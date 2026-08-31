@@ -2,7 +2,7 @@
   "name": "cognee",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.8.1" } },
+  "metadata": { "release": { "adaptedVersion": "0.10.0" } },
   "tags": ["type:app", "layer:entrypoint", "scope:cognee"],
   "targets": {
     "lint": {

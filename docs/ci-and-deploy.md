@@ -141,11 +141,11 @@ flowchart TD
   the old server build looks healthy and behaves like the old release.
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
-- A reviewed PostgreSQL migration runs as a bounded Helm hook Job. A failure is returned directly;
+- A reviewed Prisma migration runs from an immutable image in a bounded Helm hook Job. A failure is returned directly;
   the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
   back the application.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
-  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`, `mcp-gateway`). An
+  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout; and a fresh install
   skips the roll entirely because its pods were born after the Secrets were published. (This
   replaced an unconditional `rollout restart` that double-started the heaviest workloads on
@@ -196,8 +196,8 @@ summary.
 - A **changed chart** bumps its chart version to the root version and adds exactly one
   `helm/migrations/<from>-to-<to>.json` transition. The umbrella needs no edit: it declares its
   in-repo dependencies with open constraints and packages them fresh at render time.
-- A **database schema change** updates the clean target baseline and adds one adjacent, reviewed
-  SQL transition under `apps/opencrane/prisma/migrations/<from>-to-<to>/`, bound by digest.
+- A **database schema change** updates the clean target baseline and adds one ordered Prisma change
+  under `apps/opencrane/prisma/prisma-migrations/`. Released SQL transitions stay as history.
 - Adjacent minor trains (`0.8.x → 0.9.0`) are the only automatic transition. Patch, skipped-minor,
   and major transitions require an approved `manualTransition` with a reason in the manifest.
 - Once a version tag exists, that train's composition is frozen: any further change must advance

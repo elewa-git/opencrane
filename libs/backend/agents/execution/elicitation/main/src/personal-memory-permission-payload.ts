@@ -60,7 +60,8 @@ const _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
  */
 export function _BuildMemoryPermissionPayload(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
 {
-	if (invocation.state !== ToolInvocationStates.AwaitingApproval) return null;
+	if (invocation.state !== ToolInvocationStates.AwaitingApproval)
+		return null;
 	return _BuildMemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision);
 }
 
@@ -86,7 +87,8 @@ export function _BuildMemoryPermissionPayload(invocation: ToolInvocationRecord, 
  */
 export function _BuildMemoryPermissionPayloadForClaimedInvocation(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
 {
-	if (invocation.state !== ToolInvocationStates.Claimed || invocation.revision < 2) return null;
+	if (invocation.state !== ToolInvocationStates.Claimed || invocation.revision < 2)
+		return null;
 	return _BuildMemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision - 2);
 }
 
@@ -109,7 +111,8 @@ export function _BuildMemoryPermissionPayloadForClaimedInvocation(invocation: To
  */
 export function _MemoryQueryDigest(argumentsValue: JsonValue): string | null
 {
-	if (!_JsonRecord(argumentsValue)) return null;
+	if (!_JsonRecord(argumentsValue))
+		return null;
 	const query = argumentsValue["query"];
 	return typeof query === "string" ? __DigestCanonicalJson(query) : null;
 }
@@ -176,6 +179,8 @@ function _BuildMemoryPermissionPayloadAtRevision(invocation: ToolInvocationRecor
 	// required too, because the consent question is shown in that conversation and answered against
 	// that persona. Any mismatch here would mean asking one user to consent to another user's recall.
 	if (invocation.toolRevisionId !== PERSONAL_MEMORY_RECALL_TOOL_REVISION
+		|| invocation.runId === null
+		|| invocation.attempt === null
 		|| snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User
 		|| snapshot.identitySnapshot.executionSubjectId !== invocation.subjectId
 		|| snapshot.runId !== invocation.runId
@@ -185,7 +190,8 @@ function _BuildMemoryPermissionPayloadAtRevision(invocation: ToolInvocationRecor
 		|| snapshot.conversationId.trim().length === 0
 		|| snapshot.personaRevisionId === null
 		|| snapshot.personaRevisionId.trim().length === 0
-		|| queryDigest === null) return null;
+		|| queryDigest === null)
+		return null;
 
 	// 3. Derive the expiry from this invocation's own retry deadline plus the tail above, so the
 	// permission is bounded by the invocation it belongs to. Both build helpers must land on the same

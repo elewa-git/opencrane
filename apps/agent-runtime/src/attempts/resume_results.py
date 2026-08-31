@@ -9,9 +9,7 @@ registries untouched, so if the server sends the same command again it is handle
 """
 
 from .elicitation_results import resolve_elicitation_results
-from .pending_elicitations import consume_pending_elicitations, peek_pending_elicitations
-from .pending_result_lock import PENDING_RESULT_LOCK
-from .pending_tools import consume_pending_tool_calls, peek_pending_tool_calls
+from .continuation import consume_elicitations, consume_tool_calls, continuation_lock, peek_elicitations, peek_tool_calls
 from .tool_results import validate_tool_results
 
 
@@ -45,9 +43,9 @@ def resolve_resume_results(
     attempt = int(coordinates["attempt"])
     # 2. Hold one lock across both lookups and both removals. Taking a lock per registry would let a
     #    second resume see the tool calls already taken while the questions were still waiting.
-    with PENDING_RESULT_LOCK:
-        pending_tools = peek_pending_tool_calls(run_id, attempt, tool_ids)
-        elicitation_call_ids = peek_pending_elicitations(run_id, attempt, request_keys)
+    with continuation_lock():
+        pending_tools = peek_tool_calls(run_id, attempt, tool_ids)
+        elicitation_call_ids = peek_elicitations(run_id, attempt, request_keys)
         # 3. If either lookup fails, reject the whole resume. Applying one half would resume the model
         #    with calls still unanswered.
         if pending_tools is None or elicitation_call_ids is None:
@@ -65,6 +63,6 @@ def resolve_resume_results(
         }
         # 6. Remove both sets now that every check has passed, still under the same lock. Each result
         #    reaches the model once, and a duplicate command later finds nothing waiting.
-        consume_pending_tool_calls(run_id, attempt, tool_ids)
-        consume_pending_elicitations(run_id, attempt, request_keys)
+        consume_tool_calls(run_id, attempt, tool_ids)
+        consume_elicitations(run_id, attempt, request_keys)
     return {**tool_values, **resolved_elicitations}

@@ -7,13 +7,15 @@
 This package turns a database-issued MCP workload claim into one OCI-backed Kubernetes Job. The
 OpenCrane server selects the imported image and deployment profile. The controller builds the Job,
 records its Kubernetes UID, releases that same Job, and records its first Pod UID.
+When the saved execution becomes terminal, the same controller deletes only that Job UID and then
+records that cleanup finished. A failed or uncertain delete is retried from the database claim.
 
 ```text
 saved MCP claim + imported image digest
         │
         ▼
 MCP executor controller ◄── HERE
-        │ suspended Job → saved UID → release → first Pod
+        │ suspended Job → saved UID → release → first Pod → exact UID deletion
         ▼
 shared exact governed Job controller
 ```

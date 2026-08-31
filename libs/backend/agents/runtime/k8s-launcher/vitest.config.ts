@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { _PackageCacheDir } from "../../../../../vitest.cache";
 
-/** Vitest configuration for the personal-runtime Job resource builder. */
+/** Runs focused tests for the warm runtime pool definitions. */
 export default defineConfig({
 	cacheDir: _PackageCacheDir(import.meta.url),
 	plugins: [tsconfigPaths({ projects: ["../../../../../tsconfig.vitest.json"] })],

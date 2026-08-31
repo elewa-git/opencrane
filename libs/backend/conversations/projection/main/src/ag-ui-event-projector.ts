@@ -1,5 +1,7 @@
-import { EventType } from "@ag-ui/core";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
+import { createHash } from "node:crypto";
+
+import { EventType, type Interrupt } from "@ag-ui/core";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiRunWaitOperations, AgUiRunWaitReasons, AgUiRunWaitSources, ElicitationPurposes, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiRunWait, type AgUiRunWaitStateEnvelope, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
 /**
  * Turns one display-safe conversation event into the AG-UI events the client receives, in order.
@@ -16,27 +18,82 @@ import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, 
  */
 export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
 {
-	if (source.eventType === "conversation.message") return _Message(source);
-	return [_Project(source)];
+	if (source.eventType === "conversation.message")
+		return _Message(source);
+	return [_Project(source), ..._WaitEvents(source)];
+}
+
+/** Project fixed wait-state changes next to the event that established or closed the wait. */
+function _WaitEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
+{
+	if (source.runId === undefined)
+		return [];
+	const toolCallId = source.payload.toolCallId ?? source.payload.toolRecovery?.toolCallId;
+	if (source.eventType === RunEventTypes.ToolRequested && toolCallId !== undefined)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Add, [{ id: _WaitIdentifier("tool", toolCallId), reason: AgUiRunWaitReasons.ExternalAction }])];
+	if (source.eventType === RunEventTypes.ToolCompleted && toolCallId !== undefined)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Remove, [{ id: _WaitIdentifier("tool", toolCallId), reason: AgUiRunWaitReasons.ExternalAction }])];
+	if (source.eventType === RunEventTypes.ToolFailed && toolCallId !== undefined && source.payload.toolFailure?.retrying === false)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Remove, [{ id: _WaitIdentifier("tool", toolCallId), reason: AgUiRunWaitReasons.ExternalAction }])];
+	if (source.eventType === RunEventTypes.ToolRecoveryRequired && toolCallId !== undefined)
+	{
+		return [
+			_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Remove, [{ id: _WaitIdentifier("tool", toolCallId), reason: AgUiRunWaitReasons.ExternalAction }]),
+			_WaitEvent(source.runId, AgUiRunWaitSources.Recovery, AgUiRunWaitOperations.Add, [{ id: _WaitIdentifier("recovery", toolCallId), reason: AgUiRunWaitReasons.RecoveryRequired }]),
+		];
+	}
+	if (source.eventType === RunEventTypes.ElicitationRequested && source.payload.interrupt !== undefined)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Participant, AgUiRunWaitOperations.Add, [_ProjectParticipantWait(source.payload.interrupt)])];
+	return [];
+}
+
+/** Map a server-owned interrupt purpose to the display reason the browser may show. */
+export function _ProjectParticipantWait(interrupt: Interrupt): AgUiRunWait
+{
+	let reason = AgUiRunWaitReasons.ParticipantInput;
+	if (interrupt.reason === ElicitationPurposes.ToolApproval)
+		reason = AgUiRunWaitReasons.Approval;
+	if (interrupt.reason === ElicitationPurposes.PersonalMemoryPermission)
+		reason = AgUiRunWaitReasons.PersonalMemoryPermission;
+	return { id: _WaitIdentifier("interrupt", interrupt.id), reason };
+}
+
+/** Derive one bounded opaque wait identifier from an unbounded runtime coordinate. */
+function _WaitIdentifier(scope: string, value: string): string
+{
+	return `${scope}:${createHash("sha256").update(`${scope}:${value}`).digest("hex")}`;
+}
+
+/** Build one strict versioned CUSTOM wait-state event. */
+function _WaitEvent(runId: string, source: AgUiRunWaitSources, operation: AgUiRunWaitOperations, waits: readonly AgUiRunWait[]): AgUiProjectionEvent
+{
+	const value: AgUiRunWaitStateEnvelope = { version: AG_UI_RUN_WAIT_STATE_EVENT, runId, source, operation, waits };
+	return { type: EventType.CUSTOM, name: AG_UI_RUN_WAIT_STATE_EVENT, value };
 }
 
 /** Expand one stored message into the standard TEXT_MESSAGE_START / CONTENT / END events. */
 function _Message(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
 {
 	const payload = source.payload;
-	if (payload.messageId === undefined || payload.messageRole === undefined || payload.messageState === undefined) return [_Custom(source)];
-	if (payload.messageRole === "tool") return [_Custom(source)];
+	if (payload.messageId === undefined || payload.messageRole === undefined || payload.messageState === undefined)
+		return [_Custom(source)];
+	if (payload.messageRole === "tool")
+		return [_Custom(source)];
 	const events: AgUiProjectionEvent[] = [{ type: EventType.TEXT_MESSAGE_START, messageId: payload.messageId, role: payload.messageRole }];
-	if (payload.messageText !== undefined && payload.messageText.length > 0) events.push({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: payload.messageId, delta: payload.messageText });
-	if (payload.messageState === "completed") events.push({ type: EventType.TEXT_MESSAGE_END, messageId: payload.messageId });
-	if (payload.messageState === "failed" || payload.messageState === "cancelled") events.push({ type: EventType.CUSTOM, name: "opencrane.message_terminal", value: { eventType: `message.${payload.messageState}`, messageId: payload.messageId } });
+	if (payload.messageText !== undefined && payload.messageText.length > 0)
+		events.push({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: payload.messageId, delta: payload.messageText });
+	if (payload.messageState === "completed")
+		events.push({ type: EventType.TEXT_MESSAGE_END, messageId: payload.messageId });
+	if (payload.messageState === "failed" || payload.messageState === "cancelled")
+		events.push({ type: EventType.CUSTOM, name: "opencrane.message_terminal", value: { eventType: `message.${payload.messageState}`, messageId: payload.messageId } });
 	return events;
 }
 
 /** Pick the most specific standard event whose required fields are present; otherwise fall back to a CUSTOM event. */
 function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
-	if (source.payload.agentThreadDelivery !== undefined) return { type: EventType.CUSTOM, name: AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, value: source.payload.agentThreadDelivery };
+	if (source.payload.agentThreadDelivery !== undefined)
+		return { type: EventType.CUSTOM, name: AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, value: source.payload.agentThreadDelivery };
 	switch (source.eventType)
 	{
 		case RunEventTypes.RunAccepted:
@@ -59,15 +116,18 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 		case RunEventTypes.ToolRequested:
 			return typeof source.payload.toolCallId === "string" && typeof source.payload.toolCallName === "string" ? { type: EventType.TOOL_CALL_START, toolCallId: source.payload.toolCallId, toolCallName: source.payload.toolCallName } : _Custom(source);
 		case RunEventTypes.ToolCompleted:
-			if (typeof source.payload.toolCallId !== "string") return _Custom(source);
+			if (typeof source.payload.toolCallId !== "string")
+				return _Custom(source);
 			return { type: EventType.TOOL_CALL_END, toolCallId: source.payload.toolCallId };
 		case RunEventTypes.ToolFailed:
 			return _ToolFailure(source);
 		case RunEventTypes.ToolRecoveryRequired:
 			return _ToolRecoveryRequired(source);
 		default:
-			if (source.payload.a2ui !== undefined) return { type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: source.payload.a2ui };
-			if (source.payload.childRun !== undefined) return { type: EventType.CUSTOM, name: AG_UI_CHILD_RUN_ENVELOPE_VERSION, value: source.payload.childRun };
+			if (source.payload.a2ui !== undefined)
+				return { type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: source.payload.a2ui };
+			if (source.payload.childRun !== undefined)
+				return { type: EventType.CUSTOM, name: AG_UI_CHILD_RUN_ENVELOPE_VERSION, value: source.payload.childRun };
 			return _Custom(source);
 	}
 }
@@ -75,7 +135,8 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 /** Emit the server-redacted recovery payload. A row missing `runId` or `toolRecovery` becomes a CUSTOM event with no payload. */
 function _ToolRecoveryRequired(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
-	if (source.runId === undefined || source.payload.toolRecovery === undefined) return _Custom(source);
+	if (source.runId === undefined || source.payload.toolRecovery === undefined)
+		return _Custom(source);
 	const value: AgUiToolRecoveryRequiredEnvelope = { ...source.payload.toolRecovery, runId: source.runId, occurredAt: source.occurredAt };
 	return { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value };
 }
@@ -83,7 +144,8 @@ function _ToolRecoveryRequired(source: AgUiProjectionSourceEvent): AgUiProjectio
 /** Keep the tool-call id and failure code, and nothing from the provider's own error. */
 function _ToolFailure(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
-	if (typeof source.payload.toolCallId !== "string" || source.payload.toolFailure === undefined) return _Custom(source);
+	if (typeof source.payload.toolCallId !== "string" || source.payload.toolFailure === undefined)
+		return _Custom(source);
 	const value: AgUiToolFailureEnvelope = { eventType: RunEventTypes.ToolFailed, toolCallId: source.payload.toolCallId, ...source.payload.toolFailure, ...(source.payload.failureCode === undefined ? {} : { failureCode: source.payload.failureCode }) };
 	return { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value };
 }

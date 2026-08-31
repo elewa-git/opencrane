@@ -4,8 +4,8 @@ import type { Logger } from "@opencrane/backend/observability";
 /** The only way the worker reaches anything outside its process. Deliberately small: OpenCrane brokers both the source bytes and the output, so the worker holds no storage credential and needs no inbound network access. */
 export interface ArtifactPreprocessorRemote
 {
-	/** Claim the next eligible job, or return null when no work is ready. */
-	claim(signal: AbortSignal): Promise<ArtifactPreprocessorJobClaim | null>;
+	/** Exchanges the Job-mounted reference for the assignment already claimed by the controller. */
+	bootstrap(reference: string, signal: AbortSignal): Promise<ArtifactPreprocessorJobClaim>;
 	/** Ask OpenCrane to stream the exact source bytes authorized by the live claim. */
 	readSource(claim: ArtifactPreprocessorJobClaim, destinationPath: string, maximumBytes: number, signal: AbortSignal): Promise<void>;
 	/** Stream one bounded text output to OpenCrane for server-owned hashing, storage, and publication. */
@@ -47,8 +47,6 @@ export interface ArtifactPreprocessorDependencies
 	readonly maximumOutputBytes: number;
 	/** Maximum duration for pdftotext. */
 	readonly conversionTimeoutMilliseconds: number;
-	/** Idle or handled-error backoff. */
-	readonly pollIntervalMilliseconds: number;
 	/** Structured process logger. */
 	readonly logger: Logger;
 }

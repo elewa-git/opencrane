@@ -35,6 +35,12 @@ run and tool state carrying only fixed display-safe evidence and its expected-at
 fence. It never becomes a retry, failure, or elicitation locally; a later canonical cancellation is
 adopted without discarding the unresolved tool evidence.
 
+Run waits are a source-scoped collection rather than one interrupted flag. The browser separately
+stores ordinary outside-action progress, participant input, server-proven approval, one-use
+personal-memory permission, and manual recovery. Reconnect replaces the complete participant-owned
+subset while leaving runtime work and recovery evidence intact. A runtime outside-action entry can
+never become approval locally; only the server projection may add that reason.
+
 Governed `opencrane.a2ui.v1` custom events are validated against the exact shared envelope,
 three-operation vocabulary, and constrained upstream-backed catalogue. Surfaces are keyed by conversation,
 run, message, and surface identity. Consecutive authoritative sequences append to one bounded,
@@ -44,7 +50,7 @@ lifecycle and display-safe reason without inferring action authority or a next s
 
 The supported AG-UI packages are exact-pinned together at `@ag-ui/core` **0.0.57** and
 `@ag-ui/client` **0.0.57**; both are MIT-licensed upstream packages. The OpenCrane projection
-version remains `opencrane.ag-ui.v1`. Conformance tests drive the actual pinned `AbstractAgent`
+version is `opencrane.ag-ui.v2`. Conformance tests drive the actual pinned `AbstractAgent`
 lifecycle through completion, tool calls, approval edits, denial, expiry, failure, cancellation,
 A2UI, and reconnect/resume. Production transport deliberately remains the cookie-authorized
 OpenCrane WebSocket adapter: using the client's POST-oriented `HttpAgent` would create a second run
@@ -61,6 +67,7 @@ this reducer remains the explicit owner of failed versus cancelled browser state
 - `__AgUiResumeCursor` — returns only the latest durable server cursor for reconnect.
 - `__RevokeAgUiStreamAccess` — purges all projected content and reconnect coordinates after access loss.
 - `AgUiRunStatuses` / `AgUiMessageStatuses` / `AgUiToolStatuses` — the browser's explicit projection lifecycle.
+- `AgUiStreamState.runWaitReasons` / `runWaits` — display categories and source-scoped identities for every current run wait.
 
 ## Boundary
 

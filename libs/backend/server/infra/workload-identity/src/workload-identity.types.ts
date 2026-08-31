@@ -35,25 +35,6 @@ export interface ChannelProxyTokenReviewerConfig
 }
 
 /**
- * Who an authoring worker is, as parsed out of a verified token: its namespace,
- * ServiceAccount name, and bound Pod UID.
- *
- * Unlike the fixed reviewers, the reviewer that produces this does NOT check the namespace
- * or the name — it only proves the token is valid for the requested audience. Whether this
- * is the worker the server was expecting is decided later, against stored bootstrap rows.
- * So do not treat a non-null value here as authorization.
- */
-export interface ReviewedSkillWorkloadIdentity
-{
-	/** Namespace parsed from the authenticated Kubernetes subject. */
-	readonly namespace: string;
-	/** ServiceAccount name parsed from the authenticated Kubernetes subject. */
-	readonly serviceAccountName: string;
-	/** Kubernetes Pod UID asserted for the bound projected token. */
-	readonly podUid: string;
-}
-
-/**
  * Who a runtime stream belongs to, as Kubernetes confirmed it.
  *
  * Every field is from the TokenReview response, never from the request body. The Pod UID
@@ -80,7 +61,7 @@ export interface RuntimeWorkloadIdentity
  * Kept this narrow on purpose — the transport gets an identity or nothing, and never sees
  * the TokenReview response, so it cannot start interpreting Kubernetes results itself.
  *
- * Implemented by: {@link _CreateRuntimeTokenReviewer} in ./projected-token-reviewer.ts.
+ * Implemented by: `_CreateWarmRuntimeTokenReviewer` in projected-token-reviewer.ts.
  * Called by: `_RegisterInternalAgentRuntimeStream` in
  * libs/backend/server/infra/agent-runtime-stream, on both of its routes.
  *
@@ -150,11 +131,4 @@ export interface MemoryGatewayServerIdentityConfig
 	readonly namespace: string;
 	/** Exact OpenCrane server ServiceAccount name. */
 	readonly serviceAccountName: string;
-}
-
-/** Reviewer seam for an authoring worker selected later by durable bootstrap authority. */
-export interface SkillWorkloadTokenReviewer
-{
-	/** Verify a projected token for the server-selected audience and return its bound Pod identity. */
-	__Review(token: string, audience: string): Promise<ReviewedSkillWorkloadIdentity | null>;
 }

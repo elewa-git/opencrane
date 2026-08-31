@@ -1,6 +1,6 @@
 # Networking and isolation
 
-OpenCrane keeps the public API, trusted services and untrusted runtime Jobs on **separate
+OpenCrane keeps the public API, trusted services and untrusted runtime Pods on **separate
 network surfaces**. Every runtime connection is outbound and every namespace starts deny-by-default.
 
 > See also: [Hosting and deployment](/operators/hosting) (namespace layout),
@@ -15,7 +15,7 @@ browser
   ▼
 Ingress ──► OpenCrane public API
 
-runtime Job
+claimed runtime Pod
   │ projected identity + one-use bootstrap + outbound stream
   ▼
 OpenCrane internal runtime API
@@ -25,7 +25,7 @@ OpenCrane internal runtime API
   └──► memory and artifact services
 ```
 
-There is no public route, Service or Ingress for an individual runtime Job. A Job also has no
+There is no public route, Service or Ingress for an individual runtime Pod. A Pod also has no
 Kubernetes RBAC, provider credential or unrestricted east-west access.
 
 ## Namespace policy
@@ -44,7 +44,7 @@ projections.
 ## Runtime authentication
 
 Network reachability is not authority. OpenCrane separately verifies the projected token
-audience, namespace, ServiceAccount, Job UID, first-Pod UID, run, attempt and agent revision.
+audience, namespace, ServiceAccount, reserved Pod UID, run, attempt and agent revision.
 A one-use bootstrap binds the runtime's proof key before the command stream is admitted.
 
 ::: tip
@@ -57,7 +57,7 @@ boundary. Both must pass.
 1. Confirm the CNI enforces `NetworkPolicy`.
 2. Confirm the trusted, personal-runtime and managed-runtime namespaces are distinct.
 3. Render the chart and inspect the runtime admission policies and quotas.
-4. Verify runtime Jobs have no Service, Ingress, role binding or persistent volume.
+4. Verify runtime Pods have no Service, Ingress, role binding or persistent volume.
 5. Verify only the ingress controller can reach the public API port.
 
 Source: [`apps/opencrane/helm/templates/_networkpolicy.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_networkpolicy.tpl)

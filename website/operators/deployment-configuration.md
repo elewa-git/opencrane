@@ -19,8 +19,8 @@ apps/_infra/deploy-k8s/deploy.sh \
   --cluster-tenant acme \
   --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
+  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
 ```
 
 Use a values overlay for a repeatable environment choice. The deploy engine layers it over the chart
@@ -41,7 +41,7 @@ These are the public configuration roots owned by the silo umbrella chart.
 | `multiCt` | Enable the explicit many-ClusterTenant profile and its required isolation floor. |
 | `crds` | Decide whether this release installs the ClusterTenant custom resource definition. |
 | `multiInstance` | Keep multiple independently named releases isolated in one cluster. |
-| `sharedPlatform` | Deliberately use a verified shared LiteLLM, MCP gateway, or external-secret store. |
+| `sharedPlatform` | Deliberately use a verified shared LiteLLM or external-secret store. |
 | `ingress` | Set the public domain, host, ingress class, annotations, and TLS reference. |
 | `certManager` | Configure the release-owned issuer and ACME certificate behaviour. The silo entrypoint uses browser-trusted ACME HTTP-01 by default. |
 | `networkPolicy` | Tune the release's default-deny and narrowly admitted network paths. |

@@ -9,7 +9,7 @@ import { PrismaRuntimeEventReporter } from "../prisma-runtime-event-reporter";
 /** Build one running conversation transaction for reporter tests. */
 function _Transaction()
 {
-	return { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Running, conversationId: "conversation-1", parentRunId: null }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, toolInvocation: { count: vi.fn().mockResolvedValue(0) }, toolResultDelivery: { count: vi.fn().mockResolvedValue(0) }, conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 3 } }), create: vi.fn().mockResolvedValue({}) } } as unknown as Prisma.TransactionClient;
+	return { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Running, conversationId: "conversation-1", parentRunId: null }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, toolInvocation: { count: vi.fn().mockResolvedValue(0) }, toolResultDelivery: { count: vi.fn().mockResolvedValue(0) }, conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 3 } }), create: vi.fn().mockResolvedValue({}) } } as unknown as Prisma.TransactionClient;
 }
 
 /** Build one event report bound to its durable accepted command kind. */

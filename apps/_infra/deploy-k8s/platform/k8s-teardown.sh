@@ -150,7 +150,6 @@ if resource_exists cluster "$POSTGRES_RELEASE" "$NAMESPACE"; then
   CNPG_CLUSTER_EXISTS="1"
 fi
 assert_cnpg_owner_if_present cluster "$POSTGRES_RELEASE"
-assert_cnpg_owner_if_present database "${POSTGRES_RELEASE}-obot"
 assert_cnpg_owner_if_present database "${POSTGRES_RELEASE}-litellm"
 
 EXPECTED_AUX_NAMESPACES=(
@@ -159,7 +158,6 @@ EXPECTED_AUX_NAMESPACES=(
   "${RELEASE}-managed-runtime"
   "${RELEASE}-artifact-preprocessing"
   "${RELEASE}-skill-authoring"
-  "${RELEASE}-tools"
   "${RELEASE}-mcp-executors"
 )
 RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
@@ -239,15 +237,13 @@ for auxiliary_namespace in "${EXPECTED_AUX_NAMESPACES[@]}"; do
       "${RELEASE}-artifacts")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" deployment "${RELEASE}-artifact-service" 'app\.kubernetes\.io/instance' "$RELEASE" ;;
       "${RELEASE}-runtime")
-        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount agent-runtime-default 'app\.kubernetes\.io/instance' "$RELEASE" ;;
+        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount warm-runtime 'app\.kubernetes\.io/component' warm-runtime ;;
       "${RELEASE}-managed-runtime")
-        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount managed-agent-runtime-default 'app\.kubernetes\.io/component' managed-agent-runtime ;;
+        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount warm-runtime 'app\.kubernetes\.io/component' warm-runtime ;;
       "${RELEASE}-artifact-preprocessing")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" deployment "${RELEASE}-artifact-preprocessor" 'app\.kubernetes\.io/instance' "$RELEASE" ;;
       "${RELEASE}-skill-authoring")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount skill-authoring-default 'app\.kubernetes\.io/component' skill-authoring ;;
-      "${RELEASE}-tools")
-        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount tool-runner-default 'app\.kubernetes\.io/component' tool-runner ;;
       "${RELEASE}-mcp-executors")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount mcp-executor-default 'app\.kubernetes\.io/component' mcp-executor ;;
     esac
@@ -304,7 +300,7 @@ done
 
 # The PostgreSQL chart intentionally marks these resources keep. Delete only the exact names
 # already proven to carry this PostgreSQL release's Helm ownership labels.
-for database_name in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
+for database_name in "${POSTGRES_RELEASE}-litellm"; do
   if resource_exists database "$database_name" "$NAMESPACE"; then
     assert_cnpg_owner_if_present database "$database_name"
     kubectl --context "$CONTEXT" delete "database/$database_name" --namespace "$NAMESPACE" --wait=true

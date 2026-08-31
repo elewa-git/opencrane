@@ -92,4 +92,4 @@ fallback.
 
 - Parent index: [_infra](../README.md)
 - Silo chart: [deploy-k8s](../deploy-k8s/README.md)
-- Sibling infra: [litellm](../litellm/README.md) · [obot](../obot/README.md)
+- Sibling infra: [litellm](../litellm/README.md)

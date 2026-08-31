@@ -16,7 +16,7 @@ acme.opencrane.example.com
 ```
 
 The host identifies the `ClusterTenant` silo. It does not route to an individual runtime:
-runtime Jobs have no public DNS name, Service or Ingress.
+claimed runtime Pods have no public DNS name, Service or Ingress.
 
 ## Required records
 

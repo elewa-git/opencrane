@@ -13,8 +13,8 @@ Agent services, runs, grants, models and memory are always evaluated inside that
 ClusterTenant: acme
 └── silo
     ├── trusted server namespace
-    ├── personal runtime Job namespace
-    ├── managed runtime Job namespace
+    ├── personal warm runtime namespace
+    ├── managed warm runtime namespace
     └── organisation-scoped data and policy
 ```
 
@@ -27,7 +27,7 @@ agent revision are frozen into run evidence when OpenCrane admits work.
 - A request without a resolvable organisation is denied.
 - A caller cannot supply a different silo or subject and have it trusted.
 - Runtime namespaces must be distinct from the trusted server namespace.
-- A workload from another namespace, ServiceAccount, Job, Pod or attempt cannot bootstrap.
+- A workload from another namespace, ServiceAccount, Pod or attempt cannot bootstrap.
 - Stale or unverifiable membership evidence cannot authorise a run.
 
 The ClusterTenant custom resource provides the organisation binding used by the deployment.

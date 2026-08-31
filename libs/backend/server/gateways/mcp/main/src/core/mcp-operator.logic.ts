@@ -1,7 +1,7 @@
-import { McpApprovalStatus, McpConnectionStatus, McpServerType, type CredentialField, type Directory, type EntitledUser, type McpAccessPolicy, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
+import { McpApprovalStatus, McpConnectionStatus, McpServerType, McpToolRevisionEligibility, McpToolRevisionReadiness, type CredentialField, type Directory, type EntitledUser, type McpAccessPolicy, type McpAssignableToolRevision, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
 import { __ResolvePrincipalAuthorization } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, type AuthorizationBoundary, type CapabilityReference } from "@opencrane/models/authorization";
-import { ___SortBy } from "@opencrane/util";
+import { ___CloneCanonicalJson, ___SortBy, type JsonValue } from "@opencrane/util";
 import type { McpAccessPolicyCommand, McpOperatorCaller } from "./mcp-operator.logic.types";
 import type { McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
 import { __McpEraProbeRequiredStates } from "../era-probe/mcp-era-probe-state";
@@ -17,6 +17,10 @@ const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: Mc
 const _REQUIRED_APPROVAL = { Approved: "PendingReview", Published: "Approved" } as const;
 const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, SharedKey: McpConnectionStatus.SharedKey } as const;
 const _AVATAR_COLORS = ["#1F3B6E", "#2E7D32", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#4527A0", "#283593"];
+/** Marks the persisted server state that permits a tool assignment. */
+const _ASSIGNABLE_SERVER_STATUS = { Active: true, Degraded: false, Draft: false } as const;
+/** Marks the persisted revision state that has frozen tool schemas. */
+const _READY_REVISION_STATE = { Discovering: false, Ready: true, Rejected: false } as const;
 
 /**
  * Lists published MCP catalog entries that the caller's persisted authorization grants allow.
@@ -100,7 +104,7 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 	return unitOfWork.execute(async function _Install(transaction)
 	{
 		const [server, capability] = await Promise.all([transaction.mcp.findServer(caller.siloId, serverId), _Capability(transaction)]);
-		if (!server || server.approvalStatus !== "Published" || !capability || !(await _Allowed(transaction, caller, capability, serverId)))
+		if (!server || !_GovernanceEligible(server) || !capability || !(await _Allowed(transaction, caller, capability, serverId)))
 			return null;
 		const status = server.serverType === "MultiUser" ? "SharedKey" : "NeedsCredential";
 		const installed = await transaction.mcp.upsertInstall(serverId, caller.principalId, status);
@@ -351,7 +355,48 @@ function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller,
 /** Maps the repository projection into the catalog contract and normalizes optional fields. */
 function _MapServer(server: McpOperatorServerRecord): McpCatalogServer
 {
-	return { id: server.id, name: server.name, description: server.description, publisher: server.publisher ?? undefined, glyph: server.glyph ?? undefined, type: _TYPE[server.serverType as keyof typeof _TYPE], approvalStatus: _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL], credentialSchema: _CredentialSchema(server.credentialSchema), entitlementSummary: server.entitlementSummary ?? undefined };
+	return { id: server.id, name: server.name, description: server.description, publisher: server.publisher ?? undefined, glyph: server.glyph ?? undefined, type: _TYPE[server.serverType as keyof typeof _TYPE], approvalStatus: _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL], credentialSchema: _CredentialSchema(server.credentialSchema), entitlementSummary: server.entitlementSummary ?? undefined, tools: _MapTools(server) };
+}
+
+/**
+ * Maps tools from the newest Ready server revision without treating visibility as authorization.
+ *
+ * A user reaches this mapper only after the catalogue checks saved grants. The administrator route
+ * can reach it for any server in the silo, so each row separately reports whether Published and
+ * Active governance currently permits assignment.
+ */
+function _MapTools(server: McpOperatorServerRecord): McpAssignableToolRevision[]
+{
+	const revision = server.latestReadyRevision;
+	if (!revision || !_READY_REVISION_STATE[revision.state as keyof typeof _READY_REVISION_STATE])
+		return [];
+	const eligibility = _GovernanceEligible(server)
+		? McpToolRevisionEligibility.Assignable
+		: McpToolRevisionEligibility.GovernanceBlocked;
+	return revision.tools.map(function _MapTool(tool): McpAssignableToolRevision
+	{
+		return {
+			toolRevisionId: tool.id,
+			serverRevisionId: revision.id,
+			name: tool.name,
+			description: tool.description,
+			inputSchema: ___CloneCanonicalJson(tool.inputSchema as JsonValue),
+			inputSchemaDigest: tool.inputSchemaDigest,
+			eligibility,
+			readiness: McpToolRevisionReadiness.Ready,
+		};
+	});
+}
+
+/** Checks the server states that must remain true before a tool revision may be assigned. */
+function _GovernanceEligible(server: McpOperatorServerRecord): boolean
+{
+	const approvalStatus = _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL];
+	const revisionState = server.latestReadyRevision?.state;
+	return approvalStatus === McpApprovalStatus.Published
+		&& _ASSIGNABLE_SERVER_STATUS[server.status as keyof typeof _ASSIGNABLE_SERVER_STATUS] === true
+		&& revisionState !== undefined
+		&& _READY_REVISION_STATE[revisionState as keyof typeof _READY_REVISION_STATE] === true;
 }
 
 /** Maps one persisted installation into the response status and ISO timestamp expected by clients. */

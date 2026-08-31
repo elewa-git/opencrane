@@ -1,6 +1,6 @@
 apiVersion: v2
 name: opencrane-agent-controller
-description: App-owned named-template library for the personal-runtime workload controller.
+description: App-owned templates for the controller that manages workflow-created Kubernetes workloads.
 type: library
-version: 0.9.3
-appVersion: "0.9.3"
+version: 0.10.0
+appVersion: "0.10.0"

@@ -1,0 +1,43 @@
+{
+  "limits": {
+    "identifierCharacters": 256,
+    "pendingCorrelationsPerClass": 128,
+    "serializedContinuationBytes": 49152
+  },
+  "cases": [
+    {
+      "name": "one durable tool correlation",
+      "accepted": true,
+      "document": {
+        "version": "opencrane.agent-runtime-continuation/v1",
+        "revision": 1,
+        "runId": "run-conformance",
+        "attempt": 1,
+        "inputGeneration": 0,
+        "appliedCommandSequence": 1,
+        "compiledInput": { "attempt": 1, "runId": "run-conformance" },
+        "modelMessages": [{ "content": "waiting", "role": "assistant" }],
+        "pendingToolCalls": [{ "frameworkCallId": "call-1", "toolInvocationId": "tool-1" }],
+        "pendingElicitations": [],
+        "digest": "sha256:8125f42691306818e39d34b9ef5c5bb9b066c4d43256ee4e4adac5d75426329f"
+      }
+    },
+    {
+      "name": "no governed pending work",
+      "accepted": false,
+      "document": {
+        "version": "opencrane.agent-runtime-continuation/v1",
+        "revision": 1,
+        "runId": "run-conformance",
+        "attempt": 1,
+        "inputGeneration": 0,
+        "appliedCommandSequence": 1,
+        "compiledInput": { "attempt": 1, "runId": "run-conformance" },
+        "modelMessages": [{ "content": "waiting", "role": "assistant" }],
+        "pendingToolCalls": [],
+        "pendingElicitations": [],
+        "digest": "sha256:29a00ef38a0cc0f696671745bab7bdb79e508645a9487a25384912391127266a"
+      }
+    }
+  ]
+}

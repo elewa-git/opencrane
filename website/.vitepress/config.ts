@@ -122,7 +122,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Governed agent runtime', link: '/integrators/agent-runtime' },
-          { text: 'MCP gateway (Obot)', link: '/integrators/mcp-gateway' },
+          { text: 'OCI MCP runtime', link: '/integrators/oci-mcp-runtime' },
           { text: 'Memory write, manage & read', link: '/integrators/retrieval-memory' },
           { text: 'Long-term memory & dreaming', link: '/integrators/long-term-memory-cognee' },
           { text: 'Silo IAM: inheritance & sharing', link: '/integrators/silo-iam' },

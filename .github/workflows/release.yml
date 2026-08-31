@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -26,6 +28,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify release predecessor is published
+        run: npm run check:release-versioning -- --base "${GITHUB_SHA}^" --require-published-predecessor
 
       # Build emits the OpenAPI spec under dist so the release asset always
       # matches the tagged source.

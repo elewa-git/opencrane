@@ -5,16 +5,19 @@ import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/w
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
+import { PrismaMcpTaskToolInvocationLifecycleRepository } from "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle";
+import { PrismaMcpTaskWorkflowExhaustionRepository } from "../mcp-tasks/prisma-mcp-task-workflow-exhaustion-repository";
+import type { McpTaskWorkflowInput, McpTaskWorkflowResult, McpTaskWorkflowRuntime } from "../mcp-tasks/mcp-task.types";
 import { PrismaMcpRuntimeCatalogRepository } from "./prisma-mcp-runtime-catalog-repository";
 import { PrismaMcpRuntimeCompanionRepository } from "./prisma-mcp-runtime-companion-repository";
 import { PrismaMcpRuntimeControllerRepository } from "./prisma-mcp-runtime-controller-repository";
-import { McpRuntimeCompanionClaimOutcomes, type McpOciServerPromotionCaller, type McpOciServerPromotionCommand, type McpOciServerPromotionResult, type McpRuntimeAuthority, type McpRuntimeControllerClaim, type McpRuntimeControllerReleaseClaim, type McpRuntimeControllerWriteOutcome, type McpRuntimePodRegistrationCommand, type McpRuntimeReleaseCommand, type PrismaMcpRuntimeAuthorityDependencies } from "./mcp-runtime.types";
+import { McpRuntimeCompanionClaimOutcomes, type McpOciServerPromotionCaller, type McpOciServerPromotionCommand, type McpOciServerPromotionResult, type McpRuntimeAuthority, type McpRuntimeCleanupCommand, type McpRuntimeControllerClaim, type McpRuntimeControllerCleanupClaim, type McpRuntimeControllerReleaseClaim, type McpRuntimeControllerWriteOutcome, type McpRuntimePodRegistrationCommand, type McpRuntimeReleaseCommand, type PrismaMcpRuntimeAuthorityDependencies } from "./mcp-runtime.types";
 
 /** Maximum serializable retries when concurrent controller or companion writes collide. */
 const _SERIALIZABLE_ATTEMPTS = 3;
 
 /** Owns every database transaction that moves an OCI-backed MCP execution. */
-export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority
+export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority, McpTaskWorkflowRuntime
 {
 	/** Root client used only to open serializable transactions. */
 	private readonly _prisma: PrismaClient;
@@ -41,6 +44,12 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority
 		return this._run("mcp.runtime.admit_invocation", "not_ready", async function _Admit(transaction, repositories): Promise<"admitted" | "idempotent" | "not_ready" | "not_mcp"> { return repositories.catalog.admitInvocation(toolInvocationRowId); });
 	}
 
+	/** Close every row owned by a public task after its final workflow attempt. */
+	recordWorkflowExhaustion(input: McpTaskWorkflowInput): Promise<McpTaskWorkflowResult | null>
+	{
+		return this._run("mcp.runtime.task.workflow_exhaustion", null, async function _RecordExhaustion(transaction, repositories): Promise<McpTaskWorkflowResult | null> { return repositories.workflowExhaustion.record(input); });
+	}
+
 	/** Claim one pending MCP workload for the controller. */
 	claimNextController(): Promise<McpRuntimeControllerClaim | null>
 	{
@@ -59,10 +68,22 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority
 		return this._run("mcp.runtime.controller.claim_release", null, async function _ClaimRelease(transaction, repositories): Promise<McpRuntimeControllerReleaseClaim | null> { return repositories.controller.claimNextRelease(); });
 	}
 
+	/** Claim one terminal execution whose exact Kubernetes Job still needs deletion. */
+	claimNextCleanup(): Promise<McpRuntimeControllerCleanupClaim | null>
+	{
+		return this._run("mcp.runtime.controller.claim_cleanup", null, async function _ClaimCleanup(transaction, repositories): Promise<McpRuntimeControllerCleanupClaim | null> { return repositories.controller.claimNextCleanup(); });
+	}
+
 	/** Commit the exact Kubernetes unsuspend under its release fence. */
 	commitRelease(claimId: string, command: McpRuntimeReleaseCommand): Promise<McpRuntimeControllerWriteOutcome>
 	{
 		return this._run("mcp.runtime.controller.release", "conflict", async function _Release(transaction, repositories): Promise<McpRuntimeControllerWriteOutcome> { return repositories.controller.commitRelease(claimId, command); });
+	}
+
+	/** Record exact Job cleanup after a terminal execution closes. */
+	commitCleanup(claimId: string, command: McpRuntimeCleanupCommand): Promise<McpRuntimeControllerWriteOutcome>
+	{
+		return this._run("mcp.runtime.controller.cleanup", "conflict", async function _Cleanup(transaction, repositories): Promise<McpRuntimeControllerWriteOutcome> { return repositories.controller.commitCleanup(claimId, command); });
 	}
 
 	/** Register the first Pod only under the matching release fence. */
@@ -96,7 +117,7 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority
 	}
 
 	/** Run one bounded serializable transaction and turn exhausted collisions into a safe outcome. */
-	private async _run<Result>(spanName: string, conflict: Result, work: (transaction: Prisma.TransactionClient, repositories: { readonly catalog: PrismaMcpRuntimeCatalogRepository; readonly controller: PrismaMcpRuntimeControllerRepository; readonly companion: PrismaMcpRuntimeCompanionRepository }) => Promise<Result>): Promise<Result>
+	private async _run<Result>(spanName: string, conflict: Result, work: (transaction: Prisma.TransactionClient, repositories: { readonly catalog: PrismaMcpRuntimeCatalogRepository; readonly controller: PrismaMcpRuntimeControllerRepository; readonly companion: PrismaMcpRuntimeCompanionRepository; readonly workflowExhaustion: PrismaMcpTaskWorkflowExhaustionRepository }) => Promise<Result>): Promise<Result>
 	{
 		const dependencies = this._dependencies;
 		const prisma = this._prisma;
@@ -109,11 +130,13 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority
 					return await prisma.$transaction(async function _Transaction(transaction): Promise<Result>
 					{
 						// 1. Bind authorization and every MCP repository to the same transaction.
-						const toolInvocations = dependencies.toolInvocations.__ForTransaction(transaction);
+						const mcpTasks = new PrismaMcpTaskToolInvocationLifecycleRepository(transaction);
+						const toolInvocations = dependencies.toolInvocations.__ForTransaction(transaction, mcpTasks);
 						const repositories = {
 							catalog: new PrismaMcpRuntimeCatalogRepository(transaction, toolInvocations, dependencies.options),
 							controller: new PrismaMcpRuntimeControllerRepository(transaction, dependencies.options),
 							companion: new PrismaMcpRuntimeCompanionRepository(transaction, toolInvocations, dependencies.options),
+							workflowExhaustion: new PrismaMcpTaskWorkflowExhaustionRepository(transaction, toolInvocations),
 						};
 
 						// 2. Keep only database work in this callback; routers and controllers perform network I/O after commit.

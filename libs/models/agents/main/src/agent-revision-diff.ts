@@ -62,19 +62,10 @@ function _skillKeys(revision: AgentRevision): string[]
 	return revision.skills.map(function _key(skill) { return `${skill.skillId}@${skill.revisionId}`; });
 }
 
-/** Renders integration tool grants as stable schema-bound member keys. */
-function _integrationToolKeys(revision: AgentRevision): string[]
+/** Returns selected MCP tool revision ids as stable capability keys. */
+function _mcpToolRevisionKeys(revision: AgentRevision): string[]
 {
-	return revision.integrationAssignments.flatMap(function _tools(assignment)
-	{
-		return assignment.toolDefinitions.map(function _key(tool) { return `${assignment.integrationId}:${tool.name}@${tool.parametersSchemaDigest}`; });
-	});
-}
-
-/** Renders integration custody bindings as stable `integrationId=custodyReferenceId` member keys. */
-function _integrationCustodyKeys(revision: AgentRevision): string[]
-{
-	return revision.integrationAssignments.map(function _key(assignment) { return `${assignment.integrationId}=${assignment.custodyReferenceId}`; });
+	return [...revision.mcpToolRevisionIds];
 }
 
 /** Renders boundary attachments as stable kind, identifier, and coverage keys. */
@@ -96,7 +87,7 @@ function _budgetWidening(field: string, before: number, after: number): Revision
  * than as one blob of JSON, so a reviewer sees which setting moved instead of a wall of text.
  *
  * The important output is `widenings`: any change that gives the agent MORE than before — a
- * broader scope, an extra tool, a new credential binding, or a raised budget. A publication flow
+ * broader scope, an extra skill or MCP tool revision, or a raised budget. A publication flow
  * must show these and get confirmation; a narrowing change is not flagged. An empty `widenings`
  * therefore means the target grants no new power, not that nothing changed.
  *
@@ -126,8 +117,7 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 	// 3. Diff collection configuration fields as stable member-key sets.
 	const setChanges = [
 		_setChange("skills", _skillKeys(base), _skillKeys(target)),
-		_setChange("integrationTools", _integrationToolKeys(base), _integrationToolKeys(target)),
-		_setChange("integrationCustody", _integrationCustodyKeys(base), _integrationCustodyKeys(target)),
+		_setChange("mcpToolRevisionIds", _mcpToolRevisionKeys(base), _mcpToolRevisionKeys(target)),
 		_setChange("boundaryAttachments", _boundaryAttachmentKeys(base), _boundaryAttachmentKeys(target)),
 	].filter(_isPresent);
 
@@ -137,7 +127,7 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 	return { lineDiffs, scalarChanges, setChanges, widenings };
 }
 
-/** Collects broader-scope, broader-tool, new-credential, and higher-budget widenings. */
+/** Collects increases in knowledge scope, tool access, and budget. */
 function _collectWidenings(base: AgentRevision, target: AgentRevision, setChanges: readonly RevisionSetChange[]): RevisionWidening[]
 {
 	const widenings: RevisionWidening[] = [];
@@ -149,24 +139,16 @@ function _collectWidenings(base: AgentRevision, target: AgentRevision, setChange
 		widenings.push({ kind: "boundary", field: "boundaryAttachments", detail: `attached ${scopeChange.added.length} additional knowledge boundary target(s): ${scopeChange.added.join(", ")}` });
 	}
 
-	// Broader tools: any newly added skill or integration tool.
+	// Treat a newly added skill or MCP tool revision as broader tool access.
 	const skillChange = setChanges.find(function _skills(change) { return change.field === "skills"; });
 	if (skillChange && skillChange.added.length > 0)
 	{
 		widenings.push({ kind: "tools", field: "skills", detail: `added ${skillChange.added.length} skill(s): ${skillChange.added.join(", ")}` });
 	}
-	const toolChange = setChanges.find(function _tools(change) { return change.field === "integrationTools"; });
-	if (toolChange && toolChange.added.length > 0)
+	const mcpToolChange = setChanges.find(function _McpTools(change) { return change.field === "mcpToolRevisionIds"; });
+	if (mcpToolChange && mcpToolChange.added.length > 0)
 	{
-		widenings.push({ kind: "tools", field: "integrationTools", detail: `granted ${toolChange.added.length} integration tool(s): ${toolChange.added.join(", ")}` });
-	}
-
-	// New credentials: any integration bound in the target that the base did not carry.
-	const baseIntegrations = new Set(base.integrationAssignments.map(function _id(assignment) { return assignment.integrationId; }));
-	const newIntegrations = target.integrationAssignments.map(function _id(assignment) { return assignment.integrationId; }).filter(function _isNew(id) { return !baseIntegrations.has(id); });
-	if (newIntegrations.length > 0)
-	{
-		widenings.push({ kind: "credentials", field: "integrationAssignments", detail: `bound ${newIntegrations.length} additional integration credential(s): ${[...new Set(newIntegrations)].sort().join(", ")}` });
+		widenings.push({ kind: "tools", field: "mcpToolRevisionIds", detail: `granted ${mcpToolChange.added.length} MCP tool revision(s): ${mcpToolChange.added.join(", ")}` });
 	}
 
 	// Higher budget: any raised resource ceiling.

@@ -1,58 +1,42 @@
-import { AgentRevisionState, ArtifactRevisionState, IntegrationCustodyState, IntegrationState, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
+import { AgentRevisionState, ArtifactRevisionState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, SkillRevisionState, SkillState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types";
+import type { BudgetPolicyInput, BudgetPolicySource, McpToolAdmissionClaimRepositoryFactory, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types";
+import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 
 /**
- * Re-checks a published revision's model route, integrations, skills, and artifacts.
+ * Re-checks a published revision's model route, selected MCP tool revisions, skills, and artifacts.
  *
- * Takes row locks before reading, in the same order revocation takes them: revision first, then
- * integration custody. Matching that order is what guarantees a revocation happening at the same
- * moment either completes before this read (and is seen) or waits until the snapshot commits —
- * never lands half-way through and leaves a snapshot naming a revoked integration.
+ * Updates the revision's MCP admission claim before reading. The surrounding Serializable admission
+ * transaction makes a concurrent publication change conflict with this snapshot instead of requiring
+ * handwritten row locks.
  *
  * The model route it returns names a LiteLLM model alias and carries no provider credentials,
  * because the compiled input reaches the runtime as opaque data.
  *
- * The custody reference it checks is the stored credential handle for an integration; an expired or
- * not-ready one refuses the run rather than letting the runtime attempt a call it cannot authorise.
- *
  * @implements ToolPolicySource
- * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as
- * pinned by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody. The `toolDefinitions` this
- * validates are MCP tools reaching the model.
- * @see PrismaRevisionBudgetPolicySource - locks the same revision row in the same order.
+ * @see PrismaRevisionBudgetPolicySource - reads the same revision in the admission transaction.
  */
 export class PrismaRevisionToolPolicySource implements ToolPolicySource
 {
+	/** Builds the claim repository from the transaction passed to {@link load}. */
+	private readonly _createMcpClaim: McpToolAdmissionClaimRepositoryFactory;
+
+	/** Binds the source to the transaction-scoped MCP policy claim factory. */
+	constructor(createMcpClaim: McpToolAdmissionClaimRepositoryFactory)
+	{
+		this._createMcpClaim = createMcpClaim;
+	}
+
 	/** Loads the revision's tool policy, keeping only same-silo rows that are still usable inside the admission transaction. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>
 	{
-		// 1. Lock the policy rows in the same order revocation locks them, so a custody or revision change lands first and this snapshot sees it.
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT revision."id"
-			FROM "agent_revisions" revision
-			JOIN "agent_services" service ON service."id" = revision."agent_service_id"
-			WHERE revision."id" = ${run.agentRevisionId}
-				AND revision."agent_service_id" = ${run.agentServiceId}
-				AND service."silo_id" = ${command.siloId}
-			ORDER BY revision."id"
-			FOR UPDATE OF revision
-		`);
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT custody."id"
-			FROM "agent_revision_integration_assignments" assignment
-			JOIN "integrations" integration ON integration."id" = assignment."integration_id" AND integration."silo_id" = assignment."silo_id"
-			JOIN "integration_custody_references" custody ON custody."id" = assignment."custody_reference_id" AND custody."integration_id" = assignment."integration_id" AND custody."silo_id" = assignment."silo_id"
-			WHERE assignment."agent_revision_id" = ${run.agentRevisionId}
-			ORDER BY custody."id"
-			FOR UPDATE OF assignment, integration, custody
-		`);
+		// 1. Touch the claim in the same Serializable admission transaction as the immutable snapshot.
+		await this._createMcpClaim(transaction).touch(run.agentRevisionId, command.siloId, new Date(transaction.admittedAt));
 
-		// 2. Re-read the model, custody, and skill assignments only after the rows above are locked.
+		// 2. Read the model, MCP, and skill assignments after the claim has joined the transaction snapshot.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: {
 				id: run.agentRevisionId,
@@ -60,19 +44,27 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 				state: AgentRevisionState.Published,
 				agentService: { is: { id: run.agentServiceId, siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } },
 			},
-			include: { modelDefinition: true, integrationAssignments: { include: { integration: true, custodyReference: true } }, skillAssignments: true },
+			include: { modelDefinition: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, skillAssignments: true },
 		});
 		if (revision === null || !_IsModelAvailable(revision.modelDefinition, command.siloId)) return { outcome: "denied", reason: "tool_policy_unavailable" };
-		if (revision.integrationAssignments.some(function _IsIntegrationUnavailable(assignment): boolean
+		const mcpTools = revision.mcpToolAssignments.map(function _McpTool(assignment)
 		{
-			const toolDefinitions = assignment.toolDefinitions as unknown as readonly ReviewedIntegrationToolDefinition[];
+			return {
+				toolRevisionId: assignment.toolRevision.id,
+				name: assignment.toolRevision.name,
+				description: assignment.toolRevision.description,
+				inputSchema: ___CloneCanonicalJson(assignment.toolRevision.inputSchema as unknown as JsonValue),
+				inputSchemaDigest: assignment.toolRevision.inputSchemaDigest,
+			};
+		});
+		if (revision.mcpToolAssignments.some(function _UnavailableMcpTool(assignment): boolean
+		{
 			return assignment.siloId !== command.siloId
-				|| assignment.integration.state !== IntegrationState.Active
-				|| assignment.custodyReference.state !== IntegrationCustodyState.Ready
-				|| assignment.custodyReference.expiresAt.getTime() <= transaction.admittedAtEpochMs
-				|| !Array.isArray(toolDefinitions)
-				|| !__AreReviewedIntegrationToolDefinitionsValid(toolDefinitions);
-		})) return { outcome: "denied", reason: "tool_policy_unavailable" };
+				|| assignment.toolRevision.serverRevision.state !== McpServerRevisionState.Ready
+				|| assignment.toolRevision.serverRevision.server.status !== McpServerStatus.Active
+				|| assignment.toolRevision.serverRevision.server.approvalStatus !== McpApprovalStatus.Published;
+		}) || !__AreRunInputSnapshotMcpToolsValid(mcpTools))
+			return { outcome: "denied", reason: "tool_policy_unavailable" };
 
 		// 3. Check every assigned skill and artifact is still in this silo and still published before the snapshot names it.
 		const skillRevisionIds = revision.skillAssignments.map(function _SkillRevisionId(assignment): string { return assignment.skillRevisionId; });
@@ -85,7 +77,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 			outcome: "loaded",
 			value: {
 				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId },
-				integrationAssignments: revision.integrationAssignments.map(function _IntegrationAssignment(assignment) { return { integrationId: assignment.integrationId, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] }; }),
+				mcpTools,
 				skillRevisionIds,
 				artifactRevisionIds,
 			},
@@ -96,8 +88,8 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 /**
  * Reads the revision's resource limits and turns them into the per-run budget the compiler reads.
  *
- * Locks the same revision row as {@link PrismaRevisionToolPolicySource}, in the same order, so the
- * two cannot deadlock and neither can read a revision the other is mid-publish on.
+ * Reads the same revision as {@link PrismaRevisionToolPolicySource} inside the surrounding
+ * Serializable admission transaction, so a concurrent publication change cannot commit unnoticed.
  *
  * Applies no defaults. A budget with a missing or non-positive limit is refused, because a run
  * admitted without a real ceiling could consume tokens without bound. The wall-clock deadline is
@@ -110,26 +102,14 @@ export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 	/** Refuses a budget policy that is missing, out of date, malformed, or holds values it cannot represent. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<BudgetPolicyInput>>
 	{
-		// 1. Lock the exact revision, matching the tool-policy lock order so a publication change cannot race the budget read.
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT revision."id"
-			FROM "agent_revisions" revision
-			JOIN "agent_services" service ON service."id" = revision."agent_service_id"
-			WHERE revision."id" = ${run.agentRevisionId}
-				AND revision."agent_service_id" = ${run.agentServiceId}
-				AND service."silo_id" = ${command.siloId}
-			ORDER BY revision."id"
-			FOR UPDATE OF revision
-		`);
-
-		// 2. Under that lock, check the revision is still published. Do not trust the revision id an earlier caller passed.
+		// 1. Re-check that the exact revision is still published. Do not trust the revision id an earlier caller passed.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: { id: run.agentRevisionId, agentServiceId: run.agentServiceId, state: AgentRevisionState.Published, agentService: { is: { siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } } },
 			select: { budget: true },
 		});
 		if (revision === null) return { outcome: "denied", reason: "budget_unavailable" };
 
-		// 3. Keep only limits that are all present and positive, plus the server's deadline. A caller can never supply a default.
+		// 2. Keep only limits that are all present and positive, plus the server's deadline. A caller can never supply a default.
 		const budgetPolicy = _ParseBudget(revision.budget as unknown as JsonValue, transaction.admittedAtEpochMs);
 		return budgetPolicy === null ? { outcome: "denied", reason: "budget_unavailable" } : { outcome: "loaded", value: { budgetPolicy } };
 	}

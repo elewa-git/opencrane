@@ -33,9 +33,15 @@ describe("runtime workload claim contract", function _DescribeRuntimeWorkloadCla
 		};
 
 		expect(claim.workloadClass).toBe(RuntimeWorkloadClaimClasses.McpExecutor);
-		expect(Object.values(RuntimeWorkloadClaimClasses)).toEqual(["mcp-executor"]);
+		expect(Object.values(RuntimeWorkloadClaimClasses)).toEqual(["warm-runtime", "mcp-executor", "skill-authoring-validation", "artifact-preprocess"]);
 		expect(binding.firstPodUid).toBeUndefined();
 		expectTypeOf<keyof RuntimeWorkloadClaim>().toEqualTypeOf<ExpectedClaimKey>();
 		expectTypeOf<keyof RuntimeWorkloadBinding>().toEqualTypeOf<ExpectedBindingKey>();
+	});
+
+	it("keeps class-specific executors distinct", function _KeepsWorkloadClassesDistinct()
+	{
+		expect(RuntimeWorkloadClaimClasses.WarmRuntime).not.toBe(RuntimeWorkloadClaimClasses.McpExecutor);
+		expect(RuntimeWorkloadClaimClasses.SkillAuthoringValidation).not.toBe(RuntimeWorkloadClaimClasses.ArtifactPreprocess);
 	});
 });

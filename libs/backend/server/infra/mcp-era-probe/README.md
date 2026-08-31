@@ -28,7 +28,7 @@ In this flow:
   JSON-RPC. It returns any well-formed announced version; the MCP domain accepts `2026-07-28` and
   records another version as rejected evidence.
 - The probe is discovery-only. It does not call `initialize`, create a session, fall back to an
-  earlier protocol revision, or contact Obot.
+  earlier protocol revision, open a session, or execute a tool.
 
 ## Public surface
 

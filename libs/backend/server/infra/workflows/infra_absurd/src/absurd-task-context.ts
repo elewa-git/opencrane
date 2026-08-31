@@ -141,15 +141,16 @@ export class _AbsurdTaskContext implements IWorkflowTaskContext
 	}
 
 	/** Suspend at an engine-persisted instant without retaining a process timer. */
-	async sleepUntil(instant: Date): Promise<void>
+	async sleepUntil(instant: Date, stepName = "opencrane:sleep-until"): Promise<void>
 	{
 		if (!(instant instanceof Date) || Number.isNaN(instant.getTime()))
 		{
 			throw new WorkflowError("sleepUntil requires a valid Date.");
 		}
+		const acceptedStepName = _RequiredString("stepName", stepName);
 		try
 		{
-			await this.context.sleepUntil("opencrane:sleep-until", instant);
+			await this.context.sleepUntil(acceptedStepName, instant);
 		}
 		catch (error)
 		{

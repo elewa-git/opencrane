@@ -7,9 +7,10 @@ durable acceptance: every candidate still crosses the server's fenced persistenc
 import hashlib
 from collections.abc import Callable
 
+from ..attempts.continuation import record_elicitation, record_tool_call
 from .candidates import candidate, elicitation_candidate, normalize_event, tool_call_candidate
 from .elicitation import elicitation_proposal
-from ..attempts.pending_elicitations import record_pending_elicitation
+from .wait_reasons import RuntimeWaitReason
 
 
 class RuntimeEventProjector:
@@ -20,7 +21,6 @@ class RuntimeEventProjector:
         coordinates: dict[str, object],
         compiled_input: dict[str, object],
         post_candidate: Callable[[dict[str, object]], None],
-        record_tool_call: Callable[[str, int, str, str, object], None],
         publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
     ) -> None:
         """Bind projection to immutable command coordinates and its frozen grant set."""
@@ -29,28 +29,18 @@ class RuntimeEventProjector:
         self._coordinates = coordinates
         self._compiled_input = compiled_input
         self._post_candidate = post_candidate
-        self._record_tool_call = record_tool_call
         self._publish_output = publish_output
         # Deriving the message id from the command makes replay deterministic while keeping separate
         # command lifecycles distinct inside the same run attempt.
         self._message_id = f"assistant:{coordinates['commandId']}"
         self._message_started = False
-        self._has_pending_tool_calls = False
+        self._wait_reasons: set[RuntimeWaitReason] = set()
         self._has_pending_elicitations = False
 
     @property
-    def has_pending_tool_calls(self) -> bool:
-        """Whether this command proposed at least one durable external action."""
-        return self._has_pending_tool_calls
-
-    @property
-    def has_pending_input(self) -> bool:
-        """Whether this turn is waiting on something, either a tool call or a question.
-
-        The executor reads this one property and stops there, so a turn waiting on a tool and a turn
-        waiting on a participant are handled the same way: neither is reported as a finished run.
-        """
-        return self._has_pending_tool_calls or self._has_pending_elicitations
+    def wait_reasons(self) -> frozenset[RuntimeWaitReason]:
+        """Return every runtime-proven reason that still blocks this command's completion."""
+        return frozenset(self._wait_reasons)
 
     @property
     def has_pending_elicitations(self) -> bool:
@@ -110,7 +100,7 @@ class RuntimeEventProjector:
         if proposal.get("kind") == "external_action":
             # ``tool.requested`` is ordered before the external-action proposal so the durable event
             # history explains why authorization/execution was requested.
-            self._has_pending_tool_calls = True
+            self._wait_reasons.add(RuntimeWaitReason.EXTERNAL_ACTION)
             self._post_candidate(
                 candidate(
                     self._coordinates,
@@ -123,12 +113,10 @@ class RuntimeEventProjector:
             )
             # Record the exact pending-call identity before posting the actionable proposal. A resume
             # result is accepted only when it maps back to this run/attempt/invocation tuple.
-            self._record_tool_call(
+            record_tool_call(
                 str(self._coordinates["runId"]),
                 int(self._coordinates["attempt"]),  # type: ignore[arg-type]
                 str(proposal["toolInvocationId"]),
-                str(neutral_event.get("toolName")),
-                proposal["arguments"],
             )
         # Failed projections still emit their bounded error proposal, while valid proposals are sent
         # only after their explanatory event and resume correlation state have been established.
@@ -162,7 +150,7 @@ class RuntimeEventProjector:
         self.complete_message()
         # Record the link first, then send the question, in that order. If recording fails there is no
         # card yet; if sending fails the recorded link goes when the attempt ends.
-        record_pending_elicitation(
+        record_elicitation(
             str(self._coordinates["runId"]),
             int(self._coordinates["attempt"]),
             str(proposal["requestKey"]),
@@ -172,6 +160,7 @@ class RuntimeEventProjector:
         # Set the flag after sending, not before. If sending raises, this object must not be left saying
         # a question is outstanding that the server never received.
         self._has_pending_elicitations = True
+        self._wait_reasons.add(RuntimeWaitReason.PARTICIPANT_INPUT)
 
     def _start_message(self) -> None:
         """Persist the assistant message start once before text or generated outputs."""

@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ExternalActionApprovalOpener, ExternalActionClassAdmission, ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
 import type { Logger } from "@opencrane/backend/observability";
-import type { ObotMcpInvocationPort } from "@opencrane/backend/server/infra/obot-custody";
 
 import { _CreateExternalActionWorker } from "../external-action-composition";
 
@@ -29,14 +28,13 @@ describe("external-action app composition", function _suite()
 		_factories.approval.mockClear();
 		_factories.worker.mockClear();
 		const prisma = {} as PrismaClient;
-		const obotInvocation = {} as ObotMcpInvocationPort;
 		const log = { warn: vi.fn(), error: vi.fn() } as unknown as Logger;
 		const classAdmission = { admitInvocation: vi.fn() } as ExternalActionClassAdmission;
 
-		const worker = _CreateExternalActionWorker(prisma, obotInvocation, classAdmission, log);
+		const worker = _CreateExternalActionWorker(prisma, classAdmission, log);
 
 		expect(_factories.approval).toHaveBeenCalledWith(prisma, log);
-		expect(_factories.worker).toHaveBeenCalledWith(expect.objectContaining({ approvals: _factories.approval.mock.results[0]?.value, classAdmission, personalMemoryPermissions: expect.anything(), transports: expect.objectContaining({ obotMcpInvocation: obotInvocation }), log }));
+		expect(_factories.worker).toHaveBeenCalledWith(expect.objectContaining({ approvals: _factories.approval.mock.results[0]?.value, classAdmission, personalMemoryPermissions: expect.anything(), transports: { sandboxExecutor: expect.anything() }, log }));
 		expect(worker).toBe(_factories.worker.mock.results[0]?.value);
 	});
 });

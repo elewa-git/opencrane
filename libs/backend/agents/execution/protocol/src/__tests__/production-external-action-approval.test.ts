@@ -31,11 +31,12 @@ function _invocation(): ToolInvocationRecord
 		siloId: "silo-1",
 		runId: "run-1",
 		attempt: 1,
+		mcpTaskId: null,
 		agentRevisionId: "revision-1",
 		subjectId: "user-1",
 		candidateId: "candidate-1",
 		toolInvocationId: "tool-call-1",
-		toolRevisionId: "integration:calendar:read",
+		toolRevisionId: "mcp-tool-revision-calendar-read",
 		arguments: argumentsValue,
 		argumentsDigest: __DigestCanonicalJson(argumentsValue),
 		effectiveArguments: argumentsValue,
@@ -75,7 +76,7 @@ function _snapshot(): RunInputSnapshot
 		artifactRevisionIds: [],
 		skillRevisionIds: [],
 		memoryQueryPolicy: {},
-		integrationAssignments: [{ integrationId: "calendar", toolDefinitions: [{ name: "read", description: "Read a calendar", parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema) }] }],
+		mcpTools: [{ toolRevisionId: "mcp-tool-revision-calendar-read", name: "read", description: "Read a calendar", inputSchema: parametersSchema, inputSchemaDigest: __DigestCanonicalJson(parametersSchema) }],
 		modelRoute: {},
 		budgetPolicy: {},
 		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-11T11:00:00.000Z" },
@@ -89,6 +90,16 @@ function _snapshot(): RunInputSnapshot
 
 describe("production external-action approval opener", function _suite()
 {
+	it("rejects standalone MCP tasks before opening an AgentRun approval", async function _RejectsStandaloneMcpTask()
+	{
+		_openApproval.mockClear();
+		const opener = __CreateProductionExternalActionApprovalOpener({} as PrismaClient, { warn: vi.fn(), error: vi.fn() } as unknown as Logger);
+		const invocation = { ..._invocation(), runId: null, attempt: null, mcpTaskId: "mcp-task-1" };
+
+		await expect(opener.open(invocation, { snapshot: _snapshot() }, _NOW)).resolves.toBe(false);
+		expect(_openApproval).not.toHaveBeenCalled();
+	});
+
 	it("opens from the exact frozen schema with an opaque stable id and bounded expiry", async function _opens()
 	{
 		_openApproval.mockClear();
@@ -100,17 +111,17 @@ describe("production external-action approval opener", function _suite()
 		await expect(opener.open(invocation, context, _NOW)).resolves.toBe(true);
 		const command = _openApproval.mock.calls[0]?.[1];
 		if (command === undefined) throw new Error("approval command was not captured");
-		const definition = context.snapshot.integrationAssignments[0]!.toolDefinitions[0]!;
+		const definition = context.snapshot.mcpTools[0]!;
 		const expected: OpenDeferredToolApprovalCommand = {
 			interruptId: command.interruptId,
 			runId: "run-1",
 			attempt: 1,
 			toolInvocationId: "tool-call-1",
-			toolRevisionId: "integration:calendar:read",
+			toolRevisionId: "mcp-tool-revision-calendar-read",
 			arguments: invocation.arguments,
 			argumentsDigest: invocation.argumentsDigest,
-			parametersSchema: definition.parametersSchema,
-			parametersSchemaDigest: definition.parametersSchemaDigest,
+			parametersSchema: definition.inputSchema,
+			parametersSchemaDigest: definition.inputSchemaDigest,
 			capabilitySetDigest: context.snapshot.capabilitySetDigest,
 			invocationId: "invocation-row-1",
 			now: _NOW,
@@ -127,8 +138,8 @@ describe("production external-action approval opener", function _suite()
 	{
 		_openApproval.mockClear();
 		const snapshot = _snapshot();
-		const assignment = snapshot.integrationAssignments[0]!;
-		const context = { snapshot: { ...snapshot, integrationAssignments: [{ ...assignment, toolDefinitions: [{ ...assignment.toolDefinitions[0]!, parametersSchemaDigest: `sha256:${"f".repeat(64)}` }] }] } };
+		const tool = snapshot.mcpTools[0]!;
+		const context = { snapshot: { ...snapshot, mcpTools: [{ ...tool, inputSchemaDigest: `sha256:${"f".repeat(64)}` }] } };
 		const opener = __CreateProductionExternalActionApprovalOpener({} as PrismaClient, { warn: vi.fn(), error: vi.fn() } as unknown as Logger);
 
 		await expect(opener.open(_invocation(), context, _NOW)).rejects.toThrow("schema digest is invalid");

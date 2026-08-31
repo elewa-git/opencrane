@@ -69,6 +69,11 @@ function _ExistingReleaseTag(version)
 	return null;
 }
 
+function _Commit(ref)
+{
+	return _GitFiles(["rev-parse", "--verify", `${ref}^{commit}`])[0];
+}
+
 function _StampOnlyFiles(repositoryRoot, base, changedFiles)
 {
 	const files = [];
@@ -100,6 +105,16 @@ function _RestoredHistoricalManifestFiles(repositoryRoot, rootVersion, changedFi
 	return restored;
 }
 
+/** Selects deleted candidate manifests only when no immutable release tag exists for them. */
+function _RemovedUntaggedHistoricalManifestFiles(repositoryRoot, rootVersion, changedFiles)
+{
+	return changedFiles.filter(function _IsRemovedUntaggedManifest(file)
+	{
+		const version = /^releases\/(?<version>\d+\.\d+\.\d+)\.json$/u.exec(file)?.groups?.version;
+		return Boolean(version && version !== rootVersion && !existsSync(join(repositoryRoot, file)) && !_ExistingReleaseTag(version));
+	});
+}
+
 const repositoryRoot = resolve(new URL(".", import.meta.url).pathname, "..");
 const base = _Argument("--base");
 if (!base) throw new Error("--base requires an exact Git commit or ref");
@@ -107,20 +122,57 @@ _GitFiles(["rev-parse", "--verify", `${base}^{commit}`]);
 const rootVersion = JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version;
 const releaseManifest = JSON.parse(readFileSync(join(repositoryRoot, "releases", `${rootVersion}.json`), "utf8"));
 const versionBase = releaseManifest.previousRepositoryVersion;
-if (versionBase) _GitFiles(["rev-parse", "--verify", `${versionBase}^{commit}`]);
+const previousRepositoryCommit = releaseManifest.previousRepositoryCommit ?? null;
+const previousReleaseTag = versionBase ? _ExistingReleaseTag(versionBase) : null;
+const previousReleaseCommit = previousReleaseTag ? _Commit(previousReleaseTag) : null;
+const requiresPublishedPredecessor = process.argv.includes("--require-published-predecessor");
+if (requiresPublishedPredecessor && versionBase && !previousReleaseTag)
+{
+	throw new Error(`release qualification requires an immutable Git tag for predecessor '${versionBase}'`);
+}
+if (previousRepositoryCommit)
+{
+	_Commit(previousRepositoryCommit);
+	_GitFiles(["merge-base", "--is-ancestor", previousRepositoryCommit, "HEAD"]);
+	if (versionBase)
+	{
+		const predecessorManifestText = _BaseText(previousRepositoryCommit, `releases/${versionBase}.json`);
+		if (predecessorManifestText === null)
+		{
+			throw new Error(`previousRepositoryCommit '${previousRepositoryCommit}' does not contain releases/${versionBase}.json`);
+		}
+		const predecessorManifest = JSON.parse(predecessorManifestText);
+		if (predecessorManifest.repositoryVersion !== versionBase)
+		{
+			throw new Error(`previousRepositoryCommit '${previousRepositoryCommit}' does not declare repository version '${versionBase}'`);
+		}
+	}
+}
+if (previousReleaseCommit && previousRepositoryCommit && previousReleaseCommit !== previousRepositoryCommit)
+{
+	throw new Error(`predecessor tag '${previousReleaseTag}' does not match previousRepositoryCommit '${previousRepositoryCommit}'`);
+}
+if (versionBase && !previousReleaseTag && !previousRepositoryCommit)
+{
+	throw new Error(`unreleased predecessor '${versionBase}' requires previousRepositoryCommit for PR validation`);
+}
 const releaseTag = _ExistingReleaseTag(rootVersion);
-const directChangedFiles = _ChangedFiles([__SelectDirectReleaseComparisonBase(base, versionBase)]);
-const changedFiles = _ChangedFiles([...new Set([base, versionBase, releaseTag].filter(Boolean))]);
-const newFiles = changedFiles.filter((file) => _BaseText(base, file) === null);
+const currentCommit = _Commit("HEAD");
+const releasedVersionTag = releaseTag && _Commit(releaseTag) !== currentCommit ? releaseTag : null;
+const comparisonBase = __SelectDirectReleaseComparisonBase(base, previousReleaseTag ?? previousRepositoryCommit);
+const directChangedFiles = _ChangedFiles([comparisonBase]);
+const changedFiles = _ChangedFiles([...new Set([base, previousReleaseTag, previousRepositoryCommit, releaseTag].filter(Boolean))]);
+const newFiles = changedFiles.filter((file) => existsSync(join(repositoryRoot, file)) && _BaseText(base, file) === null);
 const errors = await validateWorkspace(
 	repositoryRoot,
 	changedFiles,
 	null,
-	_StampOnlyFiles(repositoryRoot, versionBase ?? base, changedFiles),
+	_StampOnlyFiles(repositoryRoot, comparisonBase, changedFiles),
 	newFiles,
-	releaseTag,
+	releasedVersionTag,
 	directChangedFiles,
 	_RestoredHistoricalManifestFiles(repositoryRoot, rootVersion, directChangedFiles),
+	_RemovedUntaggedHistoricalManifestFiles(repositoryRoot, rootVersion, directChangedFiles),
 );
 if (errors.length > 0)
 {

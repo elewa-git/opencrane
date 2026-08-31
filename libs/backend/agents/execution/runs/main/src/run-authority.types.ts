@@ -1,124 +1,4 @@
 import type { AgentRevisionId, AgentRun, AgentRunId, AgentServiceId, AgentServiceState, SiloId } from "@opencrane/models/agents";
-import type { AgentRuntimeProjectedTokenAudience, ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
-
-/**
- * The audience a runtime's projected ServiceAccount token may carry: personal or managed.
- *
- * The two values never overlap, and the validator additionally requires the ServiceAccount name to
- * come from the matching class, so a personal runtime's token cannot be presented at the managed
- * boundary or the other way round.
- *
- * @see AgentRuntimeProjectedTokenAudience and ManagedAgentRuntimeProjectedTokenAudience in
- * `@opencrane/contracts`, which explain why the two audiences are kept apart.
- */
-export type RunWorkloadProjectedTokenAudience = AgentRuntimeProjectedTokenAudience | ManagedAgentRuntimeProjectedTokenAudience;
-
-/**
- * What a runtime Pod claims about itself when it asks the control plane for execution material.
- *
- * Every field is a claim, not a fact: the Pod presents this and the server compares it against
- * {@link RunWorkloadAssignmentExpectation}. The projected ServiceAccount only proves the Pod is
- * some runtime of that class — it does not prove which run or attempt the Pod is entitled to, which
- * is why the run, attempt, revision, silo, subject, Job UID, and Pod UID all have to be matched as
- * well.
- *
- * @see __ValidateRunWorkloadAssignment — the comparison this shape exists for.
- * @see docs/adr/0008-target-agent-contracts-and-workload-identity.md, "Workload identity", which
- * requires assignment admission to bind exactly this set of coordinates.
- */
-export interface RunWorkloadAssignment
-{
-	/** The run this Pod says it is executing. */
-	readonly runId: AgentRunId;
-	/** The AgentService the run belongs to. It never changes for the life of the run. */
-	readonly agentServiceId: AgentServiceId;
-	/** Which attempt of that run. Must be a whole number of 1 or more; a retry raises it. */
-	readonly attempt: number;
-	/** The agent revision this attempt executes. Frozen when the attempt started, so a later rollover cannot change what is running. */
-	readonly agentRevisionId: AgentRevisionId;
-	/** Silo containing the run and workload. */
-	readonly siloId: SiloId;
-	/** Audience on the projected token, which also decides which ServiceAccount names are acceptable. */
-	readonly audience: RunWorkloadProjectedTokenAudience;
-	/** The person or service on whose behalf the run executes; carried so the runtime cannot act for anyone else. */
-	readonly subjectId: string;
-	/** Kubernetes ServiceAccount the projected token was issued to. */
-	readonly serviceAccountName: string;
-	/** Namespace the runtime Job lives in. */
-	readonly namespace: string;
-	/** Always `job`: `agent-controller` creates one Job per attempt, and no other kind is accepted. */
-	readonly workloadKind: "job";
-	/** UID of that Job. Kubernetes never reuses a UID, so it ties the claim to one attempt's Job and not merely to a name that could be recreated. */
-	readonly workloadUid: string;
-	/** UID of the Pod making the request, for the same reason as the Job UID. */
-	readonly podUid: string;
-	/**
-	 * When this assignment stops being usable, in epoch milliseconds. Trust is refused at or after
-	 * this instant even when every other field matches, so a claim replayed later fails.
-	 */
-	readonly expiresAtEpochMs: number;
-}
-
-/**
- * What the control plane already knows to be true, which a presented {@link RunWorkloadAssignment}
- * must match field for field.
- *
- * Read from the server's own records and the trusted clock, never from the request, so it is the
- * side of the comparison that decides. Every field here has a counterpart on the assignment except
- * `nowEpochMs`, which is checked against the assignment's expiry instead.
- */
-export interface RunWorkloadAssignmentExpectation
-{
-	/** The run the server believes this Pod was created for. */
-	readonly runId: AgentRunId;
-	/** The AgentService recorded on that run. */
-	readonly agentServiceId: AgentServiceId;
-	/** The attempt the run is currently on. A Pod left over from an earlier attempt fails here. */
-	readonly attempt: number;
-	/** The agent revision recorded for this attempt. */
-	readonly agentRevisionId: AgentRevisionId;
-	/** Silo the run belongs to. */
-	readonly siloId: SiloId;
-	/** Audience the server issued the projected token for. */
-	readonly audience: RunWorkloadProjectedTokenAudience;
-	/** Subject the run executes for. */
-	readonly subjectId: string;
-	/** ServiceAccount the controller gave this attempt's Job. */
-	readonly serviceAccountName: string;
-	/** Namespace the controller created that Job in. */
-	readonly namespace: string;
-	/** Always `job`, matching the assignment. */
-	readonly workloadKind: "job";
-	/** UID of the Job the controller created for this attempt. */
-	readonly workloadUid: string;
-	/** UID of the Pod the server expects the request from. */
-	readonly podUid: string;
-	/** Current time from the server's clock, compared against the assignment's expiry. Passed in rather than read inside the validator so the expiry case is testable. */
-	readonly nowEpochMs: number;
-}
-
-/**
- * Whether a runtime Pod's claim was accepted, and if not, which check stopped it.
- *
- * `trusted` is the only value that lets the caller hand over execution material; every `denied`
- * reason means hand over nothing. The reasons exist for logs and tests, not for the runtime — the
- * Pod should learn only that it was refused, since telling it which field mismatched would let it
- * probe for the right values one field at a time.
- *
- * The reasons fall into three groups, in the order the validator checks them. `invalid_assignment`,
- * `invalid_attempt`, and `invalid_workload_kind` mean the claim was malformed — a blank identifier,
- * an attempt that is not a whole number of 1 or more, or a workload kind other than `job` — and no
- * amount of agreement between the two sides can rescue that. The `*_mismatch` reasons name the one
- * field that disagreed, and `projected_token_audience_mismatch` also covers an audience and
- * ServiceAccount name that belong to different runtime classes even when both sides agree, so a
- * consistent-looking pair from the wrong class is still refused. `expired` means everything matched
- * but the assignment's moment has passed, which is the fail-closed case for a replayed claim.
- *
- * Nothing here is persisted or returned over HTTP, so a reason can be renamed without a migration.
- */
-export type RunWorkloadAssignmentDecision =
-	| { readonly outcome: "trusted" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_assignment" | "invalid_attempt" | "invalid_workload_kind" | "projected_token_audience_mismatch" | "run_mismatch" | "agent_service_mismatch" | "attempt_mismatch" | "revision_mismatch" | "silo_mismatch" | "subject_mismatch" | "service_account_mismatch" | "namespace_mismatch" | "workload_kind_mismatch" | "workload_uid_mismatch" | "pod_mismatch" | "expired" };
 
 /**
  * A participant's request to run one failed or cancelled run again.
@@ -147,12 +27,7 @@ export interface StartNextRunAttemptCommand
 	readonly conversationId: string;
 	/** The authenticated subject asking. Must still be an active org member and a current participant when the write happens. */
 	readonly requestedBy: string;
-	/**
-	 * The client's retry key. Sending the same key again returns the attempt it already started
-	 * rather than starting a third; a different key against an already-advanced run is a conflict.
-	 */
-	readonly idempotencyKey: string;
-	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt` and as when its outbox event becomes available. */
+	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt`. */
 	readonly acceptedAt: string;
 }
 
@@ -206,14 +81,14 @@ export interface AtomicStartNextRunAttemptCommand extends StartNextRunAttemptCom
  * different questions — this one says what the write found, and the domain one says what the
  * participant should be told.
  *
- * Only `started` means an attempt was created and an outbox event written. `idempotent` also means
+ * Only `started` means an attempt was created and its workflow task was admitted. `idempotent` also means
  * an attempt exists, but this call did not create it. The remaining three wrote nothing at all, so a
  * caller must never report progress on them.
  */
 export type AtomicRunAttemptResult =
-	/** The conditional update matched, the attempt is now one higher, the run is back in `Accepted`, and a `RunAttemptRequested` outbox event was written in the same transaction. */
+	/** The conditional update matched, the attempt is now one higher, the run is back in `Accepted`, and its durable workflow task was admitted in the same transaction. */
 	| { readonly status: "started"; readonly run: AgentRun }
-	/** This same retry key already started the next attempt, proved by the stored outbox payload, so nothing was written. `run` is the already-advanced run and is safe to show as success. */
+	/** The next attempt already owns its deterministic workflow task, so nothing was written. `run` is the already-advanced run and is safe to show as success. */
 	| { readonly status: "idempotent"; readonly run: AgentRun }
 	/** The run is no longer on the attempt the caller observed, and the advance was not this caller's. `currentAttempt` is where it actually is, so the caller can re-read and offer retry again. */
 	| { readonly status: "attempt_conflict"; readonly currentAttempt: number }
@@ -288,7 +163,7 @@ export interface RunRetryAuthority
 {
 	/**
 	 * Starts or replays the next attempt of an existing run.
-	 * @param command - Run, observed attempt, signed-in owner, route, retry key, and server time.
+	 * @param command - Run, observed attempt, signed-in owner, route, and server time.
 	 * @returns The user-facing retry outcome.
 	 */
 	retry(command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult>;
@@ -298,7 +173,7 @@ export interface RunRetryAuthority
  * What to tell the participant who asked to retry a run.
  *
  * Two of these are successes and differ only in who started the attempt: `started` means this
- * request did, `idempotent` means an earlier request with the same key already had. Both carry the
+ * request did, `idempotent` means an earlier request already started the next attempt. Both carry the
  * run at its new attempt, so a client can render either the same way — and both `outcome` strings
  * appear in the published OpenAPI schema for `POST /me/conversations/{id}/runs/{runId}/retry`
  * (201 and 200), so renaming one breaks API clients.

@@ -15,19 +15,16 @@ cancellation, provider faults, compaction/bounded payloads, budgets, and telemet
 """
 
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
 import os
-import tempfile
 import threading
 import types
 import unittest
 import unittest.mock
-from src.model_loop.checkpoints import (
-    read_checkpoint as _read_checkpoint,
-    write_checkpoint as _write_checkpoint,
-)
+from src.constants import PROTOCOL_VERSION
 from src.model_loop.driver import (
     translate_framework_event as _translate_framework_event,
     zero_retry_openai_settings as _zero_retry_openai_settings,
@@ -42,18 +39,6 @@ from src.protocol.candidates import (
     arguments_digest as _arguments_digest,
     normalize_event as _normalize_event,
 )
-
-
-class _ReversingCipher:
-    """A reversible in-test cipher seam so restart checkpoints round-trip without ``cryptography``."""
-
-    def encrypt(self, data: bytes) -> bytes:
-        return b"v:" + data[::-1]
-
-    def decrypt(self, token: bytes) -> bytes:
-        if not token.startswith(b"v:"):
-            raise ValueError("bad token")
-        return token[len(b"v:"):][::-1]
 
 
 def _compiled_input() -> dict:
@@ -78,7 +63,10 @@ def _start_command() -> dict:
     """Build one structurally valid ``start_attempt`` command carrying the compiled input fixture."""
     return {
         "kind": "start_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "instance-conf",
         "commandId": "cmd-start",
+        "sequence": 1,
         "fence": 3,
         "assignment": {"runId": "run-conf", "attempt": 1},
         "payload": {"snapshot": {"inputGeneration": 9}, "compiledInput": _compiled_input()},
@@ -89,7 +77,10 @@ def _resume_command(tool_results: list, input_generation: int = 9) -> dict:
     """Build one valid resume carrying exact saved server-owned tool results."""
     return {
         "kind": "resume_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "instance-conf",
         "commandId": "cmd-resume",
+        "sequence": 2,
         "fence": 3,
         "assignment": {"runId": "run-conf", "attempt": 1},
         "payload": {
@@ -97,8 +88,31 @@ def _resume_command(tool_results: list, input_generation: int = 9) -> dict:
             "toolResults": tool_results,
             "steeringRequests": [],
             "elicitationResults": [],
+            "continuation": _continuation(tool_results, input_generation),
         },
     }
+
+
+def _continuation(tool_results: list, input_generation: int) -> dict:
+    """Build a digest-bound continuation with the tool correlations named by a resume."""
+    unsigned = {
+        "version": "opencrane.agent-runtime-continuation/v1",
+        "revision": 1,
+        "runId": "run-conf",
+        "attempt": 1,
+        "inputGeneration": input_generation,
+        "appliedCommandSequence": 1,
+        "compiledInput": _compiled_input(),
+        "modelMessages": [{"message": "saved turn"}],
+        "pendingToolCalls": [
+            {"toolInvocationId": result["toolInvocationId"], "frameworkCallId": result["toolInvocationId"]}
+            for result in tool_results
+            if isinstance(result, dict) and isinstance(result.get("toolInvocationId"), str)
+        ],
+        "pendingElicitations": [],
+    }
+    encoded = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return {**unsigned, "digest": "sha256:" + hashlib.sha256(encoded).hexdigest()}
 
 
 def _succeeded(tool_invocation_id: str, result: object) -> dict:
@@ -130,6 +144,7 @@ def _scripted_source(events: list[dict]):
 def _run_start(command: dict, events: list[dict], **kwargs) -> list[dict]:
     """Drive one start attempt over a scripted mock loop and return the emitted candidates."""
     emitted: list[dict] = []
+    kwargs.setdefault("save_continuation", lambda *_args: None)
     _execute_start_attempt(command, "instance-conf", emitted.append, event_source=_scripted_source(events), **kwargs)
     return emitted
 
@@ -267,13 +282,12 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
             return iter([{"type": "output_text", "text": "done"}, {"type": "usage", "inputTokens": 1, "outputTokens": 1}])
 
         resume_emitted: list[dict] = []
-        cipher = _ReversingCipher()
-        with tempfile.TemporaryDirectory() as directory:
-            environment = {"OPENCRANE_RUNTIME_CHECKPOINT_DIR": directory}
-            with unittest.mock.patch.dict(os.environ, environment):
-                start_emitted = _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-approve", "arguments": '{"title":"x"}'}], checkpoint_cipher=cipher)
-                self.assertEqual([candidate["kind"] for candidate in start_emitted if candidate["kind"] == "external_action"], ["external_action"])
-                _execute_resume_attempt(_resume_command([_succeeded("call-approve", tool_result)]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
+        saved: list[dict] = []
+        start_emitted = _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-approve", "arguments": '{"title":"x"}'}], save_continuation=lambda _coordinates, _generation, continuation: saved.append(continuation))
+        self.assertEqual([candidate["kind"] for candidate in start_emitted if candidate["kind"] == "external_action"], ["external_action"])
+        resume = _resume_command([_succeeded("call-approve", tool_result)])
+        resume["payload"]["continuation"] = saved[0]
+        _execute_resume_attempt(resume, "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
 
         self.assertEqual(captured["results"], {"call-approve": tool_result})
         self.assertEqual(_event_types(resume_emitted), ["run.resumed", "message.started", "message.delta", "run.usage", "message.completed", "run.completed"])
@@ -312,19 +326,6 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
         reasons = [candidate["payload"].get("reason") for candidate in resume_emitted if candidate.get("eventType") in ("run.error", "run.failed")]
         self.assertEqual(reasons, ["invalid_resume_results"])
         self.assertNotIn("must-not-enter", json.dumps(captured))
-
-
-class ConformanceRestartTests(unittest.TestCase):
-    """Restart resumes from the subordinate local checkpoint only when coordinates agree."""
-
-    def test_checkpoint_round_trips_for_the_agreeing_attempt(self) -> None:
-        """A checkpoint written during start reads back its compiled state for a matching restart."""
-        with tempfile.TemporaryDirectory() as directory:
-            cipher = _ReversingCipher()
-            _write_checkpoint("run-conf", 1, 9, {"compiledInput": _compiled_input()}, cipher=cipher, checkpoint_dir=directory)
-            state = _read_checkpoint("run-conf", 1, 9, cipher=cipher, checkpoint_dir=directory)
-            assert isinstance(state, dict)
-            self.assertEqual(state["compiledInput"]["digest"], "sha256:conformance")
 
 
 class ConformanceCancellationTests(unittest.TestCase):
@@ -374,7 +375,7 @@ class ConformanceCompactionAndBudgetTests(unittest.TestCase):
 
     def test_budget_exhausted_cancel_reason_stays_server_owned(self) -> None:
         """A budget cancel stops work and records only the server-owned cancellation reason."""
-        cancel_command = {"kind": "cancel_attempt", "commandId": "cmd-cancel", "fence": 3, "assignment": {"runId": "run-conf", "attempt": 1}, "payload": {"reason": "budget_exhausted"}}
+        cancel_command = {"kind": "cancel_attempt", "protocolVersion": PROTOCOL_VERSION, "runtimeInstanceId": "instance-conf", "commandId": "cmd-cancel", "sequence": 3, "fence": 3, "assignment": {"runId": "run-conf", "attempt": 1}, "payload": {"reason": "budget_exhausted"}}
         cancel_event = threading.Event()
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):

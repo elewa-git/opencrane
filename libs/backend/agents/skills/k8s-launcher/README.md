@@ -1,11 +1,11 @@
-# @opencrane/backend/agents/skills/k8s-launcher — governed skill Job builder
+# @opencrane/backend/agents/skills/k8s-launcher — skill-authoring validation Job builder
 
 > [backend](../../../../README.md) › [agents](../../../README.md) › [skills](../README.md) › k8s-launcher
 
 ## What it owns
 
-This package builds the exact Kubernetes Job shape for two isolated Python workloads: a skill
-authoring worker and a tenant-authored tool runner. The Job builder is pure: it does not call
+This package builds the exact Kubernetes Job shape for the isolated Python skill-authoring worker.
+The Job builder is pure: it does not call
 Kubernetes, issue capabilities, download artifacts, or execute Python. The agent controller remains
 the only process allowed to submit its result to Kubernetes.
 
@@ -31,19 +31,20 @@ code, artifact bytes, arguments, or credentials embedded in the manifest. The co
 only after it has durably committed the exact Kubernetes identity. The Job receives an audience-bound
 projected token and an opaque bootstrap reference in separate read-only files; the worker can use them
 only to acknowledge the deployment-selected cluster-local bootstrap endpoint. Authoring Jobs require at least
-64 MiB of scratch: a future validator uses that space for a bounded archive, an extracted tree, and
-fixed offline checks without borrowing persistent storage.
+128 MiB of scratch. The validator uses that space for the uploaded archive, extracted files, and
+offline checks without using permanent storage.
 
 ## Public surface
 
-- `__BuildGovernedSkillWorkloadJob` — creates the deterministic hardened Job manifest.
-- `SkillWorkloadJobAssignment` — durable controller coordinates for one Job.
-- `SkillWorkloadJobProfile` — deployment-owned image, identity, resource, and token policy.
+- `__BuildSkillAuthoringValidationJob` — creates the deterministic hardened Job manifest.
+- `SkillAuthoringValidationJobAssignment` — durable controller coordinates for one Job.
+- `SkillAuthoringValidationJobProfile` — deployment-owned image, identity, resource, and token policy.
 
 ## Boundary
 
-The agent controller consumes this builder. It does not make a tool executable, contact the
-ArtifactStore, or provide a worker transport; those require the later durable claim/result protocol.
+The agent controller consumes this builder for authoring-package validation. It does not make a
+published code skill executable; that remains unavailable until a separate execution protocol is
+built.
 Malformed identity, image, lifetime, namespace, resource, bootstrap-endpoint, or bootstrap-reference
 inputs fail before Kubernetes sees a manifest. The reference must use the fixed opaque grammar, so readable durable
 workload identifiers are not repeated in the worker's bootstrap input or environment. Job annotations retain only

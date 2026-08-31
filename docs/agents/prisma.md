@@ -27,9 +27,11 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty database.
    Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe indexes,
    and authority constraints in the reviewed baseline. Regeneration must preserve and revalidate
-   those blocks explicitly. Add the adjacent, reviewed SQL transition and manifest under
-   `apps/opencrane/prisma/migrations/<from>-to-<to>/`; the deployment-owned PostgreSQL Job runs it,
-   never server startup. Prove the migrated schema matches the clean target. Run
+   those blocks explicitly. Run `npm run db:regenerate-target-baseline -w @opencrane/server`; its
+   checked script restores the reviewed non-Prisma objects and fails if an expected insertion point
+   has changed. Add the next reviewed Prisma migration under
+   `apps/opencrane/prisma/prisma-migrations/`; the deployment-owned Prisma Migrate Job runs the
+   ledger, never server startup. Prove the migrated schema matches the clean target. Run
    `npm run test:authority-baseline -w @opencrane/server` as well: it fails closed when a
    Prisma-only rewrite has discarded the reviewed functions, triggers, constraints, or seeds.
 4. **CNPG `initdb` is the only application-schema setup boundary.** The deployment publisher
@@ -37,7 +39,7 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    one immutable, content-addressed ConfigMap. Its superuser envelope records the full baseline
    digest in a protected database schema. Physical recovery restores that marker with the existing
    schema, never attaches fresh setup SQL, and must pass the digest-checking Postgres hook.
-   Existing databases advance only through the versioned migration Job described in
+   Existing databases advance only through the versioned Prisma Migrate Job described in
    [`versioning.md`](./versioning.md); the protected baseline digest remains immutable origin proof.
 
 ## Runtime ORM ownership
@@ -51,9 +53,10 @@ Production TypeScript reaches Prisma through reviewed capability boundaries, enf
    declaration binds the repository contract import, adapter class, and source path; renaming or
    moving any of them requires policy review. `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and
    `$executeRawUnsafe` are forbidden in production TypeScript, including declared repositories.
-   The sole permanent exception is the typed `WorkflowTaskAdmission` call to the fixed,
-   parameterized `absurd.spawn_task` template, bound by exact path, class, contract, method, and
-   SQL template in the checked policy.
+   The permanent exceptions are the typed `WorkflowTaskAdmission` and `WorkflowTaskEventAdmission`
+   adapters. They call the fixed, parameterized `absurd.spawn_task` and `absurd.emit_task_event`
+   templates, each bound by exact path, class, contract, method, and SQL template in the checked
+   policy.
 3. Only an exact declared UnitOfWork adapter may call `$transaction`.
 4. Passing a transaction client into another repository is also policy-owned. Every declared
 	repository constructor accepts `Prisma.TransactionClient`, and each declared construction must

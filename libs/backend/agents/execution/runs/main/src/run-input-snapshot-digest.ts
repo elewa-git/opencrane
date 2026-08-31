@@ -3,9 +3,9 @@ import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
- * Produces the content identity of every authority-frozen runtime input without hashing the digest
- * into itself. Callers must canonicalise set-like source arrays before invoking it; ordered message
- * history and provenance remain deliberately order-sensitive where their order carries meaning.
+ * Hashes every saved runtime input except the digest field itself. Callers must sort lists that
+ * represent sets first. Message history and source records keep their order because that order
+ * changes their meaning.
  */
 export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "digest">): string
 {
@@ -22,15 +22,9 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		artifactRevisionIds: snapshot.artifactRevisionIds,
 		skillRevisionIds: snapshot.skillRevisionIds,
 		memoryQueryPolicy: snapshot.memoryQueryPolicy,
-		integrationAssignments: snapshot.integrationAssignments.map(function _integration(assignment): JsonValue
+		mcpTools: snapshot.mcpTools.map(function _McpTool(tool): JsonValue
 		{
-			return {
-				integrationId: assignment.integrationId,
-				toolDefinitions: assignment.toolDefinitions.map(function _tool(definition): JsonValue
-				{
-					return { name: definition.name, description: definition.description, parametersSchema: definition.parametersSchema, parametersSchemaDigest: definition.parametersSchemaDigest };
-				}),
-			};
+			return { toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: tool.inputSchema, inputSchemaDigest: tool.inputSchemaDigest };
 		}),
 		modelRoute: snapshot.modelRoute,
 		budgetPolicy: snapshot.budgetPolicy,

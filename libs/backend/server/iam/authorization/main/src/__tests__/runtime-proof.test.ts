@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { __ComputeEs256JwkThumbprint } from "../capability-proof";
 import { __DigestCanonicalJson } from "../canonical-json-digest";
-import { __ConsumeRuntimeBootstrap, __ExecuteCapabilityAction } from "../runtime-proof";
-import type { CapabilityActionExecutor, CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, ExecuteCapabilityActionCommand, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapExpectation, RuntimeBootstrapRepository } from "../runtime-proof.types";
+import { __ExecuteCapabilityAction } from "../runtime-proof";
+import type { CapabilityActionExecutor, CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, ExecuteCapabilityActionCommand } from "../runtime-proof.types";
 
 /** Fixed trusted NumericDate used by action-proof fixtures. */
 const NOW = 1_750_000_000;
@@ -20,66 +20,6 @@ const PUBLIC_JWK = KEY_PAIR.publicKey.export({ format: "jwk" }) as Es256PublicJw
 
 /** Verified thumbprint bound atomically during bootstrap. */
 const PROOF_KEY_THUMBPRINT = __ComputeEs256JwkThumbprint(PUBLIC_JWK);
-
-/** Creates a personal attempt Job bootstrap claim with a proposed run key. */
-function _bootstrap(): RuntimeBootstrapClaim
-{
-	return {
-		bootstrapId: "bootstrap-1",
-		siloId: "silo-1",
-		audience: "opencrane-agent-runtime",
-		subjectId: "user-1",
-		serviceAccountName: "agent-runtime",
-		namespace: "silo-1-runtime",
-		workloadKind: "job",
-		workloadUid: "job-uid-1",
-		podUid: "pod-uid-1",
-		runId: "run-1",
-		agentServiceId: "agent-service-1",
-		attempt: 2,
-		agentRevisionId: "revision-1",
-		proofPublicJwk: PUBLIC_JWK,
-		proofKeyThumbprint: PROOF_KEY_THUMBPRINT,
-		expiresAtEpochMs: 2000,
-	};
-}
-
-/** Creates assignment facts known before the runtime proposes its proof key. */
-function _bootstrapExpectation(): RuntimeBootstrapExpectation
-{
-	return {
-		siloId: "silo-1",
-		audience: "opencrane-agent-runtime",
-		subjectId: "user-1",
-		serviceAccountName: "agent-runtime",
-		namespace: "silo-1-runtime",
-		workloadKind: "job",
-		workloadUid: "job-uid-1",
-		podUid: "pod-uid-1",
-		runId: "run-1",
-		agentServiceId: "agent-service-1",
-		attempt: 2,
-		agentRevisionId: "revision-1",
-		nowEpochMs: 1000,
-	};
-}
-
-/** In-memory atomic bootstrap consumption and proof-key binding port. */
-class _BootstrapRepository implements RuntimeBootstrapRepository
-{
-	/** Claims consumed and bound by bootstrap identifier. */
-	private readonly consumed = new Map<string, RuntimeBootstrapClaim>();
-
-	/** Consumes once and records the already verified proposed run proof key. */
-	async consumeAndBindProofKeyAtomically(claim: RuntimeBootstrapClaim): Promise<RuntimeBootstrapConsumptionResult>
-	{
-		const existing = this.consumed.get(claim.bootstrapId);
-		if (existing !== undefined && JSON.stringify(existing) === JSON.stringify(claim)) return { status: "already_consumed" };
-		if (existing !== undefined) return { status: "conflict" };
-		this.consumed.set(claim.bootstrapId, claim);
-		return { status: "consumed", receiptId: `receipt-${claim.bootstrapId}` };
-	}
-}
 
 /** Creates one complete proof-bound action capability. */
 function _capability(argumentsDigest = __DigestCanonicalJson({ filename: "brief.pdf" })): ActionCapability
@@ -271,51 +211,9 @@ class _ThrowingExecutor implements CapabilityActionExecutor<{ value: string }>
 	}
 }
 
-describe("runtime bootstrap and capability replay", function _suite()
+describe("runtime capability replay", function _suite()
 {
-	it("fails closed for every assignment, workload, run, revision, proof-key, and expiry mismatch", async function _bootstrapMismatchMatrix()
-	{
-		const cases: Array<[Partial<RuntimeBootstrapClaim>, string]> = [
-			[{ siloId: "silo-other" }, "silo_mismatch"],
-			[{ audience: "artifact-service" as RuntimeBootstrapClaim["audience"] }, "projected_token_audience_mismatch"],
-			[{ subjectId: "user-other" }, "subject_mismatch"],
-			[{ serviceAccountName: "wrong-ksa" }, "service_account_mismatch"],
-			[{ namespace: "wrong-namespace" }, "namespace_mismatch"],
-			[{ workloadKind: "deployment" }, "workload_kind_mismatch"],
-			[{ workloadUid: "wrong-workload-uid" }, "workload_uid_mismatch"],
-			[{ podUid: "wrong-pod" }, "pod_mismatch"],
-			[{ runId: "run-other" }, "run_mismatch"],
-			[{ agentServiceId: "agent-service-other" }, "agent_service_mismatch"],
-			[{ attempt: 3 }, "attempt_mismatch"],
-			[{ agentRevisionId: "revision-other" }, "revision_mismatch"],
-			[{ proofKeyThumbprint: Buffer.alloc(32, 2).toString("base64url") }, "proof_key_mismatch"],
-			[{ proofPublicJwk: { ...PUBLIC_JWK, x: "AA" } }, "invalid_proof_key"],
-			[{ expiresAtEpochMs: 1000 }, "expired"],
-		];
-		for (const [change, reason] of cases)
-		{
-			expect(await __ConsumeRuntimeBootstrap(new _BootstrapRepository(), { ..._bootstrap(), ...change }, _bootstrapExpectation())).toEqual({ outcome: "denied", reason });
-		}
-	});
-
-	it("atomically binds a Job proof key once and rejects bootstrap replay", async function _bootstrapReplay()
-	{
-		const repository = new _BootstrapRepository();
-		const first = await __ConsumeRuntimeBootstrap(repository, _bootstrap(), _bootstrapExpectation());
-		const second = await __ConsumeRuntimeBootstrap(repository, _bootstrap(), _bootstrapExpectation());
-
-		expect(first).toEqual({ outcome: "consumed", receiptId: "receipt-bootstrap-1" });
-		expect(second).toEqual({ outcome: "denied", reason: "bootstrap_replay" });
-	});
-
-	it("rejects matching non-control-plane bootstrap audiences", async function _nonControlPlaneBootstrapAudience()
-	{
-		const result = await __ConsumeRuntimeBootstrap(new _BootstrapRepository(), { ..._bootstrap(), audience: "artifact-service" as RuntimeBootstrapClaim["audience"] }, { ..._bootstrapExpectation(), audience: "artifact-service" as RuntimeBootstrapExpectation["audience"] });
-
-		expect(result).toEqual({ outcome: "denied", reason: "projected_token_audience_mismatch" });
-	});
-
-	it("keeps action PEP audiences independent from the control-plane bootstrap audience", async function _serviceSpecificActionAudience()
+	it("keeps each action bound to its service audience", async function _serviceSpecificActionAudience()
 	{
 		const repository = new _ReceiptRepository();
 		const executor = new _Executor();

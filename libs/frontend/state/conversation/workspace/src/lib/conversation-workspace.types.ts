@@ -278,8 +278,6 @@ export interface RetryConversationRunCommand
 	readonly runId: string;
 	/** Attempt last observed by the participant. */
 	readonly expectedAttempt: number;
-	/** Fresh command key retained only for this explicit submission. */
-	readonly idempotencyKey: string;
 }
 
 /** Retry-stable steering command for one participant-visible run. */

@@ -6,6 +6,12 @@ import { PrismaArtifactCatalogueRepository } from "../prisma-artifact-catalogue-
 /** Stable database-owned time used by transaction-delegate tests. */
 const _DATABASE_NOW = new Date("2026-08-05T08:00:00.000Z");
 
+/** Return a task receipt for the exact remote task the repository admits. */
+function _Workflow()
+{
+	return { spawn: vi.fn(async function _Spawn(_transaction: unknown, task: { readonly taskName: string; readonly idempotencyKey: string }) { return { taskId: "task-1", taskName: task.taskName, idempotencyKey: task.idempotencyKey }; }) };
+}
+
 /** Build one exact finalization command, optionally selecting a PDF source. */
 function _command(mediaType = "text/plain")
 {
@@ -42,7 +48,7 @@ describe("Prisma artifact authority", function _suite()
 			artifactUploadLease: { findUnique: vi.fn().mockResolvedValue({ id: "lease-1", artifactId: "artifact-1", state: "Active", expiresAt: new Date(_DATABASE_NOW.getTime() + 60_000), expectedContentAddress: `sha256:${"a".repeat(64)}`, expectedByteLength: 12n, mediaType: "text/plain" }), update: vi.fn().mockResolvedValue({}) },
 			artifactRevision: { create: vi.fn().mockResolvedValue({}) },
 		};
-		const result = await new PrismaArtifactAuthorityRepository(transaction as never).finalizeRevisionAtomically(_command());
+		const result = await new PrismaArtifactAuthorityRepository(transaction as never, _Workflow()).finalizeRevisionAtomically(_command());
 		expect(result).toEqual({ status: "finalized" });
 		expect(transaction.artifactUploadLease.update).toHaveBeenCalledTimes(2);
 		expect(transaction.artifactUploadLease.update).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: expect.objectContaining({ promotedAt: _DATABASE_NOW }) }));
@@ -51,19 +57,22 @@ describe("Prisma artifact authority", function _suite()
 		expect(transaction.artifactOutboxEvent.create).toHaveBeenCalledOnce();
 	});
 
-	it("creates one durable PDF preprocessing job beside source publication", async function _schedulesPdfPreprocessing()
+	it("creates the PDF job and admits its workflow task beside source publication", async function _schedulesPdfPreprocessing()
 	{
 		const transaction = {
 			artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) },
 			artifactOutboxEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
-			artifact: { findFirst: vi.fn().mockResolvedValue({ id: "artifact-1", state: "Active" }), update: vi.fn().mockResolvedValue({}) },
+			artifact: { findFirst: vi.fn().mockResolvedValue({ id: "artifact-1", siloId: "silo-1", state: "Active" }), update: vi.fn().mockResolvedValue({}) },
 			artifactUploadLease: { findUnique: vi.fn().mockResolvedValue({ id: "lease-1", artifactId: "artifact-1", state: "Active", expiresAt: new Date(_DATABASE_NOW.getTime() + 60_000), expectedContentAddress: `sha256:${"a".repeat(64)}`, expectedByteLength: 12n, mediaType: "application/pdf" }), update: vi.fn().mockResolvedValue({}) },
 			artifactRevision: { create: vi.fn().mockResolvedValue({}) },
-			artifactPreprocessJob: { create: vi.fn().mockResolvedValue({}) },
+			artifactPreprocessJob: { create: vi.fn().mockResolvedValue({ id: "preprocess-1" }), update: vi.fn().mockResolvedValue({}) },
 		};
+		const workflow = _Workflow();
 
-		await expect(new PrismaArtifactAuthorityRepository(transaction as never).finalizeRevisionAtomically(_command("application/pdf"))).resolves.toEqual({ status: "finalized" });
-		expect(transaction.artifactPreprocessJob.create).toHaveBeenCalledWith({ data: { sourceRevisionId: "revision-1", pipelineVersion: "pdf-to-text/v1" } });
+		await expect(new PrismaArtifactAuthorityRepository(transaction as never, workflow).finalizeRevisionAtomically(_command("application/pdf"))).resolves.toEqual({ status: "finalized" });
+		expect(transaction.artifactPreprocessJob.create).toHaveBeenCalledWith({ data: { sourceRevisionId: "revision-1", pipelineVersion: "pdf-to-text/v1", taskKey: expect.stringMatching(/^workflows:artifact-preprocess:/u) } });
+		expect(workflow.spawn).toHaveBeenCalledWith({ client: transaction }, expect.objectContaining({ input: { siloId: "silo-1", preprocessJobId: "preprocess-1" } }));
+		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "preprocess-1" }, data: { taskId: "task-1", taskName: expect.any(String) } });
 		expect(transaction.artifactOutboxEvent.create).toHaveBeenCalledOnce();
 		expect(transaction.artifactOutboxEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: "RevisionPublished", idempotencyKey: "finalize-1" }) }));
 	});
@@ -77,7 +86,7 @@ describe("Prisma artifact authority", function _suite()
 			artifactUploadLease: { findUnique: vi.fn().mockResolvedValue({ id: "lease-1", artifactId: "artifact-1", state: "Finalized", expiresAt: new Date(_DATABASE_NOW.getTime() + 60_000), expectedContentAddress: `sha256:${"a".repeat(64)}`, expectedByteLength: 12n, mediaType: "text/plain" }), update: vi.fn() },
 			artifactRevision: { create: vi.fn() },
 		};
-		const result = await new PrismaArtifactAuthorityRepository(transaction as never).finalizeRevisionAtomically(_command());
+		const result = await new PrismaArtifactAuthorityRepository(transaction as never, _Workflow()).finalizeRevisionAtomically(_command());
 		expect(result).toEqual({ status: "receipt_consumed" });
 		expect(transaction.artifactRevision.create).not.toHaveBeenCalled();
 	});
@@ -89,7 +98,7 @@ describe("Prisma artifact authority", function _suite()
 			artifact: { findFirst: vi.fn().mockResolvedValue({ id: "artifact-1", state: "Active", siloId: "silo-1" }) },
 			artifactUploadLease: { findUnique: vi.fn().mockResolvedValue({ id: "lease-1", artifactId: "artifact-1", siloId: "silo-1", state: "Finalized", expiresAt: new Date(_DATABASE_NOW.getTime() + 60_000), expectedContentAddress: `sha256:${"a".repeat(64)}`, expectedByteLength: 12n, mediaType: "text/plain" }), create: vi.fn() },
 		};
-		const result = await new PrismaArtifactAuthorityRepository(transaction as never).issueLeaseAtomically({ artifactId: "artifact-1", siloId: "silo-1", capabilityJti: "capability-1", expectedContentAddress: `sha256:${"a".repeat(64)}`, expectedByteLength: 12, mediaType: "text/plain", expiresAtEpochSeconds: Math.floor(_DATABASE_NOW.getTime() / 1_000) + 60 });
+		const result = await new PrismaArtifactAuthorityRepository(transaction as never, _Workflow()).issueLeaseAtomically({ artifactId: "artifact-1", siloId: "silo-1", capabilityJti: "capability-1", expectedContentAddress: `sha256:${"a".repeat(64)}`, expectedByteLength: 12, mediaType: "text/plain", expiresAtEpochSeconds: Math.floor(_DATABASE_NOW.getTime() / 1_000) + 60 });
 		expect(result).toEqual({ status: "conflict" });
 		expect(transaction.artifactUploadLease.create).not.toHaveBeenCalled();
 	});

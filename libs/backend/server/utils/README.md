@@ -30,7 +30,6 @@ archive: the caller receives `null` and must fail closed.
 ## Public surface
 
 - `___ParseZipPackage` — reads a safe ZIP central directory and exposes per-entry bounded reads.
-- `ZipPackage`, `ZipPackageEntry` — parsed entry metadata and its read boundary.
 
 ## Boundary
 

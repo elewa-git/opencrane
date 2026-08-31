@@ -36,7 +36,7 @@ export interface ToolInvocationIntent
 	/** Agent service executed by the attempt. */
 	readonly agentServiceId: string;
 	/** Immutable agent revision executed by the attempt. */
-	readonly agentRevisionId: string;
+	readonly agentRevisionId: string | null;
 	/** Trusted execution subject from the immutable snapshot. */
 	readonly subjectId: string;
 	/** Admitted stream, command, and candidate identity. */
@@ -67,13 +67,15 @@ export interface ToolInvocationRecord
 	/** Silo in which the invocation authority is valid. */
 	readonly siloId: string;
 	/** Immutable agent revision that selected the tool. */
-	readonly agentRevisionId: string;
+	readonly agentRevisionId: string | null;
 	/** Trusted execution subject on whose behalf the action runs. */
 	readonly subjectId: string;
 	/** Run owning the invocation. */
-	readonly runId: string;
+	readonly runId: string | null;
 	/** Attempt owning the invocation. */
-	readonly attempt: number;
+	readonly attempt: number | null;
+	/** Caller-owned MCP task when this invocation does not belong to an AgentRun. */
+	readonly mcpTaskId: string | null;
 	/** Candidate id accepted with the invocation. */
 	readonly candidateId: string;
 	/** Id the runtime gave this tool call; repeat calls with the same id must not run twice. */

@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 
 import { PrismaChannelTargetAuthorityUnitOfWork, __CreateChannelTargetsRouter, __ExactHostSiloResolver, __RandomChannelOpaqueContextSource, __ReconcileChannelTargetRoutes as __ReconcileOwnedChannelTargetRoutes, __StartChannelTargetRouteReconciler as __StartOwnedChannelTargetRouteReconciler, __SystemChannelTargetClock, type ChannelTargetResolutionConfig, type ChannelTargetResolutionDependencies, type ChannelTargetRouteReconciler, type ChannelTargetRouteReconcilerDependencies, type ReconcileChannelRuntimeRoutesCommand } from "@opencrane/backend/server/agents/channel-targets";
-import { PrismaFleetMembershipAuthorityRepository, SignedFleetMembershipAssertionVerifier, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { PrismaFleetMembershipAuthorityUnitOfWork, SignedFleetMembershipAssertionVerifier, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { _CreateChannelProxyTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { ChannelTargetRuntimeConfig } from "./config.types";
@@ -37,7 +37,7 @@ function _CreateResolutionDependencies(prisma: PrismaClient, authApi: Authentica
 		config: resolutionConfig,
 		workloadIdentity: _CreateChannelProxyTokenReviewer(authApi, { audience: resolutionConfig.workloadAudience, namespace: resolutionConfig.channelProxyNamespace, serviceAccountName: resolutionConfig.channelProxyServiceAccountName }),
 		hostSilo: new __ExactHostSiloResolver({ trustedHost: config.trustedHost, siloId: config.siloId }),
-		membership: new SignedFleetMembershipAssertionVerifier(new PrismaFleetMembershipAuthorityRepository(prisma), _CreateFleetMembershipEvidenceConfig()),
+		membership: new SignedFleetMembershipAssertionVerifier(new PrismaFleetMembershipAuthorityUnitOfWork(prisma), _CreateFleetMembershipEvidenceConfig()),
 		repository: new PrismaChannelTargetAuthorityUnitOfWork(prisma),
 		clock: new __SystemChannelTargetClock(),
 		opaqueContext: new __RandomChannelOpaqueContextSource(),

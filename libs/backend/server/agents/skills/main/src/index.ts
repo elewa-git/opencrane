@@ -1,6 +1,15 @@
 export { __CreateSkillCatalogueRouter } from "./skill-catalogue.router";
 export { _CreateSkillCatalogueRouter } from "./prisma-skill-catalogue.router";
+export { PrismaSkillAuthoringValidationRepository } from "./prisma-skill-authoring-validation-repository";
+export { PrismaSkillAuthoringValidationSubmissionUnitOfWork } from "./prisma-skill-authoring-validation-submission";
+export { __CreateSkillAuthoringValidationSubmissionRouter } from "./skill-authoring-validation-submission.router";
+export { PrismaSkillAuthoringValidationControllerUnitOfWork } from "./prisma-skill-authoring-validation-controller-unit-of-work";
+export { __CreateSkillAuthoringValidationControllerRouter } from "./skill-authoring-validation-controller.router";
+export { PrismaSkillAuthoringValidationWorkerUnitOfWork } from "./prisma-skill-authoring-validation-worker";
+export { __CreateSkillAuthoringValidationWorkerRouter } from "./skill-authoring-validation-worker.router";
 export { _SkillCatalogueOpenapiPaths } from "./openapi";
 export { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types";
 export type { SkillCatalogueEntry, SkillCatalogueRepository } from "./skill-catalogue.types";
 export type { SkillCatalogueCaller, SkillCatalogueRouterDependencies } from "./skill-catalogue.router.types";
+export type { SkillAuthoringValidationControllerIdentity, SkillAuthoringValidationControllerRouterDependencies, SkillAuthoringValidationControllerRouterLogger, SkillAuthoringValidationControllerTokenReviewer } from "./skill-authoring-validation-controller.router.types";
+export type { SkillAuthoringValidationArtifactReader } from "./skill-authoring-validation-worker.types";

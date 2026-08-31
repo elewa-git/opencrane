@@ -31,8 +31,8 @@ export interface RevisionSetChange
 	readonly removed: readonly string[];
 }
 
-/** Which kind of power a revision change broadened: knowledge boundary, tools, credentials, or budget. */
-export type RevisionWideningKind = "boundary" | "tools" | "credentials" | "budget";
+/** Names the kind of power a revision change increased: knowledge boundary, tools, or budget. */
+export type RevisionWideningKind = "boundary" | "tools" | "budget";
 
 /**
  * One change that gives the agent more power than the base revision had.
