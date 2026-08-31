@@ -4,7 +4,7 @@ import { Observable, type ConfigurationOptions, type ObservableMiddleware, type 
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { GovernedJobControllerStore, GovernedJobControllerStoreOptions } from "./governed-job-controller.types";
+import type { GovernedJobControllerStore, GovernedJobControllerStoreOptions, GovernedJobObservation, GovernedJobReleaseFence } from "./governed-job-controller.types";
 
 const _SERVER_METADATA_FIELDS = ["creationTimestamp", "generation", "managedFields", "resourceVersion", "selfLink", "uid"] as const;
 /** Kubernetes owner-reference kind for one Batch Job. */
@@ -122,12 +122,14 @@ function _ReleaseIdentity(job: V1Job): { readonly name: string; readonly namespa
 }
 
 /** Bound the released Job lifetime to the remaining database-issued lease. */
-function _ReleaseDeadline(expected: V1Job, releaseExpiresAt: string, requestTimeoutMilliseconds: number): number
+function _ReleaseDeadline(expected: V1Job, releaseFence: GovernedJobReleaseFence, requestTimeoutMilliseconds: number): number
 {
-	const expiry = Date.parse(releaseExpiresAt);
 	const maximum = expected.spec?.activeDeadlineSeconds;
-	const remaining = Math.floor((expiry - Date.now() - requestTimeoutMilliseconds) / 1_000);
-	if (!Number.isSafeInteger(expiry) || !Number.isSafeInteger(maximum) || maximum === undefined || maximum < 1 || remaining < 1)
+	const timeoutSeconds = Math.ceil(requestTimeoutMilliseconds / 1_000);
+	const remaining = "lifetimeSeconds" in releaseFence
+		? releaseFence.lifetimeSeconds - (2 * timeoutSeconds)
+		: Math.floor((Date.parse(releaseFence.expiresAt) - Date.now() - requestTimeoutMilliseconds) / 1_000);
+	if (!Number.isSafeInteger(maximum) || maximum === undefined || maximum < 1 || !Number.isSafeInteger(remaining) || remaining < 1)
 		throw new Error("governed workload lease expired before Kubernetes release");
 	return Math.min(maximum, remaining);
 }
@@ -144,13 +146,31 @@ function _AssertExactPod(pod: V1Pod, expectedJob: V1Job, workloadUid: string, se
 		throw new Error("refusing to register a Pod that differs from the assigned governed Job");
 }
 
+/** Map one exact released Job to the narrow recovery state its durable owner may consume. */
+function _JobObservation(job: V1Job): GovernedJobObservation
+{
+	if (job.spec?.suspend !== false)
+	{
+		throw new Error("refusing to observe a governed Job that has not been released");
+	}
+	const terminalConditions = (job.status?.conditions ?? []).filter(function _TerminalCondition(condition): boolean
+	{
+		return condition.status === "True" && (condition.type === "Complete" || condition.type === "Failed");
+	});
+	if (terminalConditions.length > 1)
+	{
+		throw new Error("governed Job has ambiguous terminal conditions");
+	}
+	return terminalConditions.length === 1 ? "terminal" : "running";
+}
+
 /**
  * Creates the only shared implementation of exact governed Job adoption, release, and Pod lookup.
  *
  * Class-specific controllers still own their Job builders, labels, profiles, claims, and database
  * writes. This store accepts a complete expected manifest and never chooses an image or workload.
- * Called by: the governed skill adapter; the OCI MCP workflow controller will use the same seam
- * when that class-specific adapter is composed.
+ * Called by: the artifact-preprocessing composition plus the governed skill and MCP executor
+ * adapters when they supply their class-owned labels and trace names.
  *
  * @param options - Narrow Kubernetes clients, request deadline, shutdown signal, and code-owned label and trace names.
  * @returns A store that creates or adopts an exact suspended Job, releases its saved UID, and verifies its first Pod.
@@ -182,7 +202,7 @@ export function __CreateKubernetesGovernedJobControllerStore(options: GovernedJo
 				return current;
 			}
 		},
-		async releaseJob(expected: V1Job, workloadUid: string, releaseExpiresAt: string): Promise<V1Job>
+		async releaseJob(expected: V1Job, workloadUid: string, releaseFence: GovernedJobReleaseFence): Promise<V1Job>
 		{
 			const { name, namespace } = _Coordinates(expected);
 			return await ___DoWithTrace(options.releaseTraceName, { name, namespace, workloadUid }, async function _ReleaseJob(): Promise<V1Job>
@@ -191,7 +211,7 @@ export function __CreateKubernetesGovernedJobControllerStore(options: GovernedJo
 				_AssertExactAssignedJob(current, expected, workloadUid);
 				if (current.spec?.suspend === false)
 					return current;
-				const activeDeadlineSeconds = _ReleaseDeadline(expected, releaseExpiresAt, options.requestTimeoutMilliseconds);
+				const activeDeadlineSeconds = _ReleaseDeadline(expected, releaseFence, options.requestTimeoutMilliseconds);
 				const identity = _ReleaseIdentity(current);
 				const currentDeadline = current.spec?.activeDeadlineSeconds;
 				if (typeof currentDeadline !== "number" || !Number.isSafeInteger(currentDeadline))
@@ -213,6 +233,41 @@ export function __CreateKubernetesGovernedJobControllerStore(options: GovernedJo
 				throw new Error("refusing to choose among multiple Pods for one governed Job");
 			_AssertExactPod(listed.items[0], expectedJob, workloadUid, serviceAccountName);
 			return listed.items[0];
+		},
+		async observeJob(expectedJob: V1Job, workloadUid: string): Promise<GovernedJobObservation>
+		{
+			const { name, namespace } = _Coordinates(expectedJob);
+			try
+			{
+				const current = await options.batchApi.readNamespacedJob({ namespace, name }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds));
+				_AssertExactAssignedJob(current, expectedJob, workloadUid);
+				return _JobObservation(current);
+			}
+			catch (error)
+			{
+				if (_StatusCode(error) === 404)
+				{
+					return "missing";
+				}
+				throw error;
+			}
+		},
+		async deleteJob(expectedJob: V1Job, workloadUid: string): Promise<void>
+		{
+			const { name, namespace } = _Coordinates(expectedJob);
+			await ___DoWithTrace(`${options.releaseTraceName}.delete`, { name, namespace, workloadUid }, async function _DeleteJob(): Promise<void>
+			{
+				try
+				{
+					await options.batchApi.deleteNamespacedJob({ namespace, name, body: { preconditions: { uid: workloadUid } } }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds));
+				}
+				catch (error)
+				{
+					if (_StatusCode(error) === 404)
+						return;
+					throw error;
+				}
+			});
 		},
 	};
 }

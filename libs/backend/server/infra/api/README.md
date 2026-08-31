@@ -46,4 +46,4 @@ packages — never on backend domains, the frontend, or app entrypoints.
 ## See also
 
 - Parent index: [infra](../README.md) · [backend libraries](../../../README.md)
-- Siblings: [auth](../auth/README.md) · [http](../http/README.md) · [obot-custody](../obot-custody/README.md)
+- Siblings: [auth](../auth/README.md) · [http](../http/README.md)

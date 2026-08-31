@@ -24,23 +24,6 @@ origin, refuses redirects, and re-reads the projected token for every exchange. 
 TokenReview that audience and bind the reviewed server ServiceAccount to the configured silo before
 trusting forwarded OIDC caller fields. No static Fleet billing credential Secret is mounted.
 
-## Obot server transport
-
-The Deployment renders the server→Obot coordinates only when
-`mcpGateway.serviceTokenExistingSecret` names a pre-provisioned Secret (key `token`) carrying the
-Obot service credential:
-
-- `OBOT_GATEWAY_URL` from the `opencrane.mcpGatewayUrl` helper (the fully-qualified release-local
-  `*-mcp-gateway` Service origin in instance mode).
-- `OBOT_SERVICE_TOKEN_PATH=/var/run/opencrane/obot/token`, mounted read-only (`0440`) from that
-  Secret and re-read per call.
-- `OBOT_TIMEOUT_SECONDS` from `mcpGateway.serverTimeoutSeconds` (default 30, bounded 1–300).
-
-When the value is empty (the default) nothing renders and the application composes fail-closed
-unavailable Obot adapters: custody provisioning and external actions refuse. The server NetworkPolicy
-adds matching `mcp-gateway` egress for custody and durable action execution. Runtime Jobs receive no
-Obot address or credential.
-
 ## Channel target and replay wiring
 
 When `channelProxy.enabled=true`, the Deployment renders the complete resolver contract: the exact

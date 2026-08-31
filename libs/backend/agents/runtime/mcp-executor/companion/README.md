@@ -30,8 +30,10 @@ oversized, redirected, or timed-out exchange fails closed without exposing argum
 - `__CreateMcpCompanionRemote` creates the projected-token OpenCrane adapter.
 - `__CreateMcpCompanionServer` creates the fixed loopback MCP adapter.
 - `__ReadMcpCompanionIdentity` reads and checks the mounted reference and Pod UID.
-- `__RunMcpCompanion` waits for controller Pod registration, runs one claim, and sends one terminal report.
-  It exits without calling the uploaded server when OpenCrane reports that cancellation already ended the saved work.
+- `__RunMcpCompanion` waits for controller Pod registration, claims one saved command, and then
+  waits for the uploaded server to become ready under that command's deadline. A readiness failure
+  is reported through the same claim instead of leaving the database work stuck. It exits without
+  calling the uploaded server when OpenCrane reports that cancellation already ended the saved work.
 - The exported wire parsers give the server route the same strict claim and report contract.
 
 ## Boundary

@@ -1,3 +1,5 @@
+import type { AgUiRunWaitReasons, AgUiRunWaitSources } from "@opencrane/contracts";
+
 /**
  * How a conversation run is going, as far as the browser can tell.
  *
@@ -33,4 +35,15 @@ export interface AgUiRunFailure
 	readonly message: string;
 	/** Optional server-selected failure code. */
 	readonly code?: string;
+}
+
+/** One browser wait entry after the server's source-scoped mutation has been applied. */
+export interface AgUiRunWaitView
+{
+	/** Opaque wait identifier used only for later updates from the same source. */
+	readonly id: string;
+	/** Display-safe reason chosen by server projection. */
+	readonly reason: AgUiRunWaitReasons;
+	/** Authority group that may update or remove this entry. */
+	readonly source: AgUiRunWaitSources;
 }

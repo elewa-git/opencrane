@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { _InspectOciImageLayout, _InspectOciImageLayoutForImport, _ReadOciImageLayoutZip } from "../oci-image-validation/oci-image-layout-verifier";
+import { _InspectOciImageLayoutForImport, _ReadOciImageLayoutZip } from "../oci-image-validation/oci-image-layout-verifier";
 import { OCI_IMAGE_MAXIMUM_BUNDLE_BYTES, OciImageVerificationFailureCodes } from "../oci-image-validation/oci-image-validation.types";
 
 /** One stored ZIP file used to build a deterministic OCI image-layout fixture. */
@@ -109,7 +109,7 @@ function _Layout(options: _LayoutOptions = {}): Buffer
 	return _Zip(entries);
 }
 
-describe("_InspectOciImageLayout", function _OciImageLayoutSuite()
+describe("_InspectOciImageLayoutForImport", function _OciImageLayoutSuite()
 {
 	it("rejects an oversized saved artifact before opening its stream", async function _RejectsSavedOversize()
 	{
@@ -132,7 +132,7 @@ describe("_InspectOciImageLayout", function _OciImageLayoutSuite()
 
 	it("accepts exactly one complete OCI image layout and verifies its layer", function _AcceptsLayout()
 	{
-		expect(_InspectOciImageLayout(_Layout())).toMatchObject({ accepted: true, layout: { indexDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u), imageManifestDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u), configDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) } });
+		expect(_InspectOciImageLayoutForImport(_Layout()).validation).toMatchObject({ accepted: true, layout: { indexDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u), imageManifestDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u), configDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) } });
 	});
 
 	it("returns the exact configuration, layer and manifest bytes for registry import", function _BuildsRegistryPlan()
@@ -147,18 +147,18 @@ describe("_InspectOciImageLayout", function _OciImageLayoutSuite()
 
 	it("reports a malformed ZIP separately from a readable non-OCI ZIP", function _ClassifiesArchiveFailures()
 	{
-		expect(_InspectOciImageLayout(Buffer.from("not-a-zip", "utf8"))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.MalformedZipPackage });
-		expect(_InspectOciImageLayout(_Zip([{ path: "note.txt", bytes: Buffer.from("not an OCI layout", "utf8") }]))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.NotOciImageLayout });
+		expect(_InspectOciImageLayoutForImport(Buffer.from("not-a-zip", "utf8")).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.MalformedZipPackage });
+		expect(_InspectOciImageLayoutForImport(_Zip([{ path: "note.txt", bytes: Buffer.from("not an OCI layout", "utf8") }])).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.NotOciImageLayout });
 	});
 
 	it("rejects missing, multiple and unsupported index manifest descriptors", function _RejectsInvalidIndexDescriptors()
 	{
 		const invalid = { mediaType: "application/vnd.oci.image.manifest.v1+json", digest: "not-a-digest", size: 1 };
 		const unsupported = { mediaType: "application/vnd.docker.distribution.manifest.v2+json", digest: `sha256:${"0".repeat(64)}`, size: 1 };
-		expect(_InspectOciImageLayout(_Layout({ indexManifests: [] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
-		expect(_InspectOciImageLayout(_Layout({ indexManifests: [invalid] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
-		expect(_InspectOciImageLayout(_Layout({ indexManifests: [unsupported] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
-		expect(_InspectOciImageLayout(_Layout({ indexManifests: [invalid, invalid] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
+		expect(_InspectOciImageLayoutForImport(_Layout({ indexManifests: [] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
+		expect(_InspectOciImageLayoutForImport(_Layout({ indexManifests: [invalid] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
+		expect(_InspectOciImageLayoutForImport(_Layout({ indexManifests: [unsupported] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
+		expect(_InspectOciImageLayoutForImport(_Layout({ indexManifests: [invalid, invalid] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex });
 	});
 
 	it("rejects malformed or unsupported configuration and layer descriptors", function _RejectsInvalidImageDescriptors()
@@ -166,10 +166,10 @@ describe("_InspectOciImageLayout", function _OciImageLayoutSuite()
 		const invalidConfig = { mediaType: "application/vnd.oci.image.config.v1+json", digest: "bad", size: 1 };
 		const malformedLayer = { mediaType: "application/vnd.oci.image.layer.v1.tar", digest: `sha256:${"0".repeat(64)}` };
 		const unsupportedLayer = { mediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip", digest: `sha256:${"0".repeat(64)}`, size: 1 };
-		expect(_InspectOciImageLayout(_Layout({ configDescriptor: invalidConfig }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
-		expect(_InspectOciImageLayout(_Layout({ omitLayers: true }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
-		expect(_InspectOciImageLayout(_Layout({ layerDescriptors: [malformedLayer] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
-		expect(_InspectOciImageLayout(_Layout({ layerDescriptors: [unsupportedLayer] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ configDescriptor: invalidConfig })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ omitLayers: true })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ layerDescriptors: [malformedLayer] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ layerDescriptors: [unsupportedLayer] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
 	});
 
 	it("rejects missing blobs and every bad layer digest or declared size", function _RejectsIncompleteBlobClosure()
@@ -179,17 +179,17 @@ describe("_InspectOciImageLayout", function _OciImageLayoutSuite()
 		const mismatchedDigestBlob = { path: `blobs/sha256/${missingDigest.slice(7)}`, bytes: Buffer.from("x", "utf8") };
 		const realLayer = Buffer.from("one immutable layer", "utf8");
 		const badSizeLayer = { mediaType: "application/vnd.oci.image.layer.v1.tar+gzip", digest: _Digest(realLayer), size: realLayer.byteLength + 1 };
-		expect(_InspectOciImageLayout(_Layout({ omitConfigBlob: true }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
-		expect(_InspectOciImageLayout(_Layout({ omitLayerBlob: true }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
-		expect(_InspectOciImageLayout(_Layout({ layerDescriptors: [badDigestLayer], additionalEntries: [mismatchedDigestBlob] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
-		expect(_InspectOciImageLayout(_Layout({ layerDescriptors: [badSizeLayer] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ omitConfigBlob: true })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ omitLayerBlob: true })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ layerDescriptors: [badDigestLayer], additionalEntries: [mismatchedDigestBlob] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ layerDescriptors: [badSizeLayer] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
 	});
 
 	it("rejects duplicate blob descriptors and a non-image manifest document", function _RejectsDuplicateOrWrongManifest()
 	{
 		const layer = Buffer.from("one immutable layer", "utf8");
 		const descriptor = { mediaType: "application/vnd.oci.image.layer.v1.tar+gzip", digest: _Digest(layer), size: layer.byteLength };
-		expect(_InspectOciImageLayout(_Layout({ layerDescriptors: [descriptor, descriptor] }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
-		expect(_InspectOciImageLayout(_Layout({ manifestMediaType: "application/vnd.oci.artifact.manifest.v1+json" }))).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ layerDescriptors: [descriptor, descriptor] })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
+		expect(_InspectOciImageLayoutForImport(_Layout({ manifestMediaType: "application/vnd.oci.artifact.manifest.v1+json" })).validation).toEqual({ accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest });
 	});
 });

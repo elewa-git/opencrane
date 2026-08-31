@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { Prisma } from "@prisma/client";
+import { McpApprovalStatus, McpServerRevisionState, McpServerStatus, Prisma } from "@prisma/client";
 import type { McpEraProbeStatus } from "@prisma/client";
 
 import { McpEraProbeDecisions, McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
@@ -8,7 +8,39 @@ import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
 import type { IMcpOperatorRepository, McpEraProbeRetryResult, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorAuditActor, McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
 
 /** Fields shared by public catalogue mapping and era-probe state transitions. */
-const _SERVER_SELECT = { id: true, name: true, description: true, publisher: true, glyph: true, serverType: true, approvalStatus: true, credentialSchema: true, entitlementSummary: true, endpoint: true, registrationKeyDigest: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true, eraProbeAttempts: true } as const satisfies Prisma.McpServerSelect;
+const _SERVER_SELECT = {
+	id: true,
+	name: true,
+	description: true,
+	publisher: true,
+	glyph: true,
+	serverType: true,
+	approvalStatus: true,
+	status: true,
+	credentialSchema: true,
+	entitlementSummary: true,
+	endpoint: true,
+	registrationKeyDigest: true,
+	registrationDigest: true,
+	eraProbeStatus: true,
+	eraProtocolVersion: true,
+	eraProbeEvidenceDigest: true,
+	eraProbeFailureCode: true,
+	eraProbeAttempts: true,
+	revisions: {
+		where: { state: McpServerRevisionState.Ready },
+		orderBy: [{ revision: "desc" }, { id: "asc" }],
+		take: 1,
+		select: {
+			id: true,
+			state: true,
+			tools: {
+				orderBy: [{ name: "asc" }, { id: "asc" }],
+				select: { id: true, name: true, description: true, inputSchema: true, inputSchemaDigest: true },
+			},
+		},
+	},
+} as const satisfies Prisma.McpServerSelect;
 
 /** Fields loaded by a worker before it makes an external request. */
 const _ERA_PROBE_TARGET_SELECT = { endpoint: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true, eraProbeAttempts: true } as const satisfies Prisma.McpServerSelect;
@@ -42,7 +74,8 @@ function _EraProbeState(value: McpEraProbeStatus): McpEraProbeStates
 /** Translate one Prisma server projection into the MCP repository contract. */
 function _ServerRecord(server: _ServerProjection): McpOperatorServerRecord
 {
-	return { ...server, eraProbeStatus: _EraProbeState(server.eraProbeStatus) };
+	const { revisions = [], ...fields } = server;
+	return { ...fields, latestReadyRevision: revisions[0] ?? null, eraProbeStatus: _EraProbeState(server.eraProbeStatus) };
 }
 
 /** Translate one Prisma worker target into the MCP repository contract. */
@@ -60,7 +93,7 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 
 	async listPublishedServers(siloId: string): Promise<readonly McpOperatorServerRecord[]>
 	{
-		return (await this._transaction.mcpServer.findMany({ where: { siloId, approvalStatus: "Published" }, orderBy: { createdAt: "desc" }, select: _SERVER_SELECT })).map(_ServerRecord);
+		return (await this._transaction.mcpServer.findMany({ where: { siloId, approvalStatus: McpApprovalStatus.Published, status: McpServerStatus.Active, revisions: { some: { state: McpServerRevisionState.Ready } } }, orderBy: { createdAt: "desc" }, select: _SERVER_SELECT })).map(_ServerRecord);
 	}
 
 	async listAllServers(siloId: string): Promise<readonly McpOperatorServerRecord[]>

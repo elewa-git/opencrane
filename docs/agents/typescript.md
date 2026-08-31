@@ -326,7 +326,7 @@ parameter types), and only after grepping to confirm the exact exported name exi
 
 **External specs and third-party services get a `@see` with the URI.** Whenever a comment leans on
 something defined outside this repo — the MCP protocol, AG-UI, A2UI, an RFC, or a third-party service
-such as Obot, LiteLLM, Zitadel or CNPG — link it. A reader must not have to go searching for the
+such as LiteLLM, Zitadel or CNPG — link it. A reader must not have to go searching for the
 document that makes the code correct.
 
 - **Link the pinned revision, not the latest.** If the code pins `2025-06-18`, link that revision's
@@ -387,10 +387,11 @@ export enum RunCancellationResultStatuses
 /**
  * What happened when someone asked to cancel a run.
  *
- * Cancelling is two jobs, and this status says which is left: the database marks the run stopped,
- * and then any Kubernetes Job it created has to be deleted by a later worker pass. So `Cancelling`
- * means "stopped, cleanup still owed" and `Cancelled` means "stopped, nothing left to delete". A
- * caller that treats them as the same will report a run as torn down while its pod still runs.
+ * Cancelling has two steps: the database fences the active attempt, then its saved workflow removes
+ * the exact warm Pod and finalizes the run. `Cancelling` means workflow cleanup is still owed;
+ * `Idempotent` means this request already happened and the saved state tells the caller whether
+ * cleanup is still running or complete. Treating either as immediate completion can report a run as
+ * torn down while its Pod still runs.
  * @see RequestRunCancellationResult for the payload carried with each status.
  */
 export enum RunCancellationResultStatuses
@@ -429,7 +430,7 @@ Cancelling = "cancelling",
 // CORRECT — the member says what is true, and what it obliges the caller to do
 /** The runtime added the next piece of a message it is still writing. Payload: `messageId` and `delta`, the new text. */
 MessageDelta = "message.delta",
-/** The run is stopped, but a Kubernetes Job may still exist and cleanup is owed. Not terminal: a later worker pass finishes it. */
+/** The run is fenced, but its workflow still owes warm Pod cleanup. Not terminal: wait for workflow completion. */
 Cancelling = "cancelling",
 ```
 
@@ -449,11 +450,11 @@ question:
 /**
  * What happened when someone asked to cancel a run, and how much of it is left to do.
  *
- * Cancelling is two jobs rather than one. The database marks the run so no further work is accepted,
- * then, if a Kubernetes Job may already exist, that Job has to be deleted in a separate worker pass.
- * Hence two success values: `Cancelling` is stopped with cleanup still owed, `Cancelled` is stopped
- * with nothing left to delete. A caller that treats them as the same will report a run as fully torn
- * down while its pod is still running.
+ * Cancelling has two steps. The database first fences the active attempt so no further work is
+ * accepted, then its saved workflow removes the exact warm Pod and finalizes the run. A fresh request
+ * returns `Cancelling`; a retry returns `Idempotent` with the saved cancelling or cancelled state.
+ * A caller that treats either as immediate completion can report a run as fully torn down while its
+ * Pod is still running.
  *
  * The repository returns exactly one of these and the HTTP layer maps it to a response; nothing
  * inside the transaction branches on it. None of them are persisted, so renaming a member needs no

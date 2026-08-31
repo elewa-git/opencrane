@@ -45,4 +45,16 @@ describe("HTTP MCP executor controller authority", function _DescribeAuthority()
 
 		await expect(authority.__Claim(new AbortController().signal)).rejects.toThrow(/claim was invalid/);
 	});
+
+	it("accepts cleanup claims and commits exact deletion evidence", async function _CleansUp()
+	{
+		const cleanup = { ..._Claim(), workloadUid: "job-uid-1", cleanupClaimedAt: "2026-08-26T00:02:00.000Z", cleanupDeliveryCount: 2 };
+		const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(cleanup), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify({ outcome: "cleaned" }), { status: 200 }));
+		const authority = __CreateHttpMcpExecutorControllerAuthority(_Options(fetch));
+
+		await expect(authority.__ClaimCleanup(new AbortController().signal)).resolves.toEqual(cleanup);
+		await expect(authority.__CommitCleanup("claim-1", { cleanupClaimedAt: cleanup.cleanupClaimedAt, cleanupDeliveryCount: 2, workloadUid: "job-uid-1" }, new AbortController().signal)).resolves.toBe("cleaned");
+		expect(fetch.mock.calls[0]?.[0]).toEqual(new URL("http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-controller/mcp-executor:cleanup-claim"));
+		expect(fetch.mock.calls[1]?.[0]).toEqual(new URL("http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-controller/mcp-executor/claim-1/cleanup"));
+	});
 });

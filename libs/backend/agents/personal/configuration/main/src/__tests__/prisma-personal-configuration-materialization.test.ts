@@ -2,17 +2,9 @@ import { AgentRevisionState, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __DigestAgentRevisionContent, RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
-import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer";
 import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "../materialization/prisma-personal-configuration-materialization-unit-of-work";
-
-/** Builds a tool definition that materialisation must copy to the new revision. */
-function _Tool()
-{
-	const parametersSchema = { type: "object", additionalProperties: false } as const;
-	return { name: "calendar.read", description: "Read a calendar", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
-}
 
 /** Trusted materialization command shared by transaction-level tests. */
 function _Command()
@@ -50,12 +42,7 @@ function _SourceRevision()
 		modelDefinitionId: "old-model",
 		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 		skillAssignments: [{ skillId: "skill-1", skillRevisionId: "skill-revision-1" }],
-		integrationAssignments: [{
-			integrationId: "integration-1",
-			siloId: "silo-1",
-			custodyReferenceId: "custody-1",
-			toolDefinitions: [_Tool()],
-		}],
+		mcpToolAssignments: [{ toolRevisionId: "mcp-tool-revision-1" }],
 		boundaryAttachments: [{
 			boundaryKind: "Personal",
 			boundaryGroupId: null,
@@ -147,11 +134,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			modelDefinitionId: "tenant-model",
 			budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 			skills: [{ skillId: "skill-1", revisionId: "skill-revision-1" }],
-			integrationAssignments: [{
-				integrationId: "integration-1",
-				custodyReferenceId: "custody-1",
-				toolDefinitions: [_Tool()],
-			}],
+			mcpToolRevisionIds: ["mcp-tool-revision-1"],
 			boundaryAttachments: [{
 				boundaryKind: RevisionBoundaryKinds.Personal,
 				boundaryId: "principal-1",
@@ -191,13 +174,8 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 						skillRevisionId: "skill-revision-1",
 					}],
 				},
-				integrationAssignments: {
-					create: [{
-						integrationId: "integration-1",
-						siloId: "silo-1",
-						custodyReferenceId: "custody-1",
-						toolDefinitions: [_Tool()],
-					}],
+				mcpToolAssignments: {
+					create: [{ toolRevisionId: "mcp-tool-revision-1", agentServiceId: "service-1", siloId: "silo-1" }],
 				},
 				boundaryAttachments: {
 					create: [{

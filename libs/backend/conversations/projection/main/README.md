@@ -50,6 +50,12 @@ server-selected technical classification such as `AuthenticationError`, because 
 understand the problem. It never includes credentials, authorization headers, provider response
 bodies, raw tool arguments, raw tool results or arbitrary exception text.
 
+The stream also projects a versioned run-wait collection. Runtime-admitted outside actions,
+participant input, server-proven approval, one-use personal-memory permission, and manual recovery
+remain separate fixed categories. Cursorless participant snapshots replace only participant-owned
+waits, so reconnect restores open questions and approvals without erasing outside work or recovery
+evidence. The projection never copies a question, tool arguments, or provider text into this state.
+
 ### What each conversation mode can emit
 
 | Mode | Canonical input | Projected output |
@@ -109,7 +115,7 @@ within the validation fences; invalid limits fail before the response opens.
 
 The projected events conform to the repository-pinned
 [`@ag-ui/core` **0.0.57** package](https://www.npmjs.com/package/@ag-ui/core/v/0.0.57) schemas and the
-OpenCrane `opencrane.ag-ui.v1` envelope. Governed A2UI content is admitted by the contracts package's
+OpenCrane `opencrane.ag-ui.v2` envelope. Governed A2UI content is admitted by the contracts package's
 `opencrane.a2ui.v1` parser before projection.
 
 ## See also

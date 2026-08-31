@@ -1,7 +1,6 @@
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationClaim } from "@opencrane/backend/server/iam/authorization";
 import { PersonalMemoryPermissionVerificationOutcomes } from "@opencrane/backend/agents/execution/elicitation";
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/server/infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
@@ -16,7 +15,7 @@ function _invocation(toolRevisionId: string): ExternalActionWorkerInvocation
 {
 	const proposedArguments = { query: "proposed" };
 	const effectiveArguments = { query: "approved" };
-	return { id: "row-1", siloId: "silo-1", runId: "run-1", attempt: 1, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "tool-1", toolRevisionId, arguments: proposedArguments, argumentsDigest: ___DigestCanonicalJson(proposedArguments), effectiveArguments, effectiveArgumentsDigest: ___DigestCanonicalJson(effectiveArguments), requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.Ready, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 2 };
+	return { id: "row-1", siloId: "silo-1", runId: "run-1", attempt: 1, mcpTaskId: null, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "tool-1", toolRevisionId, arguments: proposedArguments, argumentsDigest: ___DigestCanonicalJson(proposedArguments), effectiveArguments, effectiveArgumentsDigest: ___DigestCanonicalJson(effectiveArguments), requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.Ready, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 2 };
 }
 
 /** Build one immutable personal snapshot. */
@@ -37,8 +36,6 @@ function _factory(proposeUpgradeSession = vi.fn().mockResolvedValue({ changeId: 
 {
 	return new ProductionExternalActionAdapterFactory({
 		transports: {
-			integrations: { resolveAssignment: async function _resolve() { return { outcome: "unavailable" as const, reason: "revoked" as const }; } },
-			obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(),
 			sandboxExecutor: new __UnavailableSandboxJobExecutor(),
 		},
 		personalConfiguration: { proposeUpgradeSession },
@@ -49,18 +46,24 @@ function _factory(proposeUpgradeSession = vi.fn().mockResolvedValue({ changeId: 
 
 describe("production external action adapter", function _suite()
 {
+	it("rejects standalone MCP tasks before creating an AgentRun command", function _RejectsStandaloneMcpTask()
+	{
+		const invocation = { ..._invocation("sandbox:image-1"), runId: null, attempt: null, mcpTaskId: "mcp-task-1" };
+		expect(function _prepare() { _factory().prepare(invocation, _context()); }).toThrow("not owned by an AgentRun");
+	});
+
 	it("marks current provider ports as manual recovery", function _manualMode()
 	{
-		const adapter = _factory().prepare(_invocation("integration:calendar:calendar.read"), _context());
+		const adapter = _factory().prepare(_invocation("sandbox:image-1"), _context());
 		expect(adapter.recoveryMode).toBe(ExternalActionRecoveryModes.Manual);
 	});
 
-	it("returns a bounded failure when live integration authority refuses before dispatch", async function _revokedIntegration()
+	it("returns a bounded failure for a retired integration revision", async function _retiredIntegration()
 	{
 		const invocation = _invocation("integration:calendar:calendar.read");
 		const adapter = _factory().prepare(invocation, _context());
 		const claimed = _claimed(invocation);
-		await expect(adapter.dispatch(null, claimed.invocation, claimed.claim)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Failed, failureCode: "integration_assignment_revoked" });
+		await expect(adapter.dispatch(null, claimed.invocation, claimed.claim)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Failed, failureCode: "external_action_unsupported" });
 	});
 
 	it("executes the built-in personal action from durable fields rather than runtime coordinates", async function _builtIn()
@@ -75,7 +78,7 @@ describe("production external action adapter", function _suite()
 
 	it("rejects changed effective arguments before selecting a provider transport", function _changedApprovedArguments()
 	{
-		const invocation = { ..._invocation("integration:calendar:calendar.read"), effectiveArguments: { query: "changed" } };
+		const invocation = { ..._invocation("sandbox:image-1"), effectiveArguments: { query: "changed" } };
 		expect(function _prepare() { _factory().prepare(invocation, _context()); }).toThrow("effective arguments failed integrity validation");
 	});
 

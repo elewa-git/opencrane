@@ -6,17 +6,12 @@ import type { RuntimeTerminalEventType, RuntimeTerminalPendingToolRepository, Ru
 
 /**
  * Turns a fenced runtime result into the sole terminal run outcome in Postgres.
- * Its advisory-lock query casts the result because Prisma cannot deserialize PostgreSQL's void return
- * type from a raw query.
  */
 export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 {
 	/** Persist one terminal report with its own stream event and child-to-parent hand-off. */
 	async reportInTransaction(transaction: Prisma.TransactionClient, command: RuntimeTerminalReportCommand): Promise<RuntimeTerminalReportResult>
 	{
-		// Serialise all terminal writers for this run before choosing the next stream sequence.
-		await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${command.runId}, 0))::text AS "lock"`);
-		await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.runId} FOR UPDATE`);
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 		const sourceState = run === null || run.attempt !== command.attempt ? null : _TerminalSourceState(run.state, command);
 		if (run === null || sourceState === null) return { outcome: "denied", reason: "run_not_running" };

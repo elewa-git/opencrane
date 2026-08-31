@@ -74,7 +74,7 @@ describe("self conversations router", function _Suite()
 			.mockResolvedValueOnce({ outcome: "started", run: { id: "run-1", attempt: 2 } })
 			.mockResolvedValueOnce({ outcome: "idempotent", run: { id: "run-1", attempt: 2 } });
 		const app = _App({ retryRun });
-		const body = { expectedAttempt: 1, idempotencyKey: "retry-1" };
+		const body = { expectedAttempt: 1 };
 
 		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(201, { outcome: "started", runId: "run-1", attempt: 2 });
 		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(200, { outcome: "idempotent", runId: "run-1", attempt: 2 });
@@ -87,7 +87,7 @@ describe("self conversations router", function _Suite()
 			.mockResolvedValueOnce({ outcome: "denied", reason: "unauthorized" })
 			.mockResolvedValueOnce({ outcome: "denied", reason: "attempt_conflict", currentAttempt: 3 });
 		const app = _App({ retryRun });
-		const body = { expectedAttempt: 1, idempotencyKey: "retry-1" };
+		const body = { expectedAttempt: 1 };
 
 		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(404, { error: "unauthorized" });
 		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(409, { error: "attempt_conflict", currentAttempt: 3 });
@@ -96,7 +96,7 @@ describe("self conversations router", function _Suite()
 	it("rejects malformed retry coordinates before run authority", async function _RejectsMalformedRetry()
 	{
 		const retryRun = vi.fn();
-		await request(_App({ retryRun })).post("/conversation-1/runs/run-1/retry").send({ expectedAttempt: 0, idempotencyKey: "retry-1" }).expect(400, { error: "invalid_run_retry" });
+		await request(_App({ retryRun })).post("/conversation-1/runs/run-1/retry").send({ expectedAttempt: 0 }).expect(400, { error: "invalid_run_retry" });
 		expect(retryRun).not.toHaveBeenCalled();
 	});
 

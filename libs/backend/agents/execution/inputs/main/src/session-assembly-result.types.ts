@@ -81,9 +81,9 @@ export enum RunInputSnapshotAdmissionOutcomes
  * - `memory_unavailable` - the memory gateway failed while selecting facts. Assembly fails closed
  *   here on purpose, rather than freezing an empty memory set that would look like "no facts".
  *   Safe to retry.
- * - `tool_policy_unavailable` - the revision is no longer published, or an integration is
- *   inactive, or its custody reference expired, or a tool definition failed review, or an assigned
- *   skill/artifact is not a published revision in this silo. An operator must fix the revision.
+ * - `tool_policy_unavailable` - the revision is no longer published, an MCP tool revision is not
+ *   ready and assignable, or an assigned skill/artifact is not a published revision in this silo.
+ *   An operator must fix the revision.
  * - `skill_unavailable` - the skill re-check at the end of admission refused: a skill revision was
  *   named twice, never assigned, revoked, from another silo, or not published.
  * - `budget_unavailable` - the revision's budget is missing, malformed, or holds values that

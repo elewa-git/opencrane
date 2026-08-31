@@ -44,9 +44,9 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorNamespace: undefined,
 		assignmentTtlMilliseconds: 60_000,
 		channelTargets: null,
-		claimLeaseMilliseconds: 30_000,
 		commandRecoveryMilliseconds: 15_000,
 		commandTtlMilliseconds: 60_000,
+		continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
 		managedRuntimeNamespace: "managed-runtime",
 		mcpCompanionClaimLeaseMilliseconds: 30_000,
 		mcpControllerClaimLeaseMilliseconds: 30_000,
@@ -54,10 +54,9 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		memoryGatewayTimeoutMilliseconds: 30_000,
 		memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
-		outboxPruneBatchSize: 100,
 		personalRuntimeNamespace: "personal-runtime",
-		publishedOutboxRetentionMilliseconds: 86_400_000,
 		serverNamespace: "opencrane-server",
+		skillAuthoringNamespace: "skill-authoring",
 		siloId: "silo-1",
 	};
 }
@@ -73,13 +72,13 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
 
-		expect(composition.agentControllerRunDispatch).toEqual(expect.any(Function));
-		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
-		expect(composition.skillWorkloadBootstrap).toEqual(expect.any(Function));
-		expect(composition.skillAuthoringInput).toEqual(expect.any(Function));
-		expect(composition.skillAuthoringCompletion).toEqual(expect.any(Function));
-		expect(composition.runtimeBootstrap).toEqual(expect.any(Function));
-		expect(composition.runtimeStream).toEqual(expect.any(Function));
+		expect(composition.agentRunWorkflowController).toEqual(expect.any(Function));
+		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
+		expect(composition.skillAuthoringValidationWorker).toEqual(expect.any(Function));
+		expect(composition).not.toHaveProperty("skillAuthoringInput");
+		expect(composition).not.toHaveProperty("skillAuthoringCompletion");
+		expect(composition.artifactPreprocessController).toBeNull();
+		expect(composition).not.toHaveProperty("runtimeStream");
 		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));
 		expect(composition.agentThreadParentDeliveries).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();
@@ -118,6 +117,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config);
 
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
+		expect(composition.artifactPreprocessController).toEqual(expect.any(Function));
 		expect(composition.artifactScanner).toEqual(expect.any(Function));
 		expect(composition.channelTargetResolver).toEqual(expect.any(Function));
 		expect(composition.conversationReplay).toEqual(expect.any(Function));

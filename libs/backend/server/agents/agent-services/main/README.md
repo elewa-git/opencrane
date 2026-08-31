@@ -7,8 +7,8 @@
 This package owns the **agent definition plane** — the side of OpenCrane that turns a saved
 managed or personal agent definition into something the runtime can execute. An *agent service* is the stable identity
 of one agent (its name and lifecycle); an *agent revision* is one immutable, versioned snapshot of
-how that agent behaves (its prompt policy, registered model definition, budget, and the skills and
-integrations it may use). A service always points at exactly one *active* revision.
+how that agent behaves (its prompt policy, registered model definition, budget, skills, and immutable
+MCP tool revisions). A service always points at exactly one *active* revision.
 
 This package owns the whole definition plane and the authoritative management API. It creates a
 managed service with its first draft revision, accepting only the deployed `managed-default`
@@ -28,7 +28,7 @@ to one Group, one stored Group subtree, or one Personal boundary, and never impl
 Context Protocol tools, models, credentials, or another boundary.
 
 ```
- author a draft AgentRevision   (prompt policy · registered model · budget · assigned skills + integrations)
+ author a draft AgentRevision   (prompt policy · registered model · budget · skills · MCP tools)
         │
         ▼
  ┌────────────────────────────────────┐
@@ -40,14 +40,13 @@ Context Protocol tools, models, credentials, or another boundary.
  runtime executes the service's active revision
 ```
 
-**In this flow:** [skills](../../skills/main/README.md) · [integrations](../../../gateways/integrations/main/README.md) *(a revision assigns these)*
+**In this flow:** [skills](../../skills/main/README.md) · [MCP](../../../gateways/mcp/main/README.md) *(a revision assigns these)*
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
 carries every executable field (a positive version, a digest, prompt and registered model definition,
-and positive turn/token/duration budgets). Every assigned integration tool must carry a non-empty,
-unambiguous name, reviewed description, valid object input schema, and matching canonical digest:
-colons are rejected because the runtime compiles the frozen
-assignment into `integration:<integrationId>:<toolName>`. The model is a foreign-key reference to the
+and positive turn/token/duration budgets). Every assigned MCP tool must point to one immutable,
+ready tool revision with a non-empty name, valid object input schema, and matching canonical digest.
+The model is a foreign-key reference to the
 gateway-owned catalogue, so an author cannot turn an arbitrary provider alias into executable
 behaviour. A model is available only when it is platform-global or belongs to the service's tenant
 scope; the database checks the same rule as the application. The publish and the pointer flip happen
@@ -81,7 +80,7 @@ questionnaire may become complete. The app binds that transaction to this packag
    none of it.
 
 The initial revision uses the package-owned initial personal-Agent policy and the
-`personal-default` runtime profile. Its skills, integrations, and knowledge-boundary attachments are
+`personal-default` runtime profile. Its skills, MCP tools, and knowledge-boundary attachments are
 empty. Personal memory access is not silently granted during onboarding; it follows the separate
 user-elicitation and consent flow.
 
@@ -200,7 +199,7 @@ digests, publication, activation, or publication audit evidence. The bootstrap r
 complete onboarding or commit the transaction. Model-routing owns configured-default precedence and
 accessible-definition resolution; the app only translates its result vocabulary into this package's
 narrow port. This package does not run agents or resolve
-skills/integrations itself. It fails closed:
+skills or MCP tools itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
 
 ## Database adapters
@@ -232,7 +231,7 @@ attachments remain silo-bounded and administrator-gated.
 Owns the `AgentService`, `AgentRevision` (with `parentRevisionId`/`sourceRevisionId`/`changeMessage`
 lineage and a required `ModelDefinition` reference), `AgentRevisionBoundaryAttachment`
 (`Group` or `Personal`, with exact or stored-descendant coverage), `AgentRevisionSkillAssignment`,
-`AgentRevisionIntegrationAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
+`AgentRevisionMcpToolAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
 enabled, catch-up window) models in `apps/opencrane/prisma/schema/agent-services.prisma`.
 
 ## See also

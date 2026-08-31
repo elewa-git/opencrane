@@ -46,6 +46,19 @@ function _Task(input: TestTaskInput): { readonly taskName: string; readonly idem
 
 describe("workflow guard policy", function _PolicySuite()
 {
+	it("admits a declared remote task without registering a local handler", async function _AdmitsDeclaredRemoteTask()
+	{
+		const execution = new __FakeWorkflowEngine();
+		const register = vi.spyOn(execution, "register");
+		const guard = _Guard(execution);
+		guard.declare({ taskName: "archive" });
+		const receipt = await guard.spawn(_Transaction(), _Task({ siloId: "silo-a", requestId: "request-1" }));
+		await execution.startWorkers({ workerName: "server-worker" });
+
+		expect(register).not.toHaveBeenCalled();
+		expect(execution.taskSnapshot(receipt).state).toBe("pending");
+	});
+
 	it("admits and runs a task only when its input belongs to the configured silo", async function _RunsSiloTask()
 	{
 		const execution = new __FakeWorkflowEngine();

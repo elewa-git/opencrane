@@ -165,8 +165,7 @@ configured as `shared` (an external, centrally-operated endpoint serves all
 instances), and "" (falsey) otherwise. Default for every component is `instance`, so
 an absent or partial `sharedPlatform` block preserves today's release-local behaviour.
 
-`opencrane.<component>Url` / `opencrane.obotSecretName` resolve the endpoint/name the
-consumers should use:
+`opencrane.<component>Url` resolves the endpoint consumers should use:
   - instance mode → release-prefixed in-cluster name (current behaviour).
   - shared mode   → the externally-provided value, failing fast if it is unset.
 */}}
@@ -174,12 +173,6 @@ consumers should use:
 {{- define "opencrane.litellmShared" -}}
 {{- $sp := .Values.sharedPlatform | default dict -}}
 {{- $c := $sp.litellm | default dict -}}
-{{- if eq (default "instance" $c.mode) "shared" -}}true{{- end -}}
-{{- end }}
-
-{{- define "opencrane.mcpGatewayShared" -}}
-{{- $sp := .Values.sharedPlatform | default dict -}}
-{{- $c := $sp.mcpGateway | default dict -}}
 {{- if eq (default "instance" $c.mode) "shared" -}}true{{- end -}}
 {{- end }}
 
@@ -203,22 +196,6 @@ instance → release-local Service; shared → sharedPlatform.litellm.shared.end
 {{- end -}}
 {{- end }}
 
-{{/*
-Obot MCP gateway base origin consumed by the opencrane-server's OBOT_GATEWAY_URL.
-instance → the fully-qualified release-local Service origin (the server validates a
-`*.svc.cluster.local` origin, so the short Service name is not used here);
-shared → sharedPlatform.mcpGateway.shared.url.
-*/}}
-{{- define "opencrane.mcpGatewayUrl" -}}
-{{- if eq (include "opencrane.mcpGatewayShared" .) "true" -}}
-{{- $u := .Values.sharedPlatform.mcpGateway.shared.url | default "" -}}
-{{- if not $u -}}{{- fail "sharedPlatform.mcpGateway.mode=shared requires sharedPlatform.mcpGateway.shared.url" -}}{{- end -}}
-{{- $u -}}
-{{- else -}}
-{{- printf "http://%s-mcp-gateway.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.mcpGateway.service.port -}}
-{{- end -}}
-{{- end }}
-
 {{/* Release-local Cognee endpoint the private memory gateway should call. */}}
 {{- define "opencrane.cogneeEndpoint" -}}
 {{- $c := .Values.clustertenantManager.cognee | default dict -}}
@@ -232,16 +209,6 @@ only permitted Cognee caller, so the server never receives a Cognee endpoint dir
 */}}
 {{- define "opencrane.memoryGatewayUrl" -}}
 {{- printf "http://%s-memory-gateway.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.memoryGateway.service.port -}}
-{{- end }}
-
-{{/*
-Name of the Secret holding Obot's PostgreSQL DSN (key `dsn`).
-instance → release-prefixed `<fullname>-obot` (per-instance, collision-free; B5).
-shared   → the operator points at an external Obot, so no in-release Secret is used.
-This Secret is provisioned out-of-band (operator/installer), not by the chart.
-*/}}
-{{- define "opencrane.obotSecretName" -}}
-{{- printf "%s-obot" (include "opencrane.fullname" .) -}}
 {{- end }}
 
 {{/*

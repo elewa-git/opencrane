@@ -1,9 +1,9 @@
 import { EventType } from "@ag-ui/core";
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
-import { AG_UI_INTERRUPTS_CLEARED_EVENT } from "@opencrane/contracts";
+import { AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_RUN_WAIT_STATE_EVENT, AgUiRunWaitOperations, AgUiRunWaitSources, type AgUiRunWaitStateEnvelope } from "@opencrane/contracts";
 import type { ConversationReplayCursor } from "@opencrane/contracts";
 
-import { __ProjectAgUiEvents } from "./ag-ui-event-projector";
+import { _ProjectParticipantWait, __ProjectAgUiEvents } from "./ag-ui-event-projector";
 import { __EncodeAgUiSseRecord } from "./ag-ui-sse-encoder";
 import { __EncodeConversationProjectionCursor } from "./conversation-projection-cursor";
 import { __ProjectConversationEvent } from "./conversation-event-projector";
@@ -99,6 +99,14 @@ async function _WriteInterruptSnapshot(sink: ConversationProjectionSink, convers
 	});
 	if (runId === undefined) throw new Error("open conversation interrupts require a run coordinate");
 	await _WriteSink(sink, __EncodeAgUiSseRecord({ event: "ag-ui", data: { type: EventType.RUN_FINISHED, threadId: conversationId, runId, outcome: { type: "interrupt", interrupts } } }), signal);
+	await _WriteSink(sink, __EncodeAgUiSseRecord({ event: "ag-ui", data: _ParticipantWaitSnapshot(runId, interrupts) }), signal);
+}
+
+/** Replace the complete server-owned participant wait subset after each overlay read. */
+function _ParticipantWaitSnapshot(runId: string, interrupts: readonly import("@ag-ui/core").Interrupt[]): import("@ag-ui/core").CustomEvent
+{
+	const value: AgUiRunWaitStateEnvelope = { version: AG_UI_RUN_WAIT_STATE_EVENT, runId, source: AgUiRunWaitSources.Participant, operation: AgUiRunWaitOperations.Replace, waits: interrupts.map(_ProjectParticipantWait) };
+	return { type: EventType.CUSTOM, name: AG_UI_RUN_WAIT_STATE_EVENT, value };
 }
 
 /** Write deterministic subframes and return the last emitted replay coordinate. */

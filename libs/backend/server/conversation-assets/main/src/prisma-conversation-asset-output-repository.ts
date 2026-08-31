@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WorkloadAssignmentState, type Prisma } from "@prisma/client";
+import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WarmRuntimeReservationState, WorkloadAssignmentState, type Prisma } from "@prisma/client";
 
 import type { ArtifactPromotionReceiptClaims } from "@opencrane/backend/artifacts/authorization";
 import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/agents/artifacts";
@@ -114,7 +114,9 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 	/** Requires the exact live attempt and exact projected pod identity on every operation. */
 	private async _assignment(identity: ConversationAssetOutputRuntimeIdentity, runId: string, runAttempt: number)
 	{
-		return this.transaction.workloadAssignment.findFirst({ where: { runId, attempt: runAttempt, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WorkloadAssignmentState.Registered, expiresAt: { gt: new Date() }, run: { attempt: runAttempt } }, include: { run: true } });
+		const now = new Date();
+		const assignment = await this.transaction.workloadAssignment.findFirst({ where: { runId, attempt: runAttempt, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, state: WorkloadAssignmentState.Registered, expiresAt: { gt: now }, run: { attempt: runAttempt } }, include: { run: true, warmRuntimeReservations: { where: { namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WarmRuntimeReservationState.Claimed, idleDeadline: { gt: now } }, select: { generation: true } } } });
+		return assignment !== null && assignment.warmRuntimeReservations.some(function _CurrentGeneration(reservation) { return reservation.generation === assignment.bindingGeneration; }) ? assignment : null;
 	}
 
 	/** Requires the canonical assistant message-start coordinate owned by this run. */

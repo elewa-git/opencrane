@@ -30,8 +30,14 @@ export enum McpRuntimeCompanionClaimOutcomes
 	Terminal = "terminal",
 }
 
-/** Stable results returned by controller-fenced writes. */
-export type McpRuntimeControllerWriteOutcome = "assigned" | "released" | "registered" | "idempotent" | "conflict";
+/**
+ * Reports what a controller write changed after the server checks its saved delivery fence.
+ *
+ * `assigned`, `released`, `registered`, and `cleaned` name the new write. `idempotent` means the
+ * same transition already committed. `conflict` means the UID, delivery, state, or lease changed,
+ * so the controller must not report the requested transition as complete.
+ */
+export type McpRuntimeControllerWriteOutcome = "assigned" | "released" | "registered" | "cleaned" | "idempotent" | "conflict";
 
 /** Bounded administrator input that promotes one imported image into a draft server revision. */
 export interface McpOciServerPromotionCommand
@@ -74,11 +80,47 @@ export interface McpRuntimeControllerReleaseClaim extends McpRuntimeControllerCl
 	readonly releaseExpiresAt: string;
 }
 
+/**
+ * Projects a terminal execution whose Kubernetes Job may still exist.
+ *
+ * The controller deletes `workloadUid`, then returns the cleanup time and delivery count so the
+ * server can reject an expired or replaced cleanup claim.
+ * The server does not send an expiry because deleting the saved UID is safe to repeat. A late
+ * commit conflicts, and a later claim confirms the already-absent Job before committing cleanup.
+ *
+ * Called by: {@link McpRuntimeAuthority.claimNextCleanup} and the agent controller's HTTP adapter.
+ */
+export interface McpRuntimeControllerCleanupClaim extends McpRuntimeControllerClaim
+{
+	/** Immutable UID Kubernetes assigned to the Job being deleted. */
+	readonly workloadUid: string;
+	/** Database time that identifies this cleanup delivery. */
+	readonly cleanupClaimedAt: string;
+	/** Delivery generation that fences this cleanup. */
+	readonly cleanupDeliveryCount: number;
+}
+
 /** Release evidence accepted only for the current delivery and Job UID. */
 export interface McpRuntimeReleaseCommand
 {
 	readonly releaseClaimedAt: string;
 	readonly releaseDeliveryCount: number;
+	readonly workloadUid: string;
+}
+
+/**
+ * Reports which Kubernetes Job UID a cleanup delivery deleted.
+ *
+ * All fields must match the current saved cleanup claim before the server records completion.
+ * Release carries an expiry because it makes a Job runnable; cleanup cannot do that and omits it.
+ */
+export interface McpRuntimeCleanupCommand
+{
+	/** Database time of the claimed cleanup delivery. */
+	readonly cleanupClaimedAt: string;
+	/** Generation of the claimed cleanup delivery. */
+	readonly cleanupDeliveryCount: number;
+	/** Immutable Job UID deleted by the controller. */
 	readonly workloadUid: string;
 }
 
@@ -108,8 +150,12 @@ export interface McpRuntimeAuthority
 	commitAssignment(binding: RuntimeWorkloadBinding): Promise<McpRuntimeControllerWriteOutcome>;
 	/** Claim an assigned or released Job for release and first-Pod registration. */
 	claimNextRelease(): Promise<McpRuntimeControllerReleaseClaim | null>;
+	/** Return one terminal execution with cleanup owed, or `null` when no cleanup delivery is ready. */
+	claimNextCleanup(): Promise<McpRuntimeControllerCleanupClaim | null>;
 	/** Save the Kubernetes release under the matching delivery and Job UID. */
 	commitRelease(claimId: string, command: McpRuntimeReleaseCommand): Promise<McpRuntimeControllerWriteOutcome>;
+	/** Return `cleaned`, `idempotent`, or `conflict` after checking the cleanup delivery and Job UID. */
+	commitCleanup(claimId: string, command: McpRuntimeCleanupCommand): Promise<McpRuntimeControllerWriteOutcome>;
 	/** Bind the first owned Pod UID while the release fence remains current. */
 	registerFirstPod(claimId: string, command: McpRuntimePodRegistrationCommand): Promise<McpRuntimeControllerWriteOutcome>;
 	/** Move one invocation whose companion lease expired after dispatch into manual recovery. */
@@ -192,8 +238,12 @@ export interface McpRuntimeControllerRepository
 	commitAssignment(binding: RuntimeWorkloadBinding): Promise<McpRuntimeControllerWriteOutcome>;
 	/** Claim one assigned Job for release. */
 	claimNextRelease(): Promise<McpRuntimeControllerReleaseClaim | null>;
+	/** Return one terminal execution with a saved Job UID and an available cleanup delivery. */
+	claimNextCleanup(): Promise<McpRuntimeControllerCleanupClaim | null>;
 	/** Commit one exact Job release. */
 	commitRelease(claimId: string, command: McpRuntimeReleaseCommand): Promise<McpRuntimeControllerWriteOutcome>;
+	/** Record deletion only while the cleanup delivery, terminal state, and saved Job UID still match. */
+	commitCleanup(claimId: string, command: McpRuntimeCleanupCommand): Promise<McpRuntimeControllerWriteOutcome>;
 	/** Register the first Pod under the release fence. */
 	registerFirstPod(claimId: string, command: McpRuntimePodRegistrationCommand): Promise<McpRuntimeControllerWriteOutcome>;
 }

@@ -19,16 +19,16 @@ from urllib.error import HTTPError, URLError
 # These aliases mark where the process is composed: the entrypoint chooses concrete implementations,
 # while ``run_forever`` receives callables so lifecycle policy can be tested without real identity,
 # network, or model infrastructure. Lower-level packages must not import this composition root.
-from .bootstrap.exchange import BootstrapDeniedError, perform_bootstrap as _perform_bootstrap
-from .bootstrap.proof import generate_proof_key
+from .bootstrap.exchange import BootstrapDeniedError, perform_warm_binding as _perform_warm_binding
+from .bootstrap.proof import load_or_create_proof_key as _load_or_create_proof_key
 from .config import (
     environment,
-    read_bootstrap_reference,
     read_projected_token,
 )
-from .constants import DEFAULT_BOOTSTRAP_PATH, DEFAULT_TOKEN_PATH
+from .constants import DEFAULT_TOKEN_PATH
 from .observability import log
 from .transport.stream import open_stream as _open_stream
+from .warm_runtime import start_warm_readiness_server as _start_warm_readiness_server
 
 
 def retry_delay(attempt: int) -> float:
@@ -41,9 +41,10 @@ def retry_delay(attempt: int) -> float:
 
 
 def run_forever(
-    open_stream: Callable[[str, str, str, str], int] = _open_stream,
-    perform_bootstrap: Callable[[str, str, str, dict[str, object]], None] = _perform_bootstrap,
-    generate_key: Callable[[], dict[str, object]] = generate_proof_key,
+    open_stream: Callable[..., int] = _open_stream,
+    perform_warm_binding: Callable[[str, str, dict[str, object]], str] = _perform_warm_binding,
+    generate_key: Callable[[], dict[str, object]] = _load_or_create_proof_key,
+    start_warm_readiness_server: Callable[[int, str, str], object] = _start_warm_readiness_server,
 ) -> None:
     """Perform one-use bootstrap, then supervise the Pod's outbound stream forever.
 
@@ -61,38 +62,33 @@ def run_forever(
     # before constructing process identity; actual mounted-file reads remain at their point of use.
     control_plane_url = environment("OPENCRANE_RUNTIME_STREAM_URL")
     token_path = environment("OPENCRANE_RUNTIME_TOKEN_PATH", DEFAULT_TOKEN_PATH)
-    bootstrap_reference_path = environment(
-        "OPENCRANE_RUNTIME_BOOTSTRAP_PATH",
-        DEFAULT_BOOTSTRAP_PATH,
-    )
     pod_uid = environment("POD_UID")
+    readiness_port = int(environment("OPENCRANE_WARM_BINDING_PORT"))
+    claimed_profile = environment("OPENCRANE_WARM_PROFILE")
 
     # The instance id distinguishes this process lifetime from a replacement Pod or restarted
     # process. It remains stable across transport reconnects, whereas the projected token below is
     # intentionally reread because its credential lifetime is shorter than the process lifetime.
     runtime_instance_id = str(uuid.uuid4())
 
-    # Generate one proof key for the one-use binding attempt and retain the same public evidence
-    # across transient bootstrap failures. Regeneration during retries would make an ambiguous
-    # accepted response impossible to reconcile with the evidence held by this process.
+    # Load one public proof identity for this Pod and retain it across binding retries and container
+    # restarts. The emptyDir file contains no private key or model key.
     proof_key = generate_key()
 
-    # The bootstrap reference is workload-selection evidence, not a general credential. Reading it
-    # once preserves the identity being bound; only the rotating workload token is refreshed.
-    bootstrap_reference = read_bootstrap_reference(bootstrap_reference_path)
+    start_warm_readiness_server(readiness_port, pod_uid, claimed_profile)
     log("runtime_started", runtime_instance_id=runtime_instance_id)
 
-    # Phase 1: bind public proof evidence exactly once. Transient failures retry the same reference
-    # and evidence; a control-plane refusal is final and no command stream is opened.
+    # Bind public proof evidence exactly once. Transient failures retry the same evidence; a control-
+    # plane refusal is final and no command stream is opened.
     attempts = 0
+    attempt_model_key = None
     while True:
         try:
             # Token access stays inside the retry attempt so a kubelet rotation between attempts is
             # observed without persisting credential material in process configuration or logs.
-            perform_bootstrap(
+            attempt_model_key = perform_warm_binding(
                 control_plane_url,
                 read_projected_token(token_path),
-                bootstrap_reference,
                 proof_key,
             )
             break
@@ -121,7 +117,7 @@ def run_forever(
             )
             time.sleep(delay_seconds)
 
-    # Phase 2: maintain the sole authority channel. Every reconnect rereads the rotating token while
+    # Then maintain the sole authority channel. Every reconnect rereads the rotating token while
     # retaining this process instance id and Pod identity.
     attempts = 0
     while True:
@@ -134,6 +130,7 @@ def run_forever(
                 read_projected_token(token_path),
                 runtime_instance_id,
                 pod_uid,
+                attempt_model_key=attempt_model_key,
             )
             # EOF is not a successful terminal state: the Pod must keep its sole authority channel.
             # Back it off exactly like a transport exception so a peer returning immediate 200/EOF

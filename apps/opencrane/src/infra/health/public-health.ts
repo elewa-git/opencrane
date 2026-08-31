@@ -33,7 +33,7 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 	private async _ReadFresh(): Promise<PublicHealthReport>
 	{
 		// Run independent checks together so an unavailable service does not delay every later check.
-		const [database, models, memory, files, channels, integrations] = await Promise.all([
+		const [database, models, memory, files, channels] = await Promise.all([
 			_ReadProbe(PublicHealthServiceNames.Database, this._dependencies.database, this._dependencies.logger),
 			_ReadProbe(PublicHealthServiceNames.Models, this._dependencies.models, this._dependencies.logger),
 			_ReadProbe(PublicHealthServiceNames.Memory, this._dependencies.memory, this._dependencies.logger),
@@ -41,9 +41,6 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 			this._dependencies.channels === null
 				? Promise.resolve(PublicHealthServiceStatuses.Disabled)
 				: _ReadProbe(PublicHealthServiceNames.Channels, this._dependencies.channels, this._dependencies.logger),
-			this._dependencies.integrations === null
-				? Promise.resolve(PublicHealthServiceStatuses.Disabled)
-				: _ReadProbe(PublicHealthServiceNames.Integrations, this._dependencies.integrations, this._dependencies.logger),
 		]);
 
 		// Map results to fixed public names so the response reveals no target or failure details.
@@ -54,7 +51,6 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 			[PublicHealthServiceNames.Memory]: memory,
 			[PublicHealthServiceNames.Files]: files,
 			[PublicHealthServiceNames.Channels]: channels,
-			[PublicHealthServiceNames.Integrations]: integrations,
 		};
 
 		// Keep readiness tied to the database while still reporting outages in the optional services.
@@ -85,7 +81,7 @@ async function _ReadProbe(name: PublicHealthServiceNames, probe: PublicHealthPro
  * Called by: `apps/opencrane/src/index.ts` while constructing the public listener.
  *
  * @param prisma - Product database client used by the request-bearing readiness probe.
- * @param config - Frozen process configuration containing memory and optional integration targets.
+	 * @param config - Frozen process configuration containing memory and channel targets.
  * @param logger - Process logger used only for structured private failure records.
  * @param environment - Process environment containing existing model and file service targets.
  * @returns Cached report reader consumed by the public `/healthz` handler.
@@ -98,7 +94,6 @@ export function ___CreatePublicHealthReportReader(prisma: Parameters<typeof ___C
 		memory: _CreateHttpHealthProbe(config.runtime.memoryGatewayUrl, "/readyz"),
 		files: _CreateHttpHealthProbe(environment.ARTIFACT_SERVICE_URL?.trim(), "/readyz"),
 		channels: config.runtime.channelTargets === null ? null : _CreateHttpHealthProbe(environment.CHANNEL_PROXY_URL?.trim(), "/readyz"),
-		integrations: config.obot === null ? null : _CreateHttpHealthProbe(config.obot.gatewayUrl, "/api/healthz"),
 		logger,
 		clock: { nowEpochMilliseconds: function _Now() { return Date.now(); } },
 		cacheMilliseconds: _REPORT_CACHE_MILLISECONDS,

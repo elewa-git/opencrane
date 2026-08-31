@@ -217,8 +217,9 @@ describe("deferred tool approval authority", function _suite()
 });
 
 /** Live assignment + proof key the defer authority binds the approval to. */
-const ASSIGNMENT = { agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: "agent-runtime-1", namespace: "silo-1-runtime", workloadKind: "Job", workloadUid: "wl-1", podUid: "pod-1", state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-21T10:00:00.000Z") };
-const PROOF_KEY = { id: "proof-1", keyThumbprint: "thumb-1", expiresAt: new Date("2026-07-21T09:30:00.000Z"), revokedAt: null };
+const ASSIGNMENT = { agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: "agent-runtime-1", namespace: "silo-1-runtime", workloadKind: "Job", workloadUid: "wl-1", podUid: "pod-original", bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-21T10:00:00.000Z") };
+const RESERVATION = { generation: 2, podUid: "pod-2" };
+const PROOF_KEY = { id: "proof-1", generation: 2, podUid: "pod-2", keyThumbprint: "thumb-1", expiresAt: new Date("2026-07-21T09:30:00.000Z"), revokedAt: null };
 
 /** Command opening a pending deferred-tool approval for an awaiting invocation. */
 function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
@@ -235,6 +236,7 @@ describe("defer tool request authority", function _deferSuite()
 		const pause = vi.fn().mockResolvedValue({ count: 1 });
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: pause },
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
@@ -255,6 +257,7 @@ describe("defer tool request authority", function _deferSuite()
 		const pause = vi.fn();
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: pause },
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
@@ -270,6 +273,7 @@ describe("defer tool request authority", function _deferSuite()
 	{
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(null) },
 			approvalRequest: { create: vi.fn(), findFirst: vi.fn() },
 		} as unknown as Prisma.TransactionClient;
@@ -282,6 +286,7 @@ describe("defer tool request authority", function _deferSuite()
 		const create = vi.fn();
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue({ ...ASSIGNMENT, subjectId: "agent-service:svc-1" }) },
+			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			approvalRequest: { create },
 		} as unknown as Prisma.TransactionClient;
@@ -294,6 +299,7 @@ describe("defer tool request authority", function _deferSuite()
 	{
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", elicitationRequestId: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest }) },
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
@@ -307,6 +313,7 @@ describe("defer tool request authority", function _deferSuite()
 		const create = vi.fn();
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },

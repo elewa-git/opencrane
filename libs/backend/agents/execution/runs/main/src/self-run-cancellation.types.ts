@@ -4,11 +4,11 @@ import type { Logger } from "@opencrane/backend/observability";
 /**
  * What the owner is told when they cancel their own run, and what each outcome really means.
  *
- * Cancelling a run is two separate jobs: mark the run stopped, then delete its Kubernetes Job in a
- * later cleanup pass. `Cancelling` means the first job is done and the second is still owed — the
- * run will accept no more work, but its pod may still be running. `Cancelled` means both are done
- * and nothing is left to delete. A caller that treats them as the same thing will tell the user a
- * run has been torn down while its pod is still alive.
+ * Cancelling a run is two separate steps: fence the active attempt, then let its saved workflow
+ * remove the exact warm Pod and finish output handling. `Cancelling` means the first step is done
+ * and workflow cleanup is still owed. `Cancelled` means both are done and nothing remains active.
+ * A caller that treats them as the same thing can tell the user a run has stopped before cleanup
+ * has actually finished.
  *
  * `NotFound` deliberately covers both "no such run" and "not your run", so a caller cannot probe
  * for other owners' runs. `AttemptConflict` means the browser was looking at an older attempt and

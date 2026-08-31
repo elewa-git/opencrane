@@ -47,7 +47,7 @@ describe("ConversationRunStore terminal states", function _RunStateSuite()
 		expect(store.canRetry()).toBe(true);
 		await store.retry("conversation-1");
 
-		expect(gateway.retry).toHaveBeenCalledWith({ conversationId: "conversation-1", runId: "run-1", expectedAttempt: 2, idempotencyKey: "retry-key" });
+		expect(gateway.retry).toHaveBeenCalledWith({ conversationId: "conversation-1", runId: "run-1", expectedAttempt: 2 });
 		expect(store.run()?.state).toBe(ConversationRunStates.Failed);
 		expect(store.error()).toBe("OpenCrane could not retry this run.");
 	});

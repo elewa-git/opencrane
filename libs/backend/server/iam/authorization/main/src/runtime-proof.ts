@@ -1,68 +1,9 @@
 import type { CapabilityProofExpectation } from "@opencrane/models/authorization";
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof";
+import { __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof";
 import { __DigestCanonicalJson } from "./canonical-json-digest";
-import type { CapabilityActionExecutor, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, ConsumeRuntimeBootstrapResult, ExecuteCapabilityActionCommand, ExecuteCapabilityActionResult, RuntimeBootstrapClaim, RuntimeBootstrapExpectation, RuntimeBootstrapFailureReason, RuntimeBootstrapRepository } from "./runtime-proof.types";
-
-/** Returns whether a value is one of the two accepted controller workload kinds. */
-function _isWorkloadKind(value: string): value is "job" | "deployment"
-{
-	return value === "job" || value === "deployment";
-}
-
-/** Returns whether a value is a canonical unpadded RFC 7638 SHA-256 thumbprint. */
-function _isProofKeyThumbprint(value: string): boolean
-{
-	if (!/^[A-Za-z0-9_-]+$/u.test(value) || value.length % 4 === 1) return false;
-	const decoded = Buffer.from(value, "base64url");
-	return decoded.length === 32 && decoded.toString("base64url") === value;
-}
-
-/** Validates every immutable workload and run-attempt bootstrap binding. */
-function _validateBootstrap(claim: RuntimeBootstrapClaim, expectation: RuntimeBootstrapExpectation): RuntimeBootstrapFailureReason | null
-{
-	// 1. Validate identifiers, counters, and trusted time before comparing authority facts.
-	const requiredIdentifiers = [claim.bootstrapId, claim.siloId, claim.audience, claim.subjectId, claim.serviceAccountName, claim.namespace, claim.workloadUid, claim.podUid, claim.runId, claim.agentServiceId, claim.agentRevisionId, expectation.siloId, expectation.audience, expectation.subjectId, expectation.serviceAccountName, expectation.namespace, expectation.workloadUid, expectation.podUid, expectation.runId, expectation.agentServiceId, expectation.agentRevisionId];
-	if (requiredIdentifiers.some(value => !value.trim()) || !Number.isSafeInteger(claim.attempt) || claim.attempt < 1 || !Number.isSafeInteger(expectation.attempt) || expectation.attempt < 1 || !Number.isSafeInteger(expectation.nowEpochMs) || expectation.nowEpochMs < 0) return "invalid_bootstrap";
-	if (!_isWorkloadKind(claim.workloadKind) || !_isWorkloadKind(expectation.workloadKind)) return "invalid_workload_kind";
-	if (!_isProofKeyThumbprint(claim.proofKeyThumbprint)) return "invalid_proof_key";
-
-	// 2. Derive the thumbprint from the proposed public key before accepting the caller's value.
-	let computedProofKeyThumbprint: string;
-	try
-	{
-		computedProofKeyThumbprint = __ComputeEs256JwkThumbprint(claim.proofPublicJwk);
-	}
-	catch
-	{
-		return "invalid_proof_key";
-	}
-	if (computedProofKeyThumbprint !== claim.proofKeyThumbprint) return "proof_key_mismatch";
-
-	// 3. Compare every assignment and run-attempt field, then enforce the hard expiry.
-	if (claim.siloId !== expectation.siloId) return "silo_mismatch";
-	if (!_IsRuntimeAudience(claim.audience) || claim.audience !== expectation.audience) return "projected_token_audience_mismatch";
-	if (claim.subjectId !== expectation.subjectId) return "subject_mismatch";
-	if (claim.serviceAccountName !== expectation.serviceAccountName) return "service_account_mismatch";
-	if (claim.namespace !== expectation.namespace) return "namespace_mismatch";
-	if (claim.workloadKind !== expectation.workloadKind) return "workload_kind_mismatch";
-	if (claim.workloadUid !== expectation.workloadUid) return "workload_uid_mismatch";
-	if (claim.podUid !== expectation.podUid) return "pod_mismatch";
-	if (claim.agentServiceId !== expectation.agentServiceId) return "agent_service_mismatch";
-	if (claim.runId !== expectation.runId) return "run_mismatch";
-	if (claim.attempt !== expectation.attempt) return "attempt_mismatch";
-	if (claim.agentRevisionId !== expectation.agentRevisionId) return "revision_mismatch";
-	if (!Number.isSafeInteger(expectation.nowEpochMs) || !Number.isSafeInteger(claim.expiresAtEpochMs) || expectation.nowEpochMs >= claim.expiresAtEpochMs) return "expired";
-	return null;
-}
-
-/** Returns whether the audience is one of the two accepted runtime token audiences. */
-function _IsRuntimeAudience(value: string): boolean
-{
-	return value === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE || value === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
-}
+import type { CapabilityActionExecutor, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, ExecuteCapabilityActionCommand, ExecuteCapabilityActionResult } from "./runtime-proof.types";
 
 /** Digests the verified capability together with the observed HTTP method and target URI; the proof's issue time is deliberately left out. */
 function _requestFingerprint(expectation: CapabilityProofExpectation): string
@@ -101,32 +42,6 @@ function _receiptMatchesIntent<TResult>(receipt: CapabilityActionReceipt<TResult
 	return receipt.jti === intent.jti
 		&& receipt.requestFingerprint === intent.requestFingerprint
 		&& receipt.replayMode === intent.replayMode;
-}
-
-/**
- * Check a runtime's bootstrap against independently observed facts, then spend it.
- *
- * Everything is verified before any write: the public key is a valid P-256 point, the thumbprint is
- * re-derived from that key rather than trusted, and every workload and run-attempt field is
- * compared against the assignment row and the TokenReview identity. Only then is the bootstrap
- * spent. A second attempt is denied as `bootstrap_replay` and never receives the first receipt, so
- * a leaked bootstrap reference cannot be reused.
- *
- * Called by: ./runtime-bootstrap.router.ts (the POST /bootstrap handler).
- * @param repository - Spends the bootstrap and stores the public key in one transaction.
- * @param claim - Bootstrap facts from the database plus the runtime's proposed public key.
- * @param expectation - The independently sourced facts to compare against, and the server time.
- * @returns `consumed` with a receipt id on first use only; otherwise `denied` with a reason from
- *   {@link RuntimeBootstrapFailureReason}, or `bootstrap_replay` / `bootstrap_conflict`.
- */
-export async function __ConsumeRuntimeBootstrap(repository: RuntimeBootstrapRepository, claim: RuntimeBootstrapClaim, expectation: RuntimeBootstrapExpectation): Promise<ConsumeRuntimeBootstrapResult>
-{
-	const failure = _validateBootstrap(claim, expectation);
-	if (failure !== null) return { outcome: "denied", reason: failure };
-	const consumption = await repository.consumeAndBindProofKeyAtomically(claim);
-	if (consumption.status === "consumed") return { outcome: "consumed", receiptId: consumption.receiptId };
-	if (consumption.status === "already_consumed") return { outcome: "denied", reason: "bootstrap_replay" };
-	return { outcome: "denied", reason: "bootstrap_conflict" };
 }
 
 /**

@@ -116,12 +116,31 @@ export function validatePolicy(policy, allowLegacyRawProcedure = false)
 /** Checks the current policy-owned task-admission exception. */
 function _IsCurrentRawProcedure(procedure)
 {
+	return _IsCurrentTaskAdmissionProcedure(procedure) || _IsCurrentTaskEventProcedure(procedure);
+}
+
+/** Checks the exact transaction-bound task admission procedure. */
+function _IsCurrentTaskAdmissionProcedure(procedure)
+{
 	return _IsExactTypeScriptPath(procedure?.path)
 		&& procedure.adapter === "WorkflowTaskAdmission"
 		&& procedure.contract === "IWorkflowTaskAdmission"
 		&& procedure.contractImportPath === "./workflow-task-admission.types"
 		&& procedure.method === "$queryRaw"
 		&& procedure.sqlTemplate === "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)"
+		&& typeof procedure.reason === "string"
+		&& procedure.reason.trim().length >= 20;
+}
+
+/** Checks the exact transaction-bound task event procedure. */
+function _IsCurrentTaskEventProcedure(procedure)
+{
+	return _IsExactTypeScriptPath(procedure?.path)
+		&& procedure.adapter === "WorkflowTaskEventAdmission"
+		&& procedure.contract === "IWorkflowTaskEventAdmission"
+		&& procedure.contractImportPath === "./workflow-task-event-admission.types"
+		&& procedure.method === "$queryRaw"
+		&& procedure.sqlTemplate === "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)"
 		&& typeof procedure.reason === "string"
 		&& procedure.reason.trim().length >= 20;
 }

@@ -38,6 +38,8 @@ export class PrismaToolInvocationElicitationRepository implements ToolInvocation
 	/** Re-read the single persisted claim row and match every dispatch fence. */
 	async verifyActiveDispatchClaim(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, now: Date): Promise<boolean>
 	{
+		if (invocation.runId === null || invocation.attempt === null)
+			return false;
 		const current = await this.findById(claim.invocationId);
 		if (current === null) return false;
 		const run = await this._transaction.agentRun.findUnique({ where: { id: invocation.runId }, select: { attempt: true, state: true } });

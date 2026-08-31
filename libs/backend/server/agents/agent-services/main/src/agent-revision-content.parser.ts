@@ -1,6 +1,5 @@
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
-import { __AreReviewedIntegrationToolDefinitionsValid, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentRevisionContent, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
-import { ___CloneCanonicalJson, type CanonicalJsonSha256Digest, type JsonValue } from "@opencrane/util";
+import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentRevisionContent } from "@opencrane/models/agents";
 
 /** Returns whether a value is a non-empty string. */
 function _isNonEmptyString(value: unknown): value is string
@@ -8,57 +7,26 @@ function _isNonEmptyString(value: unknown): value is string
 	return typeof value === "string" && value.trim().length > 0;
 }
 
-/** Returns whether a string can be used in a colon-joined runtime tool name: non-empty and containing no `:`. A colon inside a segment would let two different integrations produce the same joined name. */
-function _isToolRevisionSegment(value: unknown): value is string
-{
-	return _isNonEmptyString(value) && !value.includes(":");
-}
-
 /** Parses the optional skill-reference array. */
 function _parseSkills(raw: unknown): AgentRevisionContent["skills"] | null
 {
-	if (raw === undefined) return [];
-	if (!Array.isArray(raw)) return null;
+	if (raw === undefined)
+		return [];
+	if (!Array.isArray(raw))
+		return null;
 	const skills = raw.map(function _skill(entry) { const item = entry as Record<string, unknown>; return _isNonEmptyString(item?.skillId) && _isNonEmptyString(item?.revisionId) ? { skillId: item.skillId, revisionId: item.revisionId } : null; });
 	return skills.some(skill => skill === null) ? null : (skills as AgentRevisionContent["skills"]);
 }
 
-/** Parses reviewed, schema-bound tool definitions from the organisation-admin revision payload. */
-function _parseToolDefinitions(raw: unknown): readonly ReviewedIntegrationToolDefinition[] | null
+/** Parses the MCP tool revision identifiers selected in the administrator payload. */
+function _parseMcpToolRevisionIds(raw: unknown): AgentRevisionContent["mcpToolRevisionIds"] | null
 {
-	if (!Array.isArray(raw)) return null;
-	try
-	{
-		const definitions = raw.map(function _definition(entry): ReviewedIntegrationToolDefinition | null
-		{
-			const item = entry as Record<string, unknown>;
-			if (!_isToolRevisionSegment(item?.name) || !_isNonEmptyString(item?.description) || !_isNonEmptyString(item?.parametersSchemaDigest)) return null;
-			return { name: item.name, description: item.description, parametersSchema: ___CloneCanonicalJson(item.parametersSchema as JsonValue), parametersSchemaDigest: item.parametersSchemaDigest as CanonicalJsonSha256Digest };
-		});
-		if (definitions.some(function _Missing(definition): boolean { return definition === null; })) return null;
-		const reviewed = definitions as readonly ReviewedIntegrationToolDefinition[];
-		return __AreReviewedIntegrationToolDefinitionsValid(reviewed) ? reviewed : null;
-	}
-	catch
-	{
+	if (raw === undefined)
+		return [];
+	if (!Array.isArray(raw))
 		return null;
-	}
-}
-
-/** Parses the optional integration-assignment array. */
-function _parseIntegrations(raw: unknown): AgentRevisionContent["integrationAssignments"] | null
-{
-	if (raw === undefined) return [];
-	if (!Array.isArray(raw)) return null;
-	const assignments = raw.map(function _assignment(entry)
-	{
-		const item = entry as Record<string, unknown>;
-		if (!_isToolRevisionSegment(item?.integrationId) || !_isNonEmptyString(item?.custodyReferenceId)) return null;
-		const toolDefinitions = _parseToolDefinitions(item.toolDefinitions);
-		if (toolDefinitions === null) return null;
-		return { integrationId: item.integrationId, custodyReferenceId: item.custodyReferenceId, toolDefinitions };
-	});
-	return assignments.some(assignment => assignment === null) ? null : (assignments as AgentRevisionContent["integrationAssignments"]);
+	const revisionIds = raw.map(function _RevisionId(value): string | null { return _isNonEmptyString(value) ? value : null; });
+	return revisionIds.some(function _Missing(value): boolean { return value === null; }) ? null : revisionIds as string[];
 }
 
 /** Parses optional boundary attachments and rejects impossible personal descendant coverage. */
@@ -108,10 +76,11 @@ export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent |
 
 	// 3. Parse the nested arrays. One malformed entry rejects the whole body — never a partial list.
 	const skills = _parseSkills(body.skills);
-	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
+	const mcpToolRevisionIds = _parseMcpToolRevisionIds(body.mcpToolRevisionIds);
 	const boundaryAttachments = _parseBoundaryAttachments(body.boundaryAttachments);
-	if (skills === null || integrationAssignments === null || boundaryAttachments === null) return null;
+	if (skills === null || mcpToolRevisionIds === null || boundaryAttachments === null)
+		return null;
 
 	// 4. Rebuild the value field by field, so nothing extra from the request body is carried through.
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, boundaryAttachments };
+	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, mcpToolRevisionIds, boundaryAttachments };
 }

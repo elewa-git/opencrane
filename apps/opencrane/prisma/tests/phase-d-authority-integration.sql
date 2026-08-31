@@ -475,23 +475,6 @@ SELECT pg_temp.expect_failure(
     'invalid AgentRun state transition'
 );
 
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its RunCancellationRequested event',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-accepted'
-    $statement$,
-    'requires its RunCancellationRequested event'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-accepted-cancellation', 'run-cancel-accepted', 1, 1, 'run.cancellation_requested',
-    'run-cancel-accepted:cancellation:1', '{"runId":"run-cancel-accepted","attempt":1}'
-);
-
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-accepted';
@@ -500,19 +483,6 @@ SELECT pg_temp.assert_true(
     'Cancelled finalises without physical work when nothing was ever assigned or claimed',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-accepted')
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-cleanup', 'run-cancel-running', 1, 1, 'run.workload_cleanup_requested',
-    'run-cancel-running:cleanup:1', '{"runId":"run-cancel-running","attempt":1}'
-);
-
-SELECT pg_temp.assert_true(
-    'cancellation cleanup has a dedicated outbox event kind',
-    (SELECT "kind" = 'run.workload_cleanup_requested'::"RunOutboxEventKind"
-     FROM "run_outbox_events" WHERE "id" = 'outbox-cancel-cleanup')
 );
 
 INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
@@ -533,13 +503,6 @@ SELECT pg_temp.expect_failure(
         VALUES ('conversation-cancel-event', 'run-cancel-event', 1, 'run.cancelled', '{}', clock_timestamp())
     $statement$,
     'requires Cancelled AgentRun authority'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-event-cancellation', 'run-cancel-event', 1, 1, 'run.cancellation_requested',
-    'run-cancel-event:cancellation:1', '{"runId":"run-cancel-event","attempt":1}'
 );
 
 UPDATE "agent_runs"
@@ -618,9 +581,7 @@ SELECT pg_temp.expect_failure(
     'requires the current Assigned attempt'
 );
 
--- Cancelling -> Cancelled: a current Registered WorkloadAssignment blocks finalisation (D1),
--- then a missing published RunWorkloadCleanupRequested blocks it once the assignment exists (D5),
--- until the confirmed cleanup event lets the fenced run finalise (S2, assigned variant).
+-- A current Registered WorkloadAssignment blocks cancellation finalisation.
 SELECT pg_temp.expect_failure(
     'Cancelled requires no current Registered WorkloadAssignment',
     $statement$
@@ -635,66 +596,18 @@ UPDATE "workload_assignments"
 SET "state" = 'revoked', "revoked_at" = clock_timestamp()
 WHERE "run_id" = 'run-cancel-bootstrap';
 
-SELECT pg_temp.expect_failure(
-    'Cancelled still requires its RunCancellationRequested event once the assignment is revoked',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-bootstrap'
-    $statement$,
-    'requires its RunCancellationRequested event'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-bootstrap-cancellation', 'run-cancel-bootstrap', 1, 1, 'run.cancellation_requested',
-    'run-cancel-bootstrap:cancellation:1', '{"runId":"run-cancel-bootstrap","attempt":1}'
-);
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires a confirmed WorkloadCleanup once a WorkloadAssignment ever existed',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-bootstrap'
-    $statement$,
-    'requires a confirmed WorkloadCleanup'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-bootstrap-cleanup', 'run-cancel-bootstrap', 1, 2, 'run.workload_cleanup_requested',
-    'run-cancel-bootstrap:cleanup:1', '{"runId":"run-cancel-bootstrap","attempt":1}'
-);
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires the WorkloadCleanup to be published, not merely requested',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-bootstrap'
-    $statement$,
-    'requires a confirmed WorkloadCleanup'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1, "published_at" = clock_timestamp()
-WHERE "id" = 'outbox-cancel-bootstrap-cleanup';
-
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-bootstrap';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises once its assignment is revoked and its WorkloadCleanup is confirmed',
+    'Cancelled finalises once its assignment is revoked',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-bootstrap')
 );
 
 -- Cancelling -> Cancelled: an unrevoked RunProofKey blocks finalisation even after its
--- WorkloadAssignment is revoked (D2), independent of the outbox-event invariants above.
+-- WorkloadAssignment is revoked.
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
     "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
@@ -758,171 +671,116 @@ SELECT pg_temp.expect_failure(
 
 UPDATE "run_proof_keys" SET "revoked_at" = clock_timestamp() WHERE "run_id" = 'run-cancel-invariant-proofkey';
 
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-invariant-proofkey-cancellation', 'run-cancel-invariant-proofkey', 1, 1, 'run.cancellation_requested',
-    'run-cancel-invariant-proofkey:cancellation:1', '{"runId":"run-cancel-invariant-proofkey","attempt":1}'
-);
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload",
-    "claimed_at", "published_at", "delivery_count"
-) VALUES (
-    'outbox-cancel-invariant-proofkey-cleanup', 'run-cancel-invariant-proofkey', 1, 2, 'run.workload_cleanup_requested',
-    'run-cancel-invariant-proofkey:cleanup:1', '{"runId":"run-cancel-invariant-proofkey","attempt":1}',
-    clock_timestamp(), clock_timestamp(), 1
-);
-
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-invariant-proofkey';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises once every RunProofKey is revoked alongside a confirmed WorkloadCleanup',
+    'Cancelled finalises once every RunProofKey is revoked',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-proofkey')
 );
 
--- Cancelling -> Cancelled: no WorkloadAssignment ever existed, but the attempt-dispatch event was
--- claimed (a Kubernetes create may be in flight); an unresolved RunAttemptRequested blocks
--- finalisation (D4), and once resolved, cleanup is still required and must be published (D5,
--- unassigned orphan variant) before the run finalises (S2, orphan variant).
+-- A bound workflow task must record exact warm runtime deletion before cancellation finalises.
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
     "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
 ) VALUES (
-    'run-cancel-invariant-outbox', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-    'request-cancel-invariant-outbox', 'run-cancel-invariant-outbox',
+    'run-cancel-workflow-task', 'silo-1', 'svc-main', 'rev-published', 'interactive',
+    'request-cancel-workflow-task', 'run-cancel-workflow-task',
     'sha256:' || repeat('d2', 32), 'sha256:' || repeat('d2', 32)
 );
 
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
+UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'run-cancel-workflow-task';
+
+INSERT INTO "workload_assignments" (
+    "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
+    "audience", "service_account_name", "namespace", "workload_kind", "workload_uid", "workload_profile",
+    "pod_uid", "expires_at"
 ) VALUES (
-    'outbox-invariant-attempt', 'run-cancel-invariant-outbox', 1, 1, 'run.attempt_requested',
-    'run-cancel-invariant-outbox:attempt:1', '{"runId":"run-cancel-invariant-outbox","attempt":1}'
+    'run-cancel-workflow-task', 1, 'svc-main', 'rev-published', 'silo-1', 'user-1',
+    'opencrane-agent-runtime', 'runtime', 'tenant-silo-1', 'deployment', 'pod-uid-cancel-workflow', 'personal-small',
+    'pod-uid-cancel-workflow', clock_timestamp() + interval '1 hour'
 );
 
-UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-invariant-outbox';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its RunCancellationRequested event before any outbox-resolution check',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
-    $statement$,
-    'requires its RunCancellationRequested event'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
+INSERT INTO "warm_runtime_reservations" (
+    "run_id", "attempt", "generation", "silo_id", "namespace", "deployment_name", "deployment_uid",
+    "pod_name", "pod_uid", "pod_resource_version", "generic_profile", "claimed_profile",
+    "service_account_name", "state", "idle_deadline"
 ) VALUES (
-    'outbox-invariant-cancellation', 'run-cancel-invariant-outbox', 1, 2, 'run.cancellation_requested',
-    'run-cancel-invariant-outbox:cancellation:1', '{"runId":"run-cancel-invariant-outbox","attempt":1}'
+    'run-cancel-workflow-task', 1, 1, 'silo-1', 'tenant-silo-1', 'personal-warm', 'deployment-uid-cancel-workflow',
+    'pod-cancel-workflow', 'pod-uid-cancel-workflow', '1', 'generic', 'personal-small',
+    'runtime', 'reserved', clock_timestamp() + interval '30 minutes'
 );
 
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its attempt command resolved before it can finalise',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
-    $statement$,
-    'requires its attempt and release commands resolved'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1,
-    "failed_at" = clock_timestamp(), "failure_code" = 'RUN_CANCELLED'
-WHERE "id" = 'outbox-invariant-attempt';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires a confirmed WorkloadCleanup once its attempt event had been claimed',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
-    $statement$,
-    'requires a confirmed WorkloadCleanup'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
+INSERT INTO "agent_run_workflow_tasks" (
+    "run_id", "attempt", "silo_id", "task_key", "task_name", "task_id", "receipt_bound_at"
 ) VALUES (
-    'outbox-invariant-cleanup', 'run-cancel-invariant-outbox', 1, 3, 'run.workload_cleanup_requested',
-    'run-cancel-invariant-outbox:cleanup:1', '{"runId":"run-cancel-invariant-outbox","attempt":1}'
+    'run-cancel-workflow-task', 1, 'silo-1', 'agent-run:silo-1:run-cancel-workflow-task:attempt:1',
+    'agent-runs.execute/v1', 'workflow-task-cancel', clock_timestamp()
 );
 
+UPDATE "workload_assignments"
+SET "state" = 'revoked', "revoked_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
+UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-workflow-task';
+
 SELECT pg_temp.expect_failure(
-    'Cancelled requires the orphan WorkloadCleanup to be published, not merely requested',
+    'Cancelled requires a reserved warm runtime deleted',
     $statement$
         UPDATE "agent_runs"
         SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
+        WHERE "id" = 'run-cancel-workflow-task'
     $statement$,
-    'requires a confirmed WorkloadCleanup'
+    'requires every warm runtime reservation deleted'
 );
 
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1, "published_at" = clock_timestamp()
-WHERE "id" = 'outbox-invariant-cleanup';
+UPDATE "warm_runtime_reservations" SET "state" = 'ready' WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a ready warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
 
+UPDATE "warm_runtime_reservations" SET "state" = 'claimed' WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a claimed warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations"
+SET "state" = 'delete_requested', "delete_requested_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a deletion-requested warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations"
+SET "state" = 'deleted', "deleted_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-WHERE "id" = 'run-cancel-invariant-outbox';
+WHERE "id" = 'run-cancel-workflow-task';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises once a claimed-but-unassigned attempt has its orphan WorkloadCleanup confirmed',
+    'Cancelled finalises after the bound workflow records warm runtime deletion',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
-     FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-outbox')
-);
-
--- Cancelling -> Cancelled: an unresolved RunWorkloadReleaseRequested also blocks finalisation (D4),
--- independent of the RunAttemptRequested variant above; with no WorkloadAssignment ever created and
--- no claimed RunAttemptRequested, resolving it alone is sufficient (no WorkloadCleanup required).
-INSERT INTO "agent_runs" (
-    "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
-) VALUES (
-    'run-cancel-invariant-release', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-    'request-cancel-invariant-release', 'run-cancel-invariant-release',
-    'sha256:' || repeat('d5', 32), 'sha256:' || repeat('d5', 32)
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES
-    ('outbox-invariant-release-cancellation', 'run-cancel-invariant-release', 1, 1, 'run.cancellation_requested',
-     'run-cancel-invariant-release:cancellation:1', '{"runId":"run-cancel-invariant-release","attempt":1}'),
-    ('outbox-invariant-release', 'run-cancel-invariant-release', 1, 2, 'run.workload_release_requested',
-     'run-cancel-invariant-release:release:1', '{"runId":"run-cancel-invariant-release","attempt":1}');
-
-UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-invariant-release';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its release command resolved before it can finalise',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-release'
-    $statement$,
-    'requires its attempt and release commands resolved'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1,
-    "failed_at" = clock_timestamp(), "failure_code" = 'RUN_CANCELLED'
-WHERE "id" = 'outbox-invariant-release';
-
-UPDATE "agent_runs"
-SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-WHERE "id" = 'run-cancel-invariant-release';
-
-SELECT pg_temp.assert_true(
-    'Cancelled finalises once its release command resolves with no assignment or claimed attempt outstanding',
-    (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
-     FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-release')
+     FROM "agent_runs" WHERE "id" = 'run-cancel-workflow-task')
 );
 
 INSERT INTO "agent_runs" (
@@ -1595,55 +1453,6 @@ SELECT pg_temp.expect_failure(
     'strictly newer verified revision'
 );
 
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-1', 'run-action', 1, 1, 'run.accepted', 'outbox-key-1', '{"run":"run-action"}'
-);
-
-SELECT pg_temp.expect_failure(
-    'outbox payload is immutable',
-    $statement$UPDATE "run_outbox_events" SET "payload" = '{}' WHERE "id" = 'outbox-1'$statement$,
-    'identity, order, and payload are immutable'
-);
-SELECT pg_temp.expect_failure(
-    'outbox kind is immutable',
-    $statement$UPDATE "run_outbox_events" SET "kind" = 'run.resume_requested' WHERE "id" = 'outbox-1'$statement$,
-    'identity, order, and payload are immutable'
-);
-SELECT pg_temp.expect_failure(
-    'outbox order is immutable',
-    $statement$UPDATE "run_outbox_events" SET "sequence" = 2 WHERE "id" = 'outbox-1'$statement$,
-    'identity, order, and payload are immutable'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1
-WHERE "id" = 'outbox-1';
-UPDATE "run_outbox_events"
-SET "published_at" = clock_timestamp()
-WHERE "id" = 'outbox-1';
-
-SELECT pg_temp.expect_failure(
-    'delivered outbox status cannot reopen',
-    $statement$
-        UPDATE "run_outbox_events"
-        SET "claimed_at" = "claimed_at" + interval '1 second', "delivery_count" = 2
-        WHERE "id" = 'outbox-1'
-    $statement$,
-    'delivered OutboxEvent status is terminal'
-);
-
-SELECT pg_temp.expect_failure(
-    'delivered outbox cannot be deleted without the retention transaction guard',
-    $statement$
-        DELETE FROM "run_outbox_events" WHERE "id" = 'outbox-1'
-    $statement$,
-    'outside successful-delivery retention'
-);
-
--- The guarded retention transaction commits the authority fixture accumulated above, so
--- conversation terminal evidence and exact snapshots must exist before that commit boundary.
 INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at") VALUES
     ('conversation-retry-retirement', 'run-retry-retirement', 1, 'run.failed', '{}', clock_timestamp()),
     ('conversation-retry-rollover', 'run-retry-rollover', 1, 'run.failed', '{}', clock_timestamp()),
@@ -1652,28 +1461,19 @@ INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", 
 INSERT INTO "run_input_snapshots" (
     "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
     "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-    "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+    "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 )
 SELECT
     'snapshot-' || "id", "id", 1, "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest",
-    "conversation_id", '[]', '{}', '{}', '{}', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
+    "conversation_id", '[]', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
 FROM "agent_runs"
 WHERE "id" IN (
     'run-retry-retirement', 'run-retry-rollover', 'run-state', 'run-action',
     'run-cancel-accepted', 'run-cancel-queued', 'run-cancel-assigned', 'run-cancel-running', 'run-cancel-waiting',
     'run-cancel-event', 'run-cancel-bootstrap', 'run-cancel-proof',
-    'run-cancel-invariant-proofkey', 'run-cancel-invariant-outbox', 'run-cancel-invariant-release'
+    'run-cancel-invariant-proofkey', 'run-cancel-workflow-task'
 );
 SET CONSTRAINTS ALL IMMEDIATE;
-
-BEGIN;
-SELECT set_config('opencrane.run_outbox_prune', 'true', true);
-DELETE FROM "run_outbox_events" WHERE "id" = 'outbox-1';
-COMMIT;
-SELECT pg_temp.assert_true(
-    'guarded retention transaction can remove a successful delivered outbox record',
-    NOT EXISTS (SELECT 1 FROM "run_outbox_events" WHERE "id" = 'outbox-1')
-);
 
 INSERT INTO "audit_decisions" (
     "id", "decision_digest", "silo_id", "actor_kind", "actor_id", "audience", "namespace",

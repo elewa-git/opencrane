@@ -12,8 +12,8 @@ import type { McpEraProbeClient, McpEraProbeDnsAddress, McpEraProbeDnsResolver, 
  * Create the HTTPS MCP protocol-check adapter.
  *
  * Every call validates every DNS result, binds the TLS socket to one reviewed address, rejects
- * redirects, and sends only `server/discover`. The adapter never initializes a session, tries an
- * older protocol revision, or contacts Obot.
+ * redirects, and sends only `server/discover`. The adapter never initializes a session or tries an
+ * older protocol revision.
  *
  * Called by: OpenCrane application composition, which supplies the protocol revision owned by the
  * MCP domain.

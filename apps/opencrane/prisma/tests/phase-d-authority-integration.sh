@@ -26,8 +26,7 @@ fi
 
 run_psql < "$TEST_FILE"
 run_psql < "$SCRIPT_DIR/run-input-snapshot-admission.sql"
-run_psql < "$SCRIPT_DIR/run-dispatch-terminalization.sql"
-run_psql < "$SCRIPT_DIR/skill-workload-authority.sql"
+run_psql < "$SCRIPT_DIR/skill-authoring-validation-authority.sql"
 
 RACE_DIR="$(mktemp -d)"
 trap 'rm -rf "$RACE_DIR"' EXIT
@@ -81,7 +80,6 @@ INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_mo
 VALUES ('phase-d-model', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
 
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES
-  ('dispatch-lock-service-principal', 'dispatch-lock-silo', 'urn:opencrane:agent-service', 'dispatch-lock-service', 'internal', clock_timestamp()),
   ('svc-race-assignment-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-assignment', 'internal', clock_timestamp()),
   ('svc-race-assignment-first-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-assignment-first', 'internal', clock_timestamp()),
   ('svc-race-activation-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-activation', 'internal', clock_timestamp()),
@@ -90,100 +88,7 @@ INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "u
   ('svc-race-run-first-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-run-first', 'internal', clock_timestamp()),
   ('svc-race-action-authority-principal', 'silo-race-action', 'urn:opencrane:agent-service', 'svc-race-action-authority', 'internal', clock_timestamp());
 
-INSERT INTO "agent_services" (
-  "id", "silo_id", "kind", "name",
-  "workload_profile", "principal_id", "updated_at"
-) VALUES (
-  'dispatch-lock-service', 'dispatch-lock-silo', 'managed', 'Dispatch lock service',
-  'managed-agent', 'dispatch-lock-service-principal', clock_timestamp()
-);
-INSERT INTO "agent_revisions" (
-  "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_definition_id", "budget", "authored_by"
-) VALUES (
-  'dispatch-lock-revision', 'dispatch-lock-service', 1, 'draft',
-  'sha256:' || repeat('e', 64), 'prompt-v1', 'phase-d-model', '{}', 'dispatch-lock-user'
-);
-UPDATE "agent_revisions"
-SET "state" = 'published', "published_at" = clock_timestamp()
-WHERE "id" = 'dispatch-lock-revision';
-UPDATE "agent_services"
-SET "state" = 'active', "active_revision_id" = 'dispatch-lock-revision'
-WHERE "id" = 'dispatch-lock-service';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
-VALUES ('dispatch-lock-conversation', 'dispatch-lock-silo', 'dispatch-lock-service', 'agent_session', clock_timestamp());
-INSERT INTO "agent_runs" (
-  "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-  "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
-) VALUES (
-  'dispatch-lock-run', 'dispatch-lock-silo', 'dispatch-lock-service', 'dispatch-lock-revision',
-  'dispatch-lock-conversation', 'interactive', 'dispatch-lock-request', 'dispatch-lock-run',
-  'sha256:' || repeat('f', 64), 'sha256:' || repeat('0', 64)
-);
-INSERT INTO "run_outbox_events" (
-  "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-  'dispatch-lock-outbox', 'dispatch-lock-run', 1, 1, 'run.attempt_requested',
-  'dispatch-lock-run:attempt:1', '{"runId":"dispatch-lock-run","attempt":1}'
-);
 SQL
-
-(
-  set +e
-  run_psql >"$RACE_DIR/dispatch-event-holder.out" 2>&1 <<'SQL'
-SET application_name = 'phase-e-dispatch-event-holder';
-BEGIN;
-SELECT pg_advisory_xact_lock(hashtextextended('dispatch-lock-run', 0));
-SELECT pg_sleep(3);
-INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at")
-VALUES ('dispatch-lock-conversation', 'dispatch-lock-run', 1, 'run.started', '{}', clock_timestamp());
-COMMIT;
-SQL
-  echo "$?" >"$RACE_DIR/dispatch-event-holder.status"
-) &
-dispatch_event_holder_pid=$!
-wait_for_holder_sleeping 'phase-e-dispatch-event-holder'
-(
-  set +e
-  run_psql >"$RACE_DIR/dispatch-terminalizer.out" 2>&1 <<'SQL'
-SET application_name = 'phase-e-dispatch-terminalizer';
-BEGIN;
-SELECT "id" FROM "agent_services" WHERE "id" = 'dispatch-lock-service' FOR UPDATE;
-SELECT pg_advisory_xact_lock(hashtextextended('dispatch-lock-run', 0));
-SELECT "id" FROM "agent_runs" WHERE "id" = 'dispatch-lock-run' FOR UPDATE;
-SELECT "id" FROM "run_outbox_events" WHERE "id" = 'dispatch-lock-outbox' FOR UPDATE;
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1,
-    "failed_at" = clock_timestamp(), "failure_code" = 'RUN_DISPATCH_SNAPSHOT_INVALID'
-WHERE "id" = 'dispatch-lock-outbox';
-UPDATE "agent_runs"
-SET "state" = 'failed', "terminal_reason" = 'invalid_input', "finished_at" = clock_timestamp()
-WHERE "id" = 'dispatch-lock-run';
-INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at")
-VALUES (
-  'dispatch-lock-conversation', 'dispatch-lock-run', 2, 'run.failed',
-  '{"terminalReason":"invalid_input","failureCode":"RUN_DISPATCH_SNAPSHOT_INVALID"}',
-  clock_timestamp()
-);
-COMMIT;
-SQL
-  echo "$?" >"$RACE_DIR/dispatch-terminalizer.status"
-) &
-dispatch_terminalizer_pid=$!
-wait_for_blocked_session 'phase-e-dispatch-terminalizer'
-wait "$dispatch_event_holder_pid"
-wait "$dispatch_terminalizer_pid"
-if [[ "$(<"$RACE_DIR/dispatch-event-holder.status")" != "0" ]]; then
-  cat "$RACE_DIR/dispatch-event-holder.out" >&2
-  echo 'FAIL: concurrent conversation event append failed' >&2
-  exit 1
-fi
-if [[ "$(<"$RACE_DIR/dispatch-terminalizer.status")" != "0" ]]; then
-  cat "$RACE_DIR/dispatch-terminalizer.out" >&2
-  echo 'FAIL: dispatch terminalisation deadlocked with a conversation event append' >&2
-  exit 1
-fi
-echo 'PASS: dispatch terminalisation serializes behind concurrent conversation event append without deadlock'
 
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
@@ -522,10 +427,10 @@ INSERT INTO "agent_runs" (
 INSERT INTO "run_input_snapshots" (
   "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
   "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-  "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+  "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 ) VALUES (
   'run-race-before-retirement-input', 'run-race-before-retirement', 1, 'silo-race', 'svc-race-run-first', 'rev-race-run-first',
-  'sha256:' || repeat('c', 64), 'conversation-race-before-retirement', '[]', '{}', '{}', '{}', '{}', '{}',
+  'sha256:' || repeat('c', 64), 'conversation-race-before-retirement', '[]', '{}', '{}', '[]', '{}', '{}',
   'sha256:' || repeat('e', 64), 'prompt-v1', 'sha256:' || repeat('d', 64)
 );
 SELECT pg_sleep(3);
@@ -707,10 +612,10 @@ INSERT INTO "agent_runs" (
 INSERT INTO "run_input_snapshots" (
   "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
   "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-  "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+  "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 ) VALUES (
   'run-race-action-authority-input', 'run-race-action-authority', 1, 'silo-race-action', 'svc-race-action-authority', 'rev-race-action-authority',
-  'sha256:' || repeat('1', 64), 'conversation-race-action-authority', '[]', '{}', '{}', '{}', '{}', '{}',
+  'sha256:' || repeat('1', 64), 'conversation-race-action-authority', '[]', '{}', '{}', '[]', '{}', '{}',
   'sha256:' || repeat('3', 64), 'prompt-v1', 'sha256:' || repeat('2', 64)
 );
 COMMIT;

@@ -1,27 +1,17 @@
-import type { ObotMcpInvocationPort } from "@opencrane/backend/server/infra/obot-custody";
 import type { SandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
-import type { IntegrationAuthorityRepository, ResolveIntegrationAssignmentResult } from "@opencrane/backend/server/gateways/integrations";
 import type { JsonValue } from "@opencrane/util";
-
-/** Short reason the integration authority returns; it never contains custody material. */
-export type IntegrationAssignmentUnavailableReason = Extract<ResolveIntegrationAssignmentResult, { readonly outcome: "unavailable" }>["reason"];
 
 /**
  * The prefix that says which transport an external action goes through.
  *
  * The value becomes the first segment of a tool revision id, so a compiled tool carries its routing
- * with it: `integration:<id>:<tool>`, `sandbox:...`, `memory:...`. It is routing only, never
- * permission - by the time the prefix is read the candidate has already been admitted, and the
- * integration path still rechecks live custody before anything is sent.
+	 * with it: `sandbox:...` or `memory:...`. It is routing only, never permission - by the time the
+	 * prefix is read the candidate has already been admitted.
  *
- * Called by: `__CreateExternalActionExecutor` (external-action-executor.ts) matches on it, and
- * `_loadToolDefinitions` (prisma-run-input-compiler.ts) writes it into every compiled tool
- * revision.
+	 * Called by: `__CreateExternalActionExecutor` (external-action-executor.ts) matches on it.
  */
 export enum ExternalActionRevisionKinds
 {
-	/** Revision routed through live integration custody and Obot. */
-	Integration = "integration",
 	/** Revision routed through an isolated sandbox Job. */
 	Sandbox = "sandbox",
 	/** Revision routed through the snapshot-scoped memory gateway. */
@@ -37,7 +27,7 @@ export enum ExternalActionRevisionKinds
  * re-proposing it.
  *
  * Called by: built by `_command` (production-external-action-adapter.ts) and consumed by the
- * integration, sandbox, and memory executors.
+	 * sandbox and memory executors.
  */
 export interface DurableExternalActionCommand
 {
@@ -81,19 +71,11 @@ export interface ExternalActionExecutorDependencies
 {
 	/** Silo owning the invocation, used as remote correlation context. */
 	readonly siloId: string;
-	/** Subject on whose behalf the action runs. */
-	readonly subjectId: string;
 	/** Gateway dataset frozen in the admitted snapshot, or null when this run cannot recall personal memory. */
 	readonly cogneeDatasetId: string | null;
-	/** Agent revision whose integration assignment the action must resolve. */
-	readonly agentRevisionId: string;
-	/** Resolves the revision's live integration assignment. It returns no credentials. */
-	readonly integrations: IntegrationAuthorityRepository;
-	/** Obot MCP invocation transport enforcing the resolved assignment's allow-list. */
-	readonly obotMcpInvocation: ObotMcpInvocationPort;
 	/** Sandbox Job transport backing sandboxed tool calls (fail-closed until verified). */
 	readonly sandboxExecutor: SandboxJobExecutor;
 }
 
 /** Transports shared by every action; the identity fields stay per-invocation. */
-export type ProductionExternalActionTransports = Omit<ExternalActionExecutorDependencies, "siloId" | "subjectId" | "cogneeDatasetId" | "agentRevisionId">;
+export type ProductionExternalActionTransports = Omit<ExternalActionExecutorDependencies, "siloId" | "cogneeDatasetId">;

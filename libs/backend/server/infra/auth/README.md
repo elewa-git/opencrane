@@ -82,4 +82,4 @@ not confuse an unavailable authority source with a successful empty membership r
 ## See also
 
 - Parent index: [infra](../README.md) · [backend libraries](../../../README.md)
-- Siblings: [http](../http/README.md) · [api](../api/README.md) · [obot-custody](../obot-custody/README.md)
+- Siblings: [http](../http/README.md) · [api](../api/README.md)

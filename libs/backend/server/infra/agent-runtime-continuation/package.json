@@ -1,0 +1,6 @@
+{
+  "name": "@opencrane/backend-server-infra-agent-runtime-continuation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module"
+}

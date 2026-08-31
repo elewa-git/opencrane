@@ -1,7 +1,4 @@
 {{- if .Values.migration.enabled }}
-{{- if and .Values.migration.privilegedExtension.enabled (or (ne .Values.migration.privilegedExtension.name "pg_cron") (not .Values.superuserAccess.enabled)) }}
-{{- fail "the migration Job may receive a superuser credential only for the reviewed pg_cron prerequisite" }}
-{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -60,83 +57,24 @@ spec:
               drop: ["ALL"]
           resources:
             {{- toYaml .Values.migration.resources | nindent 12 }}
-          command: ["/bin/sh", "-ceu"]
-          args:
-            - |
-              actual_sha256="$(sha256sum /migration/migration.sql | awk '{print $1}')"
-              if [ "$actual_sha256" != "$EXPECTED_SQL_SHA256" ]; then
-                echo "Migration SQL digest '$actual_sha256' does not match '$EXPECTED_SQL_SHA256'" >&2
-                exit 1
-              fi
-              if [ "$PRIVILEGED_EXTENSION_ENABLED" = "true" ]; then
-                # CNPG generated this credential only while this Job enables it. This setup creates
-                # pg_cron and grants its schema only to the application owner. The
-                # file input lets psql apply its quoted application_owner variable to the grant.
-                printf '%s\n' \
-                  'CREATE EXTENSION IF NOT EXISTS pg_cron;' \
-                  'GRANT USAGE ON SCHEMA cron TO :"application_owner";' | \
-                  PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" PGUSER=postgres \
-                  psql --no-psqlrc -v ON_ERROR_STOP=1 --dbname "$PGDATABASE" \
-                    --set "application_owner=$POSTGRES_APPLICATION_OWNER" \
-                    --file -
-              fi
-              exec psql --no-psqlrc -v ON_ERROR_STOP=1 \
-                -v source_baseline_sha256="$SOURCE_PROTECTED_BASELINE_SHA256" \
-                -v migration_sql_sha256="$EXPECTED_SQL_SHA256" \
-                -v migration_silo_id="$MIGRATION_SILO_ID" \
-                -v migration_oidc_issuer="$MIGRATION_OIDC_ISSUER" \
-                --file /migration/migration.sql
           env:
-            - name: PGUSER
+            - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ (index .Values.databases 0).credentialsSecret | quote }}
-                  key: username
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ (index .Values.databases 0).credentialsSecret | quote }}
-                  key: password
-            - name: PGHOST
-              value: {{ printf "%s-rw" (include "opencrane.postgres.fullname" .) | quote }}
-            - name: PGDATABASE
-              value: {{ (index .Values.databases 0).name | quote }}
-            - name: POSTGRES_APPLICATION_OWNER
-              value: {{ (index .Values.databases 0).owner | quote }}
-            - name: PGCONNECT_TIMEOUT
-              value: "10"
-            - name: EXPECTED_SQL_SHA256
-              value: {{ .Values.migration.sqlSha256 | quote }}
-            - name: SOURCE_PROTECTED_BASELINE_SHA256
-              value: {{ .Values.migration.sourceBaselineSha256 | quote }}
-            - name: MIGRATION_SILO_ID
-              value: {{ required "migration.siloId is required when migration.enabled=true" .Values.migration.siloId | quote }}
-            - name: MIGRATION_OIDC_ISSUER
-              value: {{ required "migration.oidcIssuer is required when migration.enabled=true" .Values.migration.oidcIssuer | quote }}
-            - name: PRIVILEGED_EXTENSION_ENABLED
-              value: {{ .Values.migration.privilegedExtension.enabled | quote }}
-            {{- if .Values.migration.privilegedExtension.enabled }}
-            - name: POSTGRES_SUPERUSER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ printf "%s-superuser" (include "opencrane.postgres.fullname" .) | quote }}
-                  key: password
-            {{- end }}
+                  name: {{ printf "%s-opencrane-app" (include "opencrane.postgres.fullname" .) | quote }}
+                  key: uri
+            - name: OPENCRANE_MIGRATION_SOURCE_VERSION
+              value: {{ .Values.migration.sourceVersion | quote }}
+            - name: OPENCRANE_MIGRATION_SILO_ID
+              value: {{ .Values.migration.siloId | quote }}
+            - name: OPENCRANE_MIGRATION_OIDC_ISSUER
+              value: {{ .Values.migration.oidcIssuer | quote }}
             - name: TMPDIR
               value: /scratch
           volumeMounts:
-            - name: migration-sql
-              mountPath: /migration
-              readOnly: true
             - name: scratch
               mountPath: /scratch
       volumes:
-        - name: migration-sql
-          configMap:
-            name: {{ .Values.migration.configMap.name | quote }}
-            items:
-              - key: {{ .Values.migration.configMap.key | quote }}
-                path: migration.sql
         - name: scratch
           emptyDir:
             sizeLimit: 64Mi

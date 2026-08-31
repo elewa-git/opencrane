@@ -19,7 +19,7 @@ function _Database()
 	let asset: Record<string, unknown> | null = null;
 	let revision: Record<string, unknown> | null = null;
 	let scanJob: Record<string, unknown> | null = null;
-	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2030-01-01T00:00:00.000Z"), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2030-01-01T00:00:00.000Z"), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" }, warmRuntimeReservations: [{ generation: 2 }] };
 
 	function _TicketWithAsset(): Record<string, unknown> | null
 	{
@@ -87,7 +87,7 @@ describe("generated conversation output journey", function _Suite()
 		if (reservation.outcome === "denied") throw new Error("test reservation was denied");
 		await expect(outputs.publish(_IDENTITY, reservation.ticketId, (async function* _Bytes() { yield _CONTENT; })())).resolves.toEqual({ outcome: "accepted" });
 
-		const scanner = new PrismaArtifactScanUnitOfWork(database.prisma as never, 300_000, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); });
+		const scanner = new PrismaArtifactScanUnitOfWork(database.prisma as never, 300_000, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }, { spawn: vi.fn() });
 		const claim = await scanner.claim();
 		expect(claim).not.toBeNull();
 		await expect(scanner.complete({ jobId: claim!.lease.jobId, attempt: claim!.lease.attempt, claimFence: claim!.lease.claimFence, verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");

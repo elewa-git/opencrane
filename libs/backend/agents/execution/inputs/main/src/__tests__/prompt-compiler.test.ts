@@ -13,6 +13,13 @@ function _snapshotTool(name: string)
 	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
 }
 
+/** Builds one exact immutable MCP tool snapshot. */
+function _mcpTool(toolRevisionId: string, name: string)
+{
+	const inputSchema = { type: "object", additionalProperties: false } as const;
+	return { toolRevisionId, name, description: `${name} description`, inputSchema, inputSchemaDigest: ___DigestCanonicalJson(inputSchema) };
+}
+
 /** Build a snapshot fixture whose references the fake repositories can resolve. */
 function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
@@ -29,7 +36,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		artifactRevisionIds: ["art-2", "art-1"],
 		skillRevisionIds: ["skill-1"],
 		memoryQueryPolicy: {},
-		integrationAssignments: [{ integrationId: "integration-b", toolDefinitions: [_snapshotTool("write")] }, { integrationId: "integration-a", toolDefinitions: [_snapshotTool("read")] }],
+		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: "sha256:c", fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" },
@@ -83,14 +90,14 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(compiled.tools.map(function _name(t): string { return t.name; })).toEqual(["alpha", "zulu"]);
 	});
 
-	it("passes the exact immutable integration allowance to the tool-definition port", async function _passesIntegrationAllowance()
+	it("passes exact immutable MCP tool revisions to the tool-definition port", async function _PassesMcpToolRevisions()
 	{
-		let received: RunInputSnapshot["integrationAssignments"] | null = null;
-		const snapshot = _snapshot({ integrationAssignments: [{ integrationId: "integration-z", toolDefinitions: [_snapshotTool("write"), _snapshotTool("read")] }] });
+		let received: RunInputSnapshot["mcpTools"] | null = null;
+		const snapshot = _snapshot({ mcpTools: [_mcpTool("mcp-tool-revision-z", "write"), _mcpTool("mcp-tool-revision-y", "read")] });
 
 		await __CompileRunInput(snapshot, 1, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledToolDefinition[]> { received = assignments; return []; } }));
 
-		expect(received).toEqual(snapshot.integrationAssignments);
+		expect(received).toEqual(snapshot.mcpTools);
 	});
 
 	it("resolves literal budget numbers from the opaque budget policy", async function _resolvesBudget()

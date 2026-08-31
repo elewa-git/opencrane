@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
 
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+
 import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types";
-
-/** First deterministic preprocessing pipeline scheduled for every published PDF source revision. */
-const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
+import { __CreateAndAdmitArtifactPreprocessWorkflow } from "./artifact-preprocess-workflow-admission";
+import { PrismaArtifactPreprocessWorkflowRepository } from "./prisma-artifact-preprocess-workflow-admission";
 
 /**
  * Runs the publication SQL inside a transaction someone else already opened.
@@ -24,11 +25,21 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 {
 	/** The already-open transaction to run every query against. This class cannot start or commit one. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Saves the remote PDF task through the same database transaction as publication. */
+	private readonly workflow: Pick<IWorkflowEngine, "spawn">;
+	/** Writes the PDF preprocessing record and task receipt through this repository's transaction. */
+	private readonly preprocessWorkflows: PrismaArtifactPreprocessWorkflowRepository;
 
-	/** Creates the repository for one already-open artifact publication transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	/**
+	 * Creates the repository for one already-open artifact publication transaction.
+	 * @param transaction - Prisma client that owns every product and workflow write in this attempt.
+	 * @param workflow - Guarded engine that saves a PDF task through that transaction.
+	 */
+	constructor(transaction: Prisma.TransactionClient, workflow: Pick<IWorkflowEngine, "spawn">)
 	{
 		this.transaction = transaction;
+		this.workflow = workflow;
+		this.preprocessWorkflows = new PrismaArtifactPreprocessWorkflowRepository(this.transaction);
 	}
 
 	/**
@@ -69,9 +80,9 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 	 * Publishes the revision and spends its lease, in a fixed order that survives a retry.
 	 *
 	 * Recognises a replay from the outbox first, so a repeat commits nothing. Then records the
-	 * promotion on the lease before creating the revision, schedules a text-conversion job when the
-	 * media type is `application/pdf`, and writes the outbox event last so nothing outside the
-	 * database can see the revision before it is fully committed.
+	 * promotion on the lease before creating the revision, saves and binds a text-conversion task
+	 * when the media type is `application/pdf`, and writes the outbox event last so nothing outside
+	 * the database can see the revision before it is fully committed.
 	 *
 	 * @param command - Validated revision metadata plus the verified promotion receipt.
 	 * @returns One of the statuses in {@link AtomicFinalizeArtifactResult}.
@@ -96,8 +107,11 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 		await this.transaction.artifactRevision.create({ data: { id: command.artifactRevisionId, artifactId: command.artifactId, revision: command.revision, contentAddress: command.promotion.contentAddress, byteLength: BigInt(command.promotion.byteLength), mediaType: command.promotion.mediaType, provenance: command.provenance as Prisma.InputJsonValue, createdBy: command.createdBy } });
 		await this.transaction.artifact.update({ where: { id: command.artifactId }, data: { currentRevisionId: command.artifactRevisionId } });
 
-		// 3. Queue the PDF-to-text job before the outbox event, so the conversion is already scheduled the moment anything outside sees the revision.
-		if (command.promotion.mediaType === "application/pdf") await this.transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
+		// 3. Save the PDF-to-text record and task receipt before the outbox event, so published PDFs never commit without their conversion work.
+		if (command.promotion.mediaType === "application/pdf")
+		{
+			await __CreateAndAdmitArtifactPreprocessWorkflow({ workflowTransaction: { client: this.transaction }, preprocessWorkflows: this.preprocessWorkflows }, this.workflow, { siloId: artifact.siloId, sourceRevisionId: command.artifactRevisionId });
+		}
 
 		// 4. Write the outbox event and mark the lease Finalized in the same commit, so a retry cannot publish twice or spend the receipt twice.
 		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: command.idempotencyKey, payload: { contentAddress: command.promotion.contentAddress, byteLength: command.promotion.byteLength, mediaType: command.promotion.mediaType } } });

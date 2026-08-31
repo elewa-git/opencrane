@@ -16,6 +16,9 @@ const _ASSIGNMENT = { claimId: "claim-1", claimedAt: "2026-08-27T00:00:00.000Z",
 /** Valid release evidence tied to the current database delivery fence. */
 const _RELEASE = { releaseClaimedAt: "2026-08-27T00:01:00.000Z", releaseDeliveryCount: 1, workloadUid: "job-uid-1" };
 
+/** Valid cleanup evidence tied to the current database delivery fence. */
+const _CLEANUP = { cleanupClaimedAt: "2026-08-27T00:02:00.000Z", cleanupDeliveryCount: 2, workloadUid: "job-uid-1" };
+
 /** Build all controller router ports with observable defaults. */
 function _Dependencies(overrides: Partial<McpRuntimeControllerRouterDependencies> = {}): McpRuntimeControllerRouterDependencies
 {
@@ -25,6 +28,8 @@ function _Dependencies(overrides: Partial<McpRuntimeControllerRouterDependencies
 			commitAssignment: vi.fn().mockResolvedValue("assigned"),
 			claimNextRelease: vi.fn().mockResolvedValue(null),
 			commitRelease: vi.fn().mockResolvedValue("released"),
+			claimNextCleanup: vi.fn().mockResolvedValue(null),
+			commitCleanup: vi.fn().mockResolvedValue("cleaned"),
 			registerFirstPod: vi.fn().mockResolvedValue("registered"),
 		},
 		tokenReviewer: { __Review: vi.fn().mockResolvedValue(_CONTROLLER_IDENTITY) },
@@ -81,13 +86,15 @@ describe("MCP runtime controller router", function _DescribeRouter()
 		expect(response.body).toEqual(claim);
 	});
 
-	it("serves all assignment and release routes with client-compatible statuses", async function _Writes()
+	it("serves all assignment, release, and cleanup routes with client-compatible statuses", async function _Writes()
 	{
 		const authority = {
 			claimNextController: vi.fn(),
 			commitAssignment: vi.fn().mockResolvedValue("assigned"),
 			claimNextRelease: vi.fn().mockResolvedValue(null),
 			commitRelease: vi.fn().mockResolvedValue("released"),
+			claimNextCleanup: vi.fn().mockResolvedValue(null),
+			commitCleanup: vi.fn().mockResolvedValue("cleaned"),
 			registerFirstPod: vi.fn().mockResolvedValue("registered"),
 		};
 		const app = _App(_Dependencies({ authority: authority as never }));
@@ -96,15 +103,20 @@ describe("MCP runtime controller router", function _DescribeRouter()
 		const releasePoll = await _Token(request(app).post("/api/internal/agent-controller/mcp-executor:release-claim")).send({});
 		const released = await _Token(request(app).put("/api/internal/agent-controller/mcp-executor/claim-1/release")).send(_RELEASE);
 		const registered = await _Token(request(app).put("/api/internal/agent-controller/mcp-executor/claim-1/pod-registration")).send({ ..._RELEASE, podUid: "pod-uid-1" });
+		const cleanupPoll = await _Token(request(app).post("/api/internal/agent-controller/mcp-executor:cleanup-claim")).send({});
+		const cleaned = await _Token(request(app).put("/api/internal/agent-controller/mcp-executor/claim-1/cleanup")).send(_CLEANUP);
 
 		expect(assigned.status).toBe(200);
 		expect(assigned.body).toEqual({ outcome: "assigned" });
 		expect(releasePoll.status).toBe(204);
 		expect(released.body).toEqual({ outcome: "released" });
 		expect(registered.body).toEqual({ outcome: "registered" });
+		expect(cleanupPoll.status).toBe(204);
+		expect(cleaned.body).toEqual({ outcome: "cleaned" });
 		expect(authority.commitAssignment).toHaveBeenCalledWith(_ASSIGNMENT);
 		expect(authority.commitRelease).toHaveBeenCalledWith("claim-1", _RELEASE);
 		expect(authority.registerFirstPod).toHaveBeenCalledWith("claim-1", { ..._RELEASE, podUid: "pod-uid-1" });
+		expect(authority.commitCleanup).toHaveBeenCalledWith("claim-1", _CLEANUP);
 	});
 
 	it("returns conflict without a body shape the controller could accept as success", async function _Conflicts()

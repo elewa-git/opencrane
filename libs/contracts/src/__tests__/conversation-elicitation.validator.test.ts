@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds } from "../agent-runtime-protocol.types";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, RuntimeCandidateKinds } from "../agent-runtime-protocol.types";
 import { ElicitationBodyKinds, ElicitationPurposes } from "../conversation-elicitation.types";
 import { ___ParseRuntimeElicitationCandidate } from "../conversation-elicitation.validator";
 
@@ -8,7 +8,7 @@ import { ___ParseRuntimeElicitationCandidate } from "../conversation-elicitation
 function _Candidate(): unknown
 {
 	return {
-		protocolVersion: AGENT_RUNTIME_PROTOCOL_V1,
+		protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
 		runtimeInstanceId: "runtime-1",
 		commandId: "command-1",
 		candidateId: "candidate-1",

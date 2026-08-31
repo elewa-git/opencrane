@@ -18,7 +18,7 @@ function _parent(overrides: Record<string, unknown> = {})
 /** Builds a transaction-backed repository with independently controlled authority rows. */
 function _repository(child: Record<string, unknown> | null, parent: Record<string, unknown> | null, reservation: Record<string, unknown> | null, delivery: Record<string, unknown> | null = null, terminalEvents: Array<{ type: string }> = [])
 {
-	const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValueOnce(child).mockResolvedValueOnce(parent) }, childRunCompletionDelivery: { findUnique: vi.fn().mockResolvedValue(delivery), create: vi.fn() }, childRunReservation: { findUnique: vi.fn().mockResolvedValue(reservation) }, conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 4 } }), findMany: vi.fn().mockResolvedValue(terminalEvents), create: vi.fn() } };
+	const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValueOnce(child).mockResolvedValueOnce(parent) }, childRunCompletionDelivery: { findUnique: vi.fn().mockResolvedValue(delivery), create: vi.fn() }, childRunReservation: { findUnique: vi.fn().mockResolvedValue(reservation) }, conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 4 } }), findMany: vi.fn().mockResolvedValue(terminalEvents), create: vi.fn() } };
 	const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 	return { repository: new PrismaChildRunCompletionRepository(prisma), transaction };
 }

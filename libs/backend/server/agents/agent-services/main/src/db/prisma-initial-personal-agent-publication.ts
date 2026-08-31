@@ -73,7 +73,7 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			modelDefinitionId: model.modelDefinitionId,
 			budget: INITIAL_PERSONAL_AGENT_POLICY.budget,
 			skills: [],
-			integrationAssignments: [],
+			mcpToolRevisionIds: [],
 			boundaryAttachments: [],
 		};
 		const cmd = {

@@ -1,6 +1,6 @@
 import { json, Router, type Response } from "express";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, ___ParseRuntimeElicitationCandidate, type RuntimeCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_COMMAND_MAX_BYTES, AGENT_RUNTIME_PROTOCOL_VERSION, RuntimeCandidateKinds, ___ParseRuntimeElicitationCandidate, type RuntimeCandidate, type RuntimeContinuationSaveRequest, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
@@ -27,8 +27,8 @@ function _ParseStreamOpen(value: unknown): RuntimeStreamOpen | null
 		return null;
 	}
 	const candidate = value as Partial<RuntimeStreamOpen>;
-	return candidate.protocolVersion === AGENT_RUNTIME_PROTOCOL_V1 && _IsRuntimeInstanceId(candidate.runtimeInstanceId) && _IsPodUid(candidate.podUid)
-		? { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: candidate.runtimeInstanceId, podUid: candidate.podUid }
+	return candidate.protocolVersion === AGENT_RUNTIME_PROTOCOL_VERSION && _IsRuntimeInstanceId(candidate.runtimeInstanceId) && _IsPodUid(candidate.podUid)
+		? { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: candidate.runtimeInstanceId, podUid: candidate.podUid }
 		: null;
 }
 
@@ -51,7 +51,7 @@ function _IsRuntimeCandidate(value: unknown): value is RuntimeCandidate
 		return false;
 	}
 	const candidate = value as Partial<RuntimeCandidate>;
-	const hasCoordinates = candidate.protocolVersion === AGENT_RUNTIME_PROTOCOL_V1
+	const hasCoordinates = candidate.protocolVersion === AGENT_RUNTIME_PROTOCOL_VERSION
 		&& _IsRuntimeInstanceId(candidate.runtimeInstanceId)
 		&& typeof candidate.commandId === "string" && candidate.commandId.length > 0
 		&& typeof candidate.candidateId === "string" && candidate.candidateId.length > 0
@@ -62,7 +62,7 @@ function _IsRuntimeCandidate(value: unknown): value is RuntimeCandidate
 	{
 		return false;
 	}
-	if (candidate.kind === "event")
+	if (candidate.kind === RuntimeCandidateKinds.Event)
 	{
 		return typeof candidate.eventType === "string" && candidate.eventType.length > 0 && "payload" in candidate;
 	}
@@ -70,11 +70,27 @@ function _IsRuntimeCandidate(value: unknown): value is RuntimeCandidate
 	{
 		return ___ParseRuntimeElicitationCandidate(value) !== null;
 	}
-	return candidate.kind === "external_action"
+	return candidate.kind === RuntimeCandidateKinds.ExternalAction
 		&& typeof candidate.toolRevisionId === "string" && candidate.toolRevisionId.length > 0
 		&& typeof candidate.toolInvocationId === "string" && candidate.toolInvocationId.length > 0
 		&& typeof candidate.argumentsDigest === "string" && candidate.argumentsDigest.length > 0
 		&& "arguments" in candidate;
+}
+
+/** Check only the top-level continuation coordinates before the authority performs full admission. */
+function _IsRuntimeContinuationSaveRequest(value: unknown): value is RuntimeContinuationSaveRequest
+{
+	if (!value || typeof value !== "object" || Array.isArray(value))
+		return false;
+	const request = value as Partial<RuntimeContinuationSaveRequest>;
+	return request.protocolVersion === AGENT_RUNTIME_PROTOCOL_VERSION
+		&& _IsRuntimeInstanceId(request.runtimeInstanceId)
+		&& typeof request.commandId === "string" && request.commandId.length > 0
+		&& typeof request.runId === "string" && request.runId.length > 0
+		&& typeof request.attempt === "number" && Number.isSafeInteger(request.attempt) && request.attempt >= 0
+		&& typeof request.fence === "number" && Number.isSafeInteger(request.fence) && request.fence >= 0
+		&& typeof request.inputGeneration === "number" && Number.isSafeInteger(request.inputGeneration) && request.inputGeneration >= 0
+		&& !!request.continuation && typeof request.continuation === "object";
 }
 
 /**
@@ -108,7 +124,7 @@ function _WriteEvent(response: Response, event: string, data: unknown): void
 }
 
 /**
- * Build the internal router that agent runtimes connect OUT to. Two routes:
+ * Build the internal router that agent runtimes connect OUT to. Three routes:
  *
  *   - `POST /stream` — the runtime opens a long-lived server-sent-event stream. After
  *     TokenReview, and after checking that the Pod UID in the body matches the one
@@ -120,6 +136,9 @@ function _WriteEvent(response: Response, event: string, data: unknown): void
  *   - `POST /candidates` — the runtime submits one event or external action. Replies 202
  *     when accepted, 409 when rejected, 503 when the server wants the same candidate
  *     retried, and 401 when the token or the body does not check out.
+ *   - `POST /continuations` — a waiting runtime submits the model state needed after process
+ *     replacement. Replies 202 when the state is stored or already present, 409 when the
+ *     authority refuses it, and 401 when the token or body does not check out.
  *
  * This file frames and bounds; it never decides. Commands, their order, and whether a
  * candidate becomes durable all come from the injected authority backed by Postgres, so a
@@ -180,7 +199,7 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 				{
 					if (!closed)
 					{
-						_WriteEvent(response, "heartbeat", { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1 });
+						_WriteEvent(response, "heartbeat", { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION });
 					}
 				}, options.heartbeatMilliseconds);
 				// An IncomingMessage closes after its finite POST body is read. The response is
@@ -207,6 +226,12 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 							response.end();
 							break;
 						}
+						if (Buffer.byteLength(`data: ${JSON.stringify(command)}\n`, "utf8") > AGENT_RUNTIME_COMMAND_MAX_BYTES)
+						{
+							_WriteEvent(response, "protocol_error", { code: "COMMAND_TOO_LARGE" });
+							response.end();
+							break;
+						}
 						sequence = command.sequence;
 						_WriteEvent(response, "command", command);
 						continue;
@@ -214,6 +239,30 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 					await wakeup.waitForChange(observedWakeRevision, options.commandRecoveryMilliseconds, waitAbort.signal);
 				}
 			});
+		}
+		catch (error)
+		{
+			next(error);
+		}
+	});
+
+	router.post("/continuations", async function _saveContinuation(request, response, next)
+	{
+		try
+		{
+			const result = await ___DoWithTrace("agent_runtime.continuation.save", {}, async function _save()
+			{
+				const identity = await _AuthenticateRuntime(_ReadBearerToken(request.header("authorization")), options);
+				if (!identity || !_IsRuntimeContinuationSaveRequest(request.body))
+					return null;
+				return options.authority.__SaveContinuation(identity, request.body);
+			});
+			if (result === null)
+			{
+				response.status(401).json({ code: "UNAUTHORIZED" });
+				return;
+			}
+			response.status(result.outcome === "denied" ? 409 : 202).json(result);
 		}
 		catch (error)
 		{
@@ -242,7 +291,8 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 			// Only external actions can currently make a resume command due. Waking on every accepted
 			// event would turn high-frequency message deltas into a fleet-wide read burst; all other
 			// lifecycle changes remain protected by the bounded durable recovery check.
-			if (result.accepted && _IsRuntimeCandidate(request.body) && request.body.kind === "external_action") wakeup.wake();
+			if (result.accepted && _IsRuntimeCandidate(request.body) && request.body.kind === RuntimeCandidateKinds.ExternalAction)
+				wakeup.wake();
 			const responseStatus = result.accepted ? 202 : 409;
 			response.status(result.retryable ? 503 : responseStatus).json(result);
 		}

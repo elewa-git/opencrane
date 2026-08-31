@@ -1,6 +1,0 @@
-apiVersion: v2
-name: opencrane-obot
-description: App-owned named-template library for the release-local Obot MCP gateway.
-type: library
-version: 0.8.0
-appVersion: "0.8.0"

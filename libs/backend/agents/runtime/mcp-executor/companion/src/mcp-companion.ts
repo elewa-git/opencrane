@@ -15,10 +15,17 @@ export async function __ReadMcpCompanionIdentity(referencePath: string, podUid: 
 	return { executionReference, podUid };
 }
 
-/** Claim and execute at most one command before returning a terminal process outcome. */
+/**
+ * Claims and executes at most one command before returning a terminal process outcome.
+ *
+ * Server readiness is checked after the claim and under its lease, so startup failure is reported
+ * against the saved command instead of escaping before OpenCrane can close it.
+ *
+ * Called by: `apps/mcp-executor/src/index.ts`.
+ * @returns Whether no command existed, work completed or failed, or saved work had already ended.
+ */
 export async function __RunMcpCompanion(dependencies: McpCompanionDependencies, identity: McpCompanionIdentity, signal: AbortSignal): Promise<McpCompanionRunOutcomes>
 {
-	await dependencies.server.ready(signal);
 	const command = await _ClaimWhenRegistered(dependencies, identity, signal);
 	if (command === McpCompanionRemoteClaimOutcomes.Terminal)
 	{
@@ -35,6 +42,7 @@ export async function __RunMcpCompanion(dependencies: McpCompanionDependencies, 
 		let completion;
 		try
 		{
+			await dependencies.server.ready(_LeaseSignal(command, signal));
 			completion = await _Execute(dependencies, command, signal);
 		}
 		catch (err)

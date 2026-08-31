@@ -42,8 +42,8 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
 /**
  * Add one first-party tool to an already compiled input and recompute its digest.
  *
- * Used for tools OpenCrane itself offers, which are not part of any integration assignment and so
- * are not in the snapshot. The digest is recomputed so the returned input stays self-consistent —
+ * Used for tools OpenCrane itself offers, which the saved agent revision does not select and so are
+ * not in the snapshot. The digest is recomputed so the returned input stays self-consistent —
  * appending without resealing would leave a digest that no longer matches the payload.
  *
  * Called by: `_CreateProductionRunInputCompiler`
@@ -78,7 +78,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.integrationAssignments));
+	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.modelRoute);

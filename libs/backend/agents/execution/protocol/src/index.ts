@@ -10,3 +10,5 @@ export { __CreateProductionExternalActionWorker } from "./production-external-ac
 export { __CreateProductionExternalActionApprovalOpener } from "./production-external-action-approval";
 export type { ProductionExternalActionInvocationAuthority, ProductionExternalActionWorkerDependencies } from "./production-external-action-worker.types";
 export * from "./production-runtime-dispatch";
+export { PrismaRuntimeContinuationAuthorityUnitOfWork } from "./prisma-runtime-continuation-authority";
+export type { RuntimeContinuationAuthority } from "./runtime-continuation.types";

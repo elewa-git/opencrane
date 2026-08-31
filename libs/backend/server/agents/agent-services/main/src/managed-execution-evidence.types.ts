@@ -46,15 +46,15 @@ export interface ManagedExecutionEvidence
 	 * It is computed over the silo, the service, the revision id and the revision's own content digest,
 	 * the agent's principal and silo, the fleet-membership revision and payload digest, the
 	 * boundary attachments that survived the grant check, the model definition, the budget ceilings, the
-	 * assigned skill revisions, and each integration's custody reference plus its reviewed tool
-	 * definitions. Anything that widens what the agent can reach is inside; nothing about the human who
+	 * assigned skill revisions, and the selected MCP tool revision ids. Anything that widens what the
+	 * agent can reach is inside; nothing about the human who
 	 * pressed the button is.
 	 *
 	 * It is stored on the run's input snapshot and copied onto the runtime assignment handed to the pod,
 	 * so a later reader can prove the pod is running the capability set that was approved. That only
-	 * works if the hash is reproducible, which is why every list is sorted before hashing
-	 * (`_CanonicalAttachments`, `_CanonicalSkillAssignments`, `_CanonicalIntegrationAssignments` in
-	 * `prisma-managed-execution-evidence.ts`): RFC 8785 sorts object keys for us but keeps array order
+	 * works if the hash is reproducible. Attachments and skills use the sorting helpers in
+	 * `prisma-managed-execution-evidence.ts`, and MCP tool revision ids are sorted inline before
+	 * hashing. RFC 8785 sorts object keys for us but keeps array order
 	 * exactly as given. If the sort were unstable — or omitted, leaving Postgres row order to decide —
 	 * two runs of the identical revision would hash differently, comparisons against the stored digest
 	 * would fail for no real reason, and the digest would stop being usable as evidence.

@@ -8,7 +8,7 @@ import type { ArtifactPreprocessorRouterDependencies } from "../artifact-preproc
 /** Fixed isolated namespace used by every reviewed test identity. */
 const _NAMESPACE = "opencrane-artifact-preprocessing";
 
-/** Build broker-only router dependencies with a successfully reviewed worker identity. */
+/** Builds broker-only router dependencies with a successfully reviewed worker identity. */
 function _Dependencies(overrides: Partial<ArtifactPreprocessorRouterDependencies> = {}): ArtifactPreprocessorRouterDependencies
 {
 	return {
@@ -17,8 +17,14 @@ function _Dependencies(overrides: Partial<ArtifactPreprocessorRouterDependencies
 			__Review: vi.fn().mockResolvedValue({ username: `system:serviceaccount:${_NAMESPACE}:artifact-preprocessor`, namespace: _NAMESPACE, serviceAccountName: "artifact-preprocessor", audiences: ["opencrane-artifact-preprocessor"] }),
 		},
 		repository: {
-			claimNextAtomically: vi.fn().mockResolvedValue({ status: "none" }),
-				issueSourceLeaseAtomically: vi.fn(),
+			loadWorkerBootstrap: vi.fn(),
+			claimForTask: vi.fn(),
+			bindWorkload: vi.fn(),
+			bindFirstPod: vi.fn(),
+			recordUnreportedFailure: vi.fn(),
+			loadOutcome: vi.fn(),
+			complete: vi.fn(),
+			issueSourceLeaseAtomically: vi.fn(),
 			issueOutputLeaseAtomically: vi.fn(),
 			completeAtomically: vi.fn(),
 			failAtomically: vi.fn().mockResolvedValue({ status: "retryable" }),
@@ -48,15 +54,17 @@ function _Authorization(): { readonly authorization: string }
 
 describe("artifact preprocessor broker router", function _Suite()
 {
-	it("returns only fenced work metadata and no storage capability", async function _Claims()
+	it("exchanges the mounted reference for one controller-bound assignment", async function _BootstrapsAssignment()
 	{
-		const repository = _Dependencies().repository;
-		vi.mocked(repository.claimNextAtomically).mockResolvedValue({ status: "claimed", claim: { jobId: "job-1", attempt: 1, claimFence: "fence-1", claimExpiresAt: new Date("2026-07-26T15:00:00.000Z"), siloId: "silo-1", sourceArtifactId: "artifact-1", sourceRevisionId: "revision-1", sourceByteLength: 25 } });
-		const response = await request(_App(_Dependencies({ repository }))).post("/api/internal/artifact-preprocessor/jobs:claim").set(_Authorization()).send({});
+		const claim = { lease: { jobId: "job-1", attempt: 2, claimFence: "fence-2", expiresAt: "2030-01-01T00:00:00.000Z" }, sourceMediaType: "application/pdf" as const, sourceByteLength: 4 };
+		const loadWorkerBootstrap = vi.fn().mockResolvedValue(claim);
+		const dependencies = _Dependencies({ repository: { ..._Dependencies().repository, loadWorkerBootstrap } });
+
+		const response = await request(_App(dependencies)).post("/api/internal/artifact-preprocessor/jobs:bootstrap").set(_Authorization()).send({ reference: "artifact-preprocess-bootstrap-v1_reference" });
 
 		expect(response.status).toBe(200);
-		expect(response.body).toEqual({ lease: { jobId: "job-1", attempt: 1, claimFence: "fence-1", expiresAt: "2026-07-26T15:00:00.000Z" }, sourceMediaType: "application/pdf", sourceByteLength: 25 });
-		expect(JSON.stringify(response.body)).not.toMatch(/address|receipt|token|capability|store/iu);
+		expect(response.body).toEqual(claim);
+		expect(loadWorkerBootstrap).toHaveBeenCalledWith("artifact-preprocess-bootstrap-v1_reference", _NAMESPACE);
 	});
 
 	it("streams source bytes only through the server-side broker", async function _ReadsSource()
@@ -84,7 +92,7 @@ describe("artifact preprocessor broker router", function _Suite()
 	it("fails closed when TokenReview does not return the exact worker identity", async function _RejectsIdentity()
 	{
 		const tokenReviewer = { __Review: vi.fn().mockResolvedValue(null) };
-		const response = await request(_App(_Dependencies({ tokenReviewer }))).post("/api/internal/artifact-preprocessor/jobs:claim").set(_Authorization()).send({});
+		const response = await request(_App(_Dependencies({ tokenReviewer }))).post("/api/internal/artifact-preprocessor/jobs/job-1/source").set(_Authorization()).send({ jobId: "job-1", attempt: 2, claimFence: "fence-2" });
 		expect(response.status).toBe(401);
 	});
 });
@@ -95,11 +103,17 @@ async function* _Bytes(value: string): AsyncGenerator<Uint8Array>
 	yield Buffer.from(value);
 }
 
-/** Collect one test-only submitted stream so its exact bytes can be asserted. */
+/** Collects one test-only submitted stream so its exact bytes can be asserted. */
 async function _Collect(bytes: AsyncIterable<Uint8Array> | undefined): Promise<Buffer>
 {
-	if (bytes === undefined) throw new Error("missing submitted bytes");
+	if (bytes === undefined)
+	{
+		throw new Error("missing submitted bytes");
+	}
 	const chunks: Buffer[] = [];
-	for await (const chunk of bytes) chunks.push(Buffer.from(chunk));
+	for await (const chunk of bytes)
+	{
+		chunks.push(Buffer.from(chunk));
+	}
 	return Buffer.concat(chunks);
 }

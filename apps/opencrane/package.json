@@ -1,6 +1,6 @@
 {
   "name": "@opencrane/server",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -13,9 +13,10 @@
     "test": "vitest run",
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
+    "db:regenerate-target-baseline": "node prisma/bootstrap/regenerate-target-baseline.mjs",
     "test:persona-source-seeds": "node prisma/bootstrap/verify-persona-source-seeds.mjs",
     "test:onboarding-bootstrap-seeds": "node prisma/bootstrap/verify-onboarding-bootstrap-seeds.mjs",
-    "test:authority-baseline": "node prisma/bootstrap/verify-authority-baseline.mjs"
+    "test:authority-baseline": "node prisma/bootstrap/regenerate-target-baseline.mjs --check && node prisma/bootstrap/verify-authority-baseline.mjs"
   },
   "dependencies": {
     "@a2ui/web_core": "0.10.3",

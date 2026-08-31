@@ -12,7 +12,7 @@ OpenCrane product entrypoints live under `apps/<name>`; deployment-only upstream
 Kubernetes release composer live under the reserved `apps/_infra/<name>` group. A workload counts
 as independently deployed when it produces or owns
 one or more cluster Pods, Deployments, StatefulSets, DaemonSets, CronJobs, or Jobs. This includes
-deployment-only wrappers for upstream products such as Cognee, Obot, or LiteLLM: the app root may
+deployment-only wrappers for upstream products such as Cognee or LiteLLM: the app root may
 contain no product source, but it still owns the pinned dependency, configuration, identity, state,
 network policy, deployment wiring, and smoke contract.
 

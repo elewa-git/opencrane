@@ -23,7 +23,8 @@ agent-controller binds UID, then releases
 
 **In this flow:** [MCP governance](../../../../server/gateways/mcp/main/README.md) issues the claim;
 the [agent controller](../../../../../../apps/agent-controller/README.md) is the only Kubernetes
-writer; the planned `apps/mcp-executor` companion performs the protocol exchange.
+writer; the [`apps/mcp-executor`](../../../../../../apps/mcp-executor/README.md) companion performs
+the protocol exchange.
 
 The uploaded image receives no projected token, claim file, credential, Service, or ingress. Both
 containers run without privilege, with read-only roots and separate temporary filesystems. The

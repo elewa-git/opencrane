@@ -1,3 +1,5 @@
+import type { JsonValue } from "@opencrane/util";
+
 /**
  * Operator-API contracts for consuming and governing MCP servers.
  *
@@ -6,9 +8,8 @@
  * org-admin governance + access-policy endpoints. This is the sole public MCP contract; there is
  * no parallel unsiloed registry or credential-inventory API.
  *
- * Custody contract: NO type here ever carries credential material. A connected
- * install reports only its {@link McpConnectionStatus}; the secret lives in the
- * gateway plane (Obot). Neither the agent runtime nor the browser receives a provider URL or secret.
+ * No type in this file carries submitted credentials. Installs expose connection status and form
+ * metadata, so an API response cannot echo a provider secret or registry credential.
  */
 
 /**
@@ -18,7 +19,7 @@
  * user installs the server: a single-user server starts at `NeedsCredential` and must collect
  * the fields in `credentialSchema`; a multi-user server is already usable via the org-wide key;
  * a remote-OAuth server needs an OAuth handshake instead of a form.
- * @see https://modelcontextprotocol.io/specification/2025-06-18
+ * @see https://modelcontextprotocol.io/specification/2026-07-28
  */
 export enum McpServerType
 {
@@ -59,10 +60,67 @@ export enum McpApprovalStatus
  */
 export enum McpConnectionStatus
 {
-  /** The server is installed but remains unusable until an external custody flow activates it. */
+  /** The install is saved but this API cannot use it until credential setup exists. */
   NeedsCredential = "needs-credential",
   /** The server is usable through an administrator-managed key; the caller supplies no credential. */
   SharedKey = "shared-key",
+}
+
+/**
+ * Reports whether current server governance permits a tool revision to be assigned.
+ *
+ * The operator API sends this value in catalogue and administrator responses. `Assignable` means
+ * the server is both published and active, but it never grants the caller permission to use the
+ * tool. User-facing reads still require an allow decision, and execution rechecks authority. An
+ * unknown value must be treated as blocked because this is a closed API vocabulary.
+ */
+export enum McpToolRevisionEligibility
+{
+	/** The server is published and active; separate caller authorization is still required. */
+	Assignable = "assignable",
+	/** The server is unpublished or inactive, so no assignment may select this revision. */
+	GovernanceBlocked = "governance-blocked",
+}
+
+/**
+ * Reports the discovery state that made one tool schema available for assignment.
+ *
+ * The operator API returns tool rows only from a server revision stored as Ready, so `Ready` is the
+ * sole value today. A server with no Ready revision returns no tool rows. This field records why the
+ * schema may be considered; it grants no execution permission by itself.
+ */
+export enum McpToolRevisionReadiness
+{
+	/** Discovery saved the protocol version and input schema for the selected server revision. */
+	Ready = "ready",
+}
+
+/**
+ * Names one immutable OCI-backed MCP tool schema that an agent author can select.
+ *
+ * The catalogue selects the newest Ready server revision, then returns its tools in stable name and
+ * identifier order. User responses contain these rows only after entitlement filtering. The
+ * administrator response may include governance-blocked rows for diagnosis, but seeing a row never
+ * grants execution authority.
+ */
+export interface McpAssignableToolRevision
+{
+	/** Identifies the immutable tool revision saved from discovery. */
+	toolRevisionId: string;
+	/** Identifies the newest Ready server revision selected for this catalogue response. */
+	serverRevisionId: string;
+	/** Gives the MCP tool name sent to the runtime. */
+	name: string;
+	/** Gives the tool description saved by discovery, or null when the server omitted it. */
+	description: string | null;
+	/** Carries the input JSON Schema frozen for this tool revision. */
+	inputSchema: JsonValue;
+	/** Binds the response schema to the digest checked again during run admission. */
+	inputSchemaDigest: string;
+	/** Reports whether current server governance permits assignment without granting caller access. */
+	eligibility: McpToolRevisionEligibility;
+	/** Reports the discovery state that made this immutable schema available. */
+	readiness: McpToolRevisionReadiness;
 }
 
 /**
@@ -86,8 +144,9 @@ export interface CredentialField
 }
 
 /**
- * A catalogue server as exposed by the operator API. Every field beyond `id` is optional so the same shape serves
- * both the entitled user catalogue and the richer admin governance view.
+ * A catalogue server as exposed by the operator API. Display metadata stays optional so the same
+ * shape serves the entitled user catalogue and the richer admin governance view. `tools` is always
+ * present and is empty when the server has no Ready OCI revision.
  */
 export interface McpCatalogServer
 {
@@ -109,6 +168,8 @@ export interface McpCatalogServer
   credentialSchema?: CredentialField[];
   /** Human-readable summary of who is entitled (admin governance view). */
   entitlementSummary?: string;
+	/** Lists tools from the newest Ready OCI server revision; an empty array means none are assignable. */
+	tools: McpAssignableToolRevision[];
 }
 
 /**
