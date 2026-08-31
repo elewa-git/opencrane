@@ -154,15 +154,12 @@ _build_image()
   local dockerfile="$3"
   local cache_arguments=()
   # CI shares registry layer caches per deployable with the publish jobs (see BUILD_CACHE_IMAGE
-  # in docker.yml). SMOKE_BUILD_CACHE is the trusted cache that integration pushes maintain;
-  # SMOKE_BUILD_CACHE_UNTRUSTED adds the pull-request cache as a second read source; and
+  # in docker.yml). SMOKE_BUILD_CACHE is the cache that integration pushes maintain, and
   # SMOKE_BUILD_CACHE_EXPORT names where this run may write its layers, so the next push builds
-  # warm. Local runs leave all three unset and build without a remote cache.
+  # warm. Pull requests read the cache but never export (the registry export costs 40-50 seconds
+  # per image). Local runs leave both unset and build without a remote cache.
   if [[ -n "${SMOKE_BUILD_CACHE:-}" ]]; then
     cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE}:${project}")
-  fi
-  if [[ -n "${SMOKE_BUILD_CACHE_UNTRUSTED:-}" ]]; then
-    cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE_UNTRUSTED}:${project}")
   fi
   if [[ -n "${SMOKE_BUILD_CACHE_EXPORT:-}" ]]; then
     cache_arguments+=(--cache-to "type=registry,ref=${SMOKE_BUILD_CACHE_EXPORT}:${project},mode=max")
@@ -210,20 +207,40 @@ _prepare_image()
   fi
 }
 
+# Each entry is project|local image|remote image|dockerfile for _prepare_image.
+SMOKE_IMAGE_SPECS=(
+  "opencrane|opencrane/opencrane-server:develop-smoke|opencrane-server|apps/opencrane/deploy/Dockerfile"
+  "opencrane-ui|opencrane/opencrane-ui:develop-smoke|opencrane-ui|apps/opencrane-ui/deploy/Dockerfile"
+  "channel-proxy|opencrane/channel-proxy:develop-smoke|opencrane-channel-proxy|apps/channel-proxy/deploy/Dockerfile"
+  "memory-gateway|opencrane/memory-gateway:develop-smoke|opencrane-memory-gateway|apps/memory-gateway/deploy/Dockerfile"
+  "artifact-service|opencrane/artifact-service:develop-smoke|opencrane-artifact-service|apps/artifact-service/deploy/Dockerfile"
+  "cognee|opencrane/cognee:develop-smoke|opencrane-cognee|apps/_infra/cognee/deploy/Dockerfile"
+)
+
 _prepare_images()
 {
-  _prepare_image opencrane opencrane/opencrane-server:develop-smoke \
-    opencrane-server apps/opencrane/deploy/Dockerfile
-  _prepare_image opencrane-ui opencrane/opencrane-ui:develop-smoke \
-    opencrane-ui apps/opencrane-ui/deploy/Dockerfile
-  _prepare_image channel-proxy opencrane/channel-proxy:develop-smoke \
-    opencrane-channel-proxy apps/channel-proxy/deploy/Dockerfile
-  _prepare_image memory-gateway opencrane/memory-gateway:develop-smoke \
-    opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
-  _prepare_image artifact-service opencrane/artifact-service:develop-smoke \
-    opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
-  _prepare_image cognee opencrane/cognee:develop-smoke \
-    opencrane-cognee apps/_infra/cognee/deploy/Dockerfile
+  # The preparations run concurrently: serially they dominated the smoke's wall clock
+  # (~11 of 15 minutes) while each one mostly waits on registry and npm network I/O.
+  # Every preparation logs to its own file so the concurrent output stays readable.
+  local log_dir project local_image remote_image dockerfile
+  local projects=() pids=() failed=0
+  log_dir="$(mktemp -d)"
+  for spec in "${SMOKE_IMAGE_SPECS[@]}"; do
+    IFS='|' read -r project local_image remote_image dockerfile <<<"$spec"
+    _prepare_image "$project" "$local_image" "$remote_image" "$dockerfile" \
+      >"$log_dir/$project.log" 2>&1 &
+    projects+=("$project")
+    pids+=($!)
+  done
+  for index in "${!pids[@]}"; do
+    if ! wait "${pids[$index]}"; then
+      failed=1
+      echo "[develop-smoke] Image preparation FAILED for ${projects[$index]}"
+    fi
+    cat "$log_dir/${projects[$index]}.log"
+  done
+  rm -rf -- "$log_dir"
+  return "$failed"
 }
 
 _create_database_credentials()

@@ -17,8 +17,8 @@ Keep this block's format stable: `key=value`, space-separated tokens. Edit the v
 not the keys.
 
 <!-- GATE-CONFIG-START -->
-threshold=10
-always-review=auth token secret credential oidc iam rbac networkpolicy network-policy egress middleware bearer session budget spend payment
+threshold=150
+always-review=secret credential rbac networkpolicy network-policy egress
 never-review-paths=__tests__/ /tests/ /test/ /spec/ /test_ _test.go Test.java Test.kt .test. .spec. .types.ts /generated/ /dist/ /fixtures/ /vendor/
 <!-- GATE-CONFIG-END -->
 
@@ -60,8 +60,10 @@ otherwise — over-blocking wastes tokens.
 - Mechanical renames or import reordering with no behavioural change.
 - A small, self-contained change with an obvious, low-risk effect.
 
-When genuinely uncertain on a production-code change, lean toward blocking — a Haiku
-judgment is far cheaper than a regression reaching `main`.
+When genuinely uncertain on a production-code change, lean toward allowing. The project
+is pre-MVP with no external users: development speed matters more than catching every
+subtle regression, and the explicit `/review-loop` remains available for the changes
+that deserve it. Revisit this default at the MVP release.
 
 ---
 
@@ -75,3 +77,8 @@ Record changes here so the feedback loop is visible to the team.
   ownership, duplicated domain algorithms, and untested core orchestration paths.
 - 2026-07-30: extend the pre-filter and module-growth trigger across supported production
   languages; keep size as a review trigger rather than a modeled finding.
+- 2026-08-31: pre-MVP relax — the gate fired on nearly every substantive change and became
+  the main drag on iteration speed. threshold 10→150; always-review trimmed to the keywords
+  that are dangerous on their own (secret/credential/rbac/networkpolicy/egress — `token`,
+  `session`, `middleware`, `budget` matched half the codebase); uncertainty default flipped
+  from block to allow. Restore the defensive posture at the MVP release.

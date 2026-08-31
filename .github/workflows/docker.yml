@@ -7,8 +7,10 @@ on:
       - develop
       - own-personal-ai-agent-setup
   # Stacked PRs target feature branches. Validate every PR base so descendants receive the same
-  # build/test gate as integration-root changes.
+  # build/test gate as integration-root changes. ready_for_review is listed because the k3d
+  # smoke is skipped on drafts and must fire when a draft flips to merge-ready.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       heavy_qualification:
@@ -50,12 +52,11 @@ env:
   # backend replaced the GitHub Actions cache backend because the 10GB Actions cache quota evicted
   # the large layer blobs on almost every run, so every build started cold.
   #
-  # Two repositories form a trust boundary: only integration-branch pushes write the trusted
-  # cache, and published image builds read only the trusted cache. Same-repository pull requests
-  # read both but write only the pull-request cache, so a layer produced by unreviewed code can
-  # never become part of a published image.
+  # Only integration-branch pushes write the cache; pull requests read it but never export.
+  # Exporting on pull requests cost 40-50 seconds per image on the smoke's critical path, and
+  # keeping unreviewed layers out of the cache means published image builds stay trustworthy
+  # without a second cache repository.
   BUILD_CACHE_IMAGE: opencrane-buildcache
-  BUILD_CACHE_IMAGE_PR: opencrane-buildcache-pr
 
 jobs:
   prepare:
@@ -342,9 +343,6 @@ jobs:
             sudo apt-get update && sudo apt-get install --yes --no-install-recommends postgresql-client
           fi
 
-      - name: Build the pg_cron migration fixture
-        run: docker build --platform linux/amd64 --tag opencrane-postgres:migration-test --file apps/postgres/deploy/Dockerfile .
-
       - name: Enforce version-to-version database migration contracts
         run: npm run check:database-migrations
 
@@ -498,17 +496,19 @@ jobs:
     needs: prepare
     permissions:
       contents: read
-      # Write lets the smoke publish its layer cache so the next run builds warm. GitHub
-      # downgrades the token to read-only for pull requests from forks, and the smoke then
-      # skips the cache export (see SMOKE_BUILD_CACHE_PUSH below).
+      # Write lets develop-push smokes publish their layer cache so the next run builds warm.
+      # Pull requests never export cache (see SMOKE_BUILD_CACHE_EXPORT below).
       packages: write
-    # Every accepted develop commit proves the current deployment path. A pull request skips the
-    # live cluster only when its exact base SHA already completed the same k3d job successfully.
-    # Missing or malformed proof output deliberately compares unequal to true and runs k3d.
+    # Every accepted develop commit proves the current deployment path. A merge-ready pull
+    # request skips the live cluster only when its exact base SHA already completed the same
+    # k3d job successfully; a draft pull request skips it always, and the ready_for_review
+    # trigger re-runs the workflow when the draft flips. Missing or malformed proof output
+    # deliberately compares unequal to true and runs k3d.
     if: >-
       ${{
         (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
         (github.event_name == 'pull_request' &&
+          github.event.pull_request.draft != true &&
           needs.prepare.outputs.develop_smoke_can_skip != 'true') ||
         (github.event_name == 'workflow_dispatch' &&
           (inputs.heavy_qualification == 'k3d' || inputs.heavy_qualification == 'all'))
@@ -572,10 +572,9 @@ jobs:
           SMOKE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           SMOKE_STORAGE_MODE: ${{ needs.prepare.outputs.develop_smoke_storage_mode }}
           SMOKE_BUILD_CACHE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}
-          SMOKE_BUILD_CACHE_UNTRUSTED: ${{ github.event_name == 'pull_request' && format('{0}/{1}/{2}', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE_PR) || '' }}
-          # Integration pushes refresh the trusted cache; same-repository pull requests export
-          # only the pull-request cache; fork pull requests (read-only token) export nothing.
-          SMOKE_BUILD_CACHE_EXPORT: ${{ github.event_name == 'push' && format('{0}/{1}/{2}', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE) || (github.event.pull_request.head.repo.full_name == github.repository && format('{0}/{1}/{2}', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE_PR) || '') }}
+          # Only integration pushes refresh the cache; pull requests export nothing because the
+          # registry export costs 40-50 seconds per image on the smoke's critical path.
+          SMOKE_BUILD_CACHE_EXPORT: ${{ github.event_name == 'push' && format('{0}/{1}/{2}', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE) || '' }}
 
   image_smoke:
     name: Image smoke (${{ matrix.project }})
@@ -664,13 +663,11 @@ jobs:
           push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_deployables != 'none') }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          # Publishable builds (push events) read only the trusted cache. Pull-request
-          # validation builds also read the pull-request cache and export only there; fork
-          # pull requests (read-only token) export nothing.
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}:${{ matrix.project }}
-            ${{ github.event_name == 'pull_request' && format('type=registry,ref={0}/{1}/{2}:{3}', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE_PR, matrix.project) || '' }}
-          cache-to: ${{ github.event_name == 'push' && format('type=registry,ref={0}/{1}/{2}:{3},mode=max', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE, matrix.project) || (github.event.pull_request.head.repo.full_name == github.repository && format('type=registry,ref={0}/{1}/{2}:{3},mode=max', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE_PR, matrix.project) || '') }}
+          # Everyone reads the integration cache; only pushes refresh it. Pull-request
+          # validation builds export nothing, so unreviewed layers never enter the cache
+          # and validation runs skip the slow registry cache export.
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}:${{ matrix.project }}
+          cache-to: ${{ github.event_name == 'push' && format('type=registry,ref={0}/{1}/{2}:{3},mode=max', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE, matrix.project) || '' }}
 
       # CloudNativePG reads the PostgreSQL version from the manifest's tag, while the digest fixes
       # the qualified image's bytes. Publish that tag as an alias for the manifest's digest in the

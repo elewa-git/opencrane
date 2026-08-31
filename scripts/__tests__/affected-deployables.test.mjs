@@ -184,8 +184,9 @@ test("overlaps image preparation and imports one complete direct k3d batch", fun
 	assert.match(smoke, /if ! wait "\$CERT_MANAGER_INSTALL_PID"/u);
 	assert.match(smoke, /docker buildx build --load/u);
 	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE\}:\$\{project\}"/u);
-	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE_UNTRUSTED\}:\$\{project\}"/u);
 	assert.match(smoke, /--cache-to "type=registry,ref=\$\{SMOKE_BUILD_CACHE_EXPORT\}:\$\{project\},mode=max"/u);
+	// The six image preparations must stay concurrent — serially they dominated the smoke.
+	assert.match(smoke, /_prepare_image "\$project" "\$local_image" "\$remote_image" "\$dockerfile" \\\n\s+>"\$log_dir\/\$project\.log" 2>&1 &/u);
 	const imports = smoke.match(/k3d image import/g) ?? [];
 	assert.equal(imports.length, 1);
 	assert.match(smoke, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
