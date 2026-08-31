@@ -2,10 +2,10 @@
 
 This is the reference for how a change travels from a pull request to a running cluster: the CI
 pipeline and its gates, the caching that keeps it fast, the deploy engine, the warnings that save
-hours, and the release-version and migration process. The contributor-facing summary lives on the
+hours, and the pre-1.0 release check. The contributor-facing summary lives on the
 website under Contributing; this file is the deeper repository-side reference.
 
-> See also: [`docs/agents/versioning.md`](agents/versioning.md) for the full release-version
+> See also: [`docs/agents/versioning.md`](agents/versioning.md) for the pre-1.0 versioning
 > policy, [`docs/agents/infra.md`](agents/infra.md) for build/infra rules, and
 > [`docs/agents/deploy-ledger.md`](agents/deploy-ledger.md) for the deploy fleet's cross-run notes.
 
@@ -19,7 +19,7 @@ main pipeline is where the time goes:
 ```mermaid
 flowchart LR
     P[prepare\ncalculate affected work\n~1-2 min] --> T[test\nbuild, test, lint,\npolicy guards\n~3-10 min]
-    P --> DB[database\nSQL authority suites,\nmigration proofs\n~2-4 min]
+    P --> DB[database\nbaseline + SQL\nauthority suites\n~2-4 min]
     P --> A[api_contract\nOpenAPI + client sync\nonly when affected]
     P --> S[storybook_visual\ncomponent contracts\nskips fast when\nnothing affected]
     P --> K[develop_smoke\nk3d current-silo smoke\n~6-15 min]
@@ -40,7 +40,7 @@ What each job owns:
 | --- | --- | --- |
 | `prepare` | Computes the Nx affected graph, the deployable matrix, the guard comparison base, and whether the k3d smoke can be skipped. | 1–2 min |
 | `test` | Builds, tests, and lints affected projects, and runs every policy guard: workload ownership, agent-domain boundary, mechanical style, module growth, release versioning, Prisma boundaries, config-docs coverage, dependency boundaries. | 3–10 min |
-| `database` | Everything PostgreSQL-bound, beside `test` instead of inside it: the migration contracts and convergence proofs, the generated client, the target baseline, and the SQL authority suites. | 2–4 min |
+| `database` | Everything PostgreSQL-bound, beside `test` instead of inside it: the generated client, the target baseline, and the SQL authority suites. | 2–4 min |
 | `api_contract` | Rebuilds the server and proves the OpenAPI reference and generated client are in sync. Runs only when the API contract changed. | skipped, or ~3–5 min |
 | `storybook_visual` | Storybook build/behaviour/visual contracts for affected frontend projects, on cached Chromium. Runs beside `test`, not after it. | seconds when nothing affected; ~5 min otherwise |
 | `develop_smoke` | Boots a disposable k3d cluster, deploys the full current silo through the real deploy scripts, and proves database isolation, TLS ingress, and workload health. The long pole of the pipeline. | 6–15 min |
@@ -72,12 +72,10 @@ Design decisions worth knowing:
   were evicted almost immediately and every image built cold. Registry-backed caches
   (`type=registry`) have no such quota, and moving them out also stops the node/Nx caches from
   being evicted alongside.
-- **The layer cache has a trust boundary.** Two cache repositories exist:
-  `opencrane-buildcache` (trusted) is written only by integration-branch pushes and is the only
-  cache a publishable build reads; `opencrane-buildcache-pr` is written and read by
-  same-repository pull-request validation builds. A layer produced by unreviewed code therefore
-  never becomes part of a published image. Fork pull requests read the trusted cache and write
-  nothing (their token is read-only).
+- **The layer cache has a trust boundary.** There is one cache repository,
+  `opencrane-buildcache`, written only by integration-branch pushes. Pull requests read it and
+  never export, so a layer produced by unreviewed code never enters the cache — and validation
+  runs skip the slow registry cache export.
 - **Chromium installs from cache, and the apt step is capped.** The browser binaries restore from
   the Actions cache; the apt-driven `--with-deps` install runs only on a cold cache and carries a
   ten-minute step timeout, because a hung apt once held an untimed job (and its runner) for hours.
@@ -113,7 +111,7 @@ apply` against a live cluster:
 flowchart TD
     A[apps/_infra/deploy-k8s/deploy.sh\nsilo profile: flags, presets] --> B[platform/k8s-deploy.sh\nthe install engine]
     B --> C[current-chart-sources.sh\npackages the in-repo\nsubchart sources]
-    B --> D[database-migration-orchestrator.sh\nCNPG cluster, databases,\nmigration + privileges Jobs]
+    B --> D[postgres-release.sh\nCNPG cluster, databases,\nprivileges Jobs]
     B --> E[umbrella helm upgrade\nall app subcharts]
     E --> F[database-release-finalization.sh\ncredential-checksum roll,\nrollout waits, cert wait]
     F --> G[post-deploy-verify.sh\nlive health verification]
@@ -141,9 +139,9 @@ flowchart TD
   the old server build looks healthy and behaves like the old release.
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
-- A reviewed PostgreSQL migration runs as a bounded Helm hook Job. A failure is returned directly;
-  the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
-  back the application.
+- The database schema is created once, by CNPG `initdb` from the target baseline. There is no
+  version-to-version migration path pre-1.0; a dev silo that needs a newer schema is rebuilt
+  (see [`docs/agents/versioning.md`](agents/versioning.md)).
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
   Secrets onto the consumer Deployments (`opencrane-server`, `litellm`, `mcp-gateway`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout; and a fresh install
@@ -176,35 +174,25 @@ flowchart TD
 - **A cancelled develop push is normal.** The workflow's concurrency group replaces a queued push
   run when a newer push arrives; only in-flight publishes are protected.
 
-## Release versions and migrations
+## Release versioning (pre-1.0)
 
 The full policy lives in [`docs/agents/versioning.md`](agents/versioning.md); this is the working
 summary.
 
-- The root `package.json` version names the **repository train** (for example `0.9.2`). Each
-  train has an immutable manifest `releases/<version>.json` recording every application's
-  `adaptedVersion`, chart version, and the database schema version that work together.
-- **Only applications whose own files changed stamp to the root version.** An application that
-  changed only through a shared library, the root dependency set, or the lockfile keeps its
-  latest released version — published images are pinned by commit SHA, so the shared change
-  reaches it regardless. (Before this rule, every shared change failed CI until every manifest
-  entry was bumped by hand.)
-- A directly changed application updates, together: its manifest entry, its `package.json`
-  version mirror, its `project.json` `metadata.release.adaptedVersion`, and its chart
-  `appVersion` where a chart exists. Version-only mirror edits are "stamp-only" and do not count
-  as changes themselves.
-- A **changed chart** bumps its chart version to the root version and adds exactly one
-  `helm/migrations/<from>-to-<to>.json` transition. The umbrella needs no edit: it declares its
-  in-repo dependencies with open constraints and packages them fresh at render time.
-- A **database schema change** updates the clean target baseline and adds one adjacent, reviewed
-  SQL transition under `apps/opencrane/prisma/migrations/<from>-to-<to>/`, bound by digest.
-- Adjacent minor trains (`0.8.x → 0.9.0`) are the only automatic transition. Patch, skipped-minor,
-  and major transitions require an approved `manualTransition` with a reason in the manifest.
-- Once a version tag exists, that train's composition is frozen: any further change must advance
-  the train and create the next manifest.
+- Until MVP the only supported install path is a **fresh install from the clean database
+  baseline**. There are no version-to-version upgrade contracts, per-change version bumps, chart
+  version stamps, `helm/migrations` files, or manifest immutability rules. Existing dev silos are
+  rebuilt, never upgraded in place.
+- The root `package.json` version names the current release, and `releases/<version>.json` is its
+  one current manifest. It binds the repository version, the fresh-install baseline digest, and
+  the PostgreSQL operand image (whose tag major must match the chart's `externalAppVersion`).
+- A **database schema change** edits the target baseline and updates `database.baselineSha256` in
+  the current manifest; live dev silos that need it are rebuilt.
+- Historical manifests are kept only so `teardown.sh` can retire silos installed from them.
+- Upgrade contracts return at MVP, most likely as a Prisma-ledger migrator Job.
 
-CI enforces all of this in the `test` job (`check:release-versioning`), diffed against the last
-validated base, so a violation fails the PR — not the deploy.
+CI enforces this in the `test` job (`check:release-versioning`), so a violation fails the PR —
+not the deploy.
 
 ## Letting an AI agent manage your deployment
 
@@ -228,7 +216,7 @@ The one thing an agent must never see in plain text is credentials. The conventi
   scripts themselves follow (the API key is environment-only precisely to keep it out of command
   history and Helm values).
 - Everything else an agent needs is already non-secret: cluster context, base domain, tenant
-  name, image digests from the release manifest, and the deploy ledger for cross-run memory.
+  name, `sha-*` image tags from a green CI run, and the deploy ledger for cross-run memory.
 
 With `keys/` populated, a fresh silo is one command the agent can compose, run, and verify —
 and the post-deploy verification plus the run report tell it (and you) whether the cluster is

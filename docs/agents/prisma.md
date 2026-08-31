@@ -23,13 +23,12 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    domain is a design smell.
 2. **Never edit a model from a non-owning domain.** If domain B needs a field on domain
    A's model, that is an API conversation with A's contract, not a schema edit from B.
-3. **Schema changes update both fresh and upgrade paths in the same slice.** Regenerate and review
-   `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty database.
-   Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe indexes,
-   and authority constraints in the reviewed baseline. Regeneration must preserve and revalidate
-   those blocks explicitly. Add the adjacent, reviewed SQL transition and manifest under
-   `apps/opencrane/prisma/migrations/<from>-to-<to>/`; the deployment-owned PostgreSQL Job runs it,
-   never server startup. Prove the migrated schema matches the clean target. Run
+3. **Schema changes edit the target baseline; there is no upgrade path pre-1.0.** Regenerate and
+   review `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty
+   database. Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe
+   indexes, and authority constraints in the reviewed baseline. Regeneration must preserve and
+   revalidate those blocks explicitly. Update `database.baselineSha256` in the current
+   `releases/<version>.json` and rebuild any live dev silo that needs the new schema. Run
    `npm run test:authority-baseline -w @opencrane/server` as well: it fails closed when a
    Prisma-only rewrite has discarded the reviewed functions, triggers, constraints, or seeds.
 4. **CNPG `initdb` is the only application-schema setup boundary.** The deployment publisher
@@ -37,8 +36,9 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    one immutable, content-addressed ConfigMap. Its superuser envelope records the full baseline
    digest in a protected database schema. Physical recovery restores that marker with the existing
    schema, never attaches fresh setup SQL, and must pass the digest-checking Postgres hook.
-   Existing databases advance only through the versioned migration Job described in
-   [`versioning.md`](./versioning.md); the protected baseline digest remains immutable origin proof.
+   Existing databases do not advance in place pre-1.0 — a silo that needs a newer schema is
+   rebuilt (see [`versioning.md`](./versioning.md)); the protected baseline digest remains
+   immutable origin proof.
 
 ## Runtime ORM ownership
 

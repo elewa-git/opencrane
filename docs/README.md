@@ -9,7 +9,7 @@ belong in `CHANGELOG.md`, while only lasting design contracts remain under `docs
 
 | Folder | What it holds |
 |--------|---------------|
-| [`ci-and-deploy.md`](ci-and-deploy.md) | The CI pipeline, its caching layers, the deploy engine, operational warnings, and the release-version and migration process. |
+| [`ci-and-deploy.md`](ci-and-deploy.md) | The CI pipeline, its caching layers, the deploy engine, operational warnings, and the pre-1.0 release check. |
 | [`agents/`](agents/) | Canonical agent guidance, indexed by [`AGENTS.md`](../AGENTS.md). |
 | [`adr/`](adr/) | Accepted architecture decisions and the exact clauses they supersede. |
 | [`design/`](design/) | Durable product and platform contracts grounded in current implementations. |

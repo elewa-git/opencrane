@@ -1,7 +1,7 @@
 # deploy-k8s platform tools
 
-This directory contains the shared tools that prepare a cluster, deploy an OpenCrane silo, upgrade
-its database, and verify the result. They live beside the deploy application because no other
+This directory contains the shared tools that prepare a cluster, deploy an OpenCrane silo, and
+verify the result. They live beside the deploy application because no other
 OpenCrane package uses them as a general-purpose library.
 
 ## What these tools are for
@@ -18,10 +18,8 @@ cluster does not match the assumptions needed to do that job safely.
 | `qualified-release-image-policy.sh` | Keeps the channel proxy, memory gateway, and artifact service on one reviewed build while allowing the server to use its own reviewed build when needed. It verifies that all four images are available before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
 | `cluster-tenant-crd-policy.sh` | Protects the cluster-wide tenant definition from conflicting ownership. It checks whether the definition is missing, owned by this release, safely shared, or conflicting before Helm proceeds. |
-| `database-migration-orchestrator.sh` | Runs a reviewed database migration Job directly. It publishes the SQL, prepares required PostgreSQL features, waits for the Job, and removes any temporary privileges. |
-| `database-pg-cron-preflight.sh` | Confirms that PostgreSQL can schedule the background work used by saved workflow tasks before a migration depends on it. The check is read-only and runs against the database primary. |
+| `postgres-release.sh` | Reconciles the PostgreSQL release. The schema is created once, by CNPG `initdb` from the app-owned target baseline; there is no version-to-version migration path pre-1.0. |
 | `qualify-workflow-engine.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
-| `database-superuser-access.sh` | Confirms that temporary database-administrator access has been disabled and its generated credential removed before the application resumes. |
 | `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
 | `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
 | `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
@@ -52,14 +50,15 @@ belong in sibling `apps/_infra/<service>` projects.
 
 ## Database deployment
 
-Every invocation supplies a release version and the version it is upgrading from. When a reviewed
-`<from>-to-<to>` migration directory exists, the deployer publishes its SQL as an immutable ConfigMap,
-prepares `pg_cron` when that migration needs it, runs the bounded migration Job, and then continues
-the ordinary application rollout. A failed Job returns its failure directly. It does not create a
-backup, inspect the existing schema, pause application writes, or restore a previous release.
+Every invocation supplies `--release-version`; the engine reads the PostgreSQL operand image from
+that `releases/<version>.json` manifest. The schema is created once, by CNPG `initdb` from the
+app-owned target baseline (the baseline publisher prepends the `pg_cron` prerequisite). There is no
+version-to-version migration path pre-1.0: a dev silo that needs a newer schema is rebuilt, and
+upgrade contracts return at MVP (see
+[`docs/agents/versioning.md`](../../../../docs/agents/versioning.md)).
 
-Operational backup and restore configuration remains available in the PostgreSQL chart, but it is not
-a condition for running a migration. Deferred migration hardening work is tracked in issue #699.
+Operational backup and restore configuration remains available in the PostgreSQL chart, but it is
+not a condition for deployment.
 
 ## OIDC upgrades
 

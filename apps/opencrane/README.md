@@ -121,9 +121,9 @@ its resources to the lifecycle owner.
   one worker for registered workflow tasks. Its focused source verifiers prove the seeded
   persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.
-- `prisma/migrations/<from>-to-<to>/` owns reviewed, adjacent schema upgrades for existing databases.
-  The PostgreSQL deployment Job runs them before an incompatible server rollout; server startup
-  never becomes a schema-migration authority.
+- There is no `prisma/migrations/` upgrade path pre-1.0: the baseline is the only schema authority,
+  existing dev silos are rebuilt rather than upgraded, and server startup never becomes a
+  schema-migration authority. Upgrade contracts return at MVP.
 
 ## Boundary
 

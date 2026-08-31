@@ -295,7 +295,7 @@ jobs:
   # database generation, the target baseline, the SQL authority suites, and the migration
   # convergence proofs together took minutes off the test job's critical path.
   database:
-    name: Database authority and migration proofs
+    name: Database authority proofs
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: prepare

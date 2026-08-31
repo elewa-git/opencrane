@@ -55,11 +55,10 @@ target therefore runs the actual image build; an image smoke check is a distinct
 
 ## Release compatibility
 
-Every Nx application records `metadata.release.adaptedVersion`, the root repository version in
-which that deployable was last directly adapted. App package and Helm chart versions mirror that
-stamp. Unchanged apps intentionally retain older stamps; [`releases`](../releases/README.md) records
-the exact app/chart/database combination for each repository train. Directly touching an app means
-updating its stamp and any required Helm or database transition in the same slice.
+Pre-1.0 there are no per-app version stamps or upgrade transitions. One current manifest,
+[`releases/<version>.json`](../releases/README.md), binds the repository version, the fresh-install
+database baseline digest, and the PostgreSQL operand image; the full policy lives in
+[`docs/agents/versioning.md`](../docs/agents/versioning.md).
 
 ## See also
 

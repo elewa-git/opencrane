@@ -3,8 +3,8 @@
 > [apps](../README.md) › postgres
 
 OpenCrane runs CloudNativePG (CNPG), a Kubernetes operator that manages PostgreSQL. This package owns
-the OpenCrane Helm chart around CNPG: the database layout, the connection pool, access boundaries,
-and the one-off migration Job. CNPG owns the database process itself.
+the OpenCrane Helm chart around CNPG: the database layout, the connection pool, and access
+boundaries. CNPG owns the database process itself.
 
 ## What it owns
 
@@ -14,11 +14,11 @@ LiteLLM, and Obot. It also creates a PgBouncer connection pool and database priv
 
 ```
   application release
-          │ reviewed migration SQL, when present
+          │ target baseline SQL
           ▼
   ┌───────────────────────────────┐
   │ postgres chart  ◄── HERE       │
-  │ Cluster · pooler · migration   │
+  │ Cluster · pooler · privileges  │
   └───────────────────────────────┘
           │ connection Secrets
           ▼
@@ -28,29 +28,23 @@ LiteLLM, and Obot. It also creates a PgBouncer connection pool and database priv
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
 [LiteLLM](../_infra/litellm/README.md) · [Obot](../_infra/obot/README.md)
 
-For a migration, the deployer publishes the reviewed SQL as an immutable ConfigMap, prepares
-`pg_cron` when required, and runs the bounded migration Job. The Job checks the SQL bytes before
-executing them. A failure is returned directly. Deployment does not require a migration backup,
-inspect the existing schema, pause application writes, or restore an earlier application release.
-Issue #699 tracks that deferred hardening work.
-
-The migration Job is not a general database shell. It has no Kubernetes API permission, cannot retry,
-runs with a read-only root filesystem, and can reach only the database and DNS. The temporary CNPG
-superuser credential is used only to create `pg_cron` and is removed immediately afterwards.
+The schema is created once, by CNPG `initdb` from the app-owned target baseline (the baseline
+publisher prepends the `pg_cron` prerequisite). There is no version-to-version migration Job
+pre-1.0: a dev silo that needs a newer schema is rebuilt, and upgrade contracts return at MVP
+(see [`docs/agents/versioning.md`](../../docs/agents/versioning.md)).
 
 ## Public surface
 
 Entrypoint: `apps/postgres/helm` is the PostgreSQL Helm chart.
 
 - `scripts/publish-initdb-baseline-config-map.sh` publishes the SQL for a new database.
-- `scripts/publish-database-migration-config-map.sh` publishes reviewed migration SQL.
 - `scripts/publish-app-connection-secret.sh` publishes each application's own connection Secret.
 
 ## Boundary
 
 The chart creates and manages PostgreSQL resources only. Application code must not migrate its own
 schema at startup. Operational backup and restore remain optional chart features; they are not a
-condition for migration deployment.
+condition for deployment.
 
 ## Dependency direction
 
@@ -60,7 +54,7 @@ database library for product code.
 ## Runtime and config
 
 The deploy wrapper supplies the PostgreSQL image, database-owner credential Secrets, the target
-baseline ConfigMap, Kubernetes API addresses for network policy, and any reviewed migration image.
+baseline ConfigMap, and Kubernetes API addresses for network policy.
 Use `apps/_infra/deploy-k8s/deploy.sh` rather than calling the chart directly for a normal install or
 upgrade.
 
@@ -68,4 +62,4 @@ upgrade.
 
 - Parent index: [apps](../README.md)
 - Deployment tools: [deploy-k8s platform](../_infra/deploy-k8s/platform/README.md)
-- Migration source: [OpenCrane Prisma migrations](../opencrane/prisma/migrations/README.md)
+- Baseline source: [OpenCrane server](../opencrane/README.md) (`prisma/bootstrap/target-baseline.sql`)

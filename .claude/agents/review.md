@@ -103,11 +103,11 @@ fresh context — do not assume the author's intent was correct.
     `secretKeyRef` reads it once at start and does not hot-reload; if that value's meaning
     can change at runtime, there must be a pod-roll trigger (a checksum/identity annotation
     on the pod template).
-  - *Release and migration truth.* Read `docs/agents/versioning.md`. Every directly changed or
-    dependency-adapted Nx application must be stamped to the root version with matching
-    package/chart mirrors. A chart
-    or schema change without its immutable manifest update, exact previous-to-current transition,
-    and previous-version upgrade proof is a finding; a chart transition may be an explicit no-op.
+  - *Release truth.* Read `docs/agents/versioning.md`. Pre-1.0 one current
+    `releases/<version>.json` binds the repository version, the fresh-install database baseline
+    digest (`target-baseline.sql`), and the PostgreSQL operand image. A schema or operand change
+    that leaves that binding stale is a finding; there are no version-to-version transitions or
+    upgrade proofs until MVP — existing silos are rebuilt, not upgraded in place.
 
 ### DIMENSION: security
 - **IAM-first**: federated identity / OIDC / Workload Identity over static bearer

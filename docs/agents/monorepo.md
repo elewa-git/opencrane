@@ -102,11 +102,9 @@ create `libs/utils/` beside it just to satisfy this document.
   an explicit version from that immutable artifact. Helm values must resolve a digest or immutable
   version tag, never a moving `latest` tag. Do not retrofit release machinery into apps being
   deleted; establish it on their direct replacements.
-- Every Nx application records `metadata.release.adaptedVersion`, the root repository version in
-  which its production or deployment contract was last changed directly or through a project it
-  depends on. Release composition is independent: an application that is only affected through
-  shared Nx inputs keeps its previous stamp. The immutable `releases/<root-version>.json` manifest
-  records the compatible app, chart, and database versions; see [`versioning.md`](./versioning.md).
+- Pre-1.0 there are no per-app version stamps or upgrade transitions. The single current
+  `releases/<version>.json` manifest binds the repository version, the fresh-install database
+  baseline digest, and the PostgreSQL operand image; see [`versioning.md`](./versioning.md).
 - Delete replaced projects with their exports, tags, path aliases, targets, chart values, tests, and
   docs. Git history is the compatibility archive.
 
