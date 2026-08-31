@@ -15,6 +15,7 @@ import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type Publi
 import { _log } from "./log";
 import type { OrganizationMembersComposition } from "./organization-members-composition.types";
 import type { PublicAuthenticationComposition } from "./public-app.types";
+import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
@@ -70,9 +71,10 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
  * @param health - Cached public service report reader with no topology or error details.
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
+ * @param mcpRuntime - Runtime routes, or null when the application profile omits Kubernetes workloads.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, organizationMembers: OrganizationMembersComposition, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition | null): Express
+export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, organizationMembers: OrganizationMembersComposition, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition | null, mcpRuntime: McpRuntimeComposition | null): Express
 {
 	const app = express();
 
@@ -101,7 +103,7 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	}
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactServiceEnabled, artifactScannerEnabled, organizationMembers.router, mcpWorkflows);
+	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactServiceEnabled, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

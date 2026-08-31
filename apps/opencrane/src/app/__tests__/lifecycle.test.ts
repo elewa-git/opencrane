@@ -82,7 +82,7 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, channelTargets,
 			{ attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer,
 			function _UnbindConsole() { _calls.push("console"); }, {} as ExternalActionWorker,
-			function _StopObot() { _calls.push("obot"); }, workflowRuntime,
+			function _StopObot() { _calls.push("obot"); }, { recoverExpiredInvocation: vi.fn() } as never, workflowRuntime,
 		)).rejects.toThrow("worker unavailable");
 
 		expect(_calls).toEqual(expect.arrayContaining(["workers.start", "obot", "routes", "workflow", "prisma", "telemetry", "console"]));
@@ -111,6 +111,7 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		function _UnbindConsole() { _calls.push("console"); },
 			{} as ExternalActionWorker,
 			function _StopObot() { _calls.push("obot"); },
+			{ recoverExpiredInvocation: vi.fn() } as never,
 			{} as IWorkflowWorkerRuntime,
 		);
 
@@ -142,7 +143,7 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
 		const routes = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 
-		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, {} as k8s.BatchV1Api, {} as ManagedRunAdmissionPort, {} as RunCancellationRepository, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, routes, { attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer, function _Unbind() { _calls.push("console"); }, {} as ExternalActionWorker, vi.fn(), {} as IWorkflowWorkerRuntime);
+		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, {} as k8s.BatchV1Api, {} as ManagedRunAdmissionPort, {} as RunCancellationRepository, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, routes, { attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer, function _Unbind() { _calls.push("console"); }, {} as ExternalActionWorker, vi.fn(), { recoverExpiredInvocation: vi.fn() } as never, {} as IWorkflowWorkerRuntime);
 		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
 		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
 		if (term === undefined || interrupt === undefined)

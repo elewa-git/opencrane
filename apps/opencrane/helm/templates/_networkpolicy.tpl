@@ -140,6 +140,18 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    # OCI MCP companions can reach only the internal command API. TokenReview then binds the
+    # projected credential to mcp-executor-default and the registered Pod UID.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ (index .Values "opencrane-mcp-executor").mcpExecutor.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: mcp-executor
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
     {{- end }}
     # Allow the fleet-manager to reach the PUBLIC /api/v1/* API for cross-silo operations.
     - from:

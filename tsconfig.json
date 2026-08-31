@@ -10,6 +10,9 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
+      "@opencrane/backend/server/utils": [
+        "./libs/backend/server/utils/src/index.ts"
+      ],
       "@opencrane/backend/server/agents/agent-services": [
         "./libs/backend/server/agents/agent-services/main/src/index.ts"
       ],
@@ -178,6 +181,24 @@
       "@opencrane/backend/agents/runtime/k8s-launcher": [
         "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
       ],
+      "@opencrane/backend/agents/runtime/workloads/contract": [
+        "./libs/backend/agents/runtime/workloads/contract/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/workloads/k8s-controller": [
+        "./libs/backend/agents/runtime/workloads/k8s-controller/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/mcp-executor/k8s-launcher": [
+        "./libs/backend/agents/runtime/mcp-executor/k8s-launcher/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/mcp-executor/controller": [
+        "./libs/backend/agents/runtime/mcp-executor/controller/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/mcp-executor/protocol": [
+        "./libs/backend/agents/runtime/mcp-executor/protocol/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/mcp-executor/companion": [
+        "./libs/backend/agents/runtime/mcp-executor/companion/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/cleanup": [
         "./libs/backend/agents/runtime/cleanup/main/src/index.ts"
       ],
@@ -207,6 +228,9 @@
       ],
       "@opencrane/backend/server/infra/mcp-era-probe": [
         "./libs/backend/server/infra/mcp-era-probe/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/oci-registry": [
+        "./libs/backend/server/infra/oci-registry/src/index.ts"
       ],
       "@opencrane/backend/server/infra/workflows/contract": [
         "./libs/backend/server/infra/workflows/contract/src/index.ts"

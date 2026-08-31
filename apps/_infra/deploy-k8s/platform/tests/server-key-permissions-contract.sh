@@ -173,6 +173,37 @@ grep -Fq '            - name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY' <<<"$server
 grep -Fq '            - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_OCI_REGISTRY_BASE_URL' <<<"$server_manifest"
+grep -Fq '              value: "https://registry.invalid"' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_OCI_REGISTRY_REPOSITORY' <<<"$server_manifest"
+grep -Fq '              value: "opencrane/mcp-images"' <<<"$server_manifest"
+if grep -Fq 'OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE' <<<"$server_manifest"; then
+  echo "OCI registry credential path rendered without a configured Secret" >&2
+  exit 1
+fi
+
+# A configured registry credential stays in a read-only file that the server re-reads per request.
+oci_registry_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string clustertenantManager.workflows.ociRegistry.authorization.existingSecret=oci-registry-authorization)"
+oci_registry_manifest="$(printf '%s\n' "$oci_registry_rendered" | awk '
+  function flush_document() {
+    if (is_deployment && is_server) { printf "%s", document }
+    document = ""; is_deployment = 0; is_server = 0
+  }
+  /^---$/ { flush_document(); next }
+  { document = document $0 ORS }
+  /^kind: Deployment$/ { is_deployment = 1 }
+  /^  name: opencrane-silo-opencrane-server$/ { is_server = 1 }
+  END { flush_document() }
+')"
+grep -Fq '            - name: OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE' <<<"$oci_registry_manifest"
+grep -Fq '              value: /var/run/opencrane/oci-registry/authorization' <<<"$oci_registry_manifest"
+grep -Fq '            - name: oci-registry-authorization' <<<"$oci_registry_manifest"
+grep -Fq '              mountPath: /var/run/opencrane/oci-registry' <<<"$oci_registry_manifest"
+oci_registry_volume="$(grep -A 8 '        - name: oci-registry-authorization' <<<"$oci_registry_manifest")"
+grep -Fq '            secretName: "oci-registry-authorization"' <<<"$oci_registry_volume"
+grep -Fq '            defaultMode: 0440' <<<"$oci_registry_volume"
+grep -Fq '                path: authorization' <<<"$oci_registry_volume"
 
 # The memory-gateway caller credential must be an audience-bound projected token, group-readable
 # only (0440), mounted where MEMORY_GATEWAY_TOKEN_PATH points.

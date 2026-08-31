@@ -3,6 +3,7 @@ import "./instrument";
 import * as k8s from "@kubernetes/client-node";
 
 import { __CreateHttpAgentControllerAuthority, __CreateKubernetesAgentControllerStore, __RunAgentController } from "@opencrane/backend/agents/runtime/controller";
+import { __CreateHttpMcpExecutorControllerAuthority, __CreateKubernetesMcpExecutorControllerStore, __RunMcpExecutorController } from "@opencrane/backend/agents/runtime/mcp-executor/controller";
 import { __CreateHttpSkillWorkloadControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __RunSkillWorkloadController } from "@opencrane/backend/agents/skills/controller";
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
@@ -24,13 +25,16 @@ async function _Main(): Promise<void>
 		kubeConfig.loadFromCluster();
 		const authority = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const skillWorkloadAuthority = __CreateHttpSkillWorkloadControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
+		const mcpExecutorAuthority = __CreateHttpMcpExecutorControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const workloads = __CreateKubernetesAgentControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 		const skillKubernetes = __CreateKubernetesSkillWorkloadControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
+		const mcpKubernetes = __CreateKubernetesMcpExecutorControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 
 		// 3. Convert both Kubernetes termination signals into one abortable poll loop.
 		function _Shutdown(signal: string): void
 		{
-			if (shutdown.signal.aborted) return;
+			if (shutdown.signal.aborted)
+				return;
 			log.info({ signal }, "agent controller shutting down");
 			shutdown.abort(signal);
 		}
@@ -40,6 +44,7 @@ async function _Main(): Promise<void>
 		await Promise.all([
 			__RunAgentController({ authority, workloads, profiles: config.profiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds, outboxPruneIntervalMilliseconds: config.outboxPruneIntervalMilliseconds, log }, shutdown.signal),
 			__RunSkillWorkloadController({ authority: skillWorkloadAuthority, kubernetes: skillKubernetes, profiles: config.skillWorkloadProfiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
+			__RunMcpExecutorController({ authority: mcpExecutorAuthority, kubernetes: mcpKubernetes, profile: config.mcpExecutorProfile, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
 		]);
 	}
 	finally

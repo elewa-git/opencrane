@@ -22,6 +22,7 @@ testing on its own, it belongs in a library, not here.
 | [`agent-runtime`](./agent-runtime/README.md) | Outbound-only personal-agent process prepared as one suspended Job per run attempt. |
 | [`managed-agent-runtime`](./managed-agent-runtime/README.md) | Chart/deploy-only plane for scheduled and triggered managed agents. |
 | [`agent-controller`](./agent-controller/README.md) | Sole Kubernetes mutator for personal-runtime attempt resources. |
+| [`mcp-executor`](./mcp-executor/README.md) | One-shot OpenCrane companion for OCI-backed MCP server Jobs. |
 | [`skill-authoring`](./skill-authoring/README.md) | Chart-only isolated candidate-skill Job plane with no standing worker. |
 | [`tool-runner`](./tool-runner/README.md) | Chart-only isolated tenant-tool Job plane with no standing worker. |
 | [`postgres`](./postgres/README.md) | The durable PostgreSQL deployable. |
@@ -34,7 +35,7 @@ service map.
    opencrane (control plane) ──serves──► opencrane-ui (SPA)
         │                                  channel-proxy (edge)
         ├── memory-gateway · artifact-service · artifact-preprocessor · artifact-scanner
-        ├── agent-controller · agent-runtime · managed-agent-runtime
+        ├── agent-controller · agent-runtime · managed-agent-runtime · mcp-executor
         ├── skill-authoring · tool-runner
         └── postgres (durable DB)
    apps/_infra/ ── vendored infra + release composer

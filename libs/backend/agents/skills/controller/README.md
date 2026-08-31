@@ -34,6 +34,8 @@ Python code running.
 - `__CreateHttpSkillWorkloadControllerAuthority` — bounds and decodes internal responses, then
   delegates every wire shape and echo invariant to the model-adjacent Zod validators in
   `@opencrane/contracts`.
+- `__CreateKubernetesSkillWorkloadControllerStore` — supplies skill-owned labels and trace names to
+  the shared exact governed Job store.
 
 ## Boundary
 
@@ -44,8 +46,9 @@ non-secret Job reference through a separately authenticated boundary before any 
 
 ## Dependency direction
 
-Tagged `scope:skills-controller` and `layer:infra`, it may depend only on the pure skill Job builder
-and shared contracts. The deployable agent-controller app composes its HTTP and Kubernetes adapters.
+Tagged `scope:skills-controller` and `layer:infra`, it may depend on the pure skill Job builder, the
+shared exact governed Job controller, and shared contracts. The deployable agent-controller app
+composes its HTTP and Kubernetes adapters.
 
 ## See also
 

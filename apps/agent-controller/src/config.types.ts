@@ -1,4 +1,5 @@
 import type { AgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
+import type { McpExecutorJobProfile } from "@opencrane/backend/agents/runtime/mcp-executor/k8s-launcher";
 import type { SkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
 
 /** Fully validated process configuration for the per-silo agent controller. */
@@ -18,4 +19,6 @@ export interface AgentControllerProcessConfig
 	readonly profiles: AgentControllerRuntimeProfiles;
 	/** Immutable profiles for the only governed skill Job classes. */
 	readonly skillWorkloadProfiles: SkillWorkloadControllerProfiles;
+	/** Immutable profile for OCI-backed MCP executor Jobs. */
+	readonly mcpExecutorProfile: McpExecutorJobProfile;
 }

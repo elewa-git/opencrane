@@ -244,6 +244,7 @@ model ToolInvocation {
   resultDelivery           ToolResultDelivery?
   skillWorkload            SkillWorkload?
   personalMemoryPermission PersonalMemoryPermissionReceipt?
+  mcpRuntimeExecution      McpRuntimeExecution?
 
   @@unique([runId, attempt, toolInvocationId])
   @@unique([runId, attempt, candidateId])

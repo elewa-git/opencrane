@@ -1,4 +1,4 @@
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationClaimOutcomes, ToolInvocationEventTypes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationPreparationPolicy, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolInvocationEventTypes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationPreparationPolicy, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
@@ -224,9 +224,9 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 		return { outcome: ToolInvocationClaimOutcomes.Claimed, claim: { invocationId: invocation.id, kind, fence: 1, revision: invocation.revision + 1 }, invocation };
 	}
 	/** Commit one successful provider result. */
-	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: "winner", invocation: this.invocation }; }
+	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: this.invocation }; }
 	/** Commit one proven provider failure. */
-	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: "winner", invocation: this.invocation }; }
+	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: this.invocation }; }
 	/** Record an ambiguous result for frozen recovery policy. */
 	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { this.ambiguous.push(claim); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return this.invocation; }
 	/** Recover one expired provider claim without dispatching. */
@@ -252,6 +252,7 @@ function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: Prep
 	return {
 		value: {
 			source: new _Source(invocation),
+			classAdmission: { admitInvocation: vi.fn().mockResolvedValue("not_mcp") },
 			invocations,
 			contexts: new _Contexts(context),
 			adapters,
@@ -345,6 +346,19 @@ describe("external action worker", function _suite()
 		expect(adapter.dispatchKeys).toEqual([null]);
 		expect(dependencies.invocations.ambiguous).toHaveLength(1);
 		expect([...dependencies.events, ...dependencies.invocations.lifecycleEvents].map(function _type(event) { return event.eventType; })).toEqual(["tool.started", "tool.failed"]);
+	});
+
+	it("hands a ready OCI MCP invocation to its durable executor before generic dispatch", async function _RoutesMcpInvocation()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const dependencies = _dependencies(_invocation(ToolInvocationStates.Ready), adapter);
+		dependencies.value.classAdmission.admitInvocation = vi.fn().mockResolvedValue("admitted");
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
+
+		expect(dependencies.value.classAdmission.admitInvocation).toHaveBeenCalledWith("invocation-row-1");
+		expect(adapter.dispatchKeys).toEqual([]);
+		expect(dependencies.invocations.claims).toEqual([]);
 	});
 
 	it("logs a bounded definite provider failure after its durable outcome commits", async function _definiteFailure()

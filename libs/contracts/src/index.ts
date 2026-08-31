@@ -18,6 +18,7 @@ export * from "./cluster-tenant.types";
 export * from "./group.types";
 export * from "./memory.types";
 export * from "./mcp-operator.types";
+export * from "./mcp-executor-identity.types";
 export * from "./model-routing.types";
 export * from "./model-routing.validator";
 export type * from "./compiled-run-input.types";

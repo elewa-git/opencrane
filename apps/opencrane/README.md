@@ -58,11 +58,11 @@ The route registry is deliberately a catalogue rather than a second application 
 | Public `:8080` | Identity and access | audit, groups, grants, resource shares |
 | Public `:8080` | Agents | agent-service management and governed skill catalogue |
 | Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, configuration, conversations |
-| Public `:8080` | Gateways | MCP, model routing, providers, bring-your-own-key, model registry |
+| Public `:8080` | Gateways | MCP catalogue, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
-| Internal `:8081` | Controller | run-attempt and skill-workload dispatch |
+| Internal `:8081` | Controller | run-attempt, skill-workload, and OCI MCP Job dispatch |
 | Internal `:8081` | Runtime | one-use bootstrap, command stream, candidate ingest, skill-authoring exchange |
-| Internal `:8081` | Workers and replay | artifact preprocessing and controller-selected conversation replay |
+| Internal `:8081` | Workers and replay | Pod-bound MCP command/result exchange, artifact preprocessing, and controller-selected conversation replay |
 
 The invariant is simple: a request creates or changes durable product state before a worker is
 trusted to act. Runtime input is frozen for the accepted attempt, and events are recorded in order
@@ -100,9 +100,13 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
 - `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
   authorities by caller plane without choosing transport paths.
-- `src/app/mcp-workflow-composition.ts` creates one Absurd worker for both remote MCP protocol
-  checks and saved MCP bundle checks. A workflow is saved work that may continue later; here it
-  checks a registered server or signed bundle without keeping the administrator's request open.
+- `src/app/mcp-workflow-composition.ts` creates one Absurd worker for remote MCP protocol checks
+  and OCI image admission. A workflow is saved work that may continue after the server restarts.
+  Here it checks a registered server, validates a saved OCI Image Layout ZIP, imports the accepted
+  image into the configured registry, and saves its immutable digest without keeping the request open.
+- `src/app/mcp-runtime-composition.ts` turns that immutable image into a separate MCP executor Job.
+  It shares one database authority across the administrator promotion route, controller claims,
+  Pod-bound companion reports, and saved tool calls, so no generic worker can also run the call.
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.
@@ -201,6 +205,7 @@ are:
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
+| `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Production organisation sign-in, callbacks, and server-side session protection | required outside Tier 3 |
 | `OPENCRANE_AUTH_MODE`, `OPENCRANE_TIER3_*_SECRET_PATH` | Select the dev-only fixed Tier 3 identity and its file-mounted, per-run proxy/session secrets | OIDC mode |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |

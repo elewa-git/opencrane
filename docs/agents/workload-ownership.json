@@ -11,6 +11,7 @@
     "artifact-scanner",
     "agent-controller",
     "agent-runtime",
+    "mcp-executor",
     "skill-authoring",
     "tool-runner",
     "cognee",
@@ -59,7 +60,8 @@
         "agentController.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "opencrane-mcp-executor.mcpExecutor.image.digest=sha256:9999999999999999999999999999999999999999999999999999999999999999"
       ],
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
@@ -83,6 +85,11 @@
       "workloadIds": ["agent-runtime"]
     },
     {
+      "path": "libs/backend/agents/runtime/mcp-executor/k8s-launcher/src/mcp-executor-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["mcp-executor"]
+    },
+    {
       "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts",
       "anchor": "kind: \"Job\"",
       "workloadIds": ["skill-authoring"]
@@ -103,9 +110,9 @@
       "workloadIds": ["agent-runtime"]
     },
     {
-      "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
+      "path": "libs/backend/agents/runtime/workloads/k8s-controller/src/governed-job-controller.ts",
       "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
-      "workloadIds": ["skill-authoring", "tool-runner"]
+      "workloadIds": ["skill-authoring", "tool-runner", "mcp-executor"]
     }
   ],
   "nonProducingRuntimeMatches": [
@@ -215,6 +222,13 @@
       "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
       "owner": "apps/agent-runtime",
       "source": { "type": "file", "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts", "anchor": "kind: \"Job\"" }
+    },
+    {
+      "id": "mcp-executor",
+      "podClass": "Job/mcp-executor-invocation",
+      "image": "registry-imported OCI digest plus the pinned OpenCrane MCP companion",
+      "owner": "apps/mcp-executor",
+      "source": { "type": "file", "path": "libs/backend/agents/runtime/mcp-executor/k8s-launcher/src/mcp-executor-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "skill-authoring",

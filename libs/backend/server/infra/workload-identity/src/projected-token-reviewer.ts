@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types";
@@ -122,6 +122,19 @@ function _CreateFixedServiceAccountTokenReviewer(authApi: ProjectedTokenReviewAp
 export function _CreateAgentControllerTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): FixedServiceAccountTokenReviewer
 {
 	return _CreateFixedServiceAccountTokenReviewer(authApi, AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, namespace, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME);
+}
+
+/** Build the Pod-bound reviewer for the isolated OCI MCP executor companion. */
+export function _CreateMcpExecutorTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE]);
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _IsMcpExecutorServiceAccount(value): boolean { return value === MCP_EXECUTOR_SERVICE_ACCOUNT_NAME; });
+		},
+	};
 }
 
 /** Build the fixed TokenReview adapter for the dedicated artifact-preprocessor identity. */

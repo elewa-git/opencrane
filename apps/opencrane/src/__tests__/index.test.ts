@@ -1,7 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
-import express from "express";
-import type { Express } from "express";
+import express, { Router, type Express } from "express";
 import type { Logger } from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
@@ -10,6 +9,13 @@ import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANA
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
 import { _ReadProcessConfig } from "../app/config";
+import type { McpRuntimeComposition } from "../app/mcp-runtime-composition.types";
+
+/** Supply inert MCP adapters because these tests own the older runtime identity routes. */
+function _McpRuntime(): McpRuntimeComposition
+{
+	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router() };
+}
 
 /** Keep identity-route tests independent from mounted ArtifactStore credentials. */
 vi.mock("../infra/artifacts/artifact-upload.factory", function _MockArtifactUploadFactory()
@@ -88,7 +94,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
   } as unknown as AuthenticationV1Api;
   const app = express();
   app.use(express.json());
-  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime);
+  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, _McpRuntime());
   return app;
 }
 
@@ -120,6 +126,8 @@ describe("Control Plane", () =>
     vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
     vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
+		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "opencrane-silo");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", "86400000");
   });
@@ -186,10 +194,10 @@ describe("Control Plane", () =>
       const { _RegisterInternalRoutes } = await import("../app/routes");
       const app = express();
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
-      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime); }).toThrow(/different from POD_NAMESPACE/);
+      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime()); }).toThrow(/different from POD_NAMESPACE/);
 
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
-      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime); }).toThrow(/different from POD_NAMESPACE/);
+      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime()); }).toThrow(/different from POD_NAMESPACE/);
     });
 
     it("rejects a reviewed token when Kubernetes omits the runtime audience", async function _RuntimeAudienceMismatch()
@@ -211,7 +219,7 @@ describe("Control Plane", () =>
 			vi.stubEnv("CHANNEL_REPLAY_ENDPOINT", "http://opencrane-server.opencrane-silo.svc.cluster.local:8081/api/internal/conversation-replay");
 			const app = express();
 			app.use(express.json());
-			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime);
+			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime());
 
 			const response = await request(app).post("/api/internal/channel-targets:resolve").set("authorization", "Bearer projected-token").send({ action: "events.read", trustedHost: "acme.example.com", conversationId: "conversation-1" });
 

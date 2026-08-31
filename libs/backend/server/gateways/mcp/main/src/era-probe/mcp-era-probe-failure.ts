@@ -5,8 +5,10 @@ export enum McpEraProbeFailureCodes
 	RetryableUnavailable = "retryable_unavailable",
 	/** The configured endpoint resolved to an unsafe address or URL. */
 	UnsafeEndpoint = "unsafe_endpoint",
-	/** The server returned a redirect, oversized body, client error, or malformed reply. */
-	InvalidResponse = "invalid_response",
+	/** The endpoint did not implement the MCP discovery response contract. */
+	NotMcpServer = "not_mcp_server",
+	/** The discovered MCP server did not support the pinned 2026-07-28 protocol. */
+	UnsupportedMcpProtocolVersion = "unsupported_mcp_protocol_version",
 	/** The endpoint remained unavailable through every reviewed retry attempt. */
 	RetryExhausted = "retry_exhausted",
 }

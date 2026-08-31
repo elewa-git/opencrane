@@ -1,0 +1,23 @@
+{
+  "name": "backend-server-utils",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/utils/src",
+  "tags": ["type:lib", "layer:backend", "scope:shared"],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.json --noEmit",
+        "cwd": "libs/backend/server/utils"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run",
+        "cwd": "libs/backend/server/utils"
+      }
+    }
+  }
+}

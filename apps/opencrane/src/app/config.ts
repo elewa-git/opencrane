@@ -276,11 +276,18 @@ function _readObotConfig(): OpenCraneObotConfig | null
 /** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
 function _readWorkflowConfig(): OpenCraneWorkflowConfig
 {
+	const ociRegistryAuthorizationFilePath = process.env.OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE?.trim() || undefined;
+	if (ociRegistryAuthorizationFilePath !== undefined && !isAbsolute(ociRegistryAuthorizationFilePath))
+		throw new Error("OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE must be an absolute mounted file path");
 	return {
 		databasePoolSize: _readBoundedInteger("OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE", 2, 1, 20),
 		databaseUrl: _readRequired("DATABASE_URL"),
 		mcpEraProbeMaximumResponseBytes: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES", 65_536, 1_024, 1_048_576),
 		mcpEraProbeTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", 5_000, 1_000, 60_000),
+		ociRegistryAuthorizationFilePath,
+		ociRegistryBaseUrl: _readRequired("OPENCRANE_OCI_REGISTRY_BASE_URL"),
+		ociRegistryRepository: _readRequired("OPENCRANE_OCI_REGISTRY_REPOSITORY"),
+		ociRegistryTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_OCI_REGISTRY_TIMEOUT_MS", 30_000, 1_000, 120_000),
 		pollIntervalMilliseconds: _readBoundedInteger("OPENCRANE_WORKFLOW_POLL_INTERVAL_MS", 100, 10, 60_000),
 		siloId: _readRequired("OPENCRANE_SILO_ID"),
 		workerConcurrency: _readBoundedInteger("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", 2, 1, 20),
@@ -302,7 +309,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		obot: _readObotConfig(),
 		publicPort: Number(process.env.PORT ?? "8080"),
-		runtime: {
+			runtime: {
 			artifactScannerEnabled: process.env.ARTIFACT_SCANNER_ENABLED === "true",
 			artifactScannerClaimLeaseMilliseconds: _readBoundedSeconds("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", 300, 60, 300),
 			artifactScannerNamespace: process.env.ARTIFACT_SCANNER_NAMESPACE?.trim(),
@@ -314,14 +321,18 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			claimLeaseMilliseconds: _readBoundedSeconds("AGENT_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
-			managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
+				managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
+				mcpCompanionClaimLeaseMilliseconds: _readBoundedSeconds("MCP_COMPANION_CLAIM_LEASE_SECONDS", 150, 1, 300),
+				mcpControllerClaimLeaseMilliseconds: _readBoundedSeconds("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
+				mcpExecutorNamespace: process.env.MCP_EXECUTOR_NAMESPACE?.trim(),
 			memoryGatewayTimeoutMilliseconds: _readBoundedSeconds("MEMORY_GATEWAY_TIMEOUT_SECONDS", 30, 1, 300),
 			memoryGatewayTokenPath: _readRequiredAbsolutePath("MEMORY_GATEWAY_TOKEN_PATH"),
 			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
 			outboxPruneBatchSize: _readBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000),
 			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
 			publishedOutboxRetentionMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000),
-			serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
+				serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
+				siloId: _readRequired("OPENCRANE_SILO_ID"),
 		},
 		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
 		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),

@@ -733,6 +733,7 @@ RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
 # compete for one cluster-wide namespace and let the first Helm release claim it.
 SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"
 TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"
+MCP_EXECUTOR_NAMESPACE="${RELEASE}-mcp-executors"
 set +e
 ARTIFACT_NAMESPACE_RESOURCE="$(kubectl get namespace "$ARTIFACT_NAMESPACE" --ignore-not-found -o name)"
 ARTIFACT_NAMESPACE_STATUS=$?
@@ -994,7 +995,8 @@ CRDS_INSTALL="$(resolve_cluster_tenant_crd_install \
 helm_args+=(
   --set "crds.install=$CRDS_INSTALL"
   --set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"
-  --set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE")
+  --set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE"
+  --set-string "opencrane-mcp-executor.mcpExecutor.namespace=$MCP_EXECUTOR_NAMESPACE")
 # Value-preservation mode. Helm's DEFAULT on upgrade drops any value a prior release set
 # via --set/-f that this invocation does not restate, silently reverting it to the chart
 # default — a footgun that broke a live silo once (a pure `--opencrane-server-tag` bump reverted
