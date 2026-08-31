@@ -40,6 +40,7 @@ render_enabled() {
     --set-string artifactPreprocessor.image.digest=sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+    --set-string 'networkPolicy.dnsResolverCidrs[0]=169.254.20.10/32' \
     --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set agentController.kubernetesApiServerEndpointPort=6443 \

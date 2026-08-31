@@ -894,6 +894,10 @@ certManager:
 # for internal platform services)
 networkPolicy:
   enabled: true
+  # -- Exact DNS resolver CIDRs for clusters whose resolver is host-networked, such as GKE
+  # NodeLocal DNS. Each entry must be a single resolver address (/32 or /128); policies keep
+  # DNS traffic limited to TCP and UDP port 53.
+  dnsResolverCidrs: []
   # -- Exact CNPG-managed Pooler identity admitted by application egress policies.
   # Defaults to `<release>-postgres-pooler`; deploy tooling sets it explicitly so a
   # recovery smoke can point the application at a separately named restored cluster.

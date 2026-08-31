@@ -215,6 +215,16 @@ spec:
       ports:
         - { port: 53, protocol: UDP }
         - { port: 53, protocol: TCP }
+    {{- if $.Values.networkPolicy.dnsResolverCidrs }}
+    - to:
+        {{- range $.Values.networkPolicy.dnsResolverCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    {{- end }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -262,6 +272,16 @@ spec:
       ports:
         - { port: 53, protocol: UDP }
         - { port: 53, protocol: TCP }
+    {{- if $.Values.networkPolicy.dnsResolverCidrs }}
+    - to:
+        {{- range $.Values.networkPolicy.dnsResolverCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    {{- end }}
     - to:
         - namespaceSelector:
             matchLabels:

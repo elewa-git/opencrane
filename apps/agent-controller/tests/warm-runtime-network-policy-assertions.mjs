@@ -213,6 +213,17 @@ function dnsEgress()
   };
 }
 
+function nodeLocalDnsEgress()
+{
+	return {
+		to: [{ ipBlock: { cidr: '169.254.20.10/32' } }],
+		ports: [
+			{ port: 53, protocol: 'UDP' },
+			{ port: 53, protocol: 'TCP' },
+		],
+	};
+}
+
 function componentEgress(component, port)
 {
   return {
@@ -342,6 +353,7 @@ for (const pool of poolProfiles) {
     ingress: [],
     egress: [
       dnsEgress(),
+      nodeLocalDnsEgress(),
       componentEgress('opencrane-server', 8081),
     ],
   }, `NetworkPolicy/${pool.namespace}/${policyPrefix}-generic has unexpected reachability`);
@@ -357,6 +369,7 @@ for (const pool of poolProfiles) {
     ingress: [controllerIngress()],
     egress: [
       dnsEgress(),
+      nodeLocalDnsEgress(),
       componentEgress('opencrane-server', 8081),
       componentEgress('litellm', 4000),
     ],
