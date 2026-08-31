@@ -1,4 +1,4 @@
-import express, { type Request } from "express";
+import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,16 +16,11 @@ function _Dependencies(overrides: Partial<McpOciServerPromotionRouterDependencie
 	} as never;
 }
 
-/** Mount the router behind a synthetic administrator session, matching the public app boundary. */
-function _App(dependencies: McpOciServerPromotionRouterDependencies, isOrgAdmin = true)
+/** Mount the router; the authority resolves product administration inside its transaction. */
+function _App(dependencies: McpOciServerPromotionRouterDependencies)
 {
 	const app = express();
 	app.use(express.json());
-	app.use(function _Session(req: Request, _response, next)
-	{
-		req.session = { authUser: { isOrgAdmin } } as never;
-		next();
-	});
 	app.use("/api/v1/mcp", __CreateMcpOciServerPromotionRouter(dependencies));
 	return app;
 }
@@ -35,13 +30,13 @@ const _COMMAND = { name: "Calendar MCP", description: "Pinned calendar tools" };
 
 describe("MCP OCI server promotion router", function _DescribeRouter()
 {
-	it("requires the organisation-admin guard before resolving or parsing the caller", async function _RequiresAdmin()
+	it("requires a durable local caller before parsing promotion input", async function _RequiresCaller()
 	{
-		const dependencies = _Dependencies();
-		const response = await request(_App(dependencies, false)).post("/api/v1/mcp/oci-image-validations/validation-1/server").send({ unexpected: true });
+		const dependencies = _Dependencies({ resolveCaller: vi.fn().mockResolvedValue(null) });
+		const response = await request(_App(dependencies)).post("/api/v1/mcp/oci-image-validations/validation-1/server").send({ unexpected: true });
 
-		expect(response.status).toBe(403);
-		expect(dependencies.resolveCaller).not.toHaveBeenCalled();
+		expect(response.status).toBe(401);
+		expect(dependencies.resolveCaller).toHaveBeenCalledOnce();
 		expect(dependencies.authority.promoteImportedValidation).not.toHaveBeenCalled();
 	});
 

@@ -35,9 +35,10 @@ The resolver runs an ordered set of independent checks. It confirms the proxy's 
 requires the browser user already verified by OpenCrane's shared signed-cookie session middleware;
 binds the already-origin-checked host to exactly one registered *silo* (a customer's isolated
 tenancy) and a current membership; requires an open agent-session conversation bound to the same
-silo and a participant whose access has not ended; and only then applies this package's explicit
-`conversation.read/v1` authorization policy. The accepted subject, silo, scope, conversation,
-AgentService, action, and membership revision form the canonical authorization digest.
+silo and a participant whose access has not ended; and only then admits exact
+`ChannelTarget/{routeId}:Send` through the central `AuthorizationAuthority`. The accepted subject,
+silo, conversation, AgentService, route, action, and membership revision form the canonical
+authorization digest.
 The optional replay cursor is forwarded as a resume hint but grants no access.
 
 The package-owned reconciliation worker converges one route row per AgentService at startup and on
@@ -46,6 +47,11 @@ next interval; shutdown stops new passes and drains the active pass. Every row h
 but may name the same stable replay `receiverId`; an invocation context binds both identities plus
 the exact silo, service, and action. Consumption rechecks that complete tuple and the route's current
 and revoked state, so a receiver id can never masquerade as per-service route evidence.
+Route reconciliation also projects `Send` only to the exact Principals behind current open
+Agent-session participants. Conversation creation, closure, participant access end, and route
+rotation reconcile or revoke those manager-owned grants in the same database transaction. A
+missing or ambiguous Principal mapping aborts the transaction; membership in the silo alone never
+creates ChannelTarget access.
 
 Invariant: it stores only the *digest* of the invocation context, never the token itself, and the
 context expires at the sooner of its configured lifetime or the membership's own expiry. The issued
@@ -76,8 +82,9 @@ replay cursors, invocation contexts, and route endpoints never enter that record
 
 The application layer only assembles named typed deployment configuration and concrete adapters:
 the workload-identity package owns fixed TokenReview and the membership package owns signed
-assertion selection and verification. This package owns the conversation-read policy, exact-host
-binding, resolver, and reconciliation lifecycle. It issues no
+assertion selection and verification. This package owns exact-host binding, relation-to-grant
+projection, resolver, and reconciliation lifecycle; the central authority is the only product
+permission decision. It issues no
 long-lived credentials, creates no message or run, and cannot target a direct, group, closed, or
 access-ended conversation. It has an alias
 (`@opencrane/backend/server/agents/channel-targets`), so it is titled by that alias.

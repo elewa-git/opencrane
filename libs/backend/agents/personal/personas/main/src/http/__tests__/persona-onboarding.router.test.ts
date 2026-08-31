@@ -17,7 +17,7 @@ const _SCORE = { orderedAnswerIds: ["answer-1"], orderedChoiceIds: ["q1:a"], col
 function _dependencies(overrides: Partial<PersonaOnboardingRouterDependencies> = {}): PersonaOnboardingRouterDependencies
 {
 	return {
-		resolveCaller: function _caller() { return { siloId: "silo-1", userId: "user-1" }; },
+		resolveCaller: function _caller() { return { siloId: "silo-1", principalId: "principal-1", userId: "user-1" }; },
 		onboarding: { ensureAtomically: vi.fn().mockResolvedValue({ outcome: "ready", personaProfileId: "profile-1", questionSet: { id: "personal-agent-onboarding", version: 1 }, derivation: { scoringPolicyId: "policy", scoringPolicyVersion: 1, interpolationMapId: "map", interpolationMapVersion: 1 } }) },
 		interviews: { startAtomically: vi.fn().mockResolvedValue({ status: "started", interviewId: "interview-1" }), recordAnswerAtomically: vi.fn().mockResolvedValue({ status: "recorded", answerId: "answer-1" }), completeAtomically: vi.fn().mockResolvedValue({ status: "completed", score: _SCORE }), resolveTieAtomically: vi.fn().mockResolvedValue({ status: "recorded", score: _SCORE }) },
 		questions: { getQuestions: vi.fn().mockResolvedValue([{ id: "q1", category: "Pace", prompt: "role", ordinal: 1, choices: [{ id: "a", label: "choice", ordinal: 1 }] }]) },
@@ -55,7 +55,7 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		const response = await request(_app(dependencies)).get("/api/v1/me/persona/");
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual(status);
-		expect(dependencies.status.readStatus).toHaveBeenCalledWith("silo-1", "user-1");
+		expect(dependencies.status.readStatus).toHaveBeenCalledWith("silo-1", "principal-1", "user-1");
 	});
 
 	it("retries a missing durable survey notification whenever status resumes an interview", async function _ReconcilesSurveyNotification()
@@ -69,7 +69,7 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 
 		expect(recovered.body).toEqual(status);
 		expect(surveyStarted).toHaveBeenCalledTimes(2);
-		expect(surveyStarted).toHaveBeenNthCalledWith(2, { siloId: "silo-1", userId: "user-1" }, "interview-1");
+		expect(surveyStarted).toHaveBeenNthCalledWith(2, { siloId: "silo-1", principalId: "principal-1", userId: "user-1" }, "interview-1");
 	});
 	it("requires session-derived caller identity before it reveals an onboarding flow", async function _requiresCaller()
 	{
@@ -138,7 +138,7 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(response.status).toBe(200);
 		expect(response.body).toMatchObject({ interviewId: "interview-existing", state: "in_progress", reused: true });
 		expect(response.body.questions).toHaveLength(1);
-		expect(dependencies.questions.getQuestions).toHaveBeenCalledWith("interview-existing", "profile-1", "user-1");
+		expect(dependencies.questions.getQuestions).toHaveBeenCalledWith("silo-1", "principal-1", "interview-existing", "profile-1", "user-1");
 	});
 
 	it("rejects a choice that does not belong to the reviewed question", async function _rejectsUnsupportedRole()
@@ -209,7 +209,7 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 
 		expect(response.status).toBe(200);
 		expect(dependencies.approval.approveAndActivateAtomically).not.toHaveBeenCalled();
-		expect(dependencies.workflow.personaApproved).toHaveBeenCalledWith({ siloId: "silo-1", userId: "user-1" }, { interviewId: "interview-1", personaRevisionId: "revision-1" });
+		expect(dependencies.workflow.personaApproved).toHaveBeenCalledWith({ siloId: "silo-1", principalId: "principal-1", userId: "user-1" }, { interviewId: "interview-1", personaRevisionId: "revision-1" });
 	});
 
 	it("maps an invalid approval command to HTTP 400", async function _invalidApprovalCommand()

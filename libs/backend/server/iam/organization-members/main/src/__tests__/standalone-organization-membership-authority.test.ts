@@ -8,7 +8,7 @@ import type { OrganizationMemberRepository } from "../organization-member-reposi
 import { StandaloneOrganizationMembershipAuthority } from "../standalone-organization-membership-authority";
 
 /** Verified administrator fixture. */
-const _CALLER = { siloId: "acme", subjectId: "admin-1", verifiedEmail: "admin@acme.test", displayName: "Admin" };
+const _CALLER = { siloId: "acme", principalId: "principal-admin-1", subjectId: "admin-1", verifiedEmail: "admin@acme.test", displayName: "Admin" };
 
 /** Pending invitation fixture returned by persistence. */
 function _Invitation(expiresAt = new Date(Date.now() + 60_000))

@@ -39,7 +39,7 @@ model ConversationAsset {
   conversation          Conversation                   @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
   message               ConversationMessage?           @relation(fields: [conversationId, messageId], references: [conversationId, id], onDelete: Restrict)
   run                   AgentRun?                      @relation(fields: [conversationId, runId], references: [conversationId, id], onDelete: Restrict)
-  runEvent              ConversationRunEvent?          @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
+  runEvent              ConversationRunEvent?          @relation(fields: [conversationId, runId, runAttempt, runEventSequence], references: [conversationId, runId, attempt, sequence], onDelete: Restrict)
   artifact              Artifact?                      @relation(fields: [artifactId, siloId], references: [id, siloId], onDelete: Restrict)
   revision              ArtifactRevision?              @relation(fields: [artifactId, revisionId], references: [artifactId, id], onDelete: Restrict)
   uploadLease           ArtifactUploadLease?           @relation(fields: [uploadLeaseId], references: [id], onDelete: Restrict)
@@ -74,7 +74,7 @@ model ConversationAssetOutputTicket {
   conversation            Conversation         @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
   run                     AgentRun             @relation(fields: [conversationId, runId], references: [conversationId, id], onDelete: Restrict)
   assignment              WorkloadAssignment   @relation(fields: [runId, runAttempt], references: [runId, attempt], onDelete: Restrict)
-  runEvent                ConversationRunEvent @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
+  runEvent                ConversationRunEvent @relation(fields: [conversationId, runId, runAttempt, runEventSequence], references: [conversationId, runId, attempt, sequence], onDelete: Restrict)
   asset                   ConversationAsset?
 
   @@unique([runId, runAttempt, idempotencyKey])

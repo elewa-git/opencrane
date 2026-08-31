@@ -13,6 +13,7 @@ import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "./perso
 import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult } from "./persona-onboarding-authority.types";
 import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types";
 import type { PersonaAgentRevisionSelectionFactory } from "./prisma-persona-persistence-composition.types";
+import type { PersonaProductAuthorizationFactory, PersonaProductAuthorizationRepository } from "./persona-product-authorization.types";
 import type { PersonaPersistenceUnitOfWork } from "./persona-persistence-unit-of-work.types";
 import { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository";
 import { PrismaPersonaOnboardingStatusRepository } from "./prisma-persona-onboarding-status-repository";
@@ -26,13 +27,16 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	private readonly logger: Logger;
 	/** App-owned factory that binds agent-service selection to each approval transaction. */
 	private readonly agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>;
+	/** Factory that binds central persona authorization to each operation transaction. */
+	private readonly productAuthorization: PersonaProductAuthorizationFactory<Prisma.TransactionClient>;
 
 	/** Creates the transaction boundary over the canonical product database. */
-	constructor(prisma: PrismaClient, logger: Logger, agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>)
+	constructor(prisma: PrismaClient, logger: Logger, agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>, productAuthorization: PersonaProductAuthorizationFactory<Prisma.TransactionClient>)
 	{
 		this.prisma = prisma;
 		this.logger = logger;
 		this.agentRevisionSelection = agentRevisionSelection;
+		this.productAuthorization = productAuthorization;
 	}
 
 	/** Verify the reviewed baseline source and create the authenticated owner's profile exactly once. */
@@ -52,11 +56,13 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	}
 
 	/** Read only the exact question-set revision frozen into one owner interview. */
-	async getQuestions(interviewId: string, personaProfileId: string, userId: string): ReturnType<PersonaInterviewQuestionReader["getQuestions"]>
+	async getQuestions(siloId: string, principalId: string, interviewId: string, personaProfileId: string, userId: string): ReturnType<PersonaInterviewQuestionReader["getQuestions"]>
 	{
-		return this._runInterview(async function _Questions(repository)
+		return this._runInterview(async function _Questions(repository, authorization)
 		{
-			return repository.getQuestions(interviewId, personaProfileId, userId);
+			if (!await authorization.canRead({ siloId, principalId }, personaProfileId))
+				return null;
+			return repository.getQuestions(siloId, principalId, interviewId, personaProfileId, userId);
 		});
 	}
 
@@ -65,8 +71,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	{
 		try
 		{
-			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.start", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId }, "Persona interview start persistence failed", () => this._runInterview(async function _Start(repository)
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.start", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId }, "Persona interview start persistence failed", () => this._runInterview(async function _Start(repository, authorization)
 			{
+				if (!await authorization.admitEdit(command, command.personaProfileId, { operation: "start", refreshConfigurationChangeId: command.refreshConfigurationChangeId }))
+					return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner };
 				return repository.startAtomically(command);
 			}), _IsInterviewConflict);
 		}
@@ -81,8 +89,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	{
 		try
 		{
-			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.answer", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona interview answer persistence failed", () => this._runInterview(async function _Answer(repository)
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.answer", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona interview answer persistence failed", () => this._runInterview(async function _Answer(repository, authorization)
 			{
+				if (!await authorization.admitEdit(command, command.personaProfileId, { operation: "answer", interviewId: command.interviewId, questionId: command.questionId, choiceId: command.choiceId }))
+					return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner };
 				return repository.recordAnswerAtomically(command);
 			}), _IsInterviewConflict);
 		}
@@ -98,8 +108,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	{
 		try
 		{
-			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.complete", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona interview completion persistence failed", () => this._runInterview(async function _Complete(repository)
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.complete", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona interview completion persistence failed", () => this._runInterview(async function _Complete(repository, authorization)
 			{
+				if (!await authorization.admitEdit(command, command.personaProfileId, { operation: "complete", interviewId: command.interviewId }))
+					return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner };
 				return repository.completeAtomically(command);
 			}), _IsInterviewConflict);
 		}
@@ -114,8 +126,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	{
 		try
 		{
-			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.resolve_tie", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona tie resolution persistence failed", () => this._runInterview(async function _Resolve(repository)
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.resolve_tie", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona tie resolution persistence failed", () => this._runInterview(async function _Resolve(repository, authorization)
 			{
+				if (!await authorization.admitEdit(command, command.personaProfileId, { operation: "resolve_tie", interviewId: command.interviewId, kind: command.kind, selectedValue: command.selectedValue }))
+					return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner };
 				return repository.resolveTieAtomically(command);
 			}), _IsInterviewConflict);
 		}
@@ -131,8 +145,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	{
 		try
 		{
-			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.draft.create", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona draft persistence failed", () => this._runDraft(async function _Draft(repository)
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.draft.create", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona draft persistence failed", () => this._runDraft(async function _Draft(repository, authorization)
 			{
+				if (!await authorization.admitEdit(command, command.personaProfileId, { operation: "draft", interviewId: command.interviewId }))
+					return { status: PersonaDraftDenialReasons.NotFoundOrWrongOwner };
 				return repository.createFromInterviewAtomically(command);
 			}), _IsPersonaConflict);
 		}
@@ -145,8 +161,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	/** Load one consistent approval snapshot from a serializable transaction. */
 	async getApprovalSnapshot(command: ApprovePersonaCommand): Promise<PersonaApprovalSnapshot | null>
 	{
-		return this._runApproval(async function _ApprovalSnapshot(repository)
+		return this._runApproval(async function _ApprovalSnapshot(repository, authorization)
 		{
+			if (!await authorization.canRead(command, command.personaProfileId))
+				return null;
 			return repository.getApprovalSnapshot(command);
 		});
 	}
@@ -156,8 +174,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	{
 		try
 		{
-			return await this._runApproval(async function _Approve(repository)
+			return await this._runApproval(async function _Approve(repository, authorization)
 			{
+				if (!await authorization.admitEdit(command, command.personaProfileId, { operation: "approve", personaRevisionId: command.personaRevisionId }))
+					return { status: PersonaApprovalPersistenceStatuses.NotFound };
 				return repository.approveAndActivateAtomically(command);
 			});
 		}
@@ -169,57 +189,65 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	}
 
 	/** Read the owner's resumable onboarding status from one transaction snapshot. */
-	async readStatus(siloId: string, userId: string): Promise<PersonaOnboardingStatus>
+	async readStatus(siloId: string, principalId: string, userId: string): Promise<PersonaOnboardingStatus>
 	{
-		return this._runStatus(async function _Status(repository)
+		return this._runStatus(async function _Status(repository, authorization)
 		{
-			return repository.readStatus(siloId, userId);
+			const personaProfileId = await repository.findOwnedProfileId(siloId, userId);
+			if (personaProfileId !== null && !await authorization.canRead({ siloId, principalId }, personaProfileId))
+				throw new Error("persona read is not authorized");
+			return repository.readStatus(siloId, principalId, userId);
 		});
 	}
 
 	/** Runs one approval operation in a Serializable transaction, giving the callback only its repository. */
-	private async _runApproval<Result>(work: (repository: PrismaPersonaAuthorityRepository) => Promise<Result>): Promise<Result>
+	private async _runApproval<Result>(work: (repository: PrismaPersonaAuthorityRepository, authorization: PersonaProductAuthorizationRepository) => Promise<Result>): Promise<Result>
 	{
 		const selectionFactory = this.agentRevisionSelection;
+		const authorizationFactory = this.productAuthorization;
 		return this.prisma.$transaction(async function _RunApprovalTransaction(transaction): Promise<Result>
 		{
-			return work(new PrismaPersonaAuthorityRepository(transaction, selectionFactory.create(transaction)));
+			return work(new PrismaPersonaAuthorityRepository(transaction, selectionFactory.create(transaction)), authorizationFactory.create(transaction));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 	/** Runs one draft operation in a Serializable transaction, giving the callback only its repository. */
-	private async _runDraft<Result>(work: (repository: PrismaPersonaDraftRepository) => Promise<Result>): Promise<Result>
+	private async _runDraft<Result>(work: (repository: PrismaPersonaDraftRepository, authorization: PersonaProductAuthorizationRepository) => Promise<Result>): Promise<Result>
 	{
+		const authorizationFactory = this.productAuthorization;
 		return this.prisma.$transaction(async function _RunDraftTransaction(transaction): Promise<Result>
 		{
-			return work(new PrismaPersonaDraftRepository(transaction));
+			return work(new PrismaPersonaDraftRepository(transaction), authorizationFactory.create(transaction));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 	/** Runs one interview operation in a Serializable transaction, giving the callback only its repository. */
-	private async _runInterview<Result>(work: (repository: PrismaPersonaInterviewRepository) => Promise<Result>): Promise<Result>
+	private async _runInterview<Result>(work: (repository: PrismaPersonaInterviewRepository, authorization: PersonaProductAuthorizationRepository) => Promise<Result>): Promise<Result>
 	{
+		const authorizationFactory = this.productAuthorization;
 		return this.prisma.$transaction(async function _RunInterviewTransaction(transaction): Promise<Result>
 		{
-			return work(new PrismaPersonaInterviewRepository(transaction));
+			return work(new PrismaPersonaInterviewRepository(transaction), authorizationFactory.create(transaction));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 	/** Runs one onboarding operation in a Serializable transaction, giving the callback only its repository. */
 	private async _runOnboarding<Result>(work: (repository: PrismaPersonaOnboardingRepository) => Promise<Result>): Promise<Result>
 	{
+		const authorizationFactory = this.productAuthorization;
 		return this.prisma.$transaction(async function _RunOnboardingTransaction(transaction): Promise<Result>
 		{
-			return work(new PrismaPersonaOnboardingRepository(transaction));
+			return work(new PrismaPersonaOnboardingRepository(transaction, authorizationFactory.create(transaction)));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 	/** Runs one status read in a Serializable transaction, giving the callback only its repository. */
-	private async _runStatus<Result>(work: (repository: PrismaPersonaOnboardingStatusRepository) => Promise<Result>): Promise<Result>
+	private async _runStatus<Result>(work: (repository: PrismaPersonaOnboardingStatusRepository, authorization: PersonaProductAuthorizationRepository) => Promise<Result>): Promise<Result>
 	{
+		const authorizationFactory = this.productAuthorization;
 		return this.prisma.$transaction(async function _RunStatusTransaction(transaction): Promise<Result>
 		{
-			return work(new PrismaPersonaOnboardingStatusRepository(transaction));
+			return work(new PrismaPersonaOnboardingStatusRepository(transaction), authorizationFactory.create(transaction));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }

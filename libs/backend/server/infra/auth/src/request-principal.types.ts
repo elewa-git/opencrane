@@ -18,9 +18,6 @@ export interface RequestPrincipal
   /** Silo selected by the trusted request host. */
   siloId: string;
 
-  /** Whether the authenticated session carries organisation-administrator authority. */
-  isOrgAdmin: boolean;
-
   /** Server-verified OIDC authentication instant, or null for invalid legacy session data. */
   verifiedAuthenticationAt: Date | null;
 }

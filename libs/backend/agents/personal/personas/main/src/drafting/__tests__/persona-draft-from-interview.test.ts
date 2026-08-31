@@ -6,7 +6,7 @@ import type { PersonaDraftFromInterviewRepository } from "../persona-draft-autho
 /** Build a complete server-owned draft request. */
 function _Command()
 {
-	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", authoredAt: "2026-07-26T12:00:00.000Z" };
+	return { siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", authoredAt: "2026-07-26T12:00:00.000Z" };
 }
 
 describe("__CreatePersonaDraftFromInterview", () =>

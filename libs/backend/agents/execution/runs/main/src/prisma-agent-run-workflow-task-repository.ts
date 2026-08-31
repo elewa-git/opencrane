@@ -21,7 +21,7 @@ function _TaskRecord(row: { readonly runId: string; readonly attempt: number; re
 /**
  * Persists and receipt-binds one controller-owned workflow task for an AgentRun attempt.
  *
- * Called by: {@link PrismaRunAdmissionRepository} and {@link PrismaAgentRunAuthorityRepository}
+ * Called by: {@link PrismaRunAdmissionUnitOfWork} and {@link PrismaAgentRunAuthorityRepository}
  * inside their existing database transactions. The adapter keeps task admission alongside the run
  * mutation without owning a transaction or starting a controller handler.
  *

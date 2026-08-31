@@ -57,8 +57,7 @@ exchange returns scoped execution material.
 | [`apps/opencrane`](../../apps/opencrane) | Control-plane API; owns product composition and database access |
 | [`apps/channel-proxy`](../../apps/channel-proxy) | Channel ingress boundary; no product database authority |
 | [`apps/agent-controller`](../../apps/agent-controller) | Runtime-namespace Job mutation only |
-| [`apps/agent-runtime`](../../apps/agent-runtime) | Projected personal-runtime identity; no RBAC or database access |
-| [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime) | Projected managed-runtime identity; no RBAC or database access |
+| [`apps/agent-runtime`](../../apps/agent-runtime) | Projected personal or managed runtime identity, selected by the fixed warm-pool profile; no RBAC or database access |
 | [`apps/artifact-service`](../../apps/artifact-service) | Private immutable-byte service behind signed leases |
 | [`apps/artifact-preprocessor`](../../apps/artifact-preprocessor) | Assigned artifact-processing Job with brokered bytes |
 | [`apps/skill-authoring`](../../apps/skill-authoring) | Assigned skill-authoring Job with brokered inputs |

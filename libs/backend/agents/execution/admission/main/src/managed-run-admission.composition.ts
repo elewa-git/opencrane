@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 
 import { __AssembleRunInputSnapshot, __CreatePrismaManagedSessionAssemblyAuthorities, ManagedExecutionIdentityEnvelopeSource } from "@opencrane/backend/agents/execution/inputs";
-import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
+import { PrismaRunAdmissionUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import type { RunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedExecutionEvidenceAuthority, ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
@@ -61,7 +61,7 @@ export function __ReadRunAdmissionConcurrencyPolicy(environment: NodeJS.ProcessE
  */
 export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, capacityGate: RunAdmissionCapacityGate, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
 {
-	const admission = new PrismaRunAdmissionRepository(prisma, workflow);
+	const admission = new PrismaRunAdmissionUnitOfWork(prisma, workflow);
 	const identityEnvelope = new ManagedExecutionIdentityEnvelopeSource(evidenceAuthority);
 	const authorities = __CreatePrismaManagedSessionAssemblyAuthorities(admission, identityEnvelope);
 	const assemble: ManagedSnapshotAssembler = async function _assemble(command)
@@ -73,6 +73,7 @@ export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, workflow: 
 			conversationId: null,
 			identityKind: "service",
 			trigger: command.trigger,
+			requestingPrincipalId: command.requestedByPrincipalId,
 			requestIdempotencyKey: command.requestIdempotencyKey,
 		}, authorities);
 	};

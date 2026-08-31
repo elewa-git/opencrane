@@ -9,7 +9,7 @@ function _App(authority: object, authenticated = true): Express
 {
 	const app = express();
 	app.use(express.json());
-	app.use(__CreateSelfConversationsRouter({ resolveCaller: function _Caller() { return authenticated ? { siloId: "silo-1", issuer: "https://issuer.test", subjectId: "user-1" } : null; }, authority: authority as never, logger: { error: vi.fn(), warn: vi.fn() } as never }));
+	app.use(__CreateSelfConversationsRouter({ resolveCaller: function _Caller() { return authenticated ? { siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" } : null; }, authority: authority as never, logger: { error: vi.fn(), warn: vi.fn() } as never }));
 	return app;
 }
 
@@ -53,7 +53,7 @@ describe("self conversations router", function _Suite()
 
 		await request(app).post("/conversation-1/messages").send(body).expect(201, { outcome: "accepted", message });
 		await request(app).post("/conversation-1/messages").send(body).expect(200, { outcome: "idempotent", message });
-		expect(submitMessage).toHaveBeenCalledWith({ siloId: "silo-1", issuer: "https://issuer.test", subjectId: "user-1" }, "conversation-1", body);
+		expect(submitMessage).toHaveBeenCalledWith({ siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" }, "conversation-1", body);
 	});
 
 	it("maps closed and active-run conflicts without exposing authority detail", async function _MapsConflicts()
@@ -78,7 +78,7 @@ describe("self conversations router", function _Suite()
 
 		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(201, { outcome: "started", runId: "run-1", attempt: 2 });
 		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(200, { outcome: "idempotent", runId: "run-1", attempt: 2 });
-		expect(retryRun).toHaveBeenCalledWith({ siloId: "silo-1", issuer: "https://issuer.test", subjectId: "user-1" }, "conversation-1", "run-1", body);
+		expect(retryRun).toHaveBeenCalledWith({ siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" }, "conversation-1", "run-1", body);
 	});
 
 	it("hides unauthorized retries and exposes only the current conflicting attempt", async function _MapsRetryDenials()
@@ -115,7 +115,7 @@ describe("self conversations router", function _Suite()
 		await request(app).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "3" }).expect(200, { outcome: "idempotent", readThroughPosition: "5" });
 		await request(app).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "6" }).expect(409, { error: "observed_position_unavailable" });
 		await request(app).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "2" }).expect(404, { error: "conversation_unavailable" });
-		expect(markAgentThreadRead).toHaveBeenCalledWith({ siloId: "silo-1", issuer: "https://issuer.test", subjectId: "user-1" }, "parent-1", "child-1", "5");
+		expect(markAgentThreadRead).toHaveBeenCalledWith({ siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" }, "parent-1", "child-1", "5");
 	});
 
 	it("rejects malformed Agent-thread read positions before authority", async function _RejectsMalformedRead()

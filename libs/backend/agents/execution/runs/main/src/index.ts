@@ -26,7 +26,7 @@ export { __CreateWarmRuntimeBindingRouter } from "./warm-runtime-binding.router"
 export type { WarmRuntimeBindingAuthority, WarmRuntimeBindingIdentity, WarmRuntimeBindingLogger, WarmRuntimeBindingResult, WarmRuntimeBindingRouterDependencies, WarmRuntimeBindingSubmission, WarmRuntimeBindingTokenReviewer } from "./warm-runtime-binding.types";
 export type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
 export * from "./openapi";
-export { PrismaRunAdmissionRepository } from "./prisma-run-admission-repository";
+export { PrismaRunAdmissionUnitOfWork } from "./prisma-run-admission-repository";
 export { PrismaRunCancellationUnitOfWork } from "./prisma-run-cancellation-repository";
 export * from "./prisma-self-run-cancellation.router";
 export * from "./prisma-runtime-terminal-reporter";
@@ -44,6 +44,7 @@ export { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyOutcomes }
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types";
 export * from "./run-admission.types";
 export type { RunCancellationRepository } from "./run-cancellation.types";
+export type { SelfRunCancellationRepository } from "./self-run-cancellation.types";
 export * from "./run-input-snapshot-digest";
 export type { RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 export { PrismaAgentRunRetryUnitOfWork } from "./prisma-run-retry-unit-of-work";

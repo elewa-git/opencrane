@@ -66,7 +66,7 @@ describe("skill authoring validation submission router", function _DescribeSubmi
 		expect(dependencies.logger.error).not.toHaveBeenCalled();
 	});
 
-	it("returns forbidden when the authenticated Principal does not own the skill", async function _RejectsUnownedSkill()
+	it("returns forbidden when the authenticated Principal cannot review the skill", async function _RejectsUnauthorizedReview()
 	{
 		const authority = { submit: vi.fn().mockRejectedValue(new SkillAuthoringValidationSubmissionForbiddenError()) };
 		const { app, dependencies } = _App({ authority });

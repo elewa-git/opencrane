@@ -35,7 +35,6 @@ app's source.
 | Group | Responsibility |
 | --- | --- |
 | `libs/backend/agents/personal/*` | Persona, verified personal-memory selection, and configuration authorities owned by a person. |
-| `libs/backend/agents/memory/*` | Generic durable fact metadata and catalog-outbox authority; fact content remains in Cognee. |
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
 | [`libs/backend/agents/execution/elicitation`](../../libs/backend/agents/execution/elicitation/main/README.md) | Recoverable participant input, exact response authority, and purpose-specific completion. |
 | `libs/backend/agents/runtime/*` | Kubernetes Job projection, controller orchestration, and class-neutral workload claim contracts. |
@@ -46,6 +45,7 @@ app's source.
 | [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/iam/organization-members`](../../libs/backend/server/iam/organization-members/main/README.md) | Settings member directory and standalone invitation authority, or fail-closed delegation of the whole capability to Fleet billing. |
+| [`libs/backend/server/iam/audit-writer`](../../libs/backend/server/iam/audit-writer/main/README.md) | Transaction-scoped append-only authorization decision evidence with no read or policy dependency. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
 | [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |

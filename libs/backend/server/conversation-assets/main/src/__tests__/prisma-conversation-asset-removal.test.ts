@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository";
 
+vi.mock("@opencrane/backend/server/iam/authorization", function _MockAuthorization()
+{
+	return {
+		PrismaAuthorizationAuthority: class
+		{
+			async listPrincipalEntitled(command: { readonly resources: readonly object[] }) { return command.resources; }
+			async admitPrincipal() { return { outcome: "allow", evidence: { decisionDigest: "digest" } }; }
+		},
+		PrismaManagedAuthorizationGrantRepository: class
+		{
+			async reconcileManagedResourceGrants() { return undefined; }
+		},
+	};
+});
+
 const _CALLER = { siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" } as const;
 
 /** Complete persisted upload fixture used by browser-safe projection tests. */

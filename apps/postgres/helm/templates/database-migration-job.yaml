@@ -58,11 +58,40 @@ spec:
           resources:
             {{- toYaml .Values.migration.resources | nindent 12 }}
           env:
+            # Prisma reads the URI, while psql reads fields from the same application Secret so
+            # both clients use the published credentials without parsing the URI in this Job.
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ printf "%s-opencrane-app" (include "opencrane.postgres.fullname" .) | quote }}
                   key: uri
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-opencrane-app" (include "opencrane.postgres.fullname" .) | quote }}
+                  key: host
+            - name: PGPORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-opencrane-app" (include "opencrane.postgres.fullname" .) | quote }}
+                  key: port
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-opencrane-app" (include "opencrane.postgres.fullname" .) | quote }}
+                  key: dbname
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-opencrane-app" (include "opencrane.postgres.fullname" .) | quote }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-opencrane-app" (include "opencrane.postgres.fullname" .) | quote }}
+                  key: password
+            - name: PGSSLMODE
+              value: disable
             - name: OPENCRANE_MIGRATION_SOURCE_VERSION
               value: {{ .Values.migration.sourceVersion | quote }}
             - name: OPENCRANE_MIGRATION_SILO_ID

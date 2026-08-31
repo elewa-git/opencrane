@@ -14,7 +14,7 @@ OpenCrane does not store passwords. Sign-in is delegated to an outside **identit
 **OIDC** browser flow (*OpenID Connect*, the protocol for "log in with…"). This package runs that
 flow: it redirects the browser to the IdP, receives the signed proof of who logged in when they come
 back, validates it, and starts a server-side session. It then derives the facts every later request
-needs — the verified user, their groups, whether they are an org admin, and which customer
+needs — the verified user, their groups, their current central product capabilities, and which customer
 (**ClusterTenant**) they belong to — resolved server-side from their stable verified subject, never
 from anything the browser claims.
 
@@ -30,7 +30,7 @@ org's IdP client, so only its own user pool can sign in there.
  └──────────────────────────────┘
         │  optional group mirror + standalone first-owner admission
         ▼
-  session established  →  /auth/me hands verified {user, groups, clusterTenant}
+  session established  →  /auth/me hands verified identity + central capability hints
         │                 to membership + authorization on every later request
         ▼
   membership → authorization (the allow/deny path)
@@ -65,8 +65,9 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   lifecycle, and the `/auth/me` enrichment that adds the caller's resolved ClusterTenant.
 - `___AuthRouter` — the Express routes for session introspection (`/me`) and the OIDC browser flow
   (`/login`, `/callback`, `/logout`).
-- `PrismaAuthenticatedPrincipalAdmissionUnitOfWork` — atomically reconciles the verified claim set
-  and exact-resolves the durable Principal before authenticated middleware admits a product request.
+- `PrismaAuthenticatedPrincipalAdmissionUnitOfWork` — atomically reconciles the verified claim set,
+  exact-resolves the durable Principal, and projects `organization:administer` through the central
+  authorization authority for `/auth/me`.
 - `PrismaAuthenticatedPrincipalDirectoryUnitOfWork` — resolves the exact stored Principal for a
   verified `{siloId, issuer, subject}` tuple.
 - `StandaloneFirstUserAdmissionConfig`, `StandaloneFirstUserAdmissionAuditPort` — composition

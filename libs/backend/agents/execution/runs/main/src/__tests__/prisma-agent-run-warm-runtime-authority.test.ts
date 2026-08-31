@@ -39,7 +39,8 @@ function _Database(initialActiveClaims: number)
 			async count() { return activeClaims; },
 		},
 		elicitationRequest: { updateMany: cancelElicitation },
-		approvalRequest: { updateMany: cancelApproval },
+		approvalRequest: { findMany: vi.fn().mockResolvedValue([{ id: "approval-1", siloId: "silo-1" }]), updateMany: cancelApproval },
+		authorizationGrant: { findMany: vi.fn().mockResolvedValue([]) },
 		agentRun: {
 			async updateMany(args: { where: { state: AgentRunState }; data: { state: AgentRunState; terminalReason: AgentRunTerminalReason; finishedAt: Date } })
 			{
@@ -144,7 +145,7 @@ describe("PrismaAgentRunWarmRuntimeUnitOfWork deletion", function _Suite()
 		expect(database.run.terminalReason).toBe(AgentRunTerminalReason.UserCancelled);
 		expect(database.cancelApproval).toHaveBeenCalledTimes(1);
 		expect(database.cancelElicitation).toHaveBeenCalledTimes(1);
-		expect(database.createEvent).toHaveBeenCalledWith({ data: expect.objectContaining({ type: "run.cancelled", runId: "run-1" }) });
+		expect(database.createEvent).toHaveBeenCalledWith({ data: expect.objectContaining({ type: "run.cancelled", runId: "run-1", attempt: 1 }) });
 
 		await expect(authority.recordWarmPodDeleted(_INPUT, _RECEIPT, _COMMAND)).resolves.toBe("idempotent");
 		expect(database.createEvent).toHaveBeenCalledTimes(1);
@@ -189,7 +190,7 @@ describe("PrismaAgentRunWarmRuntimeUnitOfWork deletion", function _Suite()
 		await expect(authority.finalizeCancellationWithoutWarmReservation(_INPUT, _RECEIPT)).resolves.toBe("bound");
 		expect(database.run.state).toBe(AgentRunState.Cancelled);
 		expect(database.run.terminalReason).toBe(AgentRunTerminalReason.UserCancelled);
-		expect(database.createEvent).toHaveBeenCalledWith({ data: expect.objectContaining({ type: "run.cancelled", runId: "run-1" }) });
+		expect(database.createEvent).toHaveBeenCalledWith({ data: expect.objectContaining({ type: "run.cancelled", runId: "run-1", attempt: 1 }) });
 
 		await expect(authority.finalizeCancellationWithoutWarmReservation(_INPUT, _RECEIPT)).resolves.toBe("idempotent");
 		expect(database.createEvent).toHaveBeenCalledTimes(1);

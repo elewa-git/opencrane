@@ -57,4 +57,13 @@ describe("HTTP MCP executor controller authority", function _DescribeAuthority()
 		expect(fetch.mock.calls[0]?.[0]).toEqual(new URL("http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-controller/mcp-executor:cleanup-claim"));
 		expect(fetch.mock.calls[1]?.[0]).toEqual(new URL("http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-controller/mcp-executor/claim-1/cleanup"));
 	});
+
+	it("rejects cleanup claims that weaken or extend the saved deletion fence", async function _RejectsInvalidCleanup()
+	{
+		const invalid = { ..._Claim(), workloadUid: "job-uid-1", cleanupClaimedAt: "2026-08-26T00:02:00.000Z", cleanupDeliveryCount: 0, releaseExpiresAt: "2026-08-26T00:03:00.000Z" };
+		const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(invalid), { status: 200 }));
+		const authority = __CreateHttpMcpExecutorControllerAuthority(_Options(fetch));
+
+		await expect(authority.__ClaimCleanup(new AbortController().signal)).rejects.toThrow(/cleanup claim was invalid/u);
+	});
 });

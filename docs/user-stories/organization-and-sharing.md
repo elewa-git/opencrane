@@ -80,6 +80,10 @@ Fleet's older subject-based member upsert is not an invitation API and is not us
 
 ## ORG-04 — Share a resource
 
+Status: `Unavailable`. OpenCrane has no authoritative creation lifecycle for a file, chat, or dataset
+share. The former migrated-share list and revocation compatibility API is not a current product
+surface in the clean 0.10 target.
+
 **As a** resource member, **I want** to share a file, chat, or dataset with an authorised recipient
 **so that** collaboration does not copy authority into browser state.
 
@@ -88,9 +92,8 @@ Acceptance criteria:
 - Resource types are `file`, `chat`, and `dataset`.
 - The UI distinguishes owner authority, the exact recipient Principal, existing share, revoked, and inaccessible.
 - Creation remains absent until each resource lifecycle exposes authoritative ownership.
-- Revocation names the share and recipient Principal exactly and soft-revokes its linked grant.
-
-APIs: `GET /api/v1/resource-shares`, `DELETE .../{shareId}/recipients/{principalId}`.
+- A future implementation must create and revoke the exact recipient grant in the same central
+  authorization transaction as its owning resource relation.
 
 ## ORG-05 — Explain effective access
 

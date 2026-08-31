@@ -40,7 +40,7 @@ MEMORY_GATEWAY_DEPLOYMENT="$(awk '
 ' "$OUTPUT")"
 
 test -n "$PLATFORM_POLICY"
-grep -Fq '        values: [artifact-service, agent-controller, agent-runtime, cognee, memory-gateway]' <<<"$PLATFORM_POLICY"
+grep -Fq '        values: [artifact-service, agent-controller, warm-runtime, cognee, litellm, memory-gateway]' <<<"$PLATFORM_POLICY"
 grep -Fq '      - key: cnpg.io/poolerName' <<<"$PLATFORM_POLICY"
 grep -Fq '        operator: DoesNotExist' <<<"$PLATFORM_POLICY"
 grep -Fq '              cnpg.io/poolerName: opencrane-postgres-restored-pooler' <<<"$PLATFORM_POLICY"
@@ -95,17 +95,45 @@ helm template oc-acme "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --namespace oc-acme \
   --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/multi-instance/oc-acme.yaml" \
+  --set multiCt.enabled=true \
+  --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
+  --set-string 'multiInstance.instanceNamespaces[1]=oc-acme-runtime' \
+  --set-string 'multiInstance.instanceNamespaces[2]=oc-acme-managed-runtime' \
   >"$MULTI_OUTPUT"
 
 CROSS_INSTANCE_POLICY="$(awk '
   BEGIN { RS="---" }
   /kind: NetworkPolicy/ && /name: .*cross-instance-deny/ { print }
 ' "$MULTI_OUTPUT")"
+MULTI_PLATFORM_POLICY="$(awk '
+  BEGIN { RS="---" }
+  /kind: NetworkPolicy/ && /name: oc-acme-opencrane-platform-default-deny/ { print }
+' "$MULTI_OUTPUT")"
+MULTI_LITELLM_POLICY="$(awk '
+  BEGIN { RS="---" }
+  /kind: NetworkPolicy/ && /name: oc-acme-opencrane-litellm/ { print }
+' "$MULTI_OUTPUT")"
 
 test -n "$CROSS_INSTANCE_POLICY"
+test -n "$MULTI_PLATFORM_POLICY"
+test -n "$MULTI_LITELLM_POLICY"
 # PostgreSQL is a separately installed Helm release, so the umbrella render cannot contain a
 # CNPG Pooler Pod. The single-instance render above asserts the platform's actual pooler egress.
-grep -Fq '        values: [artifact-service, agent-controller, agent-runtime, cognee, memory-gateway]' <<<"$CROSS_INSTANCE_POLICY"
+grep -Fq '        values: [artifact-service, agent-controller, warm-runtime, cognee, litellm, memory-gateway]' <<<"$CROSS_INSTANCE_POLICY"
+grep -Fq '        values: [artifact-service, agent-controller, warm-runtime, cognee, litellm, memory-gateway]' <<<"$MULTI_PLATFORM_POLICY"
+test "$(grep -Fc 'namespace: oc-acme-runtime' <<<"$CROSS_INSTANCE_POLICY")" -eq 1
+test "$(grep -Fc 'namespace: oc-acme-managed-runtime' <<<"$CROSS_INSTANCE_POLICY")" -eq 1
+if grep -Fq 'agent-runtime' <<<"$CROSS_INSTANCE_POLICY"; then
+  echo "cross-instance policy retained the retired per-Job runtime selector" >&2
+  exit 1
+fi
+
+if helm template opencrane-redis-with-policy "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set litellm.redis.enabled=true >/dev/null 2>&1; then
+  echo "app-owned LiteLLM policy accepted Redis without an exact workload boundary" >&2
+  exit 1
+fi
 grep -Fq '      - key: cnpg.io/poolerName' <<<"$CROSS_INSTANCE_POLICY"
 grep -Fq '        operator: DoesNotExist' <<<"$CROSS_INSTANCE_POLICY"
 

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+
 import { PrismaSteeringRequestRepository } from "./prisma-steering-request-repository";
 import type { SteeringRequestRepository, SteeringRequestTransactionRepository, SubmitSteeringRequestCommand, SubmitSteeringRequestResult } from "./steering-request.types";
 
@@ -76,7 +78,7 @@ export class PrismaSteeringRequestUnitOfWork implements SteeringRequestRepositor
 	{
 		return this._prisma.$transaction(async function _Run(transaction): Promise<Result>
 		{
-			return work(new PrismaSteeringRequestRepository(transaction));
+			return work(new PrismaSteeringRequestRepository(transaction, new PrismaAuthorizationAuthority(transaction)));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }

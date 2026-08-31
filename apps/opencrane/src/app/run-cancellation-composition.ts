@@ -1,9 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaRunCancellationUnitOfWork, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
+import { PrismaRunCancellationUnitOfWork, type RunCancellationRepository, type SelfRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 
 /** Compose the cancellation transaction used by the public self-run route. */
-export function _CreateRunCancellationAuthority(prisma: PrismaClient): RunCancellationRepository
+export function _CreateRunCancellationAuthority(prisma: PrismaClient): RunCancellationRepository & SelfRunCancellationRepository
 {
 	return new PrismaRunCancellationUnitOfWork(prisma);
 }

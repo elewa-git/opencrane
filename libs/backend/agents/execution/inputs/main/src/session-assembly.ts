@@ -97,6 +97,9 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		}
 		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
 		if (skills.outcome === "denied") return skills;
+		const productAuthorization = await authorities.productAuthorization.load(command, identity.value, persona.value, memory.value, tools.value, transaction);
+		if (productAuthorization.outcome === "denied")
+			return productAuthorization;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === "denied") return budget;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.

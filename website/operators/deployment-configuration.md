@@ -55,6 +55,36 @@ vendored services are forwarded to their app owners. Change them only with the a
 deployment contract and review their trust boundary first.
 :::
 
+## MCP image registry
+
+OCI MCP admission needs one operator-owned OCI Distribution repository. The reserved
+`registry.invalid` default is deliberately unusable; set the server's fixed HTTPS origin and
+repository before accepting MCP image uploads.
+
+```yaml
+clustertenantManager:
+  workflows:
+    ociRegistry:
+      baseUrl: https://registry.example.com
+      repository: opencrane/mcp-images
+      requestTimeoutMilliseconds: 30000
+      authorization:
+        existingSecret: opencrane-oci-registry-authorization
+        secretKey: authorization
+```
+
+The optional Secret value is the complete HTTP `Authorization` header. OpenCrane mounts it as a
+read-only file and re-reads it for each registry request, so rotation needs no server restart. The
+client sends it only to the configured HTTPS origin, does not follow redirects, and stores accepted
+images by digest rather than tag.
+
+This repository currently stores admitted MCP images. It is not a product catalogue and it does not
+grant access to an image. The central authorization authority targets MCP server and tool revisions;
+Kubernetes receives the immutable registry reference only after admission.
+
+→ [Governed packages and container images](/integrators/governed-packages) ·
+[OCI MCP runtime](/integrators/oci-mcp-runtime)
+
 ## Keep the contract honest
 
 The repository checks this page against the explicit configuration contract before a deploy workflow
@@ -69,4 +99,5 @@ value, or an internal chart key. Operator inputs must name this page and appear 
 
 Source: [`values.yaml`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/values.yaml),
 [`config-docs-contract.json`](https://github.com/elewa-git/opencrane/blob/main/scripts/config-docs-contract.json),
+[`server deployment template`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_deployment.tpl),
 and [`k8s-deploy.sh`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/platform/k8s-deploy.sh).

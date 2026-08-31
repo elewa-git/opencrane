@@ -1,9 +1,9 @@
 import { Injectable, inject } from "@angular/core";
 
-import { ControlPlaneApiService, McpAccessPolicy, McpDirectory, McpInstalledServer, McpServer } from "@opencrane/core";
+import { ControlPlaneApiService, McpInstalledServer, McpServer } from "@opencrane/core";
 
-import type { McpAccessPolicyWire, McpGateway, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
-import { _MapAccessPolicy, _MapDirectory, _MapInstalled, _MapServer } from "./mcp-mapper.util";
+import type { McpGateway, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
+import { _MapInstalled, _MapServer } from "./mcp-mapper.util";
 
 /**
  * Live {@link McpGateway} backed by the OpenCrane opencrane-ui MCP API.
@@ -86,22 +86,4 @@ export class OpenCraneMcpGateway implements McpGateway
 		return _MapServer(await this._api.request<McpServerWire>("POST", `/mcp/servers/${encodeURIComponent(serverId)}/enabled`, { body: { enabled } }));
 	}
 
-	/** @inheritdoc */
-	public async getAccessPolicy(serverId: string): Promise<McpAccessPolicy>
-	{
-		return _MapAccessPolicy(await this._api.request<McpAccessPolicyWire>("GET", `/mcp/servers/${encodeURIComponent(serverId)}/access`));
-	}
-
-	/** @inheritdoc */
-	public async updateAccessPolicy(serverId: string, policy: McpAccessPolicy): Promise<McpAccessPolicy>
-	{
-		const body = { groups: policy.groups.map(function _Id(group): string { return group.id; }), users: policy.users.map(function _Id(user): string { return user.id; }) };
-		return _MapAccessPolicy(await this._api.request<McpAccessPolicyWire>("PUT", `/mcp/servers/${encodeURIComponent(serverId)}/access`, { body }));
-	}
-
-	/** @inheritdoc */
-	public async getDirectory(): Promise<McpDirectory>
-	{
-		return _MapDirectory(await this._api.request<{ users?: McpDirectory["users"]; groups?: McpDirectory["groups"] }>("GET", "/mcp/directory"));
-	}
 }

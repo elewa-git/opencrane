@@ -1,9 +1,9 @@
 import { Routes } from "@angular/router";
 
 /**
- * Admin-only MCP routes (catalogue governance + access policy), mounted by the
- * operator app under `/admin`. Each screen gates itself on the admin capability;
- * the control plane is the real enforcement point.
+ * MCP governance routes (catalogue governance and model keys), mounted by the operator app under
+ * `/admin`. Each screen uses the server-derived administration capability for presentation; the
+ * control plane rechecks the current Organization/Administer grant.
  */
 export const MCP_ADMIN_ROUTES: Routes =
 [
@@ -14,16 +14,6 @@ export const MCP_ADMIN_ROUTES: Routes =
 			return import("./catalogue-admin/catalogue-admin.component").then(function pick(m)
 			{
 				return m.CatalogueAdminComponent;
-			});
-		}
-	},
-	{
-		path: "access-policy",
-		loadComponent: function loadAccessPolicy()
-		{
-			return import("./access-policy/access-policy.component").then(function pick(m)
-			{
-				return m.AccessPolicyComponent;
 			});
 		}
 	},

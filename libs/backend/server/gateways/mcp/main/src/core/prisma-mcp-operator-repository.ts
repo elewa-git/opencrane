@@ -5,7 +5,7 @@ import type { McpEraProbeStatus } from "@prisma/client";
 
 import { McpEraProbeDecisions, McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
-import type { IMcpOperatorRepository, McpEraProbeRetryResult, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorAuditActor, McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
+import type { IMcpOperatorRepository, McpEraProbeRetryResult, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorInstallRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
 
 /** Fields shared by public catalogue mapping and era-probe state transitions. */
 const _SERVER_SELECT = {
@@ -218,18 +218,8 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		return { changed: changed.count === 1, exhausted: record.eraProbeStatus === McpEraProbeStates.Rejected && record.eraProbeFailureCode === exhaustedResult.failureCode, server: record };
 	}
 
-	async listGroups(siloId: string, groupIds?: readonly string[])
+	async appendAudit(siloId: string, action: string, resource: string, message: string, actorPrincipalId?: string): Promise<void>
 	{
-		return this._transaction.group.findMany({ where: { siloId, ...(groupIds ? { id: { in: [...groupIds] } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" } });
-	}
-
-	async listPrincipals(siloId: string, principalIds?: readonly string[]): Promise<readonly McpOperatorPrincipalRecord[]>
-	{
-		return this._transaction.principal.findMany({ where: { siloId, ...(principalIds ? { id: { in: [...principalIds] } } : {}) }, select: { id: true, email: true, displayName: true }, orderBy: { id: "asc" } });
-	}
-
-	async appendAudit(action: string, resource: string, message: string, actor?: McpOperatorAuditActor): Promise<void>
-	{
-		await this._transaction.auditEntry.create({ data: { action, resource, message, ...(actor ? { metadata: { siloId: actor.siloId, actorPrincipalId: actor.actorPrincipalId } } : {}) } });
+		await this._transaction.auditEntry.create({ data: { siloId, action, resource, message, ...(actorPrincipalId === undefined ? {} : { metadata: { actorPrincipalId } }) } });
 	}
 }

@@ -386,11 +386,10 @@ EOF
 }
 
 # Proves the public health report is complete and every service the smoke can provision is
-# healthy. Model routing is the one exception: CI holds no provider credentials, so LiteLLM
-# serves an empty estate and the models probe reports unavailable. Seeding a placeholder key
-# instead made the server fetch a BYOK Secret through the API server and exit fatally when that
-# call failed, so the report is asserted as-is and models is allowed to be unavailable. Reporting
-# an unconfigured estate as disabled rather than unavailable is tracked separately.
+# healthy. Model routing is the one exception: CI holds no provider credentials, so LiteLLM serves
+# an empty estate and the models probe reports unavailable. Provider setup now begins only through
+# the authenticated durable command path, so a fresh server remains ready while that estate is
+# intentionally empty. Reporting it as disabled rather than unavailable is tracked separately.
 _assert_ingress_health()
 {
   local health_url="https://${CONTROL_PLANE_HOST}:8443/healthz"

@@ -26,7 +26,7 @@ export function __CreatePersonalArtifactCatalogueRouter(dependencies: PersonalAr
 		if (caller === null) { response.status(401).json({ error: "personal_artifact_authentication_required" }); return; }
 		try
 		{
-			const assets = await dependencies.catalogue.listOwnedCatalogue(caller.siloId, caller.ownerPrincipalId);
+			const assets = await dependencies.catalogue.listCatalogue(caller.siloId, caller.ownerPrincipalId);
 			response.status(200).json({ assets });
 		}
 		catch (err)

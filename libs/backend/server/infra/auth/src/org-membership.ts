@@ -1,34 +1,29 @@
-import type { OrgMembershipFacts, OrgMembershipRepository, OwnedOrg } from "./org-membership.types";
+import type { OwnedOrgSummaryFacts, OwnedOrgSummaryRepository, OwnedOrg } from "./org-membership.types";
 
-export type { OrgMembershipFacts, OrgMembershipRepository, OrgMembershipRow, OwnedOrg } from "./org-membership.types";
+export type { OwnedOrgSummaryFacts, OwnedOrgSummaryRepository, OwnedOrgSummaryRow, OwnedOrg } from "./org-membership.types";
 
-/** Empty (fail-closed) facts: no admin authority, no org scope. */
-const _EMPTY: OrgMembershipFacts = { isOrgAdmin: false, ownedOrgs: [] };
+/** Returns an empty presentation when the verified subject owns or administers no organisation. */
+const _EMPTY: OwnedOrgSummaryFacts = { ownedOrgs: [] };
 
 /**
- * Work out, from the caller's `OrgMembership` rows, whether they administer any
- * organisation and which ones.
+ * List the organisations the caller owns or administers for session presentation.
  *
- * The rules:
- *   - Holding `owner` or `admin` on at least one organisation makes the caller an org
- *     admin, for exactly those organisations.
- *   - `member` rows grant nothing and never appear in the returned list.
- *   - No subject, or no rows, means no authority.
- *   - A failed lookup is RETHROWN, never turned into an empty result. This matters: an
- *     unreachable database would otherwise silently read as "administers nothing", and a
- *     caller would strip a real admin's rights instead of reporting an error.
+ * This function supplies a navigation and account summary only. It grants no product permission;
+ * routes use `AuthorizationAuthority` even when an owner or administrator label appears here.
+ * Missing subjects return an empty summary, while database failures remain errors so the API does
+ * not present incomplete organisation data as a successful response.
  *
  * Always keyed on the subject the identity provider verified (OIDC `sub`), never on
  * anything from the request body or query.
  *
  * Called by: `OidcAuthServiceBase.getStatus` in ./oidc-service.ts, on every `/auth/me`.
  *
- * @param repository - Supplies the owner/admin rows; see {@link OrgMembershipRepository}.
- * @param subject    - The caller's verified subject; empty or missing returns no authority.
- * @returns Whether the caller administers at least one organisation, plus that list.
+ * @param repository - Supplies the owner/admin rows; see {@link OwnedOrgSummaryRepository}.
+ * @param subject - The caller's verified subject; empty or missing values return no summaries.
+ * @returns The organisations shown as owned or administered in the caller's session summary.
  * @throws Whatever the repository throws when the lookup fails — deliberately not caught.
  */
-export async function _ResolveOrgMembershipFacts(repository: OrgMembershipRepository, subject: string | undefined): Promise<OrgMembershipFacts>
+export async function _ResolveOwnedOrgSummaries(repository: OwnedOrgSummaryRepository, subject: string | undefined): Promise<OwnedOrgSummaryFacts>
 {
   const normalized = typeof subject === "string" ? subject.trim() : "";
   if (!normalized)
@@ -36,12 +31,12 @@ export async function _ResolveOrgMembershipFacts(repository: OrgMembershipReposi
     return _EMPTY;
   }
 
-  const rows = await repository.findAdminMemberships(normalized);
+  const rows = await repository.findOwnedOrgSummaries(normalized);
 
-  const ownedOrgs: OwnedOrg[] = rows.map(function _toOwned(row)
+  const ownedOrgs: OwnedOrg[] = rows.map(function _ToOwnedOrg(row)
   {
     return { clusterTenant: row.clusterTenant, role: row.role === "Owner" ? "owner" : "admin" };
   });
 
-  return { isOrgAdmin: ownedOrgs.length > 0, ownedOrgs };
+  return { ownedOrgs };
 }

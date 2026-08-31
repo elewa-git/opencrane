@@ -15,14 +15,14 @@ function _Run(): InitialRunAuthority
 function _Command(identityKind: "user" | "service" = "service")
 {
 	return identityKind === "service"
-		? { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind, trigger: "managed_invocation", requestIdempotencyKey: "request-1" } as never
+		? { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind, requestingPrincipalId: "principal-1", trigger: "managed_invocation", requestIdempotencyKey: "request-1" } as never
 		: { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind, trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as never;
 }
 
 /** Creates a stand-in transaction, to check the adapter passes the same transaction through. */
 function _Transaction(): RunAdmissionTransaction
 {
-	return { prisma: {} as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
+	return { prisma: {} as never, authorization: { admit: vi.fn(), admitPrincipal: vi.fn().mockResolvedValue({ outcome: "allow" }), listPrincipalEntitled: vi.fn() } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
 }
 
 /** Creates a stub managed evidence authority whose response each test can replace. */
@@ -44,7 +44,7 @@ describe("ManagedExecutionIdentityEnvelopeSource", function _DescribeManagedExec
 		const evidence = _Evidence(_LoadedEvidence());
 		const transaction = _Transaction();
 		await expect(new ManagedExecutionIdentityEnvelopeSource(evidence).load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { ..._LoadedEvidence().value.identity, capabilitySetDigest: _LoadedEvidence().value.capabilitySetDigest } });
-		expect(evidence.load).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1" }, { prisma: transaction.prisma, admittedAtEpochMs: transaction.admittedAtEpochMs });
+		expect(evidence.load).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1" }, expect.objectContaining({ prisma: transaction.prisma, authorization: expect.any(Object), admittedAtEpochMs: transaction.admittedAtEpochMs }));
 	});
 
 	it("denies a caller subject or returned service identity that is not bound to the admitted service", async function _DeniesMismatchedService()
@@ -53,5 +53,16 @@ describe("ManagedExecutionIdentityEnvelopeSource", function _DescribeManagedExec
 		const mismatched = _LoadedEvidence();
 		const identity = { ...mismatched.value.identity, agentServiceId: "service-other" };
 		await expect(new ManagedExecutionIdentityEnvelopeSource(_Evidence({ outcome: "loaded", value: { ...mismatched.value, identity } })).load(_Command(), _Run(), _Transaction())).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
+	});
+
+	it("denies run-now before loading service evidence when current invocation authority is absent", async function _DeniesUnauthorizedInvocation()
+	{
+		const evidence = _Evidence(_LoadedEvidence());
+		const transaction = _Transaction();
+		vi.mocked(transaction.authorization!.admitPrincipal).mockResolvedValue({ outcome: "deny" } as never);
+
+		await expect(new ManagedExecutionIdentityEnvelopeSource(evidence).load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
+		expect(transaction.authorization!.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1", action: "invoke", resource: { kind: "agent-service", id: "service-1" } }));
+		expect(evidence.load).not.toHaveBeenCalled();
 	});
 });

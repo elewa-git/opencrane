@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { PrismaSkillAuthoringValidationSubmissionRepository } from "./prisma-skill-authoring-validation-submission-repository";
@@ -26,7 +27,9 @@ export class PrismaSkillAuthoringValidationSubmissionUnitOfWork implements Skill
 		const workflow = this.workflow;
 		return this.prisma.$transaction(async function _Submit(transaction): Promise<SkillAuthoringValidationSubmission>
 		{
-			return await new PrismaSkillAuthoringValidationSubmissionRepository(transaction, workflow).submit(caller, skillRevisionId);
+			const authorization = new PrismaAuthorizationAuthority(transaction);
+			const submissions = new PrismaSkillAuthoringValidationSubmissionRepository(transaction, workflow, authorization);
+			return await submissions.submit(caller, skillRevisionId);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }

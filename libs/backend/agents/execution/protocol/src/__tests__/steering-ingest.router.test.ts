@@ -10,7 +10,7 @@ import type { SteeringIngestRouterDependencies } from "../steering-ingest.router
 function _dependencies(overrides: Partial<SteeringIngestRouterDependencies> = {}): SteeringIngestRouterDependencies
 {
 	return {
-		resolveCaller: function _caller() { return { siloId: "silo-1", subjectId: "user-1" }; },
+		resolveCaller: function _caller() { return { siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }; },
 		requests: { submitAtomically: vi.fn().mockResolvedValue({ outcome: "queued", steeringRequestId: "steer-1", attempt: 2 }) },
 		clock: { now: function _now() { return new Date("2026-07-26T12:00:00.000Z"); } },
 		logger: { error: vi.fn() } as unknown as Logger,
@@ -42,7 +42,7 @@ describe("__CreateSteeringIngestRouter", function _suite()
 		const response = await request(_app(dependencies)).post("/api/v1/me/runs/run-1/steering").send({ text: "  Focus on the risks.  ", idempotencyKey: "steer-key" });
 		expect(response.status).toBe(202);
 		expect(response.body).toEqual({ steeringRequestId: "steer-1", attempt: 2, state: "pending" });
-		expect(dependencies.requests.submitAtomically).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", siloId: "silo-1", subjectId: "user-1", content: { text: "Focus on the risks." }, idempotencyDigest: expect.stringMatching(/^sha256:/), digest: expect.stringMatching(/^sha256:/) }));
+		expect(dependencies.requests.submitAtomically).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", siloId: "silo-1", subjectId: "user-1", principalId: "principal-1", content: { text: "Focus on the risks." }, idempotencyDigest: expect.stringMatching(/^sha256:/), digest: expect.stringMatching(/^sha256:/) }));
 	});
 
 	it("rejects a body that tries to add caller-controlled runtime coordinates", async function _rejectsCoordinates()

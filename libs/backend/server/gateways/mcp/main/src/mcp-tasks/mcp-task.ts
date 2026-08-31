@@ -83,7 +83,7 @@ async function _AdmitToolInvocation(context: IWorkflowTaskContext, options: McpT
 		{
 			return options.unitOfWork.execute(async function _Write(transaction): Promise<McpTaskRecord>
 			{
-				const task = await transaction.mcpTasks.admitToolInvocation(input.siloId, input.mcpTaskId, input.callDigest);
+				const task = await transaction.mcpTasks.admitAuthorizedToolInvocation(input.siloId, input.mcpTaskId, input.callDigest);
 				if (task === null)
 					throw new WorkflowTaskTerminalError("MCP task tool invocation is unavailable");
 				return task;

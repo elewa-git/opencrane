@@ -36,6 +36,10 @@ FROM build AS migration
 
 WORKDIR /app/apps/opencrane
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY apps/opencrane-prisma-migrator/run-migrations.sh /app/run-migrations.sh
 
 USER node

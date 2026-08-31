@@ -64,7 +64,7 @@ runtime, not another store.
 ┌───────┴──────────┐  ┌──────────────────┐               ┌─────────────────┐
 │ session history │  │ semantic memory  │               │ authority ledger│
 │ messages/events │  │ fact content     │               │ scope, approval,│
-│ OpenCrane       │  │ Cognee (target)  │               │ receipts/outcome│
+│ OpenCrane       │  │ Cognee (target)  │               │ decisions/result│
 └──────────────────┘  └──────────────────┘               └─────────────────┘
 ```
 
@@ -147,7 +147,7 @@ invocation; the action then returns `safe_delivery_required` before Cognee is co
 | Write | 🔶 The schema, provenance validation, content-free catalogue command and outbox contract exist, but no production writer or outbox dispatcher is composed. Gateway writes fail closed. | Cognee accepts content first; OpenCrane then atomically records its external id, digest, consent, provenance and outbox intent. |
 | Manage | ✅ Personal dataset selection is identity-bound at admission. Dataset and fact metadata have active, correction and forgetting states, but generic record/correct/forget execution is not composed. | Governance changes retain an explainable metadata trail without duplicating fact text. |
 | Read | 🔶 The private gateway accepts only authenticated, bounded search. A personal run can propose an approval-required recall, but its content delivery is blocked before the gateway. | The server delivers gateway-originated results transiently to the exact active attempt, then resumes the paused loop. |
-| Audit | ✅ Run snapshots, action invocations, approvals, receipts, ordered events and terminal outcomes are durable authorities. | Memory actions join the same evidence chain once safe delivery and writing are enabled. |
+| Audit | ✅ Run snapshots, ToolInvocations, approvals, decision evidence, ordered events and terminal outcomes are durable authorities. | Memory actions join the same evidence chain once safe delivery and writing are enabled. |
 
 Exactly one provenance source is required for a future fact record: an artifact revision, a
 conversation message or an explicit user statement. An explicit statement must name the same

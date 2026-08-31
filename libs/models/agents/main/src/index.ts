@@ -12,4 +12,4 @@ export type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaProfileId, Per
 export { RunEventTypes } from "./run-event.types";
 export type { RunEvent, RunEventType } from "./run-event.types";
 export { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "./tool-revision.constants";
-export { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "./state-transitions";
+export { __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "./state-transitions";

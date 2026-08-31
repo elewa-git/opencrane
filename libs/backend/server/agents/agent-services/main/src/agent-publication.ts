@@ -93,6 +93,10 @@ export async function __PublishAgentRevision(repository: AgentServicePublication
 	{
 		return _deny("invalid_revision");
 	}
+	if (publication.status === "unauthorized")
+	{
+		return _deny("unauthorized");
+	}
 	if (publication.status === "conflict")
 	{
 		return { outcome: "denied", reason: "publication_conflict", currentActiveRevisionId: publication.currentActiveRevisionId };

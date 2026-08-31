@@ -1,4 +1,4 @@
-import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 import type { OciImageValidationRepository } from "../oci-image-validation/oci-image-validation-repository.types";
 import type { McpTaskRepository } from "../mcp-tasks/mcp-task-repository.types";
@@ -157,48 +157,9 @@ export interface McpOperatorInstallRecord
 }
 
 /**
- * Carries the persisted group fields needed by the MCP access editor.
- *
- * MCP policy flows use these local groups as authorization subjects; identity-provider claims do
- * not replace them.
- */
-export interface McpOperatorGroupRecord
-{
-  /** Identifies the local group used in an authorization subject. */
-  readonly id: string;
-  /** Gives the group name shown to an access-policy editor. */
-  readonly name: string;
-}
-
-/**
- * Carries the local Principal fields needed by the MCP access editor.
- *
- * MCP policy flows use this persisted identity to name a grant subject and to display a selectable
- * person when profile fields are available.
- */
-export interface McpOperatorPrincipalRecord
-{
-  /** Identifies the local principal used in an authorization subject. */
-  readonly id: string;
-  /** Gives the principal email when the directory has one. */
-  readonly email: string | null;
-  /** Gives the principal display name when the directory has one. */
-  readonly displayName: string | null;
-}
-
-/** Authenticated administrator recorded with a catalogue audit entry. */
-export interface McpOperatorAuditActor
-{
-	/** Silo in which the administrator acted. */
-	readonly siloId: string;
-	/** Saved principal identifier resolved from the authenticated request. */
-	readonly actorPrincipalId: string;
-}
-
-/**
  * Defines the transaction-scoped MCP persistence operations that the operator logic requires.
  *
- * The logic reads catalog and directory data through this port, then writes installs, approval
+ * The logic reads catalog data through this port, then writes installs, approval
  * changes, and audit entries through the same {@link McpOperatorTransaction}. Implementations must
  * apply the supplied silo boundary and preserve `null` or `false` absence outcomes, because callers
  * use those outcomes to avoid returning or changing another silo's rows.
@@ -224,7 +185,7 @@ export interface IMcpOperatorRepository
 	/**
 	 * Finds a server only when its identifier belongs to the requested silo.
 	 *
-	 * Called by: install, access-policy, and approval flows before they act on a server.
+	 * Called by: install and approval flows before they act on a server.
 	 * @param siloId - Keeps the lookup inside the authenticated caller's silo.
 	 * @param serverId - Identifies the catalog server to find.
 	 * @returns The server row, or `null` when no server with this ID belongs to the silo.
@@ -313,60 +274,37 @@ export interface IMcpOperatorRepository
 	 */
 	recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, attempt: number, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>;
 	/**
-	 * Lists groups in the requested silo, optionally restricted to the supplied group IDs.
-	 *
-	 * Called by: directory and access-policy flows; omitting `groupIds` builds the full directory,
-	 * while supplying it checks the proposed or stored group subjects.
-	 * @param siloId - Identifies the silo whose groups the caller may read.
-	 * @param groupIds - Restricts the result to these group IDs when supplied.
-	 * @returns Name-sorted group rows; an empty array means no requested group was found.
-	 */
-	listGroups(siloId: string, groupIds?: readonly string[]): Promise<readonly McpOperatorGroupRecord[]>;
-	/**
-	 * Lists principals in the requested silo, optionally restricted to the supplied principal IDs.
-	 *
-	 * Called by: directory and access-policy flows; omitting `principalIds` builds the full
-	 * directory, while supplying it checks the proposed or stored principal subjects.
-	 * @param siloId - Identifies the silo whose principals the caller may read.
-	 * @param principalIds - Restricts the result to these principal IDs when supplied.
-	 * @returns ID-sorted principal rows; an empty array means no requested principal was found.
-	 */
-	listPrincipals(siloId: string, principalIds?: readonly string[]): Promise<readonly McpOperatorPrincipalRecord[]>;
-	/**
 	 * Appends an MCP operation to the audit log owned by the current transaction.
 	 *
-	 * Called by: install, uninstall, approval, and access-policy mutation flows after their primary
+	 * Called by: install, uninstall, and approval flows after their primary
 	 * storage action completes, so the audit row commits or rolls back with that action.
+	 * @param siloId - Owns the audit entry under the affected organization.
 	 * @param action - Records the action category for the audit entry.
 	 * @param resource - Identifies the MCP resource affected by the action.
 	 * @param message - Records the human-readable audit detail.
-	 * @param actor - Identifies the authenticated administrator when this is a governance action.
+	 * @param actorPrincipalId - Identifies the authenticated administrator when this is a user action.
 	 * @returns Resolves after the audit entry has been added to the transaction.
 	 */
-	appendAudit(action: string, resource: string, message: string, actor?: McpOperatorAuditActor): Promise<void>;
+	appendAudit(siloId: string, action: string, resource: string, message: string, actorPrincipalId?: string): Promise<void>;
 }
 
 /**
  * Groups the repositories that one MCP operator operation uses in one database transaction.
  *
- * The core combines catalog rows with authorization decisions and managed grants, then appends an
- * audit record. Keeping these ports together lets a unit of work commit all writes from an operation
+ * The core combines catalog rows with authorization decisions, then appends an audit record.
+ * Keeping these ports together lets a unit of work commit all writes from an operation
  * or roll them all back when the operation fails.
  */
 export interface McpOperatorTransaction
 {
-	/** Reads and changes MCP catalog, install, directory, and audit records. */
+	/** Reads and changes MCP catalog, install, and audit records. */
 	readonly mcp: IMcpOperatorRepository;
 	/** Reads and changes OCI image-layout validation records. */
 	readonly ociImageValidations: OciImageValidationRepository;
 	/** Saves caller-owned MCP tasks and their mutually exclusive ToolInvocation owner. */
 	readonly mcpTasks: McpTaskRepository;
-	/** Resolves the caller's principal and group subjects for entitlement decisions. */
-	readonly authorization: AuthorizationContextRepository;
-	/** Finds the MCP-use capability required to evaluate entitlement grants. */
-	readonly capabilityCatalog: CapabilityCatalogRepository;
-	/** Reads and reconciles the grant set owned by the MCP access editor. */
-	readonly managedGrants: ManagedAuthorizationGrantRepository;
+	/** Decides typed MCP actions from current grants and memberships in this transaction. */
+	readonly authorization: AuthorizationAuthority;
 	/** Opaque form of this same database transaction used for task admission. */
 	readonly workflowTransaction: IWorkflowTransaction;
 }

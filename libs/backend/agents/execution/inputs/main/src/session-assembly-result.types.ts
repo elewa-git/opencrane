@@ -84,6 +84,9 @@ export enum RunInputSnapshotAdmissionOutcomes
  * - `tool_policy_unavailable` - the revision is no longer published, an MCP tool revision is not
  *   ready and assignable, or an assigned skill/artifact is not a published revision in this silo.
  *   An operator must fix the revision.
+ * - `product_authorization_unavailable` - the current Principal no longer has `Use` for every exact
+ *   model, tool, skill, artifact, persona, dataset, and memory scope selected for this run. Nothing
+ *   is frozen from an earlier decision; restore the missing grant before retrying.
  * - `skill_unavailable` - the skill re-check at the end of admission refused: a skill revision was
  *   named twice, never assigned, revoked, from another silo, or not published.
  * - `budget_unavailable` - the revision's budget is missing, malformed, or holds values that
@@ -102,7 +105,7 @@ export enum RunInputSnapshotAdmissionOutcomes
  * onto the conversation write denials the HTTP layer returns. A new member added here without
  * updating that mapper falls through to its default.
  */
-export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittable" | "revision_unavailable" | "persona_unavailable" | "conversation_unavailable" | RunAdmissionDenialReasons.ActiveRun | "memory_scope_unavailable" | "memory_unavailable" | "tool_policy_unavailable" | "skill_unavailable" | "budget_unavailable" | "membership_stale" | "identity_unavailable" | "persistence_unavailable";
+export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittable" | "revision_unavailable" | "persona_unavailable" | "conversation_unavailable" | RunAdmissionDenialReasons.ActiveRun | "memory_scope_unavailable" | "memory_unavailable" | "tool_policy_unavailable" | "skill_unavailable" | "product_authorization_unavailable" | "budget_unavailable" | "membership_stale" | "identity_unavailable" | "persistence_unavailable";
 
 /**
  * What {@link __AssembleRunInputSnapshot} returns.

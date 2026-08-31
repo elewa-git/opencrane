@@ -4,14 +4,9 @@ import "express-session";
  * The logged-in human, as stored in the session cookie store.
  *
  * Written once per login by `OidcAuthServiceBase.completeLogin` (through its private
- * `_buildAuthUser`) and read afterwards by {@link ___AuthMiddleware}, the two route
- * guards, and `_ResolveRequestPrincipal`. Treat it as a cache of what was true AT LOGIN:
- * nothing here is refreshed while the session lives.
- *
- * The one exception is {@link AuthUser.isOrgAdmin}, which `/auth/me` recomputes on every
- * call by OR-ing the stored value with current `OrgMembership` rows. So a route guard
- * reading the session may still say "not an org admin" for a user whom `/auth/me` already
- * reports as one, until they log in again or a login hook rewrites the session.
+ * `_buildAuthUser`) and read afterwards by {@link ___AuthMiddleware} and
+ * `_ResolveRequestPrincipal`. Treat it as a cache of what was true at login: nothing here is
+ * refreshed while the session lives.
  *
  * @see https://github.com/expressjs/session — the `express-session` store that holds
  *      this object; the augmentation at the bottom of this file is what types it.
@@ -40,14 +35,6 @@ export interface AuthUser
    * Introspection only — the API stays the enforcement point.
    */
   isPlatformOperator: boolean;
-
-  /**
-   * Whether the caller is an organisation admin, as resolved AT LOGIN (groups intersecting
-   * `OPENCRANE_ORG_ADMIN_GROUPS`, or platform-operator superset). `/auth/me` re-derives the
-   * EFFECTIVE flag fresh by OR-ing this with membership (owner/admin of ≥1 org). Empty
-   * config + no membership ⇒ false (fail-closed).
-   */
-  isOrgAdmin: boolean;
 
   /** Human-readable email address when available. */
   email?: string;

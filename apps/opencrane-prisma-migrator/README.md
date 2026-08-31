@@ -32,12 +32,22 @@ HTTP server, Kubernetes permissions, or product request handling. The Job receiv
 database URL, admitted source release, exact silo, and OIDC issuer. It applies the reviewed IAM
 prerequisite before recording the Prisma bridge and applying later changes.
 
+The Job projects one application connection Secret in two forms: Prisma receives its complete URL,
+including pool controls, while `psql` receives discrete libpq connection variables. Database
+credentials therefore stay out of process arguments, and each client receives only the settings it
+understands.
+
 ## Public surface
 
-Entrypoint: `run-migrations.sh` accepts only tagged 0.9.2, runs the digest-bound IAM prerequisite,
-records the `20260826000000_0_9_2_baseline` Prisma bridge, resolves a fully rolled-back 0.10.0
-workflow-cutover attempt when a repaired image retries it, and runs `prisma migrate deploy`. Other
-migration failures are returned immediately for a forward code or migration repair.
+Entrypoint: `run-migrations.sh` accepts only tagged 0.9.2, checks the digest-bound development-candidate
+repair, runs the IAM prerequisite, records the `20260826000000_0_9_2_baseline` Prisma bridge, resolves
+fully rolled-back `20260827000000_0_10_0_workflow_cutover` and
+`20260829000000_central_authorization_authority` attempts when a repaired image retries them, and runs
+`prisma migrate deploy`. Other migration failures are returned immediately for a forward repair.
+
+The Nx `build` contract checks that the migration image still copies and starts this entrypoint with
+the reviewed Prisma ledger. `lint` checks every app-owned shell entrypoint and contract before CI
+selects the independently publishable `container` target.
 
 ## Boundary
 
@@ -51,13 +61,16 @@ not import another app at runtime.
 
 ## Runtime & config
 
-The Job supplies `DATABASE_URL`, `OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2`,
-`OPENCRANE_MIGRATION_SILO_ID`, and `OPENCRANE_MIGRATION_OIDC_ISSUER`. Fresh databases use the
-reviewed target baseline instead and do not run this upgrade image.
+The Job supplies `DATABASE_URL`, the discrete libpq connection variables, and
+`OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2`, `OPENCRANE_MIGRATION_SILO_ID`, and
+`OPENCRANE_MIGRATION_OIDC_ISSUER`. Fresh databases use the reviewed target baseline instead and do
+not run this upgrade image.
 
-The `0.9.3` candidate was never tagged. A development database that already recorded its old
-candidate migration IDs must be reset or receive an explicitly reviewed forward repair; this image
-will not relabel it as the supported path.
+The `0.9.3` candidate was never tagged. The migrator recognizes only the exact reviewed candidate
+ledger, derives its invitation-audit silo from existing product records, applies the missing MCP
+database authority, and records a distinct forward-repair receipt. It preserves the candidate rows
+as historical evidence instead of relabelling them as a release. Any other candidate shape fails
+closed and still requires its own reviewed repair or a development reset.
 
 ## See also
 

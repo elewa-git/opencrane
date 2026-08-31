@@ -7,7 +7,7 @@
   "database": {
     "schemaVersion": "0.10.0",
     "baselinePath": "apps/opencrane/prisma/bootstrap/target-baseline.sql",
-    "baselineSha256": "b322ff849c0636e128a0faccf6dbc7c8e5ad1cab1bc286538f1557bc6fa4eb77",
+    "baselineSha256": "a615f3ff03b6ffeb5bf0cd3b25a64be2656742b9d1cb85dc65fa3f31745750f2",
     "operandImage": "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-be461113253b9cd6d51532cf007775ec8385bfe7@sha256:9c27816e67b9f0b23e771a4c8a8a4c8eb4c84abeefead14f727747d21d7d70c7"
   },
   "projects": {
@@ -36,10 +36,10 @@
     },
     "artifact-scanner": {
       "root": "apps/artifact-scanner",
-      "adaptedVersion": "0.9.2",
-      "packageVersion": "0.9.2",
-      "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.2"
+      "adaptedVersion": "0.10.0",
+      "packageVersion": "0.10.0",
+      "chartVersion": "0.10.0",
+      "chartAppVersion": "0.10.0"
     },
     "artifact-service": {
       "root": "apps/artifact-service",
@@ -69,9 +69,9 @@
     },
     "litellm": {
       "root": "apps/_infra/litellm",
-      "adaptedVersion": "0.8.0",
-      "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "adaptedVersion": "0.10.0",
+      "chartVersion": "0.10.0",
+      "chartAppVersion": "0.10.0"
     },
     "mcp-executor": {
       "root": "apps/mcp-executor",

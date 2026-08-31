@@ -1,7 +1,8 @@
-/// Default model + auto-routing config at a scope (Global platform default, or per ClusterTenant),
+/// Default model + auto-routing config at a scope (organisation-wide within one silo, or per ClusterTenant),
 /// consulted when a skill has no posture of its own. `defaultModel` is a ModelDefinition.publicModelName.
 model ModelRoutingDefault {
   id            String            @id @default(cuid())
+  siloId        String            @map("silo_id")
   scope         ModelRoutingScope @default(Global)
   clusterTenant String?           @map("cluster_tenant")
   defaultModel  String?           @map("default_model")
@@ -9,6 +10,7 @@ model ModelRoutingDefault {
   createdAt     DateTime          @default(now()) @map("created_at")
   updatedAt     DateTime          @updatedAt @map("updated_at")
 
-  @@unique([scope, clusterTenant])
+  @@unique([id, siloId])
+  @@unique([siloId, scope, clusterTenant])
   @@map("model_routing_defaults")
 }

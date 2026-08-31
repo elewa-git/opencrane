@@ -12,8 +12,10 @@ cluster does not match the assumptions needed to do that job safely.
 
 During the exact public 0.9.2-to-0.10.0 upgrade, the deploy engine removes the six named Acorn
 resources from the retired `sms1obot-mcp-server` after the five replacement deployments are ready.
-It checks each resource's Acorn hash and owner, then fences deletion with its UID and resource
-version. Missing resources are treated as an already-completed retry.
+It also reconciles the retained Obot logical database and login role to absent, proves PostgreSQL
+removed both, and deletes the two generated credential adapters. Every deletion is fenced by the
+proven UID and resource version. The externally supplied Obot bootstrap Secret remains
+operator-owned, and a retry still proves no unmanaged database or login survived before succeeding.
 
 | Path | Responsibility |
 |---|---|
@@ -23,11 +25,12 @@ version. Missing resources are treated as an already-completed retry.
 | `runtime-continuation-keyring-secret.sh` | Creates the continuation encryption keyring once through a mode-0600 temporary file and retains valid existing keys. Rotation changes the active key while keeping older keys until their saved rows are gone. |
 | `qualified-release-image-policy.sh` | Keeps first-party services on one reviewed build, resolves exact digests for workflow runtimes and workers, enables those completed planes, and verifies every image before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
+| `network-policy-cni.sh` | Recognises only exact known NetworkPolicy-enforcing CNI DaemonSet names. The deploy preflight treats a missing match as fatal for multi-tenant topology and advisory for a single silo. |
 | `cluster-tenant-crd-policy.sh` | Protects the cluster-wide tenant definition from conflicting ownership. It checks whether the definition is missing, owned by this release, safely shared, or conflicting before Helm proceeds. |
 | `database-migration-orchestrator.sh` | Runs the dedicated Prisma Migrate Job and waits for it to finish before application rollout. |
 | `qualify-workflow-engine.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
 | `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
-| `retire-legacy-obot-mcp-server.sh` | Removes the six named Obot MCP resources during the exact public 0.9.2-to-0.10.0 upgrade after the replacement deployments are ready and each resource's identity and Acorn ownership match. |
+| `retire-legacy-obot-mcp-server.sh` | Removes the Obot MCP resources and retained database custody during the exact public 0.9.2-to-0.10.0 upgrade after replacement readiness and exact ownership proofs. |
 | `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
 | `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
 | `prerequisite-chart-lock.sh` | Pins the exact upstream controller packages accepted by the bootstrap. Checksums and expected cluster resources make downloaded dependencies reproducible and tamper-evident. |
@@ -120,14 +123,12 @@ external-dns or DNS credentials and it does not create a cluster-wide certificat
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
 ingress Service reports the reserved address.
 
-The bootstrap also owns `opencrane-database-proof`, a GKE Autopilot ComputeClass used only by the
-short-lived PostgreSQL privilege-proof Job through `values/postgres-gke-autopilot.yaml`. Its explicit
-`ScaleUpAnyway` policy allows the proof to receive capacity when GKE system balloon Pods reserve all
-otherwise idle capacity. Its `general-purpose` pod family uses GKE's Autopilot container-optimized
-compute platform and pod-based billing; GKE manages the node shape and boot disk because explicit
-storage cannot be combined with this pod family. The Job retains its three one-GiB
-ephemeral-storage requests. The class does not change the Job's database grants, credentials,
-network path, or completion requirement.
+The short-lived PostgreSQL privilege proof uses ordinary GKE Autopilot scheduling. Its single Job
+runs one PostgreSQL client container for each logical database, which means two containers in the
+current profile. Each container requests 50 millicores of processor time and 64 mebibytes (MiB) of
+memory. The chart does not render a node selector, even when an older Helm release still has the
+former selector saved in its values. Scheduling does not change the Job's database grants,
+credentials, network path, or completion requirement.
 
 The pinned ingress-nginx release is accepted only for this single-silo development qualification.
 The upstream project is archived, so a supported ingress controller must replace it before a
