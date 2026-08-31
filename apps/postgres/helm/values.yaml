@@ -7,8 +7,8 @@ image: ""
 postgresql:
   maxConnections: 80
 
-# CNPG exposes its generated `postgres` credential only for the reviewed migration that creates
-# pg_cron. The deploy owner must restore this to false before the server can be released.
+# CNPG's generated `postgres` credential stays unavailable: the schema is created once, by
+# initdb from the target baseline, and no deployment path needs a superuser afterwards.
 superuserAccess:
   enabled: false
 
@@ -128,41 +128,6 @@ privileges:
     limits:
       cpu: 250m
       memory: 256Mi
-
-# Existing databases are mutated only by this bounded, app-owner Job. The SQL ConfigMap is
-# content-addressed and immutable; the deployer runs the Job directly.
-migration:
-  enabled: false
-  sqlSha256: ""
-  sourceBaselineSha256: ""
-  # Reviewed identity coordinates used only by migrations that convert legacy globally named
-  # groups and OIDC subjects into silo-bound principals and memberships.
-  siloId: ""
-  oidcIssuer: ""
-  # This is deliberately not a generic extension-install switch. The only admitted value is the
-  # manifest-bound pg_cron prerequisite for the 0.9.3 workflow-engine integration.
-  privilegedExtension:
-    enabled: false
-    name: ""
-  # Required when enabled. Use an exact OCI digest, for example
-  # ghcr.io/cloudnative-pg/postgresql@sha256:<64 lowercase hex characters>.
-  image: ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f
-  configMap:
-    name: ""
-    key: migration.sql
-  timeoutSeconds: 900
-  jobDeadlineGraceSeconds: 30
-  ttlSecondsAfterFinished: 86400
-  nodeSelector: {}
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-      ephemeral-storage: 32Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
-      ephemeral-storage: 128Mi
 
 backup:
   enabled: false

@@ -23,20 +23,6 @@ upgrade, while the digest keeps the selected bytes immutable.
 {{- if lt (int .Values.privileges.jobDeadlineGraceSeconds) 10 -}}
 {{- fail "privileges.jobDeadlineGraceSeconds must be at least 10 so the Job can emit terminal diagnostics" -}}
 {{- end -}}
-{{- if .Values.migration.enabled -}}
-{{- if not (regexMatch "^[^[:space:]@]+@sha256:[0-9a-f]{64}$" .Values.migration.image) -}}
-{{- fail "migration.image must use an exact sha256 OCI digest when migration is enabled" -}}
-{{- end -}}
-{{- if or (not (regexMatch "^[0-9a-f]{64}$" .Values.migration.sqlSha256)) (not (regexMatch "^[0-9a-f]{64}$" .Values.migration.sourceBaselineSha256)) -}}
-{{- fail "migration.sqlSha256 and migration.sourceBaselineSha256 must be full lowercase SHA-256 digests" -}}
-{{- end -}}
-{{- if or (not .Values.migration.configMap.name) (ne .Values.migration.configMap.key "migration.sql") -}}
-{{- fail "migration execution requires an immutable migration.sql ConfigMap and full SQL digest" -}}
-{{- end -}}
-{{- if or (lt (int .Values.migration.timeoutSeconds) 1) (lt (int .Values.migration.jobDeadlineGraceSeconds) 10) (lt (int .Values.migration.ttlSecondsAfterFinished) 3600) -}}
-{{- fail "migration Job requires a positive timeout, at least 10 seconds diagnostic grace, and at least one hour log retention" -}}
-{{- end -}}
-{{- end -}}
 {{- range $database := .Values.databases }}
 {{- if or (not .name) (not .owner) (not .credentialsSecret) -}}
 {{- fail "every databases entry requires name, owner, and credentialsSecret; OpenCrane never generates database credentials" -}}
@@ -115,9 +101,6 @@ upgrade, while the digest keeps the selected bytes immutable.
 {{- end -}}
 {{- if not (kindIs "bool" .Values.superuserAccess.enabled) -}}
 {{- fail "superuserAccess.enabled must be a boolean" -}}
-{{- end -}}
-{{- if and .Values.migration.privilegedExtension.enabled (or (ne .Values.migration.privilegedExtension.name "pg_cron") (not .Values.superuserAccess.enabled)) -}}
-{{- fail "the privileged pg_cron migration requires temporary CNPG superuser access" -}}
 {{- end -}}
 {{- if lt (int .Values.pooler.instances) 1 -}}
 {{- fail "pooler.instances must be positive" -}}

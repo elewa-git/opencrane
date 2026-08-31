@@ -93,7 +93,7 @@ RELEASE="opencrane-${CLUSTER_TENANT}"
 POSTGRES_RELEASE="${RELEASE}-postgres"
 POOLER_SERVICE="${POSTGRES_RELEASE}-pooler"
 APPLICATION_SECRET="${POSTGRES_RELEASE}-opencrane-app"
-EXPECTED_VERSION="$(jq -r '.repositoryVersion' "$REPOSITORY_ROOT/releases/0.9.3.json")"
+EXPECTED_VERSION="$(jq -r '.version' "$REPOSITORY_ROOT/package.json")"
 
 SILO_STATUS="$(helm status "$RELEASE" --namespace "$NAMESPACE" --output json)"
 POSTGRES_STATUS="$(helm status "$POSTGRES_RELEASE" --namespace "$NAMESPACE" --output json)"

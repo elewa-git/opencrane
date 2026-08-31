@@ -524,7 +524,6 @@ export TIMEOUT_SECONDS
   --namespace "$NAMESPACE" \
   --release "$RELEASE_NAME" \
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
-  --from-release-version fresh \
   --image-tag develop-smoke \
   --cognee-tag develop-smoke \
   --storage-class "$SMOKE_STORAGE_CLASS" \

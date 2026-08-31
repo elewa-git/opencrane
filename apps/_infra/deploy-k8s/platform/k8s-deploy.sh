@@ -14,7 +14,7 @@
 # WeOwnAI repo, elewa-git/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh — which preset
 # the value flags and exec this core):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --release-version VERSION
-#     --from-release-version fresh|VERSION [--base-domain DOMAIN] [--namespace NS] [--release NAME]
+#     [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG] [--opencrane-ui-tag TAG]
 #                            [--opencrane-ui-digest sha256:DIGEST]
@@ -111,9 +111,7 @@ fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
-source "$SCRIPT_DIR/database-pg-cron-preflight.sh"
-source "$SCRIPT_DIR/database-superuser-access.sh"
-source "$SCRIPT_DIR/database-migration-orchestrator.sh"
+source "$SCRIPT_DIR/postgres-release.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
@@ -134,12 +132,10 @@ if [[ ! -f "$POSTGRES_CONNECTION_PUBLISHER" ]]; then
   exit 1
 fi
 POSTGRES_BASELINE_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-initdb-baseline-config-map.sh"
-POSTGRES_MIGRATION_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-database-migration-config-map.sh"
 POSTGRES_BASELINE_FILE="$SCRIPT_DIR/../../../opencrane/prisma/bootstrap/target-baseline.sql"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -f "$POSTGRES_MIGRATION_PUBLISHER" \
-  || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
-  echo "[k8s-deploy] OpenCrane database baseline or migration deployment helpers are missing." >&2
+if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
+  echo "[k8s-deploy] OpenCrane database baseline deployment helpers are missing." >&2
   exit 1
 fi
 NAMESPACE="opencrane-system"
@@ -212,8 +208,6 @@ LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SE
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
-POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
-DATABASE_MIGRATION_SILO_ID="${OPENCRANE_DATABASE_MIGRATION_SILO_ID:-}"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -240,7 +234,6 @@ VERIFY_INSECURE="${OPENCRANE_VERIFY_INSECURE:-0}"
 
 POSTGRES_RELEASE=""
 RELEASE_VERSION="${OPENCRANE_RELEASE_VERSION:-}"
-FROM_RELEASE_VERSION="${OPENCRANE_FROM_RELEASE_VERSION:-}"
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
@@ -282,11 +275,8 @@ while [[ $# -gt 0 ]]; do
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
-    --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
-    --database-migration-silo-id) DATABASE_MIGRATION_SILO_ID="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --release-version) RELEASE_VERSION="$2"; shift 2 ;;
-    --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
     --values)        VALUES_FILE="$2"; shift 2 ;;
     --reuse-values)  REUSE_VALUES="1"; shift ;;
     --reset-values)  RESET_VALUES="1"; shift ;;
@@ -302,8 +292,8 @@ if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
   exit 1
 fi
-if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
-  err "--release-version and --from-release-version are required. Use --from-release-version fresh only for an empty initdb install."
+if [[ -z "$RELEASE_VERSION" ]]; then
+  err "--release-version is required."
   exit 1
 fi
 RELEASE_MANIFEST="$REPOSITORY_ROOT/releases/${RELEASE_VERSION}.json"
@@ -603,50 +593,9 @@ if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY="$(jq -r '.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key // empty' <<<"$existing_postgres_values")"
 fi
 
-DATABASE_MIGRATION_ENABLED=false
-DATABASE_MIGRATION_ID=""
-DATABASE_MIGRATION_SQL_FILE=""
-DATABASE_MIGRATION_SQL_SHA256=""
-DATABASE_MIGRATION_SOURCE_BASELINE_SHA256=""
-DATABASE_PRIVILEGED_EXTENSION=""
-DATABASE_MIGRATION_CONFIG_MAP=""
-DATABASE_MIGRATION_ROOT=""
-if [[ "$FROM_RELEASE_VERSION" == "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
-  err "--from-release-version fresh is only valid when PostgreSQL has not been created."
-  exit 1
-fi
-if [[ "$FROM_RELEASE_VERSION" != "fresh" && ! -f "$REPOSITORY_ROOT/releases/${FROM_RELEASE_VERSION}.json" ]]; then
-  err "Source release manifest 'releases/${FROM_RELEASE_VERSION}.json' does not exist."
-  exit 1
-fi
-if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
-  DATABASE_SOURCE_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$REPOSITORY_ROOT/releases/${FROM_RELEASE_VERSION}.json")"
-  DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$RELEASE_MANIFEST")"
-  DATABASE_MIGRATION_ROOT="$REPOSITORY_ROOT/apps/opencrane/prisma/migrations/${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
-fi
-if [[ -n "$DATABASE_MIGRATION_ROOT" && -f "$DATABASE_MIGRATION_ROOT/migration.sql" && -f "$DATABASE_MIGRATION_ROOT/manifest.json" ]]; then
-  DATABASE_MIGRATION_ENABLED=true
-  DATABASE_MIGRATION_ID="${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
-  DATABASE_MIGRATION_SQL_FILE="$DATABASE_MIGRATION_ROOT/migration.sql"
-  DATABASE_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  DATABASE_MIGRATION_SOURCE_BASELINE_SHA256="$(jq -r '.sourceTargetBaselineSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  DATABASE_PRIVILEGED_EXTENSION="$(jq -r '.privilegedExtension // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  if [[ ! "$POSTGRES_MIGRATION_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
-    err "Database migration requires --postgres-migration-image with an exact sha256 OCI digest."
-    exit 1
-  fi
-  if [[ ! "$DATABASE_MIGRATION_SQL_SHA256" =~ ^[0-9a-f]{64}$ || ! "$DATABASE_MIGRATION_SOURCE_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
-    err "Database migration manifest must provide SQL and source-baseline digests."
-    exit 1
-  fi
-  if [[ -n "$DATABASE_PRIVILEGED_EXTENSION" && "$DATABASE_PRIVILEGED_EXTENSION" != "pg_cron" ]]; then
-    err "Database migration manifest declares an unsupported privileged extension."
-    exit 1
-  fi
-elif [[ "$FROM_RELEASE_VERSION" != "fresh" && "$DATABASE_SOURCE_SCHEMA_VERSION" != "$DATABASE_TARGET_SCHEMA_VERSION" ]]; then
-  err "No reviewed database migration exists from schema '$DATABASE_SOURCE_SCHEMA_VERSION' to '$DATABASE_TARGET_SCHEMA_VERSION'."
-  exit 1
-fi
+# Pre-1.0 policy: there are no reviewed version-to-version schema upgrades. A fresh install
+# applies the target baseline through CNPG initdb; an existing cluster keeps the schema it has,
+# and a needed schema change means a rebuild (see docs/agents/deploy-ledger.md, 2026-08-31).
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
 POSTGRES_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
@@ -670,7 +619,7 @@ _copy_cnpg_uri_secret() {
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
-run_database_release_transition
+install_postgres_release true
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
@@ -1025,8 +974,8 @@ if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
     "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
 fi
 
-# 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
-# the bounded deployment-owned migration Job; application startup never mutates it.
+# 4. Wait for the core workloads. The database schema was created by CNPG initdb from the
+# target baseline; application startup never mutates it.
 # Wait only on the deployment(s) this chart actually rendered: the fleet chart ships
 # the fleet-manager, the silo chart the clustertenant-manager. A fleet-only (or silo-only)
 # install has just one, so guard each wait on the deployment existing rather than waiting

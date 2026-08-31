@@ -2,7 +2,6 @@
   "name": "postgres",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.9.3" } },
   "tags": ["type:app", "layer:entrypoint", "scope:postgres"],
   "targets": {
     "helm-lint": {
@@ -28,9 +27,7 @@
       "options": {
         "commands": [
           "bash apps/postgres/tests/helm-contract.sh",
-          "bash apps/postgres/tests/baseline-publisher-contract.sh",
-          "bash apps/postgres/tests/migration-publisher-contract.sh",
-          "bash apps/_infra/deploy-k8s/platform/tests/database-migration-deploy-contract.sh"
+          "bash apps/postgres/tests/baseline-publisher-contract.sh"
         ],
         "parallel": false
       }

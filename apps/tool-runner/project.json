@@ -2,7 +2,6 @@
   "name": "tool-runner",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.8.0" } },
   "sourceRoot": "apps/tool-runner",
   "tags": ["type:app", "layer:entrypoint", "scope:tool-runner"],
   "targets": {
