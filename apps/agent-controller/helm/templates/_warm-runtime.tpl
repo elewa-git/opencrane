@@ -143,13 +143,25 @@ spec:
         operations: ["UPDATE", "DELETE"]
         resources: ["pods"]
         scope: Namespaced
+  # Kubernetes uses its ReplicaSet controller to remove old Pods during a Deployment rollout. The
+  # release controller remains the only identity allowed to update a Pod's warm profile.
   validations:
     - expression: >-
-        request.userInfo.username == {{ printf "system:serviceaccount:%s:agent-controller" $.Release.Namespace | toJson }}
-      message: only this release's agent controller may change or delete warm runtime Pods
+        (request.operation == 'UPDATE' &&
+         request.userInfo.username == {{ printf "system:serviceaccount:%s:agent-controller" $.Release.Namespace | toJson }}) ||
+        (request.operation == 'DELETE' &&
+         (request.userInfo.username == {{ printf "system:serviceaccount:%s:agent-controller" $.Release.Namespace | toJson }} ||
+          (request.userInfo.username == 'system:serviceaccount:kube-system:replicaset-controller' &&
+           oldObject.metadata.labels['opencrane.ai/warm-runtime-profile'] == {{ $warm.genericProfile | toJson }})))
+      message: only this release's agent controller may update or delete claimed warm runtime Pods
     - expression: >-
         oldObject.metadata.labels['opencrane.ai/warm-runtime-pool'] == {{ printf "%s-%s" (include "opencrane.fullname" $) $pool.name | toJson }} &&
         oldObject.metadata.ownerReferences.size() == 1 && oldObject.metadata.ownerReferences[0].controller == true
+        && oldObject.metadata.ownerReferences[0].blockOwnerDeletion == true
+        && oldObject.metadata.ownerReferences[0].apiVersion == 'apps/v1'
+        && oldObject.metadata.ownerReferences[0].kind == 'ReplicaSet'
+        && 'pod-template-hash' in oldObject.metadata.labels
+        && oldObject.metadata.ownerReferences[0].name == {{ printf "%s-%s-" (include "opencrane.fullname" $) $pool.name | toJson }} + oldObject.metadata.labels['pod-template-hash']
       message: the Pod must belong to the fixed warm pool
     - expression: >-
         request.operation == 'DELETE' ||

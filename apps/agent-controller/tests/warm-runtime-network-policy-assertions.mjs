@@ -46,6 +46,79 @@ function findNetworkPolicy(name, namespace, component)
   return matches[0];
 }
 
+function findAdmissionPolicy(nameSuffix, namespace)
+{
+  const bindings = documents.filter((document) => (
+    document.apiVersion === 'admissionregistration.k8s.io/v1'
+      && document.kind === 'ValidatingAdmissionPolicyBinding'
+      && document.metadata?.name?.endsWith(nameSuffix)
+      && document.spec?.policyName === document.metadata.name
+      && document.spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] === namespace
+  ));
+  assert.equal(
+    bindings.length,
+    1,
+    `expected one ${namespace} ValidatingAdmissionPolicyBinding ending in ${nameSuffix}`,
+  );
+  assert.deepStrictEqual(bindings[0].spec.validationActions, ['Deny']);
+  const matches = documents.filter((document) => (
+    document.apiVersion === 'admissionregistration.k8s.io/v1'
+      && document.kind === 'ValidatingAdmissionPolicy'
+      && document.metadata?.name === bindings[0].spec.policyName
+  ));
+  assert.equal(matches.length, 1, `expected the bound ValidatingAdmissionPolicy/${bindings[0].spec.policyName}`);
+  return matches[0];
+}
+
+function normalizeExpression(expression)
+{
+  return expression.replace(/\s+/gu, ' ').trim();
+}
+
+function allowsWarmMutation({
+  claimedProfile,
+  expectedPool,
+  hash = '7f4b8d9c6a',
+  immutableUpdate = true,
+  newProfile,
+  oldProfile = 'generic',
+  operation,
+  ownerApiVersion = 'apps/v1',
+  ownerBlockDeletion = true,
+  ownerController = true,
+  ownerCount = 1,
+  ownerKind = 'ReplicaSet',
+  ownerName,
+  poolLabel,
+  username,
+})
+{
+  const agentController = 'system:serviceaccount:server-ns:agent-controller';
+  const replicaSetController = 'system:serviceaccount:kube-system:replicaset-controller';
+  const identityAllows = (
+    (operation === 'UPDATE' && username === agentController)
+      || (operation === 'DELETE' && (
+        username === agentController
+          || (username === replicaSetController && oldProfile === 'generic')
+      ))
+  );
+  const ownerAllows = (
+    poolLabel === expectedPool
+      && ownerCount === 1
+      && ownerController
+      && ownerBlockDeletion
+      && ownerApiVersion === 'apps/v1'
+      && ownerKind === 'ReplicaSet'
+      && ownerName === `${expectedPool}-${hash}`
+  );
+  const updateAllows = (
+    immutableUpdate
+      && oldProfile === 'generic'
+      && (newProfile ?? claimedProfile) === claimedProfile
+  );
+  return identityAllows && ownerAllows && (operation === 'DELETE' || updateAllows);
+}
+
 function releasePodLabels(component)
 {
   return {
@@ -173,6 +246,90 @@ for (const pool of poolProfiles) {
   const podPool = `oc-opencrane-${pool.name}`;
   const genericPolicy = findNetworkPolicy(`${policyPrefix}-generic`, pool.namespace, 'warm-runtime');
   const claimedPolicy = findNetworkPolicy(`${policyPrefix}-claimed`, pool.namespace, 'warm-runtime');
+  const admissionPolicy = findAdmissionPolicy(`-${pool.name}-warm`, pool.namespace);
+  const admissionPolicyName = admissionPolicy.metadata.name;
+
+  assert.equal(admissionPolicy.spec?.failurePolicy, 'Fail');
+  assert.equal(admissionPolicy.spec?.matchConditions, undefined);
+  assert.equal(admissionPolicy.spec?.matchConstraints?.matchPolicy, 'Exact');
+  assert.deepStrictEqual(admissionPolicy.spec?.matchConstraints?.resourceRules, [{
+    apiGroups: [''],
+    apiVersions: ['v1'],
+    operations: ['UPDATE', 'DELETE'],
+    resources: ['pods'],
+    scope: 'Namespaced',
+  }]);
+  assert.equal(admissionPolicy.spec?.validations?.length, 3);
+  assert.equal(
+    normalizeExpression(admissionPolicy.spec.validations[0].expression),
+    normalizeExpression(`
+      (request.operation == 'UPDATE' &&
+       request.userInfo.username == "system:serviceaccount:server-ns:agent-controller") ||
+      (request.operation == 'DELETE' &&
+       (request.userInfo.username == "system:serviceaccount:server-ns:agent-controller" ||
+        (request.userInfo.username == 'system:serviceaccount:kube-system:replicaset-controller' &&
+         oldObject.metadata.labels['opencrane.ai/warm-runtime-profile'] == "generic")))
+    `),
+    `ValidatingAdmissionPolicy/${admissionPolicyName} must separate controller updates from rollout deletes`,
+  );
+  assert.equal(
+    normalizeExpression(admissionPolicy.spec.validations[1].expression),
+    normalizeExpression(`
+      oldObject.metadata.labels['opencrane.ai/warm-runtime-pool'] == "${podPool}" &&
+      oldObject.metadata.ownerReferences.size() == 1 && oldObject.metadata.ownerReferences[0].controller == true
+      && oldObject.metadata.ownerReferences[0].blockOwnerDeletion == true
+      && oldObject.metadata.ownerReferences[0].apiVersion == 'apps/v1'
+      && oldObject.metadata.ownerReferences[0].kind == 'ReplicaSet'
+      && 'pod-template-hash' in oldObject.metadata.labels
+      && oldObject.metadata.ownerReferences[0].name == "${podPool}-" + oldObject.metadata.labels['pod-template-hash']
+    `),
+    `ValidatingAdmissionPolicy/${admissionPolicyName} must fence deletes to the fixed Deployment ReplicaSet`,
+  );
+  assert.equal(
+    normalizeExpression(admissionPolicy.spec.validations[2].expression),
+    normalizeExpression(`
+      request.operation == 'DELETE' ||
+      (object.metadata.uid == oldObject.metadata.uid &&
+       object.metadata.name == oldObject.metadata.name &&
+       object.metadata.namespace == oldObject.metadata.namespace &&
+       object.metadata.annotations == oldObject.metadata.annotations &&
+       object.metadata.ownerReferences == oldObject.metadata.ownerReferences &&
+       object.spec == oldObject.spec && object.status == oldObject.status &&
+       oldObject.metadata.labels['opencrane.ai/warm-runtime-profile'] == "generic" &&
+       object.metadata.labels['opencrane.ai/warm-runtime-profile'] == "${pool.claimedProfile}" &&
+       object.metadata.labels.all(key, key == 'opencrane.ai/warm-runtime-profile' || object.metadata.labels[key] == oldObject.metadata.labels[key]) &&
+       oldObject.metadata.labels.all(key, key == 'opencrane.ai/warm-runtime-profile' || object.metadata.labels[key] == oldObject.metadata.labels[key]))
+    `),
+    `ValidatingAdmissionPolicy/${admissionPolicyName} must preserve exact claim updates and delete-only rollout authority`,
+  );
+
+  const baseMutation = {
+    claimedProfile: pool.claimedProfile,
+    expectedPool: podPool,
+    operation: 'DELETE',
+    ownerName: `${podPool}-7f4b8d9c6a`,
+    poolLabel: podPool,
+    username: 'system:serviceaccount:kube-system:replicaset-controller',
+  };
+  const cases = [
+    { expected: true, input: { ...baseMutation }, label: 'ReplicaSet controller deletes a generic rollout Pod' },
+    { expected: false, input: { ...baseMutation, oldProfile: pool.claimedProfile }, label: 'ReplicaSet controller cannot delete a claimed Pod' },
+    { expected: true, input: { ...baseMutation, oldProfile: pool.claimedProfile, username: 'system:serviceaccount:server-ns:agent-controller' }, label: 'agent controller deletes a claimed Pod' },
+    { expected: false, input: { ...baseMutation, username: 'system:serviceaccount:kube-system:default' }, label: 'foreign identity cannot delete a warm Pod' },
+    { expected: false, input: { ...baseMutation, poolLabel: 'another-pool' }, label: 'wrong pool label is denied' },
+    { expected: false, input: { ...baseMutation, ownerKind: 'Job' }, label: 'wrong owner kind is denied' },
+    { expected: false, input: { ...baseMutation, ownerName: `${podPool}-wrong-hash` }, label: 'wrong owner hash is denied' },
+    { expected: true, input: { ...baseMutation, operation: 'UPDATE', username: 'system:serviceaccount:server-ns:agent-controller' }, label: 'agent controller claims a generic Pod' },
+    { expected: false, input: { ...baseMutation, operation: 'UPDATE' }, label: 'ReplicaSet controller cannot update a warm Pod' },
+    { expected: false, input: { ...baseMutation, immutableUpdate: false, operation: 'UPDATE', username: 'system:serviceaccount:server-ns:agent-controller' }, label: 'agent controller cannot combine a claim with another mutation' },
+  ];
+  for (const scenario of cases) {
+    assert.equal(
+      allowsWarmMutation(scenario.input),
+      scenario.expected,
+      `${pool.name}: ${scenario.label}`,
+    );
+  }
 
   assert.deepStrictEqual(genericPolicy.spec, {
     podSelector: {
@@ -323,4 +480,4 @@ assert.deepStrictEqual(
   'warm runtime namespaces rendered an unexpected allow policy',
 );
 
-console.log('warm runtime NetworkPolicy structure: PASS');
+console.log('warm runtime NetworkPolicy and admission structure: PASS');
