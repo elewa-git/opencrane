@@ -199,6 +199,9 @@
       "@opencrane/backend/agents/runtime/workloads/contract": [
         "./libs/backend/agents/runtime/workloads/contract/src/index.ts"
       ],
+      "@opencrane/backend/agents/runtime/workloads/controller-transport": [
+        "./libs/backend/agents/runtime/workloads/controller-transport/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/workloads/k8s-controller": [
         "./libs/backend/agents/runtime/workloads/k8s-controller/src/index.ts"
       ],
