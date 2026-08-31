@@ -109,7 +109,6 @@ source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/postgres-release.sh"
 source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
-source "$SCRIPT_DIR/retire-legacy-obot-mcp-server.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -1015,31 +1014,6 @@ wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 
 _wait_for_release_certificate || exit $?
-# Only a cluster that existed before this deploy can still hold retired Obot resources. The gate
-# used to name the 0.9.2-to-0.10.0 upgrade; pre-1.0 deploys no longer declare a source release, and
-# every retirement step below tolerates the resources already being gone.
-if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
-  FINAL_SERVER_REPOSITORY="$(jq -r '.clustertenantManager.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_CONTROLLER_REPOSITORY="$(jq -r '.agentController.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_SCANNER_REPOSITORY="$(jq -r '.artifactScanner.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_RUNTIME_REPOSITORY="$(jq -r '.agentController.runtimeProfile.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  if [[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]; then
-    err "The final release values do not identify every replacement image repository, so the retired Obot server remains in place."
-    exit 1
-  fi
-  FINAL_PERSONAL_RUNTIME_NAMESPACE="$(jq -r '.agentController.runtimeNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_MANAGED_RUNTIME_NAMESPACE="$(jq -r '.agentController.warmRuntime.managedNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_PERSONAL_RUNTIME_NAMESPACE="${FINAL_PERSONAL_RUNTIME_NAMESPACE:-${RELEASE}-runtime}"
-  FINAL_MANAGED_RUNTIME_NAMESPACE="${FINAL_MANAGED_RUNTIME_NAMESPACE:-${RELEASE}-managed-runtime}"
-  verify_legacy_obot_replacement_ready "$NAMESPACE" "$RELEASE" "$TIMEOUT" \
-    "${FINAL_SERVER_REPOSITORY}:${CP_TAG}" \
-    "${FINAL_CONTROLLER_REPOSITORY}@${AGENT_CONTROLLER_IMAGE_DIGEST}" \
-    "${FINAL_SCANNER_REPOSITORY}@${ARTIFACT_SCANNER_IMAGE_DIGEST}" \
-    "${FINAL_RUNTIME_REPOSITORY}@${AGENT_RUNTIME_IMAGE_DIGEST}" \
-    "$FINAL_SCANNER_NAMESPACE" "$FINAL_PERSONAL_RUNTIME_NAMESPACE" "$FINAL_MANAGED_RUNTIME_NAMESPACE" || exit $?
-  retire_legacy_obot_mcp_server_resources "$NAMESPACE" "$TIMEOUT" || exit $?
-  retire_legacy_obot_database_custody "$NAMESPACE" "$RELEASE" "$TIMEOUT" || exit $?
-fi
 _post_deploy_verify || exit $?
 
 log "Done. OpenCrane is installed in namespace '$NAMESPACE'."

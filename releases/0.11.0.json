@@ -16,13 +16,13 @@
     "artifact-service": { "root": "apps/artifact-service", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "channel-proxy": { "root": "apps/channel-proxy", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "cognee": { "root": "apps/_infra/cognee", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
-    "deploy-k8s": { "root": "apps/_infra/deploy-k8s", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
+    "deploy-k8s": { "root": "apps/_infra/deploy-k8s", "adaptedVersion": "0.11.0", "chartVersion": "0.11.0", "chartAppVersion": "0.11.0" },
     "litellm": { "root": "apps/_infra/litellm", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "mcp-executor": { "root": "apps/mcp-executor", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "memory-gateway": { "root": "apps/memory-gateway", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "opencrane": { "root": "apps/opencrane", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "opencrane-ui": { "root": "apps/opencrane-ui", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
-    "postgres": { "root": "apps/postgres", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "externalAppVersion": "17" },
+    "postgres": { "root": "apps/postgres", "adaptedVersion": "0.11.0", "chartVersion": "0.11.0", "externalAppVersion": "17" },
     "skill-authoring": { "root": "apps/skill-authoring", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" }
   }
 }
