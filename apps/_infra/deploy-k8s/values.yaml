@@ -457,9 +457,9 @@ clustertenantManager:
   firstUser:
     email: ""
     clusterTenant: ""
-  # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and starts
-  # without a verification-key mount. It deliberately denies run admission until a local issuer
-  # produces signed revisions; it never treats an unsigned OIDC session as membership.
+  # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and verifies
+  # local Ed25519-signed membership revisions. It still denies run admission until an operator has
+  # published a signed revision; it never treats an unsigned OIDC session as membership.
   membership:
     mode: standalone
     maximumStalenessMs: 300000
@@ -469,6 +469,12 @@ clustertenantManager:
     standalone:
       invitationSigningExistingSecret: opencrane-invitation-signing
       invitationSigningKeyKey: key
+      # -- Dedicated Ed25519 key for locally signed, durable membership revisions. It never shares
+      # invitation HMAC material and is mounted only into the control-plane server.
+      membershipSigningExistingSecret: opencrane-standalone-membership-signing
+      membershipSigningKeyKey: private-key.pem
+      issuerId: opencrane-standalone
+      issuerKeyId: local-ed25519-1
       # -- An empty value derives https://<control-plane-host> from the ingress contract.
       publicBaseUrl: ""
       invitationTtlSeconds: 604800

@@ -55,12 +55,21 @@ grep -Fq '              value: "standalone"' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_INVITATION_SIGNING_KEY_PATH' <<<"$server_manifest"
 grep -Fq '              value: /var/run/opencrane/invitation-signing/key' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_MEMBERSHIP_ISSUER_ID' <<<"$server_manifest"
+grep -Fq '              value: "opencrane-standalone"' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_MEMBERSHIP_KEY_ID' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_MEMBERSHIP_PRIVATE_KEY_FILE' <<<"$server_manifest"
+grep -Fq '              value: /var/run/opencrane/standalone-membership/private-key.pem' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_PUBLIC_BASE_URL' <<<"$server_manifest"
 grep -Fq '            - name: invitation-signing-key' <<<"$server_manifest"
 grep -Fq '              mountPath: /var/run/opencrane/invitation-signing' <<<"$server_manifest"
+grep -Fq '            - name: standalone-membership-signing-key' <<<"$server_manifest"
+grep -Fq '              mountPath: /var/run/opencrane/standalone-membership' <<<"$server_manifest"
 grep -Fq '        - name: invitation-signing-key' <<<"$server_manifest"
 grep -Fq '            secretName: "opencrane-invitation-signing"' <<<"$server_manifest"
-if grep -Eq 'OPENCRANE_MEMBERSHIP_(ISSUER_ID|KEY_ID|PUBLIC_KEY_FILE)|membership-verification-key|fleet-membership' <<<"$server_manifest"; then
+grep -Fq '        - name: standalone-membership-signing-key' <<<"$server_manifest"
+grep -Fq '            secretName: "opencrane-standalone-membership-signing"' <<<"$server_manifest"
+if grep -Eq 'OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE|membership-verification-key|fleet-membership' <<<"$server_manifest"; then
   echo "standalone server renders Fleet membership trust material" >&2
   exit 1
 fi
