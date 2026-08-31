@@ -1,4 +1,9 @@
-{{/* Render two fixed warm pools whose Pods are claimed once and replaced after use. */}}
+{{/*
+This template renders the personal and managed warm pools that the controller claims once.
+Admission permits only the generic-to-claimed label change, and NetworkPolicy uses that label to
+switch reachability before the Deployment replaces the Pod after use.
+Called by opencrane.agentController.resources.
+*/}}
 {{- define "opencrane.agentController.warmRuntimeResources" -}}
 {{- $warm := .Values.agentController.warmRuntime -}}
 {{- $replicas := int $warm.replicas -}}
@@ -6,7 +11,7 @@
 {{- fail "agentController.warmRuntime.replicas must be between 2 and 5" -}}
 {{- end -}}
 {{- $personalNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
-{{- $managedNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $warm.managedNamespace -}}
+{{- $managedNamespace := include "opencrane.agentController.managedRuntimeNamespace" . -}}
 {{- $image := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
 {{- $serverUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
 {{- $litellmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
@@ -172,74 +177,98 @@ spec:
       matchLabels:
         kubernetes.io/metadata.name: {{ $pool.namespace | quote }}
 ---
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: {{ include "opencrane.fullname" $ }}-{{ $pool.name }}-generic
   namespace: {{ $pool.namespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: warm-runtime
 spec:
-  endpointSelector:
+  podSelector:
     matchLabels:
       opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" $ }}-{{ $pool.name }}
       opencrane.ai/warm-runtime-profile: {{ $warm.genericProfile }}
+  policyTypes: ["Ingress", "Egress"]
   ingress: []
   egress:
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: kube-system
-            k8s:k8s-app: kube-dns
-      toPorts:
-        - ports:
-            - { port: "53", protocol: UDP }
-            - { port: "53", protocol: TCP }
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
-            k8s:app.kubernetes.io/component: opencrane-server
-      toPorts:
-        - ports:
-            - { port: {{ $.Values.clustertenantManager.service.internalPort | quote }}, protocol: TCP }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - { port: {{ $.Values.clustertenantManager.service.internalPort }}, protocol: TCP }
 ---
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: {{ include "opencrane.fullname" $ }}-{{ $pool.name }}-claimed
   namespace: {{ $pool.namespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: warm-runtime
 spec:
-  endpointSelector:
+  podSelector:
     matchLabels:
       opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" $ }}-{{ $pool.name }}
       opencrane.ai/warm-runtime-profile: {{ $pool.claimedProfile }}
+  policyTypes: ["Ingress", "Egress"]
   ingress:
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
-            k8s:app.kubernetes.io/component: agent-controller
-      toPorts:
-        - ports:
-            - { port: {{ $warm.bindingPort | quote }}, protocol: TCP }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: agent-controller
+      ports:
+        - { port: {{ $warm.bindingPort }}, protocol: TCP }
   egress:
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: kube-system
-            k8s:k8s-app: kube-dns
-      toPorts:
-        - ports:
-            - { port: "53", protocol: UDP }
-            - { port: "53", protocol: TCP }
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
-            k8s:app.kubernetes.io/component: opencrane-server
-      toPorts:
-        - ports:
-            - { port: {{ $.Values.clustertenantManager.service.internalPort | quote }}, protocol: TCP }
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
-            k8s:app.kubernetes.io/component: litellm
-      toPorts:
-        - ports:
-            - { port: "4000", protocol: TCP }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - { port: {{ $.Values.clustertenantManager.service.internalPort }}, protocol: TCP }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: litellm
+      ports:
+        - { port: {{ $.Values.litellm.service.port }}, protocol: TCP }
 {{- end }}
 {{- end }}

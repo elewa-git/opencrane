@@ -1,4 +1,7 @@
-{{/* Resolve and validate the namespace that contains only personal-runtime Jobs and their zero-RBAC identity. */}}
+{{/*
+This helper derives the personal warm-pool namespace and rejects the server namespace before
+the chart renders its zero-RBAC identity and network policies.
+*/}}
 {{- define "opencrane.agentController.runtimeNamespace" -}}
 {{- $runtimeNamespace := default (printf "%s-runtime" (include "opencrane.fullname" .) | trunc 63 | trimSuffix "-") .Values.agentController.runtimeNamespace -}}
 {{- if or (gt (len $runtimeNamespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $runtimeNamespace)) -}}
@@ -8,6 +11,19 @@
 {{- fail "agentController.runtimeNamespace must differ from the server release namespace" -}}
 {{- end -}}
 {{- $runtimeNamespace -}}
+{{- end }}
+
+{{/*
+This helper derives the managed warm-pool namespace once for the controller, server, and policies.
+It rejects either release-owned namespace because sharing one would collapse their trust boundaries.
+*/}}
+{{- define "opencrane.agentController.managedRuntimeNamespace" -}}
+{{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
+{{- if or (gt (len $managedRuntimeNamespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $managedRuntimeNamespace)) (eq $managedRuntimeNamespace .Release.Namespace) (eq $managedRuntimeNamespace $runtimeNamespace) -}}
+{{- fail "agentController.warmRuntime.managedNamespace must be a valid namespace distinct from the server and personal runtime namespaces" -}}
+{{- end -}}
+{{- $managedRuntimeNamespace -}}
 {{- end }}
 
 {{/* Release-unique label value used by NetworkPolicy and admission scoping without trusting a name alone. */}}
@@ -52,10 +68,7 @@
 {{- $controllerName := "agent-controller" -}}
 {{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
 {{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
-{{- if or (gt (len $managedRuntimeNamespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $managedRuntimeNamespace)) (eq $managedRuntimeNamespace .Release.Namespace) (eq $managedRuntimeNamespace $runtimeNamespace) -}}
-{{- fail "agentController.warmRuntime.managedNamespace must be a valid namespace distinct from the server and personal runtime namespaces" -}}
-{{- end -}}
+{{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . -}}
 {{- $openCraneInternalUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
 {{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/agent-runtime" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $runtimeImage := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
@@ -586,6 +599,30 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    # Readiness can reach only a Pod whose release-owned pool has already entered its fixed claimed
+    # profile. The destination policy independently admits this controller on the binding port.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $runtimeNamespace }}
+              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
+              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.personalProfile }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace }}
+              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
+              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.managedProfile }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.agentController.warmRuntime.bindingPort }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -638,8 +675,48 @@ spec:
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
 ---
+# Add claimed warm Pods to LiteLLM's app-owned ingress boundary. The base policy separately admits
+# its release-local server and Cognee callers; this rule owns only the runtime path.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrane.fullname" . }}-warm-runtime-litellm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opencrane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: litellm
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $runtimeNamespace }}
+              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
+              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.personalProfile }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace }}
+              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
+              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.managedProfile }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.litellm.service.port }}
+---
 {{- range $namespace := $runtimeNamespaces }}
-# Deny namespace traffic unless the fixed warm-runtime policy admits it.
+# Deny runtime traffic unless the Pod's generic or claimed profile admits a named path.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -653,56 +730,6 @@ spec:
   policyTypes: ["Ingress", "Egress"]
   ingress: []
   egress: []
----
-# Warm Pods can resolve the two same-silo services they use and reach nothing else.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "opencrane.fullname" $ }}-warm-runtime-egress
-  namespace: {{ $namespace }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: warm-runtime
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/component: warm-runtime
-  policyTypes: ["Egress"]
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
-          podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
-              app.kubernetes.io/component: opencrane-server
-      ports:
-        - protocol: TCP
-          port: {{ $.Values.clustertenantManager.service.internalPort }}
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
-          podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
-              app.kubernetes.io/component: litellm
-      ports:
-        - protocol: TCP
-          port: {{ $.Values.litellm.service.port }}
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
 ---
 {{- end }}
 # The MCP controller may create only the fixed two-container envelope. The uploaded image is the

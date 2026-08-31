@@ -15,6 +15,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Operators can deploy the warm runtime on standard-NetworkPolicy platforms such as GKE
+  Dataplane V2.** Portable policies avoid unsupported Cilium CRDs: generic Pods retain only DNS and
+  same-silo OpenCrane reachability, while only claimed Pods gain controller binding ingress and
+  same-silo LiteLLM egress.
+
 - **Database upgrades now run through a dedicated migration Job.** The forward 0.9.2 to 0.10.0
   path accepts the exact tagged predecessor, carries its 0.9.0 schema through the reviewed IAM
   prerequisite, lets CloudNativePG install `pg_cron` and assign its schema without sharing a
@@ -258,14 +263,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   and its dead bootstrap version marker are removed. Existing server-side rollout controls are
   unchanged pending a separate retirement or migration to real plugin deployment versions.
 
-- **The identity and mesh substrate decision has moved from Linkerd to Cilium + SPIFFE.**
-  ADR 0003 — Cilium + SPIFFE identity substrate — supersedes ADR 0001 (Linkerd). The chosen model
-  gives every silo workload a SPIFFE SVID (`spiffe://opencrane/ct/<org>/<workload>`) derived from
-  its Kubernetes ServiceAccount, and enforces the default-deny + allow-intra-silo + allow-super-admin
-  posture at L3/L4/L7 via `CiliumNetworkPolicy` keyed on cryptographic identity rather than IP
-  addresses. The portable `NetworkPolicy` floor from S2 remains as defence-in-depth underneath.
-  This is a recorded architectural decision; Cilium + SPIFFE enforcement is forward implementation
-  work (tracked in S5).
+- **Operators can enforce the same fail-closed workload topology on every qualified
+  `NetworkPolicy` cluster.** Standard Kubernetes policy is now the required isolation baseline,
+  including the exact server, controller, warm-runtime, and LiteLLM paths. Cilium-specific FQDN,
+  L7, and identity controls are optional extensions only where the exact API and enforcement
+  controller are qualified. Projected ServiceAccount tokens remain the live application
+  authentication path; SPIFFE/SPIRE is optional future work and does not replace product
+  authorization. Linkerd is no longer part of the runtime contract.
 
 ### Fixed
 

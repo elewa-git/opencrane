@@ -283,9 +283,9 @@ artifactScanner:
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
 agentController:
   enabled: false
-  # -- Dedicated namespace containing only personal-runtime Jobs, Pods, their zero-RBAC KSA, and
-  # Helm-owned runtime policies. Empty derives `<release-fullname>-runtime`. It must never equal the
-  # server release namespace.
+  # -- Dedicated namespace containing only the personal warm Deployment, Pods, their zero-RBAC KSA,
+  # and Helm-owned runtime policies. Empty derives `<release-fullname>-runtime`. It must never equal
+  # the server release namespace.
   runtimeNamespace: ""
   image:
     repository: ghcr.io/elewa-git/opencrane-agent-controller
@@ -931,8 +931,8 @@ networkPolicy:
   #    what platform pods can reach OUTBOUND. The two complement each other.
   #
   #    FQDN-BASED EGRESS: the HTTPS egress rules (rules 7, 8) allow port 443 to ANY
-  #    external destination (conservative). If your cluster runs Cilium, replace those
-  #    with CiliumNetworkPolicy objects scoped to the exact FQDNs
+  #    external destination (conservative). If your cluster serves and enforces the exact
+  #    CiliumNetworkPolicy API, replace those rules with objects scoped to the exact FQDNs
   #    (api.openai.com, api.anthropic.com, your Zitadel host, etc.).
   mainNetworkDefaultDeny:
     # -- MANDATORY under the `--multi-ct` profile (`multiCt.enabled`): the template renders

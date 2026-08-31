@@ -1,5 +1,5 @@
 {{- define "opencrane.server.deployment" -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
+{{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}

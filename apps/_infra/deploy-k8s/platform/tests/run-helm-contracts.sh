@@ -8,6 +8,7 @@ for contract in \
   bootstrap-prerequisites-render-contract.sh \
   current-chart-sources-contract.sh \
   provision-contract.sh \
+  preflight-cni-contract.sh \
   kubernetes-api-helm-args-contract.sh \
   runtime-continuation-keyring-secret-contract.sh \
   pooler-deploy-contract.sh \

@@ -31,7 +31,8 @@ workload behind a **language-neutral** `AgentRuntimeProtocol v2` ([ADR 0010](doc
 4. **Architecture:** Postgres is product authority; artifacts live behind `ArtifactStore` on PVC;
    authorization is per silo through the central durable authority and one-use ToolInvocation
    admissions; runtimes receive no
-   Kubernetes mutation RBAC; Cilium/default-deny enforces workload isolation; Python Jobs are
+   Kubernetes mutation RBAC; a NetworkPolicy-enforcing CNI and default-deny policies enforce
+   workload isolation; Python Jobs are
    isolated; controller and channel-proxy trust boundaries are separate apps; legacy CRDs and
    OpenClaw authorities disappear.
 
@@ -86,7 +87,7 @@ Build the target Postgres models for AgentService/Revision, Conversation/Message
 conditional AgentRun/RunEvent, Approval, Persona, Artifact, SkillRevision, audit, and membership
 projection. Build the authorization facade,
 central product grants, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
-Cognee integration, OCI-backed MCP execution, default-deny Cilium profiles, workload identities, and deterministic creation
+Cognee integration, OCI-backed MCP execution, default-deny network profiles, workload identities, and deterministic creation
 of fresh application stores and credentials. Every durable store uses an expandable mounted volume;
 agent-runtime storage is mounted scratch and never the long-term home for user data.
 
@@ -250,6 +251,15 @@ PostgreSQL, pooler, and dynamic MCP workload is Ready/Running. The superseded `t
 Zitadel callback/origin/logout entries were retired, then its four legacy namespaces were deleted
 through a reviewed, UID- and full-inventory-bound app-owned retirement path. The one-time legacy
 script was removed after its evidence was recorded in the deploy ledger.
+
+**Live 0.10 qualification update (2026-08-31):** testv4 proved the repaired central migration and
+ordinary-scheduled PostgreSQL privileges path through revision 73. The following application render
+then stopped before apply because the warm-runtime chart required four `CiliumNetworkPolicy`
+resources that GKE Dataplane V2 does not expose. Those rules use only namespace labels, Pod labels,
+and ports, so the 0.10 candidate replaces them with profile-specific standard `NetworkPolicy`
+resources: generic Pods retain only DNS and OpenCrane egress, while claimed Pods add the fixed
+controller ingress and same-silo LiteLLM path. The prior application revision remained installed;
+the portable-policy candidate requires a fresh exact-SHA qualification and deployment.
 
 Repository train `0.8.0` also replaces the earlier fresh-database-only decision with explicit
 version-to-version authority. Every Nx application records the last root train that adapted its

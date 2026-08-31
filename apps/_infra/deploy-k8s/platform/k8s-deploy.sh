@@ -95,6 +95,7 @@ source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
 source "$SCRIPT_DIR/qualified-release-image-policy.sh"
+source "$SCRIPT_DIR/network-policy-cni.sh"
 source "$SCRIPT_DIR/cluster-tenant-crd-policy.sh"
 source "$SCRIPT_DIR/dns-authority.sh"
 COGNEE_IMAGE_POLICY="$SCRIPT_DIR/../../cognee/deploy/image-policy.sh"
@@ -356,10 +357,8 @@ _resolve_release_images
 resolve_qualified_workflow_image_digests || exit $?
 preflight_qualified_release_tag_images || exit $?
 
-# --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
-# check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
-# so the operator fixes the cluster ONCE rather than chasing one half-broken install at a
-# time. Read-only against cloud + cluster (never mutates).
+# --preflight runs before any cluster mutation and accumulates every failure in PF_FAILS, so the
+# operator can repair the environment once. It reads cloud and cluster state but never mutates it.
 _run_preflight() {
   local PF_FAILS=()
   log "Preflight: validating the target environment (no cluster changes will be made)…"
@@ -414,11 +413,11 @@ _run_preflight() {
   #    --multi-ct (cross-tenant isolation is mandatory there, so a no-op CNI is a security
   #    hole, not a warning); advisory (warn-and-continue) for a single-CT install where a
   #    non-enforcing CNI only weakens defence-in-depth on a one-org box.
-  if ! kubectl get ds -n kube-system -o name 2>/dev/null | grep -qiE "calico|cilium|weave|antrea|kube-router"; then
+  if ! kubectl get ds -n kube-system -o name 2>/dev/null | _network_policy_enforcing_cni_detected; then
     if [[ "$MULTI_CT" == "1" ]]; then
-      PF_FAILS+=("No NetworkPolicy-enforcing CNI detected (looked for calico/cilium/weave/antrea/kube-router in kube-system). Under --multi-ct the platform's NetworkPolicy isolation is MANDATORY and would be a NO-OP on this CNI — cross-tenant traffic would not be denied. Install an enforcing CNI (GKE: enable Dataplane V2 / network-policy).")
+      PF_FAILS+=("No NetworkPolicy-enforcing CNI detected (looked for $(_network_policy_enforcing_cni_display_names) in kube-system). Under --multi-ct the platform's NetworkPolicy isolation is MANDATORY and would be a NO-OP on this CNI — cross-tenant traffic would not be denied. Install an enforcing CNI (GKE: enable Dataplane V2 / network-policy).")
     else
-      warn "Preflight: no NetworkPolicy-enforcing CNI detected (calico/cilium/weave/antrea/kube-router). NetworkPolicy isolation will be a no-op; acceptable for a single-tenant box but re-run with --multi-ct if this hosts multiple tenants."
+      warn "Preflight: no NetworkPolicy-enforcing CNI detected ($(_network_policy_enforcing_cni_display_names)). NetworkPolicy isolation will be a no-op; acceptable for a single-tenant box but re-run with --multi-ct if this hosts multiple tenants."
     fi
   fi
 

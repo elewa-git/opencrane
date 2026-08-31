@@ -69,9 +69,9 @@
     },
     "litellm": {
       "root": "apps/_infra/litellm",
-      "adaptedVersion": "0.8.0",
-      "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "adaptedVersion": "0.10.0",
+      "chartVersion": "0.10.0",
+      "chartAppVersion": "0.10.0"
     },
     "mcp-executor": {
       "root": "apps/mcp-executor",

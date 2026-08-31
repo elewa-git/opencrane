@@ -317,3 +317,18 @@ Full run reports belong in the corresponding pull request or issue.
 - friction: preflight accepted a selector that required unavailable dedicated capacity, costing two
   full hook deadlines after the database migration had already succeeded.
 - lesson: fixed by PR #752.
+
+## 2026-08-31 · dev · testv4 central-authorization network-policy gate · f773912c7baadbf8b57ec8f8f8e957c5d89d72f8 · FAILED
+
+- findings: chart: PostgreSQL revision 73 and its selector-free two-container privileges hook
+  completed, but the application render required four `cilium.io/v2` `CiliumNetworkPolicy`
+  resources that GKE Dataplane V2 does not expose. Helm rejected the unsupported resources before
+  applying application revision 35, so revision 34 remained installed. data: Prisma has no
+  unfinished migration, the five retired tables remain absent, and the retired invocation and
+  dependent-record counts remain zero.
+- friction: live GKE evidence confirmed standard `NetworkPolicy` enforcement, while preflight
+  recognized neither the `anetd` DaemonSet nor a rendered custom policy API that the target cluster
+  cannot serve.
+- lesson: express the warm-runtime label-and-port rules through portable
+  `networking.k8s.io/v1` `NetworkPolicy`; installing a CRD without its enforcement controller would
+  only hide the incompatibility.

@@ -5,6 +5,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 source "$ROOT/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 ARTIFACT_CONFORMANCE="$ROOT/apps/agent-controller/tests/artifact-admission-conformance.sh"
 IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
+WARM_POLICY_ASSERTIONS="$ROOT/apps/agent-controller/tests/warm-runtime-network-policy-assertions.mjs"
 MANIFEST="$(mktemp)"
 DISABLED="$(mktemp)"
 ARTIFACT_DISABLED="$(mktemp)"
@@ -20,10 +21,8 @@ ADMISSION="$(mktemp)"
 SKILL_URL_OVERRIDE="$(mktemp)"
 SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
-RUNTIME_DENY="$(mktemp)"
-RUNTIME_EGRESS="$(mktemp)"
 prepare_current_chart_sources
-trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ARTIFACT_DISABLED" "$ARTIFACT_ROLE" "$ARTIFACT_BINDING" "$ARTIFACT_ADMISSION" "$ARTIFACT_ADMISSION_BINDING" "$RUNTIME_NAMESPACE" "$MANAGED_RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ARTIFACT_DISABLED" "$ARTIFACT_ROLE" "$ARTIFACT_BINDING" "$ARTIFACT_ADMISSION" "$ARTIFACT_ADMISSION_BINDING" "$RUNTIME_NAMESPACE" "$MANAGED_RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY"' EXIT
 CHART_ROOT="$(current_chart_sources_dir)"
 
 render_enabled() {
@@ -33,7 +32,7 @@ render_enabled() {
     --set-string clustertenantManager.database.existingSecret=opencrane-app-db \
     --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
     --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
-    --set-string agentController.warmRuntime.managedNamespace=oc-opencrane-managed-runtime \
+    --set-string agentController.warmRuntime.managedNamespace=oc-managed-warm-custom \
     --set-string agentController.skillAuthoringValidation.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
     --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --set artifactPreprocessor.enabled=true \
@@ -56,14 +55,12 @@ awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-co
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ && $0 ~ /app.kubernetes.io\/component: artifact-preprocessor/ { print $0 }' "$MANIFEST" > "$ARTIFACT_ADMISSION"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicyBinding\n/ && $0 ~ /app.kubernetes.io\/component: artifact-preprocessor/ { print $0 }' "$MANIFEST" > "$ARTIFACT_ADMISSION_BINDING"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencrane-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_NAMESPACE"
-awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencrane-managed-runtime\n/ { print $0 }' "$MANIFEST" > "$MANAGED_RUNTIME_NAMESPACE"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-managed-warm-custom\n/ { print $0 }' "$MANIFEST" > "$MANAGED_RUNTIME_NAMESPACE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: oc-opencrane-warm-runtime\n/ && $0 ~ /\n  namespace: oc-opencrane-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_QUOTA"
-awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: oc-opencrane-warm-runtime\n/ && $0 ~ /\n  namespace: oc-opencrane-managed-runtime\n/ { print $0 }' "$MANIFEST" > "$MANAGED_RUNTIME_QUOTA"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: oc-opencrane-warm-runtime\n/ && $0 ~ /\n  namespace: oc-managed-warm-custom\n/ { print $0 }' "$MANIFEST" > "$MANAGED_RUNTIME_QUOTA"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ { print $0 }' "$MANIFEST" > "$ADMISSION"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-opencrane-server\n/ { print $0 }' "$MANIFEST" > "$SERVER_POLICY"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-agent-controller\n/ { print $0 }' "$MANIFEST" > "$CONTROLLER_POLICY"
-awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-warm-runtime-default-deny\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_DENY"
-awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-warm-runtime-egress\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_EGRESS"
 
 # Two deterministic restricted namespaces own only the fixed warm pools.
 test -s "$RUNTIME_NAMESPACE"
@@ -155,9 +152,10 @@ grep -Fq 'kubernetes.io/metadata.name: "oc-opencrane-artifact-preprocessing"' "$
 
 # The controller receives both warm pools in one fixed map.
 grep -A1 -F 'name: AGENT_CONTROLLER_WARM_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-runtime\"' >/dev/null
-grep -A1 -F 'name: AGENT_CONTROLLER_WARM_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-managed-runtime\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_WARM_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-managed-warm-custom\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_WARM_PROFILES_JSON' "$MANIFEST" | grep -F '\"deploymentName\":\"oc-opencrane-personal-warm\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_WARM_PROFILES_JSON' "$MANIFEST" | grep -F '\"deploymentName\":\"oc-opencrane-managed-warm\"' >/dev/null
+grep -A1 -F 'name: AGENT_RUNTIME_MANAGED_NAMESPACE' "$MANIFEST" | grep -F 'value: "oc-managed-warm-custom"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"namespace\":\"opencrane-mcp-executors\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"companionImage\":\"ghcr.io/elewa-git/opencrane-mcp-executor@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-artifact-preprocessing\"' >/dev/null
@@ -186,29 +184,20 @@ if grep -Fq 'AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS' "$MANIFEST"; then
   exit 1
 fi
 
-# Helm, not the controller, owns the namespace-wide network boundary.
+# Helm keeps the namespace default-deny and selects the network paths for each warm profile.
 test -s "$CONTROLLER_POLICY"
 grep -Fq 'policyTypes: ["Ingress", "Egress"]' "$CONTROLLER_POLICY"
 grep -Fq 'ingress: []' "$CONTROLLER_POLICY"
 grep -Fq 'cnpg.io/poolerName: oc-postgres-pooler' "$CONTROLLER_POLICY"
 grep -A3 -F 'cnpg.io/poolerName: oc-postgres-pooler' "$CONTROLLER_POLICY" | grep -F 'port: 5432' >/dev/null
-test -s "$RUNTIME_DENY"
-grep -Fq 'policyTypes: ["Ingress", "Egress"]' "$RUNTIME_DENY"
-grep -Fq 'ingress: []' "$RUNTIME_DENY"
-grep -Fq 'egress: []' "$RUNTIME_DENY"
-test -s "$RUNTIME_EGRESS"
-grep -Fq 'policyTypes: ["Egress"]' "$RUNTIME_EGRESS"
-if grep -Fq 'ingress:' "$RUNTIME_EGRESS"; then
-  echo "runtime egress policy redundantly owns ingress" >&2
+if grep -Eq 'apiVersion: cilium.io/v2|kind: CiliumNetworkPolicy' "$MANIFEST"; then
+  echo "warm runtime render retained Cilium-only network policy resources" >&2
   exit 1
 fi
-grep -A20 -F 'name: oc-opencrane-warm-runtime-egress' "$MANIFEST" | grep -F 'namespace: oc-opencrane-runtime' >/dev/null
-grep -A20 -F 'name: oc-opencrane-warm-runtime-egress' "$MANIFEST" | grep -F 'namespace: oc-opencrane-managed-runtime' >/dev/null
+node "$WARM_POLICY_ASSERTIONS" "$MANIFEST"
 grep -Fq 'opencrane.ai/runtime-release:' "$MANIFEST"
 grep -Fq 'kubernetes.io/metadata.name: server-ns' "$MANIFEST"
 grep -Fq 'kubernetes.io/metadata.name: kube-system' "$MANIFEST"
-grep -Fq 'app.kubernetes.io/component: litellm' "$RUNTIME_EGRESS"
-grep -Fq 'port: 4000' "$RUNTIME_EGRESS"
 
 # Disabling only artifact preprocessing removes its controller profile and cross-namespace RBAC
 # without disabling the controller's other workflow and reconciliation responsibilities.
@@ -217,10 +206,6 @@ if grep -Eq 'name: agent-controller-artifact-preprocessor|AGENT_CONTROLLER_ARTIF
   exit 1
 fi
 # Provider actions execute in the server, so the runtime floor must not admit direct Obot traffic.
-if grep -Fq 'app.kubernetes.io/component: mcp-gateway' "$RUNTIME_EGRESS"; then
-  echo "runtime egress must not reach the MCP gateway" >&2
-  exit 1
-fi
 test -s "$SERVER_POLICY"
 grep -Fq 'cidr: "10.43.0.1/32"' "$SERVER_POLICY"
 grep -A3 -F 'cidr: "10.43.0.1/32"' "$SERVER_POLICY" | grep -F 'port: 443' >/dev/null
@@ -337,7 +322,7 @@ grep -Fq 'cidr: "172.18.0.2/32"' "$DISABLED"
 grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -Fq 'port: 6443'
 # The exact runtime namespace names are anchored so workload-class resources do not count as
 # controller residue when the controller is disabled.
-if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime$|name: oc-opencrane-managed-runtime$|name: oc-opencrane-warm-runtime|opencrane.ai/runtime-release|AGENT_CONTROLLER_WARM_PROFILES_JSON' "$DISABLED"; then
+if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime$|name: oc-opencrane-managed-runtime$|name: oc-opencrane-warm-runtime|name: oc-opencrane-(personal|managed)-warm-(generic|claimed)$|opencrane.ai/runtime-release|AGENT_CONTROLLER_WARM_PROFILES_JSON' "$DISABLED"; then
   echo "disabled agent-controller rendered runtime authority" >&2
   exit 1
 fi

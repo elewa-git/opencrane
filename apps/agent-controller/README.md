@@ -119,8 +119,10 @@ standard output, and OpenTelemetry spans cover every HTTP and Kubernetes input/o
 the chart requires immutable SHA-256 digests for both the controller and runtime images. Helm derives
 one personal `<release>-runtime` namespace and one managed `<release>-managed-runtime` namespace by
 default. This chart owns both namespaces, their warm Deployments, quotas, default-deny networking,
-fixed OpenCrane, same-silo LiteLLM and DNS egress, and the admission rule that permits only the exact
-generic-to-claimed profile change or discard. Enabling this controller requires Kubernetes
+and the admission rule that permits only the exact generic-to-claimed profile change or discard.
+Generic Pods may reach only DNS and same-silo OpenCrane. Claimed Pods additionally admit the
+controller on the fixed binding port and may reach same-silo LiteLLM. Enabling this controller
+requires Kubernetes
 1.30 or newer, where that admission API is stable, and the release-local LiteLLM mode: a shared
 LiteLLM endpoint is rejected because this runtime boundary deliberately permits only the same-silo
 Service and port.

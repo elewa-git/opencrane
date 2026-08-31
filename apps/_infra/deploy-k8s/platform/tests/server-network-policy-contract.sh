@@ -102,8 +102,16 @@ grep -Fq '              app.kubernetes.io/component: litellm' <<<"$server_policy
 grep -Fq '          port: 4000' <<<"$server_policy"
 grep -Fq '              app.kubernetes.io/component: memory-gateway' <<<"$server_policy"
 grep -Fq '          port: 8080' <<<"$server_policy"
+grep -Fq '              opencrane.ai/runtime-release:' <<<"$runtime_server_policy"
+grep -Fq '              app.kubernetes.io/component: warm-runtime' <<<"$runtime_server_policy"
+grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-runtime"' <<<"$runtime_server_policy"
 grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
-grep -Fq '              app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"
+grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-personal-warm' <<<"$runtime_server_policy"
+grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-managed-warm' <<<"$runtime_server_policy"
+if grep -Fq 'app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"; then
+  echo "opencrane-server policy retained the retired per-Job runtime selector" >&2
+  exit 1
+fi
 grep -A1 -F 'name: MCP_CONTROLLER_CLAIM_LEASE_SECONDS' <<<"$lease_rendered" | grep -F 'value: "47"' >/dev/null
 grep -A1 -F 'name: MCP_COMPANION_CLAIM_LEASE_SECONDS' <<<"$lease_rendered" | grep -F 'value: "181"' >/dev/null
 grep -Fq 'value: "http://acme-opencrane-otel-collector.default.svc:4318"' <<<"$otel_rendered"
