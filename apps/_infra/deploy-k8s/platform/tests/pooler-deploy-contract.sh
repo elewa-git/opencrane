@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 CONNECTION_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/postgres-connection.sh"
 KUBERNETES_API_ARGS="$ROOT_DIR/apps/_infra/deploy-k8s/platform/kubernetes-api-helm-args.sh"
+POSTGRES_RELEASE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/postgres-release.sh"
 
 grep -Fq 'POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"' "$DEPLOY_SCRIPT"
 if grep -Fq 'POSTGRES_POOLER_CLIENT_HOST=' "$DEPLOY_SCRIPT"; then
@@ -26,5 +27,6 @@ grep -Fq '$values_prefix.kubernetesApiServerCidrs[0]' "$KUBERNETES_API_ARGS"
 grep -Fq '$values_prefix.kubernetesApiServerEndpointCidrs[$endpoint_index]' "$KUBERNETES_API_ARGS"
 grep -Fq '$values_prefix.kubernetesApiServerEndpointPort=$endpoint_port' "$KUBERNETES_API_ARGS"
 grep -Fq '"${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}"' "$DEPLOY_SCRIPT"
+grep -Fq '{"matchLabels":{"app.kubernetes.io/component":"agent-controller"}}' "$POSTGRES_RELEASE"
 
 echo "pooler deploy contract: PASS"
