@@ -1,6 +1,6 @@
-import { BACKWARDS, END, FORWARDS, NO_STREAM, START, STREAM_STATE, KurrentDBClient, jsonEvent, type EventType, type ResolvedEvent, type StreamStateCheck } from "@kurrent/kurrentdb-client";
+import { BACKWARDS, END, FORWARDS, NO_STREAM, PARK, RETRY, START, STREAM_STATE, KurrentDBClient, jsonEvent, type EventType, type PersistentSubscriptionToStream, type PersistentSubscriptionToStreamResolvedEvent, type ResolvedEvent, type StreamStateCheck } from "@kurrent/kurrentdb-client";
 
-import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAppendReceipt, type HistoryAtomicAppend, type HistoryEvent, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore, type HistoryStreamHead, type HistorySubscription } from "./history-store.types";
+import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAppendReceipt, type HistoryAtomicAppend, type HistoryEvent, type HistoryPersistentRecordedEvent, type HistoryPersistentSubscription, type HistoryPersistentSubscriptionRequest, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore, type HistoryStreamHead, type HistorySubscription } from "./history-store.types";
 
 /** Adapts the official KurrentDB client to OpenCrane's stream-scoped history port. */
 export class _KurrentHistoryStore implements HistoryStore
@@ -54,6 +54,26 @@ export class _KurrentHistoryStore implements HistoryStore
 		const subscription = this.client.subscribeToStream(request.streamName, { fromRevision: request.fromRevision ?? START });
 		return { events: _MapSubscription(subscription), close: subscription.unsubscribe.bind(subscription) };
 	}
+
+	/**
+	 * Connects to a pre-provisioned KurrentDB consumer group with explicit delivery actions.
+	 *
+	 * This adapter does not create groups. It maps each yielded event to the newest opaque KurrentDB
+	 * delivery handle so acknowledge, retry, and park act on the delivery that KurrentDB still holds.
+	 * @see https://github.com/kurrent-io/KurrentDB-Client-NodeJS/tree/v1.3.1 — the persistent-subscription client API used here.
+	 */
+	public async subscribePersistent(request: HistoryPersistentSubscriptionRequest): Promise<HistoryPersistentSubscription>
+	{
+		const subscription = this.client.subscribeToPersistentSubscriptionToStream(request.streamName, request.groupName);
+		const deliveries = new Map<string, PersistentSubscriptionToStreamResolvedEvent>();
+		return {
+			events: _MapPersistentSubscription(subscription, deliveries),
+			acknowledge: async function _Acknowledge(event): Promise<void> { await _ResolvePersistentDelivery(deliveries, event, async function _Ack(delivery) { await subscription.ack(delivery); }); },
+			retry: async function _Retry(event, reason): Promise<void> { await _ResolvePersistentDelivery(deliveries, event, async function _RetryDelivery(delivery) { await subscription.nack(RETRY, reason, delivery); }); },
+			park: async function _Park(event, reason): Promise<void> { await _ResolvePersistentDelivery(deliveries, event, async function _ParkDelivery(delivery) { await subscription.nack(PARK, reason, delivery); }); },
+			close: async function _Close(): Promise<void> { await subscription.unsubscribe(); },
+		};
+	}
 }
 
 /** Builds unique KurrentDB checks and refuses an append whose own revision is not checked. */
@@ -104,6 +124,47 @@ async function *_MapSubscription(subscription: AsyncIterable<ResolvedEvent<Event
 		if (!resolved.event)
 			continue;
 		yield _MapRecordedEvent(resolved.event);
+	}
+}
+
+/** Maps persistent deliveries while retaining each opaque client record for a later delivery action. */
+async function *_MapPersistentSubscription(subscription: PersistentSubscriptionToStream, deliveries: Map<string, PersistentSubscriptionToStreamResolvedEvent>): AsyncIterable<HistoryPersistentRecordedEvent>
+{
+	for await (const resolved of subscription)
+	{
+		if (!resolved.event)
+			continue;
+		const event = _MapRecordedEvent(resolved.event);
+		// A KurrentDB redelivery replaces the earlier opaque handle before a consumer chooses its terminal action.
+		deliveries.set(event.id, resolved);
+		yield { ...event, retryCount: resolved.retryCount };
+	}
+}
+
+/** Finds the current client delivery that a terminal action may use. */
+function _PersistentDelivery(deliveries: Map<string, PersistentSubscriptionToStreamResolvedEvent>, event: HistoryPersistentRecordedEvent): PersistentSubscriptionToStreamResolvedEvent
+{
+	const delivery = deliveries.get(event.id);
+	if (!delivery)
+		throw new Error(`KurrentDB persistent subscription does not hold delivery '${event.id}'`);
+	return delivery;
+}
+
+/** Claims one delivery before its terminal action and restores it only when that action fails. */
+async function _ResolvePersistentDelivery(deliveries: Map<string, PersistentSubscriptionToStreamResolvedEvent>, event: HistoryPersistentRecordedEvent, resolve: (delivery: PersistentSubscriptionToStreamResolvedEvent) => Promise<void>): Promise<void>
+{
+	const delivery = _PersistentDelivery(deliveries, event);
+	if (deliveries.get(event.id) === delivery)
+		deliveries.delete(event.id);
+	try
+	{
+		await resolve(delivery);
+	}
+	catch (error)
+	{
+		if (!deliveries.has(event.id))
+			deliveries.set(event.id, delivery);
+		throw error;
 	}
 }
 

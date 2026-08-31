@@ -85,6 +85,34 @@ export interface HistoryReadRequest
 	readonly fromRevision?: bigint;
 }
 
+/**
+ * Selects a KurrentDB persistent consumer group for one ordered history stream.
+ *
+ * The adapter opens this group but does not create it, so deployment or a controller must provision
+ * the named group before a consumer subscribes. Keeping the group name explicit prevents one
+ * listener from accidentally sharing another listener's acknowledgement checkpoint.
+ */
+export interface HistoryPersistentSubscriptionRequest
+{
+	/** Names the one stream whose deliveries this consumer group receives. */
+	readonly streamName: string;
+	/** Names the already-provisioned durable consumer group. */
+	readonly groupName: string;
+}
+
+/**
+ * Extends a recorded event with KurrentDB's persistent-delivery retry count.
+ *
+ * A nonzero count means KurrentDB has delivered the event to this consumer group before. It does
+ * not identify a specific client delivery handle, which remains inside the adapter for the next
+ * acknowledgement, retry, or park action.
+ */
+export interface HistoryPersistentRecordedEvent extends HistoryRecordedEvent
+{
+	/** Reports how often KurrentDB has redelivered this event to the consumer group. */
+	readonly retryCount: number;
+}
+
 /** Gives callers a narrow history port without PostgreSQL or global-ledger fallback. */
 export interface HistoryStore
 {
@@ -98,6 +126,16 @@ export interface HistoryStore
 	appendAtomic(command: HistoryAtomicAppend): Promise<readonly HistoryAppendReceipt[]>;
 	/** Streams new entries for one named stream and lets the caller stop the subscription. */
 	subscribe(request: HistoryReadRequest): Promise<HistorySubscription>;
+	/**
+	 * Connects to a provisioned persistent consumer group.
+	 *
+	 * The returned subscription is at-least-once: each delivery needs an explicit acknowledge, retry,
+	 * or park action. Closing the connection does not acknowledge outstanding deliveries.
+	 * @param request - Names the stream and pre-provisioned consumer group.
+	 * @returns A consumer that exposes deliveries and their terminal actions.
+	 * @throws {Error} Propagates a KurrentDB connection failure.
+	 */
+	subscribePersistent(request: HistoryPersistentSubscriptionRequest): Promise<HistoryPersistentSubscription>;
 }
 
 /** Carries one active stream subscription and its explicit cleanup action. */
@@ -106,5 +144,26 @@ export interface HistorySubscription
 	/** Iterates events delivered after the requested stream revision. */
 	readonly events: AsyncIterable<HistoryRecordedEvent>;
 	/** Stops the KurrentDB stream subscription. */
+	close(): Promise<void>;
+}
+
+/**
+ * Holds one KurrentDB persistent-consumer connection and its delivery actions.
+ *
+ * Delivery is at least once, so a caller must make handling idempotent and choose exactly one action
+ * for a currently delivered event. The adapter retains the current opaque delivery handle; a newer
+ * redelivery supersedes its earlier handle.
+ */
+export interface HistoryPersistentSubscription
+{
+	/** Iterates at-least-once deliveries from the named consumer group. */
+	readonly events: AsyncIterable<HistoryPersistentRecordedEvent>;
+	/** Confirms one currently delivered event so KurrentDB may advance the group checkpoint. */
+	acknowledge(event: HistoryPersistentRecordedEvent): Promise<void>;
+	/** Requests that KurrentDB redeliver one currently delivered event after a transient failure. */
+	retry(event: HistoryPersistentRecordedEvent, reason: string): Promise<void>;
+	/** Moves one currently delivered poison event to the consumer group's parked queue. */
+	park(event: HistoryPersistentRecordedEvent, reason: string): Promise<void>;
+	/** Closes the consumer connection without acknowledging its outstanding deliveries. */
 	close(): Promise<void>;
 }

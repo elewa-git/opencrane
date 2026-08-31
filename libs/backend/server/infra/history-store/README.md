@@ -28,9 +28,16 @@ never reads the global ledger, grants database administration, or supplies a Pos
 
 ## Public surface
 
-- `HistoryStore` defines stream reads, checked appends, atomic checked records, and subscriptions.
+- `HistoryStore` defines stream reads, checked appends, atomic checked records, transient
+  subscriptions, and acknowledged persistent subscriptions for durable consumers.
 - `_KurrentHistoryStore` adapts the official KurrentDB gRPC client to that port.
 - `HistoryExpectedRevisions` names the missing-stream condition accepted by the port.
+
+Persistent consumers name an already-provisioned KurrentDB group. The adapter opens that group but
+does not create it, so its deployment owner must provision group settings before a consumer starts.
+Each delivery is at least once: a consumer acknowledges successful work, retries a transient
+failure, parks a poison event, or closes without acknowledging outstanding work. A redelivery
+supersedes the prior opaque client handle, while consumers make their own handlers idempotent.
 
 ## Boundary
 

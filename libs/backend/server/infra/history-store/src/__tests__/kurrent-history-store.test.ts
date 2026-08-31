@@ -40,4 +40,65 @@ describe("_KurrentHistoryStore", function ()
 
 		expect(appendRecords).not.toHaveBeenCalled();
 	});
+
+	it("acknowledges, retries, and parks only a delivered persistent event", async function ()
+	{
+		const delivery = { event: { id: "8e0e2498-819f-4339-8d78-4f4c7377e20b", type: "computer.activation-requested.v1", data: { computerId: "computer-1" }, metadata: {}, streamId: "computer-computer-1", revision: 4n, created: new Date("2026-08-31T00:00:00.000Z") }, retryCount: 2 };
+		const ack = vi.fn().mockResolvedValue(undefined);
+		const nack = vi.fn().mockResolvedValue(undefined);
+		const unsubscribe = vi.fn().mockResolvedValue(undefined);
+		const subscription = { ack, nack, unsubscribe, async *[Symbol.asyncIterator]() { yield delivery; } };
+		const subscribeToPersistentSubscriptionToStream = vi.fn().mockReturnValue(subscription);
+		const store = new _KurrentHistoryStore({ subscribeToPersistentSubscriptionToStream } as unknown as KurrentDBClient);
+		const consumer = await store.subscribePersistent({ streamName: "computer-computer-1", groupName: "conversation-computer-activation" });
+		const iterator = consumer.events[Symbol.asyncIterator]();
+		const next = await iterator.next();
+		if (next.done)
+			throw new Error("persistent test delivery was not yielded");
+
+		expect(next.value).toMatchObject({ id: delivery.event.id, retryCount: 2 });
+		await consumer.retry(next.value, "transient failure");
+		expect(nack).toHaveBeenCalledWith("retry", "transient failure", delivery);
+		await expect(consumer.acknowledge(next.value)).rejects.toThrow("does not hold delivery");
+		await consumer.close();
+		expect(unsubscribe).toHaveBeenCalledOnce();
+	});
+
+	it("uses the newest opaque handle when KurrentDB redelivers an event", async function ()
+	{
+		const firstDelivery = { event: { id: "8e0e2498-819f-4339-8d78-4f4c7377e20b", type: "computer.activation-requested.v1", data: {}, metadata: {}, streamId: "computer-computer-1", revision: 4n, created: new Date("2026-08-31T00:00:00.000Z") }, retryCount: 0 };
+		const secondDelivery = { ...firstDelivery, retryCount: 1 };
+		const ack = vi.fn().mockResolvedValue(undefined);
+		const subscription = { ack, nack: vi.fn(), unsubscribe: vi.fn(), async *[Symbol.asyncIterator]() { yield firstDelivery; yield secondDelivery; } };
+		const store = new _KurrentHistoryStore({ subscribeToPersistentSubscriptionToStream: vi.fn().mockReturnValue(subscription) } as unknown as KurrentDBClient);
+		const consumer = await store.subscribePersistent({ streamName: "computer-computer-1", groupName: "conversation-computer-activation" });
+		const iterator = consumer.events[Symbol.asyncIterator]();
+		const first = await iterator.next();
+		const second = await iterator.next();
+		if (first.done || second.done)
+			throw new Error("persistent redelivery was not yielded");
+
+		await consumer.acknowledge(first.value);
+		expect(ack).toHaveBeenCalledWith(secondDelivery);
+	});
+
+	it("restores a failed terminal delivery and rejects a concurrent second action", async function ()
+	{
+		let releaseAcknowledgement: (() => void) | undefined;
+		const waitForAcknowledgement = new Promise<void>(function (resolve) { releaseAcknowledgement = resolve; });
+		const delivery = { event: { id: "8e0e2498-819f-4339-8d78-4f4c7377e20b", type: "computer.activation-requested.v1", data: {}, metadata: {}, streamId: "computer-computer-1", revision: 4n, created: new Date("2026-08-31T00:00:00.000Z") }, retryCount: 0 };
+		const ack = vi.fn().mockRejectedValueOnce(new Error("transport failure")).mockReturnValueOnce(waitForAcknowledgement);
+		const subscription = { ack, nack: vi.fn(), unsubscribe: vi.fn(), async *[Symbol.asyncIterator]() { yield delivery; } };
+		const store = new _KurrentHistoryStore({ subscribeToPersistentSubscriptionToStream: vi.fn().mockReturnValue(subscription) } as unknown as KurrentDBClient);
+		const consumer = await store.subscribePersistent({ streamName: "computer-computer-1", groupName: "conversation-computer-activation" });
+		const next = await consumer.events[Symbol.asyncIterator]().next();
+		if (next.done)
+			throw new Error("persistent delivery was not yielded");
+
+		await expect(consumer.acknowledge(next.value)).rejects.toThrow("transport failure");
+		const acknowledged = consumer.acknowledge(next.value);
+		await expect(consumer.park(next.value, "poison event")).rejects.toThrow("does not hold delivery");
+		releaseAcknowledgement?.();
+		await acknowledged;
+	});
 });
