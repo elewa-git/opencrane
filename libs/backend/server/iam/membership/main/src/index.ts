@@ -5,5 +5,7 @@ export type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetM
 export { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier";
 export { _CreateFleetMembershipEvidenceConfig } from "./fleet-membership-evidence.factory";
 export { PrismaFleetMembershipAuthorityRepository, PrismaFleetMembershipAuthorityUnitOfWork } from "./prisma-membership-authority";
+export { PrismaRuntimeMembershipEligibilityAuthority } from "./prisma-runtime-membership-eligibility";
+export type { RuntimeMembershipEligibility, RuntimeMembershipEligibilityCommand } from "./runtime-membership-eligibility.types";
 export { SignedFleetMembershipAssertionVerifier } from "./signed-membership-assertion-authority";
 export type { SignedFleetMembershipAssertionAuthority } from "./membership-authority.types";

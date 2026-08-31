@@ -5,16 +5,17 @@ import type { Logger } from "@opencrane/backend/observability";
 import type { SkillCatalogueRepository } from "./skill-catalogue.types";
 
 /**
- * The one fact this router needs about the caller: which silo they are in.
+ * The trusted identity facts this router needs for catalogue discovery.
  *
- * Nothing else is carried on purpose — the catalogue is read-only, so there is no role to check. The
- * silo is derived from the authenticated session and request host, never from anything the caller
- * sends, and it scopes every query.
+ * The silo and local Principal come from the authenticated session and request host. The central
+ * authority uses the Principal's stored direct and Group grants; request claims do not widen it.
  */
 export interface SkillCatalogueCaller
 {
 	/** Silo derived from the authenticated request host. */
 	readonly siloId: string;
+	/** Local Principal derived from the verified browser session. */
+	readonly principalId: string;
 }
 
 /**
@@ -28,7 +29,7 @@ export interface SkillCatalogueRouterDependencies
 {
 	/** Resolves the authenticated browser caller and trusted host silo. */
 	resolveCaller(request: Request): SkillCatalogueCaller | null;
-	/** Reads the bounded catalogue from the resolved silo only. */
+	/** Reads the bounded catalogue allowed for the resolved Principal. */
 	readonly catalogue: SkillCatalogueRepository;
 	/** Records unexpected catalogue persistence failures without logging skill content. */
 	readonly logger: Logger;

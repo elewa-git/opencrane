@@ -17,14 +17,14 @@ BEGIN
 END;
 $$;
 
-INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('run-event-model', 'global', 'run-event-model', 'litellm-run-event-model', 'run-event-model', clock_timestamp());
+INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('run-event-model', 'silo-run-event', 'global', 'run-event-model', 'litellm-run-event-model', 'run-event-model', clock_timestamp());
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
 VALUES ('run-event-service-principal', 'silo-run-event', 'urn:opencrane:agent-service', 'run-event-service', 'internal', clock_timestamp());
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
 VALUES ('run-event-service', 'silo-run-event', 'managed', 'Run event test', 'managed-agent', 'run-event-service-principal', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
-VALUES ('run-event-revision', 'run-event-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'run-event-model', '{}', 'user-run-event');
+INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
+VALUES ('run-event-revision', 'silo-run-event', 'run-event-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'run-event-model', '{}', 'user-run-event');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'run-event-revision';
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'run-event-revision' WHERE "id" = 'run-event-service';
 INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
@@ -64,22 +64,22 @@ SELECT pg_temp.expect_failure(
 INSERT INTO "conversation_messages" ("id", "conversation_id", "user_id", "idempotency_key", "role", "state", "source", "blocks", "completed_at")
 VALUES ('direct-message', 'direct-conversation', 'user-run-event', 'direct-message', 'user', 'completed', 'user_input', '[]', clock_timestamp());
 
-INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload")
-VALUES ('run-event-conversation', 'run-event-run', 1, 'run.accepted', '{}');
+INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload")
+VALUES ('run-event-conversation', 'run-event-run', 1, 1, 'run.accepted', '{}');
 
 SELECT pg_temp.expect_failure(
     'run events cannot skip a sequence',
-    $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 3, 'run.started', '{}')$statement$,
+    $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 1, 3, 'run.started', '{}')$statement$,
     'RunEvent sequence must be contiguous'
 );
 SELECT pg_temp.expect_failure(
     'child completion events require a canonical delivery',
-    $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 2, 'child.run.completed', '{"childRunId":"forged-child"}')$statement$,
+    $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 1, 2, 'child.run.completed', '{"childRunId":"forged-child","childAttempt":1}')$statement$,
     'child RunEvent requires child completion delivery authority'
 );
 SELECT pg_temp.expect_failure(
     'completed events require a completed run',
-    $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 2, 'run.completed', '{}')$statement$,
+    $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 1, 2, 'run.completed', '{}')$statement$,
     'run.completed event requires Completed AgentRun authority'
 );
 

@@ -11,6 +11,7 @@ export { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority,
 export { __UploadArtifact } from "./artifact-upload";
 export { __CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue.router";
 export { _CreatePersonalArtifactCatalogueRouter } from "./prisma-personal-artifact-catalogue.router";
+export { PrismaPersonalArtifactCatalogueUnitOfWork } from "./prisma-personal-artifact-catalogue-unit-of-work";
 export { _PersonalArtifactsOpenapiPaths } from "./openapi";
 export type { ArtifactAuthorityRepository, ArtifactStorePromotionReceipt, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types";
 export type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputBroker, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceBroker, ArtifactPreprocessSourceLeaseIssuer, ArtifactPreprocessSourceRead, ArtifactPreprocessorRouterDependencies, ArtifactPreprocessorTokenReviewer, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types";

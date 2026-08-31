@@ -2,9 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://opencrane.ai/schemas/release-manifest.schema.json",
   "title": "OpenCrane repository release manifest",
+  "description": "Pre-1.0 the manifest binds only what deployment consumes: the repository version, the fresh-install database baseline, the PostgreSQL operand image, and per-project chart versions. The version-train fields (previousRepositoryVersion, adoptionBaseline, manualTransition) remain declared so historical manifests keep validating, but no current rule reads them.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["repositoryVersion", "previousRepositoryVersion", "adoptionBaseline", "database", "projects"],
+  "required": ["repositoryVersion", "database", "projects"],
   "properties": {
     "$schema": { "type": "string" },
     "repositoryVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
@@ -23,7 +24,7 @@
     "database": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "baselinePath", "baselineSha256"],
+      "required": ["baselinePath", "baselineSha256", "operandImage"],
       "properties": {
         "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
         "baselinePath": { "type": "string", "minLength": 1 },
@@ -38,7 +39,7 @@
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["root", "adaptedVersion"],
+        "required": ["root"],
         "properties": {
           "root": { "type": "string", "minLength": 1 },
           "adaptedVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },

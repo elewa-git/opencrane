@@ -8,6 +8,8 @@ export interface OrganizationMembershipCaller
 {
 	/** Host-selected silo; request bodies never provide it. */
 	readonly siloId: string;
+	/** Durable local Principal admitted by authentication middleware. */
+	readonly principalId: string;
 	/** Stable OpenID Connect subject; request bodies never provide it. */
 	readonly subjectId: string;
 	/** Normalized email only when the identity provider explicitly verified it. */
@@ -31,7 +33,7 @@ export type OrganizationMembershipCallerResolver = (request: Request) => Organiz
  */
 export interface OrganizationMembershipAuthority
 {
-	/** Returns the authoritative directory for an active administrator. */
+	/** Returns the authoritative directory for a currently authorized caller. */
 	directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectory>;
 	/** Validates proposed recipients without changing state. */
 	validate(command: ValidateOrganizationInvitationsCommand): Promise<OrganizationInviteValidationResult>;

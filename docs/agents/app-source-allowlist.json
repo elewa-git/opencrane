@@ -18,8 +18,6 @@
     { "path": "apps/opencrane/src/app/config.types.ts", "owner": "apps/opencrane", "classification": "app-config" },
     { "path": "apps/opencrane/src/app/external-action-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/instrument.ts", "owner": "apps/opencrane", "classification": "process-instrumentation" },
-    { "path": "apps/opencrane/src/app/initial-model-bootstrap.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/initial-model-bootstrap.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/internal-app.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/kubernetes-clients.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/kubernetes-clients.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },

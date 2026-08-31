@@ -1,6 +1,6 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
-import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./prisma-tool-invocation-repository";
+import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./tool-invocation-transaction";
 import type { ApproveElicitedToolInvocationCommand, RejectElicitedToolInvocationCommand, ToolInvocationElicitationRepository } from "./tool-invocation-elicitation-authority.types";
 import { ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 import type { ToolInvocationClaim, ToolInvocationRecord } from "./tool-invocation.types";

@@ -28,6 +28,8 @@ export interface CreatePersonaDraftCommand
 {
 	/** Silo that owns the profile and interview evidence. */
 	readonly siloId: string;
+	/** Stable local Principal authoring the persona draft. */
+	readonly principalId: string;
 	/** Profile owner and only allowed draft author. */
 	readonly userId: string;
 	/** Personal persona profile receiving the next draft revision. */

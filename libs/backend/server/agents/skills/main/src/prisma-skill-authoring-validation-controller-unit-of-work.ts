@@ -1,13 +1,11 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
 import type { SkillAuthoringValidationBindOutcome, SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationCurrentStatus, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationRecoveryOutcome, SkillAuthoringValidationRecoveryReasons, SkillAuthoringValidationReleaseOutcome, SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { ___IsRolledBackConflict, ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { PrismaSkillAuthoringValidationControllerRepository } from "./skill-authoring-validation-controller-authority";
-
-/** Bounds recovery from a rolled-back serializable controller transaction. */
-const _SERIALIZABLE_ATTEMPTS = 3;
 
 /** Opens a short serializable transaction for each server-side skill-validation controller command. */
 export class PrismaSkillAuthoringValidationControllerUnitOfWork implements SkillAuthoringValidationControllerAuthority
@@ -75,28 +73,29 @@ export class PrismaSkillAuthoringValidationControllerUnitOfWork implements Skill
 		return await this._Run(async function _Complete(repository) { return await repository.complete(validationId, completion, task); });
 	}
 
-	/** Runs one controller authority operation with the only transaction policy this lifecycle uses. */
+	/**
+	 * Runs one controller authority operation with the only transaction policy this lifecycle uses.
+	 *
+	 * The shared unit-of-work envelope allows three Serializable attempts, retrying only proven
+	 * rollbacks (P2002 and P2034). When the last attempt still conflicts, the raw conflict is
+	 * wrapped in a stable message so recovery callers never depend on Prisma error text.
+	 */
 	private async _Run<TResult>(operation: (repository: PrismaSkillAuthoringValidationControllerRepository) => Promise<TResult>): Promise<TResult>
 	{
-		let lastConflict: Prisma.PrismaClientKnownRequestError | null = null;
-		for (let attempt = 1; attempt <= _SERIALIZABLE_ATTEMPTS; attempt += 1)
+		try
 		{
-			try
+			return await ___RunInPrismaUnitOfWork(this.prisma, async function _Transaction(transaction): Promise<TResult>
 			{
-				return await this.prisma.$transaction(async function _Transaction(transaction): Promise<TResult>
-				{
-					return await operation(new PrismaSkillAuthoringValidationControllerRepository(transaction));
-				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-			}
-			catch (error)
-			{
-				if (!(error instanceof Prisma.PrismaClientKnownRequestError) || (error.code !== "P2002" && error.code !== "P2034"))
-				{
-					throw error;
-				}
-				lastConflict = error;
-			}
+				return await operation(new PrismaSkillAuthoringValidationControllerRepository(transaction));
+			}, { isolationLevel: "Serializable", operation: "skill authoring validation controller", attemptLimit: 3 });
 		}
-		throw new Error("skill authoring validation controller transaction conflicted after bounded retries", { cause: lastConflict ?? undefined });
+		catch (error)
+		{
+			if (!___IsRolledBackConflict(error))
+			{
+				throw error;
+			}
+			throw new Error("skill authoring validation controller transaction conflicted after bounded retries", { cause: error });
+		}
 	}
 }

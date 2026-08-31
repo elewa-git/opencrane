@@ -22,7 +22,7 @@ describe("Prisma tool invocation lifecycle event reporter", function _suite()
 		const reporter = new PrismaToolInvocationLifecycleEventUnitOfWork({ $transaction: vi.fn(async function _run(work: (value: unknown) => Promise<unknown>) { return work(transaction); }) } as never);
 
 		await expect(reporter.append({ runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Started, payload: { toolInvocationId: "call-1" } })).resolves.toBeUndefined();
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "tool.started", payload: { toolInvocationId: "call-1" } }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", attempt: 2, sequence: 5, type: "tool.started", payload: { toolInvocationId: "call-1" } }) });
 	});
 
 	it("accepts a recovery transaction's safe retry-visible failure", async function _recoveryFailure()

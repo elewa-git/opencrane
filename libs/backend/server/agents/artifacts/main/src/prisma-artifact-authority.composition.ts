@@ -5,7 +5,6 @@ import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/
 import { _ArtifactPreprocessAuthority } from "./artifact-preprocess-authority";
 import { _ArtifactUploadAuthority } from "./artifact-authority";
 import type { ArtifactReadLeaseRepository } from "./artifact-read-lease.types";
-import type { PersonalArtifactCatalogueRepository } from "./artifact-finalization.types";
 import type { ArtifactPreprocessRepository } from "./artifact-preprocessing.types";
 import { PrismaArtifactCatalogueRepository } from "./prisma-artifact-catalogue-repository";
 import { PrismaArtifactPreprocessUnitOfWork } from "./prisma-artifact-preprocess-unit-of-work";
@@ -57,13 +56,12 @@ export function _CreateArtifactPreprocessAuthority(prisma: PrismaClient): Artifa
  * preprocessing claim.
  *
  * Called by: `_CreateSkillAuthoringArtifactReader` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts, and
- * `_CreatePersonalArtifactCatalogueRouter` in prisma-personal-artifact-catalogue.router.ts.
+ * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts.
  *
  * @param prisma - The product database client.
- * @returns One object serving both the read-lease lookup and the owner-only asset listing.
+ * @returns The internal published-revision read repository.
  */
-export function _CreateArtifactCatalogueRepository(prisma: PrismaClient): ArtifactReadLeaseRepository & PersonalArtifactCatalogueRepository
+export function _CreateArtifactCatalogueRepository(prisma: PrismaClient): ArtifactReadLeaseRepository
 {
 	return new PrismaArtifactCatalogueRepository(prisma);
 }

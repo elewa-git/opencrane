@@ -4,7 +4,7 @@ import { ConfirmationService } from "primeng/api";
 import { ConfirmDialogModule } from "primeng/confirmdialog";
 
 import { ModelProvider, PROVIDER_KEY_GATEWAY, ProviderKeyStatus } from "@opencrane/state/provider-key/adapter";
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 import { ScopeChipAppearances, ScopeChipComponent, ScopeChipTones, SectionHeadingComponent } from "@opencrane/elements/ui";
 
 import { LITELLM_BADGE_STYLES, ModelKeyRow } from "./model-keys-admin.types";
@@ -13,13 +13,13 @@ import { _BadgeFor, _ToModelKeyRows } from "./model-keys-admin.utils";
 /**
  * Model Keys — bring-your-own-key (BYOK) provider-key governance.
  *
- * The org admin's source of truth for the upstream model-provider keys this
+ * The governance view for upstream model-provider keys this
  * silo uses. Lists every supported provider (configured or not), shows whether
  * each key reached LiteLLM ("active") or only the k8s Secret ("Secret-only"),
- * and lets the admin set/refresh a key (write-only — never shown back) or remove
+ * and lets an authorized caller set or refresh a key (write-only — never shown back) or remove
  * one. Writes go through {@link PROVIDER_KEY_GATEWAY}, then reload the list.
- * Access is gated in-component on {@link SessionStore.capabilities}`().customerAdmin`;
- * the control plane remains the real enforcement point.
+ * The component uses {@link SessionStore.capabilities}`().customerAdmin` for presentation; the
+ * control plane rechecks the current Organization/Administer grant.
  */
 @Component({
 	selector: "wo-model-keys-admin",

@@ -83,7 +83,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		if (caller === null) return;
 		try
 		{
-			const status = await dependencies.status.readStatus(caller.siloId, caller.userId);
+			const status = await dependencies.status.readStatus(caller.siloId, caller.principalId, caller.userId);
 			if (status.interviewId !== null) await dependencies.workflow.surveyStarted(caller, status.interviewId);
 			response.status(200).json(status);
 		}
@@ -103,9 +103,9 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: null, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, ...ready.derivation, startedAt: dependencies.clock.now().toISOString() });
+			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, principalId: caller.principalId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: null, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, ...ready.derivation, startedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
-			const questions = await dependencies.questions.getQuestions(result.interviewId, ready.personaProfileId, caller.userId);
+			const questions = await dependencies.questions.getQuestions(caller.siloId, caller.principalId, result.interviewId, ready.personaProfileId, caller.userId);
 			if (questions === null || questions.length === 0) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			await dependencies.workflow.surveyStarted(caller, result.interviewId);
 			response.status(200).json({ interviewId: result.interviewId, state: PersonaOnboardingApiStates.InProgress, reused: result.outcome === PersonaLifecycleOutcomes.AlreadyInProgress, questions: _UnansweredQuestions(questions) });
@@ -127,9 +127,9 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: configurationChangeId, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, ...ready.derivation, startedAt: dependencies.clock.now().toISOString() });
+			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, principalId: caller.principalId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: configurationChangeId, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, ...ready.derivation, startedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
-			const questions = await dependencies.questions.getQuestions(result.interviewId, ready.personaProfileId, caller.userId);
+			const questions = await dependencies.questions.getQuestions(caller.siloId, caller.principalId, result.interviewId, ready.personaProfileId, caller.userId);
 			if (questions === null || questions.length === 0) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			await dependencies.workflow.surveyStarted(caller, result.interviewId);
 			response.status(200).json({ interviewId: result.interviewId, state: PersonaOnboardingApiStates.InProgress, reused: result.outcome === PersonaLifecycleOutcomes.AlreadyInProgress, questions: _UnansweredQuestions(questions) });
@@ -152,10 +152,10 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const questions = await dependencies.questions.getQuestions(interviewId, ready.personaProfileId, caller.userId);
+			const questions = await dependencies.questions.getQuestions(caller.siloId, caller.principalId, interviewId, ready.personaProfileId, caller.userId);
 			const choiceId = _answerChoiceId(request.body, questionId, questions);
 			if (choiceId === null) { _respond(response, 400, "invalid_persona_answer"); return; }
-			const result = await __RecordPersonaInterviewAnswer(dependencies.interviews, { userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, questionId, choiceId, answeredAt: dependencies.clock.now().toISOString() });
+			const result = await __RecordPersonaInterviewAnswer(dependencies.interviews, { siloId: caller.siloId, principalId: caller.principalId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, questionId, choiceId, answeredAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			response.status(201).json({ answerId: result.answerId });
 		}
@@ -176,7 +176,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const result = await __CompletePersonaInterview(dependencies.interviews, { userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, completedAt: dependencies.clock.now().toISOString() });
+			const result = await __CompletePersonaInterview(dependencies.interviews, { siloId: caller.siloId, principalId: caller.principalId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, completedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			response.status(200).json({ interviewId, state: result.score.resolutionRequired === null ? PersonaOnboardingApiStates.Completed : PersonaOnboardingApiStates.Resolution, ..._scoreProjection(result.score) });
 		}
@@ -199,7 +199,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const result = await __ResolvePersonaInterviewTie(dependencies.interviews, { userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, kind, selectedValue, resolvedAt: dependencies.clock.now().toISOString() });
+			const result = await __ResolvePersonaInterviewTie(dependencies.interviews, { siloId: caller.siloId, principalId: caller.principalId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, kind, selectedValue, resolvedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			response.status(201).json({ interviewId, state: result.score.resolutionRequired === null ? PersonaOnboardingApiStates.Completed : PersonaOnboardingApiStates.Resolution, ..._scoreProjection(result.score) });
 		}
@@ -220,7 +220,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const result = await __CreatePersonaDraftFromInterview(dependencies.drafts, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, authoredAt: dependencies.clock.now().toISOString() });
+			const result = await __CreatePersonaDraftFromInterview(dependencies.drafts, { siloId: caller.siloId, principalId: caller.principalId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, authoredAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _draftDenialStatus(result.reason), result.reason); return; }
 			response.status(201).json({ personaRevisionId: result.personaRevisionId, state: PersonaOnboardingApiStates.Draft });
 		}
@@ -241,9 +241,9 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const beforeApproval = await dependencies.status.readStatus(caller.siloId, caller.userId);
+			const beforeApproval = await dependencies.status.readStatus(caller.siloId, caller.principalId, caller.userId);
 			if (beforeApproval.personaRevisionId !== personaRevisionId || beforeApproval.interviewId === null) { _respond(response, 409, "persona_revision_not_current"); return; }
-			const result = await __ApprovePersona(dependencies.approval, { personaProfileId: ready.personaProfileId, personaRevisionId, userId: caller.userId, approvedAt: dependencies.clock.now().toISOString() });
+			const result = await __ApprovePersona(dependencies.approval, { siloId: caller.siloId, principalId: caller.principalId, personaProfileId: ready.personaProfileId, personaRevisionId, userId: caller.userId, approvedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _approvalDenialStatus(result.reason), result.reason); return; }
 			await dependencies.workflow.personaApproved(caller, { interviewId: beforeApproval.interviewId, personaRevisionId });
 			response.status(200).json({ personaRevisionId, state: PersonaOnboardingApiStates.Approved });
@@ -269,7 +269,7 @@ function _requireCaller(request: Request, response: Response, dependencies: Pers
 /** Provisions the profile and question set on the server, returning null when that fails. Their identifiers never reach the browser. */
 async function _ensure(caller: PersonaOnboardingCaller, dependencies: PersonaOnboardingRouterDependencies): Promise<Extract<Awaited<ReturnType<typeof __EnsurePersonaOnboarding>>, { readonly outcome: PersonaLifecycleOutcomes.Ready }> | null>
 {
-	const result = await __EnsurePersonaOnboarding(dependencies.onboarding, { siloId: caller.siloId, userId: caller.userId, provisionedAt: dependencies.clock.now().toISOString() });
+	const result = await __EnsurePersonaOnboarding(dependencies.onboarding, { siloId: caller.siloId, principalId: caller.principalId, userId: caller.userId, provisionedAt: dependencies.clock.now().toISOString() });
 	return result.outcome === PersonaLifecycleOutcomes.Ready ? result : null;
 }
 

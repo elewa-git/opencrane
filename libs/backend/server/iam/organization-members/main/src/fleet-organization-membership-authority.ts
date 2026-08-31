@@ -8,7 +8,7 @@ import { _ParseAcceptOrganizationInvitationResult, _ParseCreateOrganizationInvit
 /** Operations whose Fleet error codes have different safe meanings. */
 enum FleetOrganizationMembershipOperations
 {
-	/** Reads the active administrator directory. */
+	/** Reads the authorized organisation directory. */
 	Directory = "directory",
 	/** Checks recipients, policy, seats, and payment without mutation. */
 	Validate = "validate",

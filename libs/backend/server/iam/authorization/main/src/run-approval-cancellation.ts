@@ -1,6 +1,7 @@
 import { AgentRunState, ApprovalRequestState, ElicitationRequestState, ExternalActionClaimKind, ExternalActionRecoveryMode, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest";
+import { __ReconcileDeferredToolApprovalGrants } from "./deferred-tool-approval";
 import type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult, RunApprovalCancellationRepository, RunApprovalCancellationUnitOfWork, RunCancellationToolInvocation } from "./run-approval-cancellation.types";
 import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
@@ -33,7 +34,8 @@ const _RECOVERY_FROM_PRISMA: Readonly<Record<ExternalActionRecoveryMode, Externa
 /** Persistence-to-domain claim mapping. */
 function _claimKind(kind: ExternalActionClaimKind | null): ExternalActionClaimKinds | null
 {
-	if (kind === null) return null;
+	if (kind === null)
+		return null;
 	return kind === ExternalActionClaimKind.Dispatch ? ExternalActionClaimKinds.Dispatch : ExternalActionClaimKinds.Reconcile;
 }
 
@@ -70,8 +72,17 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
 	async cancelPending(runId: string, attempt: number, now: Date): Promise<number>
 	{
 		await this._transaction.elicitationRequest.updateMany({ where: { runId, attempt, state: ElicitationRequestState.Requested }, data: { state: ElicitationRequestState.Cancelled, resolvedAt: now, resolvedBy: null, safeReason: "run_cancelled" } });
-		const cancelled = await this._transaction.approvalRequest.updateMany({ where: { runId, attempt, state: ApprovalRequestState.Pending }, data: { state: ApprovalRequestState.Cancelled, decidedAt: now, decidedBy: null } });
-		return cancelled.count;
+		const pending = await this._transaction.approvalRequest.findMany({ where: { runId, attempt, state: ApprovalRequestState.Pending }, select: { id: true, siloId: true }, orderBy: { id: "asc" } });
+		let cancelledCount = 0;
+		for (const approval of pending)
+		{
+			const cancelled = await this._transaction.approvalRequest.updateMany({ where: { id: approval.id, runId, attempt, state: ApprovalRequestState.Pending }, data: { state: ApprovalRequestState.Cancelled, decidedAt: now, decidedBy: null } });
+			if (cancelled.count !== 1)
+				continue;
+			await __ReconcileDeferredToolApprovalGrants(this._transaction, approval.siloId, approval.id, null, now);
+			cancelledCount += 1;
+		}
+		return cancelledCount;
 	}
 
 	/** Fail every nonterminal invocation and create its exact cancellation delivery. */
@@ -80,16 +91,19 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
 		for (const invocation of invocations)
 		{
 			const action = __PlanToolInvocationLifecycle({ state: invocation.state, event: ToolInvocationLifecycleEvents.Cancelled, recoveryMode: invocation.recoveryMode, claimKind: invocation.claimKind, preparationAttempt: invocation.preparationAttempt, preparationAttemptLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, withinPreparationDeadline: invocation.retryDeadlineAt.getTime() > now.getTime() });
-			if (action !== ToolInvocationLifecycleActions.Fail) throw new Error("run cancellation attempted to close provider-active invocation work");
+			if (action !== ToolInvocationLifecycleActions.Fail)
+				throw new Error("run cancellation attempted to close provider-active invocation work");
 			const failed = await this._transaction.toolInvocation.updateMany({ where: { id: invocation.id, runId, attempt, state: _STATE_TO_PRISMA[invocation.state], revision: invocation.revision, claimKind: null, run: { is: { attempt, state: AgentRunState.Cancelling } } }, data: { state: ToolInvocationState.Failed, result: Prisma.DbNull, failureCode: "run_cancelled", completedAt: now, revision: { increment: 1 } } });
-			if (failed.count !== 1) throw new Error("run cancellation lost an exact cancellable invocation fence");
+			if (failed.count !== 1)
+				throw new Error("run cancellation lost an exact cancellable invocation fence");
 		}
 		const deliveries = invocations.map(function _delivery(invocation)
 		{
 			const payload = { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode: "run_cancelled" } as const;
 			return { toolInvocationId: invocation.id, state: ToolResultDeliveryState.Pending, payload, payloadDigest: __DigestCanonicalJson(payload), createdAt: now };
 		});
-		if (deliveries.length > 0) await this._transaction.toolResultDelivery.createMany({ data: deliveries });
+		if (deliveries.length > 0)
+			await this._transaction.toolResultDelivery.createMany({ data: deliveries });
 		return invocations.length;
 	}
 

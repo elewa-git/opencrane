@@ -1,17 +1,16 @@
 # Control who can access what
 
 Every agent — personal or managed — starts with **nothing**: no skills, no tools, no knowledge,
-no model. Before OpenCrane admits any run, it checks that the person and, separately, the agent
-itself both currently have the access being used. Granting access to a person doesn't
-automatically hand it to their assistant, and configuring an agent with a capability doesn't
-automatically extend it to everyone who can talk to that agent — both sides have to line up.
+no model. A personal assistant acts through its person's Principal, limited by the approved agent
+revision and run. A managed agent acts through its own `AgentService` Principal. Permission to use
+or administer that managed agent is separate from the permissions the agent needs for its work.
 
 ## Grant a capability
 
 Choose a subject—one principal or one group—and a resource boundary. A boundary is either one
 stored group or one principal's personal space. A group boundary can cover that exact group or
-its descendants. Both the acting principal and the agent service must remain inside the resulting
-effective access boundary.
+its descendants. The acting Principal and its approved agent/run limits must remain inside the
+resulting effective access boundary.
 
 Department, team and project names are ordinary groups. Their meaning comes from stored parent
 relationships, not from fixed grant categories.
@@ -21,12 +20,14 @@ relationships, not from fixed grant categories.
 At admission OpenCrane records:
 
 - the accepted membership revision;
-- subject and agent-service grant evidence;
+- acting-Principal and inherited Group grant evidence;
 - resolved tool and skill revisions;
 - model and memory policy; and
 - the capability-set digest.
 
-The runtime receives compiled inputs. It cannot re-evaluate grants or add a capability.
+The runtime receives compiled inputs. It cannot re-evaluate grants or add a capability. The frozen
+inputs are a ceiling, so OpenCrane rechecks current membership, grants, cancellation, and resource
+eligibility before the next external effect.
 
 ## Change access
 
@@ -38,4 +39,5 @@ Do not infer access from a Kubernetes namespace, group name or network path. Mem
 grant authority must resolve successfully; uncertainty denies the request.
 :::
 
-→ [Organise groups](/guide/organize) · [Silo IAM](/integrators/silo-iam)
+→ [Organise groups](/guide/organize) · [Silo IAM](/integrators/silo-iam) ·
+[Central authorization authority](/integrators/authorization-authority)

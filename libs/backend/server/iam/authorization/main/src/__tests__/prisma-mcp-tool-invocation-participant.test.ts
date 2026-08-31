@@ -102,4 +102,19 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		expect(completeUnusedBeforeDispatch).toHaveBeenCalledWith(expect.objectContaining({ mcpTaskId: "mcp-task-1", revision: 5 }), "workflow_attempts_exhausted", new Date("2026-08-26T10:00:02.000Z"));
 		expect(appendLifecycle).not.toHaveBeenCalled();
 	});
+
+	it("moves an ambiguous MCP task through its task projection without an AgentRun event", async function _RecoversTask()
+	{
+		const claimed = _Row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 1, claimAttempt: 1, claimExpiresAt: new Date("2026-08-26T10:00:31.000Z"), revision: 5 });
+		const recovered = _Row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", state: ToolInvocationState.RecoveryRequired, claimKind: null, claimFence: 1, claimAttempt: 1, claimExpiresAt: null, recoveryRequiredAt: new Date("2026-08-26T10:00:02.000Z"), revision: 6 });
+		const completeAmbiguous = vi.fn().mockResolvedValue(true);
+		const mcpTasks = { markClaimed: vi.fn(), completeUnusedBeforeDispatch: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous };
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(recovered), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } } as unknown as Prisma.TransactionClient;
+		const { participant, appendLifecycle } = _Participant(transaction, vi.fn().mockResolvedValue(true), mcpTasks);
+		const claim = { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 1, revision: 5 } as const;
+
+		await expect(participant.completeAmbiguous(claim, new Date("2026-08-26T10:00:02.000Z"))).resolves.toEqual(expect.objectContaining({ mcpTaskId: "mcp-task-1", state: ToolInvocationStates.RecoveryRequired }));
+		expect(completeAmbiguous).toHaveBeenCalledWith(expect.objectContaining({ mcpTaskId: "mcp-task-1" }), new Date("2026-08-26T10:00:02.000Z"));
+		expect(appendLifecycle).not.toHaveBeenCalled();
+	});
 });

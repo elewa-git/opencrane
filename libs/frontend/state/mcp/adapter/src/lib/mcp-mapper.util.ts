@@ -1,5 +1,5 @@
-import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpEntitledGroup, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
-import type { McpAccessPolicyWire, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
+import { McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import type { McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
 
 /**
  * Wire shapes + mappers for the live OpenCrane MCP gateway.
@@ -55,20 +55,4 @@ export function _MapInstalled(wire: McpInstalledWire): McpInstalledServer
 		connectionStatus: _ToConnectionStatus(wire.connectionStatus),
 		lastUsed: wire.lastUsed ?? null
 	};
-}
-
-/** Map a wire access policy onto the {@link McpAccessPolicy} read model. */
-export function _MapAccessPolicy(wire: McpAccessPolicyWire): McpAccessPolicy
-{
-	return {
-		serverId: wire.serverId,
-		groups: wire.groups ?? [],
-		users: wire.users ?? []
-	};
-}
-
-/** Map a wire directory onto the {@link McpDirectory} read model. */
-export function _MapDirectory(wire: { users?: McpEntitledUser[]; groups?: McpEntitledGroup[] }): McpDirectory
-{
-	return { users: wire.users ?? [], groups: wire.groups ?? [] };
 }

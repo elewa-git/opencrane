@@ -8,7 +8,7 @@ BEGIN
         IF strpos(actual_message, expected_message) > 0 THEN RAISE NOTICE 'PASS: %', test_name; RETURN; END IF;
         RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
     END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded';
+    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
 END;
 $$;
 
@@ -40,6 +40,9 @@ SELECT pg_temp.expect_failure(
 );
 INSERT INTO "artifact_revisions" ("id", "artifact_id", "revision", "content_address", "byte_length", "media_type", "provenance", "created_by")
 VALUES ('validation-artifact-unpublished', 'validation-artifact', 2, 'sha256:' || repeat('c', 64), 1, 'application/gzip', '{}', 'validation-user');
+UPDATE "artifact_revisions"
+SET "state" = 'deletion_pending', "deletion_requested_at" = clock_timestamp()
+WHERE "id" = 'validation-artifact-unpublished';
 INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by")
 VALUES ('validation-revision-unpublished', 'validation-skill', 2, 'validation-artifact', 'validation-artifact-unpublished', 'sha256:' || repeat('c', 64), '{}', '{}', 'sandboxed_python', 'validation-user');
 SELECT pg_temp.expect_failure(

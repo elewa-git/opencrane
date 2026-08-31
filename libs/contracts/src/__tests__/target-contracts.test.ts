@@ -57,7 +57,7 @@ describe("canonical model exports", function ()
       finishedAt: null,
       terminalReason: null,
     };
-		const event: RunEvent = { runId: run.id, sequence: 4, type: "elicitation.requested", payload: { requestId: "elicitation-1" }, occurredAt: "2026-07-18T09:00:02.000Z" };
+		const event: RunEvent = { runId: run.id, attempt: run.attempt, sequence: 4, type: "elicitation.requested", payload: { requestId: "elicitation-1" }, occurredAt: "2026-07-18T09:00:02.000Z" };
 
 		expect(event.runId).toBe(run.id);
     expect(run.agentServiceId).toBe(service.id);

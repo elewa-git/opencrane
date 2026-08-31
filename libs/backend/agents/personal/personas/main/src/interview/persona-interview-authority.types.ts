@@ -6,6 +6,8 @@ export interface StartPersonaInterviewCommand
 {
 	/** Silo that owns the profile and reviewed question set. */
 	readonly siloId: string;
+	/** Stable local Principal performing the persona mutation. */
+	readonly principalId: string;
 	/** Profile owner who is starting the interview. */
 	readonly userId: string;
 	/** Personal persona profile that will receive the interview evidence. */
@@ -31,6 +33,10 @@ export interface StartPersonaInterviewCommand
 /** Request to record one immutable answer while an interview remains in progress. */
 export interface RecordPersonaInterviewAnswerCommand
 {
+	/** Silo selected from the trusted request host. */
+	readonly siloId: string;
+	/** Stable local Principal performing the persona mutation. */
+	readonly principalId: string;
 	/** Profile owner who is answering the question. */
 	readonly userId: string;
 	/** Profile that owns the interview. */
@@ -48,6 +54,10 @@ export interface RecordPersonaInterviewAnswerCommand
 /** Request to make a fully answered interview immutable and ready for persona-draft derivation. */
 export interface CompletePersonaInterviewCommand
 {
+	/** Silo selected from the trusted request host. */
+	readonly siloId: string;
+	/** Stable local Principal performing the persona mutation. */
+	readonly principalId: string;
 	/** Profile owner who completes the interview. */
 	readonly userId: string;
 	/** Profile that owns the interview. */
@@ -61,6 +71,10 @@ export interface CompletePersonaInterviewCommand
 /** Owner-bound request to append one exact tie resolution. */
 export interface ResolvePersonaInterviewTieCommand
 {
+	/** Silo selected from the trusted request host. */
+	readonly siloId: string;
+	/** Stable local Principal performing the persona mutation. */
+	readonly principalId: string;
 	/** Profile owner resolving the tie. */
 	readonly userId: string;
 	/** Profile that owns the interview. */
@@ -135,5 +149,5 @@ export interface PersonaInterviewRepository
 export interface PersonaInterviewQuestionReader
 {
 	/** Loads the pinned questions for one owner's interview, or null when the interview does not belong to that owner. */
-	getQuestions(interviewId: string, personaProfileId: string, userId: string): Promise<readonly { readonly id: string; readonly category: string; readonly prompt: string; readonly ordinal: number; readonly choices: readonly { readonly id: string; readonly label: string; readonly ordinal: number }[] }[] | null>;
+	getQuestions(siloId: string, principalId: string, interviewId: string, personaProfileId: string, userId: string): Promise<readonly { readonly id: string; readonly category: string; readonly prompt: string; readonly ordinal: number; readonly choices: readonly { readonly id: string; readonly label: string; readonly ordinal: number }[] }[] | null>;
 }

@@ -7,7 +7,7 @@ import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessRecoveryReasons, Arti
 import type { ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessTaskInput } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { WorkflowTaskCancelledError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryableError, WorkflowTaskTerminalError, ___DeliveryCheckpointName, ___RetryWorkflowDependency, ___SleepWithinClaim } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessHandlerOptions, ArtifactPreprocessTaskContext, ArtifactPreprocessTaskResult } from "./artifact-preprocess-handler.types";
@@ -93,12 +93,6 @@ function _RequireActiveClaim(claimExpiry: number): void
 	}
 }
 
-/** Builds one stable checkpoint name for a delivery cycle within the long-lived workflow task. */
-function _CheckpointName(cycle: number, stepName: string): string
-{
-	return `delivery-${cycle}:${stepName}`;
-}
-
 /** Reads the database-owned retry instant before it controls the next durable workflow sleep. */
 function _RetryAt(value: string): Date
 {
@@ -113,33 +107,17 @@ function _RetryAt(value: string): Date
 /** Sleeps once before another read for the first Pod of a released PDF preprocessing Job. */
 async function _WaitForPod(context: ArtifactPreprocessTaskContext, milliseconds: number, claimExpiry: number, stepName: string): Promise<void>
 {
-	if (!Number.isSafeInteger(milliseconds) || milliseconds < 100 || milliseconds > 60_000)
-	{
-		throw new Error("artifact preprocessing requires a 100-60000ms Pod wait");
-	}
-	const now = Date.now();
-	if (now >= claimExpiry)
+	if (Date.now() >= claimExpiry)
 	{
 		throw new WorkflowTaskRetryableError("PDF preprocessing Job did not create a Pod before its claim expired.");
 	}
-	await context.sleepUntil(new Date(Math.min(now + milliseconds, claimExpiry)), stepName);
+	await ___SleepWithinClaim(context, milliseconds, claimExpiry, stepName);
 }
 
 /** Converts an unavailable server or Kubernetes exchange into the task's declared retry policy. */
-async function _RetryExternal<TResult>(operation: () => Promise<TResult>): Promise<TResult>
+function _RetryExternal<TResult>(operation: () => Promise<TResult>): Promise<TResult>
 {
-	try
-	{
-		return await operation();
-	}
-	catch (error)
-	{
-		if (error instanceof WorkflowTaskCancelledError || error instanceof WorkflowTaskTerminalError || error instanceof WorkflowTaskRetryableError)
-		{
-			throw error;
-		}
-		throw new WorkflowTaskRetryableError("PDF preprocessing dependency is temporarily unavailable.");
-	}
+	return ___RetryWorkflowDependency(operation, "PDF preprocessing dependency is temporarily unavailable.");
 }
 
 /**
@@ -162,7 +140,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 			while (true)
 			{
 				// 1. Obtain this cycle's server-issued claim so replay cannot choose another PDF or silo.
-				const record = await context.checkpoint({ stepName: _CheckpointName(cycle, "claim-preprocess") }, async function _ClaimPreprocess()
+				const record = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "claim-preprocess") }, async function _ClaimPreprocess()
 				{
 					const claimed = await _RetryExternal(async function _ClaimForTask()
 					{
@@ -178,7 +156,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 
 				// 2. Build or adopt the suspended Job, then bind its Kubernetes UID before any worker code runs.
 				const prepared = await _Job(record, options.profile);
-				const assigned = await context.checkpoint({ stepName: _CheckpointName(cycle, "ensure-suspended-job") }, async function _EnsureSuspendedJob(): Promise<V1Job>
+				const assigned = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "ensure-suspended-job") }, async function _EnsureSuspendedJob(): Promise<V1Job>
 				{
 					_RequireActiveClaim(claimExpiry);
 					return await _RetryExternal(async function _EnsureJob()
@@ -187,7 +165,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 					});
 				});
 				const binding: RuntimeWorkloadBinding = { claimId: record.claim.claimId, claimedAt: record.claim.claimedAt, deliveryCount: record.claim.deliveryCount, profileName: record.claim.profileName, workloadUid: _JobUid(assigned) };
-				await context.checkpoint({ stepName: _CheckpointName(cycle, "bind-workload") }, async function _BindWorkload(): Promise<void>
+				await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "bind-workload") }, async function _BindWorkload(): Promise<void>
 				{
 					const command = { binding, bootstrapReference: prepared.bootstrapReference, namespace: options.profile.namespace };
 					const outcome = await _RetryExternal(async function _BindWorkload()
@@ -201,7 +179,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 				});
 
 				// 3. Release only the UID the server recorded, then save the first Pod that exact Job owns.
-				await context.checkpoint({ stepName: _CheckpointName(cycle, "release-job") }, async function _ReleaseJob(): Promise<void>
+				await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "release-job") }, async function _ReleaseJob(): Promise<void>
 				{
 					_RequireActiveClaim(claimExpiry);
 					await _RetryExternal(async function _ReleaseJob()
@@ -215,7 +193,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 				{
 					try
 					{
-						pod = await context.checkpoint({ stepName: _CheckpointName(cycle, "observe-first-pod") }, async function _ObserveFirstPod(): Promise<V1Pod>
+						pod = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "observe-first-pod") }, async function _ObserveFirstPod(): Promise<V1Pod>
 						{
 							_RequireActiveClaim(claimExpiry);
 							const observed = await _RetryExternal(async function _FindFirstPod()
@@ -235,11 +213,11 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 						{
 							throw error;
 						}
-						await _WaitForPod(context, options.podWaitMilliseconds, claimExpiry, _CheckpointName(cycle, `wait-for-pod-${observation}`));
+						await _WaitForPod(context, options.podWaitMilliseconds, claimExpiry, ___DeliveryCheckpointName(cycle, `wait-for-pod-${observation}`));
 						observation += 1;
 					}
 				}
-				await context.checkpoint({ stepName: _CheckpointName(cycle, "bind-first-pod") }, async function _BindFirstPod(): Promise<void>
+				await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "bind-first-pod") }, async function _BindFirstPod(): Promise<void>
 				{
 					const command = { binding: { ...binding, firstPodUid: _PodUid(pod) } };
 					const outcome = await _RetryExternal(async function _BindFirstPod()
@@ -259,7 +237,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 				{
 					try
 					{
-						outcome = await context.checkpoint({ stepName: _CheckpointName(cycle, `recover-outcome-${recoveryObservation}`) }, async function _RecoverOutcome(): Promise<ArtifactPreprocessOutcome>
+						outcome = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, `recover-outcome-${recoveryObservation}`) }, async function _RecoverOutcome(): Promise<ArtifactPreprocessOutcome>
 						{
 							const loaded = await _RetryExternal(async function _LoadOutcomeFromServer()
 							{
@@ -295,13 +273,13 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 						{
 							throw error;
 						}
-						await context.sleepUntil(new Date(Date.now() + _RECOVERY_HEARTBEAT_MILLISECONDS), _CheckpointName(cycle, `wait-for-outcome-${recoveryObservation}`));
+						await context.sleepUntil(new Date(Date.now() + _RECOVERY_HEARTBEAT_MILLISECONDS), ___DeliveryCheckpointName(cycle, `wait-for-outcome-${recoveryObservation}`));
 						recoveryObservation += 1;
 					}
 				}
 				if (outcome.kind === ArtifactPreprocessOutcomeKinds.Completed)
 				{
-					await context.checkpoint({ stepName: _CheckpointName(cycle, "complete-preprocess") }, async function _CompletePreprocess(): Promise<void>
+					await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "complete-preprocess") }, async function _CompletePreprocess(): Promise<void>
 					{
 						const completionOutcome = await _RetryExternal(async function _CompleteOnServer()
 						{
@@ -315,7 +293,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 				}
 
 				// 5. A persisted outcome authorizes deletion; retry repeats the UID-fenced call after an ambiguous response.
-				await context.checkpoint({ stepName: _CheckpointName(cycle, "delete-outcome-job") }, async function _DeleteOutcomeJob(): Promise<void>
+				await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "delete-outcome-job") }, async function _DeleteOutcomeJob(): Promise<void>
 				{
 					await _RetryExternal(async function _DeleteOutcomeJob()
 					{
@@ -325,7 +303,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 				if (outcome.kind === ArtifactPreprocessOutcomeKinds.RetryableFailed)
 				{
 					// 6. Sleep without consuming an engine retry, then use new checkpoint names for the next delivery.
-					await context.sleepUntil(_RetryAt(outcome.retryAt), _CheckpointName(cycle, "wait-for-retry"));
+					await context.sleepUntil(_RetryAt(outcome.retryAt), ___DeliveryCheckpointName(cycle, "wait-for-retry"));
 					cycle += 1;
 					continue;
 				}

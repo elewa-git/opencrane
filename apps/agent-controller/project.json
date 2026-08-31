@@ -2,7 +2,6 @@
   "name": "agent-controller",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.10.0" } },
   "sourceRoot": "apps/agent-controller/src",
   "tags": ["type:app", "layer:entrypoint", "scope:agent-controller"],
   "targets": {
@@ -14,6 +13,7 @@
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/agent-controller" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run && bash tests/helm-contract.sh", "cwd": "apps/agent-controller" } },
     "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/agent-controller/helm" } },
+    "image-smoke": { "executor": "nx:run-commands", "options": { "command": "bash apps/agent-controller/tests/image-smoke.sh", "cwd": "." } },
     "container": {
       "executor": "nx:run-commands",
       "metadata": {

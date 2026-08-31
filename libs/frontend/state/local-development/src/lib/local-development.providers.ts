@@ -6,7 +6,7 @@ import { AGENT_THREAD_GATEWAY } from "@opencrane/state/conversation/agent-thread
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { ELICITATION_GATEWAY } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
-import { SESSION_GATEWAY } from "@opencrane/state/core";
+import { SESSION_GATEWAY } from "@opencrane/state/session";
 import { PERSONA_FIRST_CHAT_GATEWAY, PERSONA_GATEWAY } from "@opencrane/state/onboarding";
 
 import { LocalDevelopmentAgentThreadGateway } from "./local-development-agent-thread.gateway";

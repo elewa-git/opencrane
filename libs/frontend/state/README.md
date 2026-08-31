@@ -12,8 +12,8 @@ owns the client-side stores and caches that hold fetched data.
 
 | Package | What it owns |
 | --- | --- |
-| [`core`](./core/README.md) | Frontend state-layer hub. |
-| [`core/adapter`](./core/adapter/README.md) | Live browser-session gateway for organization and platform surfaces. |
+| [`session/main`](./session/main/README.md) | Browser session port, state, and capability hints. |
+| [`session/adapter`](./session/adapter/README.md) | Live browser-session gateway for organization and platform surfaces. |
 | [`gateways`](./gateways/README.md) | Gateway dependency-injection composition root. |
 | [`local-development`](./local-development/README.md) | Coherent frontend-only onboarding and chat gateway profile. |
 | [`conversation/stream`](./conversation/stream/README.md) | Transport-neutral browser stream port and connection states. |
@@ -40,9 +40,9 @@ owns the client-side stores and caches that hold fetched data.
    features
       │ ask a port
       ▼
-    core  ── defines ports, holds stores ──  gateways (wires ports → adapters)
+ session/main ── defines its port and store ── gateways (wires ports → adapters)
       │
-      ├─ core/adapter   local-development   conversation/{stream,adapter,ag-ui,render}
+      ├─ session/adapter   local-development   conversation/{stream,adapter,ag-ui,render}
       ├─ assets/adapter   skills/adapter
       ├─ mcp/adapter   provider-key/adapter   organization/members/adapter
       └─ onboarding ── persona/adapter

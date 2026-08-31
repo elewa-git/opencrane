@@ -67,6 +67,9 @@
       "@opencrane/backend/server/iam/audit": [
         "./libs/backend/server/iam/audit/main/src/index.ts"
       ],
+      "@opencrane/backend/server/iam/audit-writer": [
+        "./libs/backend/server/iam/audit-writer/main/src/index.ts"
+      ],
       "@opencrane/backend/server/iam/authorization": [
         "./libs/backend/server/iam/authorization/main/src/index.ts"
       ],
@@ -99,9 +102,6 @@
       ],
       "@opencrane/backend/agents/personal/memory": [
         "./libs/backend/agents/personal/memory/main/src/index.ts"
-      ],
-      "@opencrane/backend/agents/memory": [
-        "./libs/backend/agents/memory/main/src/index.ts"
       ],
       "@opencrane/backend/server/gateways/model-routing": [
         "./libs/backend/server/gateways/model-routing/main/src/index.ts"
@@ -199,6 +199,9 @@
       "@opencrane/backend/agents/runtime/workloads/contract": [
         "./libs/backend/agents/runtime/workloads/contract/src/index.ts"
       ],
+      "@opencrane/backend/agents/runtime/workloads/controller-transport": [
+        "./libs/backend/agents/runtime/workloads/controller-transport/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/workloads/k8s-controller": [
         "./libs/backend/agents/runtime/workloads/k8s-controller/src/index.ts"
       ],
@@ -243,6 +246,9 @@
       ],
       "@opencrane/backend/server/infra/oci-registry": [
         "./libs/backend/server/infra/oci-registry/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/prisma-unit-of-work": [
+        "./libs/backend/server/infra/prisma-unit-of-work/src/index.ts"
       ],
       "@opencrane/backend/server/infra/workflows/contract": [
         "./libs/backend/server/infra/workflows/contract/src/index.ts"
@@ -313,11 +319,11 @@
       "@opencrane/features/settings": [
         "./libs/frontend/features/settings/src/index.ts"
       ],
-      "@opencrane/state/core": [
-        "./libs/frontend/state/core/src/index.ts"
+      "@opencrane/state/session": [
+        "./libs/frontend/state/session/main/src/index.ts"
       ],
-      "@opencrane/state/core/adapter": [
-        "./libs/frontend/state/core/adapter/src/index.ts"
+      "@opencrane/state/session/adapter": [
+        "./libs/frontend/state/session/adapter/src/index.ts"
       ],
       "@opencrane/state/local-development": [
         "./libs/frontend/state/local-development/src/index.ts"
@@ -422,10 +428,10 @@
       "path": "./libs/frontend/elements/ui"
     },
     {
-      "path": "./libs/frontend/state/core"
+      "path": "./libs/frontend/state/session/main"
     },
     {
-      "path": "./libs/frontend/state/core/adapter"
+      "path": "./libs/frontend/state/session/adapter"
     },
     {
       "path": "./libs/frontend/state/local-development"

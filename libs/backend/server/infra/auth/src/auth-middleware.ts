@@ -19,8 +19,8 @@ import { _ClusterTenantFromHost } from "./request-silo";
  * Configuration is read once, when this factory is called — at startup in production, and
  * per test in tests, so a test only has to set the environment before calling the factory.
  *
- * This is authentication only. Roles are enforced separately by {@link _RequireOrgAdmin}
- * and {@link _RequirePlatformOperator}.
+ * This is authentication only. Product actions are admitted by the central authorization
+ * authority inside each owning domain transaction.
  *
  * Called by: apps/opencrane/src/app/public-app.ts.
  *

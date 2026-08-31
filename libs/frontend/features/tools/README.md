@@ -11,8 +11,9 @@ an MCP server is one such tool the user can install. This package ships two sepa
 
 - User-facing (`/tools`): **My Tools** — the user's installed servers and their connection status —
   and a **catalogue** to browse and install the servers they are entitled to.
-- Admin (`/admin`): tool **governance** for a customer admin — catalogue governance, access policy,
-  and model keys — each screen gating itself on the admin capability.
+- Admin (`/admin`): tool **governance** for a customer admin — catalogue governance and model keys —
+  each screen gating itself on the admin capability. Generic central grant administration owns MCP
+  sharing outside this feature.
 
 The screens read connection and key state from client-side **stores/gateways** (a gateway is an
 injection token that is the port to the opencrane-server HTTP API) and render it; the server stays
@@ -21,7 +22,7 @@ the authority on what a user may install or govern.
 ## Public surface
 
 - `TOOLS_ROUTES` — the user-facing route table (My Tools at `""`, catalogue at `"catalogue"`).
-- `MCP_ADMIN_ROUTES` — the admin route table (catalogue-admin, access-policy, model-keys).
+- `MCP_ADMIN_ROUTES` — the admin route table (catalogue-admin and model-keys).
 - `theme.scss` — the feature-owned shared presentation for tools/admin layouts, tables, inputs,
   callouts, actions, and connection-status indicators; the SPA composes this public style entrypoint.
 
@@ -34,7 +35,8 @@ the real enforcement point.
 ## Dependency direction
 
 Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
-only other `scope:web` packages and `scope:shared` contracts. It depends on `@opencrane/state/core`
+only other legacy `scope:web` packages, the bounded `scope:frontend-session`, and `scope:shared`
+contracts. It depends on `@opencrane/state/session`
 (session store), `@opencrane/state/mcp/adapter` (the MCP gateway), and
 `@opencrane/state/provider-key/adapter` (the provider-key gateway and status).
 

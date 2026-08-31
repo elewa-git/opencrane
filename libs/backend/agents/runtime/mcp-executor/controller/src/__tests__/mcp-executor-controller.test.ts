@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ___CreateLogger } from "@opencrane/backend/observability";
 
-import { __ReconcileNextMcpExecutorCleanup, __ReconcileNextMcpExecutorRelease, __ReconcileNextMcpExecutorWorkload } from "../mcp-executor-controller";
+import { __ReconcileNextMcpExecutorCleanup, __ReconcileNextMcpExecutorRelease, __ReconcileNextMcpExecutorWorkload, __ValidateMcpExecutorControllerProfile } from "../mcp-executor-controller";
 import type { McpExecutorControllerAuthority, McpExecutorControllerOptions } from "../mcp-executor-controller.types";
 
 /** Returns one valid MCP workload claim and imported image. */
@@ -26,6 +26,14 @@ function _Options(authority: McpExecutorControllerAuthority, kubernetes: McpExec
 
 describe("MCP executor controller", function _DescribeController()
 {
+	it("rejects unknown fields inside the deployment-owned profile", function _ValidatesProfile()
+	{
+		expect(__ValidateMcpExecutorControllerProfile(_Profile())).toEqual(_Profile());
+		const profile = _Profile();
+		const injected = { ...profile, companionResources: { ...profile.companionResources, limits: { ...profile.companionResources.limits, gpu: "1" } } };
+		expect(function _InjectedResource() { __ValidateMcpExecutorControllerProfile(injected); }).toThrow(/deployment-owned fields/u);
+	});
+
 	it("records the Kubernetes Job UID before any release", async function _AssignsSuspendedJob()
 	{
 		const authority = { __Claim: vi.fn().mockResolvedValue(_Claim()), __CommitAssignment: vi.fn().mockResolvedValue("assigned"), __ClaimRelease: vi.fn(), __CommitRelease: vi.fn(), __ClaimCleanup: vi.fn(), __CommitCleanup: vi.fn(), __RegisterFirstPod: vi.fn() } satisfies McpExecutorControllerAuthority;

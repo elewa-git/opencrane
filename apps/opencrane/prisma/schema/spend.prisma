@@ -1,5 +1,6 @@
 model TokenUsageSnapshot {
   id           Int      @id @default(autoincrement())
+  siloId       String   @map("silo_id")
   userId       String   @map("user_id")
   inputTokens  Int      @default(0) @map("input_tokens")
   outputTokens Int      @default(0) @map("output_tokens")
@@ -8,25 +9,29 @@ model TokenUsageSnapshot {
   totalCost    Decimal  @map("total_cost") @db.Decimal(12, 4)
   sampledAt    DateTime @default(now()) @map("sampled_at")
 
-  @@unique([userId, currency])
-  @@index([sampledAt])
+  @@unique([siloId, userId, currency])
+  @@index([siloId, sampledAt])
   @@map("token_usage_snapshots")
 }
 
 model GlobalBudgetSetting {
-  id            Int      @id @default(1)
+  id            Int      @default(1)
+  siloId        String   @map("silo_id")
   currency      String
   ceilingAmount Decimal  @map("ceiling_amount") @db.Decimal(12, 2)
   updatedAt     DateTime @updatedAt @map("updated_at")
 
+  @@id([siloId, id])
   @@map("global_budget_settings")
 }
 
 model AccountBudgetSetting {
-  userId        String   @id @map("user_id")
+  siloId        String   @map("silo_id")
+  userId        String   @map("user_id")
   currency      String
   ceilingAmount Decimal  @map("ceiling_amount") @db.Decimal(12, 2)
   updatedAt     DateTime @updatedAt @map("updated_at")
 
+  @@id([siloId, userId])
   @@map("account_budget_settings")
 }

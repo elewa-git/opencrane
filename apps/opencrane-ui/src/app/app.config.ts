@@ -7,7 +7,7 @@ import { providePrimeNG } from "primeng/config";
 import { OpenCranePreset } from "@opencrane/core";
 import { provideOpenCraneA2ui } from "@opencrane/elements/a2ui";
 import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
-import { PLATFORM_SURFACE } from "@opencrane/state/core";
+import { PLATFORM_SURFACE } from "@opencrane/state/session";
 import { provideWebPlatform } from "@opencrane/platform";
 
 import { APP_ROUTES } from "./app.routes";

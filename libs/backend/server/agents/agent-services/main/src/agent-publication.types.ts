@@ -1,7 +1,5 @@
 import type { AgentRevision, AgentRevisionId, AgentService, AgentServiceId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 
-import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
-
 /** Command that publishes one immutable agent revision as the service's active revision. */
 export interface PublishAgentRevisionCommand
 {
@@ -56,6 +54,7 @@ export interface AtomicAgentRevisionPublication
 export type AtomicAgentRevisionPublicationResult =
 	| { readonly status: "published"; readonly service: AgentService; readonly revision: AgentRevision }
 	| { readonly status: "invalid_revision" }
+	| { readonly status: "unauthorized" }
 	| { readonly status: "conflict"; readonly currentActiveRevisionId: AgentRevisionId | null };
 
 /**
@@ -68,8 +67,8 @@ export type AtomicAgentRevisionPublicationResult =
  *
  * Implemented by: `PrismaAgentServicePublicationUnitOfWork` in `db/prisma-agent-publication.ts`.
  * Called by: {@link __PublishAgentRevision} in `agent-publication.ts`; a caller-attributed instance
- * is built per request by `_publicationFor` in `prisma-agent-services.router.ts` so the audit row
- * names the real administrator.
+ * is built per request by `_publicationFor` in `prisma-agent-services.router.ts` so central
+ * admission records the real administrator.
  */
 export interface AgentServicePublicationRepository
 {
@@ -83,8 +82,8 @@ export interface AgentServicePublicationRepository
 		 * The implementation conditionally claims the exact service state, then the exact draft. It
 		 * re-checks the service state, the
 	 * active revision, the revision's parent service, and that the revision is still a draft. Any
-	 * mismatch aborts with `conflict` and writes nothing. An audit row is appended before commit, so a
-	 * failed audit write rolls the whole publication back.
+	 * mismatch aborts with `conflict` and writes nothing. Central admission evidence is recorded in
+	 * the same transaction before either publication write.
 	 *
 	 * @param publication - The service, the draft, and the two values that must still match: the
 	 *   observed service state and the observed active revision.
@@ -94,23 +93,6 @@ export interface AgentServicePublicationRepository
 	 *   that into a 500; it is not a `conflict`.
 	 */
 	publishRevisionAtomically(publication: AtomicAgentRevisionPublication): Promise<AtomicAgentRevisionPublicationResult>;
-}
-
-/**
- * Builds the audit row while the publication transaction is still open.
- *
- * The router binds this port to the authenticated administrator, so the database adapter records
- * the person who published the revision rather than the server process. A failed audit write rolls
- * back the publication with it.
- *
- * Implemented by: `_buildPublicationAuditEvidence` in `prisma-agent-services.router.ts`.
- * Called by: `PrismaAgentServicePublicationUnitOfWork.publishRevisionAtomically` in
- * `db/prisma-agent-publication.ts`.
- */
-export interface AgentPublicationAuditEvidencePort
-{
-	/** Builds the audit evidence from the records the conditional writes will commit. */
-	build(publication: AtomicAgentRevisionPublication, service: AgentService, revision: AgentRevision): AuditDecisionRecord;
 }
 
 /**
@@ -133,6 +115,7 @@ export interface AgentPublicationAuditEvidencePort
  */
 export type PublishAgentRevisionFailureReason =
 	| "invalid_command"
+	| "unauthorized"
 	| "service_not_found"
 	| "service_retired"
 	| "revision_not_found"

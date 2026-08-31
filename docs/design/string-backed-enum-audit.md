@@ -100,7 +100,7 @@ the same vocabulary.
 
 ## Priority 2: cohesive local policy vocabularies
 
-- `AgentServiceLifecycleAction`, `DeferredToolDecision`, `SteeringDisposition`, `ActionReplayMode`,
+- `AgentServiceLifecycleAction`, `DeferredToolDecision`, `SteeringDisposition`,
   `AuditDecisionActorKind`, and `AuditDecisionOutcome`.
 
 ## Deliberate exclusions

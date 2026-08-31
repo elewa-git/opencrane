@@ -33,7 +33,7 @@ model Principal {
   grantedResourceShares       ResourceShareRecipient[]          @relation("ResourceShareGrantingPrincipal")
   memoryDatasets              MemoryDataset[]                   @relation("MemoryDatasetBoundaryPrincipal")
   agentRevisionBoundaries     AgentRevisionBoundaryAttachment[]
-  managedAgentService         AgentService?                      @relation("ManagedAgentServicePrincipal")
+  managedAgentService         AgentService?                     @relation("ManagedAgentServicePrincipal")
   mcpServerInstalls           McpServerInstall[]
 
   @@unique([id, siloId])

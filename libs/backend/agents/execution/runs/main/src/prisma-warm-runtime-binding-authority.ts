@@ -4,13 +4,18 @@ import { WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
 
-import type { WarmRuntimeBindingAuthority, WarmRuntimeBindingIdentity, WarmRuntimeBindingResult, WarmRuntimeBindingSubmission } from "./warm-runtime-binding.types";
+import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+
 import type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
-import { PrismaWarmRuntimeBindingRepository, WarmRuntimeBindingConflict } from "./prisma-warm-runtime-binding-repository";
+import { PrismaRunModelCredentialMintAuthorizationRepository, PrismaWarmRuntimeBindingRepository, WarmRuntimeBindingConflict } from "./prisma-warm-runtime-binding-repository";
 import { _BuildRunAttemptCredentialMintInputs } from "./run-attempt-credential-minting";
+import type { WarmRuntimeBindingAuthority, WarmRuntimeBindingIdentity, WarmRuntimeBindingResult, WarmRuntimeBindingSubmission } from "./warm-runtime-binding.types";
 
 /** Retries database serialization conflicts while two requests race for one Pod. */
 const _SERIALIZABLE_ATTEMPTS = 3;
+
+/** Builds the central authority over the transaction that persists one binding attempt. */
+type WarmRuntimeBindingAuthorizationFactory = (transaction: Prisma.TransactionClient) => AuthorizationAuthority;
 
 /**
  * Commits a warm Pod's proof binding before minting its short-lived model key.
@@ -28,12 +33,15 @@ export class PrismaWarmRuntimeBindingUnitOfWork implements WarmRuntimeBindingAut
 	private readonly prisma: PrismaClient;
 	/** Mints the raw attempt key only after proof binding commits. */
 	private readonly options: Pick<AgentRunWorkflowControllerAuthorityOptions, "assignmentTtlMilliseconds" | "issueAttemptModelKey">;
+	/** Creates the current product authority inside each binding transaction. */
+	private readonly createAuthorization: WarmRuntimeBindingAuthorizationFactory | null;
 
 	/** Create the binding authority over the main database. */
-	constructor(prisma: PrismaClient, options: Pick<AgentRunWorkflowControllerAuthorityOptions, "assignmentTtlMilliseconds" | "issueAttemptModelKey">)
+	constructor(prisma: PrismaClient, options: Pick<AgentRunWorkflowControllerAuthorityOptions, "assignmentTtlMilliseconds" | "issueAttemptModelKey">, createAuthorization: WarmRuntimeBindingAuthorizationFactory | null = null)
 	{
 		this.prisma = prisma;
 		this.options = options;
+		this.createAuthorization = createAuthorization;
 	}
 
 	/**
@@ -56,9 +64,11 @@ export class PrismaWarmRuntimeBindingUnitOfWork implements WarmRuntimeBindingAut
 			try
 			{
 				// 2. Commit Pod ownership and proof before any raw model credential exists.
+				const createAuthorization = this.createAuthorization;
 				const bound = await this.prisma.$transaction(async function _Bind(transaction)
 				{
-					const repository = new PrismaWarmRuntimeBindingRepository(transaction);
+					const authorization = createAuthorization?.(transaction) ?? new PrismaAuthorizationAuthority(transaction);
+					const repository = new PrismaWarmRuntimeBindingRepository(transaction, authorization);
 					return await repository.bind(identity, submission);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 				if (!("modelRoute" in bound))
@@ -72,12 +82,21 @@ export class PrismaWarmRuntimeBindingUnitOfWork implements WarmRuntimeBindingAut
 				if (credentials === null)
 					return { outcome: "conflict" };
 
-				// 4. Mint only after commit so a failed database transaction never creates a usable key.
+				// 4. Spend the durable authorization before the post-commit external effect.
+				const claimed = await this.prisma.$transaction(async function _ClaimMintAuthorization(transaction)
+				{
+					const repository = new PrismaRunModelCredentialMintAuthorizationRepository(transaction);
+					return repository.claim({ authorizationId: bound.mintAuthorizationId, runId: bound.runId, attempt: bound.attempt, keyAlias: credentials.keyAlias, claimedAt: new Date() });
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+				if (!claimed)
+					return { outcome: "conflict" };
+
+				// 5. Mint only after both commits so a failed database transaction never creates a usable key.
 				const minted = await this.options.issueAttemptModelKey({ ...credentials, siloId: bound.siloId });
 				if (typeof minted.key !== "string" || minted.key.length === 0)
 					return { outcome: "conflict" };
 
-				// 5. Revoke a late key when issuer delay would let it outlive the saved binding deadline.
+				// 6. Revoke a late key when issuer delay would let it outlive the saved binding deadline.
 				if (Date.now() + credentials.expirySeconds * 1_000 > bound.credentialExpiresAt.getTime())
 				{
 					await this.options.issueAttemptModelKey.revokeAttemptKey({ keyAlias: credentials.keyAlias, key: minted.key });

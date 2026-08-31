@@ -220,12 +220,44 @@ export interface PrismaMcpRuntimeAuthorityDependencies
 	readonly options: McpRuntimeAuthorityOptions;
 }
 
-/** Catalogue and invocation writes available inside one MCP runtime transaction. */
-export interface McpRuntimeCatalogRepository
+/**
+ * Promotes an imported OCI validation while the MCP runtime unit of work holds its transaction.
+ *
+ * The unit of work creates this port beside the other runtime repositories so promotion can create
+ * its server, revision, discovery execution, and audit entry atomically. `created` creates discovery work;
+ * `idempotent` returns the prior matching work; the remaining results tell the router not to claim
+ * that a server was promoted.
+ * Called by: `PrismaMcpRuntimeUnitOfWork`.
+ */
+export interface McpOciServerPromotionRepository
 {
-	/** Promote one imported validation into discovery work. */
+	/**
+	 * Creates or finds discovery work for one imported validation.
+	 *
+	 * @param caller - Authenticated administrator and silo that scope the validation lookup.
+	 * @param validationId - OCI validation selected for promotion.
+	 * @param command - New catalogue name and description.
+	 * @returns `created` or `idempotent` with the server, revision, and execution IDs; otherwise a reason not to promote.
+	 */
 	promoteImportedValidation(caller: McpOciServerPromotionCaller, validationId: string, command: McpOciServerPromotionCommand): Promise<McpOciServerPromotionResult>;
-	/** Admit one ready authorization-owned invocation into MCP runtime work. */
+}
+
+/**
+ * Admits an authorization-owned ToolInvocation while the MCP runtime unit of work holds its transaction.
+ *
+ * The port reads invocation state through the authorization participant and creates runtime work in
+ * the same transaction. It therefore reports readiness or ownership failures rather than creating
+ * a runtime execution that a companion cannot safely complete.
+ * Called by: `PrismaMcpRuntimeUnitOfWork`.
+ */
+export interface McpToolInvocationAdmissionRepository
+{
+	/**
+	 * Creates or finds the runtime execution for one ready MCP invocation.
+	 *
+	 * @param toolInvocationRowId - Authorization-owned invocation row selected for admission.
+	 * @returns `admitted` for new work, `idempotent` for the same work, `not_ready` for blocked readiness, or `not_mcp` when the row cannot be admitted as MCP work.
+	 */
 	admitInvocation(toolInvocationRowId: string): Promise<"admitted" | "idempotent" | "not_ready" | "not_mcp">;
 }
 

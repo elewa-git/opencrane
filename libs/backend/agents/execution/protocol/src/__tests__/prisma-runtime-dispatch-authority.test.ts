@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { ToolInvocationRunRecoveryEnterResults } from "@opencrane/backend/server/iam/authorization";
-import { AGENT_RUNTIME_PROTOCOL_VERSION, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaRuntimeDispatchAuthorityUnitOfWork } from "../prisma-runtime-dispatch-authority";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchRecoveryAuthority, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchRecoveryAuthority, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeExternalActionAuthorization, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types";
+import type { RuntimeExternalActionAuthorizationEvidence } from "../runtime-external-action-authorization.types";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types";
 import { RuntimeContinuationSaveOutcomes } from "../runtime-continuation.types";
 
@@ -118,6 +120,10 @@ interface FakeOptions
 	readonly recoveryAuthority?: RuntimeDispatchRecoveryAuthority;
 	/** Makes the command-stream recovery compare-and-set lose its sequence fence. */
 	readonly loseDispatchBlockFence?: boolean;
+	/** Makes candidate-id persistence lose after external-action work was prepared. */
+	readonly loseCandidateFence?: boolean;
+	/** Current central product-authority check for external actions. */
+	readonly externalActionAuthorization?: RuntimeExternalActionAuthorization;
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
@@ -144,10 +150,10 @@ function _fakePrisma(options: FakeOptions)
 	const subjectId = options.managed ? "agent-service:svc-1" : "user-1";
 	const audience = options.managed ? "opencrane-managed-agent-runtime" : "opencrane-agent-runtime";
 	const currentPodUid = options.podUid === undefined ? "pod-1" : options.podUid;
-	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Deployment", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.assignmentPodUid === undefined ? currentPodUid : options.assignmentPodUid, bindingGeneration: options.bindingGeneration ?? 1, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
+	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Deployment", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.assignmentPodUid === undefined ? currentPodUid : options.assignmentPodUid, bindingGeneration: options.bindingGeneration ?? 1, state: options.assignmentState ?? "Registered", revokedAt: null, expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const reservation = currentPodUid === null ? null : { runId: "run-1", attempt: 1, generation: options.bindingGeneration ?? 1, siloId: "silo-1", namespace: workloadIdentity.namespace, podUid: currentPodUid, serviceAccountName: workloadIdentity.serviceAccountName, state: "Claimed", idleDeadline: new Date("2026-07-20T00:05:00.000Z"), reservedAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: options.conversationId ?? null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: options.conversationId ?? null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 	const transactionOptions: unknown[] = [];
 
 	/** Return whether a stream row matches the fields given in a where clause. */
@@ -165,12 +171,14 @@ function _fakePrisma(options: FakeOptions)
 			transactionOptions.push(options);
 			const beforeStreams = streams.map(function _Copy(row) { return { ...row, acceptedCandidateIds: [...row.acceptedCandidateIds] }; });
 			const beforeCommands = commands.map(function _Copy(row) { return { ...row }; });
+			const beforeToolInvocations = toolInvocations.map(function _Copy(row) { return { ...row }; });
 			const beforeRunState = run.state;
 			try { return await run_(client); }
 			catch (error)
 			{
 				streams.splice(0, streams.length, ...beforeStreams);
 				commands.splice(0, commands.length, ...beforeCommands);
+				toolInvocations.splice(0, toolInvocations.length, ...beforeToolInvocations);
 				run.state = beforeRunState;
 				throw error;
 			}
@@ -213,6 +221,8 @@ function _fakePrisma(options: FakeOptions)
 			async updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> })
 			{
 				if (options.loseDispatchBlockFence === true && args.data["dispatchBlockedReason"] === "resume_frame_too_large")
+					return { count: 0 };
+				if (options.loseCandidateFence === true && args.data["acceptedCandidateIds"] !== undefined)
 					return { count: 0 };
 				let count = 0;
 				for (const row of streams.filter(candidate => _streamMatches(candidate, args.where)))
@@ -309,6 +319,24 @@ const _continuations = {
 	async prepareReplacementInTransaction() { return null; },
 };
 
+/** Build complete structured evidence for one fake external-action admission. */
+function _AuthorizationEvidence(context: Parameters<RuntimeExternalActionAuthorization["admitInTransaction"]>[1], candidate: RuntimeExternalActionCandidate, assignmentDigest = context.assignmentDigest): RuntimeExternalActionAuthorizationEvidence
+{
+	const evidence = {
+		principalId: context.snapshot.identitySnapshot.kind === "user" ? context.snapshot.identitySnapshot.principalId : context.snapshot.identitySnapshot.executionSubjectId,
+		actorKind: context.snapshot.identitySnapshot.kind === "user" ? "user" as const : "agent-service" as const,
+		coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: candidate.toolRevisionId }, action: ProductAuthorizationActions.Invoke }],
+		decisionDigests: [`sha256:${"b".repeat(64)}`] as const,
+		membershipRevision: context.snapshot.identitySnapshot.fleetMembershipRevision,
+		agentRevisionId: context.agentRevisionId,
+		runId: context.runId,
+		attempt: context.attempt,
+		argumentsDigest: candidate.argumentsDigest as `sha256:${string}`,
+		assignmentDigest: assignmentDigest as `sha256:${string}`,
+	};
+	return { ...evidence, evidenceDigest: ___DigestCanonicalJson(evidence as unknown as JsonValue) };
+}
+
 /** Build the adapter under test over a fake with the requested durable state. */
 function _authority(options: FakeOptions)
 {
@@ -321,7 +349,8 @@ function _authority(options: FakeOptions)
 		fake.run.state = "RecoveryRequired";
 		return ToolInvocationRunRecoveryEnterResults.Entered;
 	}) };
-	return { authority: new PrismaRuntimeDispatchAuthorityUnitOfWork(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry, elicitationUnitOfWorkFactory, _continuations, recoveryAuthority), elicitationUnitOfWork, elicitationUnitOfWorkFactory, recoveryAuthority, ...fake };
+	const externalActionAuthorization = options.externalActionAuthorization ?? { admitInTransaction: vi.fn(async function _Admit(_transaction, context, candidate): Promise<RuntimeExternalActionAuthorizationEvidence> { return _AuthorizationEvidence(context, candidate); }) };
+	return { authority: new PrismaRuntimeDispatchAuthorityUnitOfWork(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry, elicitationUnitOfWorkFactory, _continuations, recoveryAuthority, externalActionAuthorization), elicitationUnitOfWork, elicitationUnitOfWorkFactory, recoveryAuthority, externalActionAuthorization, ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -716,6 +745,59 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.toolInvocations).toHaveLength(1);
 		expect(context.toolInvocations[0]).toMatchObject({ state: "Preparing", candidateId: "candidate-ext", toolInvocationId: "invocation-1", approvalRequired: true, recoveryMode: "Manual" });
 		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-ext"]);
+		expect(context.externalActionAuthorization.admitInTransaction).toHaveBeenCalledTimes(1);
+	});
+
+	it("refuses an external action when current central authorization no longer allows it", async function _RefusesRevokedAction()
+	{
+		const authorization = { admitInTransaction: vi.fn().mockResolvedValue(null) };
+		const context = _authority({ runState: "Running", externalActionAuthorization: authorization });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const argumentsValue = { q: "revoked" };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-revoked", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "integration:search:query", toolInvocationId: "invocation-revoked", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "external_action_not_authorized" });
+		expect(context.toolInvocations).toHaveLength(0);
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
+		expect(authorization.admitInTransaction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ runId: "run-1", siloId: "silo-1" }), candidate, new Date("2026-07-20T00:01:00.000Z"));
+	});
+
+	it("validates compiled tool arguments before recording central authorization", async function _ValidatesBeforeAuthorization()
+	{
+		const authorization = { admitInTransaction: vi.fn() };
+		const context = _authority({ runState: "Running", externalActionAuthorization: authorization });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const argumentsValue = { q: 42 };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-invalid", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "integration:search:query", toolInvocationId: "invocation-invalid", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "external_action_invalid" });
+		expect(authorization.admitInTransaction).not.toHaveBeenCalled();
+		expect(context.toolInvocations).toHaveLength(0);
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
+	});
+
+	it("refuses evidence bound to a different workload assignment", async function _RefusesWrongAssignment()
+	{
+		const authorization = { admitInTransaction: vi.fn(async function _Admit(_transaction, context, candidate) { return _AuthorizationEvidence(context, candidate, `sha256:${"c".repeat(64)}`); }) };
+		const context = _authority({ runState: "Running", externalActionAuthorization: authorization });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const argumentsValue = { q: "wrong assignment" };
+		const candidate: RuntimeExternalActionCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-wrong-assignment", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "integration:search:query", toolInvocationId: "invocation-wrong-assignment", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "external_action_invalid" });
+		expect(context.toolInvocations).toHaveLength(0);
+	});
+
+	it("rolls back authorization evidence and invocation when candidate fencing loses", async function _RollsBackExternalAction()
+	{
+		const context = _authority({ runState: "Running", loseCandidateFence: true });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const argumentsValue = { q: "rollback" };
+		const candidate: RuntimeExternalActionCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-rollback", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "integration:search:query", toolInvocationId: "invocation-rollback", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).rejects.toThrow("runtime dispatch lost its candidate acceptance fence");
+		expect(context.toolInvocations).toHaveLength(0);
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
 	});
 
 	it("opens a runtime request before accepting its candidate id and exactly replays it", async function _OpensRuntimeElicitation()

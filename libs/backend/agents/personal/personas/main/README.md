@@ -49,6 +49,16 @@ A retake is a new interview rather than a rewrite of an old one. The owner profi
 question-set version, and start instant are fixed at creation, so a later refresh preserves the
 earlier interview as evidence instead of changing who answered which questions.
 
+Persona permission is decided by the central transaction-bound `AuthorizationAuthority`. Active
+membership grants the authenticated local Principal `PersonaCollection/Create` on the silo before a
+profile id exists. Profile creation and creator `Persona` grants (`Discover`, `Read`, `Create`,
+`Edit`, `Use`, and `Delete`) commit together. Status, questions, and approval snapshots require
+`Read`; interview, answer, completion, tie, draft, and approval writes require `Edit`. Runtime
+execution separately requires `Use`. External subjects remain ownership evidence only and are never
+substituted for the admitted local Principal.
+`PrismaRuntimePersonaEffectEligibilityAuthority` supplies that effect-time lifecycle coordinate only
+while the frozen approved revision remains the profile's active revision.
+
 The approval half takes one consistent database snapshot and confirms the caller owns the profile;
 the revision is still a `draft`; the interview is `completed`; there are between **three and five**
 provenance-linked insights; the immutable weighted score, explicit tie evidence, reviewed source

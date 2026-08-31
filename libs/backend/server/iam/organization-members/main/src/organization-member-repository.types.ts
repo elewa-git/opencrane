@@ -1,7 +1,12 @@
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+
 import type { OrganizationMember, OrganizationMemberRoles } from "./directory.types";
 import type { OrganizationMembershipCaller } from "./authority.types";
 import type { OrganizationInvitationStatuses, OrganizationInviteRecipientValidation } from "./invitations.types";
 import type { OrganizationInvitationTokenCoordinates } from "./invitation-token.types";
+
+/** Constructs the central authority over one organization-member transaction. */
+export type OrganizationMemberAuthorizationAuthorityFactory<Transaction> = (transaction: Transaction) => AuthorizationAuthority;
 
 /** Persistence projection needed to issue a link for one invitation generation. */
 export interface OrganizationInvitationRecord
@@ -55,7 +60,7 @@ export interface OrganizationInvitationDraft
 /** Inputs for one standalone create transaction. */
 export interface CreateStandaloneInvitationsCommand
 {
-	/** Verified active administrator. */
+	/** Verified caller whose current organisation administration grant is required. */
 	readonly caller: OrganizationMembershipCaller;
 	/** Assignable role. */
 	readonly role: OrganizationMemberRoles.Admin | OrganizationMemberRoles.Member;
@@ -83,7 +88,7 @@ export interface CreateStandaloneInvitationsResult
 /** Inputs for one standalone resend transaction. */
 export interface ResendStandaloneInvitationCommand
 {
-	/** Verified active administrator. */
+	/** Verified caller whose current organisation administration grant is required. */
 	readonly caller: OrganizationMembershipCaller;
 	/** Invitation selected by the route path. */
 	readonly invitationId: string;
@@ -113,9 +118,9 @@ export interface OrganizationMemberRepository
 {
 	/** Checks current active membership for the exact subject and host-selected silo. */
 	hasActiveMembership(caller: Pick<OrganizationMembershipCaller, "siloId" | "subjectId">): Promise<boolean>;
-	/** Reads the directory after proving the caller is an active administrator. */
+	/** Reads the directory after proving the caller's current organisation administration grant. */
 	directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectoryRecords>;
-	/** Validates recipients after proving the caller is an active administrator. */
+	/** Validates recipients after proving the caller's current organisation administration grant. */
 	validate(caller: OrganizationMembershipCaller, emails: readonly string[], now: Date): Promise<readonly OrganizationInviteRecipientValidation[]>;
 	/** Creates or recovers one idempotent invitation batch and audit entry. */
 	create(command: CreateStandaloneInvitationsCommand): Promise<CreateStandaloneInvitationsResult>;

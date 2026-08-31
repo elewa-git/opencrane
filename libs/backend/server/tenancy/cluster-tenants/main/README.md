@@ -14,9 +14,9 @@ mutating resources owned by another organisation.
                     ▼
  ┌─────────────────────────────────────┐
  │ cluster-tenants  ◄── HERE            │
- │ resolve caller membership · compare │
+ │ resolve caller membership           │
  └───────────────┬─────────────────────┘
-                 │ allow or deny
+                 │ trusted tenant or none
                  ▼
        authenticated domain capabilities
 ```
@@ -26,13 +26,14 @@ organisation name. Missing, ambiguous, or mismatched evidence produces a denial.
 
 ## Public surface
 
-- `_ClusterTenantScopeGuard` / `_ResolveCallerClusterTenant` — enforce organisation ownership for
-  mutations.
+- `_ResolveCallerClusterTenant` — resolves an authenticated subject to one trusted organisation
+  membership for identity projection.
 
 ## Boundary
 
-Consumed by organisation-scoped domain routes. It checks caller scope; it does not own agent, run,
-membership, provisioning, or provider behaviour.
+Consumed by identity and organisation-scoped composition. It resolves membership identity facts;
+the central authorization authority decides product permissions. It does not own agent, run,
+provisioning, or provider behaviour.
 
 ## Dependency direction
 
@@ -41,7 +42,7 @@ Tagged `scope:cluster-tenants`: it may depend only on `scope:auth`, `scope:clust
 
 ## Data & persistence
 
-Organisation membership is stored in PostgreSQL and supplies the evidence used by the guard.
+Organisation membership is stored in PostgreSQL and supplies the subject-to-tenant projection.
 
 ## See also
 

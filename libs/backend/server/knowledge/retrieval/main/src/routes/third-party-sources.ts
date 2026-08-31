@@ -1,270 +1,167 @@
-import { Router } from "express";
-import type { ThirdPartySource, ThirdPartySourceItem } from "@opencrane/contracts";
-import type { PrismaClient } from "@prisma/client";
+import { Router, type Request, type Response } from "express";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
-import type { ThirdPartySourceWriteRequest } from "./third-party-sources.types";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-/** Convert an optional API timestamp into the database value for a named update field. */
-function _OptionalTimestamp(value: string | null | undefined): Date | null | undefined
+import { PrismaThirdPartySourceUnitOfWork, ThirdPartySourceAuthorizationError, ThirdPartySourceNotFoundError } from "../prisma-third-party-source-authority";
+import type { ThirdPartySourceAuthorizationAuthorityFactory, ThirdPartySourceRouteCaller, ThirdPartySourceRouteCallerResolver, ThirdPartySourceWriteRequest } from "./third-party-sources.types";
+
+/** Resolves source-governance authority from the verified browser Principal. */
+function _ResolveThirdPartySourceCaller(request: Request): ThirdPartySourceRouteCaller | null
 {
-	if (value === undefined) return undefined;
-	if (value === null) return null;
-	if (value.length === 0) return null;
-	return new Date(value);
+	const principal = _ResolveRequestPrincipal(request);
+	return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId };
 }
 
-function _OptionalUpdate<T>(key: string, value: T | undefined): Record<string, T>
+/** Returns the trusted caller or sends the fail-closed authorization response. */
+function _RequireThirdPartySourceCaller(request: Request, response: Response, resolveCaller: ThirdPartySourceRouteCallerResolver): ThirdPartySourceRouteCaller | null
 {
-	if (value === undefined) return {};
-	return { [key]: value };
+	const caller = resolveCaller(request);
+	if (caller !== null)
+	{
+		return caller;
+	}
+	response.status(403).json({ error: "Authenticated Principal is required", code: "FORBIDDEN" });
+	return null;
 }
 
-/**
- * CRUD router for third-party source inventory and discovery results.
- *
- * @param prisma - Prisma client used for persistence.
- * @returns Configured Express router.
- */
-export function thirdPartySourcesRouter(prisma: PrismaClient): Router
+/** Maps central authorization denials to the public source-governance response. */
+function _SendAuthorizationError(error: unknown, response: Response): boolean
 {
-  const router = Router();
+	if (!(error instanceof ThirdPartySourceAuthorizationError))
+	{
+		return false;
+	}
+	response.status(403).json({ error: error.message, code: "FORBIDDEN" });
+	return true;
+}
 
-  /** List all configured third-party sources with discovered item counts. */
-  router.get("/", async function _listThirdPartySources(req, res)
-  {
-    const sources = await (prisma as unknown as {
-      thirdPartySource: {
-        findMany: (args: { orderBy: { createdAt: "desc" }; include: { items: true } }) => Promise<Array<Record<string, unknown>>>;
-      };
-    }).thirdPartySource.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { items: true },
-    });
-
-    res.json(sources.map(function _mapSource(source)
-    {
-      return _MapThirdPartySource(source);
-    }));
-  });
-
-  /** Get a single third-party source and its discovered items. */
-  router.get("/:id", async function _getThirdPartySource(req, res)
-  {
-    const source = await (prisma as unknown as {
-      thirdPartySource: {
-        findUnique: (args: { where: { id: string }; include: { items: true } }) => Promise<Record<string, unknown> | null>;
-      };
-    }).thirdPartySource.findUnique({
-      where: { id: req.params.id },
-      include: { items: true },
-    });
-
-    if (!source)
-    {
-      res.status(404).json({ error: "Third-party source not found", code: "THIRD_PARTY_SOURCE_NOT_FOUND" });
-      return;
-    }
-
-    res.json(_MapThirdPartySource(source));
-  });
-
-  /** Create a new third-party source and its discovered item inventory. */
-  router.post("/", async function _createThirdPartySource(req, res)
-  {
-    const body = req.body as ThirdPartySourceWriteRequest;
-    const createdSource = await (prisma as unknown as {
-      thirdPartySource: {
-        create: (args: { data: Record<string, unknown> }) => Promise<{ id: string; name: string }>;
-      };
-      thirdPartySourceItem: {
-        createMany: (args: { data: Array<Record<string, unknown>> }) => Promise<unknown>;
-      };
-      auditEntry: {
-        create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
-      };
-    }).thirdPartySource.create({
-      data: {
-        name: body.name,
-        kind: body.kind,
-        status: body.status ?? "pending-approval",
-        originUrl: body.originUrl,
-        syncMode: body.syncMode,
-        ...(body.lastSyncedAt ? { lastSyncedAt: new Date(body.lastSyncedAt) } : {}),
-        ...(body.nextRunAt ? { nextRunAt: new Date(body.nextRunAt) } : {}),
-        ...(body.notes ? { notes: body.notes } : {}),
-      },
-    });
-
-    if (body.items && body.items.length > 0)
-    {
-      await (prisma as unknown as {
-        thirdPartySourceItem: {
-          createMany: (args: { data: Array<Record<string, unknown>> }) => Promise<unknown>;
-        };
-      }).thirdPartySourceItem.createMany({
-        data: body.items.map(function _mapItem(item)
-        {
-          return {
-            sourceId: createdSource.id,
-            kind: item.kind,
-            name: item.name,
-            upstreamId: item.upstreamId,
-            version: item.version,
-            digest: item.digest,
-            metadata: item.metadata,
-          };
-        }),
-      });
-    }
-
-    await (prisma as unknown as {
-      auditEntry: { create: (args: { data: Record<string, unknown> }) => Promise<unknown> };
-    }).auditEntry.create({
-      data: {
-        action: "Created",
-        resource: `ThirdPartySource/${createdSource.id}`,
-        message: `Third-party source ${createdSource.name} created`,
-      },
-    });
-
-    res.status(201).json({ id: createdSource.id, status: "created" });
-  });
-
-  /** Update a third-party source and fully replace its discovered item inventory. */
-  router.put("/:id", async function _updateThirdPartySource(req, res)
-  {
-    const body = req.body as Partial<ThirdPartySourceWriteRequest>;
-    await (prisma as unknown as {
-      thirdPartySource: {
-        update: (args: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>;
-      };
-      thirdPartySourceItem: {
-        deleteMany: (args: { where: { sourceId: string } }) => Promise<unknown>;
-        createMany: (args: { data: Array<Record<string, unknown>> }) => Promise<unknown>;
-      };
-      auditEntry: {
-        create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
-      };
-    }).thirdPartySource.update({
-      where: { id: req.params.id },
-      data: {
-        ...(body.name ? { name: body.name } : {}),
-        ...(body.kind ? { kind: body.kind } : {}),
-        ...(body.status ? { status: body.status } : {}),
-        ...(body.originUrl ? { originUrl: body.originUrl } : {}),
-        ...(body.syncMode ? { syncMode: body.syncMode } : {}),
-        ..._OptionalUpdate("lastSyncedAt", _OptionalTimestamp(body.lastSyncedAt)),
-        ..._OptionalUpdate("nextRunAt", _OptionalTimestamp(body.nextRunAt)),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-      },
-    });
-
-    await (prisma as unknown as {
-      thirdPartySourceItem: {
-        deleteMany: (args: { where: { sourceId: string } }) => Promise<unknown>;
-        createMany: (args: { data: Array<Record<string, unknown>> }) => Promise<unknown>;
-      };
-    }).thirdPartySourceItem.deleteMany({ where: { sourceId: req.params.id } });
-
-    if (body.items && body.items.length > 0)
-    {
-      await (prisma as unknown as {
-        thirdPartySourceItem: {
-          createMany: (args: { data: Array<Record<string, unknown>> }) => Promise<unknown>;
-        };
-      }).thirdPartySourceItem.createMany({
-        data: body.items.map(function _mapItem(item)
-        {
-          return {
-            sourceId: req.params.id,
-            kind: item.kind,
-            name: item.name,
-            upstreamId: item.upstreamId,
-            version: item.version,
-            digest: item.digest,
-            metadata: item.metadata,
-          };
-        }),
-      });
-    }
-
-    await (prisma as unknown as {
-      auditEntry: { create: (args: { data: Record<string, unknown> }) => Promise<unknown> };
-    }).auditEntry.create({
-      data: {
-        action: "Updated",
-        resource: `ThirdPartySource/${req.params.id}`,
-        message: `Third-party source ${req.params.id} updated`,
-      },
-    });
-
-    res.json({ id: req.params.id, status: "updated" });
-  });
-
-  /** Delete a third-party source and its discovered items. */
-  router.delete("/:id", async function _deleteThirdPartySource(req, res)
-  {
-    await (prisma as unknown as {
-      thirdPartySourceItem: { deleteMany: (args: { where: { sourceId: string } }) => Promise<unknown> };
-      thirdPartySource: { delete: (args: { where: { id: string } }) => Promise<unknown> };
-      auditEntry: { create: (args: { data: Record<string, unknown> }) => Promise<unknown> };
-    }).thirdPartySourceItem.deleteMany({ where: { sourceId: req.params.id } });
-    await (prisma as unknown as {
-      thirdPartySource: { delete: (args: { where: { id: string } }) => Promise<unknown> };
-    }).thirdPartySource.delete({ where: { id: req.params.id } });
-    await (prisma as unknown as {
-      auditEntry: { create: (args: { data: Record<string, unknown> }) => Promise<unknown> };
-    }).auditEntry.create({
-      data: {
-        action: "Deleted",
-        resource: `ThirdPartySource/${req.params.id}`,
-        message: `Third-party source ${req.params.id} deleted`,
-      },
-    });
-    res.json({ id: req.params.id, status: "deleted" });
-  });
-
-  return router;
+/** Maps a silo-scoped source miss to the public not-found response. */
+function _SendNotFoundError(error: unknown, response: Response): boolean
+{
+	if (!(error instanceof ThirdPartySourceNotFoundError))
+	{
+		return false;
+	}
+	response.status(404).json({ error: error.message, code: "THIRD_PARTY_SOURCE_NOT_FOUND" });
+	return true;
 }
 
 /**
- * Convert a stored source row into the API shape.
+ * Serves source governance after binding every operation to the verified Principal and central authority.
  *
- * The enum conversion is by string replacement, not by a lookup table: a database value with no
- * matching replacement is lower-cased and passed through as though it were valid, and the cast
- * hides that from the compiler. So adding a kind or a status to the schema without adding its
- * replacement here produces a wrong value in the response rather than a build failure.
- *
- * @param source - The stored row, typed loosely because the caller reaches the table
- *   dynamically.
- * @returns The source with its item list, ready to serialise.
+ * Called by: apps/opencrane/src/app/routes.ts at `/api/v1/third-party-sources`.
  */
-function _MapThirdPartySource(source: Record<string, unknown>): ThirdPartySource
+export function thirdPartySourcesRouter(prisma: PrismaClient, resolveCaller: ThirdPartySourceRouteCallerResolver = _ResolveThirdPartySourceCaller, createAuthorization?: ThirdPartySourceAuthorizationAuthorityFactory<Prisma.TransactionClient>): Router
 {
-  const items = Array.isArray(source.items) ? source.items as Array<Record<string, unknown>> : [];
+	const router = Router();
+	const sources = new PrismaThirdPartySourceUnitOfWork(prisma, createAuthorization);
 
-  return {
-    id: String(source.id),
-    name: String(source.name),
-    kind: String(source.kind).replace("McpRegistry", "mcp-registry").replace("AnthropicSkills", "anthropic-skills").replace("GitRepository", "git-repository").replace("ManualUpload", "manual-upload").toLowerCase() as ThirdPartySource["kind"],
-    status: String(source.status).replace("PendingApproval", "pending-approval").toLowerCase() as ThirdPartySource["status"],
-    originUrl: String(source.originUrl),
-    syncMode: String(source.syncMode) as ThirdPartySource["syncMode"],
-    managedItemCount: items.length,
-    lastSyncedAt: source.lastSyncedAt instanceof Date ? source.lastSyncedAt.toISOString() : undefined,
-    nextRunAt: source.nextRunAt instanceof Date ? source.nextRunAt.toISOString() : undefined,
-    notes: typeof source.notes === "string" ? source.notes : undefined,
-    items: items.map(function _mapItem(item): ThirdPartySourceItem
-    {
-      return {
-        id: typeof item.id === "string" ? item.id : undefined,
-        kind: String(item.kind).replace("McpServer", "mcp-server").toLowerCase() as ThirdPartySourceItem["kind"],
-        name: String(item.name),
-        upstreamId: String(item.upstreamId),
-        version: typeof item.version === "string" ? item.version : undefined,
-        digest: typeof item.digest === "string" ? item.digest : undefined,
-        metadata: typeof item.metadata === "object" && item.metadata !== null ? item.metadata as Record<string, unknown> : undefined,
-      };
-    }),
-  };
+	router.get("/", async function _ListThirdPartySources(request, response)
+	{
+		const caller = _RequireThirdPartySourceCaller(request, response, resolveCaller);
+		if (caller === null)
+		{
+			return;
+		}
+		try
+		{
+			response.json(await sources.list(caller));
+		}
+		catch (error)
+		{
+			if (!_SendAuthorizationError(error, response) && !_SendNotFoundError(error, response))
+			{
+				throw error;
+			}
+		}
+	});
+
+	router.get("/:id", async function _GetThirdPartySource(request, response)
+	{
+		const caller = _RequireThirdPartySourceCaller(request, response, resolveCaller);
+		if (caller === null)
+		{
+			return;
+		}
+		try
+		{
+			const source = await sources.get(caller, String(request.params.id));
+			if (source === null)
+			{
+				response.status(404).json({ error: "Third-party source not found", code: "THIRD_PARTY_SOURCE_NOT_FOUND" });
+				return;
+			}
+			response.json(source);
+		}
+		catch (error)
+		{
+			if (!_SendAuthorizationError(error, response) && !_SendNotFoundError(error, response))
+			{
+				throw error;
+			}
+		}
+	});
+
+	router.post("/", async function _CreateThirdPartySource(request, response)
+	{
+		const caller = _RequireThirdPartySourceCaller(request, response, resolveCaller);
+		if (caller === null)
+		{
+			return;
+		}
+		try
+		{
+			response.status(201).json(await sources.create(caller, request.body as ThirdPartySourceWriteRequest));
+		}
+		catch (error)
+		{
+			if (!_SendAuthorizationError(error, response))
+			{
+				throw error;
+			}
+		}
+	});
+
+	router.put("/:id", async function _UpdateThirdPartySource(request, response)
+	{
+		const caller = _RequireThirdPartySourceCaller(request, response, resolveCaller);
+		if (caller === null)
+		{
+			return;
+		}
+		try
+		{
+			response.json(await sources.update(caller, String(request.params.id), request.body as Partial<ThirdPartySourceWriteRequest>));
+		}
+		catch (error)
+		{
+			if (!_SendAuthorizationError(error, response) && !_SendNotFoundError(error, response))
+			{
+				throw error;
+			}
+		}
+	});
+
+	router.delete("/:id", async function _DeleteThirdPartySource(request, response)
+	{
+		const caller = _RequireThirdPartySourceCaller(request, response, resolveCaller);
+		if (caller === null)
+		{
+			return;
+		}
+		try
+		{
+			response.json(await sources.delete(caller, String(request.params.id)));
+		}
+		catch (error)
+		{
+			if (!_SendAuthorizationError(error, response) && !_SendNotFoundError(error, response))
+			{
+				throw error;
+			}
+		}
+	});
+
+	return router;
 }

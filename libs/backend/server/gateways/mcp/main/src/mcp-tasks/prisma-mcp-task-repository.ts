@@ -1,14 +1,19 @@
 import { createHash } from "node:crypto";
 
 import Ajv from "ajv";
-import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
+import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 
+import { PrismaManagedAuthorizationGrantRepository, type AuthorizationAuthority, type ManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantSpec } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { MCP_ERA_PROTOCOL_VERSION } from "../era-probe/mcp-era-probe.types";
 import { _McpTerminalWorkloadState } from "../runtime/mcp-runtime-terminal-workload-state";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _McpTaskCancellationConflictError, type McpTaskCreateResult, type McpTaskRepository, type McpTaskSubmissionRecord, type McpTaskWorkflowBinding } from "./mcp-task-repository.types";
 import { McpTaskStates, type McpTaskInputRequest, type McpTaskInputResponse, type McpTaskRecord } from "./mcp-task.types";
+
+/** Isolates grants that follow the durable creator relation of one public MCP task. */
+const _MCP_TASK_CREATOR_GRANT_MANAGER_ID = "mcp-task-creator-access";
 
 /** Fields returned by every task repository operation. */
 const _TASK_SELECT = {
@@ -141,11 +146,17 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 {
 	/** Prisma transaction shared with workflow admission. */
 	private readonly _transaction: Prisma.TransactionClient;
+	/** Central product authority sharing this repository's transaction. */
+	private readonly _authorization: AuthorizationAuthority;
+	/** Shared grant writer that projects the creator relation inside this transaction. */
+	private readonly _managedGrants: ManagedAuthorizationGrantRepository;
 
-	/** Bind task operations to one caller-owned database transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	/** Bind task and product authorization operations to one caller-owned database transaction. */
+	constructor(transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, managedGrants: ManagedAuthorizationGrantRepository | null = null)
 	{
 		this._transaction = transaction;
+		this._authorization = authorization;
+		this._managedGrants = managedGrants ?? new PrismaManagedAuthorizationGrantRepository(transaction);
 	}
 
 	/** Create or replay one exact installed Ready MCP tool task. */
@@ -159,7 +170,11 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		});
 		const existing = await this._transaction.mcpTask.findUnique({ where: { siloId_requestKeyDigest: { siloId: submission.siloId, requestKeyDigest: submission.requestKeyDigest } }, select: _TASK_SELECT });
 		if (existing !== null)
-			return existing.callDigest === submission.callDigest && existing.principalId === submission.principalId ? { created: false, task: _Record(existing) } : null;
+		{
+			if (existing.callDigest !== submission.callDigest || existing.principalId !== submission.principalId)
+				return null;
+			return await this._CanReadTask(submission.siloId, submission.principalId, existing.id) ? { created: false, task: _Record(existing) } : null;
+		}
 		const tool = await this._transaction.mcpToolRevision.findFirst({
 			where: {
 				id: submission.toolRevisionId,
@@ -195,6 +210,7 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 			},
 			select: _TASK_SELECT,
 		});
+		await this._ReconcileCreatorGrants(submission.siloId, submission.principalId, created.id);
 		return { created: true, task: _Record(created) };
 	}
 
@@ -214,7 +230,9 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 	async find(siloId: string, principalId: string, taskId: string): Promise<McpTaskRecord | null>
 	{
 		const task = await this._transaction.mcpTask.findFirst({ where: { id: taskId, siloId, principalId }, select: _TASK_SELECT });
-		return task === null ? null : _Record(task);
+		if (task === null || !await this._CanReadTask(siloId, principalId, task.id))
+			return null;
+		return _Record(task);
 	}
 
 	/** Load the exact immutable call selected by Absurd input. */
@@ -241,10 +259,24 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		const stored = _InputResponse(current.inputResponse);
 		if (request === null || request.requestId !== response.requestId)
 			return null;
-		if (stored !== null)
-			return ___DigestCanonicalJson(stored.value) === ___DigestCanonicalJson(response.value) ? _Record(current) : null;
-		if (current.state !== McpTaskState.InputRequired)
+		if (stored !== null && ___DigestCanonicalJson(stored.value) !== ___DigestCanonicalJson(response.value))
 			return null;
+		if (stored === null && current.state !== McpTaskState.InputRequired)
+			return null;
+		const inputAdmission = await this._authorization.admitPrincipal({
+			siloId,
+			principalId,
+			actorKind: "user",
+			actorId: principalId,
+			resource: { kind: ProductAuthorizationResourceKinds.McpTask, id: current.id },
+			action: ProductAuthorizationActions.Edit,
+			argumentsDigest: ___DigestCanonicalJson({ requestId: response.requestId, value: response.value }),
+			nowEpochMs: Date.now(),
+		});
+		if (inputAdmission.outcome !== AuthorizationDecisionOutcomes.Allow)
+			return null;
+		if (stored !== null)
+			return _Record(current);
 		const updated = await this._transaction.mcpTask.updateMany({ where: { id: taskId, state: McpTaskState.InputRequired, inputResponse: { equals: Prisma.DbNull } }, data: { inputResponse: response as unknown as Prisma.InputJsonValue, state: McpTaskState.Working } });
 		if (updated.count !== 1)
 			return null;
@@ -252,7 +284,7 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 	}
 
 	/** Create a task-owned Ready ToolInvocation and queue it for the existing MCP runtime. */
-	async admitToolInvocation(siloId: string, taskId: string, callDigest: string): Promise<McpTaskRecord | null>
+	async admitAuthorizedToolInvocation(siloId: string, taskId: string, callDigest: string): Promise<McpTaskRecord | null>
 	{
 		const task = await this._transaction.mcpTask.findFirst({ where: { id: taskId, siloId, callDigest }, select: _TASK_SELECT });
 		if (task === null)
@@ -270,12 +302,46 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		const now = new Date();
 		const retryDeadlineAt = new Date(now.getTime() + 5 * 60_000);
 		const argumentsDigest = ___DigestCanonicalJson(effectiveArguments);
+		const invocationAdmission = await this._authorization.admitPrincipal({
+			siloId: task.siloId,
+			principalId: task.principalId,
+			actorKind: "user",
+			actorId: task.principalId,
+			resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: task.toolRevisionId },
+			action: ProductAuthorizationActions.Invoke,
+			argumentsDigest,
+			nowEpochMs: now.getTime(),
+		});
+		if (invocationAdmission.outcome !== AuthorizationDecisionOutcomes.Allow)
+		{
+			const failed = await this._transaction.mcpTask.update({ where: { id: task.id }, data: { state: McpTaskState.Failed, failureCode: "mcp_tool_not_authorized", completedAt: now }, select: _TASK_SELECT });
+			return _Record(failed);
+		}
+		if (invocationAdmission.evidence === null)
+			throw new Error("allowed MCP tool invocation admission omitted central evidence");
+		const authorizationCoordinates = [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: task.toolRevisionId }, action: ProductAuthorizationActions.Invoke }] as const;
+		const authorizationDecisionDigests = [invocationAdmission.evidence.decisionDigest];
+		const authorizationEvidenceDigest = ___DigestCanonicalJson({
+			siloId: task.siloId,
+			principalId: task.principalId,
+			actorKind: "user",
+			coordinates: authorizationCoordinates,
+			decisionDigests: authorizationDecisionDigests,
+			mcpTaskId: task.id,
+			toolRevisionId: task.toolRevisionId,
+			argumentsDigest,
+		} as unknown as JsonValue);
 		const requestIdentity = { runtimeInstanceId: `mcp-task:${task.id}`, commandId: task.id, candidateId: task.id };
 		const invocation = await this._transaction.toolInvocation.create({
 			data: {
 				siloId: task.siloId,
 				mcpTaskId: task.id,
 				subjectId: task.principalId,
+				authorizationPrincipalId: task.principalId,
+				authorizationActorKind: ToolInvocationAuthorizationActorKind.User,
+				authorizationCoordinates: authorizationCoordinates as unknown as Prisma.InputJsonValue,
+				authorizationDecisionDigests,
+				authorizationEvidenceDigest,
 				runtimeInstanceId: requestIdentity.runtimeInstanceId,
 				commandId: requestIdentity.commandId,
 				candidateId: requestIdentity.candidateId,
@@ -319,6 +385,18 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 			return "not_available";
 		if (task.state === McpTaskState.Running || task.toolInvocation?.state === ToolInvocationState.Claimed || task.toolInvocation?.state === ToolInvocationState.Reconciling)
 			return "too_late";
+		const cancellationAdmission = await this._authorization.admitPrincipal({
+			siloId,
+			principalId,
+			actorKind: "user",
+			actorId: principalId,
+			resource: { kind: ProductAuthorizationResourceKinds.McpTask, id: task.id },
+			action: ProductAuthorizationActions.Cancel,
+			argumentsDigest: ___DigestCanonicalJson({ taskId: task.id }),
+			nowEpochMs: Date.now(),
+		});
+		if (cancellationAdmission.outcome !== AuthorizationDecisionOutcomes.Allow)
+			return "not_available";
 		if (task.toolInvocation !== null)
 		{
 			const execution = task.toolInvocation.mcpRuntimeExecution;
@@ -340,5 +418,27 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		if (updated.count !== 1)
 			throw new _McpTaskCancellationConflictError();
 		return "cancelled";
+	}
+
+	/** Return whether the Principal still holds the exact task read grant through any current subject. */
+	private async _CanReadTask(siloId: string, principalId: string, taskId: string): Promise<boolean>
+	{
+		const entitled = await this._authorization.listPrincipalEntitled({ siloId, principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.McpTask, id: taskId }], nowEpochMs: Date.now() });
+		return entitled.length === 1;
+	}
+
+	/** Project the exact creator read, input-response and cancellation grants beside a new task. */
+	private async _ReconcileCreatorGrants(siloId: string, principalId: string, taskId: string): Promise<void>
+	{
+		const resource = { kind: ProductAuthorizationResourceKinds.McpTask, id: taskId } as const;
+		const actions = [ProductAuthorizationActions.Read, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Cancel] as const;
+		const grants = actions.map(function _Grant(action): ManagedAuthorizationGrantSpec
+		{
+			const capability = __ProductAuthorizationCapability(resource.kind, action);
+			if (capability === null)
+				throw new Error(`MCP task capability ${action} is unavailable`);
+			return { subject: { kind: AuthorizationSubjectKinds.Principal, principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: principalId };
+		});
+		await this._managedGrants.reconcileManagedResourceGrants({ siloId, managerId: _MCP_TASK_CREATOR_GRANT_MANAGER_ID, resource, grants, now: new Date() });
 	}
 }

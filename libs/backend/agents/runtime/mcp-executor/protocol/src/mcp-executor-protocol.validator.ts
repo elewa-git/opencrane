@@ -1,6 +1,13 @@
+/**
+ * Validates MCP server data before the executor stores it or returns it across a JSON boundary.
+ * Keeping these schemas beside the protocol types makes the accepted wire form independently
+ * reviewable from transport and lifecycle orchestration.
+ */
 import { z } from "zod";
 
 import type { JsonValue } from "@opencrane/util";
+
+import type { McpExecutorDiscoveredTool } from "./mcp-executor-protocol.types";
 
 /** Recursively accepts only values that can cross the executor's JSON boundary. */
 const _JsonValueSchema: z.ZodType<JsonValue> = z.lazy(function _JsonValue(): z.ZodType<JsonValue>
@@ -52,16 +59,36 @@ const _ContentBlockSchema = z.discriminatedUnion("type", [_TextContentSchema, _I
 
 const _ToolInputSchema = z.record(_JsonValueSchema).refine(function _ObjectSchema(value): boolean { return value["type"] === "object"; });
 
+/** Validates the durable representation of a tool discovered from an MCP server. */
+const _DiscoveredToolSchema = z.object({
+	name: z.string().min(1).max(128),
+	description: z.string().max(4_096).nullable().optional(),
+	inputSchema: _ToolInputSchema,
+}).strict();
+
+/** Bounds a tools/list response before names are checked for uniqueness. */
+const _DiscoveredToolsSchema = z.array(_DiscoveredToolSchema).max(256);
+
 /**
- * Returns whether a live tool input is one JSON Schema object.
+ * Parses the server-provided durable form of discovered MCP tools.
  *
- * {@link __ParseMcpExecutorToolsListResponse} uses this check before returning a discovered tool.
- * @returns True when the value is a JSON object whose `type` field is `object`.
+ * The schema rejects unknown fields before the protocol parser checks duplicate names across the
+ * complete list. A malformed list returns null so the public parser can raise its protocol error.
+ *
+ * Called by: {@link __ParseMcpExecutorDiscoveredTools}.
+ * @param value - Untrusted `tools` field returned by an MCP server.
+ * @returns Strictly shaped tools without duplicate-name interpretation, or null when malformed.
  * @see https://modelcontextprotocol.io/specification/2026-07-28
  */
-export function _IsMcpExecutorToolInputSchema(value: unknown): value is Readonly<Record<string, JsonValue>>
+export function _ParseMcpExecutorDiscoveredTools(value: unknown): readonly McpExecutorDiscoveredTool[] | null
 {
-	return _ToolInputSchema.safeParse(value).success;
+	const result = _DiscoveredToolsSchema.safeParse(value);
+	if (!result.success)
+		return null;
+	return result.data.map(function _Tool(tool): McpExecutorDiscoveredTool
+	{
+		return { name: tool.name, description: tool.description ?? null, inputSchema: tool.inputSchema };
+	});
 }
 
 /**

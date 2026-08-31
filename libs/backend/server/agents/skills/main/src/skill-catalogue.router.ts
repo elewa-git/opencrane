@@ -3,10 +3,10 @@ import { Router, type Request, type Response } from "express";
 import type { SkillCatalogueRouterDependencies } from "./skill-catalogue.router.types";
 
 /**
- * Builds the read-only skill catalogue router: one `GET /` returning the caller's silo's skills.
+ * Builds the read-only skill catalogue router: one `GET /` returning discoverable skills.
  *
- * The silo comes from the authenticated session, never from the request, so there is no way to ask
- * for another silo's skills. There are no write endpoints here at all.
+ * The silo and Principal come from the authenticated session. The database transaction filters a
+ * bounded silo candidate list through current direct and Group grants before this route returns it.
  *
  * Responses: 200 `{ skills }` on success; 401 `skill_catalogue_authentication_required` when the
  * session does not resolve; 503 `skill_catalogue_unavailable` when the read throws, which is logged
@@ -24,10 +24,14 @@ export function __CreateSkillCatalogueRouter(dependencies: SkillCatalogueRouterD
 	router.get("/", async function _list(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);
-		if (caller === null) { response.status(401).json({ error: "skill_catalogue_authentication_required" }); return; }
+		if (caller === null)
+		{
+			response.status(401).json({ error: "skill_catalogue_authentication_required" });
+			return;
+		}
 		try
 		{
-			const skills = await dependencies.catalogue.listCatalogue(caller.siloId);
+			const skills = await dependencies.catalogue.listCatalogue(caller.siloId, caller.principalId);
 			response.status(200).json({ skills });
 		}
 		catch (err)

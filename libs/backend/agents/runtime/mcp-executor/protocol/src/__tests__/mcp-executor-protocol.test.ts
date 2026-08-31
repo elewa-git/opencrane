@@ -18,6 +18,7 @@ describe("MCP executor protocol", function _DescribeMcpExecutorProtocol()
 		expect(function _Duplicates() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [valid.result.tools[0], valid.result.tools[0]] } }); }).toThrow(/invalid/);
 		expect(function _NullSchema() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [{ name: "invalid", inputSchema: null }] } }); }).toThrow(/invalid/);
 		expect(function _ArraySchema() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [{ name: "invalid", inputSchema: [] }] } }); }).toThrow(/invalid/);
+		expect(function _UnknownField() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [{ ...valid.result.tools[0], endpoint: "caller-controlled" }] } }); }).toThrow(/invalid/);
 	});
 
 	it("matches one saved invocation and keeps tool errors explicit", function _CallsTool()

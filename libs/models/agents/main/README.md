@@ -13,8 +13,8 @@ It owns two kinds of thing:
 - **Types** for an `AgentService` (a named, reusable agent), its immutable `AgentRevision`
   (a published, frozen version of that agent, carrying revision lineage — `parentRevisionId`,
   `sourceRevisionId`, `changeMessage` — and revision-scoped `RevisionBoundaryAttachment`s over
-  stored Group or Personal knowledge boundaries), an `AgentRun` (one execution attempt), and
-  the ordered `RunEvent` emitted by that attempt.
+  stored Group or Personal knowledge boundaries), an `AgentRun` (one durable request whose attempt
+  advances across retries), and each globally ordered `RunEvent` bound to the attempt that admitted it.
 - A **pure revision diff** (`__DiffAgentRevisions`): line-level prompt diff plus semantic
   field-level configuration diff, flagging security-relevant widening (broader knowledge boundaries, tools,
   or budgets) for reviewer confirmation. It reads only stable references, never secrets.
@@ -25,8 +25,7 @@ It owns two kinds of thing:
   - `state-transitions` holds the small lookup tables of which state may legally follow which (for
     example a run may go `running → completed` but never `completed → running`), and answers a plain
     yes/no for a proposed move. Cancellation is deliberately two-phase: every active state moves to
-    nonterminal `cancelling`, and only completed workload cleanup may move it to `cancelled`. It also
-    checks that persisted run events form one gap-free sequence.
+    nonterminal `cancelling`, and only completed workload cleanup may move it to `cancelled`.
 
 Used by the agent-services backend, the personal-agent backends, and re-exported through
 `@opencrane/contracts`. Invariant: transitions are **fail-closed** — only an explicitly listed next
@@ -48,7 +47,7 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   admission instead of repeated categorical literals.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
   `AgentRevisionDiff` result types.
-- `__Is…TransitionAllowed`, `__CanAppendRunEvent` — the guard functions over the transition tables.
+- `__Is…TransitionAllowed` — the guard functions over the service, revision, and run transition tables.
 
 ## Boundary
 

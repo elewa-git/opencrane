@@ -15,15 +15,33 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
-- **Database upgrades now run through Prisma Migrate in a dedicated Job.** The forward 0.9.3 to
-  0.10.0 path accepts the exact released predecessor, applies the saved Prisma ledger once, and no
+- **Operators can deploy the warm runtime on standard-NetworkPolicy platforms such as GKE
+  Dataplane V2.** Portable policies avoid unsupported Cilium CRDs: generic Pods retain only DNS and
+  same-silo OpenCrane reachability, while only claimed Pods gain controller binding ingress and
+  same-silo LiteLLM egress.
+
+- **Database upgrades now run through a dedicated migration Job.** The forward 0.9.2 to 0.10.0
+  path accepts the exact tagged predecessor, carries its 0.9.0 schema through the reviewed IAM
+  prerequisite, lets CloudNativePG install `pg_cron` and assign its schema without sharing a
+  superuser credential with the migration container, applies the saved Prisma ledger once, and no
   longer requires a backup, application write pause, or automatic recovery. Deferred migration
-  hardening is tracked in #699.
+  hardening is tracked in #699. The same upgrade now removes residual SQL workload and run-outbox
+  authority from untagged development candidates, so repaired and fresh 0.10 databases converge on
+  the same runtime schema.
 
 - **Invited users can now complete standalone registration after the first Owner has claimed the
   silo.** A verified invited identity keeps its OIDC session long enough to accept its signed link,
   while every other product route remains unavailable until that exact subject has an active
   membership in the host-selected silo.
+
+- **Ending conversation access now reaches the durable authorization revocation path.** The database
+  allocates the participant's access-end timeline position before validating its read cursor, so the
+  same transaction can revoke the exact ChannelTarget grants on fresh installs and 0.9.2 upgrades.
+
+- **Retried agent runs now preserve attempt-exact conversation and child-delivery history.** A failed
+  attempt no longer makes the stable run stream permanently terminal: later attempts continue the
+  global event sequence while message starts, generated outputs, and child completion delivery stay
+  bound to the attempt that produced them, with at most one delivered result per child attempt.
 
 ### Added
 
@@ -48,6 +66,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   boundaries.** Grants distinguish exact from descendant coverage without inheriting group
   membership through the hierarchy, managed editors revoke only grants they own, and resource
   shares create auditable exact-recipient grants without becoming a parallel authorization model.
+- **People, personal assistants, and managed agents now use one transaction-bound product
+  authorization authority.** Reads filter the catalogue against current grants, protected mutations
+  commit their decision evidence and product change in the same database transaction, and runtime
+  tool effects first create a one-use
+  `ToolInvocation` bound to the principal, run, resource revision, arguments, approval, and workload
+  assignment. Revocation and cancellation therefore close future runtime effects without letting a
+  runtime reinterpret grants.
 - **Platform developers can now add durable, transactionally admitted work without coupling product
   logic to a scheduler engine.** The engine-neutral workflow contract and scheduling kit preserve
   idempotency, cancellation, and respawn evidence, while the Absurd adapter admits a task and its
@@ -138,13 +163,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   physical recovery reuses the schema in the backup, and a protected in-database digest prevents an
   incompatible backup from being relabelled as current. A changed target requires a clean database.
 
-- **Org admins can supply their own upstream provider key and get a full tier-structured model
-  catalog from a single credential.** Calling `PUT /api/v1/providers/byok/:provider` (org-admin
-  gated) stores one raw key in a Kubernetes Secret, registers it with the silo's LiteLLM instance
-  over the dynamic `/credentials` path without a restart, and seeds a catalog of flagship, balanced,
-  and fast model classes — all routed through that single key. From that point, the org's tenants
-  can call any of those model tiers without the platform operator having to register individual
-  models. The route is `_RequireOrgAdmin`-gated; LiteLLM-only routing is the enforcement layer.
+- **Authorized administrators can configure provider keys and models through recoverable,
+  revocation-aware commands.** `PUT /api/v1/providers/byok/:provider` commits protected intent,
+  central decision evidence, and a secret-free provider-effect command together; resumed delivery
+  rechecks authority and cannot let older work replace newer intent. New resources grant their
+  creator exact `Discover`, `Read`, and `Use`; the 0.10 cutover gives active owners and admins only
+  exact `Read` and `Use` over retained silo-global providers and models. Raw keys never persist in
+  the database.
 
 - **The gateway WebSocket is now reachable at `/gateway` so the org's SPA can own the root path.**
   Upgrading to `wss://<org>.<base>/gateway` routes to the tenant's OpenClaw pod (the proxy strips
@@ -200,11 +225,18 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Changed
 
-- **Operators upgrading from 0.9.0 to 0.9.3 now cut over to the same IAM model used by fresh
-  installations.** The digest-bound migration deterministically projects principals, groups,
-  memberships, grants, and resource boundaries, then removes the superseded agent-scope and MCP
-  access-policy authorities; ambiguous or populated unsupported legacy state stops before mutation,
-  and recovery remains backup/restore only.
+- **Operators upgrading tagged 0.9.2 to 0.10.0 now receive the same clean authorization and workflow
+  model as a fresh installation.** The migration projects current principals, groups, memberships,
+  grants, and resource boundaries, then deletes every pre-0.10 `ToolInvocation` and its approval,
+  result, memory, and MCP execution dependants before dropping the superseded DPoP, action-receipt,
+  runtime-authority, Obot, workload, outbox, and memory tables. Development databases that ran the
+  untagged 0.9.3 candidate must accept the checksum-bound forward repair or be reset; 0.9.3 is never
+  presented as a supported release boundary. This destructive pre-1.0 cutover avoids carrying
+  compatibility state into the 0.10 architecture.
+
+- **Readers can now distinguish package governance, OCI storage, and product authorization.** The
+  website explains what artifact, MCP, skill, image, grant, `ToolInvocation`, and workload-assignment
+  records each prove, and marks incomplete skill execution classes as planned rather than shipped.
 
 - **Maintainers now carry durable compatibility and transition evidence with every release-affecting
   change.** Each directly changed or dependency-adapted Nx application records the immutable root
@@ -218,8 +250,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   under `libs/backend/server`, and server-process support lives under `libs/backend/server/infra`.
 
 - **Operators can now identify and release every deployed workload from its owning app package.**
-  OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, and Obot live
-  under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those app-owned charts.
+  OpenCrane server and UI definitions stay with their product apps; Cognee and LiteLLM live under
+  `apps/_infra`; governed MCP servers execute from admitted OCI revisions; and
+  `apps/_infra/deploy-k8s` composes the surviving app-owned charts without an Obot workload.
 
 - **Platform developers can reuse functional server capabilities without importing an app root.**
   Tenant reconciliation, identity, projection, connection auth, policy reconciliation, channel
@@ -241,14 +274,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   and its dead bootstrap version marker are removed. Existing server-side rollout controls are
   unchanged pending a separate retirement or migration to real plugin deployment versions.
 
-- **The identity and mesh substrate decision has moved from Linkerd to Cilium + SPIFFE.**
-  ADR 0003 — Cilium + SPIFFE identity substrate — supersedes ADR 0001 (Linkerd). The chosen model
-  gives every silo workload a SPIFFE SVID (`spiffe://opencrane/ct/<org>/<workload>`) derived from
-  its Kubernetes ServiceAccount, and enforces the default-deny + allow-intra-silo + allow-super-admin
-  posture at L3/L4/L7 via `CiliumNetworkPolicy` keyed on cryptographic identity rather than IP
-  addresses. The portable `NetworkPolicy` floor from S2 remains as defence-in-depth underneath.
-  This is a recorded architectural decision; Cilium + SPIFFE enforcement is forward implementation
-  work (tracked in S5).
+- **Operators can enforce the same fail-closed workload topology on every qualified
+  `NetworkPolicy` cluster.** Standard Kubernetes policy is now the required isolation baseline,
+  including the exact server, controller, warm-runtime, and LiteLLM paths. Cilium-specific FQDN,
+  L7, and identity controls are optional extensions only where the exact API and enforcement
+  controller are qualified. Projected ServiceAccount tokens remain the live application
+  authentication path; SPIFFE/SPIRE is optional future work and does not replace product
+  authorization. Linkerd is no longer part of the runtime contract.
 
 ### Fixed
 
@@ -262,8 +294,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   database whose migration already completed can now finish convergence and privilege
   reconciliation because the proof query binds its validated history values through psql's script
   input instead of treating them as literal placeholders, allowing the fence to clear. Deployments
-  that omit `--initial-model-provider` can also complete Helm argument construction under strict
-  shell checks instead of aborting on an unset optional argument array. The path is contract-tested;
+  that omitted the former `--initial-model-provider` could also complete Helm argument construction
+  under strict shell checks instead of aborting on an unset optional argument array. That bootstrap
+  option is now retired. The path is contract-tested;
   live-cluster redeployment qualification remains pending.
 
 - **BYOK model calls no longer return 401 when the operator fetches the tenant model list.**
@@ -295,6 +328,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Security
 
+- **Product access can no longer be granted by a session role flag, ownership shortcut, or a
+  domain-specific policy engine.** Routes and agent effects use `AuthorizationAuthority` for the
+  typed resource and action; the callerless DPoP capability executor and separate action receipts
+  are gone. `isPlatformOperator` survives only as a fleet identity-plane claim and cannot authorize
+  a product action.
+
 - **Tenant pods can no longer self-install or self-update their agent runtime.** Runtime code is
   owned by the signed image lifecycle, closing the path where a restart or mutable state volume
   could silently select a different OpenClaw or memory-plugin build.
@@ -318,8 +357,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 ### Removed
 
 - **Operators no longer deploy or maintain Obot or MCPB alongside the supported MCP runtime.** The
-  Obot workload, integration authority, MCPB upload and validation surfaces, and replaced SQL
-  pollers, locks, and outbox kinds are removed after their OCI and Absurd owners take over.
+  Obot workload, logical database and login, generated custody objects, integration authority, MCPB
+  upload and validation surfaces, and replaced SQL pollers, locks, and outbox kinds are removed only
+  after their OCI and Absurd owners are ready.
 
 - **Operators can now run the OpenCrane stack without the bundled Langfuse data plane.** The
   Langfuse workloads, database and credentials, LiteLLM callback, metrics proxy, and unused

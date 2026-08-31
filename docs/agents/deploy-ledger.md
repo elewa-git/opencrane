@@ -296,3 +296,53 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: preflight live-Cluster backup capability before the application fence, then recheck it when
   creating the immediate recovery backup. Never translate approval for the schema transition into an
   unbacked-migration override.
+
+## 2026-08-31 · dev · testv4 central-authorization upgrade · e5a9a3a35792e66766a5fb211aa3e6273a812da6 · FAILED
+
+- findings: codebase: PostgreSQL revision 64 stopped in `20260829000000_central_authorization_authority`
+  when the provider-identity backfill updated a referenced `ModelDefinition` and the existing
+  immutability trigger rejected it. The migration transaction fully rolled back, and no application
+  rollout began. script: the failed central-migration ledger row requires a bounded
+  `migrate resolve --rolled-back` before the next deploy can pass Prisma's failed-migration gate.
+- friction: the authorized identity rewrite crossed a target immutability guard that the migration
+  left active, while migrator recovery covered only the earlier workflow-cutover migration.
+- lesson: fixed by PR #752.
+
+## 2026-08-31 · dev · testv4 central-authorization retry · 031449ef74beb411565f28593198421860d037c8 · FAILED
+
+- findings: config: the central authorization migration completed and retired its obsolete tables,
+  but PostgreSQL revisions 67 and 70 failed because the database-privileges hook still selected the
+  obsolete `opencrane-database-proof` ComputeClass. No node matched, scale-up hit capacity and quota
+  failures, and both Jobs exhausted their 930-second deadlines before application rollout.
+- friction: preflight accepted a selector that required unavailable dedicated capacity, costing two
+  full hook deadlines after the database migration had already succeeded.
+- lesson: fixed by PR #752.
+
+## 2026-08-31 · dev · testv4 central-authorization network-policy gate · f773912c7baadbf8b57ec8f8f8e957c5d89d72f8 · FAILED
+
+- findings: chart: PostgreSQL revision 73 and its selector-free two-container privileges hook
+  completed, but the application render required four `cilium.io/v2` `CiliumNetworkPolicy`
+  resources that GKE Dataplane V2 does not expose. Helm rejected the unsupported resources before
+  applying application revision 35, so revision 34 remained installed. data: Prisma has no
+  unfinished migration, the five retired tables remain absent, and the retired invocation and
+  dependent-record counts remain zero.
+- friction: live GKE evidence confirmed standard `NetworkPolicy` enforcement, while preflight
+  recognized neither the `anetd` DaemonSet nor a rendered custom policy API that the target cluster
+  cannot serve.
+- lesson: express the warm-runtime label-and-port rules through portable
+  `networking.k8s.io/v1` `NetworkPolicy`; installing a CRD without its enforcement controller would
+  only hide the incompatibility.
+
+## 2026-08-31 · dev · fleet policy decision · 9715dedbb1f6e1c2c357615a20160c88343840b8 · LIVE
+
+- findings: policy: pre-1.0 baseline-only decision approved by Jente Rosseel — the platform keeps a
+  single fresh-install authority (`apps/opencrane/prisma/bootstrap/target-baseline.sql`) and no
+  reviewed version-to-version upgrade paths until the MVP release. testv4 (schema 0.9.0, live
+  invitations and onboarding data), testlynn (schema 0.9.0, four failed 0.9.3 attempts), and testv3
+  (pre-ledger baseline `22cd09a9`, no `opencrane_migrations.schema_history`) are **rebuild, not
+  upgrade**: the accepted path to a newer schema on these silos is teardown plus a fresh install,
+  and the data loss is explicitly accepted.
+- friction: the version-train machinery (transition SQL, digest contracts, per-version manifests)
+  made every schema change a multi-file ceremony while no external user depends on an upgrade path.
+- lesson: do not attempt an in-place schema upgrade on any dev silo while the pre-1.0 policy stands;
+  rebuild instead. Upgrade contracts return at MVP, most likely as a Prisma-ledger migrator Job.

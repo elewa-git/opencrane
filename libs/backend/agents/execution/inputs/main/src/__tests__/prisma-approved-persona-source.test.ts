@@ -28,7 +28,7 @@ describe("PrismaApprovedPersonaSource", function _DescribePrismaApprovedPersonaS
 	it("loads only the delegated user's approved active persona in the command silo", async function _LoadsApprovedPersona()
 	{
 		const transaction = _Transaction({ id: "persona-1", state: PersonaRevisionState.Approved, personaProfileId: "profile-1" });
-		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun(), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: "persona-1" } });
+		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun(), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: "persona-1", personaId: "profile-1" } });
 		expect(transaction.prisma.personaProfile.findUnique).toHaveBeenCalledWith({ where: { siloId_userId: { siloId: "silo-1", userId: "user-1" } }, select: { activeRevision: { select: { id: true, state: true, personaProfileId: true } } } });
 	});
 
@@ -36,7 +36,7 @@ describe("PrismaApprovedPersonaSource", function _DescribePrismaApprovedPersonaS
 	{
 		const transaction = _Transaction({ id: "persona-1", state: PersonaRevisionState.Approved, personaProfileId: "profile-1" });
 		await expect(new PrismaApprovedPersonaSource().load(_Command({ executionSubjectId: "user-2" }), _PersonalRun(), transaction)).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
-		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun({ agentKind: AgentServiceKinds.Managed, delegatedUserId: null }), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: null } });
+		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun({ agentKind: AgentServiceKinds.Managed, delegatedUserId: null }), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: null, personaId: null } });
 	});
 
 	it("refuses a missing or non-approved active revision", async function _RejectsDraftPersona()

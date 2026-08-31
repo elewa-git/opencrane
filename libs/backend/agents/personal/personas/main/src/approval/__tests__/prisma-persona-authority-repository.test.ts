@@ -53,7 +53,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		});
 		const repository = _Repository(prisma);
 
-		await expect(repository.getApprovalSnapshot({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z" })).resolves.toEqual({ profileUserId: "user-1", activeRevisionId: null, revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" });
+		await expect(repository.getApprovalSnapshot({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z" })).resolves.toEqual({ profileUserId: "user-1", activeRevisionId: null, revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" });
 	});
 
 	it("reads the owner profile before approving the draft and advancing its active pointer", async function _readsThenActivates()
@@ -64,7 +64,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		const prisma = _Prisma({ personaRevision: revisionReads, personaProfile: { findFirst: profileFind, updateMany: updateProfile } });
 		const repository = _Repository(prisma);
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
+		await expect(repository.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
 		expect(profileFind).toHaveBeenCalledBefore(revisionReads.updateMany);
 		expect(revisionReads.updateMany).toHaveBeenCalledBefore(updateProfile);
 		expect(updateProfile).toHaveBeenCalledWith({ where: { id: "profile-1", userId: "user-1" }, data: { activeRevisionId: "revision-1" } });
@@ -76,7 +76,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		const prisma = _Prisma({ personaRevision: { findFirst: vi.fn(), updateMany: updateRevision }, personaProfile: { findFirst: vi.fn().mockResolvedValue(null), updateMany: vi.fn() } });
 		const repository = _Repository(prisma);
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.NotFound });
+		await expect(repository.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.NotFound });
 		expect(updateRevision).not.toHaveBeenCalled();
 	});
 
@@ -93,7 +93,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		});
 		const repository = _Repository(prisma, _Selection(select));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
+		await expect(repository.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
 		expect(select).toHaveBeenCalledWith({ siloId: "silo-1", userId: "user-1", personaRevisionId: "revision-1", selectedAt: new Date("2026-07-23T12:00:00.000Z") });
 		expect(select).toHaveBeenCalledBefore(updateProfile);
 		expect(updateProfile).toHaveBeenCalledBefore(applyChange);
@@ -105,7 +105,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		const select = vi.fn();
 		const repository = _Repository(_Prisma({ personaRevision: _DraftRevision() }), _Selection(select));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
+		await expect(repository.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
 		expect(select).not.toHaveBeenCalled();
 	});
 
@@ -121,7 +121,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		});
 		const repository = _Repository(prisma, _Selection(vi.fn().mockResolvedValue({ status: PersonaAgentRevisionSelectionStatuses.Conflict })));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).rejects.toBeInstanceOf(PersonaApprovalTransactionConflict);
+		await expect(repository.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).rejects.toBeInstanceOf(PersonaApprovalTransactionConflict);
 		expect(updateProfile).not.toHaveBeenCalled();
 		expect(applyChange).not.toHaveBeenCalled();
 	});
@@ -132,7 +132,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		const prisma = _Prisma({ personaRevision: revisionReads, personaInsight: { count: vi.fn().mockResolvedValue(4) } });
 		const repository = _Repository(prisma);
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
+		await expect(repository.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
 		expect(revisionReads.updateMany).not.toHaveBeenCalled();
 	});
 
@@ -143,7 +143,7 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		const prisma = _Prisma({ personaRevision: revisionReads, personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: null }), updateMany: updateProfile }, personaInterview: { findUnique: vi.fn().mockResolvedValue(null) } });
 		const repository = _Repository(prisma);
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
+		await expect(repository.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
 		expect(revisionReads.updateMany).not.toHaveBeenCalled();
 		expect(updateProfile).not.toHaveBeenCalled();
 	});

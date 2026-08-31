@@ -160,10 +160,10 @@ describe("live conversation projection", function _Suite()
 	it("projects governed A2UI only after coordinate validation and redaction", async function _ProjectsGovernedA2ui()
 	{
 		const a2ui = { version: AG_UI_A2UI_ENVELOPE_VERSION, conversationId: "conversation-1", runId: "run-1", messageId: "message-1", surfaceId: "surface-1", sequence: 0, state: AgUiA2uiSurfaceStates.Streaming, operations: [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }] };
-		const body = await _ProjectRow({ ..._Row(), runId: "run-1", type: RunEventTypes.A2uiRenderingBegun, payload: { a2ui, capabilityProof: "secret" } });
+		const body = await _ProjectRow({ ..._Row(), runId: "run-1", type: RunEventTypes.A2uiRenderingBegun, payload: { a2ui, unknownSecret: "secret" } });
 		expect(body).toContain(`"name":"${AG_UI_A2UI_ENVELOPE_VERSION}"`);
 		expect(body).toContain('"surfaceId":"surface-1"');
-		expect(body).not.toContain("capabilityProof");
+		expect(body).not.toContain("unknownSecret");
 		expect(body).not.toContain("secret");
 	});
 });

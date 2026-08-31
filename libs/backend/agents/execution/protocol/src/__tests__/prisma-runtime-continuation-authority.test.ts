@@ -43,7 +43,7 @@ function _SaveTransaction(overrides: { readonly assignmentState?: string; readon
 {
 	return {
 		workloadAssignment: { findUnique: vi.fn().mockResolvedValue({ namespace: "personal-runtime", serviceAccountName: "warm-runtime", bindingGeneration: 2, state: overrides.assignmentState ?? "Registered", revokedAt: overrides.assignmentRevokedAt ?? null, expiresAt: overrides.assignmentDeadline ?? new Date("2099-01-01T00:00:00.000Z"), workloadKind: overrides.workloadKind ?? "Deployment" }) },
-		warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue({ state: overrides.reservationState ?? "Claimed", podUid: overrides.podUid ?? "pod-1", namespace: "personal-runtime", serviceAccountName: "warm-runtime", idleDeadline: overrides.reservationDeadline ?? new Date("2099-01-01T00:00:00.000Z") }) },
+		warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue({ generation: 2, state: overrides.reservationState ?? "Claimed", podUid: overrides.podUid ?? "pod-1", namespace: "personal-runtime", serviceAccountName: "warm-runtime", idleDeadline: overrides.reservationDeadline ?? new Date("2099-01-01T00:00:00.000Z") }) },
 		runtimeCommandStream: { findUnique: vi.fn().mockResolvedValue({ inputGeneration: 3, fence: 8, runtimeInstanceId: "runtime-1", nextCommandSequence: overrides.nextCommandSequence ?? 3 }) },
 		runtimeDispatchedCommand: { findUnique: vi.fn().mockResolvedValue({ runId: "run-1", attempt: 1, kind: "ResumeAttempt", sequence: overrides.commandSequence ?? 2, fence: 8 }) },
 		toolInvocation: { findMany: vi.fn().mockResolvedValue(overrides.durableTool === false ? [] : [{ toolInvocationId: "tool-1" }]) },
@@ -178,7 +178,6 @@ describe("PrismaRuntimeContinuationAuthorityUnitOfWork", function _Suite()
 		{
 			const cipher = { seal: vi.fn(), open: vi.fn() } as unknown as RuntimeContinuationCipher;
 			await expect(_Authority(transaction, cipher).save(_identity, _SaveRequest())).resolves.toEqual(expect.objectContaining({ reason: "stale_continuation_authority" }));
-			expect(transaction.warmRuntimeReservation.findUnique).not.toHaveBeenCalled();
 			expect(cipher.seal).not.toHaveBeenCalled();
 		}
 	});

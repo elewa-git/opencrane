@@ -62,7 +62,7 @@
       "path": "../../libs/frontend/state/conversation/agent-threads"
     },
     {
-      "path": "../../libs/frontend/state/core"
+      "path": "../../libs/frontend/state/session/main"
     },
     {
       "path": "../../libs/frontend/state/local-development"

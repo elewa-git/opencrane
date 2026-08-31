@@ -1,9 +1,7 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, resource } from "@angular/core";
-import { Router } from "@angular/router";
-
 import { McpApprovalStatus, McpServer } from "@opencrane/core";
 import { MCP_GATEWAY } from "@opencrane/state/mcp/adapter";
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 import { ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
 
 import { MCP_APPROVAL_CHIPS, MCP_TYPE_CHIPS } from "../../mcp-chip.constants";
@@ -11,12 +9,10 @@ import { MCP_APPROVAL_CHIPS, MCP_TYPE_CHIPS } from "../../mcp-chip.constants";
 /**
  * Catalogue — admin governance view.
  *
- * The org admin's source of truth for **every** server, including pending and
- * disabled ones users never see. Drives each server through its lifecycle
- * (approve → publish, reject, disable/re-enable) and deep-links to the
- * access-policy editor. Access is gated in-component on
- * {@link SessionStore.capabilities}`().customerAdmin`; the control plane remains
- * the real enforcement point.
+ * The governance view for **every** server, including pending and disabled ones users never see.
+ * It drives each server through approve, publish, reject, disable, and restore. The component uses
+ * {@link SessionStore.capabilities}`().customerAdmin` for presentation; the control plane rechecks
+ * the current Organization/Administer grant.
  */
 @Component({
 	selector: "wo-catalogue-admin",
@@ -33,9 +29,6 @@ export class CatalogueAdminComponent
 
 	/** App-wide session/identity (drives the admin capability gate). */
 	private readonly _session = inject(SessionStore);
-
-	/** Router, for the "Assign access" deep link. */
-	private readonly _router = inject(Router);
 
 	/** Full catalogue incl. pending/disabled (admin scope). */
 	private readonly _catalogue = resource({
@@ -91,9 +84,4 @@ export class CatalogueAdminComponent
 		this._catalogue.reload();
 	}
 
-	/** Deep-link to the access-policy editor with the server pre-selected. */
-	public assignAccess(server: McpServer): void
-	{
-		void this._router.navigate(["/admin/access-policy"], { queryParams: { server: server.id } });
-	}
 }

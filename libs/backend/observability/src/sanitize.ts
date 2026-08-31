@@ -7,7 +7,7 @@ const _TRUNCATED = "[Truncated]";
 /** Maximum object depth inspected before the whole remaining value is removed. */
 const _MAX_DEPTH = 12;
 
-/** Case-insensitive field names whose values must never leave the process in logs. */
+/** Lists case-insensitive field names whose values must never leave the process in logs. */
 const _SENSITIVE_FIELD_NAMES = new Set([
 	"authorization",
 	"cookie",
@@ -27,6 +27,8 @@ const _SENSITIVE_FIELD_NAMES = new Set([
 	"clientsecret",
 	"database_url",
 	"databaseurl",
+	"providerkey",
+	"materialverifier",
 	"reviewedtoolarguments",
 	"finalarguments",
 	"arguments",

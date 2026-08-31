@@ -11,7 +11,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler";
 import { PrismaRuntimeDispatchAuthorityUnitOfWork } from "./prisma-runtime-dispatch-authority";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory } from "./prisma-runtime-dispatch-authority.types";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory, RuntimeExternalActionAuthorization } from "./prisma-runtime-dispatch-authority.types";
 import type { RuntimeContinuationAuthority } from "./runtime-continuation.types";
 
 /** Reviewed arguments for one model-proposed personal-memory recall. */
@@ -76,7 +76,7 @@ function _CreateProductionRuntimeElicitationUnitOfWorkFactory(): RuntimeElicitat
  * @param config - Deployment-fixed namespaces, command lifetime, and retry bounds.
  * @returns One production dispatch authority ready for the runtime stream transport.
  */
-export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, continuationAuthority: RuntimeContinuationAuthority): PrismaRuntimeDispatchAuthorityUnitOfWork
+export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, continuationAuthority: RuntimeContinuationAuthority, externalActionAuthorization: RuntimeExternalActionAuthorization): PrismaRuntimeDispatchAuthorityUnitOfWork
 {
-	return new PrismaRuntimeDispatchAuthorityUnitOfWork(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), _CreateProductionRuntimeElicitationUnitOfWorkFactory(), continuationAuthority, new PrismaToolInvocationRunRecoveryAuthority());
+	return new PrismaRuntimeDispatchAuthorityUnitOfWork(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), _CreateProductionRuntimeElicitationUnitOfWorkFactory(), continuationAuthority, new PrismaToolInvocationRunRecoveryAuthority(), externalActionAuthorization);
 }

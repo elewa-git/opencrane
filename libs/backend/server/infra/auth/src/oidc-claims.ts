@@ -49,7 +49,6 @@ export function ___BuildOidcAuthUser(claims: Record<string, unknown>, config: Oi
 		groups: identity.groups,
 		authorizationExpiresAt: new Date(expiresAtSeconds * 1000).toISOString(),
 		isPlatformOperator: identity.isPlatformOperator,
-		isOrgAdmin: identity.isOrgAdmin,
 		...(email ? { email } : {}),
 		...(emailVerified !== undefined ? { emailVerified } : {}),
 		...(typeof claims.name === "string" ? { name: claims.name } : {}),

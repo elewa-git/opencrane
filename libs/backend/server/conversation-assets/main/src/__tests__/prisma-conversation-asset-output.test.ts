@@ -5,6 +5,20 @@ import { describe, expect, it, vi } from "vitest";
 import { PrismaConversationAssetOutputRepository } from "../prisma-conversation-asset-output-repository";
 import { PrismaConversationAssetOutputUnitOfWork } from "../prisma-conversation-asset-output-unit-of-work";
 
+vi.mock("@opencrane/backend/server/iam/authorization", function _MockAuthorization()
+{
+	return {
+		PrismaAuthorizationAuthority: class
+		{
+			async admitPrincipal() { return { outcome: "allow", evidence: { decisionDigest: "digest" } }; }
+		},
+		PrismaManagedAuthorizationGrantRepository: class
+		{
+			async reconcileManagedResourceGrants() { return undefined; }
+		},
+	};
+});
+
 const _IDENTITY = { namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1" } as const;
 const _ADDRESS = `sha256:${"a".repeat(64)}`;
 const _COMMAND = { runId: "run-1", runAttempt: 2, messageId: "message-1", idempotencyKey: "output-1", displayName: "report.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: _ADDRESS } as const;
@@ -13,7 +27,13 @@ const _NOW = new Date("2026-08-11T10:00:00.000Z");
 /** Exact live assignment selected by the output authority. */
 function _Assignment()
 {
-	return { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date(Date.now() + 60_000), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" }, warmRuntimeReservations: [{ generation: 2 }] };
+	return { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, revokedAt: null, workloadKind: "Deployment", expiresAt: new Date(Date.now() + 60_000), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+}
+
+/** Claimed warm reservation for the assignment's current binding generation. */
+function _Reservation(generation = 2)
+{
+	return { generation, state: "Claimed", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, idleDeadline: new Date(Date.now() + 60_000) };
 }
 
 /** Complete generated asset fixture returned by mocked Prisma writes. */
@@ -25,7 +45,7 @@ function _Asset(overrides: Record<string, unknown> = {})
 /** Exact assistant message-start event used as the public message coordinate. */
 function _MessageEvent()
 {
-	return { conversationId: "conversation-1", runId: "run-1", sequence: 7, type: "message.started", messageId: "message-1", payload: { messageId: "message-1", role: "assistant" } };
+	return { conversationId: "conversation-1", runId: "run-1", attempt: 2, sequence: 7, type: "message.started", messageId: "message-1", payload: { messageId: "message-1", role: "assistant" } };
 }
 
 describe("PrismaConversationAssetOutputRepository", function _Suite()
@@ -34,7 +54,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	{
 		const transaction = {
 			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
-			workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) },
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) },
 			conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) },
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
 			artifact: { create: vi.fn() }, artifactUploadLease: { create: vi.fn() },
@@ -43,8 +63,9 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 		const result = await new PrismaConversationAssetOutputRepository(transaction as never).reserve(_IDENTITY, _COMMAND);
 
 		expect(result).toEqual({ outcome: "issued", ticketId: expect.any(String) });
-		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 2, namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", state: WorkloadAssignmentState.Registered, expiresAt: { gt: expect.any(Date) }, run: { attempt: 2 } }, include: { run: true, warmRuntimeReservations: { where: { namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1", state: "Claimed", idleDeadline: { gt: expect.any(Date) } }, select: { generation: true } } } });
-		expect(transaction.conversationRunEvent.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", runId: "run-1", type: "message.started", messageId: "message-1" }, select: { sequence: true, payload: true } });
+		expect(transaction.workloadAssignment.findUnique).toHaveBeenCalledWith({ where: { runId_attempt: { runId: "run-1", attempt: 2 } }, include: { run: true } });
+		expect(transaction.warmRuntimeReservation.findUnique).toHaveBeenCalledWith({ where: { runId_attempt_generation: { runId: "run-1", attempt: 2, generation: 2 } } });
+		expect(transaction.conversationRunEvent.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", runId: "run-1", attempt: 2, type: "message.started", messageId: "message-1" }, select: { sequence: true, payload: true } });
 		expect(transaction.artifact.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "principal-1", kind: ArtifactKind.Generated }) });
 		expect(transaction.artifactUploadLease.create).toHaveBeenCalledWith({ data: expect.objectContaining({ expectedContentAddress: _ADDRESS, expectedByteLength: 5n, mediaType: "application/pdf" }) });
 		expect(transaction.conversationAsset.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", runAttempt: 2, runEventSequence: 7, runMessageId: "message-1", provenance: ConversationAssetProvenance.AgentOutput, state: ConversationAssetState.Uploading }) });
@@ -52,18 +73,33 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 
 	it("rejects an output from a Pod reservation older than the assignment generation", async function _RejectsOldPod()
 	{
-		const assignment = { ..._Assignment(), warmRuntimeReservations: [{ generation: 1 }] };
-		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue(assignment) }, conversationRunEvent: { findFirst: vi.fn() }, principal: { findMany: vi.fn() } };
+		const transaction = { workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation(1)) }, conversationRunEvent: { findFirst: vi.fn() }, principal: { findMany: vi.fn() } };
 
 		await expect(new PrismaConversationAssetOutputRepository(transaction as never).reserve(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "runtime_unavailable" });
 		expect(transaction.conversationRunEvent.findFirst).not.toHaveBeenCalled();
+	});
+
+	it("does not let an earlier attempt's message event authorize current-attempt output", async function _RejectsEarlierAttemptEvent()
+	{
+		const findFirst = vi.fn().mockImplementation(async function _FindEvent({ where }: { readonly where: { readonly attempt: number } })
+		{
+			return where.attempt === 1 ? _MessageEvent() : null;
+		});
+		const transaction = {
+			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) },
+			conversationRunEvent: { findFirst },
+		};
+
+		await expect(new PrismaConversationAssetOutputRepository(transaction as never).reserve(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "runtime_unavailable" });
+		expect(findFirst).toHaveBeenCalledWith({ where: expect.objectContaining({ runId: "run-1", attempt: 2, messageId: "message-1" }), select: { sequence: true, payload: true } });
 	});
 
 	it("enforces the approved 200 MiB total across all outputs for one message", async function _LimitsMessageTotal()
 	{
 		const transaction = {
 			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
-			workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) },
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) },
 			conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) },
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
 			conversationAsset: { findMany: vi.fn().mockResolvedValue([{ mediaType: "application/pdf", byteLength: 200n * 1_024n * 1_024n }]), create: vi.fn() },
@@ -80,7 +116,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	it("returns the same ticket only when every retry coordinate still matches", async function _Idempotent()
 	{
 		const existing = { id: "ticket-1", runEventSequence: 7, outputMessageId: "message-1", asset: { ..._Asset(), uploadLease: { expectedContentAddress: _ADDRESS } } };
-		const transaction = { principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) }, workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) }, conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) }, conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(existing) } };
+		const transaction = { principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) }, workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) }, conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) }, conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(existing) } };
 		const repository = new PrismaConversationAssetOutputRepository(transaction as never);
 
 		expect(await repository.reserve(_IDENTITY, _COMMAND)).toEqual({ outcome: "idempotent", ticketId: "ticket-1" });
@@ -93,7 +129,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 		const ticket = { id: "ticket-1", runId: "run-1", runAttempt: 2, runEventSequence: 7, outputMessageId: "message-1", expiresAt: new Date(Date.now() + 60_000), finalizedAt: null, asset };
 		const transaction = {
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(ticket), update: vi.fn() },
-			workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) },
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) },
 			artifactUploadLease: { findUnique: vi.fn().mockResolvedValue({ id: "lease-1", state: ArtifactUploadLeaseState.Active, expiresAt: new Date(Date.now() + 60_000), expectedContentAddress: _ADDRESS, expectedByteLength: 5n, mediaType: "application/pdf" }), update: vi.fn() },
 			artifactRevision: { create: vi.fn() }, artifactScanJob: { create: vi.fn() },
 			conversationAsset: { update: vi.fn().mockResolvedValue(_Asset({ revisionId: "revision-new", state: ConversationAssetState.Processing })) },
@@ -116,9 +152,9 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 		const asset = _Asset();
 		const targetTransaction = {
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue({ id: "ticket-1", runId: "run-1", runAttempt: 2, expiresAt: new Date(Date.now() + 60_000), finalizedAt: null, asset: { ...asset, uploadLease: { id: "lease-1", siloId: "silo-1", artifactId: "artifact-1", state: ArtifactUploadLeaseState.Active, expiresAt: new Date(Date.now() + 60_000), expectedContentAddress: _ADDRESS, expectedByteLength: 5n, mediaType: "application/pdf" } } }) },
-			workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) }
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) }
 		};
-		const finalizeTransaction = { conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue({ id: "ticket-1", runId: "run-1", runAttempt: 2, expiresAt: new Date(Date.now() + 60_000), finalizedAt: null, asset }) }, workloadAssignment: { findFirst: vi.fn().mockResolvedValue(null) }, artifactRevision: { create: vi.fn() }, artifactScanJob: { create: vi.fn() } };
+		const finalizeTransaction = { conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue({ id: "ticket-1", runId: "run-1", runAttempt: 2, expiresAt: new Date(Date.now() + 60_000), finalizedAt: null, asset }) }, workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(null) }, artifactRevision: { create: vi.fn() }, artifactScanJob: { create: vi.fn() } };
 		const prisma = { $transaction: vi.fn().mockImplementationOnce(async function _Read(work: (value: unknown) => unknown) { return work(targetTransaction); }).mockImplementationOnce(async function _Finalize(work: (value: unknown) => unknown) { return work(finalizeTransaction); }) };
 		const service = { promote: vi.fn().mockResolvedValue({ receipt: "receipt" }) };
 		const crypto = { signLease: vi.fn().mockReturnValue("signed"), verifyReceipt: vi.fn().mockReturnValue({ leaseId: "lease-1", contentAddress: _ADDRESS, byteLength: 5, mediaType: "application/pdf", issuedAtEpochSeconds: 1 }), digestReceipt: vi.fn().mockReturnValue("digest") };
