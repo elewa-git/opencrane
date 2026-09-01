@@ -1,5 +1,5 @@
-import { ConversationComputerSandboxReconciliationOutcomes, type ConversationComputerActivationCommand } from "@opencrane/backend/server/conversations";
-import type { ConversationComputerSandboxReconciliationAuthority } from "@opencrane/backend/server/conversations";
+import { ConversationComputerExecutionStartOutcomes, ConversationComputerSandboxReconciliationOutcomes, type ConversationComputerActivationCommand } from "@opencrane/backend/server/conversations";
+import type { ConversationComputerExecutionAuthority, ConversationComputerSandboxReconciliationAuthority } from "@opencrane/backend/server/conversations";
 import type { HistoryRecordedEvent, HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { OpenCraneConversationComputerSandboxReconciliationWorker } from "./conversation-computer-sandbox-reconciliation-composition.types";
@@ -27,7 +27,7 @@ const _RECONCILIATION_INTERVAL_MILLISECONDS = 1_000;
  * @returns A worker that stops polling and closes its regular stream before KurrentDB closes.
  * @throws {Error} Propagates a failure to open the regular history subscription.
  */
-export async function _StartConversationComputerSandboxReconciliationWorker(historyStore: HistoryStore, authority: ConversationComputerSandboxReconciliationAuthority, siloId: string): Promise<OpenCraneConversationComputerSandboxReconciliationWorker>
+export async function _StartConversationComputerSandboxReconciliationWorker(historyStore: HistoryStore, authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, siloId: string): Promise<OpenCraneConversationComputerSandboxReconciliationWorker>
 {
 	const streamName = `computer-activations-${siloId}`;
 	const subscription = await historyStore.subscribe({ streamName, fromRevision: 0n });
@@ -49,7 +49,7 @@ export async function _StartConversationComputerSandboxReconciliationWorker(hist
 	{
 		if (reconciliationPass !== null)
 			return;
-		reconciliationPass = _ReconcileOutstanding(authority, outstanding, reconciliationCursor).then(function _AdvanceReconciliationCursor(nextCursor)
+		reconciliationPass = _ReconcileOutstanding(authority, executions, outstanding, reconciliationCursor).then(function _AdvanceReconciliationCursor(nextCursor)
 		{
 			reconciliationCursor = nextCursor;
 		}).catch(function _LogReconciliationFailure(error: unknown)
@@ -86,7 +86,7 @@ async function _ReadActivationLocators(events: AsyncIterable<HistoryRecordedEven
 }
 
 /** Reconciles one bounded batch and preserves only claims whose transient result is Pending. */
-async function _ReconcileOutstanding(authority: ConversationComputerSandboxReconciliationAuthority, outstanding: Map<string, ConversationComputerActivationCommand>, cursor: number): Promise<number>
+async function _ReconcileOutstanding(authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, outstanding: Map<string, ConversationComputerActivationCommand>, cursor: number): Promise<number>
 {
 	const entries = [...outstanding.entries()];
 	if (entries.length === 0)
@@ -98,8 +98,13 @@ async function _ReconcileOutstanding(authority: ConversationComputerSandboxRecon
 		try
 		{
 			const outcome = await authority.reconcile(command);
+			// 1. Admit an execution only after reconciliation persisted the checked active Sandbox Pod.
+			if (outcome === ConversationComputerSandboxReconciliationOutcomes.Warmed)
+				await _StartExecution(executions, command);
+			// 2. Retire the polling locator once durable state moved beyond a pending claim.
 			if (outcome !== ConversationComputerSandboxReconciliationOutcomes.Pending)
 				outstanding.delete(key);
+			// 3. Surface release contradictions without inventing a replacement claim or lease.
 			if (outcome === ConversationComputerSandboxReconciliationOutcomes.Blocked)
 				_log.error({ computerId: command.computerId, generation: command.generation, siloId: command.siloId }, "conversation computer sandbox reconciliation is blocked by release or claim evidence");
 		}
@@ -109,6 +114,14 @@ async function _ReconcileOutstanding(authority: ConversationComputerSandboxRecon
 		}
 	}));
 	return (start + batch.length) % entries.length;
+}
+
+/** Starts the sole server-owned execution after its exact Sandbox-backed lease became warm. */
+async function _StartExecution(executions: Pick<ConversationComputerExecutionAuthority, "start">, command: ConversationComputerActivationCommand): Promise<void>
+{
+	const result = await executions.start(command);
+	if (result.outcome === ConversationComputerExecutionStartOutcomes.Unavailable)
+		_log.warn({ computerId: command.computerId, generation: command.generation, siloId: command.siloId }, "conversation computer became unavailable before execution admission");
 }
 
 /** Validates one status-reconciliation locator without treating arbitrary stream data as a claim target. */
