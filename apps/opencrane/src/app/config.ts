@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, ConversationComputerActivationConfig, ConversationComputerActivationProfileConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -94,6 +94,54 @@ function _readHistoryStoreConfig(): OpenCraneHistoryStoreConfig
 		passwordPath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_PASSWORD_PATH"),
 		usernamePath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_USERNAME_PATH"),
 	};
+}
+
+/** Read and validate the release-owned computer-profile map without introducing a database fallback. */
+function _readConversationComputerActivationConfig(): ConversationComputerActivationConfig | null
+{
+	const configuredPath = process.env.OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH?.trim() ?? "";
+	if (!configuredPath)
+		return null;
+	const path = _readRequiredAbsolutePath("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH");
+	let parsed: unknown;
+	try { parsed = JSON.parse(readFileSync(path, "utf8")); }
+	catch { throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH must contain valid JSON"); }
+	if (!Array.isArray(parsed) || parsed.length === 0)
+		throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH must contain one or more profiles");
+	const profiles: ConversationComputerActivationProfileConfig[] = [];
+	const profileRevisionIds = new Set<string>();
+	const sandboxProfiles = new Set<string>();
+	const warmPools = new Set<string>();
+	for (const value of parsed)
+	{
+		if (!_isRecord(value))
+			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must be objects");
+		const profileRevisionId = typeof value.profileRevisionId === "string" ? value.profileRevisionId : "";
+		const namespace = typeof value.namespace === "string" ? value.namespace : "";
+		const sandboxProfile = typeof value.sandboxProfile === "string" ? value.sandboxProfile : "";
+		const warmPoolName = typeof value.warmPoolName === "string" ? value.warmPoolName : "";
+		if (!profileRevisionId || !_isDnsLabel(namespace) || !_isDnsLabel(sandboxProfile) || !_isDnsLabel(warmPoolName))
+			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have one revision id and DNS-label namespace, sandboxProfile, and warmPoolName");
+		if (profileRevisionIds.has(profileRevisionId) || sandboxProfiles.has(sandboxProfile) || warmPools.has(warmPoolName))
+			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have unique revision ids, sandbox profiles, and warm pools");
+		profileRevisionIds.add(profileRevisionId);
+		sandboxProfiles.add(sandboxProfile);
+		warmPools.add(warmPoolName);
+		profiles.push({ profileRevisionId, namespace, sandboxProfile, warmPoolName });
+	}
+	return { profiles };
+}
+
+/** Checks a Kubernetes DNS label before deployment configuration reaches a CustomObject call. */
+function _isDnsLabel(value: string): boolean
+{
+	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
+}
+
+/** Narrows a parsed JSON value to one object without trusting its prototype or members. */
+function _isRecord(value: unknown): value is Record<string, unknown>
+{
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Read the maximum artifact-preprocessor output size; the server-side promotion broker uses the same limit. */
@@ -226,6 +274,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
 			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
 			channelTargets: _readChannelTargetConfig(),
+			conversationComputerActivation: _readConversationComputerActivationConfig(),
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
 			continuationKeyringPath: _readRequiredAbsolutePath("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH"),
