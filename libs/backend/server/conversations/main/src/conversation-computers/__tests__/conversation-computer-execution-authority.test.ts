@@ -65,13 +65,19 @@ function _Current(overrides: { readonly computer?: ConversationComputer; readonl
 }
 
 /** Builds the authority with independently controlled history reads and writes. */
-function _Subject(overrides: { readonly current?: ReturnType<typeof _Current> | null; readonly reloaded?: ReturnType<typeof _Current> | null; readonly appendError?: Error } = {})
+function _Subject(overrides: { readonly current?: ReturnType<typeof _Current> | null; readonly reloaded?: ReturnType<typeof _Current> | null; readonly appendError?: Error; readonly afterFirstLoadClock?: Date } = {})
 {
 	const current = overrides.current === undefined ? _Current() : overrides.current;
 	const reloaded = overrides.reloaded === undefined ? current : overrides.reloaded;
-	const loadForActivation = vi.fn().mockResolvedValueOnce(current).mockResolvedValue(reloaded);
+	let now = _NOW;
+	const loadForActivation = vi.fn().mockImplementationOnce(async function _LoadCurrent()
+	{
+		if (overrides.afterFirstLoadClock !== undefined)
+			now = overrides.afterFirstLoadClock;
+		return current;
+	}).mockResolvedValue(reloaded);
 	const append = overrides.appendError === undefined ? vi.fn().mockResolvedValue(undefined) : vi.fn().mockRejectedValue(overrides.appendError);
-	const authority = new ConversationComputerExecutionAuthority({ loadForActivation, append } as never, { now: function _Now(): Date { return _NOW; } });
+	const authority = new ConversationComputerExecutionAuthority({ loadForActivation, append } as never, { now: function _Now(): Date { return now; } });
 	return { authority, loadForActivation, append };
 }
 
@@ -121,6 +127,14 @@ describe("ConversationComputerExecutionAuthority", function _DescribeConversatio
 		expect(expired.append).not.toHaveBeenCalled();
 		expect(terminal.append).not.toHaveBeenCalled();
 		expect(cooling.append).not.toHaveBeenCalled();
+	});
+
+	it("rechecks server time after history I/O before it appends an execution", async function _RejectsLeaseThatExpiresDuringLoad()
+	{
+		const subject = _Subject({ afterFirstLoadClock: new Date("2026-09-01T00:20:00.000Z") });
+
+		await expect(subject.authority.start(_Command())).resolves.toEqual({ outcome: ConversationComputerExecutionStartOutcomes.Unavailable, execution: null });
+		expect(subject.append).not.toHaveBeenCalled();
 	});
 
 	it("propagates an append failure when a reload has no active concurrent winner", async function _PropagatesFailedStart()
