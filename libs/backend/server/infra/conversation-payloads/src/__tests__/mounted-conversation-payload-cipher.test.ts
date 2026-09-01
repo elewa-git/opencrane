@@ -74,4 +74,14 @@ describe("MountedConversationPayloadCipher", function _MountedConversationPayloa
 		await writeFile(keyringPath, JSON.stringify({ activeKeyId: "key-2", keys: { "key-1": firstKey, "key-2": randomBytes(32).toString("base64") } }), "utf8");
 		expect(Buffer.from(await cipher.open(sealed, associatedData)).toString("utf8")).toBe("private agent reply");
 	});
+
+	it("rejects altered ciphertext before a private payload can be returned", async function _AlteredCiphertext()
+	{
+		const cipher = new MountedConversationPayloadCipher(await _Keyring());
+		const associatedData = _AssociatedData();
+		const sealed = await cipher.seal(Buffer.from("private agent reply", "utf8"), associatedData);
+		const alteredCiphertext = Uint8Array.from(sealed.ciphertext);
+		alteredCiphertext[0] ^= 1;
+		await expect(cipher.open({ ...sealed, ciphertext: alteredCiphertext }, associatedData)).rejects.toThrow();
+	});
 });
