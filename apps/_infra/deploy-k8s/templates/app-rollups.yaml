@@ -1,5 +1,9 @@
 {{- $skillAuthoring := index .Values "opencrane-skill-authoring" -}}
 {{ include "opencrane.server.certificate" . }}
+{{- if .Values.agentSandbox.enabled }}
+---
+{{ include "opencrane.server.conversationComputerActivationConfig" . }}
+{{- end }}
 ---
 {{ include "opencrane.server.deployment" . }}
 ---

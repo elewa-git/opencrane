@@ -4,7 +4,7 @@
 {{- if not (semverCompare ">=1.30.0-0" .Capabilities.KubeVersion.Version) -}}
 {{- fail "agentSandbox.enabled=true requires Kubernetes 1.30+ for admissionregistration.k8s.io/v1 ValidatingAdmissionPolicy" -}}
 {{- end -}}
-{{- if empty $sandbox.namespace -}}{{- fail "agentSandbox.namespace is required when Agent Sandbox is enabled" -}}{{- end -}}
+{{- if or (empty $sandbox.namespace) (gt (len $sandbox.namespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $sandbox.namespace)) -}}{{- fail "agentSandbox.namespace must be a DNS label when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if empty $sandbox.runtimeClassName -}}{{- fail "agentSandbox.runtimeClassName is required when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if empty $sandbox.serviceAccountName -}}{{- fail "agentSandbox.serviceAccountName is required when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if not (kindIs "slice" $sandbox.profiles) -}}{{- fail "agentSandbox.profiles must be an array" -}}{{- end -}}
@@ -14,13 +14,17 @@
 {{- $profilePools := dict -}}
 {{- $seenProfiles := dict -}}
 {{- $seenPools := dict -}}
+{{- $seenProfileRevisions := dict -}}
 {{- range $profile := $sandbox.profiles -}}
+{{- if empty $profile.profileRevisionId -}}{{- fail "every Agent Sandbox profile requires profileRevisionId" -}}{{- end -}}
+{{- if hasKey $seenProfileRevisions $profile.profileRevisionId -}}{{- fail "Agent Sandbox profileRevisionIds must be unique" -}}{{- end -}}
+{{- $_ := set $seenProfileRevisions $profile.profileRevisionId true -}}
 {{- if empty $profile.name -}}{{- fail "every Agent Sandbox profile requires a name" -}}{{- end -}}
-{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.name) -}}{{- fail "every Agent Sandbox profile name must be a DNS label" -}}{{- end -}}
+{{- if or (gt (len $profile.name) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.name)) -}}{{- fail "every Agent Sandbox profile name must be a DNS label" -}}{{- end -}}
 {{- if hasKey $seenProfiles $profile.name -}}{{- fail "Agent Sandbox profile names must be unique" -}}{{- end -}}
 {{- $_ := set $seenProfiles $profile.name true -}}
 {{- if empty $profile.poolName -}}{{- fail "every Agent Sandbox profile requires a poolName" -}}{{- end -}}
-{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.poolName) -}}{{- fail "every Agent Sandbox poolName must be a DNS label" -}}{{- end -}}
+{{- if or (gt (len $profile.poolName) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.poolName)) -}}{{- fail "every Agent Sandbox poolName must be a DNS label" -}}{{- end -}}
 {{- if hasKey $seenPools $profile.poolName -}}{{- fail "Agent Sandbox pool names must be unique" -}}{{- end -}}
 {{- $_ := set $seenPools $profile.poolName true -}}
 {{- $_ := set $profilePools $profile.name $profile.poolName -}}
