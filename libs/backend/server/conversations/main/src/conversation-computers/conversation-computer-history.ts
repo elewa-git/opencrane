@@ -105,7 +105,8 @@ export class ConversationComputerHistory
 		if (first.done)
 		{
 			const head = await this.historyStore.readHead(streamName);
-			if (head.streamName !== streamName || head.revision !== null) throw new Error("Conversation computer history omitted a stream event before its reported head");
+			if (head.streamName !== streamName || head.revision !== null)
+				throw new Error("Conversation computer history omitted a stream event before its reported head");
 			return null;
 		}
 		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
