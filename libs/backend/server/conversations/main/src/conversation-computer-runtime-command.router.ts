@@ -43,6 +43,13 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 			}
 			// 5. Redeem only the selected oldest input, after the active lease has fenced the caller.
 			const work = await _WorkPackage(result.command, dependencies, active.computer.conversationId);
+			// 6. Recheck the command head and lease after decryption so a replaced Pod never receives plaintext.
+			const current = await dependencies.authority.poll({ siloId: dependencies.siloId, computerId: active.computer.id, conversationId: active.computer.conversationId });
+			if (!_IsSameCommand(current.command, result.command))
+				throw new Error("ConversationComputer runtime command changed during payload redemption");
+			const finalAdmission = await _AdmitConversationComputerRuntime(computerId, identity, response, dependencies);
+			if (finalAdmission === null)
+				return;
 			response.status(200).json({ work });
 		}
 		catch (err)
@@ -85,6 +92,15 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 	return router;
 }
 
+/** Confirms that the oldest pending command did not change while its private input was redeemed. */
+function _IsSameCommand(current: ConversationComputerRuntimeCommandEnvelope | null, selected: ConversationComputerRuntimeCommandEnvelope): boolean
+{
+	return current !== null
+		&& current.commandId === selected.commandId
+		&& current.executionId === selected.executionId
+		&& current.leaseGeneration === selected.leaseGeneration;
+}
+
 /** Builds one runtime work package without returning the command's private storage reference. */
 async function _WorkPackage(command: ConversationComputerRuntimeCommandEnvelope, dependencies: ConversationComputerRuntimeCommandRouterDependencies, conversationId: string): Promise<ConversationComputerRuntimeWorkPackage>
 {
@@ -94,7 +110,7 @@ async function _WorkPackage(command: ConversationComputerRuntimeCommandEnvelope,
 		siloId: dependencies.siloId,
 		conversationId,
 		idempotencyKey: command.payload.inputEntryId,
-		payloadRef: command.payload.inputPayloadRef as `payload://${string}`,
+		payloadRef: command.payload.inputPayloadRef,
 		ciphertextDigest: command.payload.inputPayloadDigest,
 	});
 	const { payload: _payload, ...commandFence } = command;

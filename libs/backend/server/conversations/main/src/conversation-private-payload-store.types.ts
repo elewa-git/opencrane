@@ -32,7 +32,12 @@ export interface StoredConversationPrivatePayload
 	readonly ciphertextDigest: `sha256:${string}`;
 }
 
-/** Carries the server-derived coordinates required to redeem one runtime input body. */
+/**
+ * Carries the server-derived coordinates required to redeem one runtime input body.
+ *
+ * The store checks the row identifier, owner key, and ciphertext digest before it decrypts. A
+ * caller cannot use this command to swap in another conversation's body or a changed ciphertext.
+ */
 export interface ConversationPrivatePayloadReadCommand
 {
 	/** Names the tenant that owns the payload and its authenticated ciphertext coordinates. */
@@ -92,7 +97,7 @@ export interface ConversationPrivatePayloadRepository
 	 * @returns The stored row, or `null` when no write owns the key yet.
 	 */
 	find(command: Pick<ConversationPrivatePayloadStoreCommand, "siloId" | "conversationId" | "idempotencyKey">): Promise<ConversationPrivatePayloadRecord | null>;
-	/** Loads one payload row by its opaque server-generated identifier. */
+	/** Loads one payload row by its opaque server-generated identifier for the store's ownership check. */
 	findById(id: string): Promise<ConversationPrivatePayloadRecord | null>;
 	/**
 	 * Attempts to store a candidate without replacing an existing row.
@@ -121,8 +126,9 @@ export interface ConversationPrivatePayloadStore
 	/**
 	 * Decrypts one exact server-selected payload after the runtime command authority admitted it.
 	 *
-	 * @returns The original bounded UTF-8 text only when the durable reference, owner key, digest,
-	 * and AES-GCM associated data all agree.
+	 * The store verifies the durable reference, owner key, digest, AES-GCM associated data, and
+	 * plaintext digest before returning bounded UTF-8 text. Every mismatch rejects rather than
+	 * making ciphertext from a different command readable.
 	 */
 	readText(command: ConversationPrivatePayloadReadCommand): Promise<string>;
 }

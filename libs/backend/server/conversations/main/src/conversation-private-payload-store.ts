@@ -87,7 +87,12 @@ export class ConversationPrivatePayloadStore implements ConversationPrivatePaylo
 		return _Stored(stored, plaintextDigest);
 	}
 
-	/** Redeems one authenticated stored body for an already-admitted runtime command. */
+	/**
+	 * Redeems one authenticated stored body for an already-admitted runtime command.
+	 *
+	 * It compares the stored row with every command coordinate before decrypting, then verifies the
+	 * plaintext digest because successful AES-GCM decryption alone does not prove the expected body.
+	 */
 	async readText(command: ConversationPrivatePayloadReadCommand): Promise<string>
 	{
 		_ValidateRead(command);

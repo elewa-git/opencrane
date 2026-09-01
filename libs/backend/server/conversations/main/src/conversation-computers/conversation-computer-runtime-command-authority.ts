@@ -16,7 +16,7 @@ const _COMMAND_OUTPUT_RECORDED_EVENT_TYPE = "opencrane.conversation-computer-run
 /** Recognizes UUID event identifiers used for command idempotency and completion records. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 /** Recognizes opaque protected payload references without accepting a path or network address. */
-const _PAYLOAD_REFERENCE_PATTERN = /^payload:\/\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+const _PAYLOAD_REFERENCE_PATTERN = /^payload:\/\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 /** Recognizes the fixed digest format used to bind protected payload references. */
 const _DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 
@@ -462,7 +462,7 @@ function _Uuid(value: unknown): value is string
 }
 
 /** Checks a protected payload reference without allowing a filesystem path or network address. */
-function _PayloadReference(value: unknown): value is string
+function _PayloadReference(value: unknown): value is `payload://${string}-${string}-${string}-${string}-${string}`
 {
 	return typeof value === "string" && _PAYLOAD_REFERENCE_PATTERN.test(value);
 }

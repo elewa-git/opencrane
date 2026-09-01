@@ -3,6 +3,7 @@ import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore 
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerRuntimeCommandAuthority } from "../conversation-computer-runtime-command-authority";
+import type { ConversationComputerRuntimeStartTurnIssueCommand } from "../conversation-computer-runtime-command-authority.types";
 
 /** Reuses a valid participant-input UUID as the target command idempotency key. */
 const _COMMAND_ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
@@ -44,7 +45,7 @@ function _Command(sequence = 1, commandId = _COMMAND_ID): ConversationComputerRu
 		issuedAt: _NOW.toISOString(),
 		expiresAt: "2026-09-01T00:15:00.000Z",
 		kind: ConversationComputerRuntimeCommandKinds.StartTurn,
-		payload: { inputEntryId: commandId, inputPayloadRef: `payload://input-${sequence}`, inputPayloadDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+		payload: { inputEntryId: commandId, inputPayloadRef: "payload://31c1f1dc-0010-4f13-9c2f-d3841ffd6651", inputPayloadDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
 	};
 }
 
@@ -88,9 +89,9 @@ function _Subject(events: readonly HistoryRecordedEvent[] = [])
 }
 
 /** Builds the trusted server-selected input that may issue one target start command. */
-function _Issue(overrides: Record<string, unknown> = {})
+function _Issue(overrides: Record<string, unknown> = {}): ConversationComputerRuntimeStartTurnIssueCommand
 {
-	return { siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", inputEntryId: _COMMAND_ID, inputPayloadRef: "payload://input-1", inputPayloadDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const, ...overrides };
+	return { siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", inputEntryId: _COMMAND_ID, inputPayloadRef: "payload://31c1f1dc-0010-4f13-9c2f-d3841ffd6651", inputPayloadDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const, ...overrides };
 }
 
 describe("ConversationComputerRuntimeCommandAuthority", function _CommandAuthoritySuite()

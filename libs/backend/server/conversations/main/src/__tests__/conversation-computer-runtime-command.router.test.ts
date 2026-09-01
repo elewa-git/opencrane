@@ -11,7 +11,7 @@ const _IDENTITY = { namespace: "conversation-computers", serviceAccountName: "ag
 /** Supplies the active execution whose coordinates a runtime route must derive. */
 const _ACTIVE = { computer: { id: "computer-1", conversationId: "conversation-1" }, execution: { id: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651" }, lease: { generation: 2, runtimePod: _IDENTITY } } as never;
 /** Supplies one durable head command returned to the reviewed Sandbox. */
-const _COMMAND = { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", sequence: 1, computerId: "computer-1", executionId: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", leaseGeneration: 2, issuedAt: "2026-09-01T00:00:00.000Z", expiresAt: "2026-09-01T00:05:00.000Z", kind: ConversationComputerRuntimeCommandKinds.StartTurn, payload: { inputEntryId: "input-1", inputPayloadRef: "payload://input-1", inputPayloadDigest: `sha256:${"a".repeat(64)}` } } as const satisfies ConversationComputerRuntimeCommandEnvelope;
+const _COMMAND = { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", sequence: 1, computerId: "computer-1", executionId: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", leaseGeneration: 2, issuedAt: "2026-09-01T00:00:00.000Z", expiresAt: "2026-09-01T00:05:00.000Z", kind: ConversationComputerRuntimeCommandKinds.StartTurn, payload: { inputEntryId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", inputPayloadRef: "payload://31c1f1dc-0010-4f13-9c2f-d3841ffd6651", inputPayloadDigest: `sha256:${"a".repeat(64)}` } } as const satisfies ConversationComputerRuntimeCommandEnvelope;
 
 /** Builds one internal router with controlled identity, history, and queue ports. */
 function _App(overrides: Partial<ConversationComputerRuntimeCommandRouterDependencies> = {})
@@ -56,6 +56,8 @@ describe("ConversationComputer runtime command router", function _ConversationCo
 		expect(response.body).toEqual({ work: { command: { protocolVersion: _COMMAND.protocolVersion, commandId: _COMMAND.commandId, sequence: _COMMAND.sequence, computerId: _COMMAND.computerId, executionId: _COMMAND.executionId, leaseGeneration: _COMMAND.leaseGeneration, issuedAt: _COMMAND.issuedAt, expiresAt: _COMMAND.expiresAt, kind: _COMMAND.kind }, inputEntryId: _COMMAND.payload.inputEntryId, inputText: "Private participant input" } });
 		expect(dependencies.authority.poll).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1" });
 		expect(dependencies.payloads.readText).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", idempotencyKey: _COMMAND.payload.inputEntryId, payloadRef: _COMMAND.payload.inputPayloadRef, ciphertextDigest: _COMMAND.payload.inputPayloadDigest });
+		expect(dependencies.authority.poll).toHaveBeenCalledTimes(2);
+		expect(dependencies.history.loadActiveExecutionForBootstrap).toHaveBeenCalledTimes(2);
 	});
 
 	it("refuses an unreviewed caller before it reads active computer history", async function _RefusesUnreviewedCaller()
@@ -96,6 +98,20 @@ describe("ConversationComputer runtime command router", function _ConversationCo
 
 		expect(response.status).toBe(403);
 		expect(response.body).toEqual({ error: "runtime_denied" });
+	});
+
+	it("withholds plaintext when the lease changes during payload redemption", async function _WithholdsPayloadAfterLeaseChange()
+	{
+		const replacement = { computer: { id: "computer-1", conversationId: "conversation-1" }, execution: { id: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651" }, lease: { generation: 3, runtimePod: { ..._IDENTITY, podUid: "pod-uid-2" } } } as never;
+		const history = { loadActiveExecutionForBootstrap: vi.fn().mockResolvedValueOnce(_ACTIVE).mockResolvedValueOnce(replacement) };
+		const { app, dependencies } = _App({ history });
+
+		const response = await request(app).get("/commands/next?computerId=computer-1").set(_Bearer());
+
+		expect(response.status).toBe(403);
+		expect(response.body).toEqual({ error: "runtime_denied" });
+		expect(dependencies.payloads.readText).toHaveBeenCalledTimes(1);
+		expect(dependencies.authority.poll).toHaveBeenCalledTimes(2);
 	});
 
 	it("completes only a strict terminal report against server-derived active coordinates", async function _CompletesHeadCommand()

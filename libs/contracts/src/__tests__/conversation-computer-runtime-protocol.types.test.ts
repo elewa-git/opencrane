@@ -17,7 +17,7 @@ describe("ConversationComputer runtime protocol contracts", function ()
 			issuedAt: "2026-09-01T00:00:00.000Z",
 			expiresAt: "2026-09-01T00:05:00.000Z",
 			kind: ConversationComputerRuntimeCommandKinds.StartTurn,
-			payload: { inputEntryId: "entry-1", inputPayloadRef: "payload://input-1", inputPayloadDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+			payload: { inputEntryId: "entry-1", inputPayloadRef: "payload://31c1f1dc-0010-4f13-9c2f-d3841ffd6651", inputPayloadDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
 		};
 		const terminal: ConversationComputerRuntimeTerminalReport = {
 			protocolVersion: command.protocolVersion,

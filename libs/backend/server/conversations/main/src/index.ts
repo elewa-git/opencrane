@@ -18,7 +18,7 @@ export { __CreateConversationReplayRouter } from "./conversation-replay.router";
 export { __CreateConversationComputerRuntimeBootstrapRouter } from "./conversation-computer-runtime-bootstrap.router";
 export type { ConversationComputerRuntimeBootstrapResponse } from "./conversation-computer-runtime-bootstrap.router.types";
 export { __CreateConversationComputerRuntimeCommandRouter } from "./conversation-computer-runtime-command.router";
-export type { ConversationComputerRuntimeCommandAuthorityPort, ConversationComputerRuntimeCommandPayloadReader, ConversationComputerRuntimeCommandRouterDependencies, ConversationComputerRuntimeWorkPackage } from "./conversation-computer-runtime-command.router.types";
+export type { ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
 export { __CreateConversationComputerRuntimeOutputRouter } from "./conversation-computer-runtime-output.router";
 export type { ConversationComputerRuntimeOutputAuthorityPort, ConversationComputerRuntimeOutputRouterDependencies } from "./conversation-computer-runtime-output.router.types";
 export { __CreateSelfConversationSocketServer } from "./self-conversation-socket";

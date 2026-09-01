@@ -1,4 +1,4 @@
-import type { ConversationComputerRuntimeCommandEnvelope, ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
+import type { ConversationComputerRuntimeCommandEnvelope, ConversationComputerRuntimePrivatePayloadReference, ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
 import type { HistoryAppend, HistoryExpectedHead, HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationComputerHistory } from "./conversation-computer-history";
@@ -38,7 +38,7 @@ export interface ConversationComputerRuntimeStartTurnIssueCommand extends Conver
 	/** Supplies the UUID conversation entry identifier that makes this command retry idempotent. */
 	readonly inputEntryId: string;
 	/** References the protected input without storing its plaintext in the command stream. */
-	readonly inputPayloadRef: string;
+	readonly inputPayloadRef: ConversationComputerRuntimePrivatePayloadReference;
 	/** Binds the protected input reference to its canonical content digest. */
 	readonly inputPayloadDigest: `sha256:${string}`;
 }
