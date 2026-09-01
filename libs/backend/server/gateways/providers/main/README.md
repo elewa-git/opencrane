@@ -101,6 +101,10 @@ so recovery can distinguish a qualified target from an assumed one. Set-BYOK per
 embedding and auto-embedding deployment evidence in `ProviderEffectCommand.result`; it does not create
 chat `ModelDefinition` rows.
 
+Each `ProviderEffectCommand` also stores the identifier of the `AuditDecision` row inserted with its
+admission. Reading the command therefore exposes the precise decision that admitted it; the command
+and its reference exist only when the surrounding transaction commits.
+
 ## Boundary
 
 The application layer mounts the routers and supplies a `PrismaClient`, the Kubernetes core API

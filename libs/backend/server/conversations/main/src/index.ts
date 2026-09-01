@@ -29,4 +29,4 @@ export type { BoundConversationWriterAppend, BoundConversationWriterBinding, Bou
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked } from "./conversation-computer-activation.types";
 export { ConversationComputerHistory } from "./conversation-computers";
-export type { ActiveConversationComputerLease, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, CurrentConversationComputer } from "./conversation-computers";
+export type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, CurrentConversationComputer } from "./conversation-computers";

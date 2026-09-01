@@ -35,6 +35,8 @@ and never decides whether an action is allowed.
 
 - `PrismaAuditDecisionWriterRepository` writes one immutable decision through a transaction the caller owns.
 - `AuditDecisionRecord` carries the actor, resource, action, policy and outcome evidence.
+- `AuditDecisionAppendReceipt` returns the identifier of the `AuditDecision` row inserted by the
+  caller's transaction, so a protected domain can retain a precise reference if that transaction commits.
 - `__CreateStandaloneFirstUserAdmissionAuditAppender` adapts the first-owner admission port to the
   same append-only row.
 

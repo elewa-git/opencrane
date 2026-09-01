@@ -23,12 +23,44 @@ export type AdmitPrincipalProductAuthorizationCommand = Omit<AdmitProductAuthori
 /** Durable evidence derived by the authority rather than supplied as an allow assertion. */
 export interface ProductAuthorizationAdmissionEvidence
 {
+	/** Identifies the PostgreSQL AuditDecision row inserted with the admitted mutation when its transaction commits. */
+	readonly decisionEvidenceId: string;
 	/** Digest of the complete decision record. */
 	readonly decisionDigest: `sha256:${string}`;
 	/** Digest of the reviewed product policy catalogue. */
 	readonly policyRevisionHash: `sha256:${string}`;
 	/** Digest of the winning current grant set. */
 	readonly effectiveAuthorizationDigest: `sha256:${string}`;
+}
+
+/**
+ * Holds the decision digests before the recorder inserts its audit row.
+ *
+ * The authority derives this draft from the allowed decision, then gives it to
+ * {@link ProductAuthorizationDecisionRecorder}. It deliberately has no `decisionEvidenceId`: the
+ * database assigns that identifier when the recorder writes the `AuditDecision` row.
+ */
+export interface ProductAuthorizationAdmissionEvidenceDraft
+{
+	/** Digest of the complete decision record. */
+	readonly decisionDigest: `sha256:${string}`;
+	/** Digest of the reviewed product policy catalogue. */
+	readonly policyRevisionHash: `sha256:${string}`;
+	/** Digest of the winning current grant set. */
+	readonly effectiveAuthorizationDigest: `sha256:${string}`;
+}
+
+/**
+ * Identifies the decision row that the transaction-bound recorder inserted.
+ *
+ * The authority adds this identifier to allowed admission evidence after recording. A caller can
+ * persist that evidence with its protected change, which keeps the reference and audit row in one
+ * transaction.
+ */
+export interface ProductAuthorizationDecisionReceipt
+{
+	/** Identifies the immutable PostgreSQL AuditDecision evidence row when the caller commits. */
+	readonly decisionEvidenceId: string;
 }
 
 /** Result of a mutation or effect admission. */
@@ -38,11 +70,24 @@ export interface AdmitProductAuthorizationResult extends ProductAuthorizationRes
 	readonly evidence: ProductAuthorizationAdmissionEvidence | null;
 }
 
-/** Appends authority-derived evidence through the caller's open transaction. */
+/**
+ * Appends authority-derived evidence through the caller's open transaction.
+ *
+ * {@link __AuthorizationAuthority} calls this port only for allowed mutation or effect decisions,
+ * after it has derived the decision digests. Implementations must write through that same transaction
+ * and return the inserted `AuditDecision` identifier; otherwise callers cannot retain a reference
+ * that commits with the protected change.
+ */
 export interface ProductAuthorizationDecisionRecorder
 {
-	/** Persists one allowed non-read decision before the transaction may commit. */
-	record(command: AdmitProductAuthorizationCommand, result: AdmitProductAuthorizationResult): Promise<void>;
+	/**
+	 * Persists one allowed mutation or effect decision and returns its audit-row identifier.
+	 * @param command - The action coordinates whose protected change shares this transaction.
+	 * @param result - The allowed policy result whose outcome and reason are recorded.
+	 * @param evidence - The authority-derived decision digests to store in the audit row.
+	 * @returns The identifier to add to the caller's allowed admission evidence.
+	 */
+	record(command: AdmitProductAuthorizationCommand, result: ProductAuthorizationResult, evidence: ProductAuthorizationAdmissionEvidenceDraft): Promise<ProductAuthorizationDecisionReceipt>;
 }
 
 /** Replaces one product editor's grant projection under central root authorization. */

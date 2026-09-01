@@ -1,6 +1,6 @@
 import { AuditDecisionActorKind, AuditDecisionOutcome, WorkloadKind, type Prisma } from "@prisma/client";
 
-import type { AuditDecisionRecord, AuditDecisionWriterRepository } from "./audit-decision.types";
+import type { AuditDecisionAppendReceipt, AuditDecisionRecord, AuditDecisionWriterRepository } from "./audit-decision.types";
 
 function _WorkloadKind(value: AuditDecisionRecord["workloadKind"]): WorkloadKind | undefined
 {
@@ -24,7 +24,13 @@ function _Outcome(value: AuditDecisionRecord["outcome"]): AuditDecisionOutcome
 	}
 }
 
-/** Writes append-only authorization decisions through the caller's existing transaction. */
+/**
+ * Writes append-only authorization decisions through the caller's existing transaction.
+ *
+ * Protected-domain repositories use this adapter so their audit row commits or rolls back with the
+ * change it describes. {@link append} returns that row's identifier for domains that persist a
+ * decision reference alongside the protected change.
+ */
 export class PrismaAuditDecisionWriterRepository implements AuditDecisionWriterRepository
 {
 	/** Open transaction that commits the decision with the authorized effect. */
@@ -36,16 +42,10 @@ export class PrismaAuditDecisionWriterRepository implements AuditDecisionWriterR
 		this.transaction = transaction;
 	}
 
-	/**
-	 * Writes one final decision row into the append-only log.
-	 *
-	 * Called by: the central authorization authority, fleet membership authority, and standalone
-	 * first-owner admission adapter.
-	 * @param decision - The final decision to record; nothing rewrites this row.
-	 */
-	async append(decision: AuditDecisionRecord): Promise<void>
+	/** @inheritdoc */
+	async append(decision: AuditDecisionRecord): Promise<AuditDecisionAppendReceipt>
 	{
-		await this.transaction.auditDecision.create({ data: {
+		const record = await this.transaction.auditDecision.create({ data: {
 			decisionDigest: decision.decisionDigest,
 			siloId: decision.siloId,
 			actorKind: {
@@ -81,5 +81,6 @@ export class PrismaAuditDecisionWriterRepository implements AuditDecisionWriterR
 			reasonCode: decision.reasonCode,
 			decidedAt: decision.decidedAt,
 		} });
+		return { decisionEvidenceId: record.id };
 	}
 }

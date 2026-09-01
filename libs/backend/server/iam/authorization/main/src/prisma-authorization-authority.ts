@@ -1,10 +1,10 @@
 import type { Prisma } from "@prisma/client";
 
 import { PrismaAuditDecisionWriterRepository, type AuditDecisionWriterRepository } from "@opencrane/backend/server/iam/audit-writer";
-import { AuthorizationDecisionOutcomes, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
+import { AuthorizationDecisionOutcomes, __ProductAuthorizationCapability, type ProductAuthorizationResult } from "@opencrane/models/authorization";
 
 import { __AuthorizationAuthority } from "./authorization-authority";
-import type { AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ProductAuthorizationDecisionRecorder } from "./authorization-authority.types";
+import type { AdmitProductAuthorizationCommand, AuthorizationAuthority, ProductAuthorizationAdmissionEvidenceDraft, ProductAuthorizationDecisionReceipt, ProductAuthorizationDecisionRecorder } from "./authorization-authority.types";
 import { PrismaAuthorizationResourceGrantRetirementRepository } from "./prisma-authorization-resource-grant-retirement-repository";
 import { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants";
 import { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
@@ -21,19 +21,19 @@ class _PrismaProductAuthorizationDecisionRecorder implements ProductAuthorizatio
 	}
 
 	/** @inheritdoc */
-	async record(command: AdmitProductAuthorizationCommand, result: AdmitProductAuthorizationResult): Promise<void>
+	async record(command: AdmitProductAuthorizationCommand, result: ProductAuthorizationResult, evidence: ProductAuthorizationAdmissionEvidenceDraft): Promise<ProductAuthorizationDecisionReceipt>
 	{
-		if (result.evidence === null || result.rule === null)
+		if (result.rule === null)
 		{
-			throw new Error("cannot record authorization admission without derived evidence");
+			throw new Error("cannot record authorization admission without a catalogue rule");
 		}
 		const capability = __ProductAuthorizationCapability(command.resource.kind, command.action);
 		if (capability === null)
 		{
 			throw new Error("cannot record authorization admission without catalogue capability");
 		}
-		await this.auditDecisions.append({
-			decisionDigest: result.evidence.decisionDigest,
+		const receipt = await this.auditDecisions.append({
+			decisionDigest: evidence.decisionDigest,
 			siloId: command.siloId,
 			actorKind: command.actorKind,
 			actorId: command.actorId,
@@ -44,13 +44,14 @@ class _PrismaProductAuthorizationDecisionRecorder implements ProductAuthorizatio
 			catalogRevision: capability.catalog.revision,
 			catalogDigest: capability.catalog.digest,
 			argumentsDigest: command.argumentsDigest,
-			policyRevisionHash: result.evidence.policyRevisionHash,
-			effectiveAuthorizationDigest: result.evidence.effectiveAuthorizationDigest,
+			policyRevisionHash: evidence.policyRevisionHash,
+			effectiveAuthorizationDigest: evidence.effectiveAuthorizationDigest,
 			membershipRevision: command.membershipRevision,
 			outcome: result.outcome === AuthorizationDecisionOutcomes.Allow ? "allow" : "deny",
 			reasonCode: result.reason,
 			decidedAt: new Date(command.nowEpochMs),
 		});
+		return { decisionEvidenceId: receipt.decisionEvidenceId };
 	}
 }
 
