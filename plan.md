@@ -579,36 +579,71 @@ runbooks, generated clients, and CI forbidden-reference checks.
 Exit: a fresh checkout builds and deploys only the target product. Operators have one supported path
 to create, share, schedule, observe, revoke, and delete agents and assets.
 
-## 0.10.0 workflow cutover
+## 0.11.0 conversation computers, sandbox queue, previews, and internal code
 
-A workflow is saved work that can continue after a server or worker restarts. The 0.10.0 cutover
-finishes the move from SQL pollers and locks to Absurd workflows in this order:
+0.10.0 is the last baseline before this replacement. Version 0.11.0 supports clean installations
+only: do not build a 0.10-to-0.11 migration, compatibility route, dual-write path, or legacy shim.
+Each slice introduces its target owner and deletes the authority or runtime path it replaces.
 
-1. Finish OCI Image Layout ZIP admission, registry import, and immutable digest persistence
-   ([#592](https://github.com/elewa-git/opencrane/issues/592),
-   [#741](https://github.com/elewa-git/opencrane/issues/741)).
-2. Use that digest for MCP installation and real tool execution through `RuntimeWorkloadClaim`, an
-   MCP-specific executor, ToolInvocation, and a class-specific warm pool
-   ([#592](https://github.com/elewa-git/opencrane/issues/592),
-   [#741](https://github.com/elewa-git/opencrane/issues/741)).
-3. Move the existing skill, artifact, and AgentRun lifecycles onto durable tasks, including explicit
-   AgentRun wait reasons ([#695](https://github.com/elewa-git/opencrane/issues/695),
-   [#736](https://github.com/elewa-git/opencrane/issues/736)).
-4. Retire Obot only after OCI-backed MCP installation and execution work
-   ([#592](https://github.com/elewa-git/opencrane/issues/592)).
-5. Delete MCPB routes, schema, workers, old SQL locks and pollers, and unreachable AgentRun residue
-   ([#695](https://github.com/elewa-git/opencrane/issues/695),
-   [#740](https://github.com/elewa-git/opencrane/issues/740)).
-6. As the final integration step, run the forward 0.9.2-to-0.10.0 change with one dedicated
-   migration Job. It carries the tagged release's 0.9.0 schema through the reviewed IAM prerequisite,
-   after CloudNativePG has installed `pg_cron` and assigned its schema to the application owner in
-   two observed `Database` generations. The Job receives no superuser credential and then uses
-   Prisma Migrate as the database-change ledger from 0.10.0 onward. The 0.10.0 release closes
-   [#592](https://github.com/elewa-git/opencrane/issues/592),
-   [#695](https://github.com/elewa-git/opencrane/issues/695),
-   [#736](https://github.com/elewa-git/opencrane/issues/736),
-   [#740](https://github.com/elewa-git/opencrane/issues/740), and
-   [#741](https://github.com/elewa-git/opencrane/issues/741) only after the full cutover is qualified.
+### Target architecture
+
+- KurrentDB stores canonical lifecycle evidence behind a narrow `HistoryStore`. Use separate
+  `conversation-{id}` and `computer-{id}` streams. They are event streams, not database tables.
+- The service-side authorization authority remains the single permission gate. A projection may
+  accelerate lookup but must never authorize a stale grant.
+- A KurrentDB persistent subscription is the durable activation queue. Delivery is at least once;
+  consumers use expected revisions, deterministic resource names, computer generations, retry, and
+  parked-message replay instead of assuming exactly-once execution.
+- A Kubebuilder controller in `apps/conversation-computer-controller` reconciles a
+  `ConversationComputer` custom resource into Agent Sandbox `SandboxClaim` resources. The custom
+  resource is an operational projection only and contains no grants or secrets.
+- Agent Sandbox owns sandbox lifecycle through pinned `SandboxTemplate`, `SandboxClaim`, and later
+  `SandboxWarmPool` APIs. OpenSandbox `execd` supplies command, file, and terminal operations inside
+  the computer; OpenCrane does not adopt the full OpenSandbox control plane.
+- Computers share a Kubernetes ServiceAccount per admitted computer profile. A short-lived,
+  generation-bound `ComputerLease` proves the exact silo, agent, conversation, computer, audience,
+  and expiry. Do not create one Kubernetes ServiceAccount per conversation computer.
+- The admitted computer image contains the agent runtime, `execd`, browser/CDP, optional noVNC,
+  shell/files, optional Jupyter, and a preview proxy. The identity-aware gateway exposes only
+  selected files, diffs, artifacts, browser/noVNC, and approved localhost preview ports.
+- Absurd remains for schedules, application jobs, and durable waits/retries. It no longer owns
+  computer activation, cooling, leasing, or Kubernetes lifecycle.
+
+### Delivery slices
+
+1. **Baseline and contracts.** Declare 0.11.0 as fresh-install-only. Define `HistoryStore`, computer
+   lifecycle events, `ConversationComputer`, `ComputerLease`, stable generations, and controller
+   status without copying authorization into Kubernetes.
+2. **Queue and authority.** Add the KurrentDB adapter and persistent-subscription consumer. Prove
+   duplicate and out-of-order delivery, crash-before-ack, parked replay, revocation, stale leases,
+   and cross-silo rejection.
+3. **Cold sandbox path.** Add the Kubebuilder app, CRD, RBAC, reconciliation, and Agent Sandbox
+   prerequisite. Reconcile each admitted computer to one deterministic `SandboxClaim`; make retries
+   and controller restarts converge on the same generation.
+4. **Usable computer and review surface.** Build the pinned computer image and gateway routes for
+   commands, files, browser, noVNC, selected outputs, diffs, artifacts, and approved local preview
+   ports. A person can inspect work without receiving unrestricted access to the Pod.
+5. **Checkpoint and cooling.** Checkpoint workspaces to ArtifactStore. Reconstruct idle deadlines
+   from durable timestamps, mark a computer stale after five idle minutes, and suspend or retire it
+   after twenty minutes without interrupting an active attempt.
+6. **Warm capacity.** Qualify the cold path first, then add `SandboxWarmPool` capacity and measured
+   latency targets. Delete the current Deployment and label-flip reservation design.
+7. **Preview apps.** Deliver temporary in-computer previews first, then immutable published
+   PreviewApp revisions under [#660](https://github.com/elewa-git/opencrane/issues/660).
+8. **Durable source.** Deliver the internal Git-backed CodeService in
+   [#765](https://github.com/elewa-git/opencrane/issues/765): exact repository grants, branches,
+   diffs and review, isolated builds from admitted commits, ArtifactRevisions, and PreviewApp
+   publication. External Git synchronization remains a later CodeService-boundary feature.
+9. **Cutover and deletion.** Remove `AgentRun`-owned warm workflows, `WarmRuntimeReservation`, label
+   activation, run-owned Pod cleanup, old Prisma lifecycle authority, and obsolete Helm, RBAC,
+   configuration, tests, and documentation. No run-owned computer workflow survives.
+
+### Qualification
+
+The release matrix covers duplicate and reordered events, consumer and controller crashes, parked
+replay, stale generations and leases, grant revocation, cross-silo access, KurrentDB and node loss,
+active work during cooling, checkpoint recovery, browser and preview access, and the complete human
+review journey. A clean installation must contain only the target path.
 
 ## Open issue disposition
 
@@ -641,6 +676,8 @@ finishes the move from SQL pollers and locks to Absurd workflows in this order:
 | [#736](https://github.com/elewa-git/opencrane/issues/736) | Complete in the 0.10 review stack: explicit wait reasons, encrypted database continuations, exact tool/question links, warm-runtime replacement, and active-call recovery fencing are implemented and tested. Close with the 0.10.0 release after final migration and live qualification. |
 | [#740](https://github.com/elewa-git/opencrane/issues/740) | Complete in the 0.10 review stack: unreachable AgentRun cancellation and model-key residue are removed. Close with the 0.10.0 release after live qualification. |
 | [#741](https://github.com/elewa-git/opencrane/issues/741) | Functionally complete in the 0.10 review stack: the public task API submits exact installed MCP `2026-07-28` tools, resumes saved input, exposes durable results and failures, and closes controller assignment and readiness races. Close with the 0.10.0 release after final migration and live qualification. |
+| [#759](https://github.com/elewa-git/opencrane/issues/759) | Replace run-owned warm runtime lifecycle with KurrentDB-backed ConversationComputer history, a durable activation queue, Kubebuilder reconciliation, Agent Sandbox claims, generation-bound leases, checkpoint recovery, and a human-reviewable computer surface. |
+| [#765](https://github.com/elewa-git/opencrane/issues/765) | Add the later internal Git-backed CodeService for durable mini-app source, branches, diffs, review, isolated builds, immutable artifacts, and PreviewApp publication. |
 
 Closed issues are intentionally absent from the active list: [#128](https://github.com/elewa-git/opencrane/issues/128),
 [#129](https://github.com/elewa-git/opencrane/issues/129),
