@@ -15,7 +15,6 @@ import { ConversationComputerExecutionStartOutcomes, type ConversationComputerEx
  * reloads the durable winner and reuses it; a cold, replaced, expired, or terminal computer remains
  * unavailable.
  *
- * Called by: the future ConversationComputer loop composition.
  * @see ConversationComputerHistory
  */
 export class ConversationComputerExecutionAuthority
@@ -31,7 +30,6 @@ export class ConversationComputerExecutionAuthority
 	/**
 	 * Returns the current execution or appends one under the currently observed warm lease.
 	 *
-	 * Called by: the future ConversationComputer loop composition.
 	 * @param command - Supplies a durable activation locator whose history replay derives profile and identity.
 	 * @returns The one execution the loop may use, or `Unavailable` when no current lease permits contact.
 	 * @throws {Error} Propagates history read and append failures when no durable concurrent winner exists.

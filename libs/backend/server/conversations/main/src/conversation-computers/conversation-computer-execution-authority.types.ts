@@ -9,7 +9,6 @@ import type { ConversationComputerActivationCurrentCommand } from "./conversatio
  * decides whether the computer has a current warm lease. The caller therefore cannot select an
  * execution, lease, profile, or identity.
  *
- * Called by: the future ConversationComputer loop composition.
  */
 export interface ConversationComputerExecutionStartCommand extends ConversationComputerActivationCurrentCommand
 {
@@ -39,7 +38,6 @@ export enum ConversationComputerExecutionStartOutcomes
  * supplies `null`, so a caller cannot create a transport session from a cold, expired, replaced, or
  * terminal computer state.
  *
- * Called by: the future ConversationComputer loop composition.
  */
 export interface ConversationComputerExecutionStartResult
 {
