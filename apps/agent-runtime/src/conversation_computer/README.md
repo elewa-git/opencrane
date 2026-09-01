@@ -27,6 +27,8 @@ no credential or lease state, and it neither starts a model loop nor authorises 
 
 - `read_bootstrap_settings` validates the three mounted bootstrap inputs.
 - `bootstrap_execution` requests and validates the single fenced execution response.
+- `run` retries only unavailable bootstrap transport, then hands the checked execution once to a
+  separately composed product-loop adapter.
 
 ## Boundary
 
