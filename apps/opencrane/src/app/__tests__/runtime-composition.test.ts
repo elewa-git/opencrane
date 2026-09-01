@@ -87,6 +87,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.artifactScanner).toBeNull();
 		expect(composition.channelTargetResolver).toBeNull();
 		expect(composition.conversationReplay).toBeNull();
+		expect(composition.conversationComputerRuntimeOutput).toBeNull();
 	});
 
 	it("refuses an enabled worker plane that crosses into the trusted server namespace", function _rejectsCrossedWorkerPlane()

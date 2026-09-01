@@ -125,6 +125,17 @@ describe("ConversationComputerRuntimeOutputAuthority", function _RuntimeOutputAu
 		expect(subject.claims.prepareOutputClaim).not.toHaveBeenCalled();
 	});
 
+	it("rejects an unissued or non-head command before it can retain an opaque payload", async function _RejectsUnissuedCommand()
+	{
+		const subject = _Subject();
+		subject.claims.prepareOutputClaim.mockRejectedValue(new Error("Conversation computer runtime output claim requires one pending unclaimed command"));
+
+		await expect(subject.authority.record(_Command({ commandId: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651" }))).rejects.toThrow("pending unclaimed command");
+
+		expect(subject.payloads.storeText).not.toHaveBeenCalled();
+		expect(subject.history.appendAtomic).not.toHaveBeenCalled();
+	});
+
 	it("uses the first conversation position when the checked stream is empty", async function _UsesFirstPosition()
 	{
 		const subject = _Subject({ conversationRevision: HistoryExpectedRevisions.NoStream });

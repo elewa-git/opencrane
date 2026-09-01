@@ -76,4 +76,12 @@ describe("internal workload app", function _Suite()
 
 		expect(response.status).toBe(413);
 	});
+
+	it("keeps the larger ConversationComputer output ceiling ahead of the generic runtime parser", async function _UsesOutputParserBeforeRuntimeParser()
+	{
+		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), [_Continue], _McpRuntime());
+		const response = await request(app).post("/api/internal/conversation-computer/runtime/output").set("content-type", "application/json").send({ computerId: "computer-1", commandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "x".repeat(5 * 1_024) });
+
+		expect(response.status).toBe(404);
+	});
 });

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
 import { __CreateConversationComputerRuntimeBootstrapRouter } from "../conversation-computer-runtime-bootstrap.router";
-import type { ConversationComputerRuntimeBootstrapRouterDependencies } from "../conversation-computer-runtime-bootstrap.router.types";
+import type { ConversationComputerRuntimeAdmissionDependencies } from "../conversation-computer-runtime-admission.types";
 
 /** Supplies the reviewed Sandbox Pod identity stored by the active lease fixture. */
 const _IDENTITY = { namespace: "conversation-computers", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" } as const;
@@ -16,9 +16,9 @@ const _ACTIVE_EXECUTION = {
 } as never;
 
 /** Build one isolated route with a controllable reviewed identity and active-history result. */
-function _App(overrides: Partial<ConversationComputerRuntimeBootstrapRouterDependencies> = {})
+function _App(overrides: Partial<ConversationComputerRuntimeAdmissionDependencies> = {})
 {
-	const dependencies: ConversationComputerRuntimeBootstrapRouterDependencies = {
+	const dependencies: ConversationComputerRuntimeAdmissionDependencies = {
 		history: { loadActiveExecutionForBootstrap: vi.fn().mockResolvedValue(_ACTIVE_EXECUTION) },
 		tokenReviewer: { __Review: vi.fn().mockResolvedValue(_IDENTITY) },
 		siloId: "silo-1",
