@@ -57,6 +57,17 @@ class ConversationComputerBootstrapTests(unittest.TestCase):
         with self.assertRaises(ConversationComputerBootstrapDeniedError):
             read_bootstrap_settings(files.__getitem__, lambda _name: "computer-1")
 
+    def test_rejects_a_mount_endpoint_without_a_network_authority(self) -> None:
+        """A malformed immutable endpoint cannot become a retryable request failure."""
+        files = {
+            "/var/run/opencrane/conversation-computer/endpoint": "http:",
+            "/var/run/opencrane/conversation-computer/protocol-version": "conversation-computer-runtime.v1",
+            "/var/run/opencrane/conversation-computer/token-audience": "opencrane-conversation-computer-runtime",
+        }
+
+        with self.assertRaises(ConversationComputerBootstrapDeniedError):
+            read_bootstrap_settings(files.__getitem__, lambda _name: "computer-1")
+
     def test_accepts_only_the_matching_server_execution(self) -> None:
         """The bootstrap request sends only the Downward-API computer id and verifies its echo."""
         settings = ConversationComputerBootstrapSettings("http://server/runtime", "computer-1", "/token")

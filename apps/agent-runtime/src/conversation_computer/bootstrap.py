@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass
 from collections.abc import Callable
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 _CONFIG_DIRECTORY = "/var/run/opencrane/conversation-computer"
@@ -57,7 +58,8 @@ def read_bootstrap_settings(
     endpoint = read(f"{_CONFIG_DIRECTORY}/endpoint").strip()
     protocol_version = read(f"{_CONFIG_DIRECTORY}/protocol-version").strip()
     token_audience = read(f"{_CONFIG_DIRECTORY}/token-audience").strip()
-    if not endpoint.startswith(("http://", "https://")) or protocol_version != _PROTOCOL_VERSION or token_audience != _TOKEN_AUDIENCE:
+    parsed_endpoint = urlparse(endpoint)
+    if parsed_endpoint.scheme not in ("http", "https") or not parsed_endpoint.netloc or parsed_endpoint.params or parsed_endpoint.query or parsed_endpoint.fragment or protocol_version != _PROTOCOL_VERSION or token_audience != _TOKEN_AUDIENCE:
         raise ConversationComputerBootstrapDeniedError("ConversationComputer runtime bootstrap contract is invalid")
     # 2. Require the identity label admission policy stamped onto this exact Pod.
     computer_id = (get_environment("OPENCRANE_CONVERSATION_COMPUTER_ID") or "").strip()
