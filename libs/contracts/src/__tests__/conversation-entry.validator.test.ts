@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ___ConversationComputerEntrySchema, ___ConversationEntrySchema } from "../index";
-import type { A2UIRemoveEntry, ConversationEntry, MessageEntry, ToolCallLogEntry } from "../index";
+import { ConversationElicitationEntryKinds, ConversationElicitationEntryStates, ConversationEntryKinds } from "../index";
+import type { A2UIRemoveEntry, ConversationEntry, ElicitationRequestEntry, ElicitationResolutionEntry, MessageEntry, ToolCallLogEntry } from "../index";
 
 const _BASE = {
 	schemaVersion: 1 as const,
@@ -16,6 +17,25 @@ const _BASE = {
 	idempotencyKey: "source-event-1",
 	occurredAt: "2026-08-31T20:00:00.000Z",
 	attestation: null,
+};
+
+const _ELICITATION_BASE = {
+	schemaVersion: 1 as const,
+	conversationId: "conversation-1",
+	position: "13",
+	author: { kind: "system" as const, systemId: "opencrane" as const, name: "OpenCrane" as const },
+	provenance: "service-attested" as const,
+	visibility: { audience: "participant_subset" as const, participantIds: ["participant-1"] },
+	causationId: "command-elicitation-1",
+	correlationId: "request-elicitation-1",
+	idempotencyKey: "source-elicitation-1",
+	occurredAt: "2026-08-31T20:00:00.000Z",
+	attestation: { serviceId: "opencrane", receiptId: "receipt-elicitation-1", domainStream: "authorization-1", domainRevision: "12", decisionEvidenceId: "decision-1" },
+	elicitationId: "elicitation-1",
+	computerId: "computer-1",
+	computerExecutionId: "computer-execution-1",
+	leaseGeneration: 2,
+	elicitationKind: ConversationElicitationEntryKinds.RuntimeInput,
 };
 
 describe("conversation entry validation", function ()
@@ -74,6 +94,93 @@ describe("conversation entry validation", function ()
 		const entries: readonly ConversationEntry[] = [entry];
 
 		expect(entries[0]).toMatchObject({ kind: "a2ui", operation: "remove", payloadRef: null });
+	});
+
+	it("accepts only a server-attested opaque elicitation request", function ()
+	{
+		const entry: ElicitationRequestEntry = {
+			..._ELICITATION_BASE,
+			id: "entry-elicitation-1",
+			kind: ConversationEntryKinds.Elicitation,
+			state: ConversationElicitationEntryStates.Requested,
+			addressedParticipantId: "participant-1",
+			requestPayloadRef: "payload://elicitation-request-1",
+			requestPayloadDigest: `sha256:${"a".repeat(64)}`,
+			expiresAt: "2026-08-31T20:05:00.000Z",
+		};
+
+		expect(___ConversationEntrySchema.safeParse(entry).success).toBe(true);
+		expect(___ConversationComputerEntrySchema.safeParse(entry).success).toBe(false);
+	});
+
+	it("accepts opaque answers and rejects plaintext or incomplete response data", function ()
+	{
+		const answer: ElicitationResolutionEntry = {
+			..._ELICITATION_BASE,
+			id: "entry-elicitation-2",
+			kind: ConversationEntryKinds.Elicitation,
+			state: ConversationElicitationEntryStates.Answered,
+			requestEntryId: "entry-elicitation-1",
+			responsePayloadRef: "payload://elicitation-response-1",
+			responsePayloadDigest: `sha256:${"b".repeat(64)}`,
+		};
+		const missingPayloadReference = { ...answer, responsePayloadRef: null };
+		const missingPayloadDigest = { ...answer, responsePayloadDigest: null };
+		const plaintext = { ...answer, responseText: "Approve payment" };
+		const plaintextReference = { ...answer, responsePayloadRef: "Approve payment" };
+
+		expect(___ConversationEntrySchema.safeParse(answer).success).toBe(true);
+		expect(___ConversationEntrySchema.safeParse(missingPayloadReference).success).toBe(false);
+		expect(___ConversationEntrySchema.safeParse(missingPayloadDigest).success).toBe(false);
+		expect(___ConversationEntrySchema.safeParse(plaintext).success).toBe(false);
+		expect(___ConversationEntrySchema.safeParse(plaintextReference).success).toBe(false);
+	});
+
+	it("keeps governed tool and memory decisions in the target elicitation vocabulary", function ()
+	{
+		const governedKinds = [ConversationElicitationEntryKinds.ToolApproval, ConversationElicitationEntryKinds.PersonalMemoryPermission] as const;
+
+		for (const elicitationKind of governedKinds)
+		{
+			const entry: ElicitationResolutionEntry = {
+				..._ELICITATION_BASE,
+				id: `entry-${elicitationKind}`,
+				kind: ConversationEntryKinds.Elicitation,
+				elicitationKind,
+				state: ConversationElicitationEntryStates.Declined,
+				requestEntryId: `request-${elicitationKind}`,
+				responsePayloadRef: null,
+				responsePayloadDigest: null,
+			};
+
+			expect(___ConversationEntrySchema.safeParse(entry).success).toBe(true);
+		}
+
+		const unsupported = { ..._ELICITATION_BASE, id: "entry-unsupported-elicitation", kind: ConversationEntryKinds.Elicitation, elicitationKind: "recovery_required", state: ConversationElicitationEntryStates.Declined, requestEntryId: "request-unsupported-elicitation", responsePayloadRef: null, responsePayloadDigest: null };
+
+		expect(___ConversationEntrySchema.safeParse(unsupported).success).toBe(false);
+	});
+
+	it("rejects every partial response coordinate on terminal non-answer outcomes", function ()
+	{
+		const terminalStates = [ConversationElicitationEntryStates.Declined, ConversationElicitationEntryStates.Expired, ConversationElicitationEntryStates.Cancelled] as const;
+
+		for (const state of terminalStates)
+		{
+			const terminal: ElicitationResolutionEntry = {
+				..._ELICITATION_BASE,
+				id: `entry-${state}`,
+				kind: ConversationEntryKinds.Elicitation,
+				state,
+				requestEntryId: `request-${state}`,
+				responsePayloadRef: null,
+				responsePayloadDigest: null,
+			};
+
+			expect(___ConversationEntrySchema.safeParse(terminal).success).toBe(true);
+			expect(___ConversationEntrySchema.safeParse({ ...terminal, responsePayloadRef: "payload://stale" }).success).toBe(false);
+			expect(___ConversationEntrySchema.safeParse({ ...terminal, responsePayloadDigest: `sha256:${"c".repeat(64)}` }).success).toBe(false);
+		}
 	});
 
 	it("rejects duplicate participant visibility and a fabricated A2UI removal payload", function ()
