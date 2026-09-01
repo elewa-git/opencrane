@@ -22,10 +22,12 @@ install that controller or create Pods itself.
 **In this flow:** [deploy-k8s](../deploy-k8s/README.md) composes the resources; the external Agent
 Sandbox controller reconciles the custom resources into Pods.
 
-The template fixes the image digest, RuntimeClass, service account, resources, security context and
-Pod metadata. The claim policy permits only the OpenCrane server identity to create the fixed v1beta1
-claim shape, and forbids claim environment variables, volume claims, additional Pod metadata and every
-spec update. A mistake therefore denies a computer activation instead of widening its Pod profile.
+The template fixes the image digest, RuntimeClass, service account, resources, security context, Pod
+metadata, and the ConversationComputer runtime bootstrap. The bootstrap contains only the release-local
+internal endpoint, a closed protocol revision, and a 10-minute audience-bound projected service-account
+token. The claim policy permits only the OpenCrane server identity to create the fixed v1beta1 claim
+shape, and forbids claim environment variables, volume claims, additional Pod metadata and every spec
+update. A mistake therefore denies a computer activation instead of widening its Pod profile.
 
 ## Public surface
 
@@ -52,9 +54,13 @@ an installed `extensions.agents.x-k8s.io/v1beta1` API, a RuntimeClass, one servi
 at least one named profile. Each profile requires an immutable unique `profileRevisionId`, a unique
 pool name, repository-and-`sha256` image identity, pull policy, and CPU/memory requests and limits.
 The umbrella chart mounts the resulting revision-to-profile map into the OpenCrane server as an
-immutable ConfigMap, so durable activation events cannot select a different Sandbox profile. Every
-resulting warm pool has
-`replicas: 0`; claims start the configured profile only after the durable computer authority admits one.
+immutable ConfigMap, so durable activation events cannot select a different Sandbox profile. It also
+creates an immutable bootstrap ConfigMap in the Sandbox namespace and projects a short-lived token at
+`/var/run/secrets/opencrane/conversation-computer/token` without enabling the default Kubernetes token
+mount. Every resulting warm pool has `replicas: 0`; claims start the configured profile only after the
+durable computer authority admits one. The runtime cannot yet reach the internal listener: the later
+authenticated runtime-route checkpoint adds the route and the matching NetworkPolicy rule after it can
+bind this token to the computer, execution, lease, and exact Sandbox Pod.
 
 ## See also
 
