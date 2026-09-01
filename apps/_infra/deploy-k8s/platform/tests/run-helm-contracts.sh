@@ -11,6 +11,7 @@ for contract in \
   preflight-cni-contract.sh \
   kubernetes-api-helm-args-contract.sh \
   runtime-continuation-keyring-secret-contract.sh \
+  conversation-payload-keyring-secret-contract.sh \
   pooler-deploy-contract.sh \
   postgres-release-contract.sh \
   workflow-engine-qualification-contract.sh \

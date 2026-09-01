@@ -523,6 +523,12 @@ clustertenantManager:
       authorization:
         existingSecret: ""
         secretKey: authorization
+  # -- Encrypts runtime-written conversation payloads. The deploy script creates this independent
+  #    keyring once and passes its data checksum to roll the server after a deliberate rotation.
+  conversationPayloadKeyring:
+    existingSecret: opencrane-conversation-payload
+    secretKey: keyring.json
+    checksum: ""
   # -- One verified OIDC email may claim this standalone silo's first active Owner membership.
   # The deploy profile supplies both values; Helm never writes database membership data itself.
   firstUser:

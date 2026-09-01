@@ -88,6 +88,8 @@ export interface InternalRuntimeConfig
 	readonly channelTargets: ChannelTargetRuntimeConfig | null;
 	/** Release-owned profile map used to realize durable ConversationComputer activation commands, when this target plane is enabled. */
 	readonly conversationComputerActivation: ConversationComputerActivationConfig | null;
+	/** Provides the Secret-mounted payload keyring path, or `null` when ConversationComputer activation is disabled. */
+	readonly conversationPayloadKeyringPath: string | null;
 	/** Maximum age of a runtime command before it is refused. */
 	readonly commandTtlMilliseconds: number;
 	/** Delay before recovering an unacknowledged runtime command. */

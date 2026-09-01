@@ -82,6 +82,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				artifactScannerEnabled: true,
 				artifactScannerClaimLeaseMilliseconds: 240_000,
 				artifactScannerNamespace: "artifact-scanner",
+				conversationPayloadKeyringPath: null,
 				managedRuntimeNamespace: "managed-runs",
 				continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
 				mcpCompanionClaimLeaseMilliseconds: 25_000,
@@ -116,10 +117,21 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
 			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
 		]));
+		vi.stubEnv("OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH", "/var/run/opencrane/conversation-payload/keyring.json");
 
 		expect(_ReadProcessConfig().runtime.conversationComputerActivation).toEqual({
 			profiles: [{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }],
 		});
+		expect(_ReadProcessConfig().runtime.conversationPayloadKeyringPath).toBe("/var/run/opencrane/conversation-payload/keyring.json");
+	});
+
+	it("requires a payload keyring when ConversationComputer activation is configured", function _RequiresConversationPayloadKeyring()
+	{
+		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+		]));
+
+		expect(_ReadProcessConfig).toThrow("OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH is required");
 	});
 
 	it("rejects a malformed or duplicate ConversationComputer profile map", function _RejectInvalidConversationComputerProfiles()

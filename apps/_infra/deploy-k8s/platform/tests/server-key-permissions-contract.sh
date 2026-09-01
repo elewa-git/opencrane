@@ -83,6 +83,10 @@ continuation_keyring_volume="$(grep -A 8 '        - name: runtime-continuation-k
 grep -Fq '            secretName: "opencrane-runtime-continuation"' <<<"$continuation_keyring_volume"
 grep -Fq '            defaultMode: 0440' <<<"$continuation_keyring_volume"
 grep -Fq '                path: keyring.json' <<<"$continuation_keyring_volume"
+if grep -Eq 'conversation-payload-keyring|OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH' <<<"$server_manifest"; then
+  echo "server rendered ConversationComputer payload key material while Agent Sandbox is disabled" >&2
+  exit 1
+fi
 grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_OCI_REGISTRY_BASE_URL' <<<"$server_manifest"
