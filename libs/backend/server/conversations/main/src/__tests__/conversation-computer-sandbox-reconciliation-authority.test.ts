@@ -102,9 +102,17 @@ describe("ConversationComputerSandboxReconciliationAuthority", function _Reconci
 		expect(fixture.history.append).toHaveBeenCalledWith(expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.RecoveryRequired }), lease: expect.objectContaining({ state: ComputerLeaseStates.Lost }) }));
 	});
 
-	it("ignores a stale or already-converged activation locator", async function _IgnoresStaleLocator()
+	it("retains one current warm generation for restart-safe execution admission", async function _RetainsWarmGeneration()
 	{
 		const fixture = _Authority(_Current({ computer: { ..._Current().computer, state: ConversationComputerStates.Warm }, lease: { ..._Current().lease, state: ComputerLeaseStates.Active, sandboxId: "sandbox-1", runtimePod: { namespace: "testv5", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" } } }));
+
+		await expect(fixture.authority.reconcile(_Command)).resolves.toBe(ConversationComputerSandboxReconciliationOutcomes.ExecutionPending);
+		expect(fixture.observations.observe).not.toHaveBeenCalled();
+	});
+
+	it("ignores a stale or terminal activation locator", async function _IgnoresStaleLocator()
+	{
+		const fixture = _Authority(_Current({ computer: { ..._Current().computer, state: ConversationComputerStates.Warm }, lease: { ..._Current().lease, state: ComputerLeaseStates.Active, sandboxId: "sandbox-1", runtimePod: { namespace: "testv5", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" }, expiresAt: "2026-09-01T00:09:00.000Z" } }));
 
 		await expect(fixture.authority.reconcile(_Command)).resolves.toBe(ConversationComputerSandboxReconciliationOutcomes.Ignored);
 		expect(fixture.observations.observe).not.toHaveBeenCalled();

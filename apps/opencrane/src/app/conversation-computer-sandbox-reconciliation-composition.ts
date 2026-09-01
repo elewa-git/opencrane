@@ -85,7 +85,7 @@ async function _ReadActivationLocators(events: AsyncIterable<HistoryRecordedEven
 	}
 }
 
-/** Reconciles one bounded batch and preserves only claims whose transient result is Pending. */
+/** Reconciles one bounded batch and retains exact warm generations until execution admission converges. */
 async function _ReconcileOutstanding(authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, outstanding: Map<string, ConversationComputerActivationCommand>, cursor: number): Promise<number>
 {
 	const entries = [...outstanding.entries()];
@@ -99,10 +99,14 @@ async function _ReconcileOutstanding(authority: ConversationComputerSandboxRecon
 		{
 			const outcome = await authority.reconcile(command);
 			// 1. Admit an execution only after reconciliation persisted the checked active Sandbox Pod.
-			if (outcome === ConversationComputerSandboxReconciliationOutcomes.Warmed)
+			const executionPending = outcome === ConversationComputerSandboxReconciliationOutcomes.Warmed || outcome === ConversationComputerSandboxReconciliationOutcomes.ExecutionPending;
+			// 2. Retire the polling locator once durable state moved beyond a pending claim or execution admission.
+			if (executionPending)
+			{
 				await _StartExecution(executions, command);
-			// 2. Retire the polling locator once durable state moved beyond a pending claim.
-			if (outcome !== ConversationComputerSandboxReconciliationOutcomes.Pending)
+				outstanding.delete(key);
+			}
+			else if (outcome !== ConversationComputerSandboxReconciliationOutcomes.Pending)
 				outstanding.delete(key);
 			// 3. Surface release contradictions without inventing a replacement claim or lease.
 			if (outcome === ConversationComputerSandboxReconciliationOutcomes.Blocked)
