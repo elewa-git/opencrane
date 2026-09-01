@@ -77,18 +77,39 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 				await this._connect(command, progress, reconnectAttempt);
 				state = progress.state;
 				lastHeartbeatAt = progress.lastHeartbeatAt;
-				if (state.accessRevoked) throw new Error("conversation socket access was revoked");
-				if (progress.receivedEvent) reconnectAttempt = 0;
+
+				if (state.accessRevoked)
+				{
+					throw new Error("conversation socket access was revoked");
+				}
+				if (progress.receivedEvent)
+				{
+					reconnectAttempt = 0;
+				}
 			}
 			catch (error)
 			{
 				state = progress.state;
 				lastHeartbeatAt = progress.lastHeartbeatAt;
-				if (command.signal.aborted) break;
-				if (state.accessRevoked) _Fail(command, __RevokeAgUiStreamAccess(), reconnectAttempt, lastHeartbeatAt, error);
-				if (progress.receivedEvent) reconnectAttempt = 0;
+
+				if (command.signal.aborted)
+				{
+					break;
+				}
+				if (state.accessRevoked)
+				{
+					_Fail(command, __RevokeAgUiStreamAccess(), reconnectAttempt, lastHeartbeatAt, error);
+				}
+				if (progress.receivedEvent)
+				{
+					reconnectAttempt = 0;
+				}
 				reconnectAttempt += 1;
-				if (reconnectAttempt > (command.maximumReconnectAttempts ?? 3)) _Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
+
+				if (reconnectAttempt > (command.maximumReconnectAttempts ?? 3))
+				{
+					_Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
+				}
 			}
 
 			if (!command.signal.aborted)
@@ -106,7 +127,12 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 	public submit(command: SubmitConversationEventStreamMessageCommand): Promise<void>
 	{
 		const socket = this._socket;
-		if (socket === null || this._conversationId !== command.conversationId || socket.readyState !== WebSocket.OPEN) return Promise.reject(new ConversationEventStreamMessageError());
+
+		if (socket === null || this._conversationId !== command.conversationId || socket.readyState !== WebSocket.OPEN)
+		{
+			return Promise.reject(new ConversationEventStreamMessageError());
+		}
+
 		const requestId = globalThis.crypto.randomUUID();
 		return new Promise<void>((resolve, reject) =>
 		{
@@ -138,14 +164,33 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 			});
 			socket.addEventListener("message", event =>
 			{
-				if (typeof event.data !== "string") { socket.close(1003, "text_frames_required"); return; }
-				if (_HandleMessageAcknowledgement(event.data, this._pendingMessages)) return;
+				if (typeof event.data !== "string")
+				{
+					socket.close(1003, "text_frames_required");
+					return;
+				}
+				if (_HandleMessageAcknowledgement(event.data, this._pendingMessages))
+				{
+					return;
+				}
 				try
 				{
 					const frame = _Json(event.data);
-					if (_IsHeartbeat(frame)) { progress.lastHeartbeatAt = Date.now(); _Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt }); return; }
+
+					if (_IsHeartbeat(frame))
+					{
+						progress.lastHeartbeatAt = Date.now();
+						_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
+						return;
+					}
+
 					const record = __DecodeAgUiSocketRecord(frame);
-					if (record === null) throw new Error("invalid conversation socket event");
+
+					if (record === null)
+					{
+						throw new Error("invalid conversation socket event");
+					}
+
 					progress.state = __ReduceAgUiStream(progress.state, record);
 					progress.receivedEvent = true;
 					_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
@@ -156,34 +201,69 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 			{
 				_Finish();
 				this._release(socket, new ConversationEventStreamMessageError());
-				if (command.signal.aborted) { resolve(); return; }
-				if (event.code === 1008) { progress.state = __RevokeAgUiStreamAccess(); reject(new Error("conversation socket access was revoked")); return; }
-				if (!opened) { reject(new Error("conversation socket could not connect")); return; }
+
+				if (command.signal.aborted)
+				{
+					resolve();
+					return;
+				}
+				if (event.code === 1008)
+				{
+					progress.state = __RevokeAgUiStreamAccess();
+					reject(new Error("conversation socket access was revoked"));
+					return;
+				}
+				if (!opened)
+				{
+					reject(new Error("conversation socket could not connect"));
+					return;
+				}
 				resolve();
 			});
-			socket.addEventListener("error", () => { if (!opened) reject(new Error("conversation socket could not connect")); });
+			socket.addEventListener("error", () =>
+			{
+				if (!opened)
+				{
+					reject(new Error("conversation socket could not connect"));
+				}
+			});
 		});
 	}
 
 	/** Reject every command owned by a socket that just closed or was replaced. */
 	private _release(socket: WebSocket | null, error: Error): void
 	{
-		if (socket === null) return;
+		if (socket === null)
+		{
+			return;
+		}
 		for (const [requestId, pending] of this._pendingMessages)
 		{
-			if (pending.socket !== socket) continue;
+			if (pending.socket !== socket)
+			{
+				continue;
+			}
 			clearTimeout(pending.timeout);
 			pending.reject(error);
 			this._pendingMessages.delete(requestId);
 		}
-		if (this._socket === socket) { this._socket = null; this._conversationId = null; }
+		if (this._socket === socket)
+		{
+			this._socket = null;
+			this._conversationId = null;
+		}
 	}
 
 	/** Reject one unacknowledged command after a socket failure or acknowledgement timeout. */
 	private _rejectMessage(requestId: string): void
 	{
 		const pending = this._pendingMessages.get(requestId);
-		if (pending === undefined) return;
+
+		if (pending === undefined)
+		{
+			return;
+		}
+
 		clearTimeout(pending.timeout);
 		this._pendingMessages.delete(requestId);
 		pending.reject(new ConversationEventStreamMessageError());
@@ -195,7 +275,12 @@ function _SocketUrl(conversationId: string, cursor: string | undefined): string
 {
 	const origin = globalThis.location.origin.replace(/^http/u, "ws");
 	const url = new URL(`/api/v1/me/conversations/${encodeURIComponent(conversationId)}/socket`, origin);
-	if (cursor !== undefined) url.searchParams.set("cursor", cursor);
+
+	if (cursor !== undefined)
+	{
+		url.searchParams.set("cursor", cursor);
+	}
+
 	return url.toString();
 }
 
@@ -205,15 +290,34 @@ function _HandleMessageAcknowledgement(raw: string, pendingMessages: ReadonlyMap
 	let message: unknown;
 	try { message = JSON.parse(raw) as unknown; }
 	catch { return false; }
-	if (typeof message !== "object" || message === null) return false;
+
+	if (typeof message !== "object" || message === null)
+	{
+		return false;
+	}
+
 	const value = message as Record<string, unknown>;
 	const requestId = value["requestId"];
-	if (typeof requestId !== "string") return false;
+
+	if (typeof requestId !== "string")
+	{
+		return false;
+	}
+
 	const pending = pendingMessages.get(requestId);
-	if (pending === undefined) return true;
+
+	if (pending === undefined)
+	{
+		return true;
+	}
+
 	clearTimeout(pending.timeout);
 	(pendingMessages as Map<string, PendingMessage>).delete(requestId);
-	if (value["type"] === "conversation.message.accepted") pending.resolve();
+
+	if (value["type"] === "conversation.message.accepted")
+	{
+		pending.resolve();
+	}
 	else pending.reject(new ConversationEventStreamMessageError(typeof value["error"] === "string" ? value["error"] : undefined));
 	return true;
 }
@@ -230,7 +334,11 @@ function _Emit(command: StreamConversationEventsCommand, update: ConversationEve
 /** Wait before reconnecting, but return immediately if the screen selection changed. */
 async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>
 {
-	if (signal.aborted || milliseconds === 0) return;
+	if (signal.aborted || milliseconds === 0)
+	{
+		return;
+	}
+
 	await new Promise<void>(function _Until(resolve)
 	{
 		const timeout = setTimeout(resolve, milliseconds);
@@ -241,9 +349,18 @@ async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>
 /** Reject invalid socket stream options before opening a network connection. */
 function _ValidateCommand(command: StreamConversationEventsCommand): void
 {
-	if (command.conversationId.trim().length === 0) throw new Error("conversation id is required");
-	if (command.maximumReconnectAttempts !== undefined && (!Number.isSafeInteger(command.maximumReconnectAttempts) || command.maximumReconnectAttempts < 0 || command.maximumReconnectAttempts > 10)) throw new Error("maximum reconnect attempts must be between zero and ten");
-	if (command.reconnectDelayMilliseconds !== undefined && (!Number.isSafeInteger(command.reconnectDelayMilliseconds) || command.reconnectDelayMilliseconds < 0 || command.reconnectDelayMilliseconds > 30_000)) throw new Error("reconnect delay must be between zero and thirty seconds");
+	if (command.conversationId.trim().length === 0)
+	{
+		throw new Error("conversation id is required");
+	}
+	if (command.maximumReconnectAttempts !== undefined && (!Number.isSafeInteger(command.maximumReconnectAttempts) || command.maximumReconnectAttempts < 0 || command.maximumReconnectAttempts > 10))
+	{
+		throw new Error("maximum reconnect attempts must be between zero and ten");
+	}
+	if (command.reconnectDelayMilliseconds !== undefined && (!Number.isSafeInteger(command.reconnectDelayMilliseconds) || command.reconnectDelayMilliseconds < 0 || command.reconnectDelayMilliseconds > 30_000))
+	{
+		throw new Error("reconnect delay must be between zero and thirty seconds");
+	}
 }
 
 /** Stop the stream with the last accepted state and browser-safe fixed copy. */
