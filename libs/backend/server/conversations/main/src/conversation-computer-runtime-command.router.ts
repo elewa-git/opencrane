@@ -1,7 +1,7 @@
 import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRuntimeTerminalStates, type ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
 import { Router, type Request, type Response } from "express";
 
-import type { ConversationComputerRuntimeIdentity } from "./conversation-computer-runtime-bootstrap.router.types";
+import { _AdmitConversationComputerRuntime, _ReviewConversationComputerRuntimeIdentity } from "./conversation-computer-runtime-admission";
 import type { ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
 
 /** Recognizes the UUID runtime coordinates that the durable command authority accepts. */
@@ -14,16 +14,25 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 	router.get("/commands/next", async function _Next(request: Request, response: Response)
 	{
 		// 1. Review the projected identity before accepting a computer selector from the caller.
-		const identity = await _ReviewIdentity(request, response, dependencies);
+		const identity = await _ReviewConversationComputerRuntimeIdentity(request, response, dependencies);
 		if (identity === null)
 			return;
 
-		// 2. Re-derive the active execution and bind its immutable Pod identity to the caller.
-		const active = await _ActiveExecution(request.query, identity, response, dependencies);
-		if (active === null)
+		// 2. Parse the sole selector before it can trigger a server history read.
+		const computerId = _ReadComputerId(request.query);
+		if (computerId === null)
+		{
+			response.status(400).json({ error: "invalid_runtime_command" });
 			return;
+		}
 
-		// 3. Poll through the durable authority so this route cannot skip or invent queue state.
+		// 3. Re-derive the active execution and bind its immutable Pod identity to the caller.
+		const admission = await _AdmitConversationComputerRuntime(computerId, identity, response, dependencies);
+		if (admission === null)
+			return;
+		const active = admission.active;
+
+		// 4. Poll through the durable authority so this route cannot skip or invent queue state.
 		try
 		{
 			const result = await dependencies.authority.poll({ siloId: dependencies.siloId, computerId: active.computer.id, conversationId: active.computer.conversationId });
@@ -43,7 +52,7 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 	router.post("/commands/complete", async function _Complete(request: Request, response: Response)
 	{
 		// 1. Review the projected identity before inspecting a caller-provided terminal report.
-		const identity = await _ReviewIdentity(request, response, dependencies);
+		const identity = await _ReviewConversationComputerRuntimeIdentity(request, response, dependencies);
 		if (identity === null)
 			return;
 
@@ -56,9 +65,10 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 		}
 
 		// 3. Re-derive the active execution and let durable authority reject every stale report fence.
-		const active = await _ActiveExecution({ computerId: report.computerId }, identity, response, dependencies);
-		if (active === null)
+		const admission = await _AdmitConversationComputerRuntime(report.computerId, identity, response, dependencies);
+		if (admission === null)
 			return;
+		const active = admission.active;
 		try
 		{
 			await dependencies.authority.complete({ siloId: dependencies.siloId, computerId: active.computer.id, conversationId: active.computer.conversationId, report });
@@ -71,57 +81,6 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 		}
 	});
 	return router;
-}
-
-/** Reviews one projected token and hides token-review failures from a Sandbox caller. */
-async function _ReviewIdentity(request: Request, response: Response, dependencies: ConversationComputerRuntimeCommandRouterDependencies): Promise<ConversationComputerRuntimeIdentity | null>
-{
-	const token = _ReadBearer(request.header("authorization"));
-	if (token === null)
-	{
-		response.status(401).json({ error: "runtime_denied" });
-		return null;
-	}
-	try
-	{
-		const identity = await dependencies.tokenReviewer.__Review(token);
-		if (identity === null)
-			response.status(401).json({ error: "runtime_denied" });
-		return identity;
-	}
-	catch (err)
-	{
-		dependencies.logger.error({ err }, "ConversationComputer runtime command TokenReview failed");
-		response.status(503).json({ error: "runtime_unavailable" });
-		return null;
-	}
-}
-
-/** Derives one active execution and proves that the reviewed Pod still owns its active lease. */
-async function _ActiveExecution(selector: unknown, identity: ConversationComputerRuntimeIdentity, response: Response, dependencies: ConversationComputerRuntimeCommandRouterDependencies)
-{
-	const computerId = _ReadComputerId(selector);
-	if (computerId === null)
-	{
-		response.status(400).json({ error: "invalid_runtime_command" });
-		return null;
-	}
-	try
-	{
-		const active = await dependencies.history.loadActiveExecutionForBootstrap({ siloId: dependencies.siloId, computerId, nowEpochMilliseconds: dependencies.clock.now().getTime() });
-		if (!_MatchesLeaseRuntimePod(identity, active.lease.runtimePod))
-		{
-			response.status(403).json({ error: "runtime_denied" });
-			return null;
-		}
-		return active;
-	}
-	catch (err)
-	{
-		dependencies.logger.warn({ err }, "ConversationComputer runtime command history was unavailable or inactive");
-		response.status(403).json({ error: "runtime_denied" });
-		return null;
-	}
 }
 
 /** Reads one strict query or body computer selector without extra execution coordinates. */
@@ -149,17 +108,4 @@ function _ReadReport(value: unknown): ConversationComputerRuntimeTerminalReport 
 	if (report.protocolVersion !== CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION || typeof report.commandId !== "string" || typeof report.computerId !== "string" || typeof report.executionId !== "string" || typeof leaseGeneration !== "number" || !_UUID_PATTERN.test(report.commandId) || !_UUID_PATTERN.test(report.executionId) || report.computerId.trim().length === 0 || report.computerId.length > 128 || !Number.isSafeInteger(leaseGeneration) || leaseGeneration < 1 || !Object.values(ConversationComputerRuntimeTerminalStates).includes(report.state as ConversationComputerRuntimeTerminalStates))
 		return null;
 	return { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: report.commandId, computerId: report.computerId, executionId: report.executionId, leaseGeneration, state: report.state as ConversationComputerRuntimeTerminalStates };
-}
-
-/** Reads one bearer token without accepting a token list or a scheme variation. */
-function _ReadBearer(value: string | undefined): string | null
-{
-	const match = /^Bearer ([^\s,]+)$/u.exec(value ?? "");
-	return match?.[1] ?? null;
-}
-
-/** Compares every Kubernetes identity field so a replacement Pod cannot use a former lease. */
-function _MatchesLeaseRuntimePod(identity: ConversationComputerRuntimeIdentity, runtimePod: { readonly namespace: string; readonly serviceAccountName: string; readonly podUid: string } | null): boolean
-{
-	return runtimePod !== null && identity.namespace === runtimePod.namespace && identity.serviceAccountName === runtimePod.serviceAccountName && identity.podUid === runtimePod.podUid;
 }

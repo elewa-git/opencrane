@@ -34,7 +34,7 @@ export class ConversationComputerRuntimeOutputAuthority
 	 * the conversation entry, so a terminal report, a competing output, or a changed execution head
 	 * cannot leave a participant-visible response without its command lifecycle fence.
 	 *
-	 * Called by: the forthcoming authenticated ConversationComputer runtime output route.
+	 * Called by: `__CreateConversationComputerRuntimeOutputRouter` after Sandbox identity and lease admission.
 	 * @param command - Supplies the runtime's already-authenticated output bytes and echoed command fence.
 	 * @returns The UUID message identifier, including the exact durable winner for a response-lost retry.
 	 * @throws {Error} Rejects malformed text, retired execution fences, changed retries, and append conflicts.
@@ -56,16 +56,27 @@ export class ConversationComputerRuntimeOutputAuthority
 			throw new Error("Conversation computer runtime output has foreign execution coordinates");
 		const identity = await this.dependencies.identities.loadActiveAuthorization({ siloId: command.siloId, agentIdentityId: computer.computer.agentIdentityId });
 
-		// 2. Replay the transcript and retain opaque output coordinates before comparing an exact retry.
+		// 2. Replay the transcript and inspect only a deterministic entry identifier for a lost response.
 		const conversation = await this.dependencies.conversations.readCurrent({ siloId: command.siloId, conversationId: command.conversationId });
-		const payload = await this.dependencies.payloads.storeText({ siloId: command.siloId, conversationId: command.conversationId, idempotencyKey: outputMessageId, text: command.text });
-		const existingMessageId = _ExistingMessageId(conversation, command, outputMessageId, computer.execution.id, identity.identity, identity.agentServiceId, payload);
-		if (existingMessageId !== null)
+		const hasExistingOutput = conversation.entries.some(entry => entry.idempotencyKey === outputMessageId);
+		if (hasExistingOutput)
+		{
+			const existingPayload = await this.dependencies.payloads.storeText({ siloId: command.siloId, conversationId: command.conversationId, idempotencyKey: outputMessageId, text: command.text });
+			const existingMessageId = _ExistingMessageId(conversation, command, outputMessageId, computer.execution.id, identity.identity, identity.agentServiceId, existingPayload);
+			if (existingMessageId === null)
+				throw new Error("Conversation computer runtime output retry has no durable message");
 			return { messageId: existingMessageId };
+		}
 
-		// 3. Build both state transitions from current heads, then append them as one all-or-nothing fact.
+		// 3. Prove that this command is the current pending head before a new payload row can be retained.
+		await this.dependencies.claims.prepareOutputClaim(command);
+
+		// 4. Retain the opaque payload after command ownership is proven and before its entry is assembled.
+		const storedPayload = await this.dependencies.payloads.storeText({ siloId: command.siloId, conversationId: command.conversationId, idempotencyKey: outputMessageId, text: command.text });
+
+		// 5. Recheck the command head after storage, then append both terminal facts atomically.
 		const claim = await this.dependencies.claims.prepareOutputClaim(command);
-		const entry = _Entry(command, outputMessageId, conversation.expectedRevision, identity.identity, identity.agentServiceId, payload, this.dependencies.clock.now());
+		const entry = _Entry(command, outputMessageId, conversation.expectedRevision, identity.identity, identity.agentServiceId, storedPayload, this.dependencies.clock.now());
 		if (!___ConversationEntrySchema.safeParse(entry).success)
 			throw new Error("Conversation computer runtime output could not stamp a valid message entry");
 		await this.dependencies.history.appendAtomic({

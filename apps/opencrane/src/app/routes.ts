@@ -210,6 +210,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const internalConversationComputerRoutes = [
 		..._OptionalRoute("/api/internal/conversation-computer/runtime", runtime.conversationComputerRuntimeBootstrap),
 		..._OptionalRoute("/api/internal/conversation-computer/runtime", runtime.conversationComputerRuntimeCommands),
+		..._OptionalRoute("/api/internal/conversation-computer/runtime", runtime.conversationComputerRuntimeOutput),
 	];
 	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },
