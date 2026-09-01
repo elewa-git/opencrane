@@ -4,6 +4,9 @@ import { Router, type Request, type Response } from "express";
 import type { ConversationComputerRuntimeIdentity } from "./conversation-computer-runtime-bootstrap.router.types";
 import type { ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
 
+/** Recognizes the UUID runtime coordinates that the durable command authority accepts. */
+const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 /** Builds the Sandbox-only command route for one active ConversationComputer execution. */
 export function __CreateConversationComputerRuntimeCommandRouter(dependencies: ConversationComputerRuntimeCommandRouterDependencies): Router
 {
@@ -143,7 +146,7 @@ function _ReadReport(value: unknown): ConversationComputerRuntimeTerminalReport 
 	if (Object.keys(report).length !== keys.length || !keys.every(key => Object.hasOwn(report, key)))
 		return null;
 	const leaseGeneration = report.leaseGeneration;
-	if (report.protocolVersion !== CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION || typeof report.commandId !== "string" || typeof report.computerId !== "string" || typeof report.executionId !== "string" || typeof leaseGeneration !== "number" || !Number.isSafeInteger(leaseGeneration) || !Object.values(ConversationComputerRuntimeTerminalStates).includes(report.state as ConversationComputerRuntimeTerminalStates))
+	if (report.protocolVersion !== CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION || typeof report.commandId !== "string" || typeof report.computerId !== "string" || typeof report.executionId !== "string" || typeof leaseGeneration !== "number" || !_UUID_PATTERN.test(report.commandId) || !_UUID_PATTERN.test(report.executionId) || report.computerId.trim().length === 0 || report.computerId.length > 128 || !Number.isSafeInteger(leaseGeneration) || leaseGeneration < 1 || !Object.values(ConversationComputerRuntimeTerminalStates).includes(report.state as ConversationComputerRuntimeTerminalStates))
 		return null;
 	return { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: report.commandId, computerId: report.computerId, executionId: report.executionId, leaseGeneration, state: report.state as ConversationComputerRuntimeTerminalStates };
 }

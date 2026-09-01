@@ -9,9 +9,9 @@ import type { ConversationComputerRuntimeCommandRouterDependencies } from "../co
 /** Supplies the reviewed Sandbox Pod identity recorded by the active lease fixture. */
 const _IDENTITY = { namespace: "conversation-computers", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" } as const;
 /** Supplies the active execution whose coordinates a runtime route must derive. */
-const _ACTIVE = { computer: { id: "computer-1", conversationId: "conversation-1" }, execution: { id: "execution-1" }, lease: { generation: 2, runtimePod: _IDENTITY } } as never;
+const _ACTIVE = { computer: { id: "computer-1", conversationId: "conversation-1" }, execution: { id: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651" }, lease: { generation: 2, runtimePod: _IDENTITY } } as never;
 /** Supplies one durable head command returned to the reviewed Sandbox. */
-const _COMMAND = { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", sequence: 1, computerId: "computer-1", executionId: "execution-1", leaseGeneration: 2, issuedAt: "2026-09-01T00:00:00.000Z", expiresAt: "2026-09-01T00:05:00.000Z", kind: ConversationComputerRuntimeCommandKinds.StartTurn, payload: { inputEntryId: "input-1", protectedInputRef: "conversation-inputs/input-1", protectedInputDigest: `sha256:${"a".repeat(64)}` } } as const;
+const _COMMAND = { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", sequence: 1, computerId: "computer-1", executionId: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", leaseGeneration: 2, issuedAt: "2026-09-01T00:00:00.000Z", expiresAt: "2026-09-01T00:05:00.000Z", kind: ConversationComputerRuntimeCommandKinds.StartTurn, payload: { inputEntryId: "input-1", protectedInputRef: "conversation-inputs/input-1", protectedInputDigest: `sha256:${"a".repeat(64)}` } } as const;
 
 /** Builds one internal router with controlled identity, history, and queue ports. */
 function _App(overrides: Partial<ConversationComputerRuntimeCommandRouterDependencies> = {})
@@ -40,7 +40,7 @@ function _Bearer()
 /** Builds one terminal report that can complete the active head command. */
 function _Report()
 {
-	return { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: _COMMAND.commandId, computerId: "computer-1", executionId: "execution-1", leaseGeneration: 2, state: ConversationComputerRuntimeTerminalStates.Completed };
+	return { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: _COMMAND.commandId, computerId: "computer-1", executionId: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", leaseGeneration: 2, state: ConversationComputerRuntimeTerminalStates.Completed };
 }
 
 describe("ConversationComputer runtime command router", function _ConversationComputerRuntimeCommandRouter()
@@ -101,6 +101,17 @@ describe("ConversationComputer runtime command router", function _ConversationCo
 		const { app, dependencies } = _App();
 
 		const response = await request(app).post("/commands/complete").set(_Bearer()).send({ ..._Report(), details: "untrusted" });
+
+		expect(response.status).toBe(400);
+		expect(dependencies.history.loadActiveExecutionForBootstrap).not.toHaveBeenCalled();
+		expect(dependencies.authority.complete).not.toHaveBeenCalled();
+	});
+
+	it("refuses malformed terminal coordinates before history reads", async function _RefusesMalformedReport()
+	{
+		const { app, dependencies } = _App();
+
+		const response = await request(app).post("/commands/complete").set(_Bearer()).send({ ..._Report(), executionId: "not-a-uuid", leaseGeneration: 0 });
 
 		expect(response.status).toBe(400);
 		expect(dependencies.history.loadActiveExecutionForBootstrap).not.toHaveBeenCalled();
