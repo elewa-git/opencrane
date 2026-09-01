@@ -54,15 +54,21 @@ else
 	FILES=("$@")
 fi
 
-# Large file lists fan out across CPU cores: each rule is a handful of grep/awk
-# processes per file, so a big diff serially cost minutes in CI. Chunks re-invoke
-# this script with explicit file arguments; AGENT_STYLE_CHUNK stops recursion.
+# Large file lists fan out across CPU cores because each rule starts several processes per file.
+# The parent runs the Prisma check with the original diff arguments before workers receive explicit
+# file chunks; otherwise each worker would lose the comparison base and inspect the whole repository.
+# AGENT_STYLE_CHUNK stops recursion, and AGENT_STYLE_SKIP_PRISMA skips the check already run by the parent.
 if [[ -z "${AGENT_STYLE_CHUNK:-}" && ${#FILES[@]} -gt 40 ]]; then
-	if printf '%s\0' "${FILES[@]}" \
-		| AGENT_STYLE_CHUNK=1 xargs -0 -n 40 -P "$(getconf _NPROCESSORS_ONLN)" "$0"; then
-		exit 0
+	PRISMA_STATUS=0
+	node scripts/prisma-boundary-check.mjs "$@" || PRISMA_STATUS=$?
+	STYLE_STATUS=0
+	printf '%s\0' "${FILES[@]}" \
+		| AGENT_STYLE_CHUNK=1 AGENT_STYLE_SKIP_PRISMA=1 xargs -0 -n 40 -P "$(getconf _NPROCESSORS_ONLN)" "$0" \
+		|| STYLE_STATUS=$?
+	if [[ $PRISMA_STATUS -ne 0 || $STYLE_STATUS -ne 0 ]]; then
+		exit 1
 	fi
-	exit 1
+	exit 0
 fi
 
 # 2. Exclusions — tests, declarations, generated output, vendored code. Test
@@ -162,8 +168,11 @@ done
 
 # PRISMA-BOUNDARY — changed production TypeScript may call Prisma delegates only from a class that
 # implements an imported Repository contract, and may open transactions only from an imported
-# UnitOfWork owner. The checker owns exact exemption validation and fails closed on malformed policy.
-node scripts/prisma-boundary-check.mjs "$@"
+# UnitOfWork owner. Both internal worker variables must be present to skip this whole-diff check, so
+# setting AGENT_STYLE_SKIP_PRISMA alone cannot disable it for a direct invocation.
+if [[ -z "${AGENT_STYLE_SKIP_PRISMA:-}" || -z "${AGENT_STYLE_CHUNK:-}" ]]; then
+	node scripts/prisma-boundary-check.mjs "$@"
+fi
 
 if [[ ${#CHECKABLE[@]} -eq 0 ]]; then
 	echo "agent-style-check: no checkable TypeScript files in scope."
