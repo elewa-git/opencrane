@@ -1,5 +1,8 @@
 export { ConversationComputerHistory } from "./conversation-computer-history";
 export type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+export { ConversationComputerExecutionAuthority } from "./conversation-computer-execution-authority";
+export { ConversationComputerExecutionStartOutcomes } from "./conversation-computer-execution-authority.types";
+export type { ConversationComputerExecutionClock, ConversationComputerExecutionStartCommand, ConversationComputerExecutionStartResult } from "./conversation-computer-execution-authority.types";
 export { ConversationComputerElicitationInterruptReader } from "./conversation-computer-elicitation-interrupt-reader";
 export type { ConversationComputerElicitationInterruptClock, ConversationComputerElicitationInterruptExecutionResolver, ConversationComputerElicitationInterruptParticipantResolver, ConversationComputerElicitationInterruptPayloadReader, DisplayedConversationComputerElicitationRequest } from "./conversation-computer-elicitation-interrupt-reader.types";
 export { ConversationComputerRuntimeInputElicitationAuthority } from "./conversation-computer-runtime-input-elicitation";
