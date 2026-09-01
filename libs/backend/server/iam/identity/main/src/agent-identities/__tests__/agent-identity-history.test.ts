@@ -197,6 +197,39 @@ describe("AgentIdentityHistory", function ()
 		await expect(history.loadActive(_CurrentCommand())).rejects.toThrow("non-active identity");
 	});
 
+	it("derives a computer-selected active identity's authorization actor without caller service or principal coordinates", async function ()
+	{
+		const managed = _ManagedIdentity({ id: "identity-managed-1", principalId: "principal-managed-1", agentServiceId: "service-managed-1" });
+		const proxied = _ProxiedIdentity({ id: "identity-proxied-1", proxiedPrincipalId: "principal-proxied-1", agentServiceId: "service-proxied-1" });
+		const managedResult = await new AgentIdentityHistory(_StreamStore({ "agent-identity-identity-managed-1": [_Event(0n, managed)] })).loadActiveAuthorization({ siloId: "silo-1", agentIdentityId: "identity-managed-1" });
+		const proxiedResult = await new AgentIdentityHistory(_StreamStore({ "agent-identity-identity-proxied-1": [_Event(0n, proxied)] })).loadActiveAuthorization({ siloId: "silo-1", agentIdentityId: "identity-proxied-1" });
+
+		expect(managedResult).toEqual(expect.objectContaining({ identity: managed, agentServiceId: "service-managed-1", principalId: "principal-managed-1", actorKind: "agent-service", actorId: "identity-managed-1", revision: 0n }));
+		expect(proxiedResult).toEqual(expect.objectContaining({ identity: proxied, agentServiceId: "service-proxied-1", principalId: "principal-proxied-1", actorKind: "user", actorId: "principal-proxied-1", revision: 0n }));
+	});
+
+	it("fails closed when a computer-selected authorization identity is foreign, missing, or no longer active", async function ()
+	{
+		const foreign = _ManagedIdentity({ siloId: "silo-2" });
+		const revoked = _ManagedIdentity({ state: AgentIdentityStates.Revoked });
+
+		await expect(new AgentIdentityHistory(_Store()).loadActiveAuthorization({ siloId: "silo-1", agentIdentityId: "identity-1" })).rejects.toThrow("missing identity");
+		await expect(new AgentIdentityHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, foreign)])), readHead: vi.fn().mockResolvedValue({ streamName: "agent-identity-identity-1", revision: 0n }) })).loadActiveAuthorization({ siloId: "silo-1", agentIdentityId: "identity-1" })).rejects.toThrow("different silo");
+		await expect(new AgentIdentityHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, revoked)])), readHead: vi.fn().mockResolvedValue({ streamName: "agent-identity-identity-1", revision: 0n }) })).loadActiveAuthorization({ siloId: "silo-1", agentIdentityId: "identity-1" })).rejects.toThrow("non-active identity");
+	});
+
+	it("returns every active managed sub-chat identity head that a later atomic command append must preserve", async function ()
+	{
+		const child = _SubChatIdentity({ id: "identity-child-1", principalId: "principal-child-1", parentAgentIdentityId: "identity-parent-1", parentPrincipalId: "principal-parent-1" });
+		const parent = _ManagedIdentity({ id: "identity-parent-1", principalId: "principal-parent-1" });
+		const history = new AgentIdentityHistory(_StreamStore({ "agent-identity-identity-child-1": [_Event(0n, child)], "agent-identity-identity-parent-1": [_Event(0n, parent)] }));
+
+		await expect(history.loadActiveAuthorization({ siloId: "silo-1", agentIdentityId: "identity-child-1" })).resolves.toEqual(expect.objectContaining({ expectedIdentityHeads: [
+			{ streamName: "agent-identity-identity-child-1", revision: 0n },
+			{ streamName: "agent-identity-identity-parent-1", revision: 0n },
+		] }));
+	});
+
 	it("does not inherit a parent identity's authority for a managed sub-chat", async function ()
 	{
 		const subchat = _SubChatIdentity();
