@@ -1,10 +1,12 @@
-import { ___ConversationEntrySchema, type ConversationEntry } from "@opencrane/contracts";
+import { ___ConversationCreatedSchema, ___ConversationEntrySchema, type ConversationEntry } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationHistoryReadCommand, ConversationHistoryReadResult, CurrentConversationHistory } from "./conversation-history-reader.types";
 
 /** Names the sole versioned event that this reader exposes as a participant-visible entry. */
 const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
+/** Names the lifecycle anchor that must occupy revision zero before entries can exist. */
+const _CONVERSATION_CREATED_EVENT_TYPE = "opencrane.conversation-created.v1";
 /** Recognizes event identifiers that are also valid durable idempotency keys. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -33,20 +35,21 @@ export class ConversationHistoryReader
 	{
 		// 1. Derive one stream before reading so caller-provided data cannot widen the history scope.
 		const streamName = _StreamName(command);
-		const request = command.fromRevision === undefined ? { streamName } : { streamName, fromRevision: command.fromRevision };
+		const request = { streamName };
 		const entries: ConversationEntry[] = [];
-		let expectedRevision = command.fromRevision ?? 0n;
+		let expectedRevision = 0n;
 
 		// 2. Check every immutable envelope before exposing its entry to a participant transport.
 		for await (const event of this.historyStore.readStream(request))
 		{
-			const entry = _ValidatedEntry(event, command, streamName, expectedRevision);
-			entries.push(entry);
+			const entry = _ValidatedEvent(event, command, streamName, expectedRevision);
+			if (entry !== null && (command.fromRevision === undefined || event.revision >= command.fromRevision))
+				entries.push(entry);
 			expectedRevision += 1n;
 		}
 
 		// 3. Return the finite ordered stream result without constructing a relational or projection fallback.
-		return { streamName, entries };
+		return { streamName, revision: expectedRevision === 0n ? null : expectedRevision - 1n, entries };
 	}
 
 	/**
@@ -66,9 +69,7 @@ export class ConversationHistoryReader
 			throw new Error("Conversation history current read cannot start after the immutable first entry");
 		const current = await this.read(command);
 		const head = await this.historyStore.readHead(current.streamName);
-		const lastEntry = current.entries.at(-1);
-		const expectedHeadRevision = lastEntry === undefined ? null : BigInt(lastEntry.position);
-		if (head.streamName !== current.streamName || head.revision !== expectedHeadRevision)
+		if (head.streamName !== current.streamName || head.revision !== current.revision)
 			throw new Error("Conversation history changed while loading its current state");
 		return {
 			...current,
@@ -90,18 +91,20 @@ function _StreamName(command: ConversationHistoryReadCommand): string
 }
 
 /** Validates one recorded event before the reader returns its participant-visible entry. */
-function _ValidatedEntry(event: HistoryRecordedEvent, command: ConversationHistoryReadCommand, streamName: string, expectedRevision: bigint): ConversationEntry
+function _ValidatedEvent(event: HistoryRecordedEvent, command: ConversationHistoryReadCommand, streamName: string, expectedRevision: bigint): ConversationEntry | null
 {
 	if (event.streamName !== streamName)
 		throw new Error("Conversation history read received an event from a different stream");
 	if (event.revision !== expectedRevision)
 		throw new Error("Conversation history read received a noncontiguous stream revision");
-	if (event.type !== _CONVERSATION_ENTRY_EVENT_TYPE)
-		throw new Error("Conversation history read received an unsupported event type");
 	if (event.metadata.siloId !== command.siloId)
 		throw new Error("Conversation history read received an event from a different silo");
 	if (event.metadata.conversationId !== command.conversationId)
 		throw new Error("Conversation history read received an event for a different conversation");
+	if (event.revision === 0n)
+		return _ValidatedCreation(event, command);
+	if (event.type !== _CONVERSATION_ENTRY_EVENT_TYPE)
+		throw new Error("Conversation history read received an unsupported event type");
 	const entry = ___ConversationEntrySchema.safeParse(event.data.entry);
 	if (!entry.success)
 		throw new Error("Conversation history read received an invalid participant-visible entry");
@@ -114,6 +117,21 @@ function _ValidatedEntry(event: HistoryRecordedEvent, command: ConversationHisto
 	if (event.id !== entry.data.id || event.metadata.causationId !== entry.data.causationId || event.metadata.correlationId !== entry.data.correlationId || event.metadata.idempotencyKey !== entry.data.idempotencyKey)
 		throw new Error("Conversation history read received an entry that does not match its envelope");
 	return entry.data;
+}
+
+/** Validates the required immutable revision-zero creation record without exposing it as a participant entry. */
+function _ValidatedCreation(event: HistoryRecordedEvent, command: ConversationHistoryReadCommand): null
+{
+	if (event.type !== _CONVERSATION_CREATED_EVENT_TYPE)
+		throw new Error("Conversation history read requires a creation event at revision zero");
+	const created = ___ConversationCreatedSchema.safeParse(event.data.created);
+	if (!created.success)
+		throw new Error("Conversation history read received an invalid creation event");
+	if (created.data.conversationId !== command.conversationId)
+		throw new Error("Conversation history creation belongs to a different conversation");
+	if (event.metadata.idempotencyKey !== event.id || !_UUID_PATTERN.test(event.id))
+		throw new Error("Conversation history read received a creation event with an invalid idempotency key");
+	return null;
 }
 
 /** Checks a trusted identifier without altering the coordinate used to derive a stream name. */

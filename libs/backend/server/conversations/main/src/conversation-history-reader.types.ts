@@ -14,7 +14,7 @@ export interface ConversationHistoryReadCommand
 	readonly siloId: string;
 	/** Names the sole conversation stream that may be read. */
 	readonly conversationId: string;
-	/** Starts at this inclusive KurrentDB revision, or at the immutable first entry when omitted. */
+	/** Selects the inclusive stream revision of participant entries to return after the lifecycle anchor validates. */
 	readonly fromRevision?: bigint;
 }
 
@@ -23,7 +23,9 @@ export interface ConversationHistoryReadResult
 {
 	/** Names the only KurrentDB stream read for this command. */
 	readonly streamName: string;
-	/** Lists the participant-visible entries in their validated immutable stream order. */
+	/** Reports the final revision observed while the reader validated the complete lifecycle-anchored stream. */
+	readonly revision: bigint | null;
+	/** Lists the participant-visible entries in their validated immutable stream order; revision zero is never an entry. */
 	readonly entries: readonly ConversationEntry[];
 }
 

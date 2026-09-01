@@ -1,13 +1,15 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { ___ConversationEntrySchema } from "@opencrane/contracts";
+import { ___ConversationCreatedSchema, ___ConversationEntrySchema } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { ConversationHistoryAppendOutcomes, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult } from "./conversation-history-authority.types";
+import { ConversationHistoryAppendOutcomes, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult, type ConversationHistoryCreateCommand } from "./conversation-history-authority.types";
 
 /** Recognizes event identifiers that can also serve as the entry idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** Names the versioned HistoryStore event that carries a participant-visible conversation entry. */
 const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
+/** Names the immutable stream anchor required before participant-visible entries may append. */
+const _CONVERSATION_CREATED_EVENT_TYPE = "opencrane.conversation-created.v1";
 
 /**
  * Appends an already-authorized participant-visible entry to its KurrentDB conversation stream.
@@ -23,6 +25,33 @@ export class ConversationHistoryAuthority
 {
 	/** Connects the authority to the append-only KurrentDB port without granting it stream reads. */
 	public constructor(private readonly historyStore: Pick<HistoryStore, "append">) {}
+
+	/**
+	 * Creates one canonical conversation stream with its immutable lifecycle anchor at revision zero.
+	 *
+	 * The creation authority calls this only after it has persisted idempotent authorization evidence.
+	 * This boundary accepts no caller-selected stream and never creates a participant-visible entry at
+	 * `NoStream`, so every later reader can prove how the history began.
+	 *
+	 * @param command - Supplies server-authorized ownership, event idempotency, and creation provenance.
+	 * @returns The checked HistoryStore receipt for the newly anchored conversation stream.
+	 * @throws {Error} Rejects malformed provenance and preserves a concurrent creation conflict as an error.
+	 */
+	public async create(command: ConversationHistoryCreateCommand)
+	{
+		const created = _ValidatedCreation(command);
+		const streamName = `conversation-${created.conversationId}`;
+		return this.historyStore.append({
+			streamName,
+			expectedRevision: HistoryExpectedRevisions.NoStream,
+			events: [{
+				id: command.eventId,
+				type: _CONVERSATION_CREATED_EVENT_TYPE,
+				data: { created },
+				metadata: { siloId: command.siloId, conversationId: created.conversationId, idempotencyKey: command.eventId },
+			}],
+		});
+	}
 
 	/**
 	 * Validates and appends one server-stamped entry at the caller's observed conversation stream head.
@@ -63,8 +92,8 @@ function _ValidatedEntry(command: ConversationHistoryAppendCommand)
 		throw new Error("Conversation history append requires a server-provided silo identifier");
 	if (!_Identifier(command.conversationId))
 		throw new Error("Conversation history append requires a server-provided conversation identifier");
-	if (!_ExpectedRevision(command.expectedRevision))
-		throw new Error("Conversation history append requires a nonnegative expected revision");
+	if (typeof command.expectedRevision !== "bigint" || command.expectedRevision < 0n)
+		throw new Error("Conversation history append requires a creation-anchored nonnegative expected revision");
 	// 2. Cross-check the unnormalized server-stamped coordinates before schema parsing can normalize them.
 	if (command.entry.conversationId !== command.conversationId)
 		throw new Error("Conversation history append entry belongs to a different conversation");
@@ -79,22 +108,29 @@ function _ValidatedEntry(command: ConversationHistoryAppendCommand)
 	return result.data;
 }
 
+/** Validates the one no-stream lifecycle record before it can establish participant history. */
+function _ValidatedCreation(command: ConversationHistoryCreateCommand)
+{
+	if (!_Identifier(command.siloId))
+		throw new Error("Conversation history creation requires a server-provided silo identifier");
+	if (!_UUID_PATTERN.test(command.eventId))
+		throw new Error("Conversation history creation requires a UUID event identifier");
+	const created = ___ConversationCreatedSchema.safeParse(command.created);
+	if (!created.success)
+		throw new Error("Conversation history creation requires valid immutable provenance");
+	return created.data;
+}
+
 /** Checks an identifier without changing the coordinate that the authority will stamp. */
 function _Identifier(value: string): boolean
 {
 	return value.trim().length > 0 && value === value.trim();
 }
 
-/** Checks the HistoryStore revisions that this authority can convert into an entry position. */
-function _ExpectedRevision(value: HistoryExpectedRevisions.NoStream | bigint): boolean
-{
-	return value === HistoryExpectedRevisions.NoStream || value >= 0n;
-}
-
 /** Derives the position that follows the expected revision checked by the append. */
 function _Position(expectedRevision: HistoryExpectedRevisions.NoStream | bigint): string
 {
 	if (expectedRevision === HistoryExpectedRevisions.NoStream)
-		return "0";
+		throw new Error("Conversation history entry positions require a creation-anchored stream");
 	return (expectedRevision + 1n).toString();
 }

@@ -1,4 +1,4 @@
-import type { ConversationEntry } from "@opencrane/contracts";
+import type { ConversationCreated, ConversationEntry } from "@opencrane/contracts";
 import { type HistoryAppendReceipt, type HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
 /**
@@ -33,6 +33,17 @@ export interface ConversationHistoryAppendCommand
 	readonly expectedRevision: HistoryExpectedRevisions.NoStream | bigint;
 	/** Carries the complete server-stamped participant-visible entry. */
 	readonly entry: ConversationEntry;
+}
+
+/** Carries the one server-authorized lifecycle record that may create a canonical conversation stream. */
+export interface ConversationHistoryCreateCommand
+{
+	/** Names the silo that owns the new conversation and its immutable history envelope. */
+	readonly siloId: string;
+	/** Supplies the UUID event identifier that makes a response-lost creation retry byte-stable. */
+	readonly eventId: string;
+	/** Carries the immutable creation anchor before any participant-visible entry may exist. */
+	readonly created: ConversationCreated;
 }
 
 /** Reports a committed receipt or the conflict that requires the caller to authorize against the new stream head. */
