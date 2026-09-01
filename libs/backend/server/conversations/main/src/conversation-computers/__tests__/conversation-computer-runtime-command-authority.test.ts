@@ -29,7 +29,7 @@ function _Active()
 {
 	const computer = _Computer();
 	const lease = _Lease();
-	return { streamName: "conversation-computer-computer-1", revision: 4n, computer, lease, execution: computer.activeExecution! };
+	return { streamName: "computer-computer-1", revision: 4n, computer, lease, execution: computer.activeExecution! };
 }
 
 /** Builds the target start command that the server stores for one protected participant input. */
@@ -118,7 +118,7 @@ describe("ConversationComputerRuntimeCommandAuthority", function _CommandAuthori
 		const result = await subject.authority.issueStartTurn(_Issue());
 
 		expect(result.command).toEqual(expect.objectContaining({ commandId: _COMMAND_ID, sequence: 1, computerId: "computer-1", executionId: "execution-1", leaseGeneration: 2, kind: ConversationComputerRuntimeCommandKinds.StartTurn }));
-		expect(subject.history.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "conversation-computer-computer-1", revision: 4n }, { streamName: "conversation-computer-runtime-computer-1-execution-1", revision: HistoryExpectedRevisions.NoStream }] }));
+		expect(subject.history.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "computer-computer-1", revision: 4n }, { streamName: "conversation-computer-runtime-computer-1-execution-1", revision: HistoryExpectedRevisions.NoStream }] }));
 	});
 
 	it("replays the existing exact input command without writing a second sequence", async function _ReplaysExactIssue()

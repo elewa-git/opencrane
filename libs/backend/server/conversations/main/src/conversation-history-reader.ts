@@ -25,10 +25,13 @@ export class ConversationHistoryReader
 	public constructor(private readonly historyStore: Pick<HistoryStore, "readHead" | "readStream">) {}
 
 	/**
-	 * Reads one validated stream range and returns only its participant-visible entries in revision order.
+	 * Validates the complete stream from revision zero, then returns the requested participant entries in revision order.
+	 *
+	 * The reader always checks `ConversationCreated` before it filters `fromRevision`; otherwise a
+	 * caller could read a later entry without proving that the stream was created by this authority.
 	 *
 	 * @param command - Supplies trusted silo and conversation coordinates plus an optional inclusive revision.
-	 * @returns The exact derived stream name and entries whose envelope and entry coordinates all match.
+	 * @returns The derived stream, its validated head, and entries whose envelope and coordinates match.
 	 * @throws {Error} Rejects malformed coordinates, noncontiguous history, or any foreign or malformed event.
 	 */
 	public async read(command: ConversationHistoryReadCommand): Promise<ConversationHistoryReadResult>

@@ -35,7 +35,12 @@ export interface ConversationHistoryAppendCommand
 	readonly entry: ConversationEntry;
 }
 
-/** Carries the one server-authorized lifecycle record that may create a canonical conversation stream. */
+/**
+ * Carries the server-authorized revision-zero record that creates a conversation stream.
+ *
+ * The caller supplies an idempotency event UUID and creation evidence after authorization; this
+ * command cannot carry a participant entry, so the first participant entry must use revision one.
+ */
 export interface ConversationHistoryCreateCommand
 {
 	/** Names the silo that owns the new conversation and its immutable history envelope. */

@@ -27,7 +27,7 @@ function _Command(overrides: Record<string, unknown> = {})
 function _Active()
 {
 	return {
-		streamName: "conversation-computer-computer-1",
+		streamName: "computer-computer-1",
 		revision: 4n,
 		computer: { id: "computer-1", agentIdentityId: "identity-1" },
 		lease: { generation: 2 },
@@ -98,7 +98,7 @@ describe("ConversationComputerRuntimeOutputAuthority", function _RuntimeOutputAu
 		await expect(subject.authority.record(_Command())).resolves.toEqual({ messageId: _OUTPUT_ID });
 
 		expect(subject.claims.prepareOutputClaim).toHaveBeenCalledWith(expect.objectContaining({ commandId: _COMMAND_ID, executionId: "execution-1", leaseGeneration: 2 }));
-		expect(subject.history.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "conversation-computer-runtime-computer-1-execution-1", revision: 5n }, { streamName: "conversation-computer-computer-1", revision: 4n }, { streamName: "conversation-conversation-1", revision: 7n }, { streamName: "agent-identity-identity-1", revision: 3n }] }));
+		expect(subject.history.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "conversation-computer-runtime-computer-1-execution-1", revision: 5n }, { streamName: "computer-computer-1", revision: 4n }, { streamName: "conversation-conversation-1", revision: 7n }, { streamName: "agent-identity-identity-1", revision: 3n }] }));
 		const append = subject.history.appendAtomic.mock.calls[0][0];
 		expect(append.appends[0]).toMatchObject({ streamName: "conversation-computer-runtime-computer-1-execution-1", events: [{ data: { commandId: _COMMAND_ID } }] });
 		expect(append.appends[1].events[0].data.entry).toMatchObject({ id: _OUTPUT_ID, idempotencyKey: _OUTPUT_ID, position: "8", author: { kind: "agent", agentIdentityId: "identity-1", agentServiceId: "service-1" }, causationId: _COMMAND_ID, correlationId: "execution-1", blocks: [{ payloadRef: _PAYLOAD.payloadRef, ciphertextDigest: _PAYLOAD.ciphertextDigest }] });
@@ -136,12 +136,12 @@ describe("ConversationComputerRuntimeOutputAuthority", function _RuntimeOutputAu
 		expect(subject.history.appendAtomic).not.toHaveBeenCalled();
 	});
 
-	it("uses the first conversation position when the checked stream is empty", async function _UsesFirstPosition()
+	it("rejects an unanchored conversation before it retains an output payload", async function _RejectsUnanchoredConversation()
 	{
 		const subject = _Subject({ conversationRevision: HistoryExpectedRevisions.NoStream });
 
-		await subject.authority.record(_Command());
-
-		expect(subject.history.appendAtomic.mock.calls[0][0].appends[1].events[0].data.entry.position).toBe("0");
+		await expect(subject.authority.record(_Command())).rejects.toThrow("creation-anchored");
+		expect(subject.history.appendAtomic).not.toHaveBeenCalled();
+		expect(subject.payloads.storeText).not.toHaveBeenCalled();
 	});
 });

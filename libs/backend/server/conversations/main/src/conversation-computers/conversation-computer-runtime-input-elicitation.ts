@@ -54,6 +54,8 @@ export class ConversationComputerRuntimeInputElicitationAuthority
 			siloId: command.siloId,
 			conversationId: command.conversationId,
 		});
+		if (conversation.expectedRevision === HistoryExpectedRevisions.NoStream)
+			throw new Error("Conversation computer runtime input requires a creation-anchored conversation history");
 		const existingReceipt = _ExistingRequestReceipt(conversation, command);
 		if (existingReceipt !== null)
 			return { receipt: existingReceipt };
@@ -152,11 +154,9 @@ function _ExistingRequestReceipt(conversation: CurrentConversationHistory, comma
 }
 
 /** Builds the immutable conversation entry from server-derived runtime authority. */
-function _Entry(command: ConversationComputerRuntimeInputElicitationCommand, computer: Awaited<ReturnType<ConversationComputerHistory["loadActiveExecutionForRuntime"]>>, conversationRevision: HistoryExpectedRevisions.NoStream | bigint, participantId: string, decisionEvidenceId: string, now: Date): ElicitationRequestEntry
+function _Entry(command: ConversationComputerRuntimeInputElicitationCommand, computer: Awaited<ReturnType<ConversationComputerHistory["loadActiveExecutionForRuntime"]>>, conversationRevision: bigint, participantId: string, decisionEvidenceId: string, now: Date): ElicitationRequestEntry
 {
-	const position = conversationRevision === HistoryExpectedRevisions.NoStream
-		? "0"
-		: (conversationRevision + 1n).toString();
+	const position = (conversationRevision + 1n).toString();
 	return {
 		schemaVersion: 1,
 		id: command.requestId,

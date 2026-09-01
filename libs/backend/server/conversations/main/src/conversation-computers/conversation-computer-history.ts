@@ -21,7 +21,17 @@ export class ConversationComputerHistory
 	/** Connects this authority to the narrow checked KurrentDB port. */
 	public constructor(private readonly historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">) {}
 
-	/** Creates the cold lifecycle anchor that establishes a computer stream before activation begins. */
+	/**
+	 * Creates a cold `ComputerProvisioned` event at revision zero for one computer stream.
+	 *
+	 * Activation and runtime readers derive their identity and profile from this record. Accepting a
+	 * lease, execution, workspace checkpoint, or later timestamp here would let a stream begin in a
+	 * state that never passed its earlier lifecycle transitions.
+	 *
+	 * @param command - Supplies the idempotency UUID and cold computer record for the new stream.
+	 * @returns The checked KurrentDB receipt for the revision-zero provision event.
+	 * @throws {Error} Rejects a malformed event UUID or a computer that is not freshly cold.
+	 */
 	public async provision(command: ConversationComputerProvisionCommand)
 	{
 		const snapshot = _ValidatedConversationComputerSnapshot({ computer: command.computer, lease: null });

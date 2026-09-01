@@ -63,7 +63,7 @@ function _Execution(overrides: Partial<ConversationComputerExecution> = {}): Con
 function _Current(overrides: { readonly computer?: ConversationComputer; readonly lease?: ComputerLease | null; readonly revision?: bigint } = {})
 {
 	const computer = overrides.computer ?? _Computer();
-	return { streamName: "conversation-computer-computer-1", revision: overrides.revision ?? 3n, computer, lease: overrides.lease === undefined ? _Lease() : overrides.lease };
+	return { streamName: "computer-computer-1", revision: overrides.revision ?? 3n, computer, lease: overrides.lease === undefined ? _Lease() : overrides.lease };
 }
 
 /** Builds the authority with independently controlled history reads and writes. */

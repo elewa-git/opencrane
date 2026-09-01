@@ -9,7 +9,7 @@ import { ConversationComputerSandboxReconciliationAuthority } from "../conversat
 function _Current(overrides: Record<string, unknown> = {})
 {
 	return {
-		streamName: "conversation-computer-computer-1",
+		streamName: "computer-computer-1",
 		revision: 4n,
 		computer: { schemaVersion: 1, id: "computer-1", siloId: "testv5", conversationId: "conversation-1", agentIdentityId: "agent-1", profileRevisionId: "profile-1", state: ConversationComputerStates.ClaimDispatched, leaseGeneration: 2, workspaceCheckpoint: null, activeExecution: null, createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:01:00.000Z" },
 		lease: { schemaVersion: 1, id: "lease-1", computerId: "computer-1", generation: 2, sandboxClaimId: "computer-1-g2", sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Claimed, claimedAt: "2026-09-01T00:00:00.000Z", expiresAt: "2026-09-01T00:20:00.000Z", releasedAt: null },

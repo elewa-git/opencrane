@@ -26,6 +26,12 @@ function _WarmComputer(overrides: Partial<ConversationComputer> = {}): Conversat
 	return _ColdComputer({ state: ConversationComputerStates.Warm, leaseGeneration: 1, updatedAt: "2026-09-02T00:01:00.000Z", ...overrides });
 }
 
+/** Builds a warm computer whose open execution is fenced to the active lease. */
+function _ActiveComputer(overrides: Partial<ConversationComputer> = {}): ConversationComputer
+{
+	return _WarmComputer({ activeExecution: { id: "execution-1", leaseId: "lease-1", leaseGeneration: 1, startedAt: "2026-09-02T00:01:00.000Z", endedAt: null }, ...overrides });
+}
+
 /** Builds metadata that attests precisely to the durable computer-and-lease snapshot. */
 function _Metadata(computer: ConversationComputer, lease: ComputerLease | null)
 {
@@ -61,6 +67,12 @@ function _CurrentCommand(overrides: Partial<ConversationComputerCurrentCommand> 
 function _Store(overrides: Partial<Pick<HistoryStore, "append" | "readHead" | "readStream">> = {}): Pick<HistoryStore, "append" | "readHead" | "readStream">
 {
 	return { append: vi.fn(), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: null }), readStream: vi.fn().mockReturnValue(_Events([])), ...overrides };
+}
+
+/** Creates a fresh readable stream for helpers that inspect its first event before replaying it. */
+function _ProvisionedStore(events: readonly HistoryRecordedEvent[]): Pick<HistoryStore, "append" | "readHead" | "readStream">
+{
+	return _Store({ readStream: vi.fn().mockImplementation(function _ReadEvents() { return _Events(events); }), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: events.at(-1)?.revision ?? null }) });
 }
 
 describe("ConversationComputerHistory", function _DescribeConversationComputerHistory()
@@ -120,5 +132,39 @@ describe("ConversationComputerHistory", function _DescribeConversationComputerHi
 		await expect(new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([foreign])), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: 0n }) })).load(_CurrentCommand())).rejects.toThrow("different stream");
 		await expect(new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events(gap)), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: 2n }) })).load(_CurrentCommand())).rejects.toThrow("noncontiguous");
 		await expect(new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events(stale)), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: 2n }) })).load(_CurrentCommand())).rejects.toThrow("changed while loading");
+	});
+
+	it("retains the claim, lease-generation, and Pod-identity fences after cold provisioning", async function _RetainsLeaseFences()
+	{
+		const cold = _ColdComputer();
+		const pending = _ColdComputer({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 1, updatedAt: "2026-09-02T00:01:00.000Z" });
+		const claimed = _Lease({ sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Claimed });
+		const bypassWarm = _WarmComputer();
+		const active = _ActiveComputer();
+		const changedPod = _Lease({ runtimePod: { namespace: "sandbox", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-2" } });
+
+		await expect(new ConversationComputerHistory(_ProvisionedStore([_ProvisionedEvent(cold), _SnapshotEvent(1n, pending, claimed), _SnapshotEvent(2n, bypassWarm, _Lease())])).load(_CurrentCommand())).rejects.toThrow("requires claim dispatch");
+		await expect(new ConversationComputerHistory(_ProvisionedStore([_ProvisionedEvent(cold), _SnapshotEvent(1n, active, _Lease()), _SnapshotEvent(2n, active, changedPod)])).load(_CurrentCommand())).rejects.toThrow("active sandbox Pod identity");
+	});
+
+	it("derives runtime, bootstrap, and server execution coordinates only from a provisioned stream", async function _DerivesExecutionCoordinates()
+	{
+		const active = _ActiveComputer();
+		const history = new ConversationComputerHistory(_ProvisionedStore([_ProvisionedEvent(), _SnapshotEvent(1n, active, _Lease())]));
+		const nowEpochMilliseconds = Date.parse("2026-09-02T00:10:00.000Z");
+
+		await expect(history.loadActiveExecutionForRuntime({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", profileRevisionId: "profile-1", nowEpochMilliseconds })).resolves.toEqual(expect.objectContaining({ computer: expect.objectContaining({ agentIdentityId: "identity-1" }), execution: expect.objectContaining({ id: "execution-1" }) }));
+		await expect(history.loadActiveExecutionForBootstrap({ siloId: "silo-1", computerId: "computer-1", nowEpochMilliseconds })).resolves.toEqual(expect.objectContaining({ computer: expect.objectContaining({ conversationId: "conversation-1", profileRevisionId: "profile-1" }) }));
+		await expect(history.loadActiveExecutionForServer({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", nowEpochMilliseconds })).resolves.toEqual(expect.objectContaining({ execution: expect.objectContaining({ leaseGeneration: 1 }) }));
+		await expect(history.loadActiveExecutionForRuntime({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", profileRevisionId: "profile-1", nowEpochMilliseconds: Date.parse("2026-09-02T00:21:00.000Z") })).rejects.toThrow("inactive runtime execution");
+	});
+
+	it("rejects mismatched execution fences and forged lifecycle-envelope metadata", async function _RejectsForgedExecution()
+	{
+		const mismatchedExecution = _ActiveComputer({ activeExecution: { id: "execution-1", leaseId: "lease-2", leaseGeneration: 1, startedAt: "2026-09-02T00:01:00.000Z", endedAt: null } });
+		const forged = { ..._SnapshotEvent(1n, _ActiveComputer(), _Lease()), metadata: { ..._SnapshotEvent(1n, _ActiveComputer(), _Lease()).metadata, executionId: "execution-2" } };
+
+		await expect(new ConversationComputerHistory(_ProvisionedStore([_ProvisionedEvent(), _SnapshotEvent(1n, mismatchedExecution, _Lease())])).load(_CurrentCommand())).rejects.toThrow("execution to match its lease");
+		await expect(new ConversationComputerHistory(_ProvisionedStore([_ProvisionedEvent(), forged])).load(_CurrentCommand())).rejects.toThrow("does not match its envelope");
 	});
 });

@@ -92,7 +92,13 @@ export interface ConversationComputerAppendCommand
 	readonly lease: ComputerLease | null;
 }
 
-/** Carries the cold immutable computer record that may establish one deterministic computer stream. */
+/**
+ * Carries the cold revision-zero record that establishes a computer history stream.
+ *
+ * `ConversationComputerHistory.provision` accepts this before any lease or execution exists. Later
+ * lifecycle appends must name a nonnegative expected revision, so they cannot replace the provision
+ * record at `NoStream`.
+ */
 export interface ConversationComputerProvisionCommand
 {
 	/** Supplies the caller-chosen UUID that keeps a response-lost provision retry byte-stable. */

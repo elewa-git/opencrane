@@ -30,7 +30,7 @@ function _Request(overrides: Partial<ElicitationRequestEntry> = {}): Elicitation
 		correlationId: "correlation-1",
 		idempotencyKey: "request-1",
 		occurredAt: "2026-09-01T00:00:00.000Z",
-		attestation: { serviceId: "opencrane", receiptId: "request-1", domainStream: "conversation-computer-computer-1", domainRevision: "2", decisionEvidenceId: "audit-request-1" },
+		attestation: { serviceId: "opencrane", receiptId: "request-1", domainStream: "computer-computer-1", domainRevision: "2", decisionEvidenceId: "audit-request-1" },
 		kind: ConversationEntryKinds.Elicitation,
 		elicitationId: "elicitation-1",
 		computerId: "computer-1",
@@ -62,7 +62,7 @@ function _Resolution(overrides: Partial<ElicitationResolutionEntry> = {}): Elici
 		correlationId: "correlation-1",
 		idempotencyKey: _RESOLUTION_ID,
 		occurredAt: _NOW.toISOString(),
-		attestation: { serviceId: "opencrane", receiptId: _RESOLUTION_ID, domainStream: "conversation-computer-computer-1", domainRevision: "2", decisionEvidenceId: "audit-resolution-1" },
+		attestation: { serviceId: "opencrane", receiptId: _RESOLUTION_ID, domainStream: "computer-computer-1", domainRevision: "2", decisionEvidenceId: "audit-resolution-1" },
 		kind: ConversationEntryKinds.Elicitation,
 		elicitationId: "elicitation-1",
 		computerId: "computer-1",
@@ -81,7 +81,7 @@ function _Resolution(overrides: Partial<ElicitationResolutionEntry> = {}): Elici
 function _Authority(overrides: { readonly entries?: readonly ConversationEntry[]; readonly participantId?: string; readonly now?: Date; readonly authorizationOutcome?: AuthorizationDecisionOutcomes } = {})
 {
 	const appendAtomic = vi.fn().mockResolvedValue([{ streamName: "conversation-conversation-1", revision: 8n }]);
-	const loadActiveExecutionForRuntime = vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 2n, computer: { id: "computer-1", agentIdentityId: "identity-1" }, lease: { generation: 3 }, execution: { id: "execution-1" } });
+	const loadActiveExecutionForRuntime = vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: 2n, computer: { id: "computer-1", agentIdentityId: "identity-1" }, lease: { generation: 3 }, execution: { id: "execution-1" } });
 	const loadActiveAuthorization = vi.fn().mockResolvedValue({ identity: { id: "identity-1" }, expectedIdentityHeads: [{ streamName: "agent-identity-identity-1", revision: 4n }] });
 	const readCurrent = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", expectedRevision: 7n, entries: overrides.entries ?? [_Request()] });
 	const resolve = vi.fn().mockResolvedValue({ participantId: overrides.participantId ?? "participant-1" });
@@ -102,7 +102,7 @@ describe("ConversationComputerElicitationResolutionAuthority", function ()
 		expect(subject.resolve).toHaveBeenCalledWith({ caller: _Command().caller, conversationId: "conversation-1" });
 		expect(subject.prepareResponse).toHaveBeenCalledWith(expect.objectContaining({ request: expect.objectContaining({ requestPayloadDigest: `sha256:${"a".repeat(64)}` }), participantId: "participant-1", response: { answer: "yes" } }));
 		expect(subject.storeResponse).toHaveBeenCalledWith(expect.objectContaining({ resolutionId: _RESOLUTION_ID, participantId: "participant-1" }));
-		expect(subject.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "conversation-computer-computer-1", revision: 2n }, { streamName: "conversation-conversation-1", revision: 7n }, { streamName: "agent-identity-identity-1", revision: 4n }] }));
+		expect(subject.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "computer-computer-1", revision: 2n }, { streamName: "conversation-conversation-1", revision: 7n }, { streamName: "agent-identity-identity-1", revision: 4n }] }));
 		const entry = subject.appendAtomic.mock.calls[0][0].appends[0].events[0].data.entry;
 		expect(entry).toMatchObject({ author: { kind: "system", systemId: "opencrane" }, causationId: "request-1", requestEntryId: "request-1", computerExecutionId: "execution-1", leaseGeneration: 3, state: ConversationElicitationEntryStates.Answered, responsePayloadRef: "payload://response-1", attestation: { decisionEvidenceId: "audit-resolution-1" } });
 	});

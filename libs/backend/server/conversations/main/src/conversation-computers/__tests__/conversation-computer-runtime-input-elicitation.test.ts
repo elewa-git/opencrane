@@ -27,7 +27,7 @@ function _ExistingRequest(overrides: Partial<ElicitationRequestEntry> = {}): Eli
 		correlationId: "correlation-1",
 		idempotencyKey: _REQUEST_ID,
 		occurredAt: _NOW.toISOString(),
-		attestation: { serviceId: "opencrane", receiptId: _REQUEST_ID, domainStream: "conversation-computer-computer-1", domainRevision: "2", decisionEvidenceId: "audit-1" },
+		attestation: { serviceId: "opencrane", receiptId: _REQUEST_ID, domainStream: "computer-computer-1", domainRevision: "2", decisionEvidenceId: "audit-1" },
 		kind: ConversationEntryKinds.Elicitation,
 		elicitationId: "elicitation-1",
 		computerId: "computer-1",
@@ -47,7 +47,7 @@ function _ExistingRequest(overrides: Partial<ElicitationRequestEntry> = {}): Eli
 function _Authority(overrides: { readonly conversationRevision?: bigint | HistoryExpectedRevisions.NoStream; readonly outcome?: AuthorizationDecisionOutcomes; readonly entries?: readonly ConversationEntry[] } = {})
 {
 	const appendAtomic = vi.fn().mockResolvedValue([{ streamName: "conversation-conversation-1", revision: 8n }]);
-	const loadActiveExecutionForRuntime = vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 2n, computer: { id: "computer-1", agentIdentityId: "identity-1" }, lease: { generation: 3 }, execution: { id: "execution-1" } });
+	const loadActiveExecutionForRuntime = vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: 2n, computer: { id: "computer-1", agentIdentityId: "identity-1" }, lease: { generation: 3 }, execution: { id: "execution-1" } });
 	const loadActiveAuthorization = vi.fn().mockResolvedValue({ identity: { id: "identity-1" }, principalId: "principal-1", actorKind: "agent-service", actorId: "identity-1", expectedIdentityHeads: [{ streamName: "agent-identity-identity-1", revision: 4n }] });
 	const readCurrent = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", expectedRevision: overrides.conversationRevision ?? 7n, entries: overrides.entries ?? [] });
 	const resolve = vi.fn().mockResolvedValue({ participantId: "participant-1" });
@@ -64,16 +64,16 @@ describe("ConversationComputerRuntimeInputElicitationAuthority", function ()
 		expect(subject.loadActiveExecutionForRuntime).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", profileRevisionId: "profile-1", nowEpochMilliseconds: _NOW.getTime() });
 		expect(subject.loadActiveAuthorization).toHaveBeenCalledWith({ siloId: "silo-1", agentIdentityId: "identity-1" });
 		expect(subject.resolve).toHaveBeenCalledWith({ siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" });
-		expect(subject.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "conversation-computer-computer-1", revision: 2n }, { streamName: "conversation-conversation-1", revision: 7n }, { streamName: "agent-identity-identity-1", revision: 4n }] }));
+		expect(subject.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "computer-computer-1", revision: 2n }, { streamName: "conversation-conversation-1", revision: 7n }, { streamName: "agent-identity-identity-1", revision: 4n }] }));
 		const entry = subject.appendAtomic.mock.calls[0][0].appends[0].events[0].data.entry;
 		expect(entry).toMatchObject({ position: "8", author: { kind: "system", systemId: "opencrane" }, computerExecutionId: "execution-1", leaseGeneration: 3, addressedParticipantId: "participant-1", attestation: { decisionEvidenceId: "audit-1" }, expiresAt: "2026-09-01T00:05:00.000Z" });
 	});
 
-	it("uses the no-stream conversation position and never appends after a current authorization denial", async function ()
+	it("rejects an unanchored conversation and never appends after a current authorization denial", async function ()
 	{
 		const noStream = _Authority({ conversationRevision: HistoryExpectedRevisions.NoStream });
-		await noStream.authority.request(_Command());
-		expect(noStream.appendAtomic.mock.calls[0][0].appends[0].events[0].data.entry.position).toBe("0");
+		await expect(noStream.authority.request(_Command())).rejects.toThrow("creation-anchored");
+		expect(noStream.appendAtomic).not.toHaveBeenCalled();
 		const denied = _Authority({ outcome: AuthorizationDecisionOutcomes.Deny });
 		await expect(denied.authority.request(_Command())).rejects.toThrow("denied by current authorization");
 		expect(denied.appendAtomic).not.toHaveBeenCalled();

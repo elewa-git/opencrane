@@ -23,7 +23,7 @@ function _PendingCurrent(overrides: Partial<CurrentConversationComputer> = {}): 
 		updatedAt: "2026-09-01T00:01:00.000Z",
 	};
 	return {
-		streamName: "conversation-computer-computer-1",
+		streamName: "computer-computer-1",
 		revision: 4n,
 		computer,
 		lease: {

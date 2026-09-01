@@ -58,6 +58,8 @@ export class ConversationComputerRuntimeOutputAuthority
 
 		// 2. Replay the transcript and inspect only a deterministic entry identifier for a lost response.
 		const conversation = await this.dependencies.conversations.readCurrent({ siloId: command.siloId, conversationId: command.conversationId });
+		if (conversation.expectedRevision === HistoryExpectedRevisions.NoStream)
+			throw new Error("Conversation computer runtime output requires a creation-anchored conversation history");
 		const hasExistingOutput = conversation.entries.some(entry => entry.idempotencyKey === outputMessageId);
 		if (hasExistingOutput)
 		{
@@ -154,11 +156,9 @@ function _ExistingMessageId(conversation: CurrentConversationHistory, command: C
 }
 
 /** Builds one opaque agent-authored message entirely from the checked runtime and identity state. */
-function _Entry(command: ConversationComputerRuntimeOutputCommand, outputMessageId: string, conversationRevision: HistoryExpectedRevisions.NoStream | bigint, identity: { readonly id: string; readonly name: string; readonly avatarArtifactRevisionId: string | null }, agentServiceId: string, payload: { readonly payloadRef: `payload://${string}`; readonly ciphertextDigest: `sha256:${string}` }, now: Date): MessageEntry
+function _Entry(command: ConversationComputerRuntimeOutputCommand, outputMessageId: string, conversationRevision: bigint, identity: { readonly id: string; readonly name: string; readonly avatarArtifactRevisionId: string | null }, agentServiceId: string, payload: { readonly payloadRef: `payload://${string}`; readonly ciphertextDigest: `sha256:${string}` }, now: Date): MessageEntry
 {
-	const position = conversationRevision === HistoryExpectedRevisions.NoStream
-		? "0"
-		: (conversationRevision + 1n).toString();
+	const position = (conversationRevision + 1n).toString();
 	return {
 		schemaVersion: 1,
 		id: outputMessageId,

@@ -18,7 +18,12 @@ export interface ConversationHistoryReadCommand
 	readonly fromRevision?: bigint;
 }
 
-/** Reports the derived stream coordinate and validated entries returned from it in stream order. */
+/**
+ * Reports the derived stream, the head observed during validation, and its participant entries.
+ *
+ * Revision zero is a lifecycle event rather than a participant entry, so `entries` can be empty
+ * even when `revision` is zero.
+ */
 export interface ConversationHistoryReadResult
 {
 	/** Names the only KurrentDB stream read for this command. */
@@ -39,6 +44,6 @@ export interface ConversationHistoryReadResult
  */
 export interface CurrentConversationHistory extends ConversationHistoryReadResult
 {
-	/** Requires the KurrentDB revision that was current when the transcript was replayed. */
+	/** Reports the KurrentDB head that a later atomic append must compare before it writes. */
 	readonly expectedRevision: HistoryExpectedRevisions.NoStream | bigint;
 }

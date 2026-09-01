@@ -1,4 +1,10 @@
-/** Lists the immutable conversation modes that its creation record fixes before any participant entry exists. */
+/**
+ * Selects the conversation contract recorded by `ConversationCreated` at stream revision zero.
+ *
+ * The creation validator accepts this closed set of serialized values before `ConversationHistoryReader`
+ * exposes participant entries. It is stored in KurrentDB history, so adding or renaming a member
+ * changes the persisted event contract; an unknown value makes the creation event malformed.
+ */
 export enum ConversationLifecycleModes
 {
 	/** The conversation has exactly one human participant and one agent participant. */
@@ -7,7 +13,12 @@ export enum ConversationLifecycleModes
 	Group = "group",
 }
 
-/** Describes the server-verified principal that authorized one conversation's creation. */
+/**
+ * Records the authorization evidence that admitted a conversation before its history stream exists.
+ *
+ * The creation authority retains these identifiers in the revision-zero event rather than accepting
+ * participant content as proof of who created the stream.
+ */
 export interface ConversationCreationProvenance
 {
 	/** Names the principal whose current grant admitted the creation command. */
@@ -16,7 +27,13 @@ export interface ConversationCreationProvenance
 	readonly authorizationEvidenceId: string;
 }
 
-/** Records the immutable first event in every canonical conversation history stream. */
+/**
+ * Records the revision-zero lifecycle event that establishes a conversation history stream.
+ *
+ * `ConversationHistoryAuthority.create` writes this before any participant entry, and
+ * `ConversationHistoryReader` rejects a stream whose first event does not validate. The event holds
+ * identifiers and authorization evidence, not participant-visible content.
+ */
 export interface ConversationCreated
 {
 	/** Names the persisted lifecycle contract shape. */

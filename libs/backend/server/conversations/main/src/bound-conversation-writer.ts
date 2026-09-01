@@ -50,6 +50,8 @@ export class BoundConversationWriter
 	{
 		if (this.appended || this.appendInFlight)
 			throw new Error("Bound conversation writer is single-use");
+		if (this.binding.expectedRevision < 0n)
+			throw new Error("Bound conversation writer requires a creation-anchored expected revision");
 		if (!_UUID_PATTERN.test(command.sourceCommandId))
 			throw new Error("Bound conversation writer requires a UUID source command identifier");
 		if (this.retrySourceCommandId !== null && this.retrySourceCommandId !== command.sourceCommandId)

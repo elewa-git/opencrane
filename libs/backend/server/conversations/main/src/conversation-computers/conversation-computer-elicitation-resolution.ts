@@ -62,6 +62,8 @@ export class ConversationComputerElicitationResolutionAuthority
 
 		// 1. Replay the current transcript so the request and any earlier terminal winner are authoritative.
 		const conversation = await this.conversations.readCurrent({ siloId: command.caller.siloId, conversationId: command.conversationId });
+		if (conversation.expectedRevision === HistoryExpectedRevisions.NoStream)
+			throw new Error("Conversation computer elicitation resolution requires a creation-anchored conversation history");
 		const request = _Request(conversation, command);
 
 		// 2. Derive and authorize the current participant before exposing request-schema validation work.
@@ -199,9 +201,9 @@ async function _ResponseCoordinates(payloads: ConversationComputerElicitationPay
 }
 
 /** Stamps the terminal resolution from immutable request ownership and checked server heads. */
-function _Entry(command: ConversationComputerElicitationResolutionCommand, request: ElicitationRequestEntry, conversationRevision: HistoryExpectedRevisions.NoStream | bigint, state: ConversationElicitationEntryStates.Answered | ConversationElicitationEntryStates.Declined | ConversationElicitationEntryStates.Expired, response: { readonly responsePayloadRef: string; readonly responsePayloadDigest: `sha256:${string}` } | null, decisionEvidenceId: string, computerStream: string, computerRevision: bigint, now: Date): ElicitationResolutionEntry
+function _Entry(command: ConversationComputerElicitationResolutionCommand, request: ElicitationRequestEntry, conversationRevision: bigint, state: ConversationElicitationEntryStates.Answered | ConversationElicitationEntryStates.Declined | ConversationElicitationEntryStates.Expired, response: { readonly responsePayloadRef: string; readonly responsePayloadDigest: `sha256:${string}` } | null, decisionEvidenceId: string, computerStream: string, computerRevision: bigint, now: Date): ElicitationResolutionEntry
 {
-	const position = conversationRevision === HistoryExpectedRevisions.NoStream ? "0" : (conversationRevision + 1n).toString();
+	const position = (conversationRevision + 1n).toString();
 	return {
 		schemaVersion: 1,
 		id: command.resolutionId,
