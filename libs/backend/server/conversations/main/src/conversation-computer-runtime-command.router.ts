@@ -1,8 +1,8 @@
-import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRuntimeTerminalStates, type ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRuntimeCommandKinds, ConversationComputerRuntimeTerminalStates, type ConversationComputerRuntimeCommandEnvelope, type ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
 import { Router, type Request, type Response } from "express";
 
 import { _AdmitConversationComputerRuntime, _ReviewConversationComputerRuntimeIdentity } from "./conversation-computer-runtime-admission";
-import type { ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
+import type { ConversationComputerRuntimeCommandRouterDependencies, ConversationComputerRuntimeWorkPackage } from "./conversation-computer-runtime-command.router.types";
 
 /** Recognizes the UUID runtime coordinates that the durable command authority accepts. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -41,7 +41,9 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 				response.status(204).end();
 				return;
 			}
-			response.status(200).json({ command: result.command });
+			// 5. Redeem only the selected oldest input, after the active lease has fenced the caller.
+			const work = await _WorkPackage(result.command, dependencies, active.computer.conversationId);
+			response.status(200).json({ work });
 		}
 		catch (err)
 		{
@@ -81,6 +83,22 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 		}
 	});
 	return router;
+}
+
+/** Builds one runtime work package without returning the command's private storage reference. */
+async function _WorkPackage(command: ConversationComputerRuntimeCommandEnvelope, dependencies: ConversationComputerRuntimeCommandRouterDependencies, conversationId: string): Promise<ConversationComputerRuntimeWorkPackage>
+{
+	if (command.kind !== ConversationComputerRuntimeCommandKinds.StartTurn)
+		throw new Error("ConversationComputer runtime command kind is unsupported");
+	const inputText = await dependencies.payloads.readText({
+		siloId: dependencies.siloId,
+		conversationId,
+		idempotencyKey: command.payload.inputEntryId,
+		payloadRef: command.payload.inputPayloadRef as `payload://${string}`,
+		ciphertextDigest: command.payload.inputPayloadDigest,
+	});
+	const { payload: _payload, ...commandFence } = command;
+	return { command: commandFence, inputEntryId: command.payload.inputEntryId, inputText };
 }
 
 /** Reads one strict query or body computer selector without extra execution coordinates. */

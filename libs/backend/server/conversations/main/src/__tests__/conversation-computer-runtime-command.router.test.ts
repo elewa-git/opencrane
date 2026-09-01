@@ -20,6 +20,7 @@ function _App(overrides: Partial<ConversationComputerRuntimeCommandRouterDepende
 		tokenReviewer: { __Review: vi.fn().mockResolvedValue(_IDENTITY) },
 		history: { loadActiveExecutionForBootstrap: vi.fn().mockResolvedValue(_ACTIVE) },
 		authority: { poll: vi.fn().mockResolvedValue({ command: _COMMAND }), complete: vi.fn().mockResolvedValue(undefined) },
+		payloads: { readText: vi.fn().mockResolvedValue("Private participant input") },
 		siloId: "testv5",
 		clock: { now: function _Now() { return new Date("2026-09-01T00:00:00.000Z"); } },
 		logger: { warn: vi.fn(), error: vi.fn() } as never,
@@ -45,15 +46,16 @@ function _Report()
 
 describe("ConversationComputer runtime command router", function _ConversationComputerRuntimeCommandRouter()
 {
-	it("returns the oldest durable command only after the reviewed Pod matches its active lease", async function _ReturnsHeadCommand()
+	it("returns the oldest durable work package only after the reviewed Pod matches its active lease", async function _ReturnsHeadCommand()
 	{
 		const { app, dependencies } = _App();
 
 		const response = await request(app).get("/commands/next?computerId=computer-1").set(_Bearer());
 
 		expect(response.status).toBe(200);
-		expect(response.body).toEqual({ command: _COMMAND });
+		expect(response.body).toEqual({ work: { command: { protocolVersion: _COMMAND.protocolVersion, commandId: _COMMAND.commandId, sequence: _COMMAND.sequence, computerId: _COMMAND.computerId, executionId: _COMMAND.executionId, leaseGeneration: _COMMAND.leaseGeneration, issuedAt: _COMMAND.issuedAt, expiresAt: _COMMAND.expiresAt, kind: _COMMAND.kind }, inputEntryId: _COMMAND.payload.inputEntryId, inputText: "Private participant input" } });
 		expect(dependencies.authority.poll).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1" });
+		expect(dependencies.payloads.readText).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", idempotencyKey: _COMMAND.payload.inputEntryId, payloadRef: _COMMAND.payload.inputPayloadRef, ciphertextDigest: _COMMAND.payload.inputPayloadDigest });
 	});
 
 	it("refuses an unreviewed caller before it reads active computer history", async function _RefusesUnreviewedCaller()
@@ -84,6 +86,16 @@ describe("ConversationComputer runtime command router", function _ConversationCo
 		const response = await request(app).get("/commands/next?computerId=computer-1").set(_Bearer());
 
 		expect(response.status).toBe(204);
+	});
+
+	it("denies payload redemption failure without exposing the command's private reference", async function _DeniesUnreadablePayload()
+	{
+		const { app } = _App({ payloads: { readText: vi.fn().mockRejectedValue(new Error("payload mismatch")) } });
+
+		const response = await request(app).get("/commands/next?computerId=computer-1").set(_Bearer());
+
+		expect(response.status).toBe(403);
+		expect(response.body).toEqual({ error: "runtime_denied" });
 	});
 
 	it("completes only a strict terminal report against server-derived active coordinates", async function _CompletesHeadCommand()
