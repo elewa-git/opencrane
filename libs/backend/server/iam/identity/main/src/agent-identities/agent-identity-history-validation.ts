@@ -1,7 +1,7 @@
 import { AgentIdentityStates, type AgentIdentity } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
-import type { AgentIdentityCurrentCommand } from "./agent-identity-history.types";
+import type { AgentIdentityCurrentCommand, AgentIdentityRuntimeAuthorizationCommand } from "./agent-identity-history.types";
 
 /** Names the one versioned event schema this history authority accepts. */
 const _AGENT_IDENTITY_EVENT_TYPE = "opencrane.agent-identity.v1";
@@ -27,6 +27,15 @@ export function _ValidateCurrentAgentIdentityCommand(command: AgentIdentityCurre
 		throw new Error("Agent identity history load requires a server-provided agent service identifier");
 	if (!_PrincipalIdentifier(command.principalId))
 		throw new Error("Agent identity history load requires a server-provided principal identifier");
+}
+
+/** Validates the only computer-derived coordinates that may select a runtime identity actor. */
+export function _ValidateAgentIdentityRuntimeAuthorizationCommand(command: AgentIdentityRuntimeAuthorizationCommand): void
+{
+	if (!_Identifier(command.siloId))
+		throw new Error("Agent identity runtime authorization requires a server-provided silo identifier");
+	if (!_Identifier(command.agentIdentityId))
+		throw new Error("Agent identity runtime authorization requires a server-provided identity identifier");
 }
 
 /** Validates one envelope and snapshot before it can contribute to current identity state. */
@@ -59,6 +68,15 @@ export function _AssertAgentIdentityCurrentCoordinates(identity: AgentIdentity, 
 		throw new Error("Agent identity history received an identity for a different agent service");
 	if (_AgentIdentityPrincipalId(identity) !== command.principalId)
 		throw new Error("Agent identity history received an identity for a different principal");
+}
+
+/** Checks the computer-derived stable identity coordinates before actor facts are derived from history. */
+export function _AssertAgentIdentityRuntimeAuthorizationCoordinates(identity: AgentIdentity, command: AgentIdentityRuntimeAuthorizationCommand): void
+{
+	if (identity.siloId !== command.siloId)
+		throw new Error("Agent identity runtime authorization received an identity from a different silo");
+	if (identity.id !== command.agentIdentityId)
+		throw new Error("Agent identity runtime authorization received a different identity");
 }
 
 /** Parses the exact discriminated AgentIdentity shape without granting unknown future kinds authority. */

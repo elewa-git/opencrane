@@ -1,2 +1,2 @@
 export { AgentIdentityHistory } from "./agent-identity-history";
-export type { AgentIdentityAppendCommand, AgentIdentityCurrentCommand, CurrentAgentIdentity } from "./agent-identity-history.types";
+export type { ActiveAgentIdentityAuthorization, AgentIdentityAppendCommand, AgentIdentityCurrentCommand, AgentIdentityRuntimeAuthorizationCommand, CurrentAgentIdentity } from "./agent-identity-history.types";

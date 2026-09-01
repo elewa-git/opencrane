@@ -1,4 +1,5 @@
 import type { ConversationEntry } from "@opencrane/contracts";
+import type { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
 /**
  * Identifies a finite read that an authorized conversation transport may make from a KurrentDB stream.
@@ -24,4 +25,18 @@ export interface ConversationHistoryReadResult
 	readonly streamName: string;
 	/** Lists the participant-visible entries in their validated immutable stream order. */
 	readonly entries: readonly ConversationEntry[];
+}
+
+/**
+ * Carries a fully replayed participant transcript and the checked head for a later atomic append.
+ *
+ * A ConversationComputer command uses this result after it has checked the whole transcript, then
+ * includes {@link expectedRevision} in its append. The result does not authorize a participant or
+ * grant permission to write; it prevents that later authorization from acting on a transcript that
+ * has changed since the replay.
+ */
+export interface CurrentConversationHistory extends ConversationHistoryReadResult
+{
+	/** Requires the KurrentDB revision that was current when the transcript was replayed. */
+	readonly expectedRevision: HistoryExpectedRevisions.NoStream | bigint;
 }
