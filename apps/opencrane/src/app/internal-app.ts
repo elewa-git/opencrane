@@ -38,6 +38,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	// 1. Apply route-specific body ceilings before the generic parser consumes the request stream.
 	app.set("trust proxy", 1);
 	app.use("/api/internal/agent-runtime", express.json({ limit: 64 * 1_024, strict: true }));
+	app.use("/api/internal/conversation-computer/runtime", express.json({ limit: 4 * 1_024, strict: true }));
 	app.use("/api/internal/warm-runtime", express.json({ limit: 64 * 1_024, strict: true }));
 	app.use("/api/internal/mcp-executor", express.json({ limit: 4_456_448, strict: true }));
 	app.use("/api/internal/artifact-scanner", express.json({ limit: 16 * 1_024, strict: true }));
