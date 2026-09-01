@@ -42,7 +42,14 @@ export interface AgentSandboxClaimCommand
 	readonly shutdownTime: Date;
 }
 
-/** Names the release selectors a claim controller must stamp onto its resulting Sandbox Pod. */
+/**
+ * Names the release selectors that identify the Sandbox Pod created for an admitted computer.
+ *
+ * The server obtains these values from its immutable activation profile, while the claim authority
+ * adds the component and computer labels itself. Callers therefore cannot redirect a Pod into a
+ * different release boundary.
+ * @see AgentSandboxClaimCommand
+ */
 export interface AgentSandboxClaimPodLabels
 {
 	/** Names the Helm application label shared with the server NetworkPolicy selector. */

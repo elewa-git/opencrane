@@ -186,7 +186,7 @@ function _PodLabels(command: AgentSandboxClaimCommand): Record<string, string>
 	};
 }
 
-/** Reads one nested Kubernetes record without accepting an arbitrary object shape. */
+/** Reads one declared nested record without treating an arbitrary object as Pod metadata. */
 function _NestedRecord(value: unknown, key: string): Record<string, unknown> | null
 {
 	return _IsRecord(value) && _IsRecord(value[key]) ? value[key] : null;

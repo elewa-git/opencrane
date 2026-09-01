@@ -94,7 +94,7 @@ function _MatchesExpectedRecord(value: unknown, expected: Record<string, string>
 	return _IsRecord(value) && Object.keys(value).length === Object.keys(expected).length && Object.entries(expected).every(([key, expectedValue]) => value[key] === expectedValue);
 }
 
-/** Reads one controller-owned nested record without accepting an unstructured Pod metadata field. */
+/** Reads one nested record without treating an arbitrary object as Pod metadata. */
 function _NestedRecord(value: unknown, key: string): Record<string, unknown> | null
 {
 	return _IsRecord(value) && _IsRecord(value[key]) ? value[key] : null;
