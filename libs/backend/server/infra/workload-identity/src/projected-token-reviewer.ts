@@ -5,6 +5,9 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity } from "./workload-identity.types";
 
+/** Matches the immutable projected-token audience rendered into every ConversationComputer Sandbox. */
+const _CONVERSATION_COMPUTER_RUNTIME_TOKEN_AUDIENCE = "opencrane-conversation-computer-runtime";
+
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
 function _IsNamespace(value: string): boolean
 {
@@ -195,6 +198,19 @@ export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi
 			if (!subject || !podUid || subject.serviceAccountName !== WARM_RUNTIME_SERVICE_ACCOUNT_NAME || (subject.namespace !== config.personalRuntimeNamespace && subject.namespace !== config.managedRuntimeNamespace))
 				return null;
 			return { subject: status?.user?.username ?? "", ...subject, podUid };
+		},
+	};
+}
+
+/** Builds the Pod-bound reviewer for Sandboxes whose durable lease later fixes the ServiceAccount. */
+export function _CreateConversationComputerRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [_CONVERSATION_COMPUTER_RUNTIME_TOKEN_AUDIENCE]);
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _AnyServiceAccount(): boolean { return true; });
 		},
 	};
 }

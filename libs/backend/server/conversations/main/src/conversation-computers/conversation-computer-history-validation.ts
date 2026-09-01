@@ -38,6 +38,13 @@ export function _ValidateConversationComputerRuntimeCurrentCommand(command: Conv
 		throw new Error("Conversation computer runtime load requires server-provided computer coordinates");
 }
 
+/** Validates bootstrap coordinates before history derives the bound conversation and profile. */
+export function _ValidateConversationComputerBootstrapCommand(command: { readonly siloId: string; readonly computerId: string; readonly nowEpochMilliseconds: number }): void
+{
+	if (!_Identifier(command.siloId) || !_Identifier(command.computerId) || !Number.isSafeInteger(command.nowEpochMilliseconds))
+		throw new Error("Conversation computer bootstrap requires valid server-owned runtime coordinates");
+}
+
 /** Validates activation coordinates without allowing an event to choose identity or profile. */
 export function _ValidateConversationComputerActivationCurrentCommand(command: ConversationComputerActivationCurrentCommand): void
 {

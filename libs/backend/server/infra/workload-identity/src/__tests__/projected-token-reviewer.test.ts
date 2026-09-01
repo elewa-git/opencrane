@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateConversationComputerRuntimeTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
 
 /** Build a TokenReview API stub with one controlled Kubernetes response. */
 function _ReviewApi(status: object)
@@ -46,14 +46,36 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 		await expect(reviewer.__Review("token")).resolves.toEqual({ username, namespace: "preprocess-ns", serviceAccountName: ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, audiences: [ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE] });
 	});
 
-	it("binds the MCP executor companion to its audience, account, namespace, and Pod UID", async function _ReviewsMcpExecutor()
+		it("binds the MCP executor companion to its audience, account, namespace, and Pod UID", async function _ReviewsMcpExecutor()
 	{
 		const audience = "opencrane-mcp-executor";
 		const subject = "system:serviceaccount:mcp-executor:mcp-executor-default";
 		const reviewer = _CreateMcpExecutorTokenReviewer(_ReviewApi(_ValidStatus(audience, subject)) as never, "mcp-executor");
 
-		await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "mcp-executor", serviceAccountName: "mcp-executor-default", podUid: "pod-uid-1" });
-	});
+			await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "mcp-executor", serviceAccountName: "mcp-executor-default", podUid: "pod-uid-1" });
+		});
+
+		it("reviews a ConversationComputer Sandbox token before history binds it to its lease", async function _ReviewsConversationComputerRuntime()
+		{
+			const audience = "opencrane-conversation-computer-runtime";
+			const subject = "system:serviceaccount:conversation-computers:agent-sandbox-runtime";
+			const api = _ReviewApi(_ValidStatus(audience, subject));
+			const reviewer = _CreateConversationComputerRuntimeTokenReviewer(api as never, "conversation-computers");
+
+			await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "conversation-computers", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" });
+			expect(api.createTokenReview).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ spec: expect.objectContaining({ audiences: [audience] }) }) }));
+		});
+
+		it.each([
+			["wrong audience", _ValidStatus("other", "system:serviceaccount:conversation-computers:agent-sandbox-runtime")],
+			["wrong namespace", _ValidStatus("opencrane-conversation-computer-runtime", "system:serviceaccount:other:agent-sandbox-runtime")],
+			["missing Pod UID", _ValidStatus("opencrane-conversation-computer-runtime", "system:serviceaccount:conversation-computers:agent-sandbox-runtime", { user: { username: "system:serviceaccount:conversation-computers:agent-sandbox-runtime", extra: {} } })],
+		])("rejects a ConversationComputer Sandbox token with %s", async function _RejectsConversationComputerRuntime(_reason, status)
+		{
+			const reviewer = _CreateConversationComputerRuntimeTokenReviewer(_ReviewApi(status) as never, "conversation-computers");
+
+			await expect(reviewer.__Review("token")).resolves.toBeNull();
+		});
 
 	it.each([
 		["wrong audience", _ValidStatus("other", "system:serviceaccount:mcp-executor:mcp-executor-default")],

@@ -1,8 +1,8 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
-import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerActivationCurrentCommand, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
+import type { ActiveConversationComputerBootstrapCommand, ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerActivationCurrentCommand, _ValidateConversationComputerBootstrapCommand, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -178,6 +178,29 @@ export class ConversationComputerHistory
 		if (current === null || current.computer.state !== ConversationComputerStates.Warm || current.lease === null || current.lease.state !== ComputerLeaseStates.Active || current.lease.runtimePod === null || !Number.isSafeInteger(command.nowEpochMilliseconds) || Date.parse(current.lease.expiresAt) <= command.nowEpochMilliseconds || current.computer.activeExecution === null || current.computer.activeExecution.endedAt !== null)
 			throw new Error("Conversation computer history cannot use an inactive runtime execution");
 		return { ...current, lease: current.lease, execution: current.computer.activeExecution };
+	}
+
+	/** Loads a bootstrappable execution after deriving every durable coordinate from history. */
+	public async loadActiveExecutionForBootstrap(command: ActiveConversationComputerBootstrapCommand): Promise<ActiveConversationComputerExecution>
+	{
+		_ValidateConversationComputerBootstrapCommand(command);
+		const streamName = _ConversationComputerStreamName(command.computerId);
+		const iterator = this.historyStore.readStream({ streamName })[Symbol.asyncIterator]();
+		let first: IteratorResult<import("@opencrane/backend/server/infra/history-store").HistoryRecordedEvent>;
+		try
+		{
+			first = await iterator.next();
+		}
+		finally
+		{
+			await iterator.return?.();
+		}
+		if (first.done)
+			throw new Error("Conversation computer history cannot bootstrap an absent runtime");
+		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
+		if (snapshot.computer.siloId !== command.siloId || snapshot.computer.id !== command.computerId)
+			throw new Error("Conversation computer bootstrap received foreign runtime coordinates");
+		return this.loadActiveExecutionForRuntime({ siloId: command.siloId, computerId: command.computerId, conversationId: snapshot.computer.conversationId, profileRevisionId: snapshot.computer.profileRevisionId, nowEpochMilliseconds: command.nowEpochMilliseconds });
 	}
 
 	/** Replays one fully specified trusted computer stream and verifies its current head. */
