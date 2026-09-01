@@ -1,4 +1,4 @@
-import { ArtifactRevisionState, ArtifactScanJobState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, PrincipalProvenance, WorkloadAssignmentState } from "@prisma/client";
+import { ArtifactRevisionState, ArtifactScanJobState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, PrincipalProvenance, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaArtifactScanUnitOfWork } from "@opencrane/backend/server/agents/artifacts";
@@ -20,7 +20,8 @@ function _Database()
 	let asset: Record<string, unknown> | null = null;
 	let revision: Record<string, unknown> | null = null;
 	let scanJob: Record<string, unknown> | null = null;
-	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2030-01-01T00:00:00.000Z"), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" }, warmRuntimeReservations: [{ generation: 2 }] };
+	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, revokedAt: null, expiresAt: new Date("2030-01-01T00:00:00.000Z"), workloadKind: WorkloadKind.Deployment, run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	const reservation = { generation: 2, state: WarmRuntimeReservationState.Claimed, namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, idleDeadline: new Date("2030-01-01T00:00:00.000Z") };
 	const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.ArtifactCollection, ProductAuthorizationActions.Create);
 	if (capability === null) throw new Error("artifact collection create capability is missing");
 	const collectionGrant = {
@@ -65,7 +66,8 @@ function _Database()
 		},
 		auditDecision: { create: vi.fn().mockResolvedValue({}) },
 		auditEntry: { create: vi.fn().mockResolvedValue({}) },
-		workloadAssignment: { findFirst: vi.fn().mockResolvedValue(assignment) },
+		workloadAssignment: { findUnique: vi.fn().mockResolvedValue(assignment) },
+		warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(reservation) },
 		conversationRunEvent: { findFirst: vi.fn().mockResolvedValue({ attempt: 2, sequence: 7, payload: { messageId: "assistant:command-1", role: "assistant" } }) },
 		conversationAssetOutputTicket: {
 			findUnique: vi.fn().mockImplementation(async function _FindTicket(args: { readonly where: Record<string, unknown> }) { return Object.hasOwn(args.where, "id") ? _TicketWithAsset() : null; }),
