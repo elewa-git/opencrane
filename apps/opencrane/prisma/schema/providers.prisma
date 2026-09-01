@@ -92,6 +92,7 @@ model ProviderEffectCommand {
   desiredGeneration               Int                               @map("desired_generation")
   argumentsDigest                 String                            @map("arguments_digest")
   materialVerifier                String?                           @map("material_verifier")
+  authorizationDecisionEvidenceId String                            @map("authorization_decision_evidence_id")
   authorizationDecisionDigest     String                            @map("authorization_decision_digest")
   authorizationPolicyRevisionHash String                            @map("authorization_policy_revision_hash")
   effectiveAuthorizationDigest    String                            @map("effective_authorization_digest")

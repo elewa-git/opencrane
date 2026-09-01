@@ -6,7 +6,7 @@ describe("__CreateStandaloneFirstUserAdmissionAuditAppender", function _suite()
 {
   it("records one immutable allow decision through the supplied transaction", async function _append()
   {
-    const transaction = { auditDecision: { create: vi.fn().mockResolvedValue(undefined) } };
+    const transaction = { auditDecision: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) } };
     const appender = __CreateStandaloneFirstUserAdmissionAuditAppender();
 
     await appender.append(transaction as never, { clusterTenant: "testv2", subject: "subject-jente" });

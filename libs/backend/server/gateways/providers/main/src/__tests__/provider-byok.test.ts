@@ -152,7 +152,7 @@ function _Authorization(allow: boolean): ProviderGatewayAuthorizationFactory<Pri
 			{
 				if (!allow)
 					return { outcome: "deny", evidence: null };
-				return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } };
+				return { outcome: "allow", evidence: { decisionEvidenceId: "audit-1", decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } };
 			},
 			listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return allow ? command.resources : []; },
 			replaceManagedGrants: async function _Replace()
@@ -273,7 +273,7 @@ describe("providerByokRouter", function _suite()
 	{
 		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", principalId: "administrator-a", resourceKind: "provider-connection", resourceId: "byok:acme:openai", desiredGeneration: 1, state: "Claimed", claimExpiresAt: new Date("2026-06-30T12:00:00.000Z") }]]);
 		const replaceManagedGrants = vi.fn();
-		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
+		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionEvidenceId: "audit-1", decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
 		const createAuthorization = (function _CreateAuthorization() { return { admitPrincipal, replaceManagedGrants }; }) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
 		const app = _buildApp(new Map(), { authorized: true }, new Map(), commands, createAuthorization, "administrator-b");
 

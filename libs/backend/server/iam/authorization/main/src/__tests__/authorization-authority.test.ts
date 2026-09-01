@@ -71,22 +71,22 @@ describe("central authorization authority", function _Suite()
 	it("records a mutation decision through the transaction-bound recorder", async function _AdmitMutation()
 	{
 		const repository = _Repository();
-		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue({ decisionEvidenceId: "audit-1" }) };
 		const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Skill, ProductAuthorizationActions.Publish);
 		if (capability === null)
 			throw new Error("skill publish capability is missing");
 		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-publish", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.Skill, id: "skill-allowed" }, effect: AuthorizationGrantEffects.Allow, priority: 10, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
 		const authority = new __AuthorizationAuthority(repository, recorder);
 		const result = await authority.admit({ siloId: "silo-1", principalId: "principal-1", actorKind: "user", actorId: "principal-1", boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, resource: { kind: ProductAuthorizationResourceKinds.Skill, id: "skill-allowed" }, action: ProductAuthorizationActions.Publish, argumentsDigest: `sha256:${"a".repeat(64)}`, nowEpochMs: 1 });
-		expect(result).toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: expect.stringMatching(/^sha256:/), effectiveAuthorizationDigest: expect.stringMatching(/^sha256:/) } });
-		expect(recorder.record).toHaveBeenCalledWith(expect.any(Object), result);
+		expect(result).toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionEvidenceId: "audit-1", decisionDigest: expect.stringMatching(/^sha256:/), effectiveAuthorizationDigest: expect.stringMatching(/^sha256:/) } });
+		expect(recorder.record).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ outcome: AuthorizationDecisionOutcomes.Allow }), expect.objectContaining({ decisionDigest: expect.stringMatching(/^sha256:/) }));
 	});
 
 	it("does not record a denied mutation", async function _DeniedMutation()
 	{
 		const repository = _Repository();
 		vi.mocked(repository.listSubjectGrants).mockResolvedValue([]);
-		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue({ decisionEvidenceId: "audit-1" }) };
 		const authority = new __AuthorizationAuthority(repository, recorder);
 		const result = await authority.admit({ siloId: "silo-1", principalId: "principal-1", actorKind: "user", actorId: "principal-1", boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, resource: { kind: ProductAuthorizationResourceKinds.Skill, id: "skill-allowed" }, action: ProductAuthorizationActions.Publish, argumentsDigest: `sha256:${"a".repeat(64)}`, nowEpochMs: 1 });
 		expect(result.evidence).toBeNull();
@@ -131,7 +131,7 @@ describe("central authorization authority", function _Suite()
 		if (capability === null)
 			throw new Error("skill revision use capability is missing");
 		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-use", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.SkillRevision, id: "revision-allowed" }, effect: AuthorizationGrantEffects.Allow, priority: 10, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
-		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue({ decisionEvidenceId: "audit-1" }) };
 		const authority = new __AuthorizationAuthority(repository, recorder);
 		const shared = { siloId: "silo-1", principalId: "principal-1", actorKind: "user" as const, actorId: "principal-1", action: ProductAuthorizationActions.Use, argumentsDigest: `sha256:${"a".repeat(64)}` as const, nowEpochMs: 1 };
 		const results = await authority.admitPrincipalBatch([
@@ -149,7 +149,7 @@ describe("central authorization authority", function _Suite()
 		if (capability === null)
 			throw new Error("organization administration capability is missing");
 		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-admin", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" }, effect: AuthorizationGrantEffects.Allow, priority: 100, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
-		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue({ decisionEvidenceId: "audit-1" }) };
 		const managedGrants: ManagedAuthorizationGrantRepository = { reconcileManagedResourceGrants: vi.fn().mockResolvedValue(2) };
 		const authority = new __AuthorizationAuthority(repository, recorder, managedGrants);
 		const result = await authority.replaceManagedGrants({ siloId: "silo-1", principalId: "principal-1", actorKind: "user", actorId: "principal-1", managerId: "test-editor", resource: { kind: ProductAuthorizationResourceKinds.McpServer, id: "server-1" }, grants: [], now: new Date(1), nowEpochMs: 1 });
@@ -164,7 +164,7 @@ describe("central authorization authority", function _Suite()
 		if (capability === null)
 			throw new Error("organization administration capability is missing");
 		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-admin", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" }, effect: AuthorizationGrantEffects.Allow, priority: 100, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
-		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue({ decisionEvidenceId: "audit-1" }) };
 		const retirement: AuthorizationResourceGrantRetirementRepository = { retireResourceGrants: vi.fn().mockResolvedValue(4) };
 		const authority = new __AuthorizationAuthority(repository, recorder, null, retirement);
 		const model = { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-1" } as const;
@@ -172,16 +172,16 @@ describe("central authorization authority", function _Suite()
 
 		const result = await authority.retireResourceGrants({ siloId: "silo-1", principalId: "principal-1", actorKind: "system", actorId: "provider-effect-v1", resources: [provider, model, model], now: new Date(1), nowEpochMs: 1 });
 
-		expect(result).toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow, changedCount: 4, evidence: { decisionDigest: expect.stringMatching(/^sha256:/) } });
+		expect(result).toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow, changedCount: 4, evidence: { decisionEvidenceId: "audit-1", decisionDigest: expect.stringMatching(/^sha256:/) } });
 		expect(retirement.retireResourceGrants).toHaveBeenCalledWith({ siloId: "silo-1", resources: [model, provider], now: new Date(1) });
-		expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ actorKind: "system", actorId: "provider-effect-v1", resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" } }), expect.any(Object));
+		expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ actorKind: "system", actorId: "provider-effect-v1", resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" } }), expect.objectContaining({ outcome: AuthorizationDecisionOutcomes.Allow }), expect.objectContaining({ decisionDigest: expect.stringMatching(/^sha256:/) }));
 	});
 
 	it("leaves exact resource grants active when current root administration is denied", async function _DenyResourceRetirement()
 	{
 		const repository = _Repository();
 		vi.mocked(repository.listSubjectGrants).mockResolvedValue([]);
-		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue({ decisionEvidenceId: "audit-1" }) };
 		const retirement: AuthorizationResourceGrantRetirementRepository = { retireResourceGrants: vi.fn().mockResolvedValue(1) };
 		const authority = new __AuthorizationAuthority(repository, recorder, null, retirement);
 

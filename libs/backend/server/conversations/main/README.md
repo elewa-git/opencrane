@@ -135,8 +135,9 @@ transport for workloads; it is not a browser fallback.
   acknowledges activated, idempotent, or denied outcomes, retries only a transient authority
   failure, and leaves an acknowledgement failure for KurrentDB to redeliver.
 - `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
-  deterministic KurrentDB stream. Its checked current-head result lets future pre-admission code use
-  only one matching warm computer with one active, generation-fenced lease.
+  deterministic KurrentDB stream. `loadActiveExecution` returns only an open execution whose
+  identity and lease generation match the checked current head, so a later command authority can
+  fence its participant append to the active loop attempt.
 
 ## Boundary
 

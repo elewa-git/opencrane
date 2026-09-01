@@ -54,6 +54,9 @@ the ordinary exact boundary-matching rules.
 
 - `AuthorizationAuthority` decides one typed action or batch-filters a lifecycle-eligible catalogue.
 - `PrismaAuthorizationAuthority` binds that port to the caller's existing Prisma transaction.
+- Every admitted mutation returns the inserted `AuditDecision` identifier with its decision digest,
+  so a protected domain can persist the precise evidence reference with its change if the transaction
+  commits.
 - `___RunSerializableAuthorizationTransaction` gives database-only product UnitOfWorks one bounded
   P2034-only retry policy for authorization reads, protected writes, and audit evidence. Its
   callback must not contain Kubernetes, provider, filesystem, or other effects that can survive a

@@ -148,6 +148,26 @@ export interface ComputerWorkspaceCheckpoint
 }
 
 /**
+ * Identifies one fenced execution that the current ConversationComputer snapshot retains.
+ *
+ * The computer stream, rather than a disposable runtime process, records this execution so a
+ * later command can reject work from a replaced lease or ended loop before it reaches history.
+ */
+export interface ConversationComputerExecution
+{
+	/** Identifies this immutable execution attempt. */
+	readonly id: string;
+	/** Identifies the current lease that owns this execution. */
+	readonly leaseId: string;
+	/** Fences this execution to the owning lease generation. */
+	readonly leaseGeneration: number;
+	/** Records when the server accepted this execution. */
+	readonly startedAt: string;
+	/** Records when the execution reached its terminal boundary, or null while it remains active. */
+	readonly endedAt: string | null;
+}
+
+/**
  * Represents the logical private computer owned by one agent conversation.
  *
  * The record persists across cold and warm realizations and binds the conversation to its resolved
@@ -174,6 +194,8 @@ export interface ConversationComputer
 	readonly leaseGeneration: number;
 	/** Stores the latest verified workspace checkpoint when one exists. */
 	readonly workspaceCheckpoint: ComputerWorkspaceCheckpoint | null;
+	/** Stores the current execution record while its owning lease remains represented in history. */
+	readonly activeExecution: ConversationComputerExecution | null;
 	/** Records when this computer was created. */
 	readonly createdAt: string;
 	/** Records the most recent durable computer-state change. */

@@ -27,11 +27,18 @@ Three files track work, each with a distinct role — keep them from drifting:
 
 ### Native GitHub stacks are the default
 
-Use GitHub's native stack workflow for every change that has an open predecessor. After committing
-the incremental checkpoint, add its branch to the current stack with `gh stack add <branch>` and
-publish or refresh the complete chain with `gh stack submit --auto --open`. This creates each pull
-request against its immediate predecessor rather than repeating its ancestor's diff against
-`develop`.
+Use GitHub's native stack workflow for every change that has an open predecessor. A pull request is
+a coherent review and merge unit, not a wrapper around one commit: one delivery slice may contain
+several small, green, bisectable commits for its contracts, authority, composition, tests, and
+documentation. Split it into a separate PR only when the reviewer can independently accept or
+merge that delivery boundary. After committing the slice's incremental checkpoints, add its branch
+to the current stack with `gh stack add <branch>` and publish or refresh the complete chain with
+`gh stack submit --auto --open`. This creates each pull request against its immediate predecessor
+rather than repeating its ancestor's diff against `develop`.
+
+Before every `gh stack submit`, write the PR body with its summary, ownership/security boundary,
+validation evidence, and stack review order. After publication, read the live body once to confirm
+that GitHub retained it; the generated Stacks footer is never an adequate description.
 
 Start a new chain with `gh stack init` only when the stack does not already exist. Before opening,
 refreshing, rebasing, or reporting a stack, inspect it with `gh stack view` and run the repository

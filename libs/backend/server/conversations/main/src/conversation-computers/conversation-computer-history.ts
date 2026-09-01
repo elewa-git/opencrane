@@ -1,7 +1,7 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, CurrentConversationComputer } from "./conversation-computer-history.types";
+import type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, CurrentConversationComputer } from "./conversation-computer-history.types";
 import { _ConversationComputerStreamName, _ValidateConversationComputerCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
@@ -65,6 +65,10 @@ export class ConversationComputerHistory
 					leaseId: snapshot.lease?.id ?? null,
 					leaseGeneration: snapshot.lease?.generation ?? null,
 					leaseState: snapshot.lease?.state ?? null,
+					executionId: snapshot.computer.activeExecution?.id ?? null,
+					executionLeaseId: snapshot.computer.activeExecution?.leaseId ?? null,
+					executionLeaseGeneration: snapshot.computer.activeExecution?.leaseGeneration ?? null,
+					executionEndedAt: snapshot.computer.activeExecution?.endedAt ?? null,
 				},
 			}],
 		});
@@ -83,12 +87,19 @@ export class ConversationComputerHistory
 		const streamName = _ConversationComputerStreamName(command.computerId);
 		let expectedRevision = 0n;
 		let current: ConversationComputerHistorySnapshot | null = null;
+		const executionIds = new Set<string>();
 
 		for await (const event of this.historyStore.readStream({ streamName }))
 		{
 			const snapshot = _ValidatedConversationComputerEvent(event, command, streamName, expectedRevision);
 			if (current !== null)
 				_ValidateSnapshotTransition(current, snapshot);
+			const previousExecutionId = current?.computer.activeExecution?.id ?? null;
+			const executionId = snapshot.computer.activeExecution?.id ?? null;
+			if (executionId !== null && executionId !== previousExecutionId && executionIds.has(executionId))
+				throw new Error("Conversation computer history reused an execution identifier");
+			if (executionId !== null)
+				executionIds.add(executionId);
 			current = snapshot;
 			expectedRevision += 1n;
 		}
@@ -125,6 +136,24 @@ export class ConversationComputerHistory
 		if (!Number.isSafeInteger(command.nowEpochMilliseconds) || Date.parse(current.lease.expiresAt) <= command.nowEpochMilliseconds)
 			throw new Error("Conversation computer history cannot activate an expired lease");
 		return { ...current, lease: current.lease };
+	}
+
+	/**
+	 * Loads the current execution only when it remains open on the active fenced lease.
+	 *
+	 * A future command authority uses the returned computer-stream head with the execution fence so
+	 * it cannot append a participant event after a loop has stopped or a lease has been replaced.
+	 * @param command - Supplies the trusted computer coordinates and current server time.
+	 * @returns The active computer lease, execution, and checked stream head.
+	 * @throws {Error} Rejects a missing or terminal execution before it reaches command authorization.
+	 */
+	public async loadActiveExecution(command: ActiveConversationComputerLeaseCommand): Promise<ActiveConversationComputerExecution>
+	{
+		const activeLease = await this.loadActiveLease(command);
+		const execution = activeLease.computer.activeExecution;
+		if (execution === null || execution.endedAt !== null)
+			throw new Error("Conversation computer history cannot use a missing or terminal execution");
+		return { ...activeLease, execution };
 	}
 }
 
