@@ -181,6 +181,9 @@
       "@opencrane/backend/server/infra/api": [
         "./libs/backend/server/infra/api/src/index.ts"
       ],
+      "@opencrane/backend/server/infra/agent-sandbox-claims": [
+        "./libs/backend/server/infra/agent-sandbox-claims/src/index.ts"
+      ],
       "@opencrane/backend/server/infra/auth": [
         "./libs/backend/server/infra/auth/src/index.ts"
       ],

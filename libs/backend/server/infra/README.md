@@ -11,6 +11,7 @@ remaining grouped with the server code that composes them.
 | Package | What it owns |
 | --- | --- |
 | [`api`](./api/README.md) | Kubernetes API constants and error normalisation. |
+| [`agent-sandbox-claims`](./agent-sandbox-claims/README.md) | Exact create-or-read leases for admitted ConversationComputer generations. |
 | [`auth`](./auth/README.md) | OIDC login, sessions, and request-principal resolution. |
 | [`agent-runtime-stream`](./agent-runtime-stream/README.md) | Projected-token runtime HTTP/SSE framing. |
 | [`agent-runtime-continuation`](./agent-runtime-continuation/README.md) | Secret-backed encryption for durable model-loop checkpoints. |
