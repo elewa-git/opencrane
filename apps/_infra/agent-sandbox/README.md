@@ -36,8 +36,9 @@ chart renders with its unchanged release context.
 
 The chart creates release-scoped profiles, server claim RBAC and admission policy only. It never
 installs Agent Sandbox CRDs or its controller, selects a Pod image at claim time, creates a bespoke
-Pod controller, or keeps a legacy warm-runtime workload. The upstream controller and CRDs are external
-cluster prerequisites.
+Pod controller, or keeps a legacy warm-runtime workload. In standalone mode the explicit platform
+bootstrap installs the pinned upstream controller and CRDs once for the cluster; a silo never owns
+or upgrades those shared resources.
 
 ## Dependency direction
 

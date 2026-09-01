@@ -54,8 +54,10 @@ Deployment rollout gates.
 Cluster-wide controllers (ingress, CloudNativePG, cert-manager, and the Agent Sandbox controller)
 and serving DNS are external prerequisites a silo never installs.
 "External" here means outside the organisation release: a cluster operator may explicitly install
-the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`
-never invokes that helper. The app-owned chart helper runs `helm dependency update --skip-refresh`
+the pinned development controller set with `platform/bootstrap-prerequisites.sh`—including the
+Agent Sandbox v1beta1 controller and CRDs—but `deploy.sh` never invokes that helper. Serving DNS
+remains Terraform- and DNS-provider-owned, and gVisor remains a verified cluster runtime capability.
+The app-owned chart helper runs `helm dependency update --skip-refresh`
 against the checked-out in-repo `file://` sources. The commit is the version authority; ignored
 `Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
 

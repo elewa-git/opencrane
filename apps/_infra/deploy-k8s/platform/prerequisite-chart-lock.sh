@@ -83,3 +83,33 @@ CNPG_CLUSTER_RESOURCES=(
   "mutatingwebhookconfiguration/cnpg-mutating-webhook-configuration"
   "validatingwebhookconfiguration/cnpg-validating-webhook-configuration"
 )
+
+# Agent Sandbox publishes a versioned Kubernetes manifest instead of a Helm repository. The
+# bootstrap verifies those exact release bytes before it server-side applies the controller.
+AGENT_SANDBOX_RELEASE="agent-sandbox"
+AGENT_SANDBOX_NAMESPACE="agent-sandbox-system"
+AGENT_SANDBOX_VERSION="v1.0.0"
+AGENT_SANDBOX_MANIFEST_URL="https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.0/sandbox-with-extensions.yaml"
+AGENT_SANDBOX_MANIFEST_SHA256="3a22f89ca1d1d6084e0a351797224842ee413641d6945f9e5b2cb5e1f6cf026c"
+AGENT_SANDBOX_CONTROLLER_IMAGE="registry.k8s.io/agent-sandbox/agent-sandbox-controller@sha256:bdde1a3150bd385f7318c974c1516e880b4f826b6b51a3e7f127c2f8c95b55cd"
+AGENT_SANDBOX_CLUSTER_RESOURCES=(
+  "crd/sandboxes.agents.x-k8s.io"
+  "crd/sandboxclaims.extensions.agents.x-k8s.io"
+  "crd/sandboxtemplates.extensions.agents.x-k8s.io"
+  "crd/sandboxwarmpools.extensions.agents.x-k8s.io"
+  "clusterrole/agent-sandbox-controller"
+  "clusterrole/agent-sandbox-controller-extensions"
+  "clusterrolebinding/agent-sandbox-controller"
+  "clusterrolebinding/agent-sandbox-controller-extensions"
+)
+AGENT_SANDBOX_NAMESPACE_RESOURCES=(
+  "serviceaccount/agent-sandbox-controller"
+  "service/agent-sandbox-controller"
+  "deployment/agent-sandbox-controller"
+)
+AGENT_SANDBOX_V1BETA1_CRDS=(
+  "sandboxes.agents.x-k8s.io"
+  "sandboxclaims.extensions.agents.x-k8s.io"
+  "sandboxtemplates.extensions.agents.x-k8s.io"
+  "sandboxwarmpools.extensions.agents.x-k8s.io"
+)

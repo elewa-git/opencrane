@@ -56,6 +56,17 @@ case "$command_name" in
         ;;
     esac
     ;;
+  curl)
+    output=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output) output="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    printf '%s\n' '        image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.0' >"$output"
+    printf '%s\n' '        - --extensions' >>"$output"
+    ;;
   kubectl)
     if [[ "$*" == "config current-context" ]]; then
       printf '%s\n' "${MOCK_CURRENT_CONTEXT:-gke_weownai-proto_europe-west1_opencrane-dev}"
@@ -88,7 +99,7 @@ case "$command_name" in
       esac
       exit 0
     fi
-    if [[ -n "${MOCK_FOREIGN_RESOURCE:-}" && "$*" == *" get ${MOCK_FOREIGN_RESOURCE}"* ]]; then
+    if [[ -n "${MOCK_FOREIGN_RESOURCE:-}" && "$*" == *"${MOCK_FOREIGN_RESOURCE}"* ]]; then
       exit 0
     fi
     if [[ "$*" == *" get service ingress-nginx-controller "* ]]; then
@@ -98,6 +109,18 @@ case "$command_name" in
     if [[ "$*" == *" rollout status "* ]]; then
       [[ "${MOCK_ROLLOUT_FAIL:-0}" == "0" ]]
       exit
+    fi
+    if [[ "$*" == *"get deployment agent-sandbox-controller"* && "$*" == *"containers[0].image"* ]]; then
+      printf '%s' 'registry.k8s.io/agent-sandbox/agent-sandbox-controller@sha256:bdde1a3150bd385f7318c974c1516e880b4f826b6b51a3e7f127c2f8c95b55cd'
+      exit 0
+    fi
+    if [[ "$*" == *"get deployment agent-sandbox-controller"* && "$*" == *"containers[0].args"* ]]; then
+      printf '%s\n' '--extensions'
+      exit 0
+    fi
+    if [[ "$*" == *"get crd "* && "$*" == *"spec.versions"* ]]; then
+      printf '%s' "${MOCK_AGENT_SANDBOX_VERSION_STATE:-true:true}"
+      exit 0
     fi
     if [[ "$*" == *" wait --for=condition=Established crd/"* ]]; then
       [[ "${MOCK_CRD_ESTABLISHED_FAIL:-0}" == "0" ]]
@@ -125,6 +148,7 @@ case "$command_name" in
       ingress-nginx-4.15.1.tgz) digest='3eff0bd18151d6e6b1c441463410571443dda1ac78292cb189346628de784f0c' ;;
       cert-manager-v1.21.1.tgz) digest='c27101f3f3e2349fb4a9e704316105bf7b52ad73b8c8257d3498ef7f2f6a4adc' ;;
       cloudnative-pg-0.29.0.tgz) digest='668e065ff53508d58238788fd35b355a925060843629a951df0e6a9362e6d32f' ;;
+      agent-sandbox-v1.0.0.yaml) digest='3a22f89ca1d1d6084e0a351797224842ee413641d6945f9e5b2cb5e1f6cf026c' ;;
       *) digest='invalid' ;;
     esac
     [[ "${MOCK_BAD_DIGEST:-0}" == "0" ]] || digest='invalid'
@@ -133,7 +157,7 @@ case "$command_name" in
 esac
 MOCK
 chmod +x "$MOCK_BIN/command-mock"
-for command_name in gcloud helm kubectl shasum sleep; do
+for command_name in curl gcloud helm kubectl shasum sleep; do
   ln -s "$MOCK_BIN/command-mock" "$MOCK_BIN/$command_name"
 done
 
@@ -170,11 +194,14 @@ grep -Fq 'helm list --deployed --failed --pending --uninstalled --superseded --u
 grep -Fq 'helm pull ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --version 4.15.1' "$SUCCESS_CALLS"
 grep -Fq 'helm pull cert-manager --repo https://charts.jetstack.io --version v1.21.1' "$SUCCESS_CALLS"
 grep -Fq 'helm pull cloudnative-pg --repo https://cloudnative-pg.github.io/charts --version 0.29.0' "$SUCCESS_CALLS"
+grep -Fq 'curl --fail --location --silent --show-error --output ' "$SUCCESS_CALLS"
+grep -Fq 'sandbox-with-extensions.yaml' "$SUCCESS_CALLS"
 grep -Eq 'helm template ingress-nginx .*/ingress-nginx-4\.15\.1\.tgz --namespace ingress-nginx' "$SUCCESS_CALLS"
 grep -Eq 'helm upgrade --install ingress-nginx .*/ingress-nginx-4\.15\.1\.tgz --namespace ingress-nginx' "$SUCCESS_CALLS"
 grep -Fq -- '--set-string controller.service.loadBalancerIP=35.205.225.244' "$SUCCESS_CALLS"
 grep -Fq -- '--atomic --wait --wait-for-jobs --timeout 20m' "$SUCCESS_CALLS"
 grep -Fq 'kubectl --context gke_weownai-proto_europe-west1_opencrane-dev wait --for=condition=Established crd/subscriptions.postgresql.cnpg.io --timeout=2m' "$SUCCESS_CALLS"
+grep -Fq 'kubectl --context gke_weownai-proto_europe-west1_opencrane-dev wait --for=condition=Established crd/sandboxclaims.extensions.agents.x-k8s.io --timeout=2m' "$SUCCESS_CALLS"
 
 if run_case context-mismatch MOCK_CURRENT_CONTEXT=other-context; then
   echo 'context mismatch unexpectedly succeeded' >&2
@@ -257,6 +284,18 @@ if run_case leftover-crd MOCK_FOREIGN_RESOURCE=crd/backups.postgresql.cnpg.io; t
   exit 1
 fi
 ! grep -Fq 'helm upgrade' "$TEST_DIR/leftover-crd.calls"
+
+if run_case foreign-agent-sandbox-crd MOCK_FOREIGN_RESOURCE=crd/sandboxclaims.extensions.agents.x-k8s.io; then
+  echo 'foreign Agent Sandbox CRD unexpectedly succeeded' >&2
+  exit 1
+fi
+! grep -Fq 'helm upgrade' "$TEST_DIR/foreign-agent-sandbox-crd.calls"
+
+if run_case agent-sandbox-v1beta1-mismatch MOCK_AGENT_SANDBOX_VERSION_STATE=true:false; then
+  echo 'non-storage Agent Sandbox v1beta1 CRD unexpectedly succeeded' >&2
+  exit 1
+fi
+grep -Fq 'helm upgrade --install cloudnative-pg' "$TEST_DIR/agent-sandbox-v1beta1-mismatch.calls"
 
 if run_case owned-namespace-foreign-crd \
   MOCK_FOREIGN_NAMESPACE=cnpg-system \
