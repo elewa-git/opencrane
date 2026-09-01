@@ -167,12 +167,20 @@
     },
     "agentSandbox": {
       "type": "object",
-      "required": ["enabled", "namespace", "runtimeClassName", "serviceAccountName", "profiles"],
+      "required": ["enabled", "namespace", "runtimeClassName", "serviceAccountName", "runtime", "profiles"],
       "properties": {
         "enabled": { "type": "boolean" },
         "namespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
         "runtimeClassName": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
         "serviceAccountName": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "runtime": {
+          "type": "object",
+          "required": ["protocolVersion", "tokenAudience"],
+          "properties": {
+            "protocolVersion": { "type": "string", "enum": ["conversation-computer-runtime.v1"] },
+            "tokenAudience": { "type": "string", "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9.-]{0,127}$" }
+          }
+        },
         "profiles": {
           "type": "array",
           "items": {

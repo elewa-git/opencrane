@@ -32,14 +32,24 @@ role="$(awk 'BEGIN { RS="---" } /kind: Role/ && /name: opencrane-testv5-agent-sa
 policy="$(awk 'BEGIN { RS="---" } /kind: ValidatingAdmissionPolicy/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
 binding="$(awk 'BEGIN { RS="---" } /kind: ValidatingAdmissionPolicyBinding/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
 profile_config="$(awk 'BEGIN { RS="---" } /kind: ConfigMap/ && /name: opencrane-testv5-conversation-computer-profiles/ { print }' <<<"$rendered")"
+runtime_bootstrap="$(awk 'BEGIN { RS="---" } /kind: ConfigMap/ && /name: opencrane-testv5-agent-sandbox-runtime-bootstrap/ { print }' <<<"$rendered")"
 server_deployment="$(awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-testv5-opencrane/ { print }' <<<"$rendered")"
 
-[[ -n "$template" && -n "$pool" && -n "$role" && -n "$policy" && -n "$binding" && -n "$profile_config" && -n "$server_deployment" ]]
+[[ -n "$template" && -n "$pool" && -n "$role" && -n "$policy" && -n "$binding" && -n "$profile_config" && -n "$runtime_bootstrap" && -n "$server_deployment" ]]
 grep -Fq 'apiVersion: extensions.agents.x-k8s.io/v1beta1' <<<"$template"
 grep -Fq 'image: "registry.invalid/opencrane-agent-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' <<<"$template"
 grep -Fq 'runtimeClassName: gvisor' <<<"$template"
 grep -Fq 'serviceAccountName: agent-sandbox-runtime' <<<"$template"
 grep -Fq 'automountServiceAccountToken: false' <<<"$template"
+grep -Fq 'app.kubernetes.io/instance: opencrane-testv5' <<<"$template"
+grep -Fq 'name: conversation-computer-runtime-bootstrap' <<<"$template"
+grep -Fq 'mountPath: /var/run/opencrane/conversation-computer' <<<"$template"
+grep -Fq 'name: conversation-computer-runtime-token' <<<"$template"
+grep -Fq 'mountPath: /var/run/secrets/opencrane/conversation-computer' <<<"$template"
+grep -Fq 'serviceAccountToken:' <<<"$template"
+grep -Fq 'audience: "opencrane-conversation-computer-runtime"' <<<"$template"
+grep -Fq 'expirationSeconds: 600' <<<"$template"
+grep -Fq 'path: token' <<<"$template"
 grep -Fq 'enableServiceLinks: false' <<<"$template"
 grep -Fq 'readOnlyRootFilesystem: true' <<<"$template"
 grep -Fq 'drop: ["ALL"]' <<<"$template"
@@ -73,6 +83,10 @@ grep -Fq '\"profileRevisionId\":\"profile-revision-developer-v1\"' <<<"$profile_
 grep -Fq '\"namespace\":\"opencrane-testv5\"' <<<"$profile_config"
 grep -Fq '\"sandboxProfile\":\"developer\"' <<<"$profile_config"
 grep -Fq '\"warmPoolName\":\"developer-pool\"' <<<"$profile_config"
+grep -Fq 'immutable: true' <<<"$runtime_bootstrap"
+grep -Fq 'endpoint: "http://opencrane-testv5-opencrane-server.opencrane-testv5.svc.cluster.local:8081/api/internal/conversation-computer/runtime"' <<<"$runtime_bootstrap"
+grep -Fq 'protocol-version: "conversation-computer-runtime.v1"' <<<"$runtime_bootstrap"
+grep -Fq 'token-audience: "opencrane-conversation-computer-runtime"' <<<"$runtime_bootstrap"
 grep -Fq 'OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH' <<<"$server_deployment"
 grep -Fq '/var/run/opencrane/conversation-computer/profiles.json' <<<"$server_deployment"
 grep -Fq 'name: conversation-computer-profiles' <<<"$server_deployment"
@@ -88,6 +102,14 @@ if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agen
 fi
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].poolName=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' >/dev/null 2>&1; then
   echo "Agent Sandbox rendered with an overlong DNS label" >&2
+  exit 1
+fi
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.runtime.protocolVersion=conversation-computer-runtime.v0' >/dev/null 2>&1; then
+  echo "Agent Sandbox rendered with an unknown ConversationComputer runtime protocol" >&2
+  exit 1
+fi
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.runtime.tokenAudience=OPENCRANE' >/dev/null 2>&1; then
+  echo "Agent Sandbox rendered with an invalid ConversationComputer token audience" >&2
   exit 1
 fi
 
