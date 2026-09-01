@@ -640,6 +640,13 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-private-payload-repository.ts",
+				"adapter": "PrismaConversationPrivatePayloadRepository",
+				"contract": "ConversationPrivatePayloadRepository",
+				"contractImportPath": "../conversation-private-payload-store.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-agent-thread-parent-delivery-repository.ts",
 				"adapter": "PrismaAgentThreadParentDeliveryRepository",
 				"contract": "AgentThreadParentDeliveryRepository",

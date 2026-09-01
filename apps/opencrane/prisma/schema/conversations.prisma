@@ -56,6 +56,7 @@ model Conversation {
   activitySequence              BigInt                          @unique @default(autoincrement()) @map("activity_sequence")
   participants                  ConversationParticipant[]
   messages                      ConversationMessage[]
+  privatePayloads               ConversationPrivatePayload[]
   runEvents                     ConversationRunEvent[]
   timelineEntries               ConversationTimelineEntry[]
   contextRevisions              ConversationContextRevision[]   @relation("ConversationContextRevisions")
@@ -118,6 +119,30 @@ model ConversationMessage {
   @@unique([conversationId, idempotencyKey])
   @@index([runId])
   @@map("conversation_messages")
+}
+
+/// Stores encrypted content for immutable ConversationComputer history entries.
+///
+/// When an authority appends an entry, it records `payload://<id>` and the ciphertext digest rather
+/// than text. The server stores the encrypted bytes under an idempotency key so a retry returns its
+/// original row, while changed text under that key fails before a participant history append.
+model ConversationPrivatePayload {
+  id                String       @id @default(cuid())
+  siloId            String       @map("silo_id")
+  conversationId    String       @map("conversation_id")
+  idempotencyKey    String       @map("idempotency_key")
+  plaintextDigest   String       @map("plaintext_digest")
+  ciphertextDigest  String       @map("ciphertext_digest")
+  keyId             String       @map("key_id")
+  ciphertext        Bytes
+  nonce             Bytes
+  authenticationTag Bytes        @map("authentication_tag")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  conversation      Conversation @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([siloId, conversationId, idempotencyKey])
+  @@index([conversationId, createdAt])
+  @@map("conversation_private_payloads")
 }
 
 model ConversationRunEvent {

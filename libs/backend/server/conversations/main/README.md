@@ -163,6 +163,12 @@ transport for workloads; it is not a browser fallback.
   reference; a Sandbox can only receive its oldest command and report that command's terminal state.
   An exact duplicate terminal report is an idempotent no-op; a stale, foreign, expired, skipped, or
   malformed report fails closed.
+- `ConversationPrivatePayloadStore` accepts text and coordinates from an authority that already
+  authorized the operation, encrypts the body under the dedicated ConversationComputer keyring, and
+  persists it against the `(silo, conversation, idempotency)` owner key. It returns only
+  `payload://…` and a ciphertext digest; a retry with the same text returns the original row, while
+  changed text fails closed. It does not authenticate a caller or append history, and remains
+  uncomposed until the ConversationComputer output authority can make its own history append.
 - `__CreateConversationComputerRuntimeCommandRouter` gives a reviewed Sandbox Pod the narrow
   `commands/next` and `commands/complete` transport. It derives the computer execution from history
   again on every request and compares the Pod UID, namespace, and service account with the active

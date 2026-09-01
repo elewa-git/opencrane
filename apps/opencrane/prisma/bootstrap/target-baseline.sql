@@ -830,6 +830,23 @@ CREATE TABLE "conversation_messages" (
 );
 
 -- CreateTable
+CREATE TABLE "conversation_private_payloads" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "plaintext_digest" TEXT NOT NULL,
+    "ciphertext_digest" TEXT NOT NULL,
+    "key_id" TEXT NOT NULL,
+    "ciphertext" BYTEA NOT NULL,
+    "nonce" BYTEA NOT NULL,
+    "authentication_tag" BYTEA NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_private_payloads_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "conversation_run_events" (
     "conversation_id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
@@ -2606,6 +2623,12 @@ CREATE UNIQUE INDEX "conversation_messages_conversation_id_id_key" ON "conversat
 CREATE UNIQUE INDEX "conversation_messages_conversation_id_idempotency_key_key" ON "conversation_messages"("conversation_id", "idempotency_key");
 
 -- CreateIndex
+CREATE INDEX "conversation_private_payloads_conversation_id_created_at_idx" ON "conversation_private_payloads"("conversation_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_private_payloads_silo_id_conversation_id_idemp_key" ON "conversation_private_payloads"("silo_id", "conversation_id", "idempotency_key");
+
+-- CreateIndex
 CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx" ON "conversation_run_events"("run_id", "attempt", "message_id");
 
 CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id") WHERE "type" = 'message.started';
@@ -3511,6 +3534,9 @@ ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participant
 
 -- AddForeignKey
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7482,6 +7508,17 @@ ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participant
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_source_check" CHECK ("source" IN ('user_input', 'model_output', 'tool_result', 'platform'));
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_blocks_check" CHECK (jsonb_typeof("blocks") = 'array');
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_idempotency_key_check" CHECK (length(btrim("idempotency_key")) BETWEEN 1 AND 128);
+ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_coordinates_check" CHECK (
+    length(btrim("silo_id")) BETWEEN 1 AND 256 AND
+    length(btrim("conversation_id")) BETWEEN 1 AND 256 AND
+    length(btrim("idempotency_key")) BETWEEN 1 AND 256 AND
+    "plaintext_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    "ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    length(btrim("key_id")) BETWEEN 1 AND 64 AND
+    octet_length("ciphertext") > 0 AND
+    octet_length("nonce") = 12 AND
+    octet_length("authentication_tag") = 16
+);
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_provenance_check" CHECK (
         ("source" = 'user_input' AND "role" = 'user' AND "user_id" IS NOT NULL) OR
         ("source" = 'model_output' AND "role" = 'assistant' AND "user_id" IS NULL AND "run_id" IS NOT NULL) OR
