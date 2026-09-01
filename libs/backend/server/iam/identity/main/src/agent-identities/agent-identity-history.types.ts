@@ -1,5 +1,5 @@
 import type { AgentIdentity } from "@opencrane/contracts";
-import type { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
+import type { HistoryExpectedHead, HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
 /** Names the immutable coordinates that select one agent identity and its acting principal. */
 export interface AgentIdentityCurrentCommand
@@ -12,6 +12,20 @@ export interface AgentIdentityCurrentCommand
 	readonly agentServiceId: string;
 	/** Identifies the exact principal that this identity is permitted to represent. */
 	readonly principalId: string;
+}
+
+/**
+ * Limits a ConversationComputer to the identity coordinates it may use to resolve a runtime actor.
+ *
+ * The computer must not choose an AgentService or Principal. {@link AgentIdentityHistory} derives
+ * both from the active identity history so a runtime command cannot substitute another actor.
+ */
+export interface AgentIdentityRuntimeAuthorizationCommand
+{
+	/** Identifies the silo that owns the computer-selected identity. */
+	readonly siloId: string;
+	/** Identifies the active computer's immutable agent identity. */
+	readonly agentIdentityId: string;
 }
 
 /** Carries one checked identity snapshot append to its deterministic history stream. */
@@ -36,4 +50,26 @@ export interface CurrentAgentIdentity
 	readonly headDigest: string;
 	/** Carries the validated identity snapshot at the reported revision. */
 	readonly identity: AgentIdentity;
+}
+
+/**
+ * Gives a runtime command the actor derived from a checked active identity.
+ *
+ * A proxied identity acts as its proxied user, while managed identities act through their dedicated
+ * AgentService principal. A later command append must preserve every {@link expectedIdentityHeads}
+ * condition or re-read this result; otherwise a suspended identity or changed parent could authorize
+ * work after the identity history changed.
+ */
+export interface ActiveAgentIdentityAuthorization extends CurrentAgentIdentity
+{
+	/** Lists every active identity and managed-sub-chat parent stream condition to preserve atomically. */
+	readonly expectedIdentityHeads: readonly HistoryExpectedHead[];
+	/** Identifies the AgentService realized by the checked identity. */
+	readonly agentServiceId: string;
+	/** Identifies the current Principal that authorization must evaluate. */
+	readonly principalId: string;
+	/** States whether the checked identity acts through a user or dedicated agent-service principal. */
+	readonly actorKind: "user" | "agent-service";
+	/** Identifies the proxied user or checked managed identity recorded in authorization evidence. */
+	readonly actorId: string;
 }

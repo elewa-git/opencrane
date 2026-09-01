@@ -2,8 +2,8 @@ import { AgentIdentityStates, type AgentIdentity } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAppendReceipt, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { AgentIdentityAppendCommand, AgentIdentityCurrentCommand, CurrentAgentIdentity } from "./agent-identity-history.types";
-import { _AgentIdentityPrincipalId, _AgentIdentityStreamName, _AssertAgentIdentityCurrentCoordinates, _SameAgentIdentityCoordinates, _ValidatedAgentIdentity, _ValidatedAgentIdentityStreamEvent, _ValidateCurrentAgentIdentityCommand } from "./agent-identity-history-validation";
+import type { ActiveAgentIdentityAuthorization, AgentIdentityAppendCommand, AgentIdentityCurrentCommand, AgentIdentityRuntimeAuthorizationCommand, CurrentAgentIdentity } from "./agent-identity-history.types";
+import { _AgentIdentityPrincipalId, _AgentIdentityStreamName, _AssertAgentIdentityCurrentCoordinates, _AssertAgentIdentityRuntimeAuthorizationCoordinates, _SameAgentIdentityCoordinates, _ValidatedAgentIdentity, _ValidatedAgentIdentityStreamEvent, _ValidateAgentIdentityRuntimeAuthorizationCommand, _ValidateCurrentAgentIdentityCommand } from "./agent-identity-history-validation";
 /** Recognizes UUID event identifiers without treating an ordinary identity coordinate as an idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -139,6 +139,37 @@ export class AgentIdentityHistory
 		if (current.identity.state !== AgentIdentityStates.Active)
 			throw new Error("Agent identity history cannot authorize a non-active identity");
 		return current;
+	}
+
+	/**
+	 * Resolves the authorization actor for a computer-selected active identity.
+	 *
+	 * A ConversationComputer owns only its silo and immutable AgentIdentity coordinate. This method
+	 * derives the service, Principal, and actor class from the validated active snapshot, so a
+	 * runtime command cannot substitute another Principal or make a managed identity act as a user.
+	 *
+	 * @param command - Supplies only the computer-selected silo and AgentIdentity coordinates.
+	 * @returns The active checked identity plus its internally derived authorization actor.
+	 * @throws {Error} Rejects missing, stale, inactive, foreign, or unlinked identities.
+	 */
+	public async loadActiveAuthorization(command: AgentIdentityRuntimeAuthorizationCommand): Promise<ActiveAgentIdentityAuthorization>
+	{
+		_ValidateAgentIdentityRuntimeAuthorizationCommand(command);
+		const current = await this._ReadCurrent(command.agentIdentityId);
+		if (current === null)
+			throw new Error("Agent identity runtime authorization cannot authorize a missing identity");
+		_AssertAgentIdentityRuntimeAuthorizationCoordinates(current.identity, command);
+		if (current.identity.state !== AgentIdentityStates.Active)
+			throw new Error("Agent identity runtime authorization cannot authorize a non-active identity");
+		const parents = await this._ParentBinding(current.identity, new Set([current.identity.id]));
+		return {
+			...current,
+			expectedIdentityHeads: [current, ...parents].map(identity => ({ streamName: identity.streamName, revision: identity.revision })),
+			agentServiceId: current.identity.agentServiceId,
+			principalId: _AgentIdentityPrincipalId(current.identity),
+			actorKind: current.identity.kind === "proxied" ? "user" : "agent-service",
+			actorId: current.identity.kind === "proxied" ? current.identity.proxiedPrincipalId : current.identity.id,
+		};
 	}
 }
 
