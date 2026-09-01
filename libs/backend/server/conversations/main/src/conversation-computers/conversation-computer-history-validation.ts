@@ -5,6 +5,8 @@ import type { ConversationComputerActivationCurrentCommand, ConversationComputer
 
 /** Names the one versioned event schema this history authority accepts. */
 const _CONVERSATION_COMPUTER_EVENT_TYPE = "opencrane.conversation-computer.v1";
+/** Names the immutable cold lifecycle anchor required at revision zero. */
+const _COMPUTER_PROVISIONED_EVENT_TYPE = "opencrane.computer-provisioned.v1";
 /** Recognizes the UUID event identifiers that HistoryStore uses for idempotent appends. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -13,7 +15,7 @@ export function _ConversationComputerStreamName(computerId: string): string
 {
 	if (!_Identifier(computerId))
 		throw new Error("Conversation computer history requires a server-provided computer identifier");
-	return `conversation-computer-${computerId}`;
+	return `computer-${computerId}`;
 }
 
 /** Validates trusted coordinates before they can select a durable computer history stream. */
@@ -64,13 +66,7 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 		throw new Error("Conversation computer history received an event from a different stream");
 	if (event.revision !== expectedRevision)
 		throw new Error("Conversation computer history received a noncontiguous stream revision");
-	if (event.type !== _CONVERSATION_COMPUTER_EVENT_TYPE)
-		throw new Error("Conversation computer history received an unsupported event type");
-	if (!_UUID_PATTERN.test(event.id))
-		throw new Error("Conversation computer history received an event with an invalid identifier");
-	const snapshot = _ValidatedConversationComputerSnapshot(event.data);
-	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null) || event.metadata.runtimePodNamespace !== (snapshot.lease?.runtimePod?.namespace ?? null) || event.metadata.runtimePodServiceAccountName !== (snapshot.lease?.runtimePod?.serviceAccountName ?? null) || event.metadata.runtimePodUid !== (snapshot.lease?.runtimePod?.podUid ?? null) || event.metadata.executionId !== (snapshot.computer.activeExecution?.id ?? null) || event.metadata.executionLeaseId !== (snapshot.computer.activeExecution?.leaseId ?? null) || event.metadata.executionLeaseGeneration !== (snapshot.computer.activeExecution?.leaseGeneration ?? null) || event.metadata.executionEndedAt !== (snapshot.computer.activeExecution?.endedAt ?? null))
-		throw new Error("Conversation computer history received an event that does not match its envelope");
+	const snapshot = expectedRevision === 0n ? _ValidatedConversationComputerProvisionedEvent(event, streamName) : _ValidatedConversationComputerSnapshotEvent(event, streamName);
 	if (snapshot.computer.siloId !== command.siloId)
 		throw new Error("Conversation computer history received a computer from a different silo");
 	if (snapshot.computer.id !== command.computerId)
@@ -81,6 +77,40 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 		throw new Error("Conversation computer history received a computer for a different agent identity");
 	if (snapshot.computer.profileRevisionId !== command.profileRevisionId)
 		throw new Error("Conversation computer history received a computer for a different profile revision");
+	return snapshot;
+}
+
+/** Validates a cold revision-zero computer anchor before any claim or execution snapshot may follow. */
+export function _ValidatedConversationComputerProvisionedEvent(event: HistoryRecordedEvent, streamName: string): ConversationComputerHistorySnapshot
+{
+	if (event.streamName !== streamName || event.revision !== 0n)
+		throw new Error("Conversation computer history received a provision event from a different stream or revision");
+	if (event.type !== _COMPUTER_PROVISIONED_EVENT_TYPE)
+		throw new Error("Conversation computer history requires a computer provision event at revision zero");
+	const snapshot = _ValidatedComputerEnvelope(event);
+	if (snapshot.computer.state !== ConversationComputerStates.Cold || snapshot.computer.leaseGeneration !== 0 || snapshot.computer.workspaceCheckpoint !== null || snapshot.computer.activeExecution !== null || snapshot.lease !== null || snapshot.computer.updatedAt !== snapshot.computer.createdAt)
+		throw new Error("Conversation computer history requires a cold zero-generation computer provision");
+	return snapshot;
+}
+
+/** Validates one non-initial state snapshot after a computer provision event has anchored its stream. */
+function _ValidatedConversationComputerSnapshotEvent(event: HistoryRecordedEvent, streamName: string): ConversationComputerHistorySnapshot
+{
+	if (event.streamName !== streamName)
+		throw new Error("Conversation computer history received an event from a different stream");
+	if (event.type !== _CONVERSATION_COMPUTER_EVENT_TYPE)
+		throw new Error("Conversation computer history received an unsupported event type");
+	return _ValidatedComputerEnvelope(event);
+}
+
+/** Verifies an exact computer snapshot and metadata before lifecycle-specific validation runs. */
+function _ValidatedComputerEnvelope(event: HistoryRecordedEvent): ConversationComputerHistorySnapshot
+{
+	if (!_UUID_PATTERN.test(event.id))
+		throw new Error("Conversation computer history received an event with an invalid identifier");
+	const snapshot = _ValidatedConversationComputerSnapshot(event.data);
+	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null) || event.metadata.runtimePodNamespace !== (snapshot.lease?.runtimePod?.namespace ?? null) || event.metadata.runtimePodServiceAccountName !== (snapshot.lease?.runtimePod?.serviceAccountName ?? null) || event.metadata.runtimePodUid !== (snapshot.lease?.runtimePod?.podUid ?? null) || event.metadata.executionId !== (snapshot.computer.activeExecution?.id ?? null) || event.metadata.executionLeaseId !== (snapshot.computer.activeExecution?.leaseId ?? null) || event.metadata.executionLeaseGeneration !== (snapshot.computer.activeExecution?.leaseGeneration ?? null) || event.metadata.executionEndedAt !== (snapshot.computer.activeExecution?.endedAt ?? null))
+		throw new Error("Conversation computer history received an event that does not match its envelope");
 	return snapshot;
 }
 

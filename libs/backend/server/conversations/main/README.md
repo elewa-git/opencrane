@@ -53,10 +53,11 @@ read history, select a different stream, or append a second distinct entry. A re
 reuses the originally stamped source command and entry bytes. It remains uncomposed until the direct KurrentDB
 conversation-authority replacement can delete the relational writer in the same slice.
 
-`ConversationComputerHistory` owns the separate deterministic KurrentDB stream for the logical
-computer itself. It accepts complete, closed computer and lease snapshots only through the narrow
-HistoryStore port, checks their stream revision on every append, and replays them against the current
-head before returning state. A later pre-admission composition can ask it only for the exact silo,
+`ConversationComputerHistory` owns the separate deterministic `computer-{id}` KurrentDB stream for the logical
+computer itself. `ComputerProvisioned@0` is the only stream-creation event and records a cold,
+zero-generation computer with no lease, execution, or checkpoint; later complete computer and lease
+snapshots may append only after that anchor. It checks their stream revision on every append, and replays
+them against the current head before returning state. A later pre-admission composition can ask it only for the exact silo,
 conversation, AgentIdentity and profile it already selected; it receives an active lease only when
 the matching computer is currently warm. A missing, retired, cooling, released, lost, malformed, or
 cross-coordinate snapshot fails closed. This history authority does not create a sandbox claim,
@@ -150,8 +151,9 @@ transport for workloads; it is not a browser fallback.
   current computer history and the exact immutable claim status. `Ready=True` becomes the active
   lease; an expired dispatch becomes `RecoveryRequired` with a lost lease. It never manages a Pod,
   writes Agent Sandbox status, or accepts a status from a foreign claim.
-- `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
-  deterministic KurrentDB stream. `loadActiveExecution` returns only an open execution whose
+- `ConversationComputerHistory` provisions each deterministic `computer-{id}` stream with a cold
+  `ComputerProvisioned@0` anchor, then persists and reloads later full computer and lease snapshots.
+  `loadActiveExecution` returns only an open execution whose
   identity and lease generation match the checked current head, so a later command authority can
   fence its participant append to the active loop attempt.
 - `__CreateConversationComputerRuntimeBootstrapRouter` admits one Sandbox bootstrap only after
@@ -187,8 +189,8 @@ transport for workloads; it is not a browser fallback.
   active, unexpired computer lease. It returns the stored execution after a concurrent append race,
   but returns unavailable rather than allowing a sandbox to begin work on a cold, expired, replaced,
   or terminal computer.
-- `ConversationHistoryReader.readCurrent` replays every participant-visible entry from the
-  immutable first position and returns only the KurrentDB head condition that a later atomic
+- `ConversationHistoryReader.readCurrent` first validates `ConversationCreated@0`, then replays every
+  participant-visible entry from revision one and returns only the KurrentDB head condition that a later atomic
   command append may use. It does not authorize a participant or append an entry itself.
 - `ConversationComputerRuntimeInputElicitationAuthority` derives the computer execution, AgentIdentity,
   participant, expiry, and entry coordinates server-side, records `Conversation/Use`, and makes one

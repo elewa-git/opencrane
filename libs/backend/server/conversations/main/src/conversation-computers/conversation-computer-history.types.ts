@@ -92,6 +92,15 @@ export interface ConversationComputerAppendCommand
 	readonly lease: ComputerLease | null;
 }
 
+/** Carries the cold immutable computer record that may establish one deterministic computer stream. */
+export interface ConversationComputerProvisionCommand
+{
+	/** Supplies the caller-chosen UUID that keeps a response-lost provision retry byte-stable. */
+	readonly eventId: string;
+	/** Carries the cold, zero-generation computer bound to its conversation, identity, and profile. */
+	readonly computer: ConversationComputer;
+}
+
 /** Carries the checked computer and lease state stored at one history revision. */
 export interface ConversationComputerHistorySnapshot
 {
