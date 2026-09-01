@@ -32,7 +32,7 @@ export interface CurrentAgentIdentity
 	readonly streamName: string;
 	/** Reports the exact KurrentDB revision that supplied this current snapshot. */
 	readonly revision: bigint;
-	/** Canonical digest of the exact stream event that supplied this current snapshot. */
+	/** Digests the exact stream event behind this snapshot so a later check can tell whether the identity head moved. @see ___DigestCanonicalJson for the RFC 8785 digest this holds. */
 	readonly headDigest: string;
 	/** Carries the validated identity snapshot at the reported revision. */
 	readonly identity: AgentIdentity;

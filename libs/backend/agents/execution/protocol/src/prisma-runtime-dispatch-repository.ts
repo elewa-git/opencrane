@@ -136,7 +136,7 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 	}
 }
 
-/** Returns whether the lease-selected workload profile still binds this assignment to one runtime plane. */
+/** Returns whether the assignment's profile, namespace, and service account still match the reservation, and the namespace is one this deployment approved for runtimes. */
 function _RuntimePlaneMatches(assignment: { readonly workloadProfile: string; readonly namespace: string; readonly serviceAccountName: string; readonly workloadKind: WorkloadKind }, reservation: { readonly namespace: string; readonly serviceAccountName: string; readonly claimedProfile: string }, config: RuntimeDispatchAuthorityConfig): boolean
 {
 	return assignment.workloadKind === WorkloadKind.Deployment

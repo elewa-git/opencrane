@@ -85,7 +85,7 @@ export interface RunAdmissionCommand extends RunAdmissionCommandCoordinates
 {
 	/** Trigger accepted for this new logical run. */
 	readonly trigger: "interactive" | "schedule" | "managed_invocation";
-	/** Provenance from which transaction-scoped authority resolves the requester principal. */
+	/** Carries the requester coordinates that transaction-scoped authority resolves to a Principal. */
 	readonly requester: RunAdmissionRequester;
 }
 
