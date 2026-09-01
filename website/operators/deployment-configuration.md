@@ -47,6 +47,8 @@ These are the public configuration roots owned by the silo umbrella chart.
 | `networkPolicy` | Tune the release's default-deny and narrowly admitted network paths. |
 | `externalSecrets` | Connect an External Secrets Operator store when that controller is already installed. |
 | `observability` | Enable OpenTelemetry export and choose its logging detail. |
+| `historyStore` | Configure the private KurrentDB event ledger, including immutable images and pre-created TLS, administrator, operations, and service credential Secrets. |
+| `agentSandbox` | Configure release-scoped Sandbox profiles and their claim-admission contract; the cluster operator installs the controller and CRDs separately. |
 
 ::: warning
 Do not copy a child chart's entire value tree into a platform overlay just because it appears in the
@@ -54,6 +56,18 @@ umbrella `values.yaml`. `channelProxy`, `agentController`, `clustertenantManager
 vendored services are forwarded to their app owners. Change them only with the app's documented
 deployment contract and review their trust boundary first.
 :::
+
+## ConversationComputer substrate
+
+`historyStore.kurrentdb` is disabled by default. Enable it only after supplying immutable KurrentDB
+and bootstrap image digests plus existing TLS, administrator, operations, and HistoryStore-service
+Secrets. The chart owns the namespaced ledger workload and its bootstrap boundary; it never creates
+or rotates those credentials.
+
+`agentSandbox` similarly creates only release-scoped `SandboxTemplate`, `SandboxWarmPool`, and
+claim-admission resources. The Agent Sandbox controller and its `v1beta1` CRDs are cluster-wide
+prerequisites. A profile must name the target namespace, verified RuntimeClass, zero-RBAC service
+account, and immutable runtime image before a ConversationComputer may claim it.
 
 ## MCP image registry
 
