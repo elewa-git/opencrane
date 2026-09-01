@@ -59,6 +59,8 @@ export interface ConversationComputerAppendCommand
 {
 	/** Requires the stream revision observed by the caller before this append. */
 	readonly expectedRevision: HistoryExpectedRevisions.NoStream | bigint;
+	/** Rechecks an authority-specific fence after history has replayed the head that this append will use. */
+	readonly assertCurrent?: (current: CurrentConversationComputer) => void;
 	/** Supplies the caller-chosen UUID that makes a retried append idempotent. */
 	readonly eventId: string;
 	/** Carries the complete closed computer snapshot to persist. */

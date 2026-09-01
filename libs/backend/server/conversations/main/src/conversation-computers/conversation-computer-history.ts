@@ -47,6 +47,7 @@ export class ConversationComputerHistory
 			if (previous === null || previous.revision !== command.expectedRevision)
 				throw new Error("Conversation computer history append requires the current expected revision");
 			_ValidateSnapshotTransition(previous, snapshot);
+			command.assertCurrent?.(previous);
 		}
 		const streamName = _ConversationComputerStreamName(snapshot.computer.id);
 		return this.historyStore.append({

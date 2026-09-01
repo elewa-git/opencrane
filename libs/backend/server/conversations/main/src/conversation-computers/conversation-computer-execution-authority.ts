@@ -40,7 +40,8 @@ export class ConversationComputerExecutionAuthority
 	{
 		// 1. Read history first so neither the caller nor a ready SandboxClaim can select execution facts.
 		const current = await this.history.loadForActivation(command);
-		const now = _Now(this.clock);
+		const clock = this.clock;
+		const now = _Now(clock);
 		const existing = _OpenExecution(current, now);
 		if (existing !== null)
 			return { outcome: ConversationComputerExecutionStartOutcomes.AlreadyActive, execution: existing };
@@ -53,6 +54,10 @@ export class ConversationComputerExecutionAuthority
 		{
 			await this.history.append({
 				expectedRevision: current.revision,
+				assertCurrent: function _AssertCurrent(reloaded: CurrentConversationComputer): void
+				{
+					_AssertStartCurrent(reloaded, clock);
+				},
 				eventId: randomUUID(),
 				computer: { ...current.computer, activeExecution: execution, updatedAt: now.toISOString() },
 				lease: current.lease,
@@ -63,12 +68,19 @@ export class ConversationComputerExecutionAuthority
 		{
 			// 3. Reload after an append loss so a response-lost concurrent start returns the stored winner.
 			const reloaded = await this.history.loadForActivation(command);
-			const winner = _OpenExecution(reloaded, _Now(this.clock));
+			const winner = _OpenExecution(reloaded, _Now(clock));
 			if (winner !== null)
 				return { outcome: ConversationComputerExecutionStartOutcomes.AlreadyActive, execution: winner };
 			throw error;
 		}
 	}
+}
+
+/** Refuses a final history append when its checked warm lease expired or gained another execution. */
+function _AssertStartCurrent(current: CurrentConversationComputer, clock: ConversationComputerExecutionClock): void
+{
+	if (!_MayStart(current, _Now(clock)))
+		throw new Error("Conversation computer execution changed or expired before its history append");
 }
 
 /** Reads a usable server time after I/O has finished so a lease cannot cross expiry during admission. */

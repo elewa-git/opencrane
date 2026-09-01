@@ -2,6 +2,7 @@ import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, ty
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerExecutionAuthority } from "../conversation-computer-execution-authority";
+import type { ConversationComputerAppendCommand } from "../conversation-computer-history.types";
 import { ConversationComputerExecutionStartOutcomes, type ConversationComputerExecutionStartCommand } from "../conversation-computer-execution-authority.types";
 
 /** Fixes the server time used to check one lease throughout these execution-start cases. */
@@ -65,7 +66,7 @@ function _Current(overrides: { readonly computer?: ConversationComputer; readonl
 }
 
 /** Builds the authority with independently controlled history reads and writes. */
-function _Subject(overrides: { readonly current?: ReturnType<typeof _Current> | null; readonly reloaded?: ReturnType<typeof _Current> | null; readonly appendError?: Error; readonly afterFirstLoadClock?: Date } = {})
+function _Subject(overrides: { readonly current?: ReturnType<typeof _Current> | null; readonly reloaded?: ReturnType<typeof _Current> | null; readonly appendError?: Error; readonly afterFirstLoadClock?: Date; readonly beforeAppendClock?: Date } = {})
 {
 	const current = overrides.current === undefined ? _Current() : overrides.current;
 	const reloaded = overrides.reloaded === undefined ? current : overrides.reloaded;
@@ -76,7 +77,16 @@ function _Subject(overrides: { readonly current?: ReturnType<typeof _Current> | 
 			now = overrides.afterFirstLoadClock;
 		return current;
 	}).mockResolvedValue(reloaded);
-	const append = overrides.appendError === undefined ? vi.fn().mockResolvedValue(undefined) : vi.fn().mockRejectedValue(overrides.appendError);
+	const append = vi.fn().mockImplementation(async function _Append(command: ConversationComputerAppendCommand): Promise<void>
+	{
+		if (current === null)
+			throw new Error("test append requires a current computer");
+		if (overrides.beforeAppendClock !== undefined)
+			now = overrides.beforeAppendClock;
+		command.assertCurrent?.(current);
+		if (overrides.appendError !== undefined)
+			throw overrides.appendError;
+	});
 	const authority = new ConversationComputerExecutionAuthority({ loadForActivation, append } as never, { now: function _Now(): Date { return now; } });
 	return { authority, loadForActivation, append };
 }
@@ -135,6 +145,14 @@ describe("ConversationComputerExecutionAuthority", function _DescribeConversatio
 
 		await expect(subject.authority.start(_Command())).resolves.toEqual({ outcome: ConversationComputerExecutionStartOutcomes.Unavailable, execution: null });
 		expect(subject.append).not.toHaveBeenCalled();
+	});
+
+	it("rechecks the history-owned append head before a lease can cross expiry", async function _RejectsLeaseThatExpiresDuringAppend()
+	{
+		const subject = _Subject({ beforeAppendClock: new Date("2026-09-01T00:20:00.000Z") });
+
+		await expect(subject.authority.start(_Command())).rejects.toThrow("changed or expired before its history append");
+		expect(subject.append).toHaveBeenCalledTimes(1);
 	});
 
 	it("propagates an append failure when a reload has no active concurrent winner", async function _PropagatesFailedStart()
