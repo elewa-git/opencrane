@@ -14,7 +14,6 @@ import type { CreateConversationRequest, RetryConversationRunRequest, SubmitConv
 import type { ConversationUnitOfWork } from "../types/conversation-unit-of-work.types";
 import type { ConversationDetail, ConversationSummary } from "../types/conversation-view.types";
 import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types";
-import { RetryRunInputCompileOutcomes, type RetryRunInputCompiler } from "../retry-run-input.types";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types";
 import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository";
@@ -52,16 +51,13 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	private readonly messageAdmission: ConversationMessageAdmissionUnitOfWork;
 	/** Run-owned authority that validates and persists participant retry requests. */
 	private readonly runRetry: RunRetryAuthority;
-	/** Inputs-owned compiler that proves the next attempt's execution subject before its retry CAS. */
-	private readonly retryInputCompiler: RetryRunInputCompiler;
 
 	/** Creates the aggregate authority with its message-admission and run-retry collaborators. */
-	constructor(prisma: PrismaClient, messageAdmission: ConversationMessageAdmissionUnitOfWork, runRetry: RunRetryAuthority, retryInputCompiler: RetryRunInputCompiler)
+	constructor(prisma: PrismaClient, messageAdmission: ConversationMessageAdmissionUnitOfWork, runRetry: RunRetryAuthority)
 	{
 		this.prisma = prisma;
 		this.messageAdmission = messageAdmission;
 		this.runRetry = runRetry;
-		this.retryInputCompiler = retryInputCompiler;
 	}
 
 	/**
@@ -116,8 +112,8 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	 * `acceptedAt` is stamped here, at the moment the request is accepted, rather than taken from the
 	 * client.
 	 *
-	 * @param caller - Session-derived participant provenance. The inputs compiler, not this caller,
-	 *   determines the execution subject and its current authority evidence.
+	 * @param caller - Session-derived participant facts. Its input compiler, not this caller,
+	 *   supplies the execution subject and current authority evidence inside the retry transaction.
 	 * @param conversationId - Conversation the run must belong to; a mismatch denies with
 	 *   `unauthorized`.
 	 * @param runId - The run to retry, not a new identifier.
@@ -130,15 +126,9 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	async retryRun(caller: ConversationCaller, conversationId: string, runId: string, request: RetryConversationRunRequest): Promise<RetryConversationRunResult>
 	{
 		const acceptedAt = new Date().toISOString();
-		const command = { runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requesterSubjectId: caller.subjectId, requesterPrincipalId: caller.principalId, acceptedAt };
 		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () =>
 		{
-			const compilation = await this.retryInputCompiler.compile(command);
-			if (compilation.outcome === RetryRunInputCompileOutcomes.Denied)
-			{
-				return { outcome: "denied", reason: compilation.reason };
-			}
-			return this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, requestedByPrincipalId: caller.principalId, acceptedAt, nextInputSnapshot: compilation.nextInputSnapshot });
+			return this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, requestedByPrincipalId: caller.principalId, acceptedAt });
 		});
 	}
 
