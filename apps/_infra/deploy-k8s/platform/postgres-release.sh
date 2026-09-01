@@ -42,6 +42,38 @@ wait_for_postgres_resource()
   local condition="$1"
   local resource="$2"
   local message="$3"
+
+  # Kubectl 1.30 cannot wait for creation, so poll for the resource within the deployment timeout
+  # instead of depending on a condition that this client does not support.
+  if [[ "$condition" == "create" ]]; then
+    local deadline="$((SECONDS + TIMEOUT))"
+    local expected_name="${resource#*/}"
+    local query_result
+    local remaining_seconds
+
+    while (( SECONDS < deadline )); do
+      remaining_seconds="$((deadline - SECONDS))"
+      if ! query_result="$(kubectl get "$resource" -n "$NAMESPACE" --ignore-not-found \
+        -o 'jsonpath={.metadata.name}' --request-timeout="${remaining_seconds}s" 2>&1)"; then
+        err "$message kubectl get failed: ${query_result:-no error details were returned}"
+        return 1
+      fi
+
+      # Kubectl can print a warning before the JSONPath output, so accept the name on the last line.
+      if [[ "$query_result" == "$expected_name" || "$query_result" == *$'\n'"$expected_name" ]]; then
+        return 0
+      fi
+
+      if (( SECONDS >= deadline )); then
+        break
+      fi
+      sleep 1
+    done
+
+    err "$message"
+    return 1
+  fi
+
   if ! kubectl wait --for="$condition" "$resource" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
     err "$message"
     return 1
