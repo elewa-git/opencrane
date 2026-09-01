@@ -7,11 +7,13 @@
  */
 import { z } from "zod";
 
-import type { ConversationEntry } from "./conversation-entry.types";
+import { ConversationElicitationEntryKinds, ConversationElicitationEntryStates, ConversationEntryKinds, type ConversationEntry } from "./conversation-entry.types";
 
 const _IdentifierSchema = z.string().trim().min(1);
 const _InstantSchema = z.string().datetime({ offset: true });
 const _PositionSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
+const _OpaquePayloadReferenceSchema = z.string().regex(/^payload:\/\/[A-Za-z0-9][A-Za-z0-9._-]*$/);
+const _PayloadDigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const _HumanAuthoredProvenance = "human-authored";
 const _AgentAuthoredProvenance = "agent-authored";
 const _ServiceAttestedProvenance = "service-attested";
@@ -69,13 +71,56 @@ const _LogEntrySchema = z.discriminatedUnion("logKind", [
 	z.object({ ..._LogEntryBase, logKind: z.literal("memory"), operation: z.enum(["recall", "write"]), phase: z.enum(["requested", "completed", "failed", "denied"]) }).strict(),
 	z.object({ ..._LogEntryBase, logKind: z.literal("approval"), approvalId: _IdentifierSchema, action: _IdentifierSchema, phase: z.enum(["requested", "granted", "denied", "expired", "revoked"]) }).strict(),
 ]);
+const { runId: _RetiredRunId, ..._ConversationComputerEntryBase } = _EntryBase;
+const _ElicitationEntryBase = {
+	..._ConversationComputerEntryBase,
+	kind: z.literal(ConversationEntryKinds.Elicitation),
+	elicitationId: _IdentifierSchema,
+	computerId: _IdentifierSchema,
+	computerExecutionId: _IdentifierSchema,
+	leaseGeneration: z.number().int().positive(),
+	elicitationKind: z.enum([
+		ConversationElicitationEntryKinds.RuntimeInput,
+		ConversationElicitationEntryKinds.ToolApproval,
+		ConversationElicitationEntryKinds.PersonalMemoryPermission,
+		ConversationElicitationEntryKinds.A2uiAction,
+	]),
+};
+const _ElicitationRequestEntrySchema = z.object({
+	..._ElicitationEntryBase,
+	state: z.literal(ConversationElicitationEntryStates.Requested),
+	addressedParticipantId: _IdentifierSchema,
+	requestPayloadRef: _OpaquePayloadReferenceSchema,
+	requestPayloadDigest: _PayloadDigestSchema,
+	expiresAt: _InstantSchema,
+}).strict();
+const _ElicitationResolutionEntrySchema = z.object({
+	..._ElicitationEntryBase,
+	state: z.enum([ConversationElicitationEntryStates.Answered, ConversationElicitationEntryStates.Declined, ConversationElicitationEntryStates.Expired, ConversationElicitationEntryStates.Cancelled]),
+	requestEntryId: _IdentifierSchema,
+	responsePayloadRef: _OpaquePayloadReferenceSchema.nullable(),
+	responsePayloadDigest: _PayloadDigestSchema.nullable(),
+}).strict().superRefine(function _ValidateElicitationResolutionPayload(entry, context): void
+{
+	const hasResponseCoordinates = entry.responsePayloadRef !== null && entry.responsePayloadDigest !== null;
+	const hasNoResponseCoordinates = entry.responsePayloadRef === null && entry.responsePayloadDigest === null;
+	if (entry.state === ConversationElicitationEntryStates.Answered && !hasResponseCoordinates)
+	{
+		context.addIssue({ code: z.ZodIssueCode.custom, path: ["responsePayloadRef"], message: "answered elicitations require both response payload coordinates" });
+	}
+	if (entry.state !== ConversationElicitationEntryStates.Answered && !hasNoResponseCoordinates)
+	{
+		context.addIssue({ code: z.ZodIssueCode.custom, path: ["responsePayloadRef"], message: "terminal non-answer outcomes require neither response payload coordinate" });
+	}
+});
+const _ElicitationEntrySchema = z.union([_ElicitationRequestEntrySchema, _ElicitationResolutionEntrySchema]);
 const _A2UIEntrySchema = z.discriminatedUnion("operation", [
 	z.object({ ..._EntryBase, kind: z.literal("a2ui"), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("replace"), payloadRef: _IdentifierSchema, payloadDigest: _IdentifierSchema }).strict(),
 	z.object({ ..._EntryBase, kind: z.literal("a2ui"), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("patch"), payloadRef: _IdentifierSchema, payloadDigest: _IdentifierSchema }).strict(),
 	z.object({ ..._EntryBase, kind: z.literal("a2ui"), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("remove"), payloadRef: z.null(), payloadDigest: z.null() }).strict(),
 ]);
 
-const _ConversationEntrySchema = z.union([_MessageEntrySchema, _LogEntrySchema, _A2UIEntrySchema]);
+const _ConversationEntrySchema = z.union([_MessageEntrySchema, _LogEntrySchema, _ElicitationEntrySchema, _A2UIEntrySchema]);
 
 function _ValidateProvenance(entry: ConversationEntry, context: z.RefinementCtx): void
 {
@@ -98,6 +143,10 @@ function _ValidateProvenance(entry: ConversationEntry, context: z.RefinementCtx)
 	if (entry.author.kind === _SystemAuthorKind && (entry.provenance !== _ServiceAttestedProvenance || entry.attestation === null || entry.attestation.serviceId !== _OpenCraneServiceId))
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["attestation"], message: "a system author requires an OpenCrane service attestation" });
+	}
+	if (entry.kind === ConversationEntryKinds.Elicitation && (entry.author.kind !== _SystemAuthorKind || entry.provenance !== _ServiceAttestedProvenance || entry.attestation === null || entry.attestation.serviceId !== _OpenCraneServiceId))
+	{
+		context.addIssue({ code: z.ZodIssueCode.custom, path: ["author"], message: "elicitation entries require an OpenCrane system attestation" });
 	}
 }
 
