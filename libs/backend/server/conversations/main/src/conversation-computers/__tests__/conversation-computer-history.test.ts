@@ -104,6 +104,15 @@ async function *_Events(events: readonly HistoryRecordedEvent[]): AsyncIterable<
 		yield event;
 }
 
+/** Returns a fresh stream because a caller may inspect the first event before a checked replay. */
+function _FreshEvents(events: readonly HistoryRecordedEvent[]): () => AsyncIterable<HistoryRecordedEvent>
+{
+	return function _ReadEvents(): AsyncIterable<HistoryRecordedEvent>
+	{
+		return _Events(events);
+	};
+}
+
 /** Builds a narrow fake HistoryStore without introducing a direct KurrentDB client into this package. */
 function _Store(overrides: Partial<Pick<HistoryStore, "append" | "readHead" | "readStream">> = {}): Pick<HistoryStore, "append" | "readHead" | "readStream">
 {
@@ -191,6 +200,26 @@ describe("ConversationComputerHistory", function ()
 
 		await expect(history.loadActiveExecution(_ActiveCommand())).resolves.toEqual(expect.objectContaining({ execution: _Execution() }));
 		await expect(terminal.loadActiveExecution(_ActiveCommand())).rejects.toThrow("missing or terminal execution");
+	});
+
+	it("derives the runtime identity from the checked computer stream instead of accepting it from command input", async function ()
+	{
+		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockImplementation(_FreshEvents([_Event(0n)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 0n }) }));
+
+		await expect(history.loadActiveExecutionForRuntime({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", profileRevisionId: "profile-1", nowEpochMilliseconds: Date.parse("2026-09-01T00:10:00.000Z") })).resolves.toEqual(expect.objectContaining({ computer: expect.objectContaining({ agentIdentityId: "identity-1" }), execution: _Execution() }));
+		await expect(history.loadForRuntime({ siloId: "silo-2", computerId: "computer-1", conversationId: "conversation-1", profileRevisionId: "profile-1" })).rejects.toThrow("foreign computer coordinates");
+	});
+
+	it("fails closed for a missing, stale, or expired runtime computer execution", async function ()
+	{
+		const missing = new ConversationComputerHistory(_Store());
+		const stale = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockImplementation(_FreshEvents([_Event(0n)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
+		const expired = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockImplementation(_FreshEvents([_Event(0n)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 0n }) }));
+		const command = { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", profileRevisionId: "profile-1" };
+
+		await expect(missing.loadActiveExecutionForRuntime({ ...command, nowEpochMilliseconds: Date.parse("2026-09-01T00:10:00.000Z") })).rejects.toThrow("inactive runtime execution");
+		await expect(stale.loadActiveExecutionForRuntime({ ...command, nowEpochMilliseconds: Date.parse("2026-09-01T00:10:00.000Z") })).rejects.toThrow("changed while loading");
+		await expect(expired.loadActiveExecutionForRuntime({ ...command, nowEpochMilliseconds: Date.parse("2026-09-01T00:20:00.000Z") })).rejects.toThrow("inactive runtime execution");
 	});
 
 	it("rejects a mismatched execution fence and a replacement before the active execution ends", async function ()
