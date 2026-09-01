@@ -17,7 +17,7 @@ import { OpenCraneApiClientBase } from "./api-client.base";
  *
  * Auth helpers (`signIn`/`signInUrl`, the 401→login middleware) and the untyped
  * `request()` escape hatch come from {@link OpenCraneApiClientBase}; this surface
- * owns the org-admin OIDC session.
+ * owns the org-admin browser session selected by its deployment.
  */
 @Injectable({ providedIn: "root" })
 export class ControlPlaneApiService extends OpenCraneApiClientBase<paths>

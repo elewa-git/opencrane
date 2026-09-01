@@ -12,7 +12,7 @@ import { _SafeLoginReturnTo } from "./login-return-to";
  * Public sign-in landing for the operator app.
  *
  * Rendered when the session is anonymous; clicking "Log in" hands off to the
- * opencrane-ui OIDC flow with the guarded same-origin `returnTo` path, so the
+ * deployment-selected login flow with the guarded same-origin `returnTo` path, so the
  * user lands back on the route that required authentication and the access
  * guard re-runs against a fresh session. While session identity is still loading the
  * page renders nothing. Once it resolves, an already-authenticated session is
@@ -38,7 +38,7 @@ export class LoginPageComponent
 	/** Router for the auto-redirect when an authenticated user lands here. */
 	private readonly _router = inject(Router);
 
-	/** Typed opencrane-ui client (used to launch the OIDC sign-in flow). */
+	/** Typed opencrane-ui client that launches the deployment-selected sign-in flow. */
 	private readonly _api = inject(ControlPlaneApiService);
 
 	/** Public login route containing the guarded same-origin continuation URL. */
@@ -89,7 +89,7 @@ export class LoginPageComponent
 	}
 
 	/**
-	 * Sends an existing user through ordinary OIDC login with the validated continuation path.
+	 * Sends an existing user through the selected login flow with the validated continuation path.
 	 *
 	 * Called by: the `Log in` actions in `login-page.component.html`.
 	 */

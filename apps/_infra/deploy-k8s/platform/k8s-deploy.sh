@@ -105,6 +105,7 @@ if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
 fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/provider-key-secrets.sh"
+source "$SCRIPT_DIR/tier3-development-auth.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/postgres-release.sh"
 source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
@@ -280,6 +281,7 @@ while [[ $# -gt 0 ]]; do
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
+validate_tier3_development_auth || exit 2
 for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
@@ -595,7 +597,7 @@ _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
 POSTGRES_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 _load_kubernetes_api_helm_args memoryGateway "memory gateway"
 MEMORY_GATEWAY_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
-_load_kubernetes_api_helm_args agentController "agent controller"
+_load_kubernetes_api_helm_args agentController "OpenCrane server and agent controller"
 AGENT_CONTROLLER_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 
 _copy_cnpg_uri_secret() {
@@ -747,6 +749,7 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 ensure_provider_key_secrets "$NAMESPACE"
+publish_tier3_development_auth_secret "$NAMESPACE"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
 # Secret already existed, so a fresh OIDC install rendered a UI that crash-looped on a missing
@@ -857,7 +860,9 @@ _guard_standalone_first_user_issuer() {
     exit 1
   fi
 }
-_guard_standalone_first_user_issuer
+if [[ "$TIER3_DEVELOPMENT_AUTH" != "1" ]]; then
+  _guard_standalone_first_user_issuer
+fi
 
 ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"
 
@@ -936,6 +941,7 @@ if [[ ${#EXTRA_SET[@]} -gt 0 ]]; then
 fi
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).
 [[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]] && helm_args+=("${EXTRA_HELM_ARGS[@]}")
+append_tier3_development_auth_helm_args
 CRDS_INSTALL="$(resolve_cluster_tenant_crd_install \
   "$CHART_DIR" "$RELEASE" "$NAMESPACE" \
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")" || exit $?

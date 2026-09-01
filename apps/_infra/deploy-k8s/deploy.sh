@@ -95,11 +95,16 @@ EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
 [[ -n "$RELEASE" ]] || RELEASE="$EXPECTED_RELEASE"
 [[ "$RELEASE" == "$EXPECTED_RELEASE" ]] || { err "--release must be '$EXPECTED_RELEASE' for ClusterTenant '$CLUSTER_TENANT'."; exit 1; }
 
-# Human APIs are fail-closed without OIDC. Require the exact org client rather than deploying an
-# intentionally inaccessible or tokenless development setup.
-[[ -n "${OIDC_ISSUER_URL:-}" ]] || { err "OIDC_ISSUER_URL is required."; exit 1; }
-[[ -n "${OIDC_CLIENT_ID:-}" ]] || { err "OIDC_CLIENT_ID is required for this ClusterTenant."; exit 1; }
-[[ -n "${OIDC_REDIRECT_URI:-}" ]] || export OIDC_REDIRECT_URI="https://${CLUSTER_TENANT}.${BASE_DOMAIN}/api/v1/auth/callback"
+# Human APIs fail closed unless startup selects one authentication authority. Ordinary installs
+# require OIDC; the disposable `.test` smoke selects its proxy-proof development authority.
+if [[ "${OPENCRANE_TIER3_DEVELOPMENT_AUTH:-0}" == "1" ]]; then
+  [[ "$BASE_DOMAIN" == *.test ]] || { err "Tier 3 development authentication requires a reserved .test base domain."; exit 1; }
+  [[ -z "${OIDC_ISSUER_URL:-}" && -z "${OIDC_CLIENT_ID:-}" && -z "${OIDC_REDIRECT_URI:-}" && -z "${OIDC_CLIENT_SECRET:-}" && -z "${OIDC_SESSION_SECRET:-}" ]] || { err "Tier 3 development authentication cannot be combined with OIDC."; exit 1; }
+else
+  [[ -n "${OIDC_ISSUER_URL:-}" ]] || { err "OIDC_ISSUER_URL is required."; exit 1; }
+  [[ -n "${OIDC_CLIENT_ID:-}" ]] || { err "OIDC_CLIENT_ID is required for this ClusterTenant."; exit 1; }
+  [[ -n "${OIDC_REDIRECT_URI:-}" ]] || export OIDC_REDIRECT_URI="https://${CLUSTER_TENANT}.${BASE_DOMAIN}/api/v1/auth/callback"
+fi
 
 # Silo value profile: a per-ClusterTenant install in its own namespace. Shared cluster
 # controllers remain external.
@@ -120,7 +125,7 @@ PROFILE_SET=(
   # The server is served at the ClusterTenant host `<cluster-tenant>.<base>`.
   --set "ingress.controlPlaneHost=${CLUSTER_TENANT}.${BASE_DOMAIN}"
   # First-owner admission stays a release-local, non-secret contract; durable ownership is
-  # created later from verified OIDC callback evidence, never from Helm data.
+  # created later from the installation-selected authentication evidence, never from Helm data.
   --set-string "clustertenantManager.firstUser.clusterTenant=${CLUSTER_TENANT}"
 )
 echo -e "\033[0;32m[silo]\033[0m Profile: silo for ClusterTenant '$CLUSTER_TENANT' in namespace '$NAMESPACE' on $BASE_DOMAIN"

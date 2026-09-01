@@ -9,7 +9,7 @@ import { _ClusterTenantFromHost } from "./request-silo";
  *
  * Both facts must be present. The durable Principal comes from the authenticated admission
  * context, while the silo is independently re-derived from the trusted request host. Either one
- * missing or mismatched returns null, so a route can never fall back to the raw OIDC subject.
+ * missing or mismatched returns null, so a route can never fall back to a raw authority subject.
  *
  * It deliberately returns a plain identity shape rather than any domain caller type: each
  * router converts it into whatever caller type it owns, so this file needs no dependency
@@ -28,7 +28,8 @@ export function _ResolveRequestPrincipal(request: Request): RequestPrincipal | n
   const authUser = request.session?.authUser;
   const admittedPrincipal = request.authenticatedPrincipal;
   const siloId = _ClusterTenantFromHost(_RequestHost(request)) ?? "";
-	if (!authUser || !admittedPrincipal || !siloId || admittedPrincipal.siloId !== siloId || !admittedPrincipal.principalId.trim()) return null;
+	if (!authUser || !admittedPrincipal || !siloId || admittedPrincipal.siloId !== siloId || !admittedPrincipal.principalId.trim())
+		return null;
 	const authenticatedAt = new Date(authUser.authenticatedAt);
 	const verifiedAuthenticationAt = Number.isFinite(authenticatedAt.getTime()) ? authenticatedAt : null;
 

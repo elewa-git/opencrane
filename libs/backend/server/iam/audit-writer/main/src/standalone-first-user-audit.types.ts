@@ -8,7 +8,7 @@ export interface StandaloneFirstUserAuditClaim
 {
   /** Silo whose one-time owner row was admitted. */
   readonly clusterTenant: string;
-  /** OIDC subject admitted as that silo's first owner. */
+  /** Stable authentication-authority subject admitted as that silo's first owner. */
   readonly subject: string;
 }
 

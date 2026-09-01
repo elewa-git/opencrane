@@ -24,6 +24,7 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
+SMOKE_HOST_PROFILE="${SMOKE_HOST_PROFILE:-recommended}"
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -66,6 +67,8 @@ _retry()
   done
 }
 
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
+
 _diagnostics()
 {
   echo "[develop-smoke] ===== failure diagnostics ====="
@@ -85,37 +88,6 @@ _diagnostics()
     done < <(kubectl get pods -n "$diagnostic_namespace" -o name 2>/dev/null || true)
   done
   echo "[develop-smoke] ===== end diagnostics ====="
-}
-
-# Remove everything the run left in the Docker daemon: the cluster, any node containers a
-# killed earlier run stranded, their named + anonymous volumes, and the label-scoped images.
-# Without this, repeated smoke runs accumulate multi-GB writable layers and dangling image
-# layers until the Docker VM disk fills.
-_teardown_cluster_storage()
-{
-  local containers volumes volume
-  containers="$(docker ps -aq --filter "name=^k3d-${CLUSTER_NAME}-" 2>/dev/null || true)"
-  volumes=""
-  if [[ -n "$containers" ]]; then
-    # shellcheck disable=SC2086
-    volumes="$(docker inspect --format \
-      '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' \
-      $containers 2>/dev/null || true)"
-  fi
-  k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
-  if [[ -n "$containers" ]]; then
-    # shellcheck disable=SC2086
-    docker rm -f -v $containers >/dev/null 2>&1 || true
-  fi
-  while IFS= read -r volume; do
-    [[ -z "$volume" ]] && continue
-    docker volume rm "$volume" >/dev/null 2>&1 || true
-  done <<< "$volumes"
-  while IFS= read -r volume; do
-    [[ -z "$volume" ]] && continue
-    docker volume rm "$volume" >/dev/null 2>&1 || true
-  done < <(docker volume ls -q --filter "name=k3d-${CLUSTER_NAME}" 2>/dev/null || true)
-  docker image prune --all --force --filter "label=${SMOKE_IMAGE_LABEL}" >/dev/null 2>&1 || true
 }
 
 _cleanup()
@@ -437,21 +409,28 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for command in curl docker git helm k3d kubectl openssl; do _require_command "$command"; done
+for command in awk curl df docker git helm k3d kubectl npm openssl; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
   exit 1
 fi
+if [[ "$SMOKE_HOST_PROFILE" != "minimum" && "$SMOKE_HOST_PROFILE" != "recommended" ]]; then
+  echo "[develop-smoke] SMOKE_HOST_PROFILE must be 'minimum' or 'recommended', got '$SMOKE_HOST_PROFILE'." >&2
+  exit 1
+fi
 
-# Image preparation is the longest independent lane. Start it before k3d so cluster creation and
-# external-controller readiness consume the same wall-clock time without fanning out five builds
-# against the runner's small Docker daemon.
+echo "[develop-smoke] Resetting disposable k3d cluster '$CLUSTER_NAME'"
+_reset_smoke_storage
+_prepare_smoke_host_storage
+
+# Delete a retained cluster before the build lane so a failed low-disk run releases its largest
+# allocation before retrying. Image preparation still overlaps cluster creation and controller
+# readiness without fanning out five builds against the runner's small Docker daemon.
 _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
-k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
 k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" --wait
 
 echo "[develop-smoke] Installing external cluster prerequisites"
@@ -485,8 +464,8 @@ if ! wait "$IMAGE_PREPARATION_PID"; then
   exit 1
 fi
 IMAGE_PREPARATION_PID=""
-echo "[develop-smoke] Importing the complete current-silo image set in one k3d transfer"
-_retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
+echo "[develop-smoke] Importing the complete current-silo image set"
+_import_smoke_images
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
@@ -504,17 +483,16 @@ kubectl create secret generic opencrane-fleet-membership-verification \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "[develop-smoke] Installing the current silo through its app-owned deploy entrypoint"
-export OIDC_ISSUER_URL="https://issuer.opencrane.test"
-export OIDC_CLIENT_ID="develop-smoke"
-export OPENCRANE_OIDC_CLIENT_SECRET="$(_random_secret)"
-export OPENCRANE_OIDC_SESSION_SECRET="$(_random_secret)"
+OPENCRANE_TIER3_PROXY_SECRET="${OPENCRANE_TIER3_PROXY_SECRET:-$(_random_secret)}"
+OPENCRANE_TIER3_SESSION_SECRET="${OPENCRANE_TIER3_SESSION_SECRET:-$(_random_secret)}"
+export OPENCRANE_TIER3_DEVELOPMENT_AUTH=1
+export OPENCRANE_TIER3_PROXY_SECRET
+export OPENCRANE_TIER3_SESSION_SECRET
 # The disposable k3d image is imported by a local tag, not published to an OCI registry. The
 # production deploy path still requires a UI digest; this explicit escape keeps the smoke honest.
 export OPENCRANE_ALLOW_TAG_FLOAT=1
 export TIMEOUT_SECONDS
-# Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
-# host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
-"$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" \
+deploy_arguments=(
   --base-domain "$BASE_DOMAIN" \
   --cluster-tenant "$CLUSTER_TENANT" \
   --acme-email "$SMOKE_ACME_EMAIL" \
@@ -531,7 +509,10 @@ export TIMEOUT_SECONDS
   --postgres-values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-postgres-values.yaml" \
   --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml" \
   --set "certManager.mode=selfSigned" \
-  --set "certManager.issuerName=opencrane-develop-smoke-issuer"
+  --set "certManager.issuerName=opencrane-develop-smoke-issuer")
+# Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
+# host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
+"$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" "${deploy_arguments[@]}"
 
 echo "[develop-smoke] Waiting for every enabled workload and certificate"
 kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"

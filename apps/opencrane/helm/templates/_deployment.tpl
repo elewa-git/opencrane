@@ -4,6 +4,8 @@
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
+{{- $oidc := .Values.clustertenantManager.oidc -}}
+{{- $tier3Auth := .Values.clustertenantManager.tier3DevelopmentAuthentication -}}
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
@@ -41,6 +43,27 @@
 {{- end -}}
 {{- if and $firstUser.email (ne $membership.mode "standalone") -}}
 {{- fail "clustertenantManager.firstUser requires membership.mode=standalone" -}}
+{{- end -}}
+{{- if and $tier3Auth.enabled (ne .Values.global.environment "dev") -}}
+{{- fail "clustertenantManager.tier3DevelopmentAuthentication is restricted to global.environment=dev" -}}
+{{- end -}}
+{{- if and $tier3Auth.enabled (ne $membership.mode "standalone") -}}
+{{- fail "clustertenantManager.tier3DevelopmentAuthentication requires standalone membership" -}}
+{{- end -}}
+{{- if and $tier3Auth.enabled (or (empty $firstUser.email) (empty $firstUser.clusterTenant)) -}}
+{{- fail "clustertenantManager.tier3DevelopmentAuthentication requires the fixed firstUser identity and silo" -}}
+{{- end -}}
+{{- if and $tier3Auth.enabled (not (hasSuffix ".test" .Values.ingress.domain)) -}}
+{{- fail "clustertenantManager.tier3DevelopmentAuthentication requires a reserved .test ingress domain" -}}
+{{- end -}}
+{{- if and $tier3Auth.enabled (or $oidc.issuerUrl $oidc.clientId $oidc.redirectUri $oidc.existingSecret $oidc.clientSecret $oidc.sessionSecret) -}}
+{{- fail "clustertenantManager.tier3DevelopmentAuthentication cannot be combined with OIDC" -}}
+{{- end -}}
+{{- if and $tier3Auth.enabled (empty $tier3Auth.existingSecret) -}}
+{{- fail "clustertenantManager.tier3DevelopmentAuthentication.existingSecret is required when enabled" -}}
+{{- end -}}
+{{- if and (not $tier3Auth.enabled) $tier3Auth.existingSecret -}}
+{{- fail "clustertenantManager.tier3DevelopmentAuthentication.existingSecret requires enabled=true" -}}
 {{- end -}}
 {{- if not (hasPrefix "https://" $ociRegistry.baseUrl) -}}
 {{- fail "clustertenantManager.workflows.ociRegistry.baseUrl must use https" -}}
@@ -219,6 +242,16 @@ spec:
             - name: ARTIFACT_SCANNER_NAMESPACE
               value: {{ include "opencrane.artifactScanner.namespace" . | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "opencrane-server") | nindent 12 }}
+            {{- if $tier3Auth.enabled }}
+            # The disposable Tier 3 proxy proves the login request; human identity still comes
+            # only from this installation's fixed first-user and silo configuration.
+            - name: OPENCRANE_AUTH_MODE
+              value: tier3-development
+            - name: OPENCRANE_TIER3_PROXY_SECRET_PATH
+              value: /var/run/opencrane/tier3-auth/proxy-secret
+            - name: OPENCRANE_TIER3_SESSION_SECRET_PATH
+              value: /var/run/opencrane/tier3-auth/session-secret
+            {{- else }}
             {{- with .Values.clustertenantManager.oidc }}
             {{- if .issuerUrl }}
             # OIDC is the only public human-authentication path. When it is absent the API
@@ -268,6 +301,7 @@ spec:
             #    rendered as no env var, so the seed grants operator to NOBODY (fail-closed).
             - name: OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
               value: {{ .platformOperatorSeedEmail | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- end }}
@@ -330,6 +364,11 @@ spec:
             - name: runtime-continuation-keyring
               mountPath: /var/run/opencrane/runtime-continuation
               readOnly: true
+            {{- if $tier3Auth.enabled }}
+            - name: tier3-development-auth
+              mountPath: /var/run/opencrane/tier3-auth
+              readOnly: true
+            {{- end }}
             {{- if $ociRegistryAuthorization.existingSecret }}
             - name: oci-registry-authorization
               mountPath: /var/run/opencrane/oci-registry
@@ -408,6 +447,17 @@ spec:
             items:
               - key: {{ $continuationKeyring.secretKey | quote }}
                 path: keyring.json
+        {{- if $tier3Auth.enabled }}
+        - name: tier3-development-auth
+          secret:
+            secretName: {{ $tier3Auth.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: proxy-secret
+                path: proxy-secret
+              - key: session-secret
+                path: session-secret
+        {{- end }}
         {{- if $ociRegistryAuthorization.existingSecret }}
         # OpenCrane re-reads this file for every registry request so Secret rotation takes effect.
         - name: oci-registry-authorization

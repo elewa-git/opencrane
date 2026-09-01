@@ -143,7 +143,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Overview', link: '/contributing/overview' },
-          { text: 'Frontend development', link: '/contributing/frontend-development' },
+          { text: 'Local development tiers', link: '/contributing/frontend-development' },
           { text: 'The CI pipeline', link: '/contributing/ci-pipeline' },
           { text: 'Deploying', link: '/contributing/deploying' },
           { text: 'Versions and migrations', link: '/contributing/versions-and-migrations' },

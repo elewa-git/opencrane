@@ -22,6 +22,7 @@ import { _log } from "./app/log";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
 import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition";
 import { _CreateConversationSocketAuthenticator } from "./app/conversation-socket-authenticator";
+import { _CreateTier3DevelopmentAuthentication } from "./app/tier3-development-authentication";
 import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
@@ -61,7 +62,9 @@ async function _Main(): Promise<void>
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
-	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
+	const authentication = config.tier3DevelopmentAuthentication === null
+		? _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission)
+		: _CreateTier3DevelopmentAuthentication(prisma, config.tier3DevelopmentAuthentication);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, managedRunAdmission, personalRunAdmission, runCancellation, authentication, _ReadOrganizationMembershipConfig(), true, config.runtime.artifactScannerEnabled, true, publicHealth, workflows.execution, workflows, mcpRuntime, providerEffects);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);

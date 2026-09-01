@@ -9,11 +9,11 @@ import type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionIn
  * expiry check, exact tuple comparison, persistence-outage mapping, Principal-result validation,
  * request attachment, and successful continuation.
  *
- * Called by: production OIDC and Tier 2 development authentication middleware after public bypass.
+ * Called by: production OIDC, Tier 2, and Tier 3 development authentication middleware after public bypass.
  * @param request - Request carrying the server-owned browser session.
  * @param response - Response used for the common 401 and 503 envelopes.
  * @param next - Product-route continuation invoked only after exact Principal admission.
- * @param admission - Durable Principal resolver shared by production and Tier 2 browser authentication.
+ * @param admission - Durable Principal resolver shared by production, Tier 2, and Tier 3 browser authentication.
  * @param authority - Startup and host-resolved authority, or null when the mode cannot admit it.
  * @param sessionRequiredError - Mode-specific anonymous-session error text.
  * @param onUnavailable - Optional structured logging hook invoked before the common 503 response.

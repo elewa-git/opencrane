@@ -73,17 +73,17 @@ async function _resolveAuth(
   const siloId = _ClusterTenantFromHost(_RequestHost(req))?.trim() ?? "";
   const issuer = authUser?.issuer?.trim() ?? "";
   const subject = authUser?.sub?.trim() ?? "";
-  let input: AuthenticatedPrincipalAdmissionInput | null = null;
-  if (oidcConfig.enabled && authUser && siloId && issuer === oidcConfig.issuerUrl && subject)
-  {
-    input = {
+	let input: AuthenticatedPrincipalAdmissionInput | null = null;
+	if (oidcConfig.enabled && authUser && siloId && issuer === oidcConfig.issuerUrl && subject)
+	{
+		input = {
 		siloId,
 		issuer,
 		subject,
 	};
-  }
-  await _AdmitBrowserSession(req, res, next, admission, input, "OIDC session required", function _LogUnavailable(err)
-  {
-    log.warn({ err, siloId }, "OIDC Principal admission is unavailable");
-  });
+	}
+	await _AdmitBrowserSession(req, res, next, admission, input, "OIDC session required", function _LogUnavailable(err)
+	{
+		log.warn({ err, siloId }, "OIDC Principal admission is unavailable");
+	});
 }

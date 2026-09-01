@@ -123,6 +123,9 @@ jobs:
       - name: Prove app-owned deployable selection
         run: npm run test:affected-deployables
 
+      - name: Prove local development workflows
+        run: npm run test:local-development
+
       - name: Emit affected deployable matrix
         id: affected
         env:
@@ -549,6 +552,16 @@ jobs:
             --output /tmp/k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
           echo "${K3D_LINUX_AMD64_SHA256}  /tmp/k3d" | sha256sum --check
           sudo install --mode 0755 /tmp/k3d /usr/local/bin/k3d
+
+      - name: Install kubectl
+        env:
+          KUBECTL_VERSION: v1.30.10
+          KUBECTL_LINUX_AMD64_SHA256: bc74dbeefd4b9d53f03016f6778f3ffc9a72ef4ca7b7c80fd5dc1a41d52dcab7
+        run: |
+          curl --location --fail --silent --show-error \
+            --output /tmp/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "${KUBECTL_LINUX_AMD64_SHA256}  /tmp/kubectl" | sha256sum --check
+          sudo install --mode 0755 /tmp/kubectl /usr/local/bin/kubectl
 
       - name: Install Helm
         uses: azure/setup-helm@v5

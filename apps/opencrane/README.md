@@ -206,7 +206,8 @@ are:
 | `AGENT_RUNTIME_CONTINUATION_KEYRING_PATH` | Read-only mounted keyring used to encrypt and decrypt durable runtime continuations | required |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
-| `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
+| `OIDC_*` | Production organisation sign-in, callbacks, and server-side session protection | required outside Tier 3 |
+| `OPENCRANE_AUTH_MODE`, `OPENCRANE_TIER3_*_SECRET_PATH` | Select the dev-only fixed Tier 3 identity and its file-mounted, per-run proxy/session secrets | OIDC mode |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
@@ -231,6 +232,12 @@ also supply separate owner-only controller and runtime launch-secret paths. The 
 entrypoint refuses production mode, non-loopback databases, identity overrides, and missing Agent
 credentials before it opens a listener. Tier 2 keeps the governed skill catalogue readable but omits
 skill-validation submission because that Kubernetes-backed worker is not part of the local profile.
+
+The full-silo `npm run dev:tier3` profile selects a separate development authentication mode. Its
+loopback proxy overwrites caller-provided proof with a fresh run secret, while the server requires
+the exact `.test` host and startup-selected issuer, silo, and subject. Login projects that identity
+through the normal durable Principal and standalone Owner authorities before issuing a signed,
+bounded session. The chart rejects this mode outside `global.environment=dev` or alongside OIDC.
 
 In standalone mode, successful OIDC authentication does not itself grant product access. Existing
 active members proceed normally. A verified identity without membership can call only the signed

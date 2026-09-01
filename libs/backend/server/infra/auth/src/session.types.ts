@@ -3,12 +3,12 @@ import "express-session";
 /**
  * Carries the logged-in human in the server-owned request session.
  *
- * Production OIDC writes this through its login-backed session store. Tier 2 builds the same shape
- * after checking the request host and origin, so the shared Principal admission can enforce the
- * same identity tuple and expiry contract before product routes run.
+ * Production OIDC and Tier 3 write this through their login-backed session stores. Tier 2 builds
+ * the same shape after checking the request host and origin, so the shared Principal admission can
+ * enforce the same identity tuple and expiry contract before product routes run.
  *
- * @see https://github.com/expressjs/session/tree/v1.19.0 — the session store used by production;
- *      its augmentation at the bottom of this file also types Tier 2's request value.
+ * @see https://github.com/expressjs/session/tree/v1.19.0 — the session store used by production
+ *      and Tier 3; its augmentation at the bottom of this file also types Tier 2's request value.
  */
 export interface AuthUser
 {

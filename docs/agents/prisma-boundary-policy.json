@@ -2231,7 +2231,8 @@
 			"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
 			"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 			"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
-			"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts"
+			"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts",
+			"apps/opencrane/src/app/tier3-development-authentication.ts"
 		]
 	},
 	"rawProcedureCalls": [

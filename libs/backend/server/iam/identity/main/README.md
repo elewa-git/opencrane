@@ -65,6 +65,11 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   lifecycle, and the `/auth/me` enrichment that adds the caller's resolved ClusterTenant.
 - `___AuthRouter` — the Express routes for session introspection (`/me`) and the OIDC browser flow
   (`/login`, `/callback`, `/logout`).
+- `Tier3DevelopmentAuthService`, `___Tier3DevelopmentAuthRouter` — the dev-only fixed-identity
+  login, exact proxy-proof check, durable Principal/Owner admission, central capability projection,
+  and signed-session lifecycle.
+- `Tier3DevelopmentAuthenticationConfig` — the fixed identity and proof inputs supplied by the
+  private loopback-proxy composition.
 - `PrismaAuthenticatedPrincipalAdmissionUnitOfWork` — atomically reconciles the verified claim set,
   exact-resolves the durable Principal, and projects `organization:administer` through the central
   authorization authority for `/auth/me`.
@@ -79,7 +84,8 @@ transaction boundaries, and failure behavior.
 
 ## Boundary
 
-Consumed by the server's HTTP composition root, which mounts `___AuthRouter` before the auth
+Consumed by the server's HTTP composition root, which mounts exactly one production OIDC or Tier 3
+router before the matching auth
 middleware (these routes are public and enforce their own checks per handler). It owns identity, not
 authorisation — it produces the verified facts, and separate packages decide access. Fail-closed:
 unverified or ambiguous identity yields no session or an anonymous one, never a trusted one.

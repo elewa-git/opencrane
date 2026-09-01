@@ -22,6 +22,7 @@ operator-owned, and a retry still proves no unmanaged database or login survived
 | `Chart.yaml`, `templates/` | Gives all workloads the same naming, access-control, database, identity, and monitoring conventions. The parent release reuses these Helm helpers; they do not install anything on their own. |
 | `k8s-deploy.sh` | Installs or upgrades a silo from reviewed application images. It checks the live database first, applies the matching database and application changes, restarts services when their connection details change, and waits until the intended workloads are actually ready. An optional verification step also checks pods, DNS, and public health. |
 | `invitation-signing-secret.sh` | Keeps invitation links valid across routine upgrades. It creates the silo's signing key once, checks that the saved key is usable, and reuses it instead of silently rotating it. |
+| `tier3-development-auth.sh` | Validates the disposable `.test` authentication contract, publishes its independent proxy and session secrets without exposing them in process arguments, and appends only non-secret Helm settings. |
 | `runtime-continuation-keyring-secret.sh` | Creates the continuation encryption keyring once through a mode-0600 temporary file and retains valid existing keys. Rotation changes the active key while keeping older keys until their saved rows are gone. |
 | `qualified-release-image-policy.sh` | Keeps first-party services on one reviewed build, resolves exact digests for workflow runtimes and workers, enables those completed planes, and verifies every image before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
@@ -43,16 +44,31 @@ operator-owned, and a retry still proves no unmanaged database or login survived
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
 digest of the last validated image set. Its sequential image lane overlaps cluster and controller
-preparation, then imports the complete image inventory in one k3d transfer. A pull request bypasses
+preparation, then imports the complete image inventory in one k3d transfer. The Tier 3 contributor
+wrapper instead selects a low-disk path that removes the reproducible workspace dependency tree,
+clears disposable host caches, reserves 12 GB for the remaining workload images, imports each local
+image, and removes its Docker-side source after k3d accepts it. A pull request bypasses
 that cluster only when one positive proof binds its exact base SHA to a completed successful push or
-manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
-for `develop` and reviewed feature-stack bases; unknown or unavailable evidence fails closed to
-k3d. Both tiers install pinned cert-manager and
+manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The
+same evidence works for `develop` and reviewed feature-stack bases; unknown or unavailable evidence
+fails closed to k3d. Both tiers install pinned cert-manager and
 CloudNativePG and fail on workload, database, Certificate, or TLS health. Ordinary pull requests use
 fast local-path storage; `develop`, explicit k3d dispatches, and storage-sensitive changes install
 the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUSTER=1` for local
 diagnosis. Backup/restore and production storage, DNS, and transport remain separate live
 qualifications.
+
+`npm run dev:tier3:infra` (also available as `npm run dev:tier3`) is the credential-free contributor
+entrypoint around this smoke. Its minimum-host default uses
+fast local-path storage, allows 600 seconds for loaded Codespaces machines, reclaims host package and
+Docker image-build caches, retains the cluster, and starts a loopback proxy that validates the
+Codespaces origin before presenting one fixed `.test` Host and forwarded authority to the real
+ingress. The proxy adds its fresh per-run proof only to exact login and reauthentication reads; the
+server then projects the configured Principal and Owner before it creates an independently signed
+session. On a recommended
+host, use `SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full` to preserve
+dependencies and caches, batch the import, and prove storage expansion. Use `--smoke-only` when
+browser access is unnecessary.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads

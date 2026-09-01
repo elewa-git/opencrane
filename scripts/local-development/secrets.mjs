@@ -12,7 +12,7 @@ import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
  * @returns {string} The trimmed, non-empty credential.
  * @throws When the path is missing, linked, not a regular private file, empty, or unreadable.
  */
-function _readRequiredSecret(filePath, label)
+function _readRequiredOwnerOnlySecret(filePath, label)
 {
 	let secret;
 	let statistics;
@@ -52,6 +52,10 @@ function _readRequiredSecret(filePath, label)
 	{
 		throw new Error(`${label} file is empty: ${filePath}`);
 	}
+	if (/[\u0000-\u001f\u007f]/u.test(secret))
+	{
+		throw new Error(`${label} file contains a control character: ${filePath}`);
+	}
 
 	return secret;
 }
@@ -61,7 +65,7 @@ export function readOrCreateLocalSecret(filePath, label, prefix, randomBytes = c
 {
 	if (fs.existsSync(filePath))
 	{
-		return _readRequiredSecret(filePath, label);
+		return _readRequiredOwnerOnlySecret(filePath, label);
 	}
 
 	fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
@@ -94,7 +98,7 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 
 	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
-		const providerKey = _readRequiredSecret(configuration.providerKeyPath, "Selected local provider key");
+		const providerKey = _readRequiredOwnerOnlySecret(configuration.providerKeyPath, "Selected local provider key");
 
 		if (providerKey === postgresPassword)
 		{
@@ -132,7 +136,7 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 
 	return {
 		postgresPassword,
-		liteLLMMasterKey: _readRequiredSecret(configuration.remoteLiteLLMMasterKeyPath, "Remote LiteLLM admin key")
+		liteLLMMasterKey: _readRequiredOwnerOnlySecret(configuration.remoteLiteLLMMasterKeyPath, "Remote LiteLLM admin key")
 	};
 }
 

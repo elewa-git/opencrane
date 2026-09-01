@@ -168,6 +168,10 @@ package imports it.
   requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
   every `develop` push also prove pinned expandable storage. Neither tier substitutes for
   backup/recovery or production qualification.
+- `npm run dev:tier3` runs that credential-free full-silo workflow for local infrastructure work,
+  retains the qualified k3d cluster, and exposes its `.test` ingress through a loopback proxy. A
+  fresh proxy proof admits only the installation-selected development identity; production and
+  remote environments continue to require OIDC.
 
 ## Sub-docs (the deep detail)
 

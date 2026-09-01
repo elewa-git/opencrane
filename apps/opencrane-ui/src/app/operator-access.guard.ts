@@ -37,7 +37,7 @@ export const ___OperatorAccessGuard: CanActivateFn = async function ___OperatorA
 	if (!session.authenticated())
 	{
 		// Carry the exact Angular-owned same-origin URL through the public login route. Invitation tokens
-		// stay in the URL long enough to survive OIDC, but are never copied into browser storage;
+		// stay in the URL long enough to survive the selected login, but never enter browser storage;
 		// the acceptance route replaces the token-bearing URL before its API call.
 		// Route metadata makes registration opt-in; other guarded routes retain ordinary login.
 		if (route.data["registrationOnAnonymous"] === true)

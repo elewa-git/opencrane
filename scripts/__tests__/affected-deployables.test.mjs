@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -35,6 +36,13 @@ function _Workflow()
 function _DevelopSmoke()
 {
 	const path = fileURLToPath(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url));
+	return readFileSync(path, "utf8");
+}
+
+/** Reads the storage owner sourced by the current-silo smoke test. */
+function _DevelopSmokeImageStorage()
+{
+	const path = fileURLToPath(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh", import.meta.url));
 	return readFileSync(path, "utf8");
 }
 
@@ -191,9 +199,11 @@ test("reuses only an exact-SHA baseline with a successful current-silo k3d job",
 	}), false);
 });
 
-test("overlaps image preparation and imports one complete direct k3d batch", function _ProtectsFastSmokeOrchestration()
+test("overlaps image preparation and keeps the fast direct k3d batch", function _ProtectsFastSmokeOrchestration()
 {
 	const smoke = _DevelopSmoke();
+	const imageStorage = _DevelopSmokeImageStorage();
+	assert.match(smoke, /_reset_smoke_storage[\s\S]*?_prepare_images &[\s\S]*?k3d cluster create "\$CLUSTER_NAME"/u);
 	assert.match(smoke, /_prepare_images &[\s\S]*?IMAGE_PREPARATION_PID=\$!/u);
 	assert.match(smoke, /if ! wait "\$IMAGE_PREPARATION_PID"/u);
 	assert.match(smoke, /cert-manager jetstack\/cert-manager[\s\S]*?&[\s\S]*?CERT_MANAGER_INSTALL_PID=\$![\s\S]*?cnpg cnpg\/cloudnative-pg/u);
@@ -203,9 +213,16 @@ test("overlaps image preparation and imports one complete direct k3d batch", fun
 	assert.match(smoke, /--cache-to "type=registry,ref=\$\{SMOKE_BUILD_CACHE_EXPORT\}:\$\{project\},mode=max"/u);
 	// The six image preparations must stay concurrent — serially they dominated the smoke.
 	assert.match(smoke, /_prepare_image "\$project" "\$local_image" "\$remote_image" "\$dockerfile" \\\n\s+>"\$log_dir\/\$project\.log" 2>&1 &/u);
-	const imports = smoke.match(/k3d image import/g) ?? [];
-	assert.equal(imports.length, 1);
-	assert.match(smoke, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
+	assert.match(imageStorage, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
+	assert.match(imageStorage, /SMOKE_HOST_PROFILE" == "recommended"[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
+});
+
+test("executes the current-silo image storage contract", function _ExecutesImageStorageContract()
+{
+	const path = fileURLToPath(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage-contract.sh", import.meta.url));
+	const output = execFileSync("bash", [path], { encoding: "utf8" });
+
+	assert.match(output, /develop-smoke image storage contract: PASS/u);
 });
 
 test("keeps the storage expansion proof targeted while preserving protected qualification", function _SelectsStorageMode()
@@ -213,6 +230,7 @@ test("keeps the storage expansion proof targeted while preserving protected qual
 	assert.equal(selectDevelopSmokeStorageMode(["apps/opencrane/src/main.ts"], "pull_request", "refs/pull/1/merge", ""), "fast");
 	assert.equal(selectDevelopSmokeStorageMode(["apps/postgres/helm/values.yaml"], "pull_request", "refs/pull/1/merge", ""), "full");
 	assert.equal(selectDevelopSmokeStorageMode(["apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh"], "pull_request", "refs/pull/1/merge", ""), "full");
+	assert.equal(selectDevelopSmokeStorageMode(["apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"], "pull_request", "refs/pull/1/merge", ""), "full");
 	assert.equal(selectDevelopSmokeStorageMode([], "push", "refs/heads/develop", ""), "full");
 	assert.equal(selectDevelopSmokeStorageMode([], "workflow_dispatch", "refs/heads/feature", "k3d"), "full");
 });

@@ -37,7 +37,7 @@ export interface ResourceShareCaller
 {
 	/** Silo selected from trusted request and membership evidence. */
 	readonly siloId: string;
-	/** Stable local principal resolved from the verified OIDC identity. */
+	/** Stable local principal resolved from the verified authentication-authority identity. */
 	readonly principalId: string;
 }
 

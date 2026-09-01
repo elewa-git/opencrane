@@ -29,6 +29,7 @@ import "./session.types";
 
 export type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput, AuthenticatedRequestPrincipal } from "./authenticated-principal-admission.types";
 export { _AdmitBrowserSession } from "./browser-session-admission";
+export { ___DevelopmentAuthMiddleware } from "./development-auth-middleware";
 export { ___LoadOidcAuthConfig } from "./oidc-config";
 export type { OidcAuthConfig } from "./oidc-config.types";
 export { _RequestHost } from "./request-host";
@@ -55,6 +56,8 @@ export { OidcAuthServiceBase } from "./oidc-service";
 export { PrismaOwnedOrgSummaryRepository } from "./prisma-owned-org-summary-repository";
 export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types";
 export { ___AuthMiddleware } from "./auth-middleware";
+export { ___CreateBrowserSessionMiddleware } from "./oidc-session-middleware";
+export type { BrowserSessionConfig } from "./browser-session.types";
 export * from "./per-org-client";
 export type * from "./per-org-client.types";
 export * from "./request-silo";

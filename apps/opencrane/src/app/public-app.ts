@@ -49,7 +49,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
 /**
  * Build the ingress-facing Express application.
  *
- * Authentication precedes every product route, while the OIDC router remains public so it can
+ * Authentication precedes every product route, while the selected login router remains public so it can
  * establish the browser session that the product routes require.
  * @param prisma - The main product database client.
  * @param runAdmission - Managed run admission port shared with scheduler execution.

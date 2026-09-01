@@ -3,6 +3,7 @@ import { URL } from "node:url";
 import type { RequestHandler } from "express";
 import session from "express-session";
 
+import type { BrowserSessionConfig } from "./browser-session.types";
 import type { OidcAuthConfig } from "./oidc-config.types";
 
 /**
@@ -18,7 +19,20 @@ import type { OidcAuthConfig } from "./oidc-config.types";
  */
 export function ___CreateOidcSessionMiddleware(config: OidcAuthConfig): RequestHandler[]
 {
-	if (!config.enabled) return [function _skipSession(_request, _response, next) { next(); }];
+	if (!config.enabled)
+		return [function _skipSession(_request, _response, next) { next(); }];
+	return ___CreateBrowserSessionMiddleware(config);
+}
+
+/**
+ * Creates a signed browser session and its same-origin mutation guard.
+ *
+ * Called by: OIDC and explicitly selected development authentication compositions.
+ * @param config - Startup-selected cookie name, lifetime, transport policy, and signing secret.
+ * @returns The session restoration handler followed by the authenticated CSRF guard.
+ */
+export function ___CreateBrowserSessionMiddleware(config: BrowserSessionConfig): RequestHandler[]
+{
 	return [
 		session({
 			name: config.cookieName,
@@ -45,13 +59,15 @@ function _CsrfOriginCheck(): RequestHandler
 	const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 	return function _csrfCheck(request, response, next)
 	{
-		if (safeMethods.has(request.method) || !request.session?.authUser) return void next();
+		if (safeMethods.has(request.method) || !request.session?.authUser)
+			return void next();
 		const expected = `${request.protocol}://${request.hostname}`;
 		const origin = request.headers.origin;
 		const referer = request.headers.referer;
 		if (origin !== undefined)
 		{
-			if (origin !== expected) response.status(403).json({ error: "CSRF check failed.", code: "CSRF_ORIGIN_MISMATCH" });
+			if (origin !== expected)
+				response.status(403).json({ error: "CSRF check failed.", code: "CSRF_ORIGIN_MISMATCH" });
 			else next();
 			return;
 		}

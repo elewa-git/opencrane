@@ -10,9 +10,11 @@ for contract in \
   provision-contract.sh \
   preflight-cni-contract.sh \
   kubernetes-api-helm-args-contract.sh \
+  tier3-development-auth-contract.sh \
   runtime-continuation-keyring-secret-contract.sh \
   pooler-deploy-contract.sh \
   postgres-release-contract.sh \
+  server-kubernetes-api-deploy-contract.sh \
   workflow-engine-qualification-contract.sh \
   server-key-permissions-contract.sh \
   server-rbac-contract.sh \

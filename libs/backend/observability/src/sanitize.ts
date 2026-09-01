@@ -15,6 +15,7 @@ const _SENSITIVE_FIELD_NAMES = new Set([
 	"last-event-id",
 	"x-opencrane-scan-fence",
 	"x-opencrane-artifact-lease",
+	"x-opencrane-tier3-proxy-secret",
 	"cursor",
 	"claimfence",
 	"password",
@@ -46,14 +47,19 @@ function _isPlainRecord(value: object): boolean
 function _sanitizeLogValue(value: unknown, depth: number, seen: WeakSet<object>): unknown
 {
 	// 1. Preserve primitives and framework-owned special objects for pino's configured serializers.
-	if (value === null || typeof value !== "object") return value;
-	if (value instanceof Error || value instanceof Date || Buffer.isBuffer(value) || (!_isPlainRecord(value) && !Array.isArray(value))) return value;
+	if (value === null || typeof value !== "object")
+		return value;
+	if (value instanceof Error || value instanceof Date || Buffer.isBuffer(value) || (!_isPlainRecord(value) && !Array.isArray(value)))
+		return value;
 
 	// 2. Bound recursion and cycles before traversing attacker-controlled or accidental deep values.
-	if (depth >= _MAX_DEPTH) return _TRUNCATED;
-	if (seen.has(value)) return "[Circular]";
+	if (depth >= _MAX_DEPTH)
+		return _TRUNCATED;
+	if (seen.has(value))
+		return "[Circular]";
 	seen.add(value);
-	if (Array.isArray(value)) return value.map(item => _sanitizeLogValue(item, depth + 1, seen));
+	if (Array.isArray(value))
+		return value.map(item => _sanitizeLogValue(item, depth + 1, seen));
 
 	// 3. Redact exact field names case-insensitively while preserving diagnostic siblings.
 	const sanitized: Record<string, unknown> = {};

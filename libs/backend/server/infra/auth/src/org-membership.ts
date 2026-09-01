@@ -13,10 +13,11 @@ const _EMPTY: OwnedOrgSummaryFacts = { ownedOrgs: [] };
  * Missing subjects return an empty summary, while database failures remain errors so the API does
  * not present incomplete organisation data as a successful response.
  *
- * Always keyed on the subject the identity provider verified (OIDC `sub`), never on
- * anything from the request body or query.
+ * Always keyed on the subject the selected authentication authority verified, never on anything
+ * from the request body or query.
  *
- * Called by: `OidcAuthServiceBase.getStatus` in ./oidc-service.ts, on every `/auth/me`.
+ * Called by: `OidcAuthServiceBase.getStatus` and `Tier3DevelopmentAuthService.getStatus` on every
+ * matching `/auth/me` request.
  *
  * @param repository - Supplies the owner/admin rows; see {@link OwnedOrgSummaryRepository}.
  * @param subject - The caller's verified subject; empty or missing values return no summaries.

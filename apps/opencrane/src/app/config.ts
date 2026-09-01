@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneTier3DevelopmentAuthenticationConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -18,6 +18,12 @@ const _DEFAULT_ARTIFACT_OUTPUT_BYTES = 16 * 1_024 * 1_024;
 
 /** Receiver-id prefix reserved for migrated route rows; a configured receiver id may never use it. */
 const _LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX = "legacy-route-v0:";
+
+/** Reserves an issuer namespace for the installation-selected Tier 3 identity. */
+const _TIER3_DEVELOPMENT_ISSUER = "opencrane-tier3-development";
+
+/** Identifies the stable subject selected by the Tier 3 installation, never by a request. */
+const _TIER3_DEVELOPMENT_SUBJECT = "tier3-development-user";
 
 /** Read one bounded whole-number setting from the startup environment. */
 function _readBoundedInteger(name: string, fallback: number, minimum: number, maximum: number): number
@@ -108,6 +114,64 @@ function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig
 	return { email, clusterTenant, issuer };
 }
 
+/** Reads a secret file without admitting blank or undersized development authentication material. */
+function _readTier3Secret(name: string): string
+{
+	const path = _readRequiredAbsolutePath(name);
+	const secret = readFileSync(path, "utf8").trim();
+	if (Buffer.byteLength(secret) < 32)
+	{
+		throw new Error(`${name} must contain at least 32 bytes`);
+	}
+	return secret;
+}
+
+/** Reads the Tier 3 identity only when startup supplies its complete OIDC-exclusive contract. */
+function _readTier3DevelopmentAuthentication(): OpenCraneTier3DevelopmentAuthenticationConfig | null
+{
+	const mode = process.env.OPENCRANE_AUTH_MODE?.trim() ?? "";
+	const tier3Inputs = [process.env.OPENCRANE_TIER3_PROXY_SECRET_PATH, process.env.OPENCRANE_TIER3_SESSION_SECRET_PATH];
+	if (mode !== "" && mode !== "tier3-development")
+	{
+		throw new Error("OPENCRANE_AUTH_MODE must be empty or tier3-development");
+	}
+	if (mode !== "tier3-development")
+	{
+		if (tier3Inputs.some(Boolean))
+		{
+			throw new Error("Tier 3 authentication secret paths require OPENCRANE_AUTH_MODE=tier3-development");
+		}
+		return null;
+	}
+	const oidcInputs = [process.env.OIDC_ISSUER_URL, process.env.OIDC_CLIENT_ID, process.env.OIDC_CLIENT_SECRET, process.env.OIDC_REDIRECT_URI, process.env.OIDC_SESSION_SECRET];
+	if (oidcInputs.some(value => Boolean(value?.trim())))
+	{
+		throw new Error("Tier 3 development authentication cannot be combined with OIDC");
+	}
+	const email = _readRequired("OPENCRANE_STANDALONE_FIRST_USER_EMAIL").toLowerCase();
+	const siloId = _readRequired("OPENCRANE_STANDALONE_CLUSTER_TENANT");
+	if (process.env.OPENCRANE_MEMBERSHIP_MODE !== FleetMembershipDeploymentModes.Standalone)
+	{
+		throw new Error("Tier 3 development authentication requires OPENCRANE_MEMBERSHIP_MODE=standalone");
+	}
+	const publicBaseUrl = new URL(_readCredentialFreeHttpsOrigin("OPENCRANE_PUBLIC_BASE_URL"));
+	if (!publicBaseUrl.hostname.endsWith(".test") || publicBaseUrl.hostname.split(".")[0] !== siloId)
+	{
+		throw new Error("Tier 3 development authentication requires the configured silo's reserved .test host");
+	}
+	return {
+		displayName: "Tier 3 Developer",
+		email,
+		expectedHost: publicBaseUrl.host.toLowerCase(),
+		issuer: _TIER3_DEVELOPMENT_ISSUER,
+		proxySecret: _readTier3Secret("OPENCRANE_TIER3_PROXY_SECRET_PATH"),
+		sessionMaxAgeMilliseconds: 12 * 60 * 60 * 1_000,
+		sessionSecret: _readTier3Secret("OPENCRANE_TIER3_SESSION_SECRET_PATH"),
+		siloId,
+		subject: _TIER3_DEVELOPMENT_SUBJECT,
+	};
+}
+
 /**
  * Reads the startup-selected owner of organisation membership decisions.
  *
@@ -187,6 +251,7 @@ function _readWorkflowConfig(): OpenCraneWorkflowConfig
  */
 export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
+	const tier3DevelopmentAuthentication = _readTier3DevelopmentAuthentication();
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
@@ -217,7 +282,8 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		},
 		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
 		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),
-		standaloneFirstUserAdmission: _readStandaloneFirstUserAdmission(),
+		standaloneFirstUserAdmission: tier3DevelopmentAuthentication === null ? _readStandaloneFirstUserAdmission() : null,
+		tier3DevelopmentAuthentication,
 		workflows: _readWorkflowConfig(),
 	};
 }

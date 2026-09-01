@@ -75,7 +75,20 @@ bootstrap, runtime stream, candidate validation, and persistence, with Alternati
 LiteLLM, B using an explicit remote HTTPS LiteLLM, and C using deterministic model events without
 provider credentials.
 
-Tier 3 will branch from the Tier 2 branch for Kubernetes and full infrastructure validation.
+**Tier 3 built on `tier-2-local-application`:** `npm run dev:tier3:infra` (and its `dev:tier3`
+alias) reuses the blocking current-silo k3d smoke with `KEEP_CLUSTER=1`, then exposes the qualified ingress
+through a loopback proxy that works behind a Codespaces forwarded URL. The devcontainer supplies
+Docker-in-Docker and the CI-aligned Node 24, Helm v4.1.4, k3d v5.8.3, and kubectl v1.30.10 toolchain,
+enforces a 4-core/16-GB/32-GB minimum and recommends an 8-core/32-GB/64-GB host. The minimum profile
+skips or removes the unused host dependency tree, uses local-path storage, clears disposable caches,
+and releases each Docker-side image after k3d accepts it. The recommended profile installs workspace dependencies
+for a repository prebuild and can opt into batch imports plus storage expansion. The private
+Codespaces proxy authenticates login with fresh per-run proof; the server admits one fixed
+development Principal and Owner before issuing a bounded signed session, without contacting OIDC.
+Provider credentials and the routing default are configured after login through the authenticated
+provider settings flow; deployment never bootstraps either value. Smoke-only mode remains explicit;
+production DNS, certificates, cloud identity, backup/restore, and real-tenant upgrades remain remote
+qualification.
 
 ## Program — personal-agent platform
 

@@ -7,7 +7,7 @@ import type { OrganizationMemberRepository } from "./organization-member-reposit
 const _INVITATION_ACCEPTANCE_PATH = "/api/v1/organization/members/invitations/accept";
 
 /**
- * Gates standalone product routes on current active membership after OIDC authentication.
+ * Gates standalone product routes on current active membership after browser authentication.
  *
  * Invitation acceptance is the sole pre-membership product exception. It still verifies the signed
  * token, provider-verified email, subject, and host-selected silo before creating membership. A

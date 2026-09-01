@@ -33,14 +33,16 @@ function _status(error: OrganizationMembershipError): number
 /** Requires the standard idempotency header without accepting a body fallback. */
 function _idempotencyKey(value: string | string[] | undefined): string
 {
-	if (typeof value !== "string") throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Invalid, "Idempotency-Key header is required");
+	if (typeof value !== "string")
+		throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Invalid, "Idempotency-Key header is required");
 	return value;
 }
 
 /** Requires one scalar Express path parameter. */
 function _pathParameter(value: string | string[] | undefined): string
 {
-	if (typeof value !== "string" || value.length === 0) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Invalid, "invitationId path parameter is required");
+	if (typeof value !== "string" || value.length === 0)
+		throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Invalid, "invitationId path parameter is required");
 	return value;
 }
 
@@ -76,7 +78,7 @@ function _handle(handler: RequestHandler): RequestHandler
  *
  * Called by: apps/opencrane/src/app/routes.ts at `/api/v1/organization/members`.
  * @param authority - Startup-selected standalone or Fleet authority.
- * @param resolveCaller - Maps the verified OIDC session and trusted request host.
+ * @param resolveCaller - Maps the admitted browser identity and trusted request host.
  * @returns Router serving directory, validation, create, resend, and acceptance.
  */
 export function _CreateOrganizationMembersRouter(authority: OrganizationMembershipAuthority, resolveCaller: OrganizationMembershipCallerResolver): Router
@@ -85,20 +87,23 @@ export function _CreateOrganizationMembersRouter(authority: OrganizationMembersh
 	router.get("/", _handle(async function _Directory(request, response)
 	{
 		const caller = resolveCaller(request);
-		if (caller === null) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
+		if (caller === null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
 		response.json(await authority.directory(caller));
 	}));
 	router.post("/invitations/validate", _handle(async function _Validate(request, response)
 	{
 		const caller = resolveCaller(request);
-		if (caller === null) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
+		if (caller === null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
 		const body = _RecipientsSchema.parse(request.body);
 		response.json(await authority.validate({ caller, emails: body.emails }));
 	}));
 	router.post("/invitations", _handle(async function _Create(request, response)
 	{
 		const caller = resolveCaller(request);
-		if (caller === null) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
+		if (caller === null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
 		const body = _CreateSchema.parse(request.body);
 		const result = await authority.create({ caller, emails: body.emails, role: body.role, idempotencyKey: _idempotencyKey(request.headers["idempotency-key"]) });
 		response.status(result.createdCount > 0 ? 201 : 200).json(result);
@@ -106,13 +111,15 @@ export function _CreateOrganizationMembersRouter(authority: OrganizationMembersh
 	router.post("/invitations/:invitationId/resend", _handle(async function _Resend(request, response)
 	{
 		const caller = resolveCaller(request);
-		if (caller === null) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
+		if (caller === null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
 		response.json(await authority.resend({ caller, invitationId: _pathParameter(request.params.invitationId), idempotencyKey: _idempotencyKey(request.headers["idempotency-key"]) }));
 	}));
 	router.post("/invitations/accept", _handle(async function _Accept(request, response)
 	{
 		const caller = resolveCaller(request);
-		if (caller === null) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
+		if (caller === null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
 		const body = _AcceptSchema.parse(request.body);
 		response.json(await authority.accept({ caller, token: body.token }));
 	}));

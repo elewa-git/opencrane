@@ -18,6 +18,16 @@ function _createInvitationSigningKey(): string
 	return path;
 }
 
+/** Creates a mounted Tier 3 secret file with the minimum accepted entropy length. */
+function _createTier3Secret(name: string, byte: number): string
+{
+	const directory = mkdtempSync(join(tmpdir(), "opencrane-tier3-auth-"));
+	const path = join(directory, name);
+	_temporaryDirectories.push(directory);
+	writeFileSync(path, Buffer.alloc(32, byte).toString("base64url"));
+	return path;
+}
+
 describe("opencrane process config", function _ProcessConfigSuite()
 {
 	beforeEach(function _stubRequiredMemoryGatewayEnvironment()
@@ -118,6 +128,52 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "testv2");
 		vi.stubEnv("OIDC_ISSUER_URL", "https://issuer.example");
 		expect(_ReadProcessConfig().standaloneFirstUserAdmission).toEqual({ email: "jente@elewa.ke", clusterTenant: "testv2", issuer: "https://issuer.example" });
+	});
+
+	it("selects the complete Tier 3 identity without enabling OIDC", function _ReadTier3Authentication()
+	{
+		vi.stubEnv("OPENCRANE_AUTH_MODE", "tier3-development");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://smoke.develop-smoke.opencrane.test");
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "OWNER@DEVELOP-SMOKE.OPENCRANE.TEST");
+		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "smoke");
+		vi.stubEnv("OPENCRANE_TIER3_PROXY_SECRET_PATH", _createTier3Secret("proxy", 3));
+		vi.stubEnv("OPENCRANE_TIER3_SESSION_SECRET_PATH", _createTier3Secret("session", 4));
+		const config = _ReadProcessConfig();
+		expect(config.standaloneFirstUserAdmission).toBeNull();
+		expect(config.tier3DevelopmentAuthentication).toMatchObject({
+			displayName: "Tier 3 Developer",
+			email: "owner@develop-smoke.opencrane.test",
+			expectedHost: "smoke.develop-smoke.opencrane.test",
+			issuer: "opencrane-tier3-development",
+			siloId: "smoke",
+			subject: "tier3-development-user",
+		});
+		expect(config.tier3DevelopmentAuthentication?.proxySecret).toHaveLength(43);
+		expect(config.tier3DevelopmentAuthentication?.sessionSecret).toHaveLength(43);
+	});
+
+	it("rejects partial, mixed, or non-disposable Tier 3 authentication", function _RejectInvalidTier3Authentication()
+	{
+		vi.stubEnv("OPENCRANE_AUTH_MODE", "oidc");
+		expect(function _RejectUnusedOidcMode() { _ReadProcessConfig(); }).toThrow(/must be empty or tier3-development/);
+		vi.stubEnv("OPENCRANE_AUTH_MODE", "");
+
+		vi.stubEnv("OPENCRANE_TIER3_PROXY_SECRET_PATH", "/var/run/opencrane/tier3-auth/proxy-secret");
+		expect(function _ReadUnselectedTier3Secret() { _ReadProcessConfig(); }).toThrow(/require OPENCRANE_AUTH_MODE/);
+
+		vi.stubEnv("OPENCRANE_AUTH_MODE", "tier3-development");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://smoke.example.com");
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "owner@example.com");
+		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "smoke");
+		vi.stubEnv("OPENCRANE_TIER3_PROXY_SECRET_PATH", _createTier3Secret("proxy", 5));
+		vi.stubEnv("OPENCRANE_TIER3_SESSION_SECRET_PATH", _createTier3Secret("session", 6));
+		expect(function _ReadPublicTier3Host() { _ReadProcessConfig(); }).toThrow(/reserved \.test host/);
+
+		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://smoke.develop-smoke.opencrane.test");
+		vi.stubEnv("OIDC_ISSUER_URL", "https://issuer.example");
+		expect(function _ReadMixedAuthentication() { _ReadProcessConfig(); }).toThrow(/cannot be combined with OIDC/);
 	});
 
 	it("rejects a partial or non-standalone first-owner admission contract", function _RejectInvalidStandaloneFirstUserAdmission()

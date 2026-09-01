@@ -247,7 +247,7 @@ export const spec = {
   info: {
     title: "OpenCrane Control Plane API",
     version: "1.0.0",
-    description: "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — OIDC browser flow via `GET /auth/login` → `/auth/callback`. Session cookie is set server-side.\n- In-cluster workloads use short-lived, audience-bound projected service-account tokens at their dedicated internal trust boundaries.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials.",
+    description: "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — the selected browser authentication mode starts at `GET /auth/login`. Production OIDC completes at `/auth/callback`; disposable Tier 3 development establishes its fixed local identity directly. The session cookie is set server-side.\n- In-cluster workloads use short-lived, audience-bound projected service-account tokens at their dedicated internal trust boundaries.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials.",
   },
   servers: [
     { url: "/api/v1", description: "Versioned API prefix" },

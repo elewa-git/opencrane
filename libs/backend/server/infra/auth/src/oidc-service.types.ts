@@ -23,9 +23,9 @@ export interface AuthStatusUser extends AuthUser
  * The `/auth/me` response: what the browser app reads at startup to decide whether to show
  * the application or send the user to log in.
  *
- * Produced only by `OidcAuthServiceBase.getStatus`. `user` is null whenever
- * `authenticated` is false, and `mode` is `development` on a server with no OIDC
- * configuration, which tells the app not to offer login at all.
+ * Produced by the startup-selected browser authentication service. `user` is null whenever
+ * `authenticated` is false. Development mode may be an unauthenticated server without login or
+ * the disposable Tier 3 fixed-identity login selected by its composition root.
  */
 export interface AuthStatus
 {
@@ -35,7 +35,7 @@ export interface AuthStatus
   /** Whether a human session is currently established. */
   authenticated: boolean;
 
-  /** Authenticated user details when logged in through OIDC (with any subclass enrichment). */
+  /** Authenticated user details from the selected browser authority. */
   user: (AuthStatusUser & Record<string, unknown>) | null;
 }
 

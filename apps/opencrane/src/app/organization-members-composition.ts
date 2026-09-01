@@ -13,7 +13,8 @@ function _resolveCaller(request: Request): OrganizationMembershipCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
 	const authUser = request.session?.authUser;
-	if (principal === null || authUser === undefined) return null;
+	if (principal === null || authUser === undefined)
+		return null;
 	const email = authUser.emailVerified === true && typeof authUser.email === "string" ? authUser.email.trim().toLowerCase() : null;
 	const displayName = typeof authUser.name === "string" && authUser.name.trim().length > 0 ? authUser.name.trim() : email ?? principal.externalSubject;
 	return { siloId: principal.siloId, principalId: principal.principalId, subjectId: principal.externalSubject, verifiedEmail: email, displayName };
@@ -26,7 +27,7 @@ function _resolveCaller(request: Request): OrganizationMembershipCaller | null
  * standalone branch receives no Fleet client. Browser requests reach only the returned router and
  * therefore cannot select either branch.
  *
- * Called by: apps/opencrane/src/app/public-app.ts.
+ * Called by: the production and Tier 2 composition roots before they build HTTP and socket access.
  * @param prisma - Silo database client used only by standalone mode.
  * @param config - Startup-frozen deployment configuration.
  * @returns Authenticated member routes plus the optional standalone product-access gate.

@@ -44,6 +44,7 @@
     { "path": "apps/opencrane/src/app/runtime-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/run-cancellation-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/telemetry.ts", "owner": "apps/opencrane", "classification": "process-instrumentation" },
+    { "path": "apps/opencrane/src/app/tier3-development-authentication.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/user-onboarding-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/prisma/bootstrap/verify-persona-source-seeds.mjs", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/prisma/bootstrap/verify-onboarding-bootstrap-seeds.mjs", "owner": "apps/opencrane", "classification": "composition-test" },

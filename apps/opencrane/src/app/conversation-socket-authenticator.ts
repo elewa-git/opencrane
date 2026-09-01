@@ -26,21 +26,24 @@ import type { SelfConversationSocketAuthenticator } from "@opencrane/backend/ser
 export function _CreateConversationSocketAuthenticator(sessionMiddleware: readonly RequestHandler[], authMiddleware: RequestHandler): SelfConversationSocketAuthenticator
 {
 	const session = sessionMiddleware[0];
-	if (session === undefined) throw new Error("conversation socket authentication requires session middleware");
+	if (session === undefined)
+		throw new Error("conversation socket authentication requires session middleware");
 	return {
 		authenticate: async function _Authenticate(request: IncomingMessage)
 		{
-			if (!__IsSameOriginConversationSocketRequest(request)) return null;
+			if (!__IsSameOriginConversationSocketRequest(request))
+				return null;
 			await _RunSession(session, request);
 			const expressRequest = _AsExpressRequest(request);
-			if (!await _RunAuthentication(authMiddleware, expressRequest)) return null;
+			if (!await _RunAuthentication(authMiddleware, expressRequest))
+				return null;
 			const principal = _ResolveRequestPrincipal(expressRequest);
 			return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId, issuer: principal.externalIssuer, subjectId: principal.externalSubject };
 		}
 	};
 }
 
-/** Add Express's header accessor without copying the restored session onto a second request. */
+/** Adds Express's header accessor without copying the restored session onto a second request. */
 function _AsExpressRequest(request: IncomingMessage): Request
 {
 	return Object.assign(Object.create(request), {
@@ -70,18 +73,25 @@ export function __IsSameOriginConversationSocketRequest(request: IncomingMessage
 	const forwarded = typeof forwardedProtocol === "string" ? forwardedProtocol.split(",")[0]?.trim() : undefined;
 	const isEncrypted = "encrypted" in request.socket && request.socket.encrypted === true;
 	const protocol = forwarded ?? (isEncrypted ? "https" : "http");
-	if (typeof origin !== "string" || host === undefined || (protocol !== "http" && protocol !== "https")) return false;
+	if (typeof origin !== "string" || host === undefined || (protocol !== "http" && protocol !== "https"))
+		return false;
 	try { return new URL(origin).origin === `${protocol}://${host}`; }
 	catch { return false; }
 }
 
-/** Run the read-only session handler against an upgrade request without sending an HTTP response. */
+/** Runs the read-only session handler against an upgrade request without sending an HTTP response. */
 function _RunSession(session: RequestHandler, request: IncomingMessage): Promise<void>
 {
 	return new Promise<void>(function _Run(resolve, reject)
 	{
 		const response = new ServerResponse(request);
-		session(request as never, response as never, function _Next(error?: unknown) { if (error === undefined) resolve(); else reject(error); });
+		session(request as never, response as never, function _Next(error?: unknown)
+		{
+			if (error === undefined)
+				resolve();
+			else
+				reject(error);
+		});
 	});
 }
 
@@ -94,6 +104,12 @@ function _RunAuthentication(authenticate: RequestHandler, request: Request): Pro
 			status(): Response { return response as unknown as Response; },
 			json(): Response { resolve(false); return response as unknown as Response; },
 		} as unknown as Response;
-		authenticate(request, response, function _Next(error?: unknown) { if (error === undefined) resolve(true); else reject(error); });
+		authenticate(request, response, function _Next(error?: unknown)
+		{
+			if (error === undefined)
+				resolve(true);
+			else
+				reject(error);
+		});
 	});
 }

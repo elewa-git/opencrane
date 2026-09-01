@@ -22,7 +22,8 @@ runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   --set-string agentController.skillAuthoringValidation.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
   --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
   --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
-  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')"
+  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --set agentController.kubernetesApiServerEndpointPort=6443)"
 lease_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set opencrane-mcp-executor.mcpExecutor.controllerClaimLeaseSeconds=47 \
@@ -108,6 +109,9 @@ grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-runtime"' <
 grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
 grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-personal-warm' <<<"$runtime_server_policy"
 grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-managed-warm' <<<"$runtime_server_policy"
+grep -Fq '            cidr: "10.43.0.1/32"' <<<"$runtime_server_policy"
+grep -Fq '            cidr: "172.18.0.2/32"' <<<"$runtime_server_policy"
+grep -Fq '          port: 6443' <<<"$runtime_server_policy"
 if grep -Fq 'app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"; then
   echo "opencrane-server policy retained the retired per-Job runtime selector" >&2
   exit 1

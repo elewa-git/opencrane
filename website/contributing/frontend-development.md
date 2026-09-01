@@ -1,8 +1,8 @@
-# Local frontend and application development
+# Local development tiers
 
-The default OpenCrane UI development profile runs **onboarding and chat entirely in the browser**.
-Use it for routed UI, state, interaction, and error-state work without provisioning the OpenCrane API
-or any infrastructure services.
+OpenCrane provides three local loops: **browser-only UI**, the **real application with PostgreSQL**,
+and a **complete k3d silo**. Start with the lowest tier that proves the change so routine frontend or
+API work does not pay the full Kubernetes cost.
 
 > See also: [Contributing overview](/contributing/overview) (where local work fits in the delivery
 > process) and [The CI pipeline](/contributing/ci-pipeline) (the checks that qualify the finished
@@ -319,6 +319,99 @@ npm run dev:tier2:agent
 Restart the profile you were using if it was not the default Agent profile. For an ordinary branch
 switch without the `504 Outdated Optimize Dep` error, stop the coordinator, switch branches, and
 restart the profile without clearing either cache.
+
+## Start the Tier 3 full-silo profile
+
+Use Tier 3 for chart rendering, Kubernetes identity, NetworkPolicy, target-baseline installation, or other
+work that needs the complete silo. Open the repository in its devcontainer, preferably in a GitHub
+Codespace, then run:
+
+```bash
+npm run dev:tier3:infra
+```
+
+This credential-free profile (also available as `npm run dev:tier3`) qualifies infrastructure and
+login without reading a provider key. The silo has no default model until the logged-in developer
+configures one through the authenticated provider settings flow.
+
+The devcontainer uses Docker-in-Docker and pins the smoke toolchain to Node 24, Helm v4.1.4, k3d
+v5.8.3, and kubectl v1.30.10. It enforces a 4-core, 16 GB memory, 32 GB storage minimum so Codespaces
+can offer smaller machines. The full image and cluster set uses approximately 6 CPUs, 10–12 GB of
+memory, and 25–30 GB of storage, so the minimum host skips the workspace dependency tree and uses
+local-path storage while still deploying every application workload. Use the recommended 8-core,
+32 GB memory, 64 GB storage machine for storage-expansion qualification, repository-wide work, and
+repeated builds. When at least 40 GB remains free, the creation step runs `npm ci` and can be baked
+into a repository Codespaces prebuild; enabling that prebuild remains a repository setting and uses
+Actions minutes and storage.
+
+On the minimum disk, Tier 3 removes an existing root `node_modules` tree, clears disposable npm and
+BuildKit caches, reserves 12 GiB for all images that arrive after the build, imports one local image at
+a time, and removes each Docker-side source after k3d accepts it. Reinstall the lockfile-bound
+dependencies before other repository work. The retained cluster keeps its own copy, and k3d's
+[direct importer](https://k3d.io/v5.8.3/usage/importing_images/) creates no intermediate archive.
+Keep k3d's default image volume: the pinned v5.8.3 create path rolls back the cluster when Codespaces
+disables that volume. A recommended-size machine can retain the caches, use the faster batch import,
+and qualify storage expansion:
+
+```bash
+SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full
+```
+
+Each minimum-host rerun resets the named disposable cluster and its run-owned Docker image storage,
+then repeats the bounded sequential build and import. The previous successful cluster stays
+available for browsing and `kubectl` diagnosis only until that next run, so there is no need to
+delete it manually before rerunning. This clean rebuild is slower but keeps disk use predictable on
+the 32 GB machine. Use the recommended profile when repeated builds should retain workspace
+dependencies and reusable caches.
+
+The contributor command also allows 600 seconds for workload readiness on a loaded Codespace.
+
+The command runs the same current-silo smoke that protects `develop`, with `KEEP_CLUSTER=1`. It
+therefore builds the affected images, installs the pinned cluster controllers, deploys through the
+real app-owned release script, and proves database isolation, TLS ingress, enabled workloads, and
+the selected storage profile before returning control to the developer.
+
+After the smoke passes, open the Codespaces port labelled **OpenCrane Tier 3** and keep its
+visibility private. A loopback proxy on port 4200 keeps the forwarded `*.app.github.dev` browser
+origin but sends the smoke's `.test` host to the k3d ingress. That preserves the SPA, `/api`,
+`/gateway`, and WebSocket routing. A direct port-forward to the SPA service would load static files
+but fail application routes because the SPA container deliberately has no reverse proxy.
+
+Click **Login** to establish the installation-selected `Tier 3 Developer` identity. This disposable
+profile does not contact an external OpenID Connect provider. The loopback proxy overwrites any
+browser-supplied proof with a fresh per-run secret; the server then projects the exact fixed identity
+into its durable Principal and standalone Owner records before issuing a bounded signed session.
+Starting Tier 3 again rotates both the proxy proof and the session key, invalidating sessions from
+the preceding disposable cluster.
+
+### Configure models after login
+
+Tier 3 deliberately installs without provider credentials. After the fixed development identity
+logs in, configure a provider through the normal authenticated provider settings flow. This keeps
+the durable provider-effect command, central authorization decision, and fixed Secret custody as
+the only supported route; deployment never writes provider keys or chooses a routing default.
+
+::: warning
+Keep the forwarded Tier 3 port private. Its login identity is deliberately selected by the local
+development installation and is not an organisation sign-in mechanism.
+:::
+
+The minimum-host command uses fast local-path storage. Select full storage when the change concerns
+storage expansion:
+
+```bash
+npm run dev:tier3 -- --storage-mode full
+```
+
+Use `--smoke-only` when no browser is needed. The cluster stays available after either command so
+you can inspect it with kubectl. When diagnosis is complete, remove that one disposable cluster with
+`k3d cluster delete opencrane-develop-smoke`.
+
+::: warning
+Tier 3 is a disposable k3d qualification. It does not prove public DNS, production certificates,
+cloud workload identity, backup and restore, or a real-tenant upgrade. Those remain remote deploy
+and release evidence.
+:::
 
 ## Add a gateway-backed feature
 

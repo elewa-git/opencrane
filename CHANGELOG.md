@@ -35,6 +35,14 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   local proxy discovers reviewed provider credentials from owner-only files and lets developers
   select an exact reviewed provider and model without putting the key into the repository.
 
+- **Infrastructure developers can retain and inspect a complete local Kubernetes silo after
+  qualification.** `npm run dev:tier3` runs the full-silo k3d smoke, keeps the qualified cluster
+  available for diagnosis, and exposes the real ingress through a loopback proxy. Login uses a
+  fresh per-run proxy proof to admit one fixed development identity into the normal durable
+  Principal, Owner, central-capability, and signed-session authorities without requiring OIDC.
+  Minimum-host mode reclaims disposable storage before building; recommended mode retains reusable
+  dependencies and caches for faster repeated work.
+
 ## [0.10.0] - 2026-08-31
 
 ### Added

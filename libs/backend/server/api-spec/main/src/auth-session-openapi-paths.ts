@@ -1,5 +1,5 @@
 /**
- * Describes session introspection, OIDC callback completion, and logout.
+ * Describes session introspection, the OIDC-only callback, and logout for the selected browser authentication mode.
  *
  * These paths share the browser-session contract. They remain separate from login and step-up
  * redirects so changes to the returned identity projection do not grow the root composition file.
@@ -31,8 +31,8 @@ export const _AuthSessionOpenapiPaths = {
 										required: ["sub", "issuer", "groups", "isPlatformOperator", "productCapabilities"],
 										properties: {
 											sub: { type: "string" },
-											issuer: { type: "string", description: "Identity provider that authenticated the user." },
-											groups: { type: "array", items: { type: "string" }, description: "The caller's stable group identifiers from the OIDC groups claim (empty when none)." },
+											issuer: { type: "string", description: "Configured authority that authenticated the user." },
+											groups: { type: "array", items: { type: "string" }, description: "Stable group identifiers from the verified authority, or an empty set for Tier 3." },
 											isPlatformOperator: {
 												type: "boolean",
 												description: "True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point.",
@@ -80,7 +80,7 @@ export const _AuthSessionOpenapiPaths = {
 		get: {
 			operationId: "completeOidcLogin",
 			summary: "OIDC authorization callback — validates the response and establishes a session",
-			description: "Called by the identity provider after a successful login. Redirects back to the SPA.",
+			description: "Called by the identity provider after a successful OIDC login. Tier 3 has no callback and returns 503.",
 			tags: ["Auth"],
 			security: [],
 			parameters: [
@@ -96,8 +96,8 @@ export const _AuthSessionOpenapiPaths = {
 	"/auth/logout": {
 		post: {
 			operationId: "logout",
-			summary: "Destroy the current session and return the IdP RP-initiated logout URL",
-			description: "Invalidates the server-side session and returns the identity provider logout URL when upstream logout is available.",
+			summary: "Destroy the current session and return any upstream logout URL",
+			description: "Invalidates the server-side session. OIDC may return an identity-provider logout URL; Tier 3 returns null.",
 			tags: ["Auth"],
 			security: [],
 			responses: {

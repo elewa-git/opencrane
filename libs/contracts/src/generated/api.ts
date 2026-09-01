@@ -1377,10 +1377,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Redirect the browser to the configured OIDC identity provider to start login
-         * @description Browser redirect — not intended for programmatic use. Returns 503 when OIDC is not configured.
+         * Start the browser login selected by this deployment
+         * @description Browser redirect — not intended for programmatic use. Production redirects to OIDC; Tier 3 establishes its installation-selected development identity.
          */
-        get: operations["startOidcLogin"];
+        get: operations["startBrowserLogin"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1396,7 +1396,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Force fresh OIDC authentication for a sensitive action */
+        /** Refresh the selected browser authentication for a sensitive action */
         get: operations["reauthenticate"];
         put?: never;
         post?: never;
@@ -1435,7 +1435,7 @@ export interface paths {
         };
         /**
          * OIDC authorization callback — validates the response and establishes a session
-         * @description Called by the identity provider after a successful login. Redirects back to the SPA.
+         * @description Called by the identity provider after a successful OIDC login. Tier 3 has no callback and returns 503.
          */
         get: operations["completeOidcLogin"];
         put?: never;
@@ -1456,8 +1456,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Destroy the current session and return the IdP RP-initiated logout URL
-         * @description Invalidates the server-side session and returns the identity provider logout URL when upstream logout is available.
+         * Destroy the current session and return any upstream logout URL
+         * @description Invalidates the server-side session. OIDC may return an identity-provider logout URL; Tier 3 returns null.
          */
         post: operations["logout"];
         delete?: never;
@@ -7990,12 +7990,12 @@ export interface operations {
             };
         };
     };
-    startOidcLogin: {
+    startBrowserLogin: {
         parameters: {
             query?: {
                 /** @description Path to redirect back to after a successful login. */
                 returnTo?: string;
-                /** @description Use create to open the identity provider's registration flow. Other values are rejected. */
+                /** @description Use create to open the OIDC provider's registration flow. Tier 3 and other values reject the prompt. */
                 prompt?: "create";
             };
             header?: never;
@@ -8004,7 +8004,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Redirect to identity provider. */
+            /** @description Redirect to the identity provider or back into Tier 3 with its signed development session. */
             302: {
                 headers: {
                     [name: string]: unknown;
@@ -8020,7 +8020,16 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description OIDC not configured. */
+            /** @description Tier 3 proxy proof is absent or invalid. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The selected browser authentication is unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -8043,7 +8052,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Redirect to the configured provider with prompt=login. */
+            /** @description Redirect through fresh provider authentication or renew the bounded Tier 3 development session. */
             302: {
                 headers: {
                     [name: string]: unknown;
@@ -8059,7 +8068,16 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description OIDC is not configured. */
+            /** @description Tier 3 proxy proof is absent or invalid. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The selected browser authentication is unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -8092,9 +8110,9 @@ export interface operations {
                         authenticated: boolean;
                         user?: {
                             sub: string;
-                            /** @description Identity provider that authenticated the user. */
+                            /** @description Configured authority that authenticated the user. */
                             issuer: string;
-                            /** @description The caller's stable group identifiers from the OIDC groups claim (empty when none). */
+                            /** @description Stable group identifiers from the verified authority, or an empty set for Tier 3. */
                             groups: string[];
                             /** @description True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point. */
                             isPlatformOperator: boolean;

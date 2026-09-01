@@ -36,3 +36,4 @@ export * from "./agent-runtime-protocol.types";
 export type * from "./runtime-assignment.types";
 export type * from "./tenant-models.types";
 export * from "./third-party-source.types";
+export * from "./tier3-development-auth.protocol";
