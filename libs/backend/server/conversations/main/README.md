@@ -154,6 +154,14 @@ transport for workloads; it is not a browser fallback.
   digest-checks the request and validates and stores the response outside conversation history. It is
   intentionally uncomposed until the replacement participant interrupt transport is ready; it never
   resumes a legacy workflow or falls back to the Prisma elicitation authority.
+- `ConversationComputerElicitationInterruptReader` restores only unresolved, unexpired target
+  elicitation requests addressed to the authenticated participant and fenced to the app-derived
+  current computer execution and lease. Its protected-payload port must verify request ownership
+  and digest before it supplies a browser-safe prompt and response schema. The reader uses
+  `computerExecutionId` as the opaque AG-UI wait correlation because a target ConversationComputer
+  deliberately does not retain a legacy `AgentRun` identifier. It remains uncomposed until the
+  protected payload store and target participant router replace the legacy elicitation transport
+  together.
 
 ## Boundary
 
