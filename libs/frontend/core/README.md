@@ -29,6 +29,8 @@ a feature never calls `fetch` directly and never guesses a request or response s
 - `CanvasDocument` — the owner-supplied content and action-state contract for context-panel canvas documents.
 - `lib/data/*.data.ts` — demo fixtures, temporary until the live API replaces them.
 - `ControlPlaneApiService` — the typed HTTP client and its `CONTROL_PLANE_BASE_URL` injection token.
+- `OPENCRANE_API_FETCH` — the shared generated/raw client transport seam. Browser builds use native
+  fetch; the Tier 1 local profile replaces it with a rejecting transport.
 - `OpenCraneApiError` — the browser-safe failed-request model. It preserves the public status/code
   and bounded validation issues so forms can bind `issue.path` to controls, while discarding
   server-only detail and arbitrary response bodies.

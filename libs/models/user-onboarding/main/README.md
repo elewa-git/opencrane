@@ -1,21 +1,29 @@
-# @opencrane/models/user-onboarding — validated first-chat projection
+# @opencrane/models/user-onboarding — validated persona-onboarding projections
 
 > [models](../../README.md) › user onboarding
 
 ## What it owns
 
-This pure model package defines the complete resumable projection returned for a user's one-time
-first chat after persona approval. It keeps the server-owned route, frozen persona and question-set
-evidence, ordered transcript, answer count, and completion evidence in one coherent value.
+This pure model package defines both resumable projections returned during persona onboarding: the
+reviewed survey, scoring result, and approval lifecycle; then the one-time first chat. It keeps the
+server-owned states, frozen questions and source evidence, ordered transcript, answer count, and
+completion evidence in dependency-bottom values shared by live adapters and frontend state.
 
 Used by: frontend onboarding state · the conversation workspace's read-only history adapter.
 
-Its validator checks field bounds and the relationships between fields. A projection cannot claim
-completion with missing answers, present a next question that disagrees with the durable answer
-count, reorder transcript evidence, or invent a conversation for a migrated completed account.
+Its validators check field bounds and relationships between fields. A persona projection cannot
+miscount selected answers or omit required tie/review evidence, while a first-chat projection cannot
+claim completion with missing answers, reorder transcript evidence, or invent a conversation for a
+migrated completed account.
 
 ## Public surface
 
+- `PersonaOnboardingSnapshot` and its nested value types — the reviewed survey, tie, review, and
+  ready projection.
+- `PersonaOnboardingStates`, `PersonaResolutionKinds`, `PersonaColours`, and `PersonaModifiers` —
+  the closed persona vocabulary shared across adapters and state.
+- `___ParsePersonaOnboardingSnapshot` — strips response extensions and rejects malformed or
+  internally inconsistent persona projections.
 - `PersonaFirstChatSnapshot` and its nested value types — the complete server projection.
 - `UserOnboardingRouteStates` and the first-chat categorical enums — the finite projection vocabulary.
 - `___ParsePersonaFirstChatSnapshot` — strips documented extensions and rejects malformed or
@@ -23,9 +31,9 @@ count, reorder transcript evidence, or invent a conversation for a migrated comp
 
 ## Boundary
 
-This package validates response values only. It does not own persistence, workflow transitions,
-HTTP calls, routing, Angular stores, user commands, or canonical direct, group, and Agent-session
-conversations. The server remains the authority for every onboarding transition.
+This package validates response values only. It does not score survey answers, own persistence or
+workflow transitions, make HTTP calls, route screens, store browser state, admit user commands, or
+own canonical conversations. The server remains the authority for every onboarding transition.
 
 ## Dependency direction
 

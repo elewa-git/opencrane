@@ -145,6 +145,42 @@
 				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && playwright test --config playwright.storybook.config.ts"
 			}
 		},
+		"static-storybook-workbench": {
+			"executor": "@nx/web:file-server",
+			"continuous": true,
+			"cache": false,
+			"dependsOn": [
+				"build-storybook"
+			],
+			"options": {
+				"staticFilePath": "dist/storybook/frontend-elements-ui",
+				"port": 4401,
+				"host": "127.0.0.1",
+				"watch": false,
+				"cors": false,
+				"cacheSeconds": -1
+			}
+		},
+		"test-storybook-visual-workbench": {
+			"executor": "nx:run-commands",
+			"cache": false,
+			"dependsOn": [
+				"static-storybook-workbench"
+			],
+			"inputs": [
+				"default",
+				"^production",
+				"{workspaceRoot}/playwright.storybook.config.ts",
+				"{workspaceRoot}/tests/storybook/**/*"
+			],
+			"outputs": [
+				"{workspaceRoot}/.nx/test-results/storybook"
+			],
+			"options": {
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4401/index.json && playwright test --config playwright.storybook.config.ts",
+				"env": { "OPENCRANE_STORYBOOK_BASE_URL": "http://127.0.0.1:4401" }
+			}
+		},
 		"update-storybook-visual": {
 			"executor": "nx:run-commands",
 			"cache": false,
@@ -152,7 +188,7 @@
 				"static-storybook"
 			],
 			"options": {
-				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && playwright test --config playwright.storybook.config.ts --update-snapshots=all"
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && playwright test --config playwright.storybook.config.ts --update-snapshots=changed"
 			}
 		}
 	}

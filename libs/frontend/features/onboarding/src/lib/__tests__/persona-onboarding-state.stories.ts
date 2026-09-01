@@ -2,32 +2,45 @@ import { moduleMetadata } from "@storybook/angular";
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
-import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaQuestion, PersonaResolutionKinds } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaModifiers, PersonaOnboardingStates, PersonaResolutionKinds, type PersonaOnboardingSnapshot } from "@opencrane/state/onboarding/projection";
 
 import { PersonaInterviewStateComponent } from "../states/interview/persona-interview-state.component";
 import { PersonaReadyStateComponent } from "../states/ready/persona-ready-state.component";
 import { PersonaResolutionStateComponent } from "../states/resolution/persona-resolution-state.component";
 import { PersonaResultEvidenceComponent } from "../states/result/persona-result-evidence.component";
 import { PersonaReviewStateComponent } from "../states/review/persona-review-state.component";
+import { __StoryPersonaQuestions } from "./persona-onboarding-state.stories.fixtures";
 
-/** Frozen reviewed q7 question used by the feature-state catalogue. */
-const _QUESTION = { id: "q7", category: "initiative", prompt: "How proactively should your assistant surface ideas and recommendations?", ordinal: 7, choices: [{ id: "recommend", label: "Bring me a concrete recommendation without waiting to be asked.", ordinal: 1 }, { id: "options", label: "Suggest options when relevant and wait for my decision.", ordinal: 2 }, { id: "check", label: "Check whether I want suggestions before expanding the topic.", ordinal: 3 }, { id: "surprise", label: "Surprise me with ideas I had not thought of, but let me choose.", ordinal: 4 }], selectedChoiceId: null } as const;
+/** Exact compiled Commander/Guardian instructions produced by the reviewed story answers. */
+const _COMMANDER_GUARDIAN_INSTRUCTIONS = `You are a direct, results-driven assistant who values speed, clarity, and proven
+approaches. You also value precision and evidence-based reasoning on important decisions.
 
-/** Build the complete reviewed ten-question set with an exact selected-answer prefix. */
-function _Questions(answeredQuestionCount: number): readonly PersonaQuestion[]
-{
-	return Array.from({ length: 10 }, function _Question(_value, index)
-	{
-		const ordinal = index + 1;
-		return {
-			..._QUESTION,
-			id: `q${ordinal}`,
-			ordinal,
-			prompt: ordinal === 7 ? _QUESTION.prompt : `Reviewed collaboration preference ${ordinal}`,
-			selectedChoiceId: ordinal <= answeredQuestionCount ? "recommend" : null
-		};
-	});
-}
+## Communication style
+
+- Lead with the conclusion. Context follows only if asked.
+- Keep responses short and actionable — bullets over paragraphs.
+- One clear recommendation per decision point. State the trade-off in one line.
+- Use plain, confident language. State necessary uncertainty precisely; avoid filler and apology
+  preambles.
+
+## Challenge and feedback
+
+- Be direct about what is wrong and how to fix it.
+- When the user is heading for trouble, name the risk directly and say “I think this is a mistake — here is why”.
+- Respect disagreement — state your case once, clearly, then respect the user's decision.
+
+## Initiative
+
+- Default to proven, well-tested approaches. Flag when something is untested.
+- Recommend the reliable option. The user can choose to experiment.
+- When something is clearly wrong, flag it immediately rather than waiting to be asked.
+
+## What to avoid
+
+- Never pad responses with reassurance or unnecessary context.
+- Never present more than three options — recommend the strongest one.
+- Never soften a genuine concern to avoid discomfort.
+`;
 
 /** Describe the visible state, component contract, and deliberately excluded authority. */
 function _StoryDescription(userState: string, contract: string, authorityBoundary: string)
@@ -44,7 +57,7 @@ function _Snapshot(overrides: Partial<PersonaOnboardingSnapshot> = {}): PersonaO
 		answeredQuestionCount: 6,
 		questionCount: 10,
 		personaRevisionId: null,
-		questions: _Questions(6),
+		questions: __StoryPersonaQuestions(6),
 		resolution: null,
 		result: null,
 		...overrides
@@ -58,16 +71,31 @@ function _ResultSnapshot(state: PersonaOnboardingStates.Review | PersonaOnboardi
 		state,
 		answeredQuestionCount: 10,
 		personaRevisionId: "revision-1",
-		questions: _Questions(10),
+		questions: __StoryPersonaQuestions(10),
 		result: {
-			displayName: "The Analyst",
-			primaryColour: PersonaColours.Blue,
-			secondaryColour: PersonaColours.Green,
-			modifier: PersonaModifiers.Explorer,
-			colourScores: { red: 2, yellow: 1, green: 3, blue: 4, total: 10 },
-			opennessScores: { explorer: 6, guardian: 4, total: 10 },
-			insights: ["You prefer evidence before confidence.", "You want uncertainty named without losing a recommendation.", "You keep the strongest alternative visible when decisions are consequential."],
-			instructionPreview: "Lead with the evidence-backed recommendation. Separate observations from inference, name material uncertainty, and show the strongest credible alternative without diluting the decision."
+			displayName: "The Commander (Guardian)",
+			primaryColour: PersonaColours.Red,
+			secondaryColour: PersonaColours.Blue,
+			modifier: PersonaModifiers.Guardian,
+			colourScores: {
+				red: 22,
+				yellow: 3,
+				green: 0,
+				blue: 8,
+				total: 33
+			},
+			opennessScores: {
+				explorer: 0,
+				guardian: 6,
+				total: 6
+			},
+			insights: [
+				"Get to the point fast — I'll ask if I need more. → Lead with the conclusion. Context follows only if asked.",
+				"Be direct — tell me what's wrong and how to fix it. → Be direct about what is wrong and how to fix it.",
+				"Tell me directly — “I think this is a mistake, here's why.” → name the risk directly and say “I think this is a mistake — here is why”",
+				"A sharp tool — efficient, reliable, no personality needed. → assistant"
+			],
+			instructionPreview: _COMMANDER_GUARDIAN_INSTRUCTIONS
 		}
 	});
 }
@@ -128,7 +156,7 @@ export const InterviewQuestionAdvanceFocus: Story = {
 	render: function render()
 	{
 		return {
-			props: { snapshot: _Snapshot(), advancedSnapshot: _Snapshot({ answeredQuestionCount: 7, questions: _Questions(7) }), busy: false, actionError: null },
+			props: { snapshot: _Snapshot(), advancedSnapshot: _Snapshot({ answeredQuestionCount: 7, questions: __StoryPersonaQuestions(7) }), busy: false, actionError: null },
 			template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" /><button type="button" (click)="snapshot = advancedSnapshot">Adopt next question</button>`
 		};
 	},
@@ -136,7 +164,7 @@ export const InterviewQuestionAdvanceFocus: Story = {
 	{
 		const canvas = within(canvasElement);
 		await userEvent.click(canvas.getByRole("button", { name: "Adopt next question" }));
-		const nextQuestion = canvas.getByRole("region", { name: "Reviewed collaboration preference 8" });
+		const nextQuestion = canvas.getByRole("region", { name: "When you're heading down a path your assistant thinks is wrong, it should…" });
 		await waitFor(async function _QuestionFocused() { await expect(nextQuestion).toHaveFocus(); });
 	}
 };
@@ -172,7 +200,7 @@ export const InterviewNotStarted: Story = {
 	parameters: _StoryDescription("A new owner sees the reviewed interview introduction before starting.", "The interview component emits one start intent from its pre-interview branch.", "It never creates the interview or assumes that it started."),
 	render: function render()
 	{
-		return { props: { snapshot: _Snapshot({ interviewId: null, answeredQuestionCount: 0, questions: _Questions(0) }), busy: false, actionError: null }, template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+		return { props: { snapshot: _Snapshot({ interviewId: null, answeredQuestionCount: 0, questions: __StoryPersonaQuestions(0) }), busy: false, actionError: null }, template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
 	}
 };
 
@@ -181,7 +209,7 @@ export const InterviewQuestionUnavailable: Story = {
 	parameters: _StoryDescription("An incomplete lifecycle transition shows a blocking missing-question message.", "The interview component fails visibly when its typed interview input has no current question.", "The production response validator rejects inconsistent answer counts before this defensive branch."),
 	render: function render()
 	{
-		return { props: { snapshot: _Snapshot({ answeredQuestionCount: 10, questions: _Questions(10) }), busy: false, actionError: null }, template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+		return { props: { snapshot: _Snapshot({ answeredQuestionCount: 10, questions: __StoryPersonaQuestions(10) }), busy: false, actionError: null }, template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
 	}
 };
 
@@ -191,7 +219,7 @@ export const Resolution: Story = {
 	parameters: _StoryDescription("A tied result asks the owner to choose from the exact server-returned candidates.", "The resolution component controls one local selection and emits a typed resolution intent.", "It never chooses a default or creates the persona draft."),
 	render: function render()
 	{
-		return { props: { snapshot: _Snapshot({ state: PersonaOnboardingStates.Resolution, answeredQuestionCount: 10, questions: _Questions(10), resolution: { kind: PersonaResolutionKinds.Primary, candidates: [PersonaColours.Blue, PersonaColours.Green] } }), busy: false, actionError: null }, template: `<wo-persona-resolution-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+		return { props: { snapshot: _Snapshot({ state: PersonaOnboardingStates.Resolution, answeredQuestionCount: 10, questions: __StoryPersonaQuestions(10), resolution: { kind: PersonaResolutionKinds.Primary, candidates: [PersonaColours.Blue, PersonaColours.Green] } }), busy: false, actionError: null }, template: `<wo-persona-resolution-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
 	},
 	play: async function play({ canvasElement })
 	{
@@ -207,7 +235,7 @@ export const ModifierResolution: Story = {
 	parameters: _StoryDescription("A tied approach preference explains both Explorer and Guardian before asking the owner to choose.", "The resolution component retains the exact modifier values while showing their reviewed meanings.", "It never invents a balanced option or changes the server-returned order."),
 	render: function render()
 	{
-		return { props: { snapshot: _Snapshot({ state: PersonaOnboardingStates.Resolution, answeredQuestionCount: 10, questions: _Questions(10), resolution: { kind: PersonaResolutionKinds.Modifier, candidates: [PersonaModifiers.Explorer, PersonaModifiers.Guardian] } }), busy: false, actionError: null }, template: `<wo-persona-resolution-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+		return { props: { snapshot: _Snapshot({ state: PersonaOnboardingStates.Resolution, answeredQuestionCount: 10, questions: __StoryPersonaQuestions(10), resolution: { kind: PersonaResolutionKinds.Modifier, candidates: [PersonaModifiers.Explorer, PersonaModifiers.Guardian] } }), busy: false, actionError: null }, template: `<wo-persona-resolution-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
 	},
 	play: async function play({ canvasElement })
 	{
@@ -223,7 +251,7 @@ export const ResolutionEvidenceUnavailable: Story = {
 	parameters: _StoryDescription("Missing tie evidence blocks resolution and offers a reload intent.", "The resolution component renders its fail-closed branch and emits retry only.", "The production validator rejects a resolution state without tie evidence."),
 	render: function render()
 	{
-		return { props: { snapshot: _Snapshot({ state: PersonaOnboardingStates.Resolution, answeredQuestionCount: 10, questions: _Questions(10), resolution: null }), busy: false, actionError: null }, template: `<wo-persona-resolution-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+		return { props: { snapshot: _Snapshot({ state: PersonaOnboardingStates.Resolution, answeredQuestionCount: 10, questions: __StoryPersonaQuestions(10), resolution: null }), busy: false, actionError: null }, template: `<wo-persona-resolution-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
 	},
 	play: async function play({ canvasElement })
 	{
@@ -273,7 +301,24 @@ export const ReviewPreparingDraft: Story = {
 	parameters: _StoryDescription("Completed interview evidence offers an explicit prepare-review action.", "The review component emits a draft intent while keeping evidence read-only.", "It never creates the immutable draft from a render or loader."),
 	render: function render()
 	{
-		return { props: { snapshot: { ..._ResultSnapshot(PersonaOnboardingStates.Review), personaRevisionId: null }, busy: false, actionError: null }, template: `<wo-persona-review-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+		const snapshot = _ResultSnapshot(PersonaOnboardingStates.Review);
+		return {
+			props: {
+				snapshot: {
+					...snapshot,
+					personaRevisionId: null,
+					result: snapshot.result
+						? {
+							...snapshot.result,
+							instructionPreview: null
+						}
+						: null
+				},
+				busy: false,
+				actionError: null
+			},
+			template: `<wo-persona-review-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />`
+		};
 	}
 };
 
@@ -287,7 +332,7 @@ export const ReviewMissingInstructionPreview: Story = {
 	}
 };
 
-/** Review confirmation retained open as a canonical deliberate-activation state. */
+/** Keeps review confirmation open so the catalogue captures the final activation decision. */
 export const ReviewApprovalDialogOpen: Story = {
 	parameters: _StoryDescription("The owner sees the exact activation confirmation before approval.", "The review component retains immutable approval coordinates only while its dialog is open.", "It emits no activation intent until the owner confirms."),
 	render: function render()

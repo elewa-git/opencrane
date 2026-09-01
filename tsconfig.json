@@ -319,8 +319,14 @@
       "@opencrane/features/settings": [
         "./libs/frontend/features/settings/src/index.ts"
       ],
-      "@opencrane/state/core": [
-        "./libs/frontend/state/core/src/index.ts"
+      "@opencrane/state/session": [
+        "./libs/frontend/state/session/main/src/index.ts"
+      ],
+      "@opencrane/state/session/adapter": [
+        "./libs/frontend/state/session/adapter/src/index.ts"
+      ],
+      "@opencrane/state/local-development": [
+        "./libs/frontend/state/local-development/src/index.ts"
       ],
       "@opencrane/state/gateways": [
         "./libs/frontend/state/gateways/src/index.ts"
@@ -422,7 +428,13 @@
       "path": "./libs/frontend/elements/ui"
     },
     {
-      "path": "./libs/frontend/state/core"
+      "path": "./libs/frontend/state/session/main"
+    },
+    {
+      "path": "./libs/frontend/state/session/adapter"
+    },
+    {
+      "path": "./libs/frontend/state/local-development"
     },
     {
       "path": "./libs/frontend/state/onboarding"

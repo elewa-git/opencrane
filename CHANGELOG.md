@@ -13,6 +13,19 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+### Added
+
+- **Frontend developers can exercise onboarding and chat locally without a backend or
+  infrastructure stack.** Plain `npm run serve:opencrane-ui` starts one coherent browser-only
+  profile for persona approval, first chat, conversations, Agent-run progress, files, approvals,
+  and child Agent threads, with deterministic slow, retry, failed-run, manual-reconnect, and routed
+  access-revocation scenarios. Build-time profile replacement keeps those fixtures out of
+  production and omits backend-owned routes locally. Local onboarding can follow the reviewed
+  Commander, Catalyst, Anchor, or Analyst Guardian path. Plain serve enters deterministic
+  onboarding, while named archetype scripts save the chosen fixture and open its Agent conversation
+  directly. The same command starts Storybook and its Playwright visual pass; backend-connected
+  local development belongs to Tier 2.
+
 ## [0.10.0] - 2026-08-31
 
 ### Added

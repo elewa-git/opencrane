@@ -44,7 +44,9 @@ function trimString(value: string): string { return value?.trim() ?? ""; }
 
 ## Arrow Functions
 
-Never use arrow functions to declare standalone functions. Arrow functions are only allowed inside higher-order functions like `map`, `filter`, and `reduce`.
+Never use arrow functions to declare standalone functions. Arrow callbacks are allowed inside pure
+higher-order functions such as `map`, `filter`, and `reduce` when the callback does not need its own
+`this`, `arguments`, or constructor behaviour.
 
 ```typescript
 // WRONG
@@ -59,6 +61,67 @@ function getUserName(user: User): string
 // Arrow functions OK inside higher-order functions
 const names = users.map(user => user.name);
 const total = items.reduce((sum, item) => sum + item.price, 0);
+```
+
+## Conditional Blocks
+
+Always give `if`, `else`, `for`, `while`, and `switch` statements a braced body. Put the opening
+brace on the next line. A one-statement body still gets its statement on an indented following line;
+never compress a condition and its action onto one line.
+
+When an `if`, `while`, or `switch` has an executable statement before it in the same enclosing block,
+leave one blank line before the control-flow statement. When another executable statement follows
+its closing brace, leave one blank line after it. Do not add an artificial leading or trailing blank
+line when the control-flow statement is already the first or last operation in its enclosing block.
+Keep `else`, `catch`, and `finally` attached to the closing brace of the block they continue.
+
+```typescript
+// WRONG
+if (!session) return;
+
+// CORRECT
+if (!session)
+{
+	return;
+}
+
+const user = session.user;
+```
+
+## Nullish And Falsy Checks
+
+Prefer `!value` when every falsy value means the same absent state. Keep an explicit `=== null` or
+`=== undefined` check when the contract distinguishes null from undefined, or when `0`, `false`, or
+an empty string is valid data. `typeof value === "undefined"` also remains necessary when reading a
+global that may not exist.
+
+```typescript
+// The validated identifier cannot be empty, so every falsy value means absent.
+if (!snapshot.conversationId)
+{
+	return;
+}
+
+// Zero is a valid attempt number, so check the sentinel explicitly.
+if (command.attempt === undefined)
+{
+	throw new Error("Attempt is required.");
+}
+```
+
+## Object Literal Layout
+
+A one-property object may stay on one line. Put every property of a multi-property object on its own
+line, including nested objects used in arrays, providers, mappings, and test fixtures. Move a long
+pure object-to-object mapping into a capability-named sibling `*.util.ts` file when it obscures the
+owning workflow; static reviewed content belongs in a named fixture module rather than a utility.
+
+```typescript
+const single = { enabled: true };
+const profile = {
+	name: "The Commander (Guardian)",
+	active: true
+};
 ```
 
 ## Inline Conditionals
@@ -126,9 +189,9 @@ line). Use its output to populate the table; do **not** rely on "it feels right"
 
 When a coding turn writes or edits `.ts` files, include a compact compliance table in the response:
 
-| File | No standalone `=>` | Max one ternary/line | `if` body on next line | Imports single-line at top | All declarations JSDoc (incl. properties) | Comments in plain English | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
-|---|---|---|---|---|---|---|---|---|---|
-| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| File | No standalone `=>` | Braced blocks | Objects split by property | Max one ternary/line | `if` body on next line | Imports single-line at top | All declarations JSDoc (incl. properties) | Comments in plain English | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Rules to check:
 
@@ -144,7 +207,16 @@ Rules to check:
    protocol/schema/data exemption.
 9. **At most one ternary conditional per physical line** — `INLINE-CONDITIONAL` is an error; expand
    each decision onto its own line or use an exhaustive lookup, `switch`, or named helper.
-10. **Every `if` body starts on the following physical line** — `IF-BODY-NEWLINE` is an error. This
+10. **Braces on control-flow blocks** — every branch or loop body uses braces on the following line,
+    even when it contains one statement.
+11. **Multi-property object literals use one property per line** — nested provider, fixture, and
+    mapping objects follow the same rule.
+12. **Falsy checks preserve meaning** — use `!value` for one absent state; keep explicit nullish
+    checks where the model has distinct sentinel semantics or another falsy value is valid.
+13. **Control-flow blocks have breathing room** — separate an `if`, `while`, or `switch` from
+    preceding and following executable statements with one blank line, except at the start or end of
+    its enclosing block and before an attached `else`, `catch`, or `finally`.
+14. **Every `if` body starts on the following physical line** — `IF-BODY-NEWLINE` is an error. This
     includes braceless bodies and opening braces; keep the condition and its effect on separate lines.
 
 The compliance table is **not** optional when TypeScript files were modified. If the table would be incomplete, fix the violations first.
@@ -473,6 +545,12 @@ Interfaces and exported types must live in dedicated type files, not mixed with 
 - Use `*.types.ts` files for exported interfaces, type aliases, and DTO shapes.
 - Keep runtime/business logic in separate implementation files.
 - If a module needs shared types, import them from its paired `*.types.ts` file.
+- Put reusable pure domain enums, interfaces, schemas, invariants, and deterministic calculations in
+  the appropriate bounded package under `libs/models/`. Do not leave a domain projection in a
+  frontend state or backend adapter because it currently has one consumer.
+- Keep boundary-specific ports, dependency-injection tokens, adapter configuration, and transport
+  payloads with their owning boundary. They are not domain models merely because they use an
+  interface or enum.
 
 ```typescript
 // WRONG: interface and runtime logic mixed in one file

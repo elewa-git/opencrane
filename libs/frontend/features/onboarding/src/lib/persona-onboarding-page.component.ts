@@ -6,7 +6,8 @@ import { ProgressSpinnerModule } from "primeng/progressspinner";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
 import { UserOnboardingRouteStates } from "@opencrane/state/onboarding/projection";
-import { PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates, type PersonaOnboardingSnapshot } from "@opencrane/state/onboarding/projection";
+import { PersonaOnboardingStore } from "@opencrane/state/onboarding";
 
 import { PersonaInterviewStateComponent } from "./states/interview/persona-interview-state.component";
 import { PersonaReadyStateComponent } from "./states/ready/persona-ready-state.component";
@@ -83,7 +84,10 @@ export class PersonaOnboardingPageComponent
 	/** Narrow the snapshot for one state's child component. Only call it from the matching @switch branch — it assumes that branch already matched. */
 	public stateSnapshot<State extends PersonaOnboardingStates>(snapshot: PersonaOnboardingSnapshot, state: State): PersonaOnboardingStateSnapshot<State>
 	{
-		if (snapshot.state !== state) throw new Error("persona onboarding state switch mismatch");
+		if (snapshot.state !== state)
+		{
+			throw new Error("persona onboarding state switch mismatch");
+		}
 		return snapshot as PersonaOnboardingStateSnapshot<State>;
 	}
 
@@ -126,7 +130,10 @@ export class PersonaOnboardingPageComponent
 	/** Ask the store to load the next route, as soon as the persona reaches Ready. */
 	private _resolveRouteWhenReady(): void
 	{
-		if (!this.onboarding.hasValue() || this.onboarding.value().state !== PersonaOnboardingStates.Ready) return;
+		if (!this.onboarding.hasValue() || this.onboarding.value().state !== PersonaOnboardingStates.Ready)
+		{
+			return;
+		}
 		void untracked(this._store.resolveReadyRoute.bind(this._store));
 	}
 
@@ -144,7 +151,10 @@ export class PersonaOnboardingPageComponent
 	private _navigateFromReadyRoute(): void
 	{
 		const onboarding = this._store.readyRoute();
-		if (onboarding === null) return;
+		if (onboarding === null)
+		{
+			return;
+		}
 		switch (onboarding.state)
 		{
 			case UserOnboardingRouteStates.BootstrapChatPending:

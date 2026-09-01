@@ -14,7 +14,7 @@ projection from [`models/user-onboarding`](../../../models/user-onboarding/main/
        │ survey choices · approval · first-chat answers
        ▼
  ┌───────────────────────────────┐
- │ state/onboarding  ◄── HERE    │  ports · models · validate · orchestrate
+ │ state/onboarding  ◄── HERE    │  ports · commands · orchestrate
  └───────────────────────────────┘
        │ PersonaGateway
        ▼
@@ -33,9 +33,9 @@ keeps retry identity outside durable browser storage, resets controlled input wh
 question changes, and asks the server to conclude only when its latest projection says all three
 answers are present.
 
-The shared model validator strips unknown first-chat response extensions and rejects invalid
-lifecycle, transcript, source, or completion evidence before this state can consume it. This package
-separately validates the route-only response and documented conflict envelope.
+The shared model validators strip unknown persona and first-chat response extensions and reject
+invalid lifecycle, scoring, transcript, source, or completion evidence before this state can consume
+it. This package separately validates the route-only response and documented conflict envelope.
 
 ## Public surface
 
@@ -44,15 +44,13 @@ separately validates the route-only response and documented conflict envelope.
 - `PersonaOnboardingStore` — read resources, single-flight command and ready-route admission,
   bounded errors, and authoritative projection adoption for one mounted onboarding shell.
 - `PERSONA_GATEWAY` and `PersonaGateway` — transport-neutral dependency-injection port.
-- `_ParsePersonaOnboardingSnapshot` plus persona lifecycle models — bounded response validation and
-  the feature-facing projection.
 - `PersonaFirstChatService` and `PERSONA_FIRST_CHAT_GATEWAY` — read and explicit start, answer, and
   guarded-conclusion operations over a package-internal narrow port.
 - `PersonaFirstChatStore` — component-scoped read resource, typed command phases and admission,
   retry coordinates, conflict adoption, controlled draft, and authoritative projection state.
 - `OpenCranePersonaFirstChatGateway` — thin generated-client adapter for the signed-in owner's
   onboarding and first-chat endpoints.
-- [`projection`](./projection/README.md) — the narrow frontend-facing first-chat vocabulary consumed
+- [`projection`](./projection/README.md) — the narrow frontend-facing onboarding vocabulary consumed
   by the onboarding feature without exposing stores, gateways, or commands.
 - Route and conflict-envelope validators fail closed before handing first-chat evidence to the
   shared model validator.
@@ -60,7 +58,7 @@ separately validates the route-only response and documented conflict envelope.
 ## Boundary
 
 Consumed by the onboarding feature; the persona port is implemented by the persona adapter, while
-the bounded first-chat adapter stays beside its model and validator in this cohesive state package.
+the bounded first-chat adapter stays beside its route and conflict validators in this cohesive state package.
 It holds no browser-storage completion flag or durable transcript, performs no score calculation or
 model execution, and cannot assert that an answer, draft, approval, or conclusion succeeded.
 
@@ -69,7 +67,7 @@ model execution, and cannot assert that an answer, draft, approval, or conclusio
 Tagged `scope:persona-onboarding`, `type:lib`, `layer:frontend`, and `frontend-role:state`. It depends
 on frontend core and the dependency-bottom `scope:user-onboarding` projection model. It cannot import
 a feature, app, backend source, or conversation workspace. Its first-chat HTTP adapter validates
-responses through the model package before adopting them.
+persona and first-chat responses through the model package before adopting them.
 
 ## See also
 

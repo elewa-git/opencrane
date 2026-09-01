@@ -1,0 +1,25 @@
+{
+	"extends": "../../../../tsconfig.frontend.json",
+	"compilerOptions": {
+		"outDir": "../../../../dist/out-tsc",
+		"types": [],
+		"composite": true,
+		"tsBuildInfoFile": "../../../../dist/out-tsc/libs/frontend/state/local-development/tsconfig.tsbuildinfo"
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["**/*.spec.ts"],
+	"references": [
+		{ "path": "../session/main" },
+		{ "path": "../onboarding" },
+		{ "path": "../conversation/ag-ui" },
+		{ "path": "../conversation/stream" },
+		{ "path": "../conversation/workspace" },
+		{ "path": "../conversation/assets" },
+		{ "path": "../conversation/elicitation" },
+		{ "path": "../conversation/agent-threads" },
+		{ "path": "../../../models/user-onboarding/main" },
+		{ "path": "../../../models/conversations/main" },
+		{ "path": "../../../models/conversation-assets/main" },
+		{ "path": "../../../contracts" }
+	]
+}

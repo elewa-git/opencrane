@@ -47,7 +47,8 @@ define what it *is* as a deployable:
 the SPA and the API share one origin without this container ever proxying. Inside the app, the platform
 surface is pinned to `"org"`: capabilities derive only from the organisation-admin claim. Change
 detection is zoneless (no zone.js is bundled), and production data gateways always use the live API.
-If the backend is unreachable the app refuses authenticated actions.
+If the backend is unreachable the live app refuses authenticated actions. The default development
+build selects a separate frontend-only profile whose in-memory state is never shipped as authority.
 
 ## Public surface
 
@@ -63,15 +64,17 @@ and child projection purge.
 
 ## Boundary
 
-Browser-only presentation. It holds no server secrets and no database; onboarding progress, persona
-answers, score evidence, bootstrap transcript, invitation policy, membership, and completion remain server-owned. It does not implement authorization
-— it renders what the backend permits and gates screens on backend-supplied capability claims.
+Browser-only presentation. It holds no server secrets and no database. In live builds, onboarding
+progress, persona answers, score evidence, bootstrap transcript, invitation policy, membership, and
+completion remain server-owned. The default development profile provides disposable in-memory
+equivalents for UI work only. It does not implement authorization — live builds render what the
+backend permits and gate screens on backend-supplied capability claims.
 
 ## Dependency direction
 
 Tagged `type:app`, `layer:entrypoint`, `scope:opencrane-ui`. As an entrypoint it composes
-`scope:web` frontend libraries (`@opencrane/features/*`, `@opencrane/state/*`, `@opencrane/core`,
-`@opencrane/platform`); it may not import backend or app code, and nothing imports it.
+legacy `scope:web` frontend libraries plus bounded frontend capabilities such as
+`scope:frontend-session`; it may not import backend or app code, and nothing imports it.
 
 ## Runtime & config
 
@@ -79,10 +82,45 @@ Build-time and container config (there is no server-side env here — it is a st
 
 | Concern | Where | Notes |
 |---|---|---|
-| API/environment selection | `src/environments/environment*.ts` | `environment.ts` (mock) · `.prod.ts` (live) · `.dev-live.ts` (dev against live backend); chosen by build `fileReplacements` |
+| Gateway and route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | Production and development-live use live gateways and all routes; default development replaces both entry points with the Tier 1 local profile. |
 | Static serving | `deploy/nginx.conf` | `nginxinc/nginx-unprivileged`, listens `:8080`, `/healthz` probe, immutable caching for hashed assets, SPA fallback to `index.html` |
 | Image | `deploy/Dockerfile` | `ghcr.io/elewa-git/opencrane-ui` |
 | Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart. The composer supplies the reviewed image's exact OCI digest; deployment fails rather than reporting success if this workload does not roll out with that digest. |
+
+## Local frontend workflow
+
+`npm run serve:opencrane-ui` starts the Tier 1 routed profile, interactive Storybook, and the
+Storybook Playwright visual suite together. It provides an authenticated local user and stateful
+in-memory implementations for persona onboarding, first chat, normal conversations, AG-UI run
+progress, files, approvals, and child Agent threads. It needs no API, PostgreSQL, Docker, LiteLLM,
+Cognee, memory gateway, or Kubernetes cluster. Unsupported administration, settings, and invitation
+URLs return to onboarding for plain serve or Agent chat for a named profile. Any accidentally
+retained Angular or native OpenCrane API adapter is stopped by a local tripwire.
+
+Plain serve opens onboarding and uses the reviewed Commander/Guardian path when no browser
+preference exists. Use a named command to select an archetype and open its Agent conversation
+directly:
+
+```bash
+npm run serve:opencrane-ui:catalyst
+```
+
+The named alternatives are `serve:opencrane-ui:commander`, `serve:opencrane-ui:catalyst`,
+`serve:opencrane-ui:anchor`, and `serve:opencrane-ui:analyst`. Each saves its archetype in browser
+local storage for the current origin. A later plain serve still enters onboarding, but reuses the
+saved deterministic path; it does not reproduce backend persona scoring. Clear the site's local
+storage to remove that preference. Mock workflow progress still resets on reload.
+
+Use `?mockScenario=slow`, `retry`, `reconnecting`, `failed-run`, or `access-changed` to exercise a
+deterministic non-happy path. Retry becomes visible after the first message submission, reconnecting
+waits for the existing **Reconnect now** action, and access-changed immediately purges the selected
+conversation. `happy-path` is the default. Component-level variants remain
+independently available through `npm run storybook:ui` when the routed UI and Playwright pass are not
+needed.
+
+Backend-connected local development belongs to Tier 2. Its coordinator starts the internal
+`development-live` browser target with the real gateway and route entry points; Tier 1 exposes no
+public live-backend command and never falls back to network access.
 
 ## See also
 

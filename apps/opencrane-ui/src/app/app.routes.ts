@@ -96,7 +96,7 @@ export const APP_ROUTES: Routes =
 	},
 	{
 		// The app owns only the guarded mount. The feature owns selected/index child routes and their
-		// navigation lifecycle; concrete gateways remain bound in app.config.ts.
+		// navigation lifecycle; app.config.ts selects the gateway profile before this route loads.
 		path: "chats",
 		canActivate: [___OperatorAccessGuard],
 		loadChildren: function loadConversationWorkspaceRoutes()

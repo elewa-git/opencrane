@@ -4,7 +4,7 @@ import { ConfirmationService } from "primeng/api";
 import { ConfirmDialogModule } from "primeng/confirmdialog";
 
 import { ModelProvider, PROVIDER_KEY_GATEWAY, ProviderKeyStatus } from "@opencrane/state/provider-key/adapter";
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 import { ScopeChipAppearances, ScopeChipComponent, ScopeChipTones, SectionHeadingComponent } from "@opencrane/elements/ui";
 
 import { LITELLM_BADGE_STYLES, ModelKeyRow } from "./model-keys-admin.types";

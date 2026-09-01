@@ -33,7 +33,14 @@ class _WorkspaceGateway implements ConversationWorkspaceGateway
 	/** Return a migration-safe empty onboarding history projection. */
 	public async onboardingHistory() { return { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null } as const; }
 	/** Return the configured authorized conversation. */
-	public async open(): Promise<ConversationWorkspaceDetail> { if (this._detail === null) throw new Error("No conversation selected."); return this._detail; }
+	public async open(): Promise<ConversationWorkspaceDetail>
+	{
+		if (this._detail === null)
+		{
+			throw new Error("No conversation selected.");
+		}
+		return this._detail;
+	}
 	/** Reject an unused create command. */
 	public async create(): Promise<ConversationWorkspaceDetail> { throw new Error("Create is unavailable."); }
 	/** Accept no unused message command. */
@@ -106,9 +113,18 @@ beforeAll(async function _InitializeAngularTesting()
 	const continuationTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-continuation/conversation-onboarding-continuation.component.html"), "utf8");
 	await resolveComponentResources(async function _ResolveResource(url): Promise<string>
 	{
-		if (url.endsWith("conversation-workspace-page.component.html")) return pageTemplate;
-		if (url.endsWith("conversation-onboarding-history.component.html")) return onboardingTemplate;
-		if (url.endsWith("conversation-onboarding-continuation.component.html")) return continuationTemplate;
+		if (url.endsWith("conversation-workspace-page.component.html"))
+		{
+			return pageTemplate;
+		}
+		if (url.endsWith("conversation-onboarding-history.component.html"))
+		{
+			return onboardingTemplate;
+		}
+		if (url.endsWith("conversation-onboarding-continuation.component.html"))
+		{
+			return continuationTemplate;
+		}
 		return "";
 	});
 });
@@ -198,6 +214,7 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
 		const continuationTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-continuation/conversation-onboarding-continuation.component.html"), "utf8");
 		expect(template).toContain('aria-labelledby="onboarding-history-title"');
+		expect(template).toContain('tabindex="0" aria-label="Completed onboarding conversation history"');
 		expect(template).toContain("onboarding-history__completion");
 		expect(template).toContain("wo-conversation-onboarding-continuation");
 		expect(template).not.toContain("wo-conversation-message");

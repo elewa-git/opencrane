@@ -69,37 +69,98 @@
 							"maximumError": "14kB"
 						}
 					],
-					"outputHashing": "all",
-					"fileReplacements": [
-						{
-							"replace": "apps/opencrane-ui/src/environments/environment.ts",
-							"with": "apps/opencrane-ui/src/environments/environment.prod.ts"
-						}
-					]
+					"outputHashing": "all"
 				},
 				"development": {
-					"optimization": false,
-					"extractLicenses": false,
-					"sourceMap": true
-				},
-				"development-live": {
 					"optimization": false,
 					"extractLicenses": false,
 					"sourceMap": true,
 					"fileReplacements": [
 						{
-							"replace": "apps/opencrane-ui/src/environments/environment.ts",
-							"with": "apps/opencrane-ui/src/environments/environment.dev-live.ts"
+							"replace": "apps/opencrane-ui/src/app/gateway-profile.providers.ts",
+							"with": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts"
+						},
+						{
+							"replace": "apps/opencrane-ui/src/app/app.routes.ts",
+							"with": "apps/opencrane-ui/src/app/app.routes.local.ts"
 						}
 					]
+				},
+				"development-commander": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true,
+					"fileReplacements": [
+						{
+							"replace": "apps/opencrane-ui/src/app/gateway-profile.providers.ts",
+							"with": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts"
+						},
+						{
+							"replace": "apps/opencrane-ui/src/app/app.routes.ts",
+							"with": "apps/opencrane-ui/src/app/app.routes.local.ts"
+						}
+					],
+					"define": { "OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE": "\"commander\"" }
+				},
+				"development-catalyst": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true,
+					"fileReplacements": [
+						{
+							"replace": "apps/opencrane-ui/src/app/gateway-profile.providers.ts",
+							"with": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts"
+						},
+						{
+							"replace": "apps/opencrane-ui/src/app/app.routes.ts",
+							"with": "apps/opencrane-ui/src/app/app.routes.local.ts"
+						}
+					],
+					"define": { "OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE": "\"catalyst\"" }
+				},
+				"development-anchor": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true,
+					"fileReplacements": [
+						{
+							"replace": "apps/opencrane-ui/src/app/gateway-profile.providers.ts",
+							"with": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts"
+						},
+						{
+							"replace": "apps/opencrane-ui/src/app/app.routes.ts",
+							"with": "apps/opencrane-ui/src/app/app.routes.local.ts"
+						}
+					],
+					"define": { "OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE": "\"anchor\"" }
+				},
+				"development-analyst": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true,
+					"fileReplacements": [
+						{
+							"replace": "apps/opencrane-ui/src/app/gateway-profile.providers.ts",
+							"with": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts"
+						},
+						{
+							"replace": "apps/opencrane-ui/src/app/app.routes.ts",
+							"with": "apps/opencrane-ui/src/app/app.routes.local.ts"
+						}
+					],
+					"define": { "OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE": "\"analyst\"" }
+				},
+				"development-live": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true
 				}
 			},
 			"defaultConfiguration": "production"
 		},
-		"serve": {
+		"serve-browser": {
 			"executor": "@angular-devkit/build-angular:dev-server",
 			"options": {
-				"proxyConfig": "apps/opencrane-ui/proxy.conf.json",
 				"allowedHosts": [
 					"dev.opencrane.ai",
 					".dev.opencrane.ai"
@@ -112,9 +173,74 @@
 				"development": {
 					"buildTarget": "opencrane-ui:build:development"
 				},
+				"development-commander": {
+					"buildTarget": "opencrane-ui:build:development-commander"
+				},
+				"development-catalyst": {
+					"buildTarget": "opencrane-ui:build:development-catalyst"
+				},
+				"development-anchor": {
+					"buildTarget": "opencrane-ui:build:development-anchor"
+				},
+				"development-analyst": {
+					"buildTarget": "opencrane-ui:build:development-analyst"
+				},
 				"development-live": {
 					"buildTarget": "opencrane-ui:build:development-live",
 					"proxyConfig": "apps/opencrane-ui/proxy.dev-live.conf.json"
+				}
+			},
+			"defaultConfiguration": "development"
+		},
+		"serve": {
+			"executor": "nx:run-commands",
+			"continuous": true,
+			"options": {
+				"parallel": true,
+				"args": "--uiConfiguration=development",
+				"commands": [
+					{
+						"command": "nx run opencrane-ui:serve-browser:{args.uiConfiguration}",
+						"forwardAllArgs": false,
+						"prefix": "UI",
+						"prefixColor": "cyan"
+					},
+					{
+						"command": "nx run frontend-elements-ui:storybook",
+						"forwardAllArgs": false,
+						"prefix": "Storybook",
+						"prefixColor": "magenta"
+					},
+					{
+						"command": "nx run frontend-elements-ui:test-storybook-visual-workbench",
+						"forwardAllArgs": false,
+						"prefix": "Playwright",
+						"prefixColor": "yellow"
+					}
+				]
+			},
+			"configurations": {
+				"production": {
+					"args": "--uiConfiguration=production",
+					"commands": [
+						{
+							"command": "nx run opencrane-ui:serve-browser:{args.uiConfiguration}",
+							"forwardAllArgs": false
+						}
+					]
+				},
+				"development": {},
+				"commander": {
+					"args": "--uiConfiguration=development-commander"
+				},
+				"catalyst": {
+					"args": "--uiConfiguration=development-catalyst"
+				},
+				"anchor": {
+					"args": "--uiConfiguration=development-anchor"
+				},
+				"analyst": {
+					"args": "--uiConfiguration=development-analyst"
 				}
 			},
 			"defaultConfiguration": "development"

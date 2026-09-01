@@ -4,12 +4,16 @@ import { DialogModule } from "primeng/dialog";
 import { MessageModule } from "primeng/message";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
-import { PersonaOnboardingStates } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates } from "@opencrane/state/onboarding/projection";
 
 import type { PersonaApprovalIntent, PersonaOnboardingStateSnapshot } from "../../persona-onboarding-state.types";
 import { PersonaResultEvidenceComponent } from "../result/persona-result-evidence.component";
 
-/** Presentational owner for immutable persona review and approval intent. */
+/**
+ * Renders persona scoring evidence in both pre-draft and approval-ready `Review` states. Missing
+ * revision data emits an explicit draft request; complete immutable evidence opens deliberate
+ * approval confirmation without activating anything inside this component.
+ */
 @Component({
 	selector: "wo-persona-review-state",
 	standalone: true,
@@ -51,7 +55,10 @@ export class PersonaReviewStateComponent
 	public requestApproval(): void
 	{
 		const snapshot = this.snapshot();
-		if (!snapshot.personaRevisionId || snapshot.result === null || snapshot.result.instructionPreview === null) return;
+		if (!snapshot.personaRevisionId || snapshot.result === null || snapshot.result.instructionPreview === null)
+		{
+			return;
+		}
 		this.approvalIntent.set({ personaRevisionId: snapshot.personaRevisionId, instructionPreview: snapshot.result.instructionPreview });
 	}
 
@@ -64,14 +71,20 @@ export class PersonaReviewStateComponent
 	/** Keep local dialog state aligned when PrimeNG closes it through Escape or its close affordance. */
 	protected approvalVisibilityChanged(visible: boolean): void
 	{
-		if (!visible) this.closeApproval();
+		if (!visible)
+		{
+			this.closeApproval();
+		}
 	}
 
 	/** Emit the immutable material captured by the owner's confirmation. */
 	protected confirmApproval(): void
 	{
 		const intent = this.approvalIntent();
-		if (intent === null) return;
+		if (intent === null)
+		{
+			return;
+		}
 		this.closeApproval();
 		this.approvalRequested.emit(intent);
 	}

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/** Fixed Storybook origin shared by the Nx static server and visual tests. */
-const STORYBOOK_BASE_URL = "http://127.0.0.1:4400";
+/** Storybook origin supplied by a workbench or defaulted to the ordinary static server. */
+const STORYBOOK_BASE_URL = process.env.OPENCRANE_STORYBOOK_BASE_URL ?? "http://127.0.0.1:4400";
 
 /** Catalogue-wide budget for rendering every tagged visual contract serially. */
 const STORYBOOK_VISUAL_TEST_TIMEOUT_MS = 180_000;

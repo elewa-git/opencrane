@@ -16,7 +16,7 @@ enforced identically on both sides.
 | [`authorization`](./authorization/main/README.md) | Capabilities, proofs, and the pure allow/deny function. |
 | [`conversations`](./conversations/main/README.md) | Conversation modes, lifecycle, messages, timeline coordinates, and pure command decisions. |
 | [`conversation-assets`](./conversation-assets/main/README.md) | Durable file lifecycle, media policy, and per-message limits. |
-| [`user-onboarding`](./user-onboarding/main/README.md) | Resumable first-chat projection values and fail-closed validation. |
+| [`user-onboarding`](./user-onboarding/main/README.md) | Persona survey/review and first-chat projections with fail-closed validation. |
 
 ```
                  libs/models  (pure — no I/O)

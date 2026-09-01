@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
 import { CollapsibleSectionComponent, PersonaArchetypeScore, PersonaArchetypeTones, PersonaSummaryComponent } from "@opencrane/elements/ui";
-import { PersonaColours, PersonaQuestion, PersonaResult } from "@opencrane/state/onboarding";
+import { PersonaColours, type PersonaQuestion, type PersonaResult } from "@opencrane/state/onboarding/projection";
 
 import { _PersonaDescription, _PersonaScores, _PersonaTone, _PersonaValueLabel } from "../../onboarding-view.util";
 import { PersonaAnswerListComponent } from "../answers/persona-answer-list.component";

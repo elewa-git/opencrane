@@ -3,8 +3,7 @@ import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
 import { ChoiceCardGroupComponent, ChoiceCardLayouts, ChoiceCardOption, JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
-import { PersonaOnboardingStates } from "@opencrane/state/onboarding";
-import type { PersonaResolutionKinds } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates, type PersonaResolutionKinds } from "@opencrane/state/onboarding/projection";
 
 import { _ResolutionCopy, _ResolutionOptions } from "../../onboarding-view.util";
 import type { PersonaOnboardingStateSnapshot, PersonaResolutionCopy, PersonaResolutionIntent } from "../../persona-onboarding-state.types";

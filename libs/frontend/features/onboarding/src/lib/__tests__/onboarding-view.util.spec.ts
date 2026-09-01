@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
-import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaResolutionKinds, PersonaResult } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaModifiers, PersonaOnboardingStates, PersonaResolutionKinds, type PersonaOnboardingSnapshot, type PersonaResult } from "@opencrane/state/onboarding/projection";
 
 import { _FindCurrentQuestion, _PersonaScores, _ProgressLabel, _ResolutionCopy, _ResolutionOptions, _SelectedChoiceLabel } from "../onboarding-view.util";
 

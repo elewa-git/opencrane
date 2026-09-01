@@ -3,7 +3,7 @@ import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
-import { PersonaOnboardingStates } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates } from "@opencrane/state/onboarding/projection";
 
 import type { PersonaOnboardingStateSnapshot } from "../../persona-onboarding-state.types";
 import { PersonaResultEvidenceComponent } from "../result/persona-result-evidence.component";

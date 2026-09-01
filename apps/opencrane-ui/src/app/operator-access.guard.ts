@@ -3,12 +3,12 @@ import { toObservable } from "@angular/core/rxjs-interop";
 import { ActivatedRouteSnapshot, CanActivateFn, Router, RouterStateSnapshot, UrlTree } from "@angular/router";
 import { filter, firstValueFrom } from "rxjs";
 
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 
 /**
  * Gate for every authenticated operator route.
  *
- * Resolves async so navigation waits for `/auth/me` to settle before deciding; otherwise a
+ * Resolves async so navigation waits for session identity to settle before deciding; otherwise a
  * cold guard would see `hasValue() === false` and either flash the wrong
  * destination or loop the redirects. The decision matrix once both resources
  * settle:
@@ -24,7 +24,7 @@ export const ___OperatorAccessGuard: CanActivateFn = async function ___OperatorA
 	const router = inject(Router);
 	const injector = inject(Injector);
 
-	// Wait for `/auth/me` to settle (no longer loading). Reading `isLoading`
+	// Wait for the configured session gateway to settle. Reading `isLoading`
 	// inside a `computed` makes the wait reactive — the guard resumes the
 	// moment the resource transitions out of its loading state, whether it
 	// resolved with a value or threw.

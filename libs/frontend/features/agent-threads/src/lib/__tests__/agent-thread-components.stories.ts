@@ -16,14 +16,52 @@ import type { AgentThreadAgentOption } from "../agent-thread-feature.types";
 /** Display-safe services offered by the controlled group-composer selector. */
 const _AGENT_OPTIONS: readonly AgentThreadAgentOption[] =
 [
-	{ agentServiceId: "service-nova", label: "Nova pod assistant" },
-	{ agentServiceId: "service-research", label: "Research assistant" }
+	{
+		agentServiceId: "service-commander",
+		label: "The Commander (Guardian)"
+	},
+	{
+		agentServiceId: "service-analyst-explorer",
+		label: "The Analyst (Explorer)"
+	}
 ];
 
 /** Build one compact parent summary state. */
 function _Summary(state: AgentThreadSummaryStates, overrides: Partial<AgentThreadSummaryPresentation> = {}): AgentThreadSummaryPresentation
 {
-	return { childConversationId: "child-pricing", state, access: AgentThreadAccessStates.Available, title: "Compare supplier pricing", preview: "The counterproposal moves most risk into the renewal clause and changes the payment date.", unreadCount: 2, participants: [{ label: "Alex Kimani", initials: "AK" }, { label: "Jente Rosseel", initials: "JR" }, { label: "Nova Agent", initials: "N" }], replyCount: 7, runCount: 2, updateCount: 9, lastUpdateLabel: "12:14", assetCount: 1, resultLabel: "Pricing comparison", target: { kind: AgentThreadSummaryTargetKinds.Thread, id: "agent-thread-origin" }, ...overrides };
+	return {
+		childConversationId: "child-pricing",
+		state,
+		access: AgentThreadAccessStates.Available,
+		title: "Compare supplier pricing",
+		preview: "The counterproposal moves most risk into the renewal clause and changes the payment date.",
+		unreadCount: 2,
+		participants: [
+			{
+				label: "Alex Kimani",
+				initials: "AK"
+			},
+			{
+				label: "Jente Rosseel",
+				initials: "JR"
+			},
+			{
+				label: "The Commander (Guardian)",
+				initials: "TC"
+			}
+		],
+		replyCount: 7,
+		runCount: 2,
+		updateCount: 9,
+		lastUpdateLabel: "12:14",
+		assetCount: 1,
+		resultLabel: "Pricing comparison",
+		target: {
+			kind: AgentThreadSummaryTargetKinds.Thread,
+			id: "agent-thread-origin"
+		},
+		...overrides
+	};
 }
 
 /** Complete summary catalogue required by the parent-message contract. */
@@ -50,13 +88,45 @@ function _Snapshot(state: AgentThreadRunStates = AgentThreadRunStates.Working, o
 	return {
 		parentConversationId: "group-launch",
 		childConversationId: "child-pricing",
-		origin: { parentTitle: "nova-pitch", parentMessageId: "root-ask", invokedByName: "Alex Kimani", invokedByInitials: "AK", ask: "@agent compare the supplier counterproposal and flag the renewal risk", timestampLabel: "11:07" },
+		origin: {
+			parentTitle: "Supplier review",
+			parentMessageId: "root-ask",
+			invokedByName: "Alex Kimani",
+			invokedByInitials: "AK",
+			ask: "@agent compare the supplier counterproposal and flag the renewal risk",
+			timestampLabel: "11:07"
+		},
 		summary: _Summary(_SummaryStateForRun(state)),
 		recovery: AgentThreadRecoveryStates.Live,
 		timeline: [
-			{ kind: AgentThreadTimelineEntryKinds.RunBoundary, id: "run-boundary-1", run: { runId: "run-1", ordinal: 1, state, label: _RunLabel(state), detail: _RunDetail(state) } },
-			{ kind: AgentThreadTimelineEntryKinds.Message, id: "message-1", message: { id: "message-1", authorName: "Nova", authorInitials: "N", authoredByAgent: true, timestampLabel: "11:08", body: "I am comparing the commercial terms and renewal obligations." } },
-			{ kind: AgentThreadTimelineEntryKinds.Delivery, id: "delivery:delivery-1", delivery }
+			{
+				kind: AgentThreadTimelineEntryKinds.RunBoundary,
+				id: "run-boundary-1",
+				run: {
+					runId: "run-1",
+					ordinal: 1,
+					state,
+					label: _RunLabel(state),
+					detail: _RunDetail(state)
+				}
+			},
+			{
+				kind: AgentThreadTimelineEntryKinds.Message,
+				id: "message-1",
+				message: {
+					id: "message-1",
+					authorName: "The Commander (Guardian)",
+					authorInitials: "TC",
+					authoredByAgent: true,
+					timestampLabel: "11:08",
+					body: "I am comparing the commercial terms and renewal obligations."
+				}
+			},
+			{
+				kind: AgentThreadTimelineEntryKinds.Delivery,
+				id: "delivery:delivery-1",
+				delivery
+			}
 		],
 		cursor: "opaque-story-cursor",
 		latestPosition: "3",
@@ -70,8 +140,23 @@ function _Snapshot(state: AgentThreadRunStates = AgentThreadRunStates.Working, o
 /** Build a truthful delivery for the latest run outcome. */
 function _DeliveryForRun(state: AgentThreadRunStates)
 {
-	if (state === AgentThreadRunStates.Failed) return { id: "delivery-1", kind: AgentThreadDeliveryKinds.Failure, label: "Comparison failed", detail: "Authentication failed. No result was delivered.", timestampLabel: "11:08" } as const;
-	return { id: "delivery-1", kind: AgentThreadDeliveryKinds.Status, label: "Review in progress", detail: "The child sent a safe progress update to nova-pitch.", timestampLabel: "11:08" } as const;
+	if (state === AgentThreadRunStates.Failed)
+	{
+		return {
+			id: "delivery-1",
+			kind: AgentThreadDeliveryKinds.Failure,
+			label: "Comparison failed",
+			detail: "Authentication failed. No result was delivered.",
+			timestampLabel: "11:08"
+		} as const;
+	}
+	return {
+		id: "delivery-1",
+		kind: AgentThreadDeliveryKinds.Status,
+		label: "Review in progress",
+		detail: "The child sent a safe progress update to the supplier review.",
+		timestampLabel: "11:08"
+	} as const;
 }
 
 /** Resolve the summary state belonging to one latest serial run state. */
@@ -167,7 +252,7 @@ export const MentionAdmissionStates: Story =
 		const canvas = within(canvasElement);
 		await expect(canvas.getAllByRole("combobox")).toHaveLength(2);
 		await userEvent.click(canvas.getAllByRole("combobox")[0]);
-		await userEvent.type(canvas.getAllByRole("combobox")[0], "Nova");
+		await userEvent.type(canvas.getAllByRole("combobox")[0], "The Commander");
 		await expect(canvas.getAllByRole("combobox")[0]).toHaveFocus();
 	}
 };

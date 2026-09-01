@@ -1,8 +1,10 @@
-// The whole public surface of @opencrane/models/user-onboarding: the first-chat projection types and
-// the one function that turns an untrusted response into one of them.
+// The public model boundary exports the persona and first-chat projection types plus one parser for
+// each untrusted API response family.
 //
-// The types are re-exported wholesale, but the validator exports a single name on purpose. The schemas
-// and the per-state rules behind it stay private so a consumer cannot assemble its own variant of a
-// valid first chat — every reader has to go through the same check.
+// Each validator exports a single parser on purpose. Its schemas and per-state rules stay private so
+// a consumer cannot assemble another definition of a valid projection; every adapter that accepts
+// untrusted API data applies the same model-owned checks.
 export * from "./persona-first-chat.types";
 export { ___ParsePersonaFirstChatSnapshot } from "./persona-first-chat.validator";
+export * from "./persona-onboarding.types";
+export { ___ParsePersonaOnboardingSnapshot } from "./persona-onboarding.validator";

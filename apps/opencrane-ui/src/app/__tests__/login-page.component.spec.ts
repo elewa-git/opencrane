@@ -10,7 +10,7 @@ import { ActivatedRoute, Router, convertToParamMap } from "@angular/router";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 
 import { LoginPageComponent } from "../login/login-page.component";
 
@@ -19,8 +19,14 @@ beforeAll(async function _InitializeAngularTesting()
 	TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
 	await resolveComponentResources(async function _ResolveLoginResource(url): Promise<string>
 	{
-		if (url.endsWith("login-page.component.html")) return readFileSync(join(process.cwd(), "src/app/login/login-page.component.html"), "utf8");
-		if (url.endsWith("login-page.component.scss")) return "";
+		if (url.endsWith("login-page.component.html"))
+		{
+			return readFileSync(join(process.cwd(), "src/app/login/login-page.component.html"), "utf8");
+		}
+		if (url.endsWith("login-page.component.scss"))
+		{
+			return "";
+		}
 		return "";
 	});
 });

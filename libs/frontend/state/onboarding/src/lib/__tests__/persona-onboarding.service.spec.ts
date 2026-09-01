@@ -1,7 +1,9 @@
 import { Injector, runInInjectionContext } from "@angular/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PERSONA_GATEWAY, PersonaGateway, PersonaOnboardingSnapshot, PersonaOnboardingStates } from "../persona-gateway.types";
+import { PersonaOnboardingStates, type PersonaOnboardingSnapshot } from "@opencrane/models/user-onboarding";
+
+import { PERSONA_GATEWAY, type PersonaGateway } from "../persona-gateway.types";
 import { PersonaOnboardingService } from "../persona-onboarding.service";
 
 /** Build one complete server snapshot for orchestration tests. */

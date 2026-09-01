@@ -1,8 +1,16 @@
 import { Injectable, inject } from "@angular/core";
 
-import { PERSONA_GATEWAY, PersonaGateway, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaResolutionKinds } from "./persona-gateway.types";
+import { PersonaOnboardingStates, type PersonaOnboardingSnapshot, type PersonaResolutionKinds } from "@opencrane/models/user-onboarding";
 
-/** Server-backed orchestration for the resumable persona onboarding lifecycle. */
+import { PERSONA_GATEWAY, type PersonaGateway } from "./persona-gateway.types";
+
+/**
+ * Orchestrates the resumable persona lifecycle through {@link PersonaGateway}. Every command reloads
+ * the authority-owned projection, and draft preparation waits until scoring has no unresolved tie,
+ * so callers never advance the browser from an assumed write result.
+ *
+ * Called by: {@link PersonaOnboardingStore}, which serializes UI commands and adopts each result.
+ */
 @Injectable({ providedIn: "root" })
 export class PersonaOnboardingService
 {
@@ -66,7 +74,7 @@ export class PersonaOnboardingService
 	/** Create a draft only when a completed command proves review evidence has no unresolved tie. */
 	private async _prepareDraft(snapshot: PersonaOnboardingSnapshot): Promise<PersonaOnboardingSnapshot>
 	{
-		if (snapshot.state !== PersonaOnboardingStates.Review || snapshot.personaRevisionId !== null || snapshot.interviewId === null)
+		if (snapshot.state !== PersonaOnboardingStates.Review || snapshot.personaRevisionId || !snapshot.interviewId)
 		{
 			return snapshot;
 		}

@@ -3,7 +3,7 @@ import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
 import { ChoiceCardGroupComponent, ChoiceCardLayouts, ChoiceCardOption, ChoiceCardPromptEmphases, CollapsibleSectionComponent, JourneyProgressComponent, JourneyShellComponent, JourneyShellHeaderEmphases, JourneyShellLayouts } from "@opencrane/elements/ui";
-import { PersonaOnboardingStates, PersonaQuestion } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates, type PersonaQuestion } from "@opencrane/state/onboarding/projection";
 
 import { _FindCurrentQuestion, _ProgressLabel, _QuestionOptions } from "../../onboarding-view.util";
 import type { PersonaAnswerIntent, PersonaOnboardingStateSnapshot } from "../../persona-onboarding-state.types";
@@ -133,7 +133,10 @@ export class PersonaInterviewStateComponent
 			return;
 		}
 		// 3. Focus the changed question so keyboard and screen-reader users arrive at the adopted task.
-		if (this._renderedQuestionId === questionId) return;
+		if (this._renderedQuestionId === questionId)
+		{
+			return;
+		}
 		this._renderedQuestionId = questionId;
 		this._questionRegion?.nativeElement.focus();
 	}

@@ -8,7 +8,14 @@ import { ConversationListComponent } from "../components/conversation-list/conve
 const _ITEMS: readonly ConversationSessionRailItemPresentation[] =
 [
 	{ key: "onboarding:onboarding-1", kind: ConversationSessionRailItemKinds.Onboarding, conversationId: null, title: "Welcome", iconState: ConversationSessionRailIconStates.Completed, archived: false },
-	{ key: "agent-session", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "agent-session", title: "Nova", iconState: ConversationSessionRailIconStates.AgentSession, archived: false },
+	{
+		key: "agent-session",
+		kind: ConversationSessionRailItemKinds.Conversation,
+		conversationId: "agent-session",
+		title: "The Commander (Guardian)",
+		iconState: ConversationSessionRailIconStates.AgentSession,
+		archived: false
+	},
 	{ key: "direct", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "direct", title: "Direct conversation", iconState: ConversationSessionRailIconStates.Direct, archived: false },
 	{ key: "group", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "group", title: "Group conversation with the launch planning team", iconState: ConversationSessionRailIconStates.Group, archived: false },
 	{ key: "closed", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "closed", title: "Closed handoff", iconState: ConversationSessionRailIconStates.Closed, archived: false },

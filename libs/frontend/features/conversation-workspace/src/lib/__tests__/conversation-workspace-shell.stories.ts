@@ -13,7 +13,25 @@ import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { ConversationWorkspaceRouteComponent } from "../conversation-workspace-route/conversation-workspace-route.component";
 
 /** Privacy-safe directory used by the full workspace stories. */
-const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "participant-1", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
+const _DIRECTORY: ConversationCreationDirectory = {
+	participants: [
+		{
+			participantRef: "self",
+			isSelf: true,
+			label: "You"
+		},
+		{
+			participantRef: "participant-1",
+			isSelf: false,
+			label: "Participant 1"
+		}
+	],
+	personalAgentStatus: ConversationPersonalAgentStatuses.Ready,
+	personalAgent: {
+		personalAgentRef: "agent-1",
+		displayName: "The Commander (Guardian)"
+	}
+};
 
 /** Directory where direct and group chat remain available without a personal Agent. */
 const _UNAVAILABLE_AGENT_DIRECTORY: ConversationCreationDirectory = { participants: _DIRECTORY.participants, personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
@@ -23,6 +41,13 @@ const _AMBIGUOUS_AGENT_DIRECTORY: ConversationCreationDirectory = { participants
 
 /** Directory projection that cannot admit a new chat because it has no self membership. */
 const _NO_MEMBERSHIP_DIRECTORY: ConversationCreationDirectory = { participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
+
+/** Exact reviewed Commander opening that precedes the first calibration question. */
+const _COMMANDER_OPENING = `I'm your personal assistant. Based on your onboarding answers, I'm set up to be direct,
+concise, and results-focused. I'll give you straight answers, challenge you when I see a better
+path, and skip the filler.
+
+Before we start working: three quick things I need from you to be effective.`;
 
 /** Product-realistic text that must exercise transcript scrolling inside the viewport shell. */
 const _LONG_CONTENT = `# Project review\n\n${"The proposal keeps the agreed constraints and records the next decision clearly. ".repeat(32)}`;
@@ -55,7 +80,52 @@ function _SecondDirectDetail(): ConversationWorkspaceDetail
 /** Build one completed onboarding projection with no conversation mode or run. */
 function _OnboardingHistory(): ConversationOnboardingHistoryProjection
 {
-	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: "onboarding-1", personaDisplayName: "Nova", startedAt: "2026-08-12T18:00:00.000Z", completedAt: "2026-08-12T18:05:00.000Z", transcript: [{ ordinal: 1, role: MessageRoles.Assistant, text: "What are you working on right now?" }, { ordinal: 2, role: MessageRoles.User, text: "I'm building OpenCrane, you basically! Right now I'm on a test drive." }, { ordinal: 3, role: MessageRoles.Assistant, text: "Good answer. What is the one thing that wastes your time most?" }, { ordinal: 4, role: MessageRoles.User, text: "Chasing status updates across tools." }, { ordinal: 5, role: MessageRoles.Assistant, text: "Noted — I'll watch for those and surface them before you have to ask. That completes your onboarding." }] } };
+	return {
+		status: ConversationOnboardingHistoryStatuses.Ready,
+		history: {
+			id: "onboarding-1",
+			personaDisplayName: "The Commander (Guardian)",
+			startedAt: "2026-08-12T18:00:00.000Z",
+			completedAt: "2026-08-12T18:05:00.000Z",
+			transcript: [
+				{
+					ordinal: 1,
+					role: MessageRoles.Assistant,
+					text: _COMMANDER_OPENING
+				},
+				{
+					ordinal: 2,
+					role: MessageRoles.Assistant,
+					text: "What are you working on right now?"
+				},
+				{
+					ordinal: 3,
+					role: MessageRoles.User,
+					text: "Preparing the Q3 launch plan for the customer portal."
+				},
+				{
+					ordinal: 4,
+					role: MessageRoles.Assistant,
+					text: "What is the one thing that wastes your time most?"
+				},
+				{
+					ordinal: 5,
+					role: MessageRoles.User,
+					text: "Reconciling project updates across too many separate tools."
+				},
+				{
+					ordinal: 6,
+					role: MessageRoles.Assistant,
+					text: "When I push back on your ideas, how hard should I push?"
+				},
+				{
+					ordinal: 7,
+					role: MessageRoles.User,
+					text: "Push back directly when you see a concrete risk, then show me the safer alternative."
+				}
+			]
+		}
+	};
 }
 
 /** Test-only participant API used by one deterministic shell story. */
@@ -82,11 +152,25 @@ class _StoryGateway implements ConversationWorkspaceGateway
 	/** Return the story directory. */
 	public async directory() { return this._directory; }
 	/** Return one row so the real page follows its snapshot-first flow. */
-	public async list() { if (this._onboardingHistory.history !== null) return []; return this._detail instanceof Error ? [_Detail()] : [this._detail]; }
+	public async list()
+	{
+		if (this._onboardingHistory.history !== null)
+		{
+			return [];
+		}
+		return this._detail instanceof Error ? [_Detail()] : [this._detail];
+	}
 	/** Return the configured separate onboarding history projection. */
 	public async onboardingHistory() { return this._onboardingHistory; }
 	/** Return or reject the configured authorized snapshot. */
-	public async open(_conversationId: string): Promise<ConversationWorkspaceDetail> { if (this._detail instanceof Error) throw this._detail; return this._detail; }
+	public async open(_conversationId: string): Promise<ConversationWorkspaceDetail>
+	{
+		if (this._detail instanceof Error)
+		{
+			throw this._detail;
+		}
+		return this._detail;
+	}
 	/** Return the configured snapshot for unused create interactions. */
 	public async create(): Promise<ConversationWorkspaceDetail> { return _Detail(); }
 	/** Accept no story message command. */
@@ -117,7 +201,10 @@ class _StoryNavigationGateway extends _StoryGateway
 	public override async open(conversationId: string): Promise<ConversationWorkspaceDetail>
 	{
 		const detail = this._details.find(candidate => candidate.id === conversationId);
-		if (detail === undefined) throw new Error("Conversation not found.");
+		if (detail === undefined)
+		{
+			throw new Error("Conversation not found.");
+		}
 		return detail;
 	}
 }
@@ -190,7 +277,10 @@ export const Desktop: Story =
 		{
 			const input = canvasElement.querySelector<HTMLInputElement>('input[type="file"]');
 			expect(input).not.toBeNull();
-			if (input === null) throw new Error("Attach input is not rendered yet.");
+			if (input === null)
+			{
+				throw new Error("Attach input is not rendered yet.");
+			}
 			return input;
 		}, { timeout: 5000 });
 		attachInput.focus();
@@ -274,7 +364,10 @@ export const LongContent: Story = {
 			expect(workspace).not.toBeNull();
 			expect(rail).not.toBeNull();
 			expect(transcript).not.toBeNull();
-			if (workspace === null || rail === null || transcript === null) throw new Error("The workspace frame is not ready.");
+			if (workspace === null || rail === null || transcript === null)
+			{
+				throw new Error("The workspace frame is not ready.");
+			}
 
 			// 2. Verify that the frame and rail both retain the browser viewport's height.
 			expect(Math.round(workspace.getBoundingClientRect().height)).toBe(window.innerHeight);

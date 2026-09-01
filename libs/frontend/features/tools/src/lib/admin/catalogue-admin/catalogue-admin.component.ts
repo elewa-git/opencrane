@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, resource } from "@angular/core";
 import { McpApprovalStatus, McpServer } from "@opencrane/core";
 import { MCP_GATEWAY } from "@opencrane/state/mcp/adapter";
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 import { ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
 
 import { MCP_APPROVAL_CHIPS, MCP_TYPE_CHIPS } from "../../mcp-chip.constants";

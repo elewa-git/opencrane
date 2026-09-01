@@ -35,7 +35,8 @@ the real enforcement point.
 ## Dependency direction
 
 Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
-only other `scope:web` packages and `scope:shared` contracts. It depends on `@opencrane/state/core`
+only other legacy `scope:web` packages, the bounded `scope:frontend-session`, and `scope:shared`
+contracts. It depends on `@opencrane/state/session`
 (session store), `@opencrane/state/mcp/adapter` (the MCP gateway), and
 `@opencrane/state/provider-key/adapter` (the provider-key gateway and status).
 

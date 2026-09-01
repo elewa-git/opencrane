@@ -1,7 +1,6 @@
 import { Injectable, computed, inject, resource, signal } from "@angular/core";
-import { UserOnboardingRouteStates } from "@opencrane/models/user-onboarding";
+import { PersonaOnboardingStates, PersonaResolutionKinds, UserOnboardingRouteStates, type PersonaOnboardingSnapshot } from "@opencrane/models/user-onboarding";
 
-import { PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaResolutionKinds } from "./persona-gateway.types";
 import { PersonaFirstChatService } from "./persona-first-chat.service";
 import type { UserOnboardingRouteSnapshot } from "./persona-first-chat.types";
 import { PersonaOnboardingService } from "./persona-onboarding.service";
@@ -86,7 +85,10 @@ export class PersonaOnboardingStore
 	 */
 	public async resolveReadyRoute(): Promise<void>
 	{
-		if (this._readyRouteActive() || this._readyRoute() !== null) return;
+		if (this._readyRouteActive() || this._readyRoute() !== null)
+		{
+			return;
+		}
 		this._readyRouteActive.set(true);
 		this._readyRouteError.set(null);
 		try
@@ -132,7 +134,10 @@ export class PersonaOnboardingStore
 		if (revisionId !== null)
 		{
 			const recovered = await this._executeCommand(this._persona.approve.bind(this._persona, revisionId));
-			if (!recovered) return;
+			if (!recovered)
+			{
+				return;
+			}
 			this._pendingApprovalRevisionId.set(null);
 		}
 		await this.resolveReadyRoute();
@@ -182,7 +187,10 @@ export class PersonaOnboardingStore
 	public async prepareDraft(): Promise<void>
 	{
 		const snapshot = this.onboarding.hasValue() ? this.onboarding.value() : null;
-		if (snapshot === null) return;
+		if (snapshot === null)
+		{
+			return;
+		}
 		await this._executeCommand(this._persona.ensureDraft.bind(this._persona, snapshot));
 	}
 
@@ -214,7 +222,10 @@ export class PersonaOnboardingStore
 		}
 		this._pendingApprovalRevisionId.set(personaRevisionId);
 		const approved = await this._executeCommand(this._persona.approve.bind(this._persona, personaRevisionId));
-		if (approved) this._pendingApprovalRevisionId.set(null);
+		if (approved)
+		{
+			this._pendingApprovalRevisionId.set(null);
+		}
 	}
 
 	/** Ask the server to start a fresh interview; the current review is left alone until it answers. */
@@ -226,7 +237,10 @@ export class PersonaOnboardingStore
 	/** Run one command at a time, storing only what the server returns; on failure, record it and reload once. */
 	private async _executeCommand(operation: () => Promise<PersonaOnboardingSnapshot>): Promise<boolean>
 	{
-		if (this._commandActive()) return false;
+		if (this._commandActive())
+		{
+			return false;
+		}
 		this._commandActive.set(true);
 		this._commandError.set(null);
 		try

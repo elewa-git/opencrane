@@ -26,10 +26,14 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	/**
 	 * @param _origin - Origin of this surface's API; empty string means same-origin.
 	 */
-	protected constructor(protected readonly _origin: string)
+	protected constructor(protected readonly _origin: string, private readonly _fetch: typeof fetch = globalThis.fetch.bind(globalThis))
 	{
 		this._baseUrl = `${this._origin}/api/v1`;
-		this.client = createClient<TPaths>({ baseUrl: this._baseUrl, credentials: "include" });
+		this.client = createClient<TPaths>({
+			baseUrl: this._baseUrl,
+			credentials: "include",
+			fetch: this._fetch
+		});
 		this.client.use(this._buildAuthMiddleware());
 	}
 
@@ -53,7 +57,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 		{
 			init.body = JSON.stringify(options.body);
 		}
-		const response = await fetch(`${this._baseUrl}${path}${search}`, init);
+		const response = await this._fetch(`${this._baseUrl}${path}${search}`, init);
 		this._redirectIfUnauthorized(response);
 		if (!response.ok)
 		{
