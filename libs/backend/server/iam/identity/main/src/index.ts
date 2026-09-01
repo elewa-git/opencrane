@@ -6,3 +6,4 @@ export * from "./authenticated-principals/prisma-authenticated-principal-directo
 export * from "./authenticated-principals/prisma-authenticated-principal-admission-unit-of-work";
 export * from "./authenticated-principals/prisma-authenticated-principal-capability-unit-of-work";
 export type { StandaloneFirstUserAdmissionAuditPort, StandaloneFirstUserAdmissionConfig } from "./standalone-first-user/standalone-first-user-admission.types";
+export * from "./agent-identities";

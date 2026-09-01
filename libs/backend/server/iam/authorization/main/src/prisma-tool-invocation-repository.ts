@@ -1,5 +1,6 @@
 import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
+import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest";
@@ -20,12 +21,6 @@ const _CLAIM_TO_PRISMA: Readonly<Record<ExternalActionClaimKinds, ExternalAction
 	[ExternalActionClaimKinds.Reconcile]: ExternalActionClaimKind.Reconcile,
 };
 
-/** Maps the two runtime actor classes onto their persisted names. */
-const _AUTHORIZATION_ACTOR_TO_PRISMA = {
-	user: ToolInvocationAuthorizationActorKind.User,
-	"agent-service": ToolInvocationAuthorizationActorKind.AgentService,
-} as const;
-
 /** Stored row shape translated without leaking generated Prisma types to callers. */
 type ToolInvocationRow = Prisma.ToolInvocationGetPayload<Record<string, never>>;
 
@@ -33,37 +28,37 @@ type ToolInvocationRow = Prisma.ToolInvocationGetPayload<Record<string, never>>;
 function _authorizationEvidence(row: ToolInvocationRow): ToolInvocationAuthorizationEvidence | McpTaskToolInvocationAuthorizationEvidence | null
 {
 	const decisionDigests = row.authorizationDecisionDigests ?? [];
-	const hasEvidence = !_isMissing(row.authorizationPrincipalId)
-		|| !_isMissing(row.authorizationActorKind)
+	const hasEvidence = !_isMissing(row.authorizationActorKind)
+		|| !_isMissing(row.authorizationExecutionSubject)
 		|| !_isMissing(row.authorizationCoordinates)
 		|| decisionDigests.length > 0
-		|| !_isMissing(row.authorizationMembershipRevision)
 		|| !_isMissing(row.authorizationAssignmentDigest)
 		|| !_isMissing(row.authorizationEvidenceDigest);
 	if (!hasEvidence)
 		return null;
-	if (_isMissing(row.authorizationPrincipalId) || _isMissing(row.authorizationActorKind) || _isMissing(row.authorizationCoordinates) || decisionDigests.length === 0 || _isMissing(row.authorizationEvidenceDigest))
+	if (_isMissing(row.authorizationCoordinates) || decisionDigests.length === 0 || _isMissing(row.authorizationEvidenceDigest))
 		throw new Error(`ToolInvocation ${row.id} has incomplete authorization evidence`);
 	if (row.runId === null)
 	{
-		if (row.authorizationActorKind !== ToolInvocationAuthorizationActorKind.User || !_isMissing(row.authorizationMembershipRevision) || !_isMissing(row.authorizationAssignmentDigest))
+		if (!_isMissing(row.agentIdentityId) || !_isMissing(row.authorizationActorKind) || !_isMissing(row.authorizationExecutionSubject) || !_isMissing(row.authorizationAssignmentDigest))
 			throw new Error(`ToolInvocation ${row.id} has invalid task authorization evidence`);
 		return {
-			principalId: row.authorizationPrincipalId,
-			actorKind: "user",
+			principalId: row.principalId,
 			coordinates: row.authorizationCoordinates as unknown as readonly ToolInvocationAuthorizationCoordinate[],
 			decisionDigests: decisionDigests as `sha256:${string}`[],
 			evidenceDigest: row.authorizationEvidenceDigest as `sha256:${string}`,
 		};
 	}
-	if (_isMissing(row.authorizationMembershipRevision) || _isMissing(row.authorizationAssignmentDigest))
+	if (_isMissing(row.agentIdentityId) || row.authorizationActorKind !== ToolInvocationAuthorizationActorKind.Workload || _isMissing(row.authorizationExecutionSubject) || _isMissing(row.authorizationAssignmentDigest))
 		throw new Error(`ToolInvocation ${row.id} has incomplete authorization evidence`);
+	const parsed = ___ExecutionSubjectSchema.safeParse(row.authorizationExecutionSubject);
+	if (!parsed.success || parsed.data.siloId !== row.siloId || parsed.data.agentIdentityId !== row.agentIdentityId || parsed.data.principalId !== row.principalId || parsed.data.runScope.runId !== row.runId || parsed.data.runScope.attempt !== row.attempt || parsed.data.runScope.agentServiceId !== row.agentServiceId || parsed.data.runScope.agentRevisionId !== row.agentRevisionId)
+		throw new Error(`ToolInvocation ${row.id} has invalid workload authorization evidence`);
 	return {
-		principalId: row.authorizationPrincipalId,
-		actorKind: row.authorizationActorKind === ToolInvocationAuthorizationActorKind.User ? "user" : "agent-service",
+		actorKind: "workload",
+		executionSubject: parsed.data,
 		coordinates: row.authorizationCoordinates as unknown as readonly ToolInvocationAuthorizationCoordinate[],
 		decisionDigests: decisionDigests as `sha256:${string}`[],
-		membershipRevision: row.authorizationMembershipRevision,
 		assignmentDigest: row.authorizationAssignmentDigest as `sha256:${string}`,
 		evidenceDigest: row.authorizationEvidenceDigest as `sha256:${string}`,
 	};
@@ -82,7 +77,6 @@ function _record(row: ToolInvocationRow): ToolInvocationRecord
 		id: row.id,
 		siloId: row.siloId,
 		agentRevisionId: row.agentRevisionId,
-		subjectId: row.subjectId,
 		authorizationEvidence: _authorizationEvidence(row),
 		runId: row.runId,
 		attempt: row.attempt,
@@ -197,12 +191,12 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 				attempt: intent.attempt,
 				agentServiceId: intent.agentServiceId,
 				agentRevisionId: intent.agentRevisionId,
-				subjectId: intent.subjectId,
-				authorizationPrincipalId: intent.authorizationEvidence.principalId,
-				authorizationActorKind: _AUTHORIZATION_ACTOR_TO_PRISMA[intent.authorizationEvidence.actorKind],
+				agentIdentityId: intent.authorizationEvidence.executionSubject.agentIdentityId,
+				principalId: intent.authorizationEvidence.executionSubject.principalId,
+				authorizationActorKind: ToolInvocationAuthorizationActorKind.Workload,
+				authorizationExecutionSubject: intent.authorizationEvidence.executionSubject as unknown as Prisma.InputJsonValue,
 				authorizationCoordinates: intent.authorizationEvidence.coordinates as unknown as Prisma.InputJsonValue,
 				authorizationDecisionDigests: [...intent.authorizationEvidence.decisionDigests],
-				authorizationMembershipRevision: intent.authorizationEvidence.membershipRevision,
 				authorizationAssignmentDigest: intent.authorizationEvidence.assignmentDigest,
 				authorizationEvidenceDigest: intent.authorizationEvidence.evidenceDigest,
 				runtimeInstanceId: intent.requestIdentity.runtimeInstanceId,

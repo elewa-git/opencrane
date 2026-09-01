@@ -36,10 +36,12 @@ does not expose a separate run-start route.
 
 The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
 dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
-the handoff into execution admission's authoritative final transaction.
-Participant run retry is injected through the runs package's `RunRetryAuthority`; conversation
-composition supplies route and session facts but neither constructs a run repository nor owns its
-transaction retries.
+the handoff into execution admission's authoritative final transaction. Participant retry first
+uses the required execution-inputs compiler to recheck a fresh AgentIdentity, membership,
+capability decision, and computer lease for the next attempt. Only that fresh immutable snapshot
+then reaches the runs package's `RunRetryAuthority`; browser requester coordinates remain
+provenance and never substitute for execution authority. Conversation composition supplies the
+compiler and route facts but neither constructs a run repository nor owns its transaction retries.
 
 `BoundConversationWriter` is the KurrentDB-facing computer boundary. A caller mints one binding for
 one silo, conversation, computer lease generation, agent identity, run, and expected stream
@@ -50,6 +52,15 @@ enforces a byte and rate budget, rechecks the active lease before each physical 
 read history, select a different stream, or append a second distinct entry. A response-lost retry
 reuses the originally stamped source command and entry bytes. It remains uncomposed until the direct KurrentDB
 conversation-authority replacement can delete the relational writer in the same slice.
+
+`ConversationComputerHistory` owns the separate deterministic KurrentDB stream for the logical
+computer itself. It accepts complete, closed computer and lease snapshots only through the narrow
+HistoryStore port, checks their stream revision on every append, and replays them against the current
+head before returning state. A later pre-admission composition can ask it only for the exact silo,
+conversation, AgentIdentity and profile it already selected; it receives an active lease only when
+the matching computer is currently warm. A missing, retired, cooling, released, lost, malformed, or
+cross-coordinate snapshot fails closed. This history authority does not create a sandbox claim,
+activate a sandbox, use PostgreSQL, or receive a direct KurrentDB client.
 
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also
@@ -123,6 +134,9 @@ transport for workloads; it is not a browser fallback.
   the computer authority, parks malformed input and an explicitly parked authority outcome,
   acknowledges activated, idempotent, or denied outcomes, retries only a transient authority
   failure, and leaves an acknowledgement failure for KurrentDB to redeliver.
+- `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
+  deterministic KurrentDB stream. Its checked current-head result lets future pre-admission code use
+  only one matching warm computer with one active, generation-fenced lease.
 
 ## Boundary
 

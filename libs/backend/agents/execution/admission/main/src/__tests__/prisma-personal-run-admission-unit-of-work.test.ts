@@ -2,13 +2,19 @@ import { AgentRunState, ConversationLifecycle, ConversationMode, OrgMemberStatus
 import { describe, expect, it, vi } from "vitest";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
-import { PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionCommand } from "../personal-run-admission.types";
+import { PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionAssemblyCommand, type PersonalRunAdmissionCommand } from "../personal-run-admission.types";
 import { PrismaPersonalRunAdmissionUnitOfWork } from "../prisma-personal-run-admission-unit-of-work";
 
 /** Builds one trusted personal admission command for persistence-adapter tests. */
 function _Command(): PersonalRunAdmissionCommand
 {
-	return { siloId: "silo-1", executionIssuer: "https://issuer.test", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
+	return { siloId: "silo-1", requesterIssuer: "https://issuer.test", requesterSubjectId: "user-1", requesterAuthenticatedAt: "2026-09-01T00:00:00.000Z", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
+}
+
+/** Adds the server-allocated coordinates that the durable duplicate reader verifies. */
+function _AssemblyCommand(): PersonalRunAdmissionAssemblyCommand
+{
+	return { ..._Command(), runId: "run-new", agentServiceId: "service-1" };
 }
 
 /** Builds a Prisma-shaped client that offers one serializable transaction. */
@@ -31,13 +37,13 @@ describe("PrismaPersonalRunAdmissionUnitOfWork", function _DescribePrismaPersona
 			agentRun: {
 				findUnique: async function _FindUnique()
 				{
-					return { id: "run-1", conversationId: "conversation-1", delegatedUserId: "user-1", trigger: "Interactive", inputSnapshot: { id: "snapshot-1" } };
+					return { id: "run-1", conversationId: "conversation-1", trigger: "Interactive", inputSnapshot: { id: "snapshot-1" } };
 				},
 			},
 		};
 		const unitOfWork = new PrismaPersonalRunAdmissionUnitOfWork(_Client(transaction));
 
-		await expect(unitOfWork.resolve(_Command())).resolves.toEqual({ outcome: PersonalRunIdempotencyOutcomes.Idempotent, runId: "run-1" });
+		await expect(unitOfWork.resolve(_AssemblyCommand())).resolves.toEqual({ outcome: PersonalRunIdempotencyOutcomes.Idempotent, runId: "run-1" });
 	});
 
 	it("resolves only a participant-bound personal service inside a serializable snapshot", async function _ResolvesPersonalConversation()

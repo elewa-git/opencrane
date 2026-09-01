@@ -60,7 +60,7 @@ describe("PrismaAgentRevisionLifecycleUnitOfWork", function _Suite()
 		expect(result.outcome).toBe("created");
 		if (result.outcome !== "created")
 			throw new Error("expected managed service creation");
-		const expectedPrincipalId = `agent-service:${result.service.id}`;
+		const expectedPrincipalId = `managed-principal:${result.service.id}`;
 		expect(principalCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: expectedPrincipalId, siloId: "silo-1", issuer: MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER, subject: result.service.id, provenance: PrincipalProvenance.Internal }) });
 		expect(serviceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: result.service.id, principalId: expectedPrincipalId, kind: AgentServiceKind.Managed, state: AgentServiceState.Draft }) });
 		expect(transaction.modelDefinition.findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "model-1", siloId: "silo-1" } }, select: { scope: true, clusterTenant: true } });

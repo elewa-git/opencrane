@@ -42,8 +42,6 @@ export interface ToolInvocationIntent
 	readonly agentServiceId: string;
 	/** Immutable agent revision executed by the attempt. */
 	readonly agentRevisionId: string | null;
-	/** Trusted execution subject from the immutable snapshot. */
-	readonly subjectId: string;
 	/** Current central authorization evidence bound to this run, attempt, revision, and arguments. */
 	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence;
 	/** Admitted stream, command, and candidate identity. */
@@ -75,8 +73,6 @@ export interface ToolInvocationRecord
 	readonly siloId: string;
 	/** Immutable agent revision that selected the tool. */
 	readonly agentRevisionId: string | null;
-	/** Trusted execution subject on whose behalf the action runs. */
-	readonly subjectId: string;
 	/** Central effect evidence shaped for either the owning AgentRun or caller-owned MCP task. */
 	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence | McpTaskToolInvocationAuthorizationEvidence | null;
 	/** Run owning the invocation. */

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
-import { RunInputSnapshotIdentityKinds, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -41,12 +41,11 @@ class RuntimeExternalActionAuthorizationCoordinator implements RuntimeExternalAc
 		if (actor === null || !/^sha256:[0-9a-f]{64}$/u.test(context.assignmentDigest))
 			return null;
 
-		// 2. Reverify signed membership and the active published AgentRevision on this transaction.
-		const membershipEligible = await this.eligibility.membership.isEligible({ siloId: context.siloId, identity: context.snapshot.identitySnapshot, nowEpochMs: now.getTime() });
+		// 2. Reverify the full subject and the active published AgentRevision on this transaction.
+		const membershipEligible = await this.eligibility.membership.isEligible({ siloId: context.siloId, executionSubject: context.executionSubject, nowEpochMs: now.getTime() });
 		if (!membershipEligible)
 			return null;
-		const executionKind = context.snapshot.identitySnapshot.kind === RunInputSnapshotIdentityKinds.User ? "personal" : "managed";
-		const agentEligible = await this.eligibility.agentService.isEligible({ siloId: context.siloId, agentServiceId: context.agentServiceId, agentRevisionId: context.agentRevisionId, executionKind, principalId: actor.principalId });
+		const agentEligible = await this.eligibility.agentService.isEligible({ siloId: context.siloId, agentServiceId: context.agentServiceId, agentRevisionId: context.agentRevisionId, executionSubject: context.executionSubject });
 		if (!agentEligible)
 			return null;
 
@@ -63,11 +62,10 @@ class RuntimeExternalActionAuthorizationCoordinator implements RuntimeExternalAc
 
 		// 5. Bind lifecycle, authority, assignment, and arguments into one stored evidence digest.
 		const evidenceWithoutDigest = {
-			principalId: actor.principalId,
 			actorKind: actor.actorKind,
+			executionSubject: context.executionSubject,
 			coordinates: _CanonicalCoordinates(coordinates),
 			decisionDigests: [...decisionDigests].sort(),
-			membershipRevision: actor.membershipRevision,
 			agentRevisionId: context.agentRevisionId,
 			runId: context.runId,
 			attempt: context.attempt,
@@ -92,8 +90,6 @@ class RuntimeExternalActionAuthorizationCoordinator implements RuntimeExternalAc
 	/** Returns both current personal-memory resources covered by recall. */
 	private async _PersonalMemoryCoordinates(context: RuntimeDispatchContext, actor: RuntimeProductActor): Promise<readonly RuntimeExternalActionAuthorizationCoordinate[] | null>
 	{
-		if (context.snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User)
-			return null;
 		const datasetId = _PersonalMemoryDatasetId(context.snapshot.memoryQueryPolicy);
 		if (datasetId === null || !await this.eligibility.personalMemory.isEligible({ siloId: context.siloId, datasetId, principalId: actor.principalId }))
 			return null;
@@ -106,9 +102,9 @@ class RuntimeExternalActionAuthorizationCoordinator implements RuntimeExternalAc
 	/** Returns the active personal Persona profile covered by an upgrade proposal. */
 	private async _UpgradeSessionCoordinates(context: RuntimeDispatchContext): Promise<readonly RuntimeExternalActionAuthorizationCoordinate[] | null>
 	{
-		if (context.snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User || context.personaRevisionId === null)
+		if (context.personaRevisionId === null)
 			return null;
-		const profileId = await this.eligibility.persona.findEligibleProfileId({ siloId: context.siloId, userId: context.snapshot.identitySnapshot.executionSubjectId, personaRevisionId: context.personaRevisionId });
+		const profileId = await this.eligibility.persona.findEligibleProfileId({ siloId: context.siloId, principalId: context.executionSubject.principalId, personaRevisionId: context.personaRevisionId });
 		return profileId === null ? null : [{ resource: { kind: ProductAuthorizationResourceKinds.Persona, id: profileId }, action: ProductAuthorizationActions.Use }];
 	}
 }
@@ -148,21 +144,15 @@ function _CreateAuthorizationAuthority(transaction: Prisma.TransactionClient): A
 	return new PrismaAuthorizationAuthority(transaction);
 }
 
-/** Derives the central Principal from the full frozen identity, not the runtime frame. */
+/** Derives the central workload actor from the full frozen subject, not the runtime frame. */
 function _RuntimeActor(context: RuntimeDispatchContext): RuntimeProductActor | null
 {
-	const identity = context.snapshot.identitySnapshot;
-	if (!Number.isSafeInteger(identity.fleetMembershipRevision) || identity.fleetMembershipRevision < 1)
+	const subject = context.executionSubject;
+	if (!Number.isSafeInteger(subject.membership.revision) || subject.membership.revision < 1)
 		return null;
-	if (identity.kind === RunInputSnapshotIdentityKinds.User)
-	{
-		if (!identity.principalId.trim() || !identity.executionSubjectId.trim())
-			return null;
-		return { principalId: identity.principalId, actorKind: "user", actorId: identity.principalId, membershipRevision: identity.fleetMembershipRevision };
-	}
-	if (!identity.executionSubjectId.trim() || identity.executionSubjectId !== `agent-service:${identity.agentServiceId}`)
+	if (!subject.principalId.trim() || !subject.agentIdentityId.trim())
 		return null;
-	return { principalId: identity.executionSubjectId, actorKind: "agent-service", actorId: identity.executionSubjectId, membershipRevision: identity.fleetMembershipRevision };
+	return { principalId: subject.principalId, actorKind: "workload", actorId: subject.agentIdentityId, membershipRevision: subject.membership.revision };
 }
 
 /** Orders resource coordinates before they become durable evidence. */

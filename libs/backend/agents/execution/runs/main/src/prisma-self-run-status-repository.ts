@@ -24,7 +24,7 @@ export class PrismaSelfRunStatusRepository implements SelfRunStatusRepository
 	/** List the latest fifty personal runs owned by one session subject in one silo. */
 	async listOwned(caller: SelfRunStatusCaller): Promise<readonly SelfRunStatus[]>
 	{
-		const runs = await this._prisma.agentRun.findMany({ where: { siloId: caller.siloId, delegatedUserId: { equals: caller.subjectId } }, orderBy: [{ acceptedAt: "desc" }, { id: "desc" }], take: 200, select: { id: true, attempt: true, state: true, conversationId: true, agentRevisionId: true, acceptedAt: true, finishedAt: true } });
+		const runs = await this._prisma.agentRun.findMany({ where: { siloId: caller.siloId, principalId: { equals: caller.principalId } }, orderBy: [{ acceptedAt: "desc" }, { id: "desc" }], take: 200, select: { id: true, attempt: true, state: true, conversationId: true, agentRevisionId: true, acceptedAt: true, finishedAt: true } });
 		const resources = runs.map(run => ({ kind: ProductAuthorizationResourceKinds.AgentRun, id: run.id }));
 		const allowed = await this._authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: Date.now() });
 		const allowedIds = new Set(allowed.map(resource => resource.id));
@@ -34,7 +34,7 @@ export class PrismaSelfRunStatusRepository implements SelfRunStatusRepository
 	/** Read only the exact run owned by the session subject in the selected silo. */
 	async readOwned(caller: SelfRunStatusCaller, runId: string): Promise<SelfRunStatus | null>
 	{
-		const run = await this._prisma.agentRun.findFirst({ where: { id: runId, siloId: caller.siloId, delegatedUserId: { equals: caller.subjectId } }, select: { id: true, attempt: true, state: true, conversationId: true, agentRevisionId: true, acceptedAt: true, finishedAt: true } });
+		const run = await this._prisma.agentRun.findFirst({ where: { id: runId, siloId: caller.siloId, principalId: { equals: caller.principalId } }, select: { id: true, attempt: true, state: true, conversationId: true, agentRevisionId: true, acceptedAt: true, finishedAt: true } });
 		if (run === null)
 		{
 			return null;

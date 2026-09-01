@@ -1,13 +1,16 @@
 import type { AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 
-/** Holds frozen identity evidence that chooses the task's runtime workload class. */
+/** Holds frozen execution evidence that binds the task to one admitted computer lease. */
 export interface AgentRunWorkflowSnapshotIdentity
 {
-	/** Identifies the person or managed service that owns this run. */
-	readonly subjectId: string;
-	/** Identifies the managed service, or is null for a personal run. */
-	readonly managedServiceId: string | null;
+	/** Identifies the agent identity that may exercise this workload. */
+	readonly agentIdentityId: string;
+	/** Identifies the principal currently realized by the agent identity. */
+	readonly principalId: string;
+	/** Carries the complete admitted identity, capability, run, and computer-lease evidence. */
+	readonly executionSubject: ExecutionSubject;
 	/** Limits how long the snapshot remains valid for workload assignment. */
 	readonly trustedUntil: Date;
 }

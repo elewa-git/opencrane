@@ -4,6 +4,11 @@ OpenCrane executes each accepted **AgentRun attempt** in a claimed, one-use Kube
 small warm pool. The control plane remains authoritative for identity, inputs, events, approvals
 and outcomes; a pre-started Pod has no attempt authority until the durable claim succeeds.
 
+::: info
+🔶 The 0.11.0 `ExecutionSubject` contract is present, but target run admission stays unavailable
+until the app composes checked Kurrent AgentIdentity and conversation-computer evidence.
+:::
+
 > See also: [Run limits and cost](/guide/budgets) (per-run technical ceilings and spending budgets),
 > [Agent delegation](/guide/child-runs) (governed child-run limits),
 > [OCI MCP runtime](/integrators/oci-mcp-runtime) (tool execution),
@@ -14,13 +19,12 @@ and outcomes; a pre-started Pod has no attempt authority until the durable claim
 ## One runtime, two admission authorities
 
 Personal and managed runs share every mechanism below, but never share an admission path.
-Personal admission derives its `AgentService` from the caller's own participant-bound
-`agent_session` conversation and verifies one signed personal membership assertion; managed
-admission derives the `agent-service:<id>` principal,
-verifies its current Ed25519-signed fleet membership, and intersects the active revision's exact
-knowledge/tool attachments with effective grants. A personal run's frozen input always names an
-approved `PersonaRevision`; a managed run's never does, because its published revision is already
-complete. Neither path can produce the other's identity or inherit its grants — see
+Each path resolves an AgentIdentity and current Principal, verifies its membership and capability
+evidence, and binds the result with the conversation computer's active lease in one
+`ExecutionSubject`. The browser or scheduler remains requester provenance, not execution
+authority. A personal run's frozen input always names an approved `PersonaRevision`; a managed
+run's never does, because its published revision is already complete. Neither path can produce the
+other's identity or inherit its grants — see
 [Architecture](/advanced/architecture#personal-and-managed-are-separate-authorities-not-a-flag).
 
 ## Per-run safety contract

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { ExternalActionRecoveryModes, __DigestCanonicalJson, __ValidateDeferredToolArguments, type ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
-import { ElicitationPurposes, RunInputSnapshotIdentityKinds, type RuntimeElicitationCandidate, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { ElicitationPurposes, type RuntimeElicitationCandidate, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
@@ -14,7 +14,7 @@ import type { RuntimeToolInvocationPreparation } from "./runtime-candidate-prepa
 /** Bind one generic runtime proposal to transaction-consistent run, conversation, participant, and server time. */
 export async function _OpenRuntimeElicitation(context: RuntimeDispatchContext, candidate: RuntimeElicitationCandidate, elicitationUnitOfWork: RuntimeElicitationUnitOfWork, now: Date): Promise<boolean>
 {
-	if (context.identity.kind !== RunInputSnapshotIdentityKinds.User || context.conversationId === null)
+	if (context.conversationId === null)
 		return false;
 	if (candidate.proposal.purpose !== ElicitationPurposes.RuntimeInput && candidate.proposal.purpose !== ElicitationPurposes.A2uiAction)
 		return false;
@@ -32,7 +32,7 @@ export async function _OpenRuntimeElicitation(context: RuntimeDispatchContext, c
 		conversationId: context.conversationId,
 		runId: context.runId,
 		attempt: context.attempt,
-		assignedParticipantId: context.identity.executionSubjectId,
+		assignedParticipantId: context.executionSubject.principalId,
 		requestKey: candidate.proposal.requestKey,
 		purpose: candidate.proposal.purpose,
 		body: candidate.proposal.body,
@@ -61,7 +61,6 @@ export async function _PrepareToolInvocation(transaction: Parameters<RunInputCom
 		attempt: context.attempt,
 		agentServiceId: context.agentServiceId,
 		agentRevisionId: context.agentRevisionId,
-		subjectId: context.identity.executionSubjectId,
 		requestIdentity: { runtimeInstanceId, commandId: candidate.commandId, candidateId: candidate.candidateId },
 		toolRevisionId: candidate.toolRevisionId,
 		toolInvocationId: candidate.toolInvocationId,
@@ -86,11 +85,10 @@ export function _BindToolInvocationAuthorization(preparation: RuntimeToolInvocat
 	return {
 		...preparation,
 		authorizationEvidence: {
-			principalId: authorizationEvidence.principalId,
 			actorKind: authorizationEvidence.actorKind,
+			executionSubject: authorizationEvidence.executionSubject,
 			coordinates: authorizationEvidence.coordinates,
 			decisionDigests: authorizationEvidence.decisionDigests,
-			membershipRevision: authorizationEvidence.membershipRevision,
 			assignmentDigest: authorizationEvidence.assignmentDigest,
 			evidenceDigest: authorizationEvidence.evidenceDigest,
 		},

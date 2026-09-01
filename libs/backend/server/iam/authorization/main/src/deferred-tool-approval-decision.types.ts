@@ -43,8 +43,8 @@ export interface DecideDeferredToolRequestCommand
 	readonly approvalRequestId: string;
 	/** Silo the authenticated reviewer is operating within. */
 	readonly siloId: string;
-	/** Authenticated subject that owns the approval-bound runtime action. */
-	readonly subjectId: string;
+	/** Authenticated human subject that may review this approval. */
+	readonly reviewerSubjectId: string;
 	/** Reviewer's terminal decision. */
 	readonly decision: DeferredToolDecisionKinds;
 	/** Complete replacement arguments required for approval and forbidden for denial. */

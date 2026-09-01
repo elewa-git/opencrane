@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeSteeringRequestState, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind } from "@prisma/client";
 
 import { __ValidateWarmRuntimeLease } from "@opencrane/backend/agents/execution/runs";
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeAssignmentIdentity } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, ___ParseExecutionSubject, type ExecutionSubject, type ExecutionSubjectVerificationContext } from "@opencrane/contracts";
 
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector";
 import type { RuntimeDispatchAuthorityConfig, RuntimeDispatchContext, RuntimeStreamBindingRepository, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types";
@@ -104,13 +104,13 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 		const run = await this.prisma.agentRun.findUnique({ where: { id: assignment.runId } });
 		if (run === null || run.attempt !== assignment.attempt || run.agentServiceId !== assignment.agentServiceId || run.agentRevisionId !== assignment.agentRevisionId || run.siloId !== assignment.siloId)
 			return null;
-		const snapshot = await this.prisma.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
+		const snapshot = await this.prisma.runInputSnapshot.findUnique({ where: { runId_attempt_digest: { runId: run.id, attempt: assignment.attempt, digest: run.inputSnapshotDigest } } });
 		if (snapshot === null)
 			return null;
-		const snapshotIdentity = _snapshotIdentity(snapshot.identitySnapshot);
-		if (snapshotIdentity === null || assignment.subjectId !== snapshotIdentity.executionSubjectId || !_RuntimePlaneMatches(snapshotIdentity, assignment, reservation, config))
+		const executionSubject = _VerifiedExecutionSubject(run, assignment, snapshot, reservation, now.getTime());
+		if (executionSubject === null || !_RuntimePlaneMatches(assignment, reservation, config))
 			return null;
-		const assignmentDigest = _computeAssignmentDigest({ runId: assignment.runId, attempt: assignment.attempt, generation: reservation.generation, agentServiceId: assignment.agentServiceId, agentRevisionId: assignment.agentRevisionId, siloId: assignment.siloId, subjectId: assignment.subjectId, identity: snapshotIdentity, serviceAccountName: reservation.serviceAccountName, podUid: reservation.podUid, expiresAt: reservation.idleDeadline, createdAt: reservation.reservedAt });
+		const assignmentDigest = _computeAssignmentDigest({ runId: assignment.runId, attempt: assignment.attempt, generation: reservation.generation, agentServiceId: assignment.agentServiceId, agentRevisionId: assignment.agentRevisionId, siloId: assignment.siloId, agentIdentityId: assignment.agentIdentityId, principalId: assignment.principalId, executionSubject, workloadProfile: assignment.workloadProfile, serviceAccountName: reservation.serviceAccountName, podUid: reservation.podUid, expiresAt: reservation.idleDeadline, createdAt: reservation.reservedAt });
 		return {
 			runId: assignment.runId,
 			attempt: assignment.attempt,
@@ -124,8 +124,8 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 			snapshot: __ProjectRuntimeInputSnapshot(snapshot),
 			conversationId: snapshot.conversationId,
 			personaRevisionId: snapshot.personaRevisionId,
-			identity: snapshotIdentity,
-			capabilitySetDigest: snapshot.capabilitySetDigest,
+			executionSubject,
+			workloadProfile: assignment.workloadProfile,
 			serviceAccountName: reservation.serviceAccountName,
 			workloadKind: assignment.workloadKind,
 			podUid: reservation.podUid,
@@ -136,19 +136,15 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 	}
 }
 
-/** Returns whether the assignment plane matches the snapshot identity. */
-function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { audience: string; workloadKind: WorkloadKind }, reservation: { namespace: string; serviceAccountName: string }, config: RuntimeDispatchAuthorityConfig): boolean
+/** Returns whether the lease-selected workload profile still binds this assignment to one runtime plane. */
+function _RuntimePlaneMatches(assignment: { readonly workloadProfile: string; readonly namespace: string; readonly serviceAccountName: string; readonly workloadKind: WorkloadKind }, reservation: { readonly namespace: string; readonly serviceAccountName: string; readonly claimedProfile: string }, config: RuntimeDispatchAuthorityConfig): boolean
 {
-	const warm = assignment.workloadKind === WorkloadKind.Deployment && reservation.serviceAccountName === WARM_RUNTIME_SERVICE_ACCOUNT_NAME;
-	if (identity.kind === RunInputSnapshotIdentityKinds.Service)
-	{
-		return reservation.namespace === config.managedRuntimeNamespace
-			&& assignment.audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
-			&& warm;
-	}
-	return reservation.namespace === config.personalRuntimeNamespace
-		&& assignment.audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
-		&& warm;
+	return assignment.workloadKind === WorkloadKind.Deployment
+		&& assignment.workloadProfile.trim().length > 0
+		&& assignment.workloadProfile === reservation.claimedProfile
+		&& assignment.namespace === reservation.namespace
+		&& reservation.serviceAccountName === assignment.serviceAccountName
+		&& (reservation.namespace === config.personalRuntimeNamespace || reservation.namespace === config.managedRuntimeNamespace);
 }
 
 /** Maps a stored run state to the protocol vocabulary. */
@@ -168,37 +164,94 @@ function _toAdmissionRunState(state: PrismaAgentRunState): RuntimeAdmissionRunSt
 	}
 }
 
-/** Hashes the assignment identity fields in one fixed order. */
-function _computeAssignmentDigest(context: { runId: string; attempt: number; generation: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; identity: RuntimeAssignmentIdentity; serviceAccountName: string; podUid: string; expiresAt: Date; createdAt: Date }): string
+/** Hashes the assignment's verified subject and computer-selected workload profile in one fixed order. */
+function _computeAssignmentDigest(context: { readonly runId: string; readonly attempt: number; readonly generation: number; readonly agentServiceId: string; readonly agentRevisionId: string; readonly siloId: string; readonly agentIdentityId: string; readonly principalId: string; readonly executionSubject: ExecutionSubject; readonly workloadProfile: string; readonly serviceAccountName: string; readonly podUid: string; readonly expiresAt: Date; readonly createdAt: Date }): string
 {
-	const canonical = JSON.stringify(["opencrane-runtime-assignment-digest-v3", context.runId, context.attempt, context.generation, context.agentServiceId, context.agentRevisionId, context.siloId, context.subjectId, _CanonicalAssignmentIdentity(context.identity), context.serviceAccountName, context.podUid, context.expiresAt.toISOString(), context.createdAt.toISOString()]);
+	const canonical = JSON.stringify(["opencrane-runtime-assignment-digest-v4", context.runId, context.attempt, context.generation, context.agentServiceId, context.agentRevisionId, context.siloId, context.agentIdentityId, context.principalId, context.executionSubject, context.workloadProfile, context.serviceAccountName, context.podUid, context.expiresAt.toISOString(), context.createdAt.toISOString()]);
 	return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 
-/** Puts identity fields in a fixed order before hashing. */
-function _CanonicalAssignmentIdentity(identity: RuntimeAssignmentIdentity): readonly string[]
+/** Parses one persisted execution subject through a strict schema before comparing trusted durable bindings. */
+function _ParseExecutionSubject(value: unknown): ExecutionSubject | null
 {
-	if (identity.kind === RunInputSnapshotIdentityKinds.User)
-		return [identity.kind, identity.executionSubjectId, String(identity.fleetMembershipRevision)];
-	return [identity.kind, identity.executionSubjectId, identity.agentServiceId, String(identity.fleetMembershipRevision), identity.effectiveBoundaryAttachmentDigest];
+	const parsed = ___ExecutionSubjectSchema.safeParse(value);
+	return parsed.success ? parsed.data : null;
 }
 
-/** Parses the execution identity stored in snapshot JSON. */
-function _snapshotIdentity(value: unknown): RuntimeAssignmentIdentity | null
+/** Rejects a snapshot unless its subject remains exactly bound to the current run, assignment, and lease. */
+function _VerifiedExecutionSubject(run: { readonly id: string; readonly attempt: number; readonly siloId: string; readonly agentServiceId: string; readonly agentRevisionId: string; readonly agentIdentityId: string; readonly principalId: string; readonly executionSubject: unknown; readonly requestIdempotencyKey: string }, assignment: { readonly runId: string; readonly attempt: number; readonly siloId: string; readonly agentServiceId: string; readonly agentRevisionId: string; readonly agentIdentityId: string; readonly principalId: string; readonly executionSubject: unknown }, snapshot: { readonly runId: string; readonly attempt: number; readonly siloId: string; readonly agentServiceId: string; readonly agentRevisionId: string; readonly agentIdentityId: string; readonly principalId: string; readonly executionSubject: unknown }, reservation: { readonly generation: number }, nowEpochMilliseconds: number): ExecutionSubject | null
 {
-	if (!value || typeof value !== "object" || Array.isArray(value))
+	const current = _ParseExecutionSubject(run.executionSubject);
+	if (current === null)
 		return null;
-	const identity = value as Record<string, unknown>;
-	const kind = identity["kind"];
-	const executionSubjectId = identity["executionSubjectId"];
-	const fleetMembershipRevision = identity["fleetMembershipRevision"];
-	if ((kind !== "user" && kind !== "service") || typeof executionSubjectId !== "string" || executionSubjectId.trim().length === 0 || typeof fleetMembershipRevision !== "number" || !Number.isSafeInteger(fleetMembershipRevision) || fleetMembershipRevision < 0)
+	const verificationContext = _ExecutionSubjectVerificationContext(current, nowEpochMilliseconds);
+	const assigned = ___ParseExecutionSubject(assignment.executionSubject, verificationContext);
+	const frozen = ___ParseExecutionSubject(snapshot.executionSubject, verificationContext);
+	if (assigned === null || frozen === null)
 		return null;
-	if (kind === "user")
-		return { kind, executionSubjectId, fleetMembershipRevision };
-	const agentServiceId = identity["agentServiceId"];
-	const effectiveBoundaryAttachmentDigest = identity["effectiveBoundaryAttachmentDigest"];
-	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || executionSubjectId !== `agent-service:${agentServiceId}` || typeof effectiveBoundaryAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveBoundaryAttachmentDigest))
-		return null;
-	return { kind, executionSubjectId, agentServiceId, fleetMembershipRevision, effectiveBoundaryAttachmentDigest };
+	if (current.siloId === run.siloId
+		&& current.siloId === assignment.siloId
+		&& current.siloId === snapshot.siloId
+		&& current.agentIdentityId === run.agentIdentityId
+		&& current.agentIdentityId === assignment.agentIdentityId
+		&& current.agentIdentityId === snapshot.agentIdentityId
+		&& current.principalId === run.principalId
+		&& current.principalId === assignment.principalId
+		&& current.principalId === snapshot.principalId
+		&& current.runScope.runId === run.id
+		&& current.runScope.runId === assignment.runId
+		&& current.runScope.runId === snapshot.runId
+		&& current.runScope.attempt === run.attempt
+		&& current.runScope.attempt === assignment.attempt
+		&& current.runScope.attempt === snapshot.attempt
+		&& current.runScope.agentServiceId === run.agentServiceId
+		&& current.runScope.agentServiceId === assignment.agentServiceId
+		&& current.runScope.agentServiceId === snapshot.agentServiceId
+		&& current.runScope.agentRevisionId === run.agentRevisionId
+		&& current.runScope.agentRevisionId === assignment.agentRevisionId
+		&& current.runScope.agentRevisionId === snapshot.agentRevisionId
+		&& current.requester.requestIdempotencyKey === run.requestIdempotencyKey
+		&& current.computerScope.leaseGeneration === reservation.generation
+		&& Date.parse(current.membership.trustedUntil) > nowEpochMilliseconds)
+	{
+		return current;
+	}
+	return null;
+}
+
+/** Builds the trusted current verification context from the durable run admission currently under the stream lock. */
+function _ExecutionSubjectVerificationContext(subject: ExecutionSubject, nowEpochMilliseconds: number): ExecutionSubjectVerificationContext
+{
+	return {
+		siloId: subject.siloId,
+		agentIdentityId: subject.agentIdentityId,
+		principalId: subject.principalId,
+		identityHeadRevision: subject.identity.headRevision,
+		identityHeadDigest: subject.identity.headDigest,
+		identityDecisionEvidenceId: subject.identity.decisionEvidenceId,
+		identityVerifiedAt: subject.identity.verifiedAt,
+		membershipRevision: subject.membership.revision,
+		membershipAssertionId: subject.membership.assertionId,
+		membershipPayloadDigest: subject.membership.payloadDigest,
+		membershipDecisionEvidenceId: subject.membership.decisionEvidenceId,
+		membershipTrustedUntil: subject.membership.trustedUntil,
+		capabilitySetDigest: subject.capability.capabilitySetDigest,
+		effectiveContractDigest: subject.capability.effectiveContractDigest,
+		capabilityDecisionEvidenceId: subject.capability.decisionEvidenceId,
+		capabilityDecidedAt: subject.capability.decidedAt,
+		runId: subject.runScope.runId,
+		attempt: subject.runScope.attempt,
+		agentServiceId: subject.runScope.agentServiceId,
+		agentRevisionId: subject.runScope.agentRevisionId,
+		computerId: subject.computerScope.computerId,
+		computerLeaseId: subject.computerScope.leaseId,
+		computerLeaseGeneration: subject.computerScope.leaseGeneration,
+		nowEpochMilliseconds,
+		requesterPrincipalId: subject.requester.requesterPrincipalId,
+		requestIdempotencyKey: subject.requester.requestIdempotencyKey,
+		requesterAuthenticatedAt: subject.requester.authenticatedAt,
+		authorizingPrincipalId: subject.admission.authorizingPrincipalId,
+		admissionDecisionEvidenceId: subject.admission.decisionEvidenceId,
+		admissionAdmittedAt: subject.admission.admittedAt,
+	};
 }

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { ToolInvocationRunRecoveryEnterResults } from "@opencrane/backend/server/iam/authorization";
-import { AGENT_RUNTIME_PROTOCOL_VERSION, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type CompiledRunInput, type ExecutionSubject, type RuntimeCandidate, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -13,6 +13,7 @@ import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchRecoveryAu
 import type { RuntimeExternalActionAuthorizationEvidence } from "../runtime-external-action-authorization.types";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types";
 import { RuntimeContinuationSaveOutcomes } from "../runtime-continuation.types";
+import { _ExecutionSubject } from "./execution-subject.fixture";
 
 /** Workload identity of the registered runtime Pod under test. */
 const _identity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:runtime-ns:warm-runtime", namespace: "runtime-ns", serviceAccountName: "warm-runtime", podUid: "pod-1" };
@@ -25,6 +26,13 @@ const _open = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstance
 
 /** Trusted server clock fixed inside the assignment lease for deterministic tests. */
 const _clock = { nowEpochMs(): number { return Date.parse("2026-07-20T00:01:00.000Z"); } };
+
+/** Builds the one admitted subject retained by the fake run, assignment, and snapshot rows. */
+function _fixtureExecutionSubject(leaseGeneration = 1): ExecutionSubject
+{
+	const baseSubject = _ExecutionSubject();
+	return _ExecutionSubject({ runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1" }, computerScope: { ...baseSubject.computerScope, leaseGeneration } });
+}
 
 /** Mutable command-stream row mirrored from the runtime.prisma model. */
 interface FakeStreamRow
@@ -75,7 +83,7 @@ interface FakeCommandRow
 /** Invocation row written in the same transaction that accepts an external-action candidate. */
 interface FakeToolInvocationRow
 {
-	id: string; siloId: string; runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; subjectId: string;
+	id: string; siloId: string; runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; agentIdentityId: string; principalId: string;
 	runtimeInstanceId: string; commandId: string; candidateId: string; toolRevisionId: string; toolInvocationId: string;
 	arguments: unknown; argumentsDigest: string; requestFingerprint: string; requestIdentity: unknown; approvalRequired: boolean;
 	recoveryMode: string; recoveryKey: string | null; state: string; preparationAttempt: number; retryDeadlineAt: Date;
@@ -143,17 +151,16 @@ function _fakePrisma(options: FakeOptions)
 	});
 	for (const [index] of resultDeliveries.entries())
 	{
-		toolInvocations.push({ id: `row-${index}`, siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", subjectId: "user-1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: `candidate-${index}`, toolRevisionId: "integration:search:query", toolInvocationId: `invocation-${index}`, arguments: {}, argumentsDigest: `sha256:${index}`, requestFingerprint: `sha256:${index}`, requestIdentity: {}, approvalRequired: true, recoveryMode: "Manual", recoveryKey: null, state: "Succeeded", preparationAttempt: 1, retryDeadlineAt: new Date("2026-07-20T00:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-07-20T00:00:00.000Z"), claimAttempt: 1, claimKind: null, claimFence: 1, claimExpiresAt: null, result: resultDeliveries[index]?.payload.result, failureCode: null, revision: 3, recoveryRequiredAt: null, completedAt: null });
+		toolInvocations.push({ id: `row-${index}`, siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", agentIdentityId: "identity-1", principalId: "principal-1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: `candidate-${index}`, toolRevisionId: "integration:search:query", toolInvocationId: `invocation-${index}`, arguments: {}, argumentsDigest: `sha256:${index}`, requestFingerprint: `sha256:${index}`, requestIdentity: {}, approvalRequired: true, recoveryMode: "Manual", recoveryKey: null, state: "Succeeded", preparationAttempt: 1, retryDeadlineAt: new Date("2026-07-20T00:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-07-20T00:00:00.000Z"), claimAttempt: 1, claimKind: null, claimFence: 1, claimExpiresAt: null, result: resultDeliveries[index]?.payload.result, failureCode: null, revision: 3, recoveryRequiredAt: null, completedAt: null });
 	}
 	const steeringRequests: { id: string; content: unknown; state: string }[] = [...(options.pendingSteeringRequests ?? [])].map(function _row(content, index) { return { id: `steering-${index}`, content, state: "Pending" }; });
 	const workloadIdentity = options.managed ? _managedIdentity : _identity;
-	const subjectId = options.managed ? "agent-service:svc-1" : "user-1";
-	const audience = options.managed ? "opencrane-managed-agent-runtime" : "opencrane-agent-runtime";
+	const executionSubject = _fixtureExecutionSubject(options.bindingGeneration ?? 1);
 	const currentPodUid = options.podUid === undefined ? "pod-1" : options.podUid;
-	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Deployment", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.assignmentPodUid === undefined ? currentPodUid : options.assignmentPodUid, bindingGeneration: options.bindingGeneration ?? 1, state: options.assignmentState ?? "Registered", revokedAt: null, expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
-	const reservation = currentPodUid === null ? null : { runId: "run-1", attempt: 1, generation: options.bindingGeneration ?? 1, siloId: "silo-1", namespace: workloadIdentity.namespace, podUid: currentPodUid, serviceAccountName: workloadIdentity.serviceAccountName, state: "Claimed", idleDeadline: new Date("2026-07-20T00:05:00.000Z"), reservedAt: new Date("2026-07-20T00:00:00.000Z") };
-	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: options.conversationId ?? null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", agentIdentityId: executionSubject.agentIdentityId, principalId: executionSubject.principalId, executionSubject, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Deployment", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.assignmentPodUid === undefined ? currentPodUid : options.assignmentPodUid, bindingGeneration: options.bindingGeneration ?? 1, state: options.assignmentState ?? "Registered", revokedAt: null, expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
+	const reservation = currentPodUid === null ? null : { runId: "run-1", attempt: 1, generation: options.bindingGeneration ?? 1, siloId: "silo-1", namespace: workloadIdentity.namespace, podUid: currentPodUid, serviceAccountName: workloadIdentity.serviceAccountName, claimedProfile: "profile", state: "Claimed", idleDeadline: new Date("2026-07-20T00:05:00.000Z"), reservedAt: new Date("2026-07-20T00:00:00.000Z") };
+	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", agentIdentityId: executionSubject.agentIdentityId, principalId: executionSubject.principalId, executionSubject, requestIdempotencyKey: "request-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
+	const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", agentIdentityId: executionSubject.agentIdentityId, principalId: executionSubject.principalId, executionSubject, snapshotVersion: 1, conversationId: options.conversationId ?? null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 	const transactionOptions: unknown[] = [];
 
 	/** Return whether a stream row matches the fields given in a where clause. */
@@ -207,7 +214,7 @@ function _fakePrisma(options: FakeOptions)
 				return { count: 1 };
 			},
 		},
-		runInputSnapshot: { async findUnique(args: { where: { runId_digest?: { runId: string; digest: string } } }) { return args.where.runId_digest && args.where.runId_digest.digest === snapshot.digest ? snapshot : null; } },
+		runInputSnapshot: { async findUnique(args: { where: { runId_attempt_digest?: { runId: string; attempt: number; digest: string } } }) { const key = args.where.runId_attempt_digest; return key !== undefined && key.runId === snapshot.runId && key.attempt === snapshot.attempt && key.digest === snapshot.digest ? snapshot : null; } },
 		runtimeCommandStream: {
 			async findUnique(args: { where: { runId_attempt: { runId: string; attempt: number } } }) { return streams.find(row => row.runId === args.where.runId_attempt.runId && row.attempt === args.where.runId_attempt.attempt) ?? null; },
 			async createMany(args: { data: readonly { runId: string; attempt: number; runtimeInstanceId: string }[] })
@@ -323,11 +330,10 @@ const _continuations = {
 function _AuthorizationEvidence(context: Parameters<RuntimeExternalActionAuthorization["admitInTransaction"]>[1], candidate: RuntimeExternalActionCandidate, assignmentDigest = context.assignmentDigest): RuntimeExternalActionAuthorizationEvidence
 {
 	const evidence = {
-		principalId: context.snapshot.identitySnapshot.kind === "user" ? context.snapshot.identitySnapshot.principalId : context.snapshot.identitySnapshot.executionSubjectId,
-		actorKind: context.snapshot.identitySnapshot.kind === "user" ? "user" as const : "agent-service" as const,
+		actorKind: "workload" as const,
+		executionSubject: context.executionSubject,
 		coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: candidate.toolRevisionId }, action: ProductAuthorizationActions.Invoke }],
 		decisionDigests: [`sha256:${"b".repeat(64)}`] as const,
-		membershipRevision: context.snapshot.identitySnapshot.fleetMembershipRevision,
 		agentRevisionId: context.agentRevisionId,
 		runId: context.runId,
 		attempt: context.attempt,
@@ -387,13 +393,13 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.commands).toHaveLength(0);
 	});
 
-	it("mints a managed-runtime frame only from tagged service identity evidence", async function _mintsManagedStart()
+	it("mints a managed-runtime frame only from matching execution-subject evidence", async function _mintsManagedStart()
 	{
 		const context = _authority({ runState: "Running", managed: true });
 
 		const command = await context.authority.__NextCommand(_managedIdentity, _open, 0);
 
-		expect(command?.assignment.identity).toEqual({ kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", fleetMembershipRevision: 3, effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}` });
+		expect(command?.assignment.executionSubject).toEqual(expect.objectContaining({ agentIdentityId: "identity-1", principalId: "principal-1" }));
 	});
 
 	it("runs command admission at Serializable isolation", async function _UsesSerializableTransaction()
@@ -817,7 +823,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
 		expect(opened).toHaveBeenCalledTimes(2);
-		expect(opened.mock.calls[0]?.[0]).toMatchObject({ siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, expiresAt: new Date("2026-07-20T00:05:00.000Z") });
+		expect(opened.mock.calls[0]?.[0]).toMatchObject({ siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "principal-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, expiresAt: new Date("2026-07-20T00:05:00.000Z") });
 		expect(elicitationUnitOfWorkFactory.bind).toHaveBeenCalledTimes(3);
 		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-input"]);
 	});

@@ -5,7 +5,7 @@ import { PrismaRuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/ex
 import { PrismaRuntimeEventReporter, PrismaToolInvocationRunRecoveryAuthority } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import { __ExpireDeferredToolApprovalBatch } from "@opencrane/backend/server/iam/authorization";
-import { RunInputSnapshotIdentityKinds, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
@@ -32,7 +32,7 @@ export const PERSONAL_MEMORY_RECALL_TOOL: CompiledToolDefinition = {
 	parametersSchemaDigest: ___DigestCanonicalJson(_PERSONAL_MEMORY_RECALL_PARAMETERS_SCHEMA),
 };
 
-/** Compile ordinary grants, then append sealed first-party tools to proven personal services. */
+/** Compile ordinary grants, then append first-party tools only to snapshots with their required frozen resources. */
 export function __CreateProductionRunInputCompiler(): RunInputCompiler
 {
 	const compile = __CreatePrismaRunInputCompiler();
@@ -44,10 +44,7 @@ export function __CreateProductionRunInputCompiler(): RunInputCompiler
 		// 2. Skip snapshots that have no conversation or no persona, without guessing the service kind.
 		if (!__IsUpgradeSessionAvailable(snapshot)) return input;
 
-		// 3. Require the immutable user identity that only personal admission can mint.
-		if (snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User) return input;
-
-		// 4. Expose memory only as a declared approval-required action; no compile-time gateway exists.
+		// 3. Expose memory only as a declared approval-required action; no compile-time gateway exists.
 		const withMemory = __AppendCompiledTool(input, PERSONAL_MEMORY_RECALL_TOOL);
 		return __AppendCompiledTool(withMemory, UPGRADE_SESSION_TOOL);
 	};

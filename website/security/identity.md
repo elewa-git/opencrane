@@ -3,21 +3,25 @@
 OpenCrane uses **OIDC sessions for people** and **audience-bound projected identities for
 workloads**. Neither is interchangeable with run authority.
 
+::: info
+🔶 `ExecutionSubject` is the 0.11.0 target contract. The server does not expose target run
+admission until its AgentIdentity and conversation-computer history adapter is composed.
+:::
+
 ## Human identity
 
 People sign in through the configured OIDC provider. The server derives their subject and
 organisation context from the authenticated session; request bodies cannot override either.
 Management UI calls use the same-origin session cookie.
 
-Current organisation membership is checked before a run is admitted. Accepted membership,
-delegated subject and scope evidence are frozen into the run input snapshot.
+Current organisation membership is checked before a run is admitted. The resulting
+`ExecutionSubject` records the resolved AgentIdentity and Principal, current membership and
+capability evidence, current computer lease, and requester provenance.
 
-A **personal** run always resolves to that one authenticated person — it can never be admitted as
-someone else. It may inherit grants through Groups that current product membership places that
-Principal in, but it can never pick up another person's direct grants. A **managed** agent
-never resolves to a human at all: it runs as its own `agent-service:<id>` principal, verified
-against a separately signed fleet-membership assertion, with no path back to the administrator who
-published or triggered it. See
+An agent acts through its resolved **AgentIdentity** and current Principal, never as the person
+who clicked run. A proxied identity is constrained by its current delegation ceiling; a constructed
+managed identity has its own Principal and grants. Neither may pick up a different Principal's
+direct grants or derive execution authority from the requester. See
 [the personal/managed distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
 
 ## Workload identity

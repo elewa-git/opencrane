@@ -99,7 +99,7 @@ describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 		const admission = _Admission(_Prisma(transaction), { admitPersonalRun } as never);
 
 		await expect(admission.submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual(expect.objectContaining({ outcome: "accepted", message: expect.objectContaining({ runId: "run-1", position: "2" }) }));
-		expect(admitPersonalRun).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageBlocks: _REQUEST.blocks, inputMessageId: expect.any(String) }), expect.any(Function));
+		expect(admitPersonalRun).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", requesterSubjectId: "user-1", requesterIssuer: "https://issuer.test", requesterAuthenticatedAt: expect.any(String), conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageBlocks: _REQUEST.blocks, inputMessageId: expect.any(String) }), expect.any(Function));
 		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", userId: "user-1", idempotencyKey: "request-1", source: "user_input" }) });
 	});
 

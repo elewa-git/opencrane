@@ -120,7 +120,7 @@ export class PrismaRunCancellationRepository implements RunCancellationPersisten
 	/** Hides foreign runs, then admits and applies one cancellation in this transaction. */
 	async requestOwned(command: SelfRunCancellationCommand, now: Date): Promise<SelfRunCancellationResult>
 	{
-		const owned = await this.transaction.agentRun.findFirst({ where: { id: command.runId, siloId: command.siloId, delegatedUserId: { equals: command.subjectId } }, select: { id: true } });
+		const owned = await this.transaction.agentRun.findFirst({ where: { id: command.runId, siloId: command.siloId, principalId: { equals: command.principalId } }, select: { id: true } });
 		if (owned === null)
 		{
 			return { outcome: SelfRunCancellationOutcomes.NotFound };

@@ -1,7 +1,8 @@
 import type { AgentRunTerminalReason, Prisma, RuntimeCommandKind, WorkloadKind } from "@prisma/client";
 
-import type { CompiledRunInput, RunInputSnapshot, RuntimeAssignmentIdentity, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { CompiledRunInput, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import type { ExpireElicitationBatchCommand, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 import type { ToolInvocationRunRecoveryAuthority } from "@opencrane/backend/server/iam/authorization";
 
@@ -217,10 +218,10 @@ export interface RuntimeDispatchContext
 	readonly conversationId: string | null;
 	/** Approved persona revision, when present. */
 	readonly personaRevisionId: string | null;
-	/** User or managed-service execution identity. */
-	readonly identity: RuntimeAssignmentIdentity;
-	/** Digest of the capability set proved for this attempt. */
-	readonly capabilitySetDigest: string;
+	/** Exact identity, principal, evidence, run, and computer lease admitted for this attempt. */
+	readonly executionSubject: ExecutionSubject;
+	/** Verified workload profile selected for this computer realization. */
+	readonly workloadProfile: string;
 	/** Expected Kubernetes ServiceAccount. */
 	readonly serviceAccountName: string;
 	/** Kubernetes workload kind. */

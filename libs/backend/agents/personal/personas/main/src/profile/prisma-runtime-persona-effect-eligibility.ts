@@ -22,11 +22,14 @@ export class PrismaRuntimePersonaEffectEligibilityAuthority implements RuntimePe
 	/** @inheritdoc */
 	async findEligibleProfileId(command: RuntimePersonaEffectEligibilityCommand): Promise<string | null>
 	{
+		const principal = await this.transaction.principal.findUnique({ where: { id_siloId: { id: command.principalId, siloId: command.siloId } }, select: { subject: true } });
+		if (principal === null)
+			return null;
 		const revision = await this.transaction.personaRevision.findFirst({
 			where: {
 				id: command.personaRevisionId,
 				state: PersonaRevisionState.Approved,
-				profile: { is: { siloId: command.siloId, userId: command.userId, activeRevisionId: command.personaRevisionId } },
+				profile: { is: { siloId: command.siloId, userId: principal.subject, activeRevisionId: command.personaRevisionId } },
 			},
 			select: { personaProfileId: true },
 		});

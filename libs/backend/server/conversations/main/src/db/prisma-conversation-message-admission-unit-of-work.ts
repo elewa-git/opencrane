@@ -95,7 +95,7 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 		const messageId = randomUUID();
 		const createAttachmentAdmission = this.createAttachmentAdmission;
 		const createMutationRepository = this.createMutationRepository;
-		const result = await this.runAdmission.admitPersonalRun({ siloId: caller.siloId, executionSubjectId: caller.subjectId, executionIssuer: caller.issuer, conversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: messageId, inputMessageBlocks: request.blocks }, async function _PersistMessage(transaction: RunAdmissionTransaction, value: RunAdmissionBuild)
+		const result = await this.runAdmission.admitPersonalRun({ siloId: caller.siloId, requesterSubjectId: caller.subjectId, requesterIssuer: caller.issuer, requesterAuthenticatedAt: new Date().toISOString(), conversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: messageId, inputMessageBlocks: request.blocks }, async function _PersistMessage(transaction: RunAdmissionTransaction, value: RunAdmissionBuild)
 		{
 			await createMutationRepository(transaction).persistAgentMessage(caller, conversationId, messageId, value.snapshot.runId, request, createAttachmentAdmission(transaction));
 		});
@@ -117,7 +117,7 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 		const createAttachments = this.createAttachmentAdmission;
 		let prepared: { readonly personaProfileId: string; readonly personaRevisionId: string } | null = null;
 		const result = await this.runAdmission.admitFirstAgentThreadRun(
-			{ siloId: caller.siloId, executionSubjectId: caller.subjectId, executionIssuer: caller.issuer, conversationId: childConversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: childMessageId, inputMessageBlocks: childRequest.blocks },
+			{ siloId: caller.siloId, requesterSubjectId: caller.subjectId, requesterIssuer: caller.issuer, requesterAuthenticatedAt: new Date().toISOString(), conversationId: childConversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: childMessageId, inputMessageBlocks: childRequest.blocks },
 			request.agentTarget.agentServiceId,
 			async function _Prepare(transaction): Promise<void>
 			{

@@ -1,17 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
+import { PROMPT_COMPILER_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreateProductionRunInputCompiler, PERSONAL_MEMORY_RECALL_TOOL } from "../production-runtime-dispatch";
+import { _ExecutionSubject } from "./execution-subject.fixture";
 
 /** Carry legacy private memory fields to prove the production compiler excludes them. */
 function _PersonalSnapshot(): RunInputSnapshot
 {
 	return {
 		runId: "run-1",
+		attempt: 1,
 		siloId: "silo-1",
 		agentServiceId: "service-1",
 		agentRevisionId: "revision-1",
@@ -26,9 +28,7 @@ function _PersonalSnapshot(): RunInputSnapshot
 		mcpTools: [],
 		modelRoute: { alias: "model-1", modelDefinitionId: "model-definition-1" },
 		budgetPolicy: {},
-		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-13T00:00:00.000Z" },
-		capabilitySetDigest: `sha256:${"c".repeat(64)}`,
-		effectiveContractDigest: `sha256:${"d".repeat(64)}`,
+		executionSubject: _ExecutionSubject(),
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,
 		digest: `sha256:${"e".repeat(64)}`,
 		compiledAt: "2026-08-12T00:00:00.000Z",

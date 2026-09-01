@@ -7,7 +7,7 @@ evidence supports that decision. Each child package owns one bounded part of tha
 
 | Package | Responsibility |
 | --- | --- |
-| [`identity`](identity/main/README.md) | Turns OpenID Connect sign-in into verified server identity facts. |
+| [`identity`](identity/main/README.md) | Turns OpenID Connect sign-in into verified server identity facts and loads canonical KurrentDB AgentIdentity state. |
 | [`membership`](membership/main/README.md) | Verifies signed Fleet execution-membership revisions. |
 | [`organization-members`](organization-members/main/README.md) | Owns the settings member directory and standalone invitation lifecycle, or delegates the entire capability to Fleet billing. |
 | [`authorization`](authorization/main/README.md) | Owns the central, transaction-bound product authorization decision and evidence flow. |

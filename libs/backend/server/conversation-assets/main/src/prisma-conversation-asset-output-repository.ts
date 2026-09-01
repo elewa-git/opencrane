@@ -5,6 +5,8 @@ import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, Conversa
 
 import type { ArtifactPromotionReceiptClaims } from "@opencrane/backend/artifacts/authorization";
 import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/agents/artifacts";
+import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
 import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
@@ -29,9 +31,10 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 	{
 		// 1. Rebind caller metadata to the live runtime assignment and canonical assistant message event.
 		const assignment = await this._assignment(identity, command.runId, command.runAttempt);
+		const executionSubject = assignment === null ? null : _ExecutionSubject(assignment);
 		const messageStarted = assignment === null || assignment.run.conversationId === null ? null : await this._messageStarted(assignment.run.conversationId, command);
-		const ownerPrincipalId = assignment === null ? null : await this._artifactOwnerPrincipalId(assignment.siloId, assignment.subjectId);
-		if (assignment === null || assignment.run.conversationId === null || messageStarted === null || ownerPrincipalId === null) return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable };
+		const ownerPrincipalId = executionSubject?.principalId ?? null;
+		if (assignment === null || executionSubject === null || assignment.run.conversationId === null || messageStarted === null || ownerPrincipalId === null) return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable };
 		// 2. Resolve the immutable retry coordinate before creating any new write authority.
 		const existing = await this.transaction.conversationAssetOutputTicket.findUnique({ where: { runId_runAttempt_idempotencyKey: { runId: command.runId, runAttempt: command.runAttempt, idempotencyKey: command.idempotencyKey } }, include: { asset: { include: { uploadLease: true } } } });
 		if (existing !== null)
@@ -59,17 +62,6 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		return { outcome: ConversationAssetOutputReservationOutcomes.Issued, ticketId };
 	}
 
-	/** Resolves either a human OIDC subject or managed internal id to exactly one local Principal. */
-	private async _artifactOwnerPrincipalId(siloId: string, assignmentSubjectId: string): Promise<string | null>
-	{
-		const principals = await this.transaction.principal.findMany({
-			where: { siloId, OR: [{ id: assignmentSubjectId }, { subject: assignmentSubjectId }] },
-			select: { id: true },
-			take: 2,
-		});
-		return principals.length === 1 ? principals[0].id : null;
-	}
-
 	/** Returns a live server-only lease only to the exact registered runtime assignment. */
 	async readUploadTarget(identity: ConversationAssetOutputRuntimeIdentity, ticketId: string): Promise<ConversationAssetOutputTarget | null>
 	{
@@ -90,7 +82,8 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		const ticket = await this.transaction.conversationAssetOutputTicket.findUnique({ where: { id: ticketId }, include: { asset: true } });
 		if (ticket === null || ticket.asset === null) return { outcome: ConversationAssetOutputPublishOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.OutputUnavailable };
 		const assignment = await this._assignment(identity, ticket.runId, ticket.runAttempt);
-		if (assignment === null) return { outcome: ConversationAssetOutputPublishOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable };
+		const executionSubject = assignment === null ? null : _ExecutionSubject(assignment);
+		if (assignment === null || executionSubject === null) return { outcome: ConversationAssetOutputPublishOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable };
 		if (ticket.finalizedAt !== null) return { outcome: ConversationAssetOutputPublishOutcomes.Idempotent };
 		const asset = ticket.asset;
 		if (ticket.expiresAt <= new Date() || asset.state !== ConversationAssetState.Uploading || asset.uploadLeaseId !== promotion.leaseId || asset.artifactId === null) return { outcome: ConversationAssetOutputPublishOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.OutputUnavailable };
@@ -101,7 +94,7 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		const revisionId = randomUUID();
 		// 3. Persist immutable receipt evidence, run provenance, quarantine, and scan work atomically.
 		await this.transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Finalized, promotionReceiptDigest: receiptDigest, promotedContentAddress: promotion.contentAddress, promotedByteLength: BigInt(promotion.byteLength), promotedAt: now, finalizedAt: now } });
-		await this.transaction.artifactRevision.create({ data: { id: revisionId, artifactId: asset.artifactId, revision: 1, state: ArtifactRevisionState.Quarantined, contentAddress: promotion.contentAddress, byteLength: BigInt(promotion.byteLength), mediaType: promotion.mediaType, provenance: { kind: "conversation_agent_output", conversationAssetId: asset.id, outputTicketId: ticket.id, runEventSequence: ticket.runEventSequence }, sourceRunId: ticket.runId, sourceMessageId: ticket.outputMessageId, createdBy: assignment.subjectId } });
+		await this.transaction.artifactRevision.create({ data: { id: revisionId, artifactId: asset.artifactId, revision: 1, state: ArtifactRevisionState.Quarantined, contentAddress: promotion.contentAddress, byteLength: BigInt(promotion.byteLength), mediaType: promotion.mediaType, provenance: { kind: "conversation_agent_output", conversationAssetId: asset.id, outputTicketId: ticket.id, runEventSequence: ticket.runEventSequence }, sourceRunId: ticket.runId, sourceMessageId: ticket.outputMessageId, createdBy: executionSubject.principalId } });
 		await this.transaction.artifactScanJob.create({ data: { artifactRevisionId: revisionId } });
 		await this.transaction.conversationAssetOutputTicket.update({ where: { id: ticket.id }, data: { finalizedContentAddress: promotion.contentAddress, finalizedReceiptDigest: receiptDigest, finalizedAt: now } });
 		await this.transaction.conversationAsset.update({ where: { id: asset.id }, data: { revisionId, state: ConversationAssetState.Processing } });
@@ -126,7 +119,9 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		if (assignment === null || assignment.run.attempt !== runAttempt)
 			return null;
 		const reservation = await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt_generation: { runId, attempt: runAttempt, generation: assignment.bindingGeneration } } });
-		return __ValidateWarmRuntimeLease(identity, assignment, reservation, new Date()) ? assignment : null;
+		if (!__ValidateWarmRuntimeLease(identity, assignment, reservation, new Date()))
+			return null;
+		return _ExecutionSubject(assignment) === null ? null : assignment;
 	}
 
 	/** Requires the canonical assistant message-start coordinate owned by this run. */
@@ -143,6 +138,20 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		if (conversation?.lifecycle !== ConversationLifecycle.Open) return;
 		await this.transaction.conversationTimelineEntry.create({ data: { conversationId, kind: ConversationTimelineEntryKind.System, systemEventId: `conversation-asset:${assetId}:${phase}`, payload: { eventType: ConversationSystemEventTypes.AssetsChanged } } });
 	}
+}
+
+/** Parses the canonical execution subject only when it binds this exact persisted assignment. */
+function _ExecutionSubject(assignment: { readonly executionSubject: Prisma.JsonValue; readonly siloId: string; readonly agentIdentityId: string; readonly principalId: string; readonly runId: string; readonly attempt: number; readonly agentServiceId: string; readonly agentRevisionId: string }): ExecutionSubject | null
+{
+	const parsed = ___ExecutionSubjectSchema.safeParse(assignment.executionSubject);
+	if (!parsed.success)
+		return null;
+	const subject = parsed.data;
+	if (subject.siloId !== assignment.siloId || subject.agentIdentityId !== assignment.agentIdentityId || subject.principalId !== assignment.principalId)
+		return null;
+	if (subject.runScope.runId !== assignment.runId || subject.runScope.attempt !== assignment.attempt || subject.runScope.agentServiceId !== assignment.agentServiceId || subject.runScope.agentRevisionId !== assignment.agentRevisionId)
+		return null;
+	return subject;
 }
 
 /** Require an exact retry body against the server-owned ticket aggregate. */

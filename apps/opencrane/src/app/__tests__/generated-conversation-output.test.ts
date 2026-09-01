@@ -11,6 +11,24 @@ const _CONTENT = new Uint8Array([137, 80, 78, 71]);
 const _CONTENT_ADDRESS = `sha256:${"a".repeat(64)}`;
 const _IDENTITY = { namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1" } as const;
 
+/** Builds the canonical subject the generated-output fixture must bind to its runtime assignment. */
+function _ExecutionSubject()
+{
+	return {
+		schemaVersion: 1,
+		siloId: "silo-1",
+		agentIdentityId: "identity-1",
+		principalId: "principal-1",
+		identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-09-01T00:00:00.000Z" },
+		membership: { principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership-1", payloadDigest: `sha256:${"c".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2030-01-01T00:00:00.000Z" },
+		capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"d".repeat(64)}`, effectiveContractDigest: `sha256:${"e".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-09-01T00:00:00.000Z" },
+		runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1" },
+		computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+		requester: { siloId: "silo-1", requesterPrincipalId: "requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-09-01T00:00:00.000Z" },
+		admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-09-01T00:00:00.000Z" },
+	} as const;
+}
+
 /** Mutable in-memory rows shared by the production output and scanner units of work. */
 function _Database()
 {
@@ -20,7 +38,7 @@ function _Database()
 	let asset: Record<string, unknown> | null = null;
 	let revision: Record<string, unknown> | null = null;
 	let scanJob: Record<string, unknown> | null = null;
-	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, revokedAt: null, expiresAt: new Date("2030-01-01T00:00:00.000Z"), workloadKind: WorkloadKind.Deployment, run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: _ExecutionSubject(), agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, revokedAt: null, expiresAt: new Date("2030-01-01T00:00:00.000Z"), workloadKind: WorkloadKind.Deployment, run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
 	const reservation = { generation: 2, state: WarmRuntimeReservationState.Claimed, namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, idleDeadline: new Date("2030-01-01T00:00:00.000Z") };
 	const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.ArtifactCollection, ProductAuthorizationActions.Create);
 	if (capability === null) throw new Error("artifact collection create capability is missing");

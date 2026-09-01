@@ -13,10 +13,14 @@ const _PREPARATION_FAILURE_CODE = "external_action_preparation_failed";
 function _contextMatchesInvocation(context: ExternalActionExecutionContext, invocation: ExternalActionWorkerInvocation): boolean
 {
 	const snapshot = context.snapshot;
+	const evidence = invocation.authorizationEvidence;
+	if (evidence === null || !("executionSubject" in evidence))
+		return false;
 	return snapshot.runId === invocation.runId
 		&& snapshot.siloId === invocation.siloId
 		&& snapshot.agentRevisionId === invocation.agentRevisionId
-		&& snapshot.identitySnapshot.executionSubjectId === invocation.subjectId;
+		&& snapshot.executionSubject.principalId === evidence.executionSubject.principalId
+		&& snapshot.executionSubject.agentIdentityId === evidence.executionSubject.agentIdentityId;
 }
 
 /**

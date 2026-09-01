@@ -158,6 +158,7 @@ export default [
                 "scope:auth",
                 "scope:authorization",
                 "scope:cluster-tenants",
+				"scope:history-store",
                 "scope:identity",
                 "scope:shared",
               ],

@@ -7,6 +7,7 @@
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
+{{- $history := .Values.historyStore.kurrentdb -}}
 {{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
@@ -307,6 +308,18 @@ spec:
               value: /var/run/opencrane/memory-gateway/token
             - name: MEMORY_GATEWAY_TIMEOUT_SECONDS
               value: {{ .Values.clustertenantManager.memoryGateway.httpTimeoutSeconds | quote }}
+            {{- if $history.enabled }}
+            # KurrentDB is the sole durable HistoryStore. The server receives only its scoped
+            # service identity, never an administrator or bootstrap credential.
+            - name: OPENCRANE_HISTORY_STORE_ENDPOINT
+              value: {{ printf "%s-kurrentdb.%s.svc:%v" (include "opencrane.fullname" .) .Release.Namespace $history.service.port | quote }}
+            - name: OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH
+              value: /var/run/opencrane/history-store/tls/ca.crt
+            - name: OPENCRANE_HISTORY_STORE_USERNAME_PATH
+              value: /var/run/opencrane/history-store/credentials/username
+            - name: OPENCRANE_HISTORY_STORE_PASSWORD_PATH
+              value: /var/run/opencrane/history-store/credentials/password
+            {{- end }}
           volumeMounts:
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
@@ -330,6 +343,14 @@ spec:
             - name: runtime-continuation-keyring
               mountPath: /var/run/opencrane/runtime-continuation
               readOnly: true
+            {{- if $history.enabled }}
+            - name: history-store-tls
+              mountPath: /var/run/opencrane/history-store/tls
+              readOnly: true
+            - name: history-store-credential
+              mountPath: /var/run/opencrane/history-store/credentials
+              readOnly: true
+            {{- end }}
             {{- if $ociRegistryAuthorization.existingSecret }}
             - name: oci-registry-authorization
               mountPath: /var/run/opencrane/oci-registry
@@ -408,6 +429,24 @@ spec:
             items:
               - key: {{ $continuationKeyring.secretKey | quote }}
                 path: keyring.json
+        {{- if $history.enabled }}
+        - name: history-store-tls
+          secret:
+            secretName: {{ $history.tls.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: history-store-credential
+          secret:
+            secretName: {{ $history.serviceCredential.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: username
+                path: username
+              - key: password
+                path: password
+        {{- end }}
         {{- if $ociRegistryAuthorization.existingSecret }}
         # OpenCrane re-reads this file for every registry request so Secret rotation takes effect.
         - name: oci-registry-authorization

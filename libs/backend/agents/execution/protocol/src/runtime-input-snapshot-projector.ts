@@ -1,4 +1,5 @@
-import type { RunInputSnapshot, RunInputSnapshotIdentity } from "@opencrane/contracts";
+import type { RunInputSnapshot } from "@opencrane/contracts";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 
 /** JSON values returned by Prisma's persisted snapshot columns. */
 type RuntimeSnapshotJsonValue = string | number | boolean | null | RuntimeSnapshotJsonObject | readonly RuntimeSnapshotJsonValue[];
@@ -13,9 +14,12 @@ interface RuntimeSnapshotJsonObject
 interface RuntimeInputSnapshotRow
 {
 	readonly runId: string;
+	readonly attempt: number;
 	readonly siloId: string;
 	readonly agentServiceId: string;
 	readonly agentRevisionId: string;
+	readonly agentIdentityId: string;
+	readonly principalId: string;
 	readonly snapshotVersion: number;
 	readonly conversationId: string | null;
 	readonly messageIds: readonly string[];
@@ -27,9 +31,7 @@ interface RuntimeInputSnapshotRow
 	readonly mcpTools: RuntimeSnapshotJsonValue;
 	readonly modelRoute: RuntimeSnapshotJsonValue;
 	readonly budgetPolicy: RuntimeSnapshotJsonValue;
-	readonly identitySnapshot: RuntimeSnapshotJsonValue;
-	readonly capabilitySetDigest: string;
-	readonly effectiveContractDigest: string;
+	readonly executionSubject: RuntimeSnapshotJsonValue;
 	readonly promptCompilerVersion: string;
 	readonly digest: string;
 	readonly compiledAt: Date;
@@ -56,6 +58,7 @@ export function __ProjectRuntimeInputSnapshot(row: RuntimeInputSnapshotRow): Run
 {
 	return {
 		runId: row.runId,
+		attempt: row.attempt,
 		siloId: row.siloId,
 		agentServiceId: row.agentServiceId,
 		agentRevisionId: row.agentRevisionId,
@@ -70,9 +73,7 @@ export function __ProjectRuntimeInputSnapshot(row: RuntimeInputSnapshotRow): Run
 		mcpTools: _ProjectSnapshotJson<RunInputSnapshot["mcpTools"]>(row.mcpTools),
 		modelRoute: _ProjectSnapshotJson<RunInputSnapshot["modelRoute"]>(row.modelRoute),
 		budgetPolicy: _ProjectSnapshotJson<RunInputSnapshot["budgetPolicy"]>(row.budgetPolicy),
-		identitySnapshot: _ProjectSnapshotJson<RunInputSnapshotIdentity>(row.identitySnapshot),
-		capabilitySetDigest: row.capabilitySetDigest,
-		effectiveContractDigest: row.effectiveContractDigest,
+		executionSubject: _ProjectSnapshotJson<ExecutionSubject>(row.executionSubject),
 		promptCompilerVersion: row.promptCompilerVersion,
 		digest: row.digest,
 		compiledAt: row.compiledAt.toISOString(),

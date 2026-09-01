@@ -11,6 +11,7 @@ export function _RequirePersonalUpgradeSessionSnapshot(snapshot: RunInputSnapsho
 {
 	if (snapshot.personaRevisionId === null) throw _invalidUpgradeSession();
 	if (snapshot.conversationId === null) throw _invalidUpgradeSession();
+	if (!_IsPersonalUpgradeSessionSubjectBound(snapshot)) throw _invalidUpgradeSession();
 }
 
 /** Reject runtime arguments outside the model-adjacent personal configuration-patch schema. */
@@ -22,6 +23,9 @@ export function _RequirePersonalUpgradeSessionCandidate(candidate: UpgradeSessio
 /** Resolve one owner profile and propose its validated future-session change in the same transaction. */
 export async function _ProposeUpgradeSession(profiles: UpgradeSessionProfileRepository, proposals: PersonalConfigurationProposalRepository, candidate: PersonalUpgradeSessionCandidate, snapshot: PersonalUpgradeSessionSnapshot, now: string): Promise<ProposePersonalConfigurationChangeResult | null>
 {
+	if (candidate.runId !== snapshot.runId || candidate.attempt !== snapshot.attempt)
+		throw _invalidUpgradeSession();
+
 	// 1. Resolve the canonical profile for the immutable execution subject.
 	const profileId = await profiles.readOwnerProfileId(_profileReadCommand(snapshot));
 	if (profileId === null) return null;
@@ -38,7 +42,7 @@ function _profileReadCommand(snapshot: PersonalUpgradeSessionSnapshot): UpgradeS
 {
 	const command: UpgradeSessionProfileReadCommand = {
 		siloId: snapshot.siloId,
-		userId: snapshot.identitySnapshot.executionSubjectId,
+		userId: snapshot.executionSubject.principalId,
 	};
 	return command;
 }
@@ -48,7 +52,7 @@ function _proposalCommand(candidate: PersonalUpgradeSessionCandidate, snapshot: 
 {
 	const command: ProposePersonalConfigurationChangeCommand = {
 		siloId: snapshot.siloId,
-		userId: snapshot.identitySnapshot.executionSubjectId,
+		userId: snapshot.executionSubject.principalId,
 		personaProfileId: profileId,
 		agentServiceId: snapshot.agentServiceId,
 		sourceConversationId: snapshot.conversationId,
@@ -61,6 +65,29 @@ function _proposalCommand(candidate: PersonalUpgradeSessionCandidate, snapshot: 
 		proposedAt: now,
 	};
 	return command;
+}
+
+/** Checks that the sealed subject names the snapshot's personal run and membership evidence. */
+function _IsPersonalUpgradeSessionSubjectBound(snapshot: RunInputSnapshot): boolean
+{
+	const subject = snapshot.executionSubject;
+	return subject.siloId === snapshot.siloId
+		&& subject.principalId.trim().length > 0
+		&& subject.identity.agentIdentityId === subject.agentIdentityId
+		&& subject.identity.principalId === subject.principalId
+		&& subject.identity.siloId === snapshot.siloId
+		&& subject.membership.principalId === subject.principalId
+		&& subject.membership.siloId === snapshot.siloId
+		&& subject.membership.revision > 0
+		&& subject.membership.assertionId.trim().length > 0
+		&& subject.membership.payloadDigest.trim().length > 0
+		&& subject.capability.agentIdentityId === subject.agentIdentityId
+		&& subject.capability.computerId === subject.computerScope.computerId
+		&& subject.runScope.siloId === snapshot.siloId
+		&& subject.runScope.runId === snapshot.runId
+		&& subject.runScope.attempt === snapshot.attempt
+		&& subject.runScope.agentServiceId === snapshot.agentServiceId
+		&& subject.runScope.agentRevisionId === snapshot.agentRevisionId;
 }
 
 /** Creates the unchanged fail-before-persistence error for an invalid upgrade-session request. */

@@ -36,9 +36,8 @@ export async function __VerifyCurrentFleetMembership(repository: FleetMembership
  * comes from the signed revision, never from the caller's input, so a run's stored membership can
  * be checked against the issuer's signature later.
  *
- * Called by: libs/backend/agents/execution/inputs/main/src/personal-execution-identity-envelope-source.ts
- * and libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence.ts, both
- * passing the transaction of the run admission they are already inside.
+ * Called by `libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence.ts`,
+ * which passes the transaction of the run admission it is already inside.
  * @param repository - Store of signed revisions and of the newest accepted revision per silo.
  * @param verifier - Holder of the issuer's public key.
  * @param command - Silo, subject, assertion, current time, and staleness limit.

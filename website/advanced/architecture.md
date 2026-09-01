@@ -47,18 +47,23 @@ Conversation (`agent_session`; optional run parent)
 Retries advance the attempt counter on the same logical run. Child runs are separate
 `AgentRun` records with a durable parent reservation and bounded inherited budget.
 
+::: info
+🔶 The AgentIdentity and `ExecutionSubject` descriptions below are the 0.11.0 target model. The
+application composition remains unavailable until Kurrent-backed identity and computer evidence is
+connected to run admission.
+:::
+
 ## Personal and managed are separate authorities, not a flag
 
 The architecture treats *personal* and *managed* as two distinct admission and identity paths that
 happen to share the same runtime and execution machinery, not as one code path with a boolean on
 it:
 
-- **Personal admission** derives its `AgentService` through the caller's own participant-bound
-  conversation admission and verifies exactly one signed personal membership assertion — the
-  caller can only ever admit a run as themselves.
-- **Managed admission** derives the canonical `agent-service:<id>` principal, verifies its current
-  Ed25519-signed fleet membership, and intersects the active revision's exact knowledge and tool
-  attachments with effective grants — it never resolves a human caller's identity at all.
+- **Personal admission** resolves the conversation's AgentIdentity and current Principal, then
+  records the authenticated person only as requester provenance.
+- **Managed admission** resolves its constructed AgentIdentity and own Principal, verifies current
+  membership, and intersects the active revision's exact knowledge and tool attachments with
+  effective grants — it never resolves a human caller as execution authority.
 
 A personal run always carries an approved `PersonaRevision`; a managed run never does — its
 published revision is already its complete instruction set. Both share one run-admission capacity
@@ -69,8 +74,8 @@ is answered the same way regardless of which path admitted it.
 
 One `ClusterTenant` represents one customer organisation. Its trusted server and runtime
 namespaces are distinct. There is no Kubernetes user resource and no standing per-user runtime.
-Personal work is bound through the admitted run's subject and immutable evidence; managed work is
-bound through its own service identity and signed fleet membership — neither can borrow the
+Personal and managed work are both bound through the admitted run's `ExecutionSubject`, including
+the current AgentIdentity, Principal, computer lease, and signed membership evidence — neither can borrow the
 other's authority.
 
 ## Shared services

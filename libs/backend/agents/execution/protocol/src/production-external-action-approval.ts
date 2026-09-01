@@ -58,7 +58,7 @@ function _openCommand(invocation: AgentRunExternalActionWorkerInvocation, contex
 		argumentsDigest: invocation.argumentsDigest,
 		parametersSchema: definition.parametersSchema,
 		parametersSchemaDigest: definition.parametersSchemaDigest,
-		capabilitySetDigest: context.snapshot.capabilitySetDigest,
+		capabilitySetDigest: context.snapshot.executionSubject.capability.capabilitySetDigest,
 		invocationId: invocation.id,
 		now,
 		expiresAt: new Date(now.getTime() + _APPROVAL_EXPIRY_MILLISECONDS),

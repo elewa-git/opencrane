@@ -35,13 +35,13 @@ function _Invocation()
 function _LiveTransaction()
 {
 	return {
-		workloadAssignment: { findUnique: vi.fn(async function _assignment() { return { agentRevisionId: "revision-1", agentServiceId: "service-1", siloId: "silo-1", subjectId: "subject-1", audience: "audience-1", serviceAccountName: "runtime-1", namespace: "runtime", workloadKind: "Job", workloadUid: "job-1", podUid: "pod-original", bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-29T00:02:00.000Z") }; }) },
+		workloadAssignment: { findUnique: vi.fn(async function _assignment() { return { agentRevisionId: "revision-1", agentServiceId: "service-1", siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", audience: "audience-1", serviceAccountName: "runtime-1", namespace: "runtime", workloadKind: "Job", workloadUid: "job-1", podUid: "pod-original", bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-29T00:02:00.000Z") }; }) },
 		warmRuntimeReservation: { findUnique: vi.fn(async function _reservation() { return { generation: 2, podUid: "pod-2" }; }) },
 		runProofKey: { findUnique: vi.fn(async function _proof() { return { id: "proof-1", podUid: "pod-2", keyThumbprint: "thumbprint-1", expiresAt: new Date("2026-07-29T00:01:30.000Z"), revokedAt: null }; }) },
 		agentRun: { findUnique: vi.fn(async function _run() { return { id: "run-1", conversationId: "conversation-1", attempt: 1, state: AgentRunState.Running }; }), updateMany: vi.fn(async function _pause() { return { count: 1 }; }) },
 		elicitationRequest: { create: vi.fn(async function _createElicitation() { return { id: "interrupt-1" }; }) },
 		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }), findFirst: vi.fn(async function _existing() { return null; }), count: vi.fn(async function _pending() { return 0; }) },
-		principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
+		principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
 			toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
 		toolResultDelivery: { create: vi.fn(async function _delivery() { return { id: "delivery-1" }; }) },
 	};

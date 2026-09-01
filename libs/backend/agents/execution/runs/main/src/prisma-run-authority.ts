@@ -1,5 +1,6 @@
 import { AgentRunState, AgentServiceState as PrismaAgentServiceState, ChildRunCompletionDeliveryOutcome, type Prisma } from "@prisma/client";
 
+import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { AgentRun, AgentRunState as DomainAgentRunState, AgentRunTerminalReason, AgentRunTrigger, AgentServiceState as DomainAgentServiceState } from "@opencrane/models/agents";
@@ -9,6 +10,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
 import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
+import { _RunInputSnapshotData } from "./prisma-run-admission-repository";
 import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
@@ -74,8 +76,11 @@ function _serviceState(value: string | null): DomainAgentServiceState | null
 }
 
 /** Maps one Prisma run row to the dependency-light target contract. */
-function _mapRun(row: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; conversationId: string | null; trigger: string; delegatedUserId: string | null; requestIdempotencyKey: string; rootRunId: string; parentRunId: string | null; attempt: number; state: string; effectiveContractDigest: string; inputSnapshotDigest: string; acceptedAt: Date; startedAt: Date | null; finishedAt: Date | null; terminalReason: string | null }): AgentRun
+function _mapRun(row: { readonly id: string; readonly siloId: string; readonly agentServiceId: string; readonly agentRevisionId: string; readonly conversationId: string | null; readonly trigger: string; readonly agentIdentityId: string; readonly principalId: string; readonly executionSubject: Prisma.JsonValue; readonly requestIdempotencyKey: string; readonly rootRunId: string; readonly parentRunId: string | null; readonly attempt: number; readonly state: string; readonly inputSnapshotDigest: string; readonly acceptedAt: Date; readonly startedAt: Date | null; readonly finishedAt: Date | null; readonly terminalReason: string | null }): AgentRun
 {
+	const parsedExecutionSubject = ___ExecutionSubjectSchema.safeParse(row.executionSubject);
+	if (!parsedExecutionSubject.success || parsedExecutionSubject.data.agentIdentityId !== row.agentIdentityId || parsedExecutionSubject.data.principalId !== row.principalId || parsedExecutionSubject.data.runScope.runId !== row.id || parsedExecutionSubject.data.runScope.attempt !== row.attempt || parsedExecutionSubject.data.runScope.siloId !== row.siloId || parsedExecutionSubject.data.runScope.agentServiceId !== row.agentServiceId || parsedExecutionSubject.data.runScope.agentRevisionId !== row.agentRevisionId)
+		throw new Error("AgentRun execution subject does not match persisted run coordinates");
 	return {
 		id: row.id,
 		siloId: row.siloId,
@@ -83,12 +88,11 @@ function _mapRun(row: { id: string; siloId: string; agentServiceId: string; agen
 		agentRevisionId: row.agentRevisionId,
 		conversationId: row.conversationId,
 		trigger: _runTrigger(row.trigger),
-		delegatedUserId: row.delegatedUserId,
+		executionSubject: parsedExecutionSubject.data,
 		requestIdempotencyKey: row.requestIdempotencyKey,
 		lineage: { rootRunId: row.rootRunId, parentRunId: row.parentRunId },
 		attempt: row.attempt,
 		state: _runState(row.state),
-		effectiveContractDigest: row.effectiveContractDigest,
 		inputSnapshotDigest: row.inputSnapshotDigest,
 		acceptedAt: row.acceptedAt.toISOString(),
 		startedAt: row.startedAt?.toISOString() ?? null,
@@ -180,6 +184,9 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 	async startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>
 	{
 		const transaction = this._transaction;
+		const nextSnapshot = _NextSnapshot(command);
+		if (nextSnapshot === null)
+			return { status: "unauthorized" } as const;
 		// 1. Check that the person asking is still an active org member and still in the conversation,
 		// before reading or writing anything else. Both can be revoked after the request was sent, and
 		// `accessEndedPosition: null` is what distinguishes a current participant from a removed one.
@@ -200,7 +207,7 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		if (run.attempt === command.expectedAttempt + 1)
 		{
 			const task = await transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } }, select: { taskKey: true } });
-			if (_RetryMatches(task, command))
+			if (_RetryMatches(task, command) && _RunMatchesNextSnapshot(run, nextSnapshot))
 			{
 				return { status: "idempotent", run: _mapRun(run) } as const;
 			}
@@ -230,7 +237,7 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		const nextAttempt = command.expectedAttempt + 1;
 		const changed = await transaction.agentRun.updateMany({
 			where: { id: run.id, attempt: command.expectedAttempt, state: { in: [AgentRunState.Failed, AgentRunState.Cancelled] }, agentServiceId: command.expectedAgentServiceId, agentRevisionId: command.expectedActiveAgentRevisionId, siloId: command.expectedAgentServiceSiloId, service: { is: { state: PrismaAgentServiceState.Active, siloId: command.expectedAgentServiceSiloId, activeRevisionId: command.expectedActiveAgentRevisionId } } },
-			data: { attempt: nextAttempt, state: AgentRunState.Accepted, acceptedAt: new Date(command.acceptedAt), startedAt: null, finishedAt: null, terminalReason: null, costAmount: null, costCurrency: null },
+			data: { attempt: nextAttempt, state: AgentRunState.Accepted, agentIdentityId: nextSnapshot.executionSubject.agentIdentityId, principalId: nextSnapshot.executionSubject.principalId, executionSubject: nextSnapshot.executionSubject as unknown as Prisma.InputJsonValue, inputSnapshotDigest: nextSnapshot.digest, acceptedAt: new Date(command.acceptedAt), startedAt: null, finishedAt: null, terminalReason: null, costAmount: null, costCurrency: null },
 		});
 		if (changed.count !== 1)
 		{
@@ -240,7 +247,7 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 			if (current.attempt === nextAttempt)
 			{
 				const task = await transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: nextAttempt } }, select: { taskKey: true } });
-				if (_RetryMatches(task, command))
+				if (_RetryMatches(task, command) && _RunMatchesNextSnapshot(current, nextSnapshot))
 				{
 					return { status: "idempotent", run: _mapRun(current) } as const;
 				}
@@ -253,6 +260,7 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		const updated = await transaction.agentRun.findUnique({ where: { id: run.id } });
 		if (updated === null)
 			return { status: "not_found" } as const;
+		await transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(nextSnapshot) });
 		await this._redeliverSuppressedChildren(run.id, command.expectedAttempt);
 
 		// 4. Admit the controller task in the same transaction as the advanced attempt. A task failure
@@ -294,10 +302,43 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		if (run.attempt !== nextAttempt)
 			return null;
 		const task = await this._transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: nextAttempt } }, select: { taskKey: true } });
-		return _RetryMatches(task, command)
+		return _RetryMatches(task, command) && _RunMatchesNextSnapshot(run, _NextSnapshotForWinner(command))
 			? { outcome: "idempotent", run: _mapRun(run) }
 			: { outcome: "denied", reason: "attempt_conflict", currentAttempt: run.attempt };
 	}
+}
+
+/** Parses only the snapshot fields available while reading a committed retry winner. */
+function _NextSnapshotForWinner(command: StartNextRunAttemptCommand): StartNextRunAttemptCommand["nextInputSnapshot"] | null
+{
+	return command.nextInputSnapshot;
+}
+
+/** Parses the newly compiled next-attempt snapshot and checks every run and lease coordinate before writing. */
+function _NextSnapshot(command: AtomicStartNextRunAttemptCommand): AtomicStartNextRunAttemptCommand["nextInputSnapshot"] | null
+{
+	const snapshot = command.nextInputSnapshot;
+	const subject = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
+	const nextAttempt = command.expectedAttempt + 1;
+	if (!subject.success || snapshot.runId !== command.runId || snapshot.attempt !== nextAttempt || snapshot.siloId !== command.siloId || snapshot.agentServiceId !== command.expectedAgentServiceId || snapshot.agentRevisionId !== command.expectedActiveAgentRevisionId || subject.data.runScope.runId !== command.runId || subject.data.runScope.attempt !== nextAttempt || subject.data.runScope.siloId !== command.siloId || subject.data.runScope.agentServiceId !== command.expectedAgentServiceId || subject.data.runScope.agentRevisionId !== command.expectedActiveAgentRevisionId || subject.data.computerScope.siloId !== command.siloId)
+		return null;
+	return snapshot;
+}
+
+/** Confirms that a committed next attempt names exactly the request's new immutable execution snapshot. */
+function _RunMatchesNextSnapshot(run: { readonly attempt: number; readonly inputSnapshotDigest: string; readonly agentIdentityId: string; readonly principalId: string; readonly executionSubject: Prisma.JsonValue }, snapshot: AtomicStartNextRunAttemptCommand["nextInputSnapshot"] | null): boolean
+{
+	if (snapshot === null)
+		return false;
+	const parsed = ___ExecutionSubjectSchema.safeParse(run.executionSubject);
+	if (!parsed.success)
+		return false;
+	return run.attempt === snapshot.attempt
+		&& run.inputSnapshotDigest === snapshot.digest
+		&& run.agentIdentityId === snapshot.executionSubject.agentIdentityId
+		&& run.principalId === snapshot.executionSubject.principalId
+		&& parsed.data.runScope.attempt === snapshot.attempt
+		&& parsed.data.runScope.runId === snapshot.runId;
 }
 
 /** Checks whether the next attempt owns the deterministic task admitted for these retry coordinates. */

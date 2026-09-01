@@ -1,5 +1,5 @@
 import type { ProductAuthorizationActorKind, AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
-import type { RunInputSnapshotIdentity } from "@opencrane/contracts";
+import type { ExecutionSubject } from "@opencrane/contracts";
 import type { ProductAuthorizationActions, ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 
 import type { RuntimeDispatchTransaction } from "./prisma-runtime-dispatch-authority.types";
@@ -9,8 +9,8 @@ export interface RuntimeProductActor
 {
 	/** Stable local Principal resolved by the central authority. */
 	readonly principalId: string;
-	/** Actor class written into durable decision evidence. */
-	readonly actorKind: Extract<ProductAuthorizationActorKind, "user" | "agent-service">;
+	/** Workload actor class written into durable decision evidence. */
+	readonly actorKind: Extract<ProductAuthorizationActorKind, "workload">;
 	/** Stable actor identifier written into durable decision evidence. */
 	readonly actorId: string;
 	/** Membership revision reverified for this effect admission. */
@@ -29,16 +29,14 @@ export interface RuntimeExternalActionAuthorizationCoordinate
 /** Authority-derived evidence that must be saved with the ToolInvocation before commit. */
 export interface RuntimeExternalActionAuthorizationEvidence
 {
-	/** Local Principal whose current grants admitted the effect. */
-	readonly principalId: string;
-	/** Human or managed-service actor class used by the central authority. */
-	readonly actorKind: Extract<ProductAuthorizationActorKind, "user" | "agent-service">;
+	/** Workload actor class used by the central authority. */
+	readonly actorKind: Extract<ProductAuthorizationActorKind, "workload">;
+	/** Exact evidence-bound subject that the runtime may exercise for this effect. */
+	readonly executionSubject: ExecutionSubject;
 	/** Canonically ordered resource and action set admitted for this effect. */
 	readonly coordinates: readonly RuntimeExternalActionAuthorizationCoordinate[];
 	/** Canonically ordered decision digests returned by the central authority. */
 	readonly decisionDigests: readonly `sha256:${string}`[];
-	/** Current signed membership revision used by every decision. */
-	readonly membershipRevision: number;
 	/** Exact AgentRevision that proposed the effect. */
 	readonly agentRevisionId: string;
 	/** Exact run that proposed the effect. */
@@ -57,14 +55,14 @@ export interface RuntimeExternalActionAuthorizationEvidence
 export interface RuntimeAgentEffectEligibilityPort
 {
 	/** Checks that the exact assigned revision remains active and published. */
-	isEligible(command: { readonly siloId: string; readonly agentServiceId: string; readonly agentRevisionId: string; readonly executionKind: "personal" | "managed"; readonly principalId: string }): Promise<boolean>;
+	isEligible(command: { readonly siloId: string; readonly agentServiceId: string; readonly agentRevisionId: string; readonly executionSubject: ExecutionSubject }): Promise<boolean>;
 }
 
 /** Signed membership question delegated to the membership authority. */
 export interface RuntimeMembershipEligibilityPort
 {
-	/** Checks that the current signed revision still proves the frozen identity. */
-	isEligible(command: { readonly siloId: string; readonly identity: RunInputSnapshotIdentity; readonly nowEpochMs: number }): Promise<boolean>;
+	/** Checks that the current signed revision still proves the full frozen execution subject. */
+	isEligible(command: { readonly siloId: string; readonly executionSubject: ExecutionSubject; readonly nowEpochMs: number }): Promise<boolean>;
 }
 
 /** MCP lifecycle question delegated to the MCP domain. */
@@ -85,7 +83,7 @@ export interface RuntimePersonalMemoryEffectEligibilityPort
 export interface RuntimePersonaEffectEligibilityPort
 {
 	/** Returns the current profile only while the frozen approved revision remains active. */
-	findEligibleProfileId(command: { readonly siloId: string; readonly userId: string; readonly personaRevisionId: string }): Promise<string | null>;
+	findEligibleProfileId(command: { readonly siloId: string; readonly principalId: string; readonly personaRevisionId: string }): Promise<string | null>;
 }
 
 /** Domain-owned lifecycle adapters bound to one runtime candidate transaction. */
@@ -93,7 +91,7 @@ export interface RuntimeExternalActionEligibilityPorts
 {
 	/** Current AgentService and revision lifecycle. */
 	readonly agentService: RuntimeAgentEffectEligibilityPort;
-	/** Current signed human or managed-service membership. */
+	/** Current membership and identity evidence for the exact execution subject. */
 	readonly membership: RuntimeMembershipEligibilityPort;
 	/** Current MCP publication and assignment. */
 	readonly mcp: RuntimeMcpEffectEligibilityPort;

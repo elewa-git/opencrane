@@ -32,6 +32,13 @@ Kubernetes SIG Agent Sandbox controller reconciles `SandboxClaim`, `SandboxTempl
 `SandboxWarmPool`. OpenCrane does not introduce another Pod lifecycle controller. A restored
 computer uses the admitted profile, stream history, and verified ArtifactStore workspace checkpoint.
 
+Run admission resolves a current active computer lease before it seals an immutable execution
+subject and input snapshot. A cold computer first reaches the durable activation queue and becomes
+warm through its checked claim/lease history; the admission transaction then rechecks the exact
+computer generation, lease, identity head, membership, and capability decision. A snapshot never
+contains an optional future lease, and a later runtime assignment cannot manufacture or replace its
+execution subject.
+
 KurrentDB owns history only. PostgreSQL remains canonical for memberships, grants, deny rules, and
 the transaction-bound `AuthorizationAuthority`. A protected call rechecks current PostgreSQL
 authority and commits its decision evidence with the protected fact; its Kurrent event carries the

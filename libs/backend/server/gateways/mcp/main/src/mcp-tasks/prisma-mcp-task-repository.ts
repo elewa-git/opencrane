@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import Ajv from "ajv";
-import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
+import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
 
 import { PrismaManagedAuthorizationGrantRepository, type AuthorizationAuthority, type ManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantSpec } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -323,8 +323,7 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		const authorizationDecisionDigests = [invocationAdmission.evidence.decisionDigest];
 		const authorizationEvidenceDigest = ___DigestCanonicalJson({
 			siloId: task.siloId,
-			principalId: task.principalId,
-			actorKind: "user",
+			caller: { principalId: task.principalId },
 			coordinates: authorizationCoordinates,
 			decisionDigests: authorizationDecisionDigests,
 			mcpTaskId: task.id,
@@ -336,9 +335,7 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 			data: {
 				siloId: task.siloId,
 				mcpTaskId: task.id,
-				subjectId: task.principalId,
-				authorizationPrincipalId: task.principalId,
-				authorizationActorKind: ToolInvocationAuthorizationActorKind.User,
+				principalId: task.principalId,
 				authorizationCoordinates: authorizationCoordinates as unknown as Prisma.InputJsonValue,
 				authorizationDecisionDigests,
 				authorizationEvidenceDigest,

@@ -6,13 +6,12 @@ import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __Re
 import { _CreateElicitationInterruptReader } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/server/conversation-assets";
-import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
-import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config";
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
 import { _CreateExternalActionWorker } from "./app/external-action-composition";
+import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
@@ -22,6 +21,7 @@ import { _log } from "./app/log";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
 import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition";
 import { _CreateConversationSocketAuthenticator } from "./app/conversation-socket-authenticator";
+import { _RequireExecutionSubjectComposition } from "./app/execution-subject-composition";
 import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
@@ -43,15 +43,15 @@ async function _Main(): Promise<void>
 	const config = _ReadProcessConfig();
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
+	const historyStore = _CreateHistoryStoreComposition(config.historyStore);
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
 	await _ReconcileChannelTargetRoutes(prisma, config.runtime.channelTargets);
 
-	// 3. Compose one shared capacity gate and deployment-selected membership evidence for every run
-	//    entrypoint. Standalone has no key mount and remains deny-only until a local issuer exists.
+	// 3. Require the complete target evidence adapter before exposing either initial admission or retry.
+	const executionSubjects = _RequireExecutionSubjectComposition(historyStore.historyStore);
 	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
-	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
-	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
-	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, membershipEvidence);
+	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
+	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
 	const runCancellation = _CreateRunCancellationAuthority(prisma);
 
 	// 4. Compose the class-specific MCP authority before the generic external-action worker.
@@ -63,13 +63,13 @@ async function _Main(): Promise<void>
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, managedRunAdmission, personalRunAdmission, runCancellation, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects);
+	const publicApp = _CreatePublicApp(prisma, managedRunAdmission, personalRunAdmission, runCancellation, executionSubjects.retryInputCompiler, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution);
-	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
+	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, executionSubjects.retryInputCompiler, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime, providerEffects);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

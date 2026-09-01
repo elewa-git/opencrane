@@ -58,6 +58,23 @@ grep -Fq 'jq -e' <<<"$rendered"
 grep -Fq 'app.kubernetes.io/component: opencrane-server' <<<"$rendered"
 grep -Fq 'app.kubernetes.io/component: kurrentdb-bootstrap' <<<"$rendered"
 grep -Fq 'egress: []' <<<"$rendered"
+server_deployment="$(awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-testv5-opencrane-server/ { print }' <<<"$rendered")"
+[[ -n "$server_deployment" ]]
+grep -Fq 'name: OPENCRANE_HISTORY_STORE_ENDPOINT' <<<"$server_deployment"
+grep -Fq 'value: "opencrane-testv5-kurrentdb.default.svc:2113"' <<<"$server_deployment"
+grep -Fq 'name: OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH' <<<"$server_deployment"
+grep -Fq 'value: /var/run/opencrane/history-store/tls/ca.crt' <<<"$server_deployment"
+grep -Fq 'name: OPENCRANE_HISTORY_STORE_USERNAME_PATH' <<<"$server_deployment"
+grep -Fq 'name: OPENCRANE_HISTORY_STORE_PASSWORD_PATH' <<<"$server_deployment"
+grep -Fq 'name: history-store-tls' <<<"$server_deployment"
+grep -Fq 'name: history-store-credential' <<<"$server_deployment"
+grep -Fq 'mountPath: /var/run/opencrane/history-store/tls' <<<"$server_deployment"
+grep -Fq 'mountPath: /var/run/opencrane/history-store/credentials' <<<"$server_deployment"
+grep -Fq 'secretName: "kurrentdb-tls"' <<<"$server_deployment"
+grep -Fq 'secretName: "kurrentdb-history-service"' <<<"$server_deployment"
+grep -Fq 'path: ca.crt' <<<"$server_deployment"
+grep -Fq 'path: username' <<<"$server_deployment"
+grep -Fq 'path: password' <<<"$server_deployment"
 
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]:0:1}" "${VALUES[@]:2}" >/dev/null 2>&1; then
   echo "KurrentDB rendered without an immutable image digest" >&2

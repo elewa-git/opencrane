@@ -1,4 +1,4 @@
-import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
+import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import { ExternalActionRevisionKinds, type DurableExternalActionCommand, type ExternalActionExecutor, type ExternalActionExecutorDependencies } from "./external-action-executor.types";
@@ -33,7 +33,6 @@ export class UnsupportedExternalActionError extends Error
  */
 export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
 {
-	if (snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User) return null;
 	const policy = snapshot.memoryQueryPolicy;
 	if (policy === null || typeof policy !== "object" || Array.isArray(policy)) return null;
 	const record = policy as Readonly<Record<string, unknown>>;

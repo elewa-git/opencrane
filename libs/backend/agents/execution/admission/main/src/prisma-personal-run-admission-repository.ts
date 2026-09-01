@@ -1,7 +1,7 @@
 import { AgentRunState, AgentServiceKind, ConversationLifecycle, ConversationMode, OrgMemberStatus, type Prisma } from "@prisma/client";
 
 import { PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types";
-import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types";
+import type { PersonalRunAdmissionAssemblyCommand, PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types";
 
 /**
  * Reads the idempotency key and the caller's conversation with Prisma, inside one transaction.
@@ -26,14 +26,14 @@ export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissio
 	}
 
 	/** Looks up this idempotency key in the caller's transaction. */
-	async resolve(command: PersonalRunAdmissionCommand): Promise<PersonalRunIdempotencyResult>
+	async resolve(command: PersonalRunAdmissionAssemblyCommand): Promise<PersonalRunIdempotencyResult>
 	{
 		const existing = await this.prisma.agentRun.findUnique({
 			where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } },
-			select: { id: true, conversationId: true, delegatedUserId: true, trigger: true, inputSnapshot: { select: { id: true } } },
+			select: { id: true, conversationId: true, trigger: true, inputSnapshot: { select: { id: true } } },
 		});
 		if (existing === null) return { outcome: PersonalRunIdempotencyOutcomes.NotFound };
-		if (existing.conversationId !== command.conversationId || existing.delegatedUserId !== command.executionSubjectId || existing.trigger !== "Interactive" || existing.inputSnapshot === null) return { outcome: PersonalRunIdempotencyOutcomes.Conflict };
+		if (existing.conversationId !== command.conversationId || existing.trigger !== "Interactive" || existing.inputSnapshot === null) return { outcome: PersonalRunIdempotencyOutcomes.Conflict };
 		return { outcome: PersonalRunIdempotencyOutcomes.Idempotent, runId: existing.id };
 	}
 
@@ -41,7 +41,7 @@ export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissio
 	async resolveConversation(command: PersonalRunAdmissionCommand): Promise<PersonalRunConversationAuthority | null>
 	{
 		const conversation = await this.prisma.conversation.findFirst({
-			where: { id: command.conversationId, siloId: command.siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: command.executionSubjectId, accessEndedPosition: null } } },
+			where: { id: command.conversationId, siloId: command.siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: command.requesterSubjectId, accessEndedPosition: null } } },
 			select: { agentServiceId: true },
 		});
 		if (conversation === null || conversation.agentServiceId === null) return null;
@@ -61,7 +61,7 @@ export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissio
 	 */
 	async hasActiveConversationRun(command: PersonalRunAdmissionCommand): Promise<boolean>
 	{
-		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.executionSubjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
+		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requesterSubjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		if (membership === null) return false;
 		const conversation = await this.prisma.conversation.findFirst({
 			where: {
@@ -69,7 +69,7 @@ export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissio
 				siloId: command.siloId,
 				mode: ConversationMode.AgentSession,
 				lifecycle: ConversationLifecycle.Open,
-				participants: { some: { userId: command.executionSubjectId, accessEndedPosition: null } },
+				participants: { some: { userId: command.requesterSubjectId, accessEndedPosition: null } },
 				runs: { some: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } } },
 			},
 			select: { id: true },

@@ -1,13 +1,13 @@
 /**
  * States whether an identity may request new protected work.
  *
- * Authorization evaluates this state with the identity's current PostgreSQL authority; it is not a
- * grant by itself. These strings cross the contract boundary, so consumers must reject an unknown
- * state instead of treating it as active.
+ * KurrentDB identity history supplies this state, while authorization separately rechecks current
+ * PostgreSQL grants. The state is not a grant by itself. These strings cross the contract boundary,
+ * so consumers must reject an unknown state instead of treating it as active.
  */
 export enum AgentIdentityStates
 {
-	/** The identity may act when current PostgreSQL authority allows the requested action. */
+	/** The identity may act when current authorization allows the requested action. */
 	Active = "active",
 	/** The identity remains historical but cannot start new protected work. */
 	Suspended = "suspended",
@@ -86,6 +86,8 @@ export interface ManagedSubChatAgentIdentity extends ConstructedAgentIdentityBas
 	readonly kind: "managed_subchat";
 	/** Identifies the parent agent identity that requested this sub-chat. */
 	readonly parentAgentIdentityId: string;
+	/** Captures the parent identity's dedicated principal for durable stream verification; it must differ from this sub-chat principal. */
+	readonly parentPrincipalId: string;
 	/** Identifies the parent conversation from which this sub-chat was requested. */
 	readonly parentConversationId: string;
 	/** Identifies the sub-chat conversation owned by this identity. */

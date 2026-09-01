@@ -57,7 +57,7 @@ export class PrismaSteeringRequestRepository implements SteeringRequestTransacti
 	{
 		// 1. Prove ownership before anything else is disclosed. Matching run, silo, and subject in one
 		// query means a caller learns nothing about a run they do not own.
-		const run = await this._transaction.agentRun.findFirst({ where: { id: command.runId, siloId: command.siloId, delegatedUserId: { equals: command.subjectId } }, select: { agentServiceId: true, attempt: true, state: true } });
+		const run = await this._transaction.agentRun.findFirst({ where: { id: command.runId, siloId: command.siloId, principalId: { equals: command.principalId } }, select: { agentServiceId: true, attempt: true, state: true } });
 		if (run === null)
 			return { outcome: "not_found_or_not_owner" };
 		// 2. Answer a repeat before judging whether the run can still be steered. The derived id is not

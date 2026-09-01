@@ -5,14 +5,26 @@ import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "
 
 import { PrismaToolInvocationRepository } from "../prisma-tool-invocation-repository";
 
+/** Complete current execution subject persisted with the run-owned invocation. */
+const EXECUTION_SUBJECT = {
+	schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1",
+	identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-evidence", verifiedAt: "2026-08-29T10:00:00.000Z" },
+	membership: { principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-08-29T11:00:00.000Z" },
+	capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-evidence", decidedAt: "2026-08-29T10:00:00.000Z" },
+	runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1" },
+	computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+	requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-08-29T10:00:00.000Z" },
+	admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-evidence", admittedAt: "2026-08-29T10:00:00.000Z" },
+} as const;
+
 /** Builds a complete stored ToolInvocation row around the fields one test changes. */
 function _row(overrides: Readonly<Record<string, unknown>> = {}): Prisma.ToolInvocationGetPayload<Record<string, never>>
 {
 	const row = {
-		id: "invocation-1", siloId: "silo-1", runId: "run-1", attempt: 2, mcpTaskId: null, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "principal-1",
-		authorizationPrincipalId: "principal-1", authorizationActorKind: ToolInvocationAuthorizationActorKind.User,
+		id: "invocation-1", siloId: "silo-1", runId: "run-1", attempt: 2, mcpTaskId: null, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1",
+		authorizationActorKind: ToolInvocationAuthorizationActorKind.Workload, authorizationExecutionSubject: EXECUTION_SUBJECT,
 		authorizationCoordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-revision-1" }, action: ProductAuthorizationActions.Invoke }],
-		authorizationDecisionDigests: [`sha256:${"b".repeat(64)}`], authorizationMembershipRevision: 3,
+		authorizationDecisionDigests: [`sha256:${"b".repeat(64)}`],
 		authorizationAssignmentDigest: `sha256:${"a".repeat(64)}`, authorizationEvidenceDigest: `sha256:${"c".repeat(64)}`,
 		runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "tool-revision-1", toolInvocationId: "tool-1",
 		arguments: { title: "Proposed" }, argumentsDigest: "sha256:arguments", effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:arguments", requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: false,
@@ -34,11 +46,10 @@ describe("ToolInvocation Prisma mapping", function _suite()
 		const record = await repository.findById("invocation-1");
 
 		expect(record).toEqual(expect.objectContaining({ authorizationEvidence: {
-			principalId: "principal-1",
-			actorKind: "user",
+			actorKind: "workload",
+			executionSubject: EXECUTION_SUBJECT,
 			coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-revision-1" }, action: ProductAuthorizationActions.Invoke }],
 			decisionDigests: [`sha256:${"b".repeat(64)}`],
-			membershipRevision: 3,
 			assignmentDigest: `sha256:${"a".repeat(64)}`,
 			evidenceDigest: `sha256:${"c".repeat(64)}`,
 		} }));
@@ -52,7 +63,9 @@ describe("ToolInvocation Prisma mapping", function _suite()
 			mcpTaskId: "mcp-task-1",
 			agentServiceId: null,
 			agentRevisionId: null,
-			authorizationMembershipRevision: null,
+			agentIdentityId: null,
+			authorizationActorKind: null,
+			authorizationExecutionSubject: null,
 			authorizationAssignmentDigest: null,
 		});
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(row) } } as unknown as Prisma.TransactionClient;
@@ -61,7 +74,6 @@ describe("ToolInvocation Prisma mapping", function _suite()
 
 		expect(record).toEqual(expect.objectContaining({ authorizationEvidence: {
 			principalId: "principal-1",
-			actorKind: "user",
 			coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-revision-1" }, action: ProductAuthorizationActions.Invoke }],
 			decisionDigests: [`sha256:${"b".repeat(64)}`],
 			evidenceDigest: `sha256:${"c".repeat(64)}`,
@@ -70,7 +82,7 @@ describe("ToolInvocation Prisma mapping", function _suite()
 
 	it("rejects task evidence that invents an AgentRun assignment", async function _rejectsTaskAssignmentEvidence()
 	{
-		const row = _row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", agentServiceId: null, agentRevisionId: null, authorizationMembershipRevision: null });
+		const row = _row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", agentServiceId: null, agentRevisionId: null, agentIdentityId: "identity-1" });
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(row) } } as unknown as Prisma.TransactionClient;
 		const repository = new PrismaToolInvocationRepository(transaction);
 
@@ -79,7 +91,7 @@ describe("ToolInvocation Prisma mapping", function _suite()
 
 	it("rejects a row whose central authorization evidence is only partly stored", async function _rejectsPartialEvidence()
 	{
-		const row = _row({ authorizationPrincipalId: null });
+		const row = _row({ authorizationExecutionSubject: null });
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(row) } } as unknown as Prisma.TransactionClient;
 		const repository = new PrismaToolInvocationRepository(transaction);
 

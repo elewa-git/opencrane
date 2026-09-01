@@ -139,7 +139,8 @@ model ApprovalRequest {
   siloId                   String                     @map("silo_id")
   proofKeyId               String                     @map("proof_key_id")
   proofKeyThumbprint       String                     @map("proof_key_thumbprint")
-  subjectId                String                     @map("subject_id")
+  agentIdentityId          String                     @map("agent_identity_id")
+  principalId              String                     @map("principal_id")
   workloadAudience         String                     @map("workload_audience")
   serviceAccountName       String                     @map("service_account_name")
   namespace                String
@@ -171,20 +172,20 @@ model ApprovalRequest {
   toolInvocation           ToolInvocation             @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
   elicitationRequest       ElicitationRequest         @relation(fields: [elicitationRequestId], references: [id], onDelete: Restrict)
   proofKey                 RunProofKey                @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
-  assignment               WorkloadAssignment         @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
+  assignment               WorkloadAssignment         @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
 
   @@unique([runId, attempt, actionDigest])
   @@index([state, expiresAt])
-  @@index([subjectId])
+  @@index([agentIdentityId, principalId])
   @@map("approval_requests")
 }
 
-/// Durable work authority for one validated external-action candidate. Candidate admission creates
-/// this Preparing row atomically with acceptance; all later preparation, approval, dispatch,
-/// reconciliation, terminal result delivery, and manual recovery decisions use revision/fence CAS.
+/// Identifies the only non-task actor class that may own a ToolInvocation.
+///
+/// A workload acts only through the exact ExecutionSubject admitted for its AgentRun. Caller-owned
+/// MCP tasks have no workload actor and leave this nullable column empty.
 enum ToolInvocationAuthorizationActorKind {
-  User         @map("user")
-  AgentService @map("agent-service")
+  Workload @map("workload")
 }
 
 model ToolInvocation {
@@ -195,12 +196,12 @@ model ToolInvocation {
   agentServiceId           String?                          @map("agent_service_id")
   agentRevisionId          String?                          @map("agent_revision_id")
   mcpTaskId                String?                          @unique @map("mcp_task_id")
-  subjectId                String                           @map("subject_id")
-  authorizationPrincipalId String?                          @map("authorization_principal_id")
+  agentIdentityId          String?                          @map("agent_identity_id")
+  principalId              String                           @map("principal_id")
   authorizationActorKind   ToolInvocationAuthorizationActorKind? @map("authorization_actor_kind")
+  authorizationExecutionSubject Json?                       @map("authorization_execution_subject")
   authorizationCoordinates Json?                            @map("authorization_coordinates")
   authorizationDecisionDigests String[]                     @default([]) @map("authorization_decision_digests")
-  authorizationMembershipRevision Int?                      @map("authorization_membership_revision")
   authorizationAssignmentDigest String?                     @map("authorization_assignment_digest")
   authorizationEvidenceDigest String?                       @map("authorization_evidence_digest")
   runtimeInstanceId        String                           @map("runtime_instance_id")
@@ -241,6 +242,7 @@ model ToolInvocation {
 
   @@unique([runId, attempt, toolInvocationId])
   @@unique([runId, attempt, candidateId])
+  @@index([siloId, agentIdentityId, principalId])
   @@index([runId, attempt, state])
   @@index([state, nextPreparationAttemptAt])
   @@index([state, claimExpiresAt])

@@ -1,6 +1,6 @@
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
-import type { RunAdmissionCommit, RunAdmissionConcurrencyDenialReasons, RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
+import type { RunAdmissionCommand, RunAdmissionCommit, RunAdmissionConcurrencyDenialReasons, RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
 import type { MessageContentBlock } from "@opencrane/models/conversations";
 import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
 
@@ -10,15 +10,17 @@ export interface PersonalRunAdmissionCommand
 	/** ClusterTenant silo selected from the authenticated request host. */
 	readonly siloId: string;
 	/**
-	 * The OIDC subject identifier for the signed-in user, taken from the verified browser session.
+	 * The OIDC subject identifier for the signed-in requester, taken from the verified browser session.
 	 *
 	 * Issued by Zitadel and already verified before this command is built. Never read it from a request
-	 * body: run admission treats this field as proof of who is asking, and later verifies the same
-	 * subject against signed fleet membership.
+	 * body. It is requester provenance only; the injected execution-subject authority decides which
+	 * principal may exercise the run.
 	 */
-	readonly executionSubjectId: string;
-	/** Verified OIDC issuer that namespaces `executionSubjectId`. */
-	readonly executionIssuer: string;
+	readonly requesterSubjectId: string;
+	/** Verified OIDC issuer that namespaces `requesterSubjectId`. */
+	readonly requesterIssuer: string;
+	/** Server-observed instant when the browser credential was authenticated. */
+	readonly requesterAuthenticatedAt: string;
 	/**
 	 * The conversation the run belongs to.
 	 *
@@ -34,6 +36,15 @@ export interface PersonalRunAdmissionCommand
 	readonly inputMessageId: string;
 	/** The message's checked content, held until admission can save the message together with the run. */
 	readonly inputMessageBlocks: readonly MessageContentBlock[];
+}
+
+/** Adds the server-allocated run and resolved service to a pre-assembly personal admission command. */
+export interface PersonalRunAdmissionAssemblyCommand extends PersonalRunAdmissionCommand
+{
+	/** Fresh logical run identifier fenced by the issued subject. */
+	readonly runId: string;
+	/** Service resolved from the participant-bound conversation. */
+	readonly agentServiceId: string;
 }
 
 /** What the preflight read worked out from the conversation, before the capacity gate is entered. */
@@ -65,7 +76,7 @@ export interface PersonalRunAdmissionRepository
 	 * `Conflict` when the key belongs to a different subject, trigger, or conversation. See
 	 * {@link PersonalRunIdempotencyOutcomes}.
 	 */
-	resolve(command: PersonalRunAdmissionCommand): Promise<PersonalRunIdempotencyResult>;
+	resolve(command: PersonalRunAdmissionAssemblyCommand): Promise<PersonalRunIdempotencyResult>;
 	/**
 	 * Finds the personal AgentService for the caller's conversation, in their silo.
 	 *
@@ -147,7 +158,7 @@ export interface PersonalRunSnapshotAssembler
 	 * @returns The assembly result, including whether this call created the run or found the key
 	 * already used. Throws rather than denying when an input source fails.
 	 */
-	(command: PersonalRunAdmissionCommand, authority: PersonalRunConversationAuthority, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<AssembleRunInputSnapshotResult>;
+	(command: PersonalRunAdmissionAssemblyCommand, authority: PersonalRunConversationAuthority, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<AssembleRunInputSnapshotResult>;
 }
 
 /**

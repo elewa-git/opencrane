@@ -19,12 +19,14 @@ describe("agent identity and capability grant contracts", function ()
 			kind: "managed_subchat",
 			principalId: "principal-subchat-1",
 			parentAgentIdentityId: "identity-parent-1",
+			parentPrincipalId: "principal-parent-1",
 			parentConversationId: "conversation-parent-1",
 			conversationId: "conversation-subchat-1",
 			requestedByPrincipalId: "principal-owner-1",
 		};
 
 		expect(identity.conversationId).not.toBe(identity.parentConversationId);
+		expect(identity.principalId).not.toBe(identity.parentPrincipalId);
 	});
 
 	it("keeps web egress grants typed and PostgreSQL-authorized", function ()

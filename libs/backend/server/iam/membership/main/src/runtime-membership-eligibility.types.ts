@@ -1,12 +1,12 @@
-import type { RunInputSnapshotIdentity } from "@opencrane/contracts";
+import type { ExecutionSubject } from "@opencrane/contracts";
 
 /** Signed membership identity frozen into a run and rechecked before an outside effect. */
 export interface RuntimeMembershipEligibilityCommand
 {
 	/** Silo in which the effect would run. */
 	readonly siloId: string;
-	/** Full signed membership coordinates stored by run admission. */
-	readonly identity: RunInputSnapshotIdentity;
+	/** Complete execution subject sealed when this run attempt was admitted. */
+	readonly executionSubject: ExecutionSubject;
 	/** Trusted server time used for signature freshness and expiry. */
 	readonly nowEpochMs: number;
 }

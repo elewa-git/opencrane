@@ -23,23 +23,23 @@ describe("self run cancellation router", function _suite()
 	it("requests cancellation with session owner and exact observed attempt", async function _cancelsOwnedRun()
 	{
 		const requestOwned = vi.fn<RequestOwned>(async function _cancel() { return { outcome: SelfRunCancellationOutcomes.Cancelling, runId: "run-1", attempt: 2 }; });
-		const response = await request(_app({ siloId: "silo-1", subjectId: "user-1" }, requestOwned).app).post("/run-1/cancellation").send({ expectedAttempt: 2 });
+		const response = await request(_app({ siloId: "silo-1", principalId: "principal-1" }, requestOwned).app).post("/run-1/cancellation").send({ expectedAttempt: 2 });
 		expect(response.status).toBe(202);
 		expect(response.body).toEqual({ runId: "run-1", attempt: 2, state: "cancelling" });
-		expect(requestOwned).toHaveBeenCalledWith({ runId: "run-1", expectedAttempt: 2, siloId: "silo-1", subjectId: "user-1" });
+		expect(requestOwned).toHaveBeenCalledWith({ runId: "run-1", expectedAttempt: 2, siloId: "silo-1", principalId: "principal-1" });
 	});
 
 	it("returns final cancellation as an idempotent success", async function _returnsCancelled()
 	{
 		const requestOwned = vi.fn<RequestOwned>(async function _cancel() { return { outcome: SelfRunCancellationOutcomes.Cancelled, runId: "run-1", attempt: 2 }; });
-		const response = await request(_app({ siloId: "silo-1", subjectId: "user-1" }, requestOwned).app).post("/run-1/cancellation").send({ expectedAttempt: 2 });
+		const response = await request(_app({ siloId: "silo-1", principalId: "principal-1" }, requestOwned).app).post("/run-1/cancellation").send({ expectedAttempt: 2 });
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ runId: "run-1", attempt: 2, state: "cancelled" });
 	});
 
 	it("does not disclose an absent or foreign run", async function _hidesForeignRun()
 	{
-		const response = await request(_app({ siloId: "silo-1", subjectId: "user-1" }).app).post("/run-foreign/cancellation").send({ expectedAttempt: 1 });
+		const response = await request(_app({ siloId: "silo-1", principalId: "principal-1" }).app).post("/run-foreign/cancellation").send({ expectedAttempt: 1 });
 		expect(response.status).toBe(404);
 		expect(response.body).toEqual({ error: "run_not_found" });
 	});
@@ -47,14 +47,14 @@ describe("self run cancellation router", function _suite()
 	it("rejects stale attempts without changing the request", async function _rejectsStaleAttempt()
 	{
 		const requestOwned = vi.fn<RequestOwned>(async function _cancel() { return { outcome: SelfRunCancellationOutcomes.AttemptConflict }; });
-		const response = await request(_app({ siloId: "silo-1", subjectId: "user-1" }, requestOwned).app).post("/run-1/cancellation").send({ expectedAttempt: 1 });
+		const response = await request(_app({ siloId: "silo-1", principalId: "principal-1" }, requestOwned).app).post("/run-1/cancellation").send({ expectedAttempt: 1 });
 		expect(response.status).toBe(409);
 		expect(response.body).toEqual({ error: "run_attempt_conflict" });
 	});
 
 	it("strictly rejects missing, non-integer, and extra body fields", async function _rejectsMalformedBody()
 	{
-		const { app, requestOwned } = _app({ siloId: "silo-1", subjectId: "user-1" });
+		const { app, requestOwned } = _app({ siloId: "silo-1", principalId: "principal-1" });
 		for (const body of [{}, { expectedAttempt: 0 }, { expectedAttempt: 1.5 }, { expectedAttempt: 1, requestedBy: "attacker" }])
 		{
 			const response = await request(app).post("/run-1/cancellation").send(body);

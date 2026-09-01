@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
-import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunAdmissionUnitOfWork, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types";
+import type { PersonalRunAdmissionAssemblyCommand, PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunAdmissionUnitOfWork, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types";
 import { PrismaPersonalRunAdmissionRepository } from "./prisma-personal-run-admission-repository";
 
 /**
@@ -32,7 +32,7 @@ export class PrismaPersonalRunAdmissionUnitOfWork implements PersonalRunAdmissio
 	}
 
 	/** Looks up the idempotency key in its own serializable transaction. */
-	async resolve(command: PersonalRunAdmissionCommand): Promise<PersonalRunIdempotencyResult>
+	async resolve(command: PersonalRunAdmissionAssemblyCommand): Promise<PersonalRunIdempotencyResult>
 	{
 		return this._run(async function _Resolve(repository)
 		{

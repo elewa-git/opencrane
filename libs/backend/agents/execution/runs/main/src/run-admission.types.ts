@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { AgentRevisionId, AgentRunId, AgentServiceId, AgentServiceKind, SiloId } from "@opencrane/models/agents";
+import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId } from "@opencrane/models/agents";
 import type { ConversationId, MessageContentBlock, MessageId } from "@opencrane/models/conversations";
 
 /** The run, service, and revision facts accepted when a logical run is first admitted; they never change afterwards. */
@@ -11,20 +11,43 @@ export interface InitialRunAuthority
 	readonly agentServiceId: AgentServiceId;
 	/** Published revision frozen for the complete logical run. */
 	readonly agentRevisionId: AgentRevisionId;
-	/** Product boundary deciding whether an approved persona is required. */
-	readonly agentKind: AgentServiceKind;
-	/** Effective contract digest accepted before the runtime is eligible for dispatch. */
-	readonly effectiveContractDigest: string;
+	/** Explicit input policy that selects persona and personal-memory treatment without inferring identity kind. */
+	readonly executionPolicy: RunExecutionPolicy;
 	/** Version of the prompt compiler selected by the published revision. */
 	readonly promptCompilerVersion: string;
 	/** Trigger accepted for the initial logical run. */
 	readonly trigger: "interactive" | "schedule" | "managed_invocation";
-	/** The user the run is acting for, when an interactive run acts on a human's behalf. */
-	readonly delegatedUserId: string | null;
 	/** Root lineage identifier fixed when the logical run is admitted. */
 	readonly rootRunId: string;
 	/** Immediate parent run, or null for a root admission. */
 	readonly parentRunId: string | null;
+}
+
+/** States whether the current immutable execution policy requires a persona revision. */
+export enum RunExecutionPersonaPolicies
+{
+	/** The snapshot must bind one approved persona revision. */
+	Required = "required",
+	/** The snapshot must not select a persona revision. */
+	None = "none",
+}
+
+/** States whether the current immutable execution policy permits personal-memory retrieval. */
+export enum RunExecutionPersonalMemoryPolicies
+{
+	/** The snapshot may retrieve personal memory only through the subject's admitted policy. */
+	Allowed = "allowed",
+	/** The snapshot must not retrieve personal memory. */
+	None = "none",
+}
+
+/** Gives the input compiler explicit policy choices without branching on an identity class. */
+export interface RunExecutionPolicy
+{
+	/** Selects whether the admitted snapshot requires a persona revision. */
+	readonly persona: RunExecutionPersonaPolicies;
+	/** Selects whether the admitted snapshot may retrieve personal memory. */
+	readonly personalMemory: RunExecutionPersonalMemoryPolicies;
 }
 
 /** Immutable coordinates shared by every initial logical-run admission. */
@@ -46,32 +69,25 @@ export interface RunAdmissionCommandCoordinates
 	readonly inputMessageBlocks?: readonly MessageContentBlock[];
 }
 
-/** Initial admission requested by a human whose signed membership authorises an interactive run. */
-export interface UserRunAdmissionCommand extends RunAdmissionCommandCoordinates
+/** Captures server-verified request provenance before the transaction resolves its durable principal. */
+export interface RunAdmissionRequester
 {
-	/** Discriminant that makes a human subject mandatory for a personal run. */
-	readonly identityKind: "user";
-	/** Interactive runs are the only root admission that exercises a human subject directly. */
-	readonly trigger: "interactive";
-	/** Subject that must be verified by signed fleet membership before the run can commit. */
-	readonly executionSubjectId: string;
-	/** Verified OIDC issuer that namespaces the execution subject. */
-	readonly executionIssuer: string;
+	/** OIDC subject from the verified browser or scheduler credential. */
+	readonly subjectId: string;
+	/** OIDC issuer that namespaces the verified subject. */
+	readonly issuer: string;
+	/** Server-observed credential authentication instant. */
+	readonly authenticatedAt: string;
 }
 
-/** Initial admission requested for an autonomous managed AgentService. */
-export interface ServiceRunAdmissionCommand extends RunAdmissionCommandCoordinates
+/** Initial admission carries only server-derived coordinates and requester provenance. */
+export interface RunAdmissionCommand extends RunAdmissionCommandCoordinates
 {
-	/** Human Principal that explicitly invoked the service, or null for scheduler admission. */
-	readonly requestingPrincipalId: string | null;
-	/** Discriminant that prevents a caller from supplying a user-shaped service identity. */
-	readonly identityKind: "service";
-	/** Managed roots are admitted by an explicit invocation or the scheduler, never interactively. */
-	readonly trigger: "managed_invocation" | "schedule";
+	/** Trigger accepted for this new logical run. */
+	readonly trigger: "interactive" | "schedule" | "managed_invocation";
+	/** Provenance from which transaction-scoped authority resolves the requester principal. */
+	readonly requester: RunAdmissionRequester;
 }
-
-/** Tagged initial admission command with no untagged execution-subject fallback. */
-export type RunAdmissionCommand = UserRunAdmissionCommand | ServiceRunAdmissionCommand;
 
 /** The transaction and trusted clock that every input loader uses at the final admission fence. */
 export interface RunAdmissionTransaction

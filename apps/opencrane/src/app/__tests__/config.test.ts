@@ -26,6 +26,10 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
 		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "opencrane-kurrentdb.default.svc:2113");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH", "/var/run/opencrane/history-store/ca.crt");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_USERNAME_PATH", "/var/run/opencrane/history-store/username");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_PASSWORD_PATH", "/var/run/opencrane/history-store/password");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
@@ -56,6 +60,12 @@ describe("opencrane process config", function _ProcessConfigSuite()
 
 		expect(_ReadProcessConfig()).toMatchObject({
 			authWatchNamespace: "workspace-seeds",
+			historyStore: {
+				caCertificatePath: "/var/run/opencrane/history-store/ca.crt",
+				endpoint: "opencrane-kurrentdb.default.svc:2113",
+				passwordPath: "/var/run/opencrane/history-store/password",
+				usernamePath: "/var/run/opencrane/history-store/username",
+			},
 			internalPort: 9081,
 			publicPort: 9080,
 			runtime: {
@@ -107,6 +117,22 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", "5000");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE", "relative/authorization");
 		expect(function _readRelativeRegistryCredential() { _ReadProcessConfig(); }).toThrow(/absolute mounted file path/);
+	});
+
+	it("requires a credential-free KurrentDB host, port, and mounted file paths", function _RejectsInvalidHistoryStoreConfig()
+	{
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "kurrentdb://operator:secret@history.example:2113");
+		expect(function _CredentialedHistoryEndpoint() { _ReadProcessConfig(); }).toThrow(/credential-free host:port/);
+
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "history.example");
+		expect(function _PortlessHistoryEndpoint() { _ReadProcessConfig(); }).toThrow(/credential-free host:port/);
+
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "history.example:0");
+		expect(function _ZeroHistoryEndpointPort() { _ReadProcessConfig(); }).toThrow(/credential-free host:port/);
+
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "history.example:2113");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH", "var/run/history/ca.crt");
+		expect(function _RelativeHistoryCertificate() { _ReadProcessConfig(); }).toThrow(/OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH must be an absolute path/);
 	});
 
 	it("reads the all-or-nothing standalone first-owner admission contract", function _ReadStandaloneFirstUserAdmission()

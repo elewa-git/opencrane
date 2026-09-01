@@ -1,6 +1,7 @@
 import type { AgentRun } from "@opencrane/models/agents";
 
 import type { AgentRunAuthorityRepository, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
+import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
 
 /**
  * Returns whether a run has finished in a way a person can ask to run again.
@@ -49,7 +50,7 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 {
 	// 1. Refuse a malformed command before touching the database. Every field here is required by the
 	// write's conditions, so a blank one would silently widen or narrow what the update matches.
-	if (!command.runId.trim() || !command.siloId.trim() || !command.conversationId.trim() || !command.requestedBy.trim() || !command.requestedByPrincipalId.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)))
+	if (!command.runId.trim() || !command.siloId.trim() || !command.conversationId.trim() || !command.requestedBy.trim() || !command.requestedByPrincipalId.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)) || !_NextSnapshotMatches(command))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -121,4 +122,23 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 			: { outcome: "denied", reason: "agent_service_inactive" };
 	}
 	return { outcome: "started", run: result.run };
+}
+
+/** Validates that one newly compiled immutable snapshot binds the exact next attempt and computer lease. */
+function _NextSnapshotMatches(command: StartNextRunAttemptCommand): boolean
+{
+	const snapshot = command.nextInputSnapshot;
+	const subject = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
+	if (!subject.success)
+		return false;
+	const nextAttempt = command.expectedAttempt + 1;
+	return snapshot.runId === command.runId
+		&& snapshot.attempt === nextAttempt
+		&& snapshot.siloId === command.siloId
+		&& snapshot.agentServiceId === subject.data.runScope.agentServiceId
+		&& snapshot.agentRevisionId === subject.data.runScope.agentRevisionId
+		&& subject.data.runScope.runId === command.runId
+		&& subject.data.runScope.attempt === nextAttempt
+		&& subject.data.runScope.siloId === command.siloId
+		&& subject.data.computerScope.siloId === command.siloId;
 }

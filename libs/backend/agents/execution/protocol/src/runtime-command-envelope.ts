@@ -43,7 +43,7 @@ export function _RuntimeCancelReason(terminalReason: RuntimeDispatchContext["ter
 /** Build the assignment block carried by every command. */
 function _AssignmentFrame(context: RuntimeDispatchContext): RuntimeAssignment
 {
-	return { runId: context.runId, attempt: context.attempt, agentServiceId: context.agentServiceId, agentRevisionId: context.agentRevisionId, personaRevisionId: context.personaRevisionId ?? undefined, siloId: context.siloId, identity: context.identity, capabilitySetDigest: context.capabilitySetDigest, serviceAccountName: context.serviceAccountName, podUid: context.podUid, assignmentDigest: context.assignmentDigest, issuedAt: context.assignmentIssuedAt, expiresAt: context.assignmentExpiresAt };
+	return { runId: context.runId, attempt: context.attempt, agentServiceId: context.agentServiceId, agentRevisionId: context.agentRevisionId, personaRevisionId: context.personaRevisionId ?? undefined, siloId: context.siloId, executionSubject: context.executionSubject, serviceAccountName: context.serviceAccountName, podUid: context.podUid, assignmentDigest: context.assignmentDigest, issuedAt: context.assignmentIssuedAt, expiresAt: context.assignmentExpiresAt };
 }
 
 /** Internal command body before a resume receives decrypted continuation state. */

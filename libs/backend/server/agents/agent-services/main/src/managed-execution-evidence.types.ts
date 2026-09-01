@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 
-import type { ServiceRunInputSnapshotIdentity } from "@opencrane/contracts";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { FleetMembershipSignatureVerifier } from "@opencrane/backend/server/iam/membership";
+import type { RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
 /** Names the exact run to check: which silo, which managed service, and which revision the caller believes is its published active revision. */
 export interface ManagedExecutionEvidenceCommand
@@ -33,39 +33,66 @@ export interface ManagedExecutionEvidenceTransaction
 	readonly admittedAtEpochMs: number;
 }
 
+/** Identifies the managed service Principal that an external AgentIdentity history must realize. */
+export interface ManagedExecutionIdentityCoordinates
+{
+	/** Silo that owns the service and Principal. */
+	readonly siloId: string;
+	/** Managed service selected for this admission. */
+	readonly agentServiceId: string;
+	/** Published service revision selected for this admission. */
+	readonly agentRevisionId: string;
+	/** Dedicated durable Principal that a checked managed AgentIdentity must realize. */
+	readonly principalId: string;
+}
+
+/** Records the signed membership assertion checked for the managed service Principal. */
+export interface ManagedExecutionMembershipEvidence
+{
+	/** Monotonic signed membership revision accepted at admission. */
+	readonly revision: number;
+	/** Trusted issuer that signed the accepted membership assertion. */
+	readonly issuerId: string;
+	/** Key identifier the trusted issuer used to sign the assertion. */
+	readonly issuerKeyId: string;
+	/** Exact accepted assertion identifier. */
+	readonly assertionId: string;
+	/** SHA-256 digest of the accepted signed membership payload. */
+	readonly payloadDigest: string;
+	/** Instant after which the assertion must no longer be accepted. */
+	readonly trustedUntil: string;
+}
+
+/** Records the revision-scoped capability facts that an execution-subject authority must bind to a computer. */
+export interface ManagedExecutionCapabilityEvidence
+{
+	/** SHA-256 digest of the managed revision's complete effective contract. */
+	readonly effectiveContractDigest: string;
+	/** Revision boundaries that survived current grant evaluation. */
+	readonly effectiveBoundaryAttachments: readonly RevisionBoundaryAttachment[];
+	/** SHA-256 digest of the canonical effective boundary attachments. */
+	readonly effectiveBoundaryAttachmentDigest: string;
+	/** Current central-authority decisions that admitted the managed Principal's capability set. */
+	readonly authorizationDecisionDigests: readonly string[];
+}
+
 /**
- * What one managed run is allowed to be and do, fixed at admission time.
+ * Checked managed-service prerequisites for creating an execution subject.
  *
- * Both fields are copied onto the run's input snapshot and never recomputed later, so a run keeps the
- * access it was admitted with even if grants or membership change mid-run.
+ * This package proves the Postgres-owned service, Principal, membership, revision, and grant facts.
+ * It deliberately does not return an `ExecutionSubject`: AgentIdentity history and an active
+ * ConversationComputer lease are Kurrent-owned facts that this package cannot invent. The app must
+ * pass these values to the checked execution-subject authority that reads those histories in the
+ * same admission fence.
  */
 export interface ManagedExecutionEvidence
 {
-	/** The agent's own identity for this run: its `agent-service:<id>` principal, signed fleet-membership evidence, and boundary attachments that survived the grant check. Never the human who triggered the run. */
-	readonly identity: ServiceRunInputSnapshotIdentity;
-	/**
-	 * One SHA-256 hash fingerprinting everything this run is allowed to do.
-	 *
-	 * It is computed over the silo, the service, the revision id and the revision's own content digest,
-	 * the agent's principal and silo, the fleet-membership revision and payload digest, the
-	 * boundary attachments that survived the grant check, the model definition, the budget ceilings, the
-	 * assigned skill revisions, and the selected MCP tool revision ids. Anything that widens what the
-	 * agent can reach is inside; nothing about the human who
-	 * pressed the button is.
-	 *
-	 * It is stored on the run's input snapshot and copied onto the runtime assignment handed to the pod,
-	 * so a later reader can prove the pod is running the capability set that was approved. That only
-	 * works if the hash is reproducible. Attachments and skills use the sorting helpers in
-	 * `prisma-managed-execution-evidence.ts`, and MCP tool revision ids are sorted inline before
-	 * hashing. RFC 8785 sorts object keys for us but keeps array order
-	 * exactly as given. If the sort were unstable — or omitted, leaving Postgres row order to decide —
-	 * two runs of the identical revision would hash differently, comparisons against the stored digest
-	 * would fail for no real reason, and the digest would stop being usable as evidence.
-	 *
-	 * @see https://www.rfc-editor.org/rfc/rfc8785 — the canonical-JSON rules the hash relies on, and
-	 *   the reason array order must be fixed by the caller rather than by the serializer.
-	 */
-	readonly capabilitySetDigest: string;
+	/** Principal and active managed revision that a checked AgentIdentity must match. */
+	readonly identity: ManagedExecutionIdentityCoordinates;
+	/** Current signed membership evidence for the service Principal. */
+	readonly membership: ManagedExecutionMembershipEvidence;
+	/** Current revision capability evidence, still unbound to any computer lease. */
+	readonly capability: ManagedExecutionCapabilityEvidence;
 }
 
 /**
@@ -93,16 +120,13 @@ export type ManagedExecutionEvidenceResult =
  * Run-input assembly lives in another package but must not re-implement these rules, so it calls in
  * here. One call re-reads the service and its published active revision, verifies the agent's signed
  * fleet membership, intersects the revision's declared boundary attachments against the grants actually
- * held, and hashes the result into a capability digest. It fails closed: any missing or stale piece
- * returns a denial rather than a partial answer.
+ * held, and returns the resulting target coordinates and evidence. It fails closed: any missing or
+ * stale piece returns a denial rather than a partial answer.
  *
  * Implemented by: `PrismaManagedExecutionEvidenceAuthority` in
- * `db/prisma-managed-execution-evidence.ts`; built for the process by
- * `_CreateManagedExecutionEvidenceAuthority` and composed in apps/opencrane/src/index.ts.
- * Called by: `ManagedExecutionIdentityEnvelopeSource` in
- * libs/backend/agents/execution/inputs/main/src/managed-execution-identity-envelope-source.ts, and
- * passed through `__CreateManagedRunAdmissionPort` in
- * libs/backend/agents/execution/admission/main/src/managed-run-admission.composition.ts.
+ * `db/prisma-managed-execution-evidence.ts`. An application composition may use this evidence
+ * only with checked AgentIdentity and ConversationComputer history; this authority alone does not
+ * produce an `ExecutionSubject`.
  */
 export interface ManagedExecutionEvidenceAuthority
 {

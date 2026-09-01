@@ -1,13 +1,13 @@
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
-import type { InitialRunAuthority, RunAdmissionCommit, RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
+import { RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
-import { _IsIdentityFresh } from "./utils/canonical-inputs";
 import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types";
-import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types";
+import type { ExecutionSubject } from "@opencrane/models/agents";
+import type { ApprovedPersonaInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types";
 
 /** Snapshot format version this assembler stamps on every snapshot it writes. */
 const _SNAPSHOT_VERSION = 1;
@@ -29,13 +29,12 @@ const _SNAPSHOT_VERSION = 1;
  * `admitFirstAgentThreadRun` for the first run of a child Agent thread, which is the only caller that
  * passes `prepare`.
  *
- * @param command - Run ids, trigger, and identity kind. The caller chooses `runId` and
+ * @param command - Run ids and trigger. The caller chooses `runId` and
  * `requestIdempotencyKey` before calling. Sending the same key again returns the first run, so a
  * caller that wants a genuinely new run must send a new key.
  * @param authorities - The sources this function sequences, in the order listed above. Build the
- * set with {@link __CreatePrismaManagedSessionAssemblyAuthorities} or
- * {@link __CreatePrismaPersonalSessionAssemblyAuthorities}. Mixing the two lets a personal input
- * source run for a managed service, and every such source then refuses the run.
+ * set with the matching target admission composition. Each source receives the same checked
+ * `ExecutionSubject`, so request provenance cannot select a separate execution identity.
  * @param commit - Optional extra write the caller needs inside the same transaction, such as the
  * conversation's input message. It runs only after every source has loaded, so it can never be
  * committed next to a partial snapshot.
@@ -68,26 +67,28 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		const run = await authorities.runAuthority.load(command, transaction);
 		if (run.outcome === "denied") return run;
 
-		// 4. Verify signed identity before any identity-scoped input can select data from another organization.
-		const identity = await authorities.identityEnvelope.load(command, run.value, transaction);
-		if (identity.outcome === "denied") return identity;
-		if (!_IsIdentityFresh(identity.value, transaction.admittedAt)) return { outcome: "denied", reason: "membership_stale" } as const;
-		if ((run.value.agentKind === "personal" && identity.value.kind !== "user") || (run.value.agentKind === "managed" && identity.value.kind !== "service")) return { outcome: "denied", reason: "identity_unavailable" } as const;
+		// 4. Verify one AgentIdentity-and-Principal subject before loading any identity-scoped input.
+		const executionSubject = await authorities.executionSubject.load(command, run.value, transaction);
+		if (executionSubject.outcome === "denied") return executionSubject;
+		if (!_IsExecutionSubjectBound(command, run.value, executionSubject.value)) return { outcome: "denied", reason: "identity_unavailable" } as const;
 
-		// 5. A personal run requires an approved persona; a managed run must not carry one.
-		const persona = await authorities.approvedPersona.load(command, run.value, transaction);
+		// 5. The admitted revision's explicit policy determines whether an approved persona is required.
+		const persona = await authorities.approvedPersona.load(command, run.value, executionSubject.value, transaction);
 		if (persona.outcome === "denied") return persona;
-		if ((run.value.agentKind === "personal") !== (persona.value.personaRevisionId !== null)) return { outcome: "denied", reason: "persona_unavailable" } as const;
+		if ((run.value.executionPolicy.persona === RunExecutionPersonaPolicies.Required) !== (persona.value.personaRevisionId !== null))
+		{
+			return { outcome: "denied", reason: "persona_unavailable" } as const;
+		}
 
 		// 6. Freeze the transcript, rejecting messages that leaked into a non-conversational run.
-		const conversation = await authorities.conversationContext.load(command, run.value, transaction);
+		const conversation = await authorities.conversationContext.load(command, run.value, executionSubject.value, transaction);
 		if (conversation.outcome === "denied") return conversation;
 		if (command.conversationId === null && conversation.value.messageIds.length > 0) return { outcome: "denied", reason: "conversation_unavailable" } as const;
 
 		// 7. Freeze preferences, identity-scoped memory, tools, and budgets in the same final transaction.
-		const preferences = await authorities.preferenceFacts.load(command, run.value, identity.value, transaction);
+		const preferences = await authorities.preferenceFacts.load(command, run.value, executionSubject.value, transaction);
 		if (preferences.outcome === "denied") return preferences;
-		const memory = await authorities.memoryScope.load(command, run.value, identity.value, conversation.value, transaction);
+		const memory = await authorities.memoryScope.load(command, run.value, executionSubject.value, conversation.value, transaction);
 		if (memory.outcome === "denied") return memory;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;
@@ -97,13 +98,13 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		}
 		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
 		if (skills.outcome === "denied") return skills;
-		const productAuthorization = await authorities.productAuthorization.load(command, identity.value, persona.value, memory.value, tools.value, transaction);
+		const productAuthorization = await authorities.productAuthorization.load(command, executionSubject.value, persona.value, memory.value, tools.value, transaction);
 		if (productAuthorization.outcome === "denied")
 			return productAuthorization;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === "denied") return budget;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
-		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
+		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
 	}, commit, prepare);
 	if (admitted.outcome === "denied") return { outcome: "denied", reason: _publicReason(admitted.reason) };
 	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot };
@@ -116,10 +117,7 @@ function _isCommandValid(command: SessionAssemblyCommand): boolean
 		&& command.siloId.trim().length > 0
 		&& (command.conversationId === null || command.conversationId.trim().length > 0)
 		&& command.requestIdempotencyKey.trim().length > 0
-		&& (command.identityKind !== "user" || command.conversationId === null || (typeof command.inputMessageId === "string" && command.inputMessageId.trim().length > 0 && Array.isArray(command.inputMessageBlocks) && command.inputMessageBlocks.length > 0))
-		&& (command.identityKind === "user"
-			? command.trigger === "interactive" && command.executionSubjectId.trim().length > 0
-			: (command.trigger === "schedule" || command.trigger === "managed_invocation"));
+		&& (command.conversationId === null || (typeof command.inputMessageId === "string" && command.inputMessageId.trim().length > 0 && Array.isArray(command.inputMessageBlocks) && command.inputMessageBlocks.length > 0));
 }
 
 /** Maps the repository-internal `authority_conflict` refusal onto the public assembly vocabulary. */
@@ -129,10 +127,11 @@ function _publicReason(reason: SessionAssemblyRefusalReason | "authority_conflic
 }
 
 /** Compiles sorted source outputs into the one canonical shape and digests it without self-reference. */
-function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, conversation: ConversationContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, budgetPolicy: JsonValue, identity: IdentityEnvelopeInput): RunInputSnapshot
+function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, conversation: ConversationContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, budgetPolicy: JsonValue, executionSubject: ExecutionSubject): RunInputSnapshot
 {
 	const withoutDigest = {
 		runId: command.runId,
+		attempt: executionSubject.runScope.attempt,
 		siloId: command.siloId,
 		agentServiceId: run.agentServiceId,
 		agentRevisionId: run.agentRevisionId,
@@ -147,9 +146,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		mcpTools: _canonicalMcpTools(tools.mcpTools),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
-		identitySnapshot: _SnapshotIdentity(identity),
-		capabilitySetDigest: identity.capabilitySetDigest,
-		effectiveContractDigest: run.effectiveContractDigest,
+		executionSubject,
 		promptCompilerVersion: run.promptCompilerVersion,
 		compiledAt: admittedAt,
 	};
@@ -168,9 +165,18 @@ function _canonicalMcpTools(tools: ToolPolicyInput["mcpTools"]): ToolPolicyInput
 		.sort(function _ByRevision(left, right): number { return left.toolRevisionId.localeCompare(right.toolRevisionId); });
 }
 
-/** Drops `capabilitySetDigest`, which is only used during assembly, and keeps every other identity field for the snapshot. */
-function _SnapshotIdentity(identity: IdentityEnvelopeInput): RunInputSnapshot["identitySnapshot"]
+/** Checks that the injected subject fences the exact admitted run and a non-empty active computer lease. */
+function _IsExecutionSubjectBound(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject): boolean
 {
-	const { capabilitySetDigest: _capabilitySetDigest, ...snapshotIdentity } = identity;
-	return snapshotIdentity;
+	return executionSubject.siloId === command.siloId
+		&& executionSubject.runScope.siloId === command.siloId
+		&& executionSubject.runScope.runId === command.runId
+		&& executionSubject.runScope.attempt === 1
+		&& executionSubject.runScope.agentServiceId === run.agentServiceId
+		&& executionSubject.runScope.agentRevisionId === run.agentRevisionId
+		&& executionSubject.computerScope.siloId === command.siloId
+		&& executionSubject.computerScope.computerId.trim().length > 0
+		&& executionSubject.computerScope.leaseId.trim().length > 0
+		&& executionSubject.computerScope.leaseGeneration > 0
+		&& executionSubject.capability.computerId === executionSubject.computerScope.computerId;
 }

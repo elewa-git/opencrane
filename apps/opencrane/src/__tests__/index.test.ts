@@ -132,6 +132,10 @@ describe("Control Plane", () =>
     vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
 		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "opencrane-kurrentdb.opencrane-silo.svc:2113");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH", "/var/run/opencrane/history-store/ca.crt");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_USERNAME_PATH", "/var/run/opencrane/history-store/username");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_PASSWORD_PATH", "/var/run/opencrane/history-store/password");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
