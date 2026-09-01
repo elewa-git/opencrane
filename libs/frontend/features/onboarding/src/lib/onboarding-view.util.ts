@@ -12,7 +12,10 @@ export function _FindCurrentQuestion(snapshot: PersonaOnboardingSnapshot): Perso
 /** Convert reviewed question choices into the shared controlled-card contract. */
 export function _QuestionOptions(question: PersonaQuestion | null): readonly ChoiceCardOption[]
 {
-	if (question === null) return [];
+	if (question === null)
+	{
+		return [];
+	}
 	return question.choices.map(function _Choice(choice) { return { id: choice.id, label: choice.label }; });
 }
 
@@ -25,7 +28,10 @@ export function _SelectedChoiceLabel(question: PersonaQuestion): string
 /** Convert only server-returned tie candidates into the shared controlled-card contract. */
 export function _ResolutionOptions(resolution: PersonaResolution | null): readonly ChoiceCardOption[]
 {
-	if (resolution === null) return [];
+	if (resolution === null)
+	{
+		return [];
+	}
 	return resolution.candidates.map(function _Candidate(candidate)
 	{
 		return _ResolutionOption(candidate);
@@ -79,7 +85,10 @@ function _ResolutionOption(candidate: PersonaColours | PersonaModifiers): Choice
 /** Build a truthful visible progress label from server-confirmed counts. */
 export function _ProgressLabel(snapshot: PersonaOnboardingSnapshot): string
 {
-	if (snapshot.questionCount === 0) return "No reviewed questions are available";
+	if (snapshot.questionCount === 0)
+	{
+		return "No reviewed questions are available";
+	}
 	const position = Math.min(snapshot.answeredQuestionCount + 1, snapshot.questionCount);
 	return `Question ${position} of ${snapshot.questionCount} · ${snapshot.answeredQuestionCount} answers saved`;
 }
@@ -123,7 +132,10 @@ function _PersonaArchetypeLabel(colour: PersonaColours): string
 /** Human-readable name for a server-owned colour, modifier, or tie candidate. */
 export function _PersonaValueLabel(value: string): string
 {
-	if (!value) return value;
+	if (!value)
+	{
+		return value;
+	}
 	return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
@@ -141,6 +153,9 @@ export function _PersonaScores(result: PersonaResult): readonly PersonaArchetype
 /** Round one display-only percentage without changing score ordering or tie evidence. */
 function _Percentage(value: number, total: number): number
 {
-	if (total <= 0) return 0;
+	if (total <= 0)
+	{
+		return 0;
+	}
 	return Math.round((value / total) * 100);
 }

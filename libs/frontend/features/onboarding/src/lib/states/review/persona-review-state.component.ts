@@ -55,7 +55,10 @@ export class PersonaReviewStateComponent
 	public requestApproval(): void
 	{
 		const snapshot = this.snapshot();
-		if (!snapshot.personaRevisionId || snapshot.result === null || snapshot.result.instructionPreview === null) return;
+		if (!snapshot.personaRevisionId || snapshot.result === null || snapshot.result.instructionPreview === null)
+		{
+			return;
+		}
 		this.approvalIntent.set({ personaRevisionId: snapshot.personaRevisionId, instructionPreview: snapshot.result.instructionPreview });
 	}
 
@@ -68,14 +71,20 @@ export class PersonaReviewStateComponent
 	/** Keep local dialog state aligned when PrimeNG closes it through Escape or its close affordance. */
 	protected approvalVisibilityChanged(visible: boolean): void
 	{
-		if (!visible) this.closeApproval();
+		if (!visible)
+		{
+			this.closeApproval();
+		}
 	}
 
 	/** Emit the immutable material captured by the owner's confirmation. */
 	protected confirmApproval(): void
 	{
 		const intent = this.approvalIntent();
-		if (intent === null) return;
+		if (intent === null)
+		{
+			return;
+		}
 		this.closeApproval();
 		this.approvalRequested.emit(intent);
 	}
