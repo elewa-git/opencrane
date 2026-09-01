@@ -177,8 +177,8 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  *
  * None of these routes sits behind the browser-session guard, because none of their callers is a
  * browser. Each one authorises the bearer token on the request itself: the controller, runtime, and
- * worker routers put it through Kubernetes TokenReview and accept only a ServiceAccount from the
- * namespace their reviewer was built for, and `/api/internal/conversation-replay` instead spends a
+ * worker routers put it through Kubernetes TokenReview and accept only a ServiceAccount from their
+ * configured namespace set, and `/api/internal/conversation-replay` instead spends a
  * single-use channel context token. Being on the internal listener is not the protection — a router
  * mounted here without its own check would be open to every workload in the cluster.
  *

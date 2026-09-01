@@ -44,7 +44,7 @@ audience returns no identity. The raw token and full Kubernetes response never l
 - `_CreateChannelProxyTokenReviewer` — binds channel resolution to one deployment-selected audience,
   namespace, and ServiceAccount without duplicating Kubernetes TokenReview in the application root.
 - `_CreateConversationComputerRuntimeTokenReviewer` — accepts only the ConversationComputer runtime
-  audience and one namespace from the release-owned Sandbox profile map. The receiving route must
+  audience and configured namespaces from the release-owned Sandbox profile map. The receiving route must
   still bind its reviewed namespace, ServiceAccount, and Pod UID to the exact active computer lease.
 - `_CreateRuntimeTokenReviewer` — separates personal and managed runtime audience, namespace, and
   ServiceAccount grammars.

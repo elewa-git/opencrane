@@ -161,7 +161,8 @@ transport for workloads; it is not a browser fallback.
 - `ConversationComputerRuntimeCommandAuthority` keeps one execution-fenced, first-in-first-out
   command stream in KurrentDB. A server can issue a start-turn command from a protected input
   reference; a Sandbox can only receive its oldest command and report that command's terminal state.
-  A duplicate, stale, foreign, expired, skipped, or malformed report fails closed.
+  An exact duplicate terminal report is an idempotent no-op; a stale, foreign, expired, skipped, or
+  malformed report fails closed.
 - `__CreateConversationComputerRuntimeCommandRouter` gives a reviewed Sandbox Pod the narrow
   `commands/next` and `commands/complete` transport. It derives the computer execution from history
   again on every request and compares the Pod UID, namespace, and service account with the active
