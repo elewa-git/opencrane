@@ -192,7 +192,7 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream"> | null = null): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">, historyStore: Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream"> | null = null): void
 {
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution, historyStore);
 	const internalControllerRoutes: readonly RouteMount[] = [
@@ -207,7 +207,10 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const internalRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringValidationWorker },
 	];
-	const internalConversationComputerRoutes = _OptionalRoute("/api/internal/conversation-computer/runtime", runtime.conversationComputerRuntimeBootstrap);
+	const internalConversationComputerRoutes = [
+		..._OptionalRoute("/api/internal/conversation-computer/runtime", runtime.conversationComputerRuntimeBootstrap),
+		..._OptionalRoute("/api/internal/conversation-computer/runtime", runtime.conversationComputerRuntimeCommands),
+	];
 	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeStream },
