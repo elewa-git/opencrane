@@ -16,6 +16,8 @@
 {{- $serviceName := printf "%s-kurrentdb" $fullName -}}
 {{- $bootstrapName := printf "%s-kurrentdb-bootstrap" $fullName -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
+{{- /* The stream uses the server's silo selector, so it cannot receive another silo's activation commands.
+@see apps/opencrane/helm/templates/_deployment.tpl ($channelSiloId) */ -}}
 {{- $activationSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
 {{- $activationStream := printf "computer-activations-%s" $activationSiloId -}}
 {{- $activationSubscription := "opencrane-conversation-computer-activation" -}}
@@ -102,7 +104,7 @@ data:
     esac
     rm -f "$user_body"
 
-    # The Job verifies the existing ACL after an initial write does not succeed.
+    # The Job reads back the ACL so retries reject a configuration that differs from the HistoryStore boundary.
     settings_body="$(mktemp)"
     cat > "$settings_body" <<'JSON'
     [
