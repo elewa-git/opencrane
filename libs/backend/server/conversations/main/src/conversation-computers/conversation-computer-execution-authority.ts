@@ -38,12 +38,9 @@ export class ConversationComputerExecutionAuthority
 	 */
 	public async start(command: ConversationComputerExecutionStartCommand): Promise<ConversationComputerExecutionStartResult>
 	{
-		const now = this.clock.now();
-		if (!Number.isFinite(now.getTime()))
-			throw new Error("Conversation computer execution requires a valid server clock");
-
 		// 1. Read history first so neither the caller nor a ready SandboxClaim can select execution facts.
 		const current = await this.history.loadForActivation(command);
+		const now = _Now(this.clock);
 		const existing = _OpenExecution(current, now);
 		if (existing !== null)
 			return { outcome: ConversationComputerExecutionStartOutcomes.AlreadyActive, execution: existing };
@@ -65,12 +62,22 @@ export class ConversationComputerExecutionAuthority
 		catch (error: unknown)
 		{
 			// 3. Reload after an append loss so a response-lost concurrent start returns the stored winner.
-			const winner = _OpenExecution(await this.history.loadForActivation(command), now);
+			const reloaded = await this.history.loadForActivation(command);
+			const winner = _OpenExecution(reloaded, _Now(this.clock));
 			if (winner !== null)
 				return { outcome: ConversationComputerExecutionStartOutcomes.AlreadyActive, execution: winner };
 			throw error;
 		}
 	}
+}
+
+/** Reads a usable server time after I/O has finished so a lease cannot cross expiry during admission. */
+function _Now(clock: ConversationComputerExecutionClock): Date
+{
+	const now = clock.now();
+	if (!Number.isFinite(now.getTime()))
+		throw new Error("Conversation computer execution requires a valid server clock");
+	return now;
 }
 
 /** Returns the current open execution only when the checked lease is still usable at server time. */
