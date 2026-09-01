@@ -5,7 +5,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity } from "./workload-identity.types";
 
-/** Matches the immutable projected-token audience rendered into every ConversationComputer Sandbox. */
+/** Matches the fixed projected-token audience that the Agent Sandbox chart renders for runtime bootstrap. */
 const _CONVERSATION_COMPUTER_RUNTIME_TOKEN_AUDIENCE = "opencrane-conversation-computer-runtime";
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
@@ -202,7 +202,20 @@ export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi
 	};
 }
 
-/** Builds the Pod-bound reviewer for Sandboxes whose durable lease later fixes the ServiceAccount. */
+/**
+ * Builds the TokenReview adapter for a ConversationComputer Sandbox projected token.
+ *
+ * It fixes the runtime audience and namespace here, then returns the authenticated Pod UID and
+ * ServiceAccount name without selecting one. The bootstrap route compares both fields with the
+ * active lease because the lease records the ServiceAccount configured for the Sandbox runtime.
+ *
+ * Called by: apps/opencrane/src/app/runtime-composition.ts.
+ *
+ * @param authApi - Kubernetes client used to submit the projected token for review.
+ * @param namespace - Namespace where the Agent Sandbox controller creates runtime Pods.
+ * @returns The reviewed Pod identity, or `null` when Kubernetes denies the token, audience,
+ *          namespace, subject, or Pod UID.
+ */
 export function _CreateConversationComputerRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
 {
 	return {

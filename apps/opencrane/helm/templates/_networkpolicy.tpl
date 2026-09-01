@@ -52,7 +52,8 @@ spec:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
     {{- if .Values.agentSandbox.enabled }}
-    # Sandboxes may reach only their TokenReview-protected bootstrap route on the internal listener.
+    # Sandboxes may reach the internal listener; the bootstrap route then TokenReviews the caller
+    # and binds its Pod identity to an active lease. NetworkPolicy cannot restrict an HTTP path.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -341,7 +342,8 @@ spec:
 {{- end }}
 {{- end }}
 {{- if .Values.agentSandbox.enabled }}
-# Agent Sandbox owns the Pod lifecycle; the OpenCrane release owns its one egress path to bootstrap.
+# Agent Sandbox owns Pod lifecycle; this release permits its egress destination for the internal
+# bootstrap listener. The route still applies TokenReview and active-lease checks per request.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

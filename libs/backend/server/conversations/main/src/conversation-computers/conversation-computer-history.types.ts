@@ -47,7 +47,12 @@ export interface ActiveConversationComputerRuntimeCommand extends ConversationCo
 	readonly nowEpochMilliseconds: number;
 }
 
-/** Names the only runtime bootstrap coordinates a Sandbox may supply. */
+/**
+ * Carries the coordinates allowed across the Sandbox bootstrap boundary.
+ *
+ * History derives the conversation and profile from the selected computer, so a Sandbox cannot
+ * choose a different execution by adding those durable coordinates to its request.
+ */
 export interface ActiveConversationComputerBootstrapCommand
 {
 	/** Identifies the deployment silo fixed by server configuration. */

@@ -180,7 +180,21 @@ export class ConversationComputerHistory
 		return { ...current, lease: current.lease, execution: current.computer.activeExecution };
 	}
 
-	/** Loads a bootstrappable execution after deriving every durable coordinate from history. */
+	/**
+	 * Loads an active execution for Sandbox bootstrap after deriving its conversation and profile from
+	 * the selected computer stream.
+	 *
+	 * The route passes its configured silo, the Sandbox-provided computer identifier, and server time.
+	 * This method rejects an absent or foreign stream before it calls {@link loadActiveExecutionForRuntime},
+	 * which then rejects an inactive or expired lease. Callers must translate every failure to the same
+	 * denial rather than disclose which state was missing.
+	 *
+	 * Called by: ConversationComputer runtime bootstrap route.
+	 *
+	 * @param command - Fixed silo, one computer identifier, and the server instant for lease expiry.
+	 * @returns The currently active execution and its Pod-bound lease.
+	 * @throws When the computer stream is absent, belongs to another silo, or has no usable execution.
+	 */
 	public async loadActiveExecutionForBootstrap(command: ActiveConversationComputerBootstrapCommand): Promise<ActiveConversationComputerExecution>
 	{
 		_ValidateConversationComputerBootstrapCommand(command);
