@@ -36,6 +36,7 @@ export * from "./agent-controller-identity.types";
 export * from "./agent-identity.types";
 export * from "./agent-capability-grant.types";
 export * from "./conversation-computer.types";
+export * from "./conversation-computer-runtime-protocol.types";
 export * from "./conversation-entry.types";
 export * from "./conversation-entry.validator";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.

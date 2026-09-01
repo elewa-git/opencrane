@@ -113,6 +113,10 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   workload class cannot borrow the other's transport identity.
 - `RuntimeCommandKinds` and `RuntimeCandidateKinds` — documented string-backed discriminants that
   keep workload command and candidate control flow exhaustive while preserving protocol bytes.
+- `CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION`, `ConversationComputerRuntimeCommandEnvelope`,
+  and `ConversationComputerRuntimeTerminalReport` — the target Sandbox protocol for one
+  ConversationComputer execution. Its command and terminal coordinates fence one computer,
+  execution, and lease generation; it carries no `AgentRun`, attempt, or legacy runtime candidate.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database
