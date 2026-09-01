@@ -271,7 +271,7 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	if (sandboxConfig !== null && historyStore === null)
 		throw new Error("ConversationComputer runtime bootstrap requires HistoryStore composition");
 	const conversationComputerHistory = sandboxConfig === null ? null : new ConversationComputerHistory(historyStore!);
-	const conversationComputerRuntimeTokenReviewer = sandboxConfig === null ? null : _CreateConversationComputerRuntimeTokenReviewer(authApi, sandboxConfig.profiles[0]!.namespace);
+	const conversationComputerRuntimeTokenReviewer = sandboxConfig === null ? null : _CreateConversationComputerRuntimeTokenReviewer(authApi, sandboxConfig.profiles.map(profile => profile.namespace));
 	const conversationComputerRuntimeBootstrap = sandboxConfig === null
 		? null
 		: __CreateConversationComputerRuntimeBootstrapRouter({ history: conversationComputerHistory!, tokenReviewer: conversationComputerRuntimeTokenReviewer!, siloId: config.siloId, clock: { now: function _Now() { return new Date(); } }, logger: _log });

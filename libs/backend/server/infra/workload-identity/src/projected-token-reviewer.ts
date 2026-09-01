@@ -205,25 +205,29 @@ export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi
 /**
  * Builds the TokenReview adapter for a ConversationComputer Sandbox projected token.
  *
- * It fixes the runtime audience and namespace here, then returns the authenticated Pod UID and
- * ServiceAccount name without selecting one. The bootstrap route compares both fields with the
- * active lease because the lease records the ServiceAccount configured for the Sandbox runtime.
+ * It fixes the runtime audience and configured namespace set here, then returns the authenticated
+ * Pod UID and ServiceAccount name without selecting one. The bootstrap route compares all fields
+ * with the active lease because that lease records the exact Sandbox runtime Pod.
  *
  * Called by: apps/opencrane/src/app/runtime-composition.ts.
  *
  * @param authApi - Kubernetes client used to submit the projected token for review.
- * @param namespace - Namespace where the Agent Sandbox controller creates runtime Pods.
+ * @param namespaces - Namespaces where this release permits Agent Sandbox runtime Pods.
  * @returns The reviewed Pod identity, or `null` when Kubernetes denies the token, audience,
  *          namespace, subject, or Pod UID.
  */
-export function _CreateConversationComputerRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
+export function _CreateConversationComputerRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, namespaces: readonly string[]): RuntimeTokenReviewer
 {
+	const acceptedNamespaces = new Set(namespaces);
 	return {
 		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
 		{
 			const status = await _ReviewProjectedToken(authApi, token, [_CONVERSATION_COMPUTER_RUNTIME_TOKEN_AUDIENCE]);
 			const podUid = _ReadReviewedPodUid(status?.user?.extra);
-			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _AnyServiceAccount(): boolean { return true; });
+			const subject = _ParseServiceAccountSubject(status?.user?.username ?? "");
+			if (subject === null || podUid === null || !acceptedNamespaces.has(subject.namespace))
+				return null;
+			return { subject: status?.user?.username ?? "", ...subject, podUid };
 		},
 	};
 }

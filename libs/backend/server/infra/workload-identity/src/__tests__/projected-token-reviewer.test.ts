@@ -60,7 +60,7 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 			const audience = "opencrane-conversation-computer-runtime";
 			const subject = "system:serviceaccount:conversation-computers:agent-sandbox-runtime";
 			const api = _ReviewApi(_ValidStatus(audience, subject));
-			const reviewer = _CreateConversationComputerRuntimeTokenReviewer(api as never, "conversation-computers");
+			const reviewer = _CreateConversationComputerRuntimeTokenReviewer(api as never, ["conversation-computers"]);
 
 			await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "conversation-computers", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" });
 			expect(api.createTokenReview).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ spec: expect.objectContaining({ audiences: [audience] }) }) }));
@@ -72,9 +72,17 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 			["missing Pod UID", _ValidStatus("opencrane-conversation-computer-runtime", "system:serviceaccount:conversation-computers:agent-sandbox-runtime", { user: { username: "system:serviceaccount:conversation-computers:agent-sandbox-runtime", extra: {} } })],
 		])("rejects a ConversationComputer Sandbox token with %s", async function _RejectsConversationComputerRuntime(_reason, status)
 		{
-			const reviewer = _CreateConversationComputerRuntimeTokenReviewer(_ReviewApi(status) as never, "conversation-computers");
+			const reviewer = _CreateConversationComputerRuntimeTokenReviewer(_ReviewApi(status) as never, ["conversation-computers"]);
 
 			await expect(reviewer.__Review("token")).resolves.toBeNull();
+		});
+
+		it("accepts every namespace configured by the ConversationComputer release profile map", async function _ReviewsConfiguredConversationComputerNamespaces()
+		{
+			const subject = "system:serviceaccount:conversation-computers-secondary:agent-sandbox-runtime";
+			const reviewer = _CreateConversationComputerRuntimeTokenReviewer(_ReviewApi(_ValidStatus("opencrane-conversation-computer-runtime", subject)) as never, ["conversation-computers", "conversation-computers-secondary"]);
+
+			await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "conversation-computers-secondary", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" });
 		});
 
 	it.each([
