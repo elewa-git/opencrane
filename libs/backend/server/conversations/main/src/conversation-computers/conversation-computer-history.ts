@@ -1,8 +1,8 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, CurrentConversationComputer } from "./conversation-computer-history.types";
-import { _ConversationComputerStreamName, _ValidateConversationComputerCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
+import type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -84,6 +84,47 @@ export class ConversationComputerHistory
 	public async load(command: ConversationComputerCurrentCommand): Promise<CurrentConversationComputer | null>
 	{
 		_ValidateConversationComputerCurrentCommand(command);
+		return this._Load(command);
+	}
+
+	/** Loads current state from a runtime-safe computer coordinate set and derives its bound identity. */
+	public async loadForRuntime(command: ConversationComputerRuntimeCurrentCommand): Promise<CurrentConversationComputer | null>
+	{
+		_ValidateConversationComputerRuntimeCurrentCommand(command);
+		const streamName = _ConversationComputerStreamName(command.computerId);
+		const iterator = this.historyStore.readStream({ streamName })[Symbol.asyncIterator]();
+		let first: IteratorResult<import("@opencrane/backend/server/infra/history-store").HistoryRecordedEvent>;
+		try
+		{
+			first = await iterator.next();
+		}
+		finally
+		{
+			await iterator.return?.();
+		}
+		if (first.done)
+		{
+			const head = await this.historyStore.readHead(streamName);
+			if (head.streamName !== streamName || head.revision !== null) throw new Error("Conversation computer history omitted a stream event before its reported head");
+			return null;
+		}
+		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
+		_AssertConversationComputerRuntimeCoordinates(snapshot, command);
+		return this._Load({ ...command, agentIdentityId: snapshot.computer.agentIdentityId });
+	}
+
+	/** Loads an open execution from runtime-safe coordinates after deriving the bound identity internally. */
+	public async loadActiveExecutionForRuntime(command: ActiveConversationComputerRuntimeCommand): Promise<ActiveConversationComputerExecution>
+	{
+		const current = await this.loadForRuntime(command);
+		if (current === null || current.computer.state !== ConversationComputerStates.Warm || current.lease === null || current.lease.state !== ComputerLeaseStates.Active || !Number.isSafeInteger(command.nowEpochMilliseconds) || Date.parse(current.lease.expiresAt) <= command.nowEpochMilliseconds || current.computer.activeExecution === null || current.computer.activeExecution.endedAt !== null)
+			throw new Error("Conversation computer history cannot use an inactive runtime execution");
+		return { ...current, lease: current.lease, execution: current.computer.activeExecution };
+	}
+
+	/** Replays one fully specified trusted computer stream and verifies its current head. */
+	private async _Load(command: ConversationComputerCurrentCommand): Promise<CurrentConversationComputer | null>
+	{
 		const streamName = _ConversationComputerStreamName(command.computerId);
 		let expectedRevision = 0n;
 		let current: ConversationComputerHistorySnapshot | null = null;
