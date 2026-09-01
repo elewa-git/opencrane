@@ -7,9 +7,9 @@
  */
 export enum ConversationLifecycleModes
 {
-	/** The conversation has exactly one human participant and one agent participant. */
+	/** The conversation may own the ConversationComputer bound by its creation authority. */
 	Agent = "agent",
-	/** The conversation has human participants without a provisioned agent computer. */
+	/** The conversation starts without a provisioned ConversationComputer. */
 	Group = "group",
 }
 
