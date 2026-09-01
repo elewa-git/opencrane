@@ -23,10 +23,14 @@ already admitted.
 **In this flow:** the [silo release composer](../deploy-k8s/README.md) provides the values and the
 [OpenCrane server](../../opencrane/README.md) is the only long-lived ledger client.
 
-The first bootstrap run creates exactly one unprivileged `opencrane-history` user and records one
-default access control list (ACL): that user and administrators can read/write user streams, while
-only administrators can delete streams or read/write metadata. A retry reads back that event and
-fails if it differs; it never resets a user, changes a password, or widens an existing ACL.
+The first bootstrap run creates exactly one unprivileged `opencrane-history` user, records one
+default access control list (ACL), and creates the durable
+`opencrane-conversation-computer-activation` subscription on the release's
+`computer-activations-<silo>` stream. The subscription starts at revision zero, allows one server
+consumer, and dispatches each activation command to that consumer. The service user and
+administrators can read/write user streams, while only administrators can delete streams or
+read/write metadata. A retry reads back the ACL and subscription configuration and fails if either
+differs; it never resets a user, changes a password, widens an ACL, or updates a subscription.
 
 ## Public surface
 
