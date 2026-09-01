@@ -72,9 +72,11 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   verified `{siloId, issuer, subject}` tuple.
 - `StandaloneFirstUserAdmissionConfig`, `StandaloneFirstUserAdmissionAuditPort` — composition
   contracts that configure the optional standalone first-owner claim.
-- `AgentIdentityHistory` — appends and loads the checked KurrentDB history of an agent identity,
-  returning current state and stream-head evidence only when silo, service, and acting-principal
-  coordinates agree.
+- `AgentIdentityHistory` — appends and loads the checked KurrentDB history of an agent identity.
+  Its ordinary loader requires exact silo, service, and acting-principal coordinates; its runtime
+  loader accepts only a ConversationComputer's silo and identity, then derives the active service,
+  Principal, actor class, and every checked child/parent stream-head condition from the identity
+  history. A later command append must preserve every returned condition atomically.
 
 The OIDC service keeps login group projection and standalone first-owner admission as internal
 steps. They are not package entry points because the login flow coordinates their verified inputs,
