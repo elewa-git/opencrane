@@ -51,11 +51,12 @@ external services, and saves durable state. The runtime never calls an external 
 
 ## Public surface
 
-- `GET /healthz` reports that the process is alive.
-- `GET /readyz` reports whether an unclaimed warm Pod is ready or a claimed Pod has the expected
-  network profile.
+- `GET /internal/warm-runtime/generic-readiness` reports that a generic Pod is ready to reserve.
+- `GET /internal/warm-runtime/readiness` proves the claimed Pod UID and network profile.
 - The runtime opens the private outbound command stream configured by
   `OPENCRANE_RUNTIME_STREAM_URL`; it does not expose a public network service.
+- `src/development_runtime.py` retains the same binding and stream boundary for Tier 2 while selecting
+  either normal LiteLLM handlers or deterministic model events.
 
 ## Boundary
 

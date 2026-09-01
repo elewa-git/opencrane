@@ -25,10 +25,17 @@ from .config import (
     environment,
     read_projected_token,
 )
-from .constants import DEFAULT_TOKEN_PATH
+from .constants import DEFAULT_PROOF_EVIDENCE_PATH, DEFAULT_TOKEN_PATH
 from .observability import log
 from .transport.stream import open_stream as _open_stream
 from .warm_runtime import start_warm_readiness_server as _start_warm_readiness_server
+
+
+def _load_configured_proof_key() -> dict[str, object]:
+    """Load public proof evidence from the Pod-specific scratch path."""
+    return _load_or_create_proof_key(
+        environment("OPENCRANE_RUNTIME_PROOF_EVIDENCE_PATH", DEFAULT_PROOF_EVIDENCE_PATH)
+    )
 
 
 def retry_delay(attempt: int) -> float:
@@ -43,7 +50,7 @@ def retry_delay(attempt: int) -> float:
 def run_forever(
     open_stream: Callable[..., int] = _open_stream,
     perform_warm_binding: Callable[[str, str, dict[str, object]], str] = _perform_warm_binding,
-    generate_key: Callable[[], dict[str, object]] = _load_or_create_proof_key,
+    generate_key: Callable[[], dict[str, object]] = _load_configured_proof_key,
     start_warm_readiness_server: Callable[[int, str, str], object] = _start_warm_readiness_server,
 ) -> None:
     """Perform one-use bootstrap, then supervise the Pod's outbound stream forever.

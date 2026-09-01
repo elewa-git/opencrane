@@ -67,8 +67,15 @@ the fixture in browser storage and open its Agent conversation directly; an unse
 Commander. Allowlisted URL scenarios cover slow, retry, reconnecting, failed-run, and access-change
 paths.
 
-Tier 2 will branch from `local-dev-workflow` for a frontend plus real-backend Agent-chat profile.
-Tier 3 will branch from the latest completed tier for Kubernetes and full infrastructure validation.
+**Tier 2 built on `local-dev-workflow`:** `npm run dev:tier2` starts the live-gateway frontend,
+real OpenCrane API, target-baseline PostgreSQL, fixed local identity, and signed local membership.
+The default core profile keeps models, memory, files, channels, integrations, Obot, Cognee, and
+Kubernetes disabled. The Agent profile reuses normal run admission, controller assignment,
+bootstrap, runtime stream, candidate validation, and persistence, with Alternative A using local
+LiteLLM, B using an explicit remote HTTPS LiteLLM, and C using deterministic model events without
+provider credentials.
+
+Tier 3 will branch from the Tier 2 branch for Kubernetes and full infrastructure validation.
 
 ## Program — personal-agent platform
 

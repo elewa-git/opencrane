@@ -53,6 +53,19 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   separately designed exact workload and egress identity; a hostname and port alone are not enough
   to widen model-router egress.
 
+Tier 2 Alternative A reuses the pinned image in a labelled loopback container. The coordinator reads
+the reviewed model/provider contract from
+[`@opencrane/models/local-development`](../../../libs/models/local-development/main/provider-contract.json),
+discovers matching owner-only provider-key files, and generates one secret-free ignored YAML for the
+selected model under `local-development/` when it is first used. Matching generated files persist
+across runs and retain the provider-neutral `auto` alias. Only the selected configuration is mounted
+read-only and only its provider key enters the container environment. The coordinator generates a
+separate local LiteLLM master key. Every reviewed provider uses the hidden
+`keys/.<provider>-key` convention. `--provider` chooses a reviewed provider and its `defaultModel`;
+`--model` can select another exact reviewed model owned by that provider.
+Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key file; Alternative C starts
+no LiteLLM process and reads no provider or model credential.
+
 ## See also
 
 - Parent index: [_infra](../README.md)

@@ -1,4 +1,8 @@
-/** Verified OIDC facts admitted against the silo selected by the trusted request host. */
+/**
+ * Carries identity coordinates that server middleware has verified against startup configuration
+ * and the request host. Production OIDC and Tier 2 development middleware build this input; request
+ * bodies must never supply it.
+ */
 export interface AuthenticatedPrincipalAdmissionInput
 {
 	/** Silo derived from the trusted request host. */
@@ -28,8 +32,10 @@ export interface AuthenticatedPrincipalAdmission
 	/**
 	 * Resolve one verified identity and return its exact durable Principal.
 	 *
-	 * Called by: {@link ___AuthMiddleware} before any authenticated product route runs.
-	 * @returns The exact local Principal, or null when the projection cannot prove the identity tuple.
+	 * Called by: {@link _AdmitBrowserSession}, the shared durable identity gate for production and Tier 2 browser authentication.
+	 * @param input - Identity coordinates established by the active authentication mode.
+	 * @returns The matched local Principal, or `null` when the projection cannot prove the tuple.
+	 * @throws When the identity projection cannot be read or reconciled.
 	 */
 	admit(input: AuthenticatedPrincipalAdmissionInput): Promise<AuthenticatedRequestPrincipal | null>;
 }

@@ -80,6 +80,12 @@ the upgrade, rejects a cross-origin request, and closes active sockets before Pr
 `Entrypoint: src/index.ts` — a short, telemetry-first `_Main()` that composes the process and hands
 its resources to the lifecycle owner.
 
+`Development entrypoint: src/development/index.ts` — the explicit Tier 2 composition used by
+`npm run dev:tier2`. It keeps the real API and database authorities but replaces production OIDC,
+Kubernetes identity review, and optional infrastructure with local-only adapters. Its fixed local
+session still passes through the shared durable Principal admission on every product request, so
+active membership reconciles the same central collection-root grants used by Tier 3 and production.
+
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
   the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
@@ -218,6 +224,13 @@ are:
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.
+
+For local application work, `npm run dev:tier2` supplies the development entrypoint flag, a
+loopback PostgreSQL URL, signed local membership keys, and fixed identity values. Agent profiles
+also supply separate owner-only controller and runtime launch-secret paths. The development
+entrypoint refuses production mode, non-loopback databases, identity overrides, and missing Agent
+credentials before it opens a listener. Tier 2 keeps the governed skill catalogue readable but omits
+skill-validation submission because that Kubernetes-backed worker is not part of the local profile.
 
 In standalone mode, successful OIDC authentication does not itself grant product access. Existing
 active members proceed normally. A verified identity without membership can call only the signed

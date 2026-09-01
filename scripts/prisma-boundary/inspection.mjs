@@ -9,6 +9,7 @@ import { authorizedOwner, classes, enclosingClass, importedBindings, isTransacti
 export function isProductionTypeScript(path)
 {
 	return path.endsWith(".ts")
+		&& path !== "apps/opencrane/prisma/development/seed.ts"
 		&& !path.endsWith(".d.ts")
 		&& !path.includes("/__tests__/")
 		&& !path.endsWith(".test.ts")

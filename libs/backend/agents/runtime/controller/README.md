@@ -1,75 +1,62 @@
-# @opencrane/backend/agents/runtime/controller — warm Pod operations
+# @opencrane/backend/agents/runtime/controller — warm runtime activation
 
 > [backend](../../../README.md) › [agents](../../README.md) › [runtime](../README.md) › controller
 
+This infrastructure library projects the saved AgentRun workflow onto one fixed warm-runtime pool.
+
 ## What it owns
 
-This package performs the Kubernetes operations used by the AgentRun workflow. A **workflow** is a
-saved task that can continue after a restart.
-
-Helm keeps a small pool of generic agent-runtime Pods ready. When an AgentRun needs one, the workflow
-reserves a Pod in the database and asks this package to activate that exact Pod.
+Helm keeps generic agent-runtime Pods ready. The AgentRun workflow reserves one exact Pod in the
+database, then this package activates its fixed network profile, proves readiness, observes its
+lifecycle, and deletes that exact UID after use. A Deployment creates the next generic replacement.
 
 ```text
- Helm-owned generic Deployment
-        │ keeps replacement Pods ready
-        ▼
- ┌──────────────────────────────────┐
- │ warm runtime controller ◄── HERE │
- │ list and check generic Pods      │
- └──────────────────────────────────┘
-        │ database reserves one UID
-        ▼
- change its network profile with UID and version checks
-        │
-        ▼
- probe readiness through the claimed path
-        │ run finishes
-        ▼
- delete that exact Pod by UID
+Helm-owned generic Deployment
+       │
+       ▼
+list exact candidates → database reservation → activate profile → readiness proof
+                                                              │
+                                                              ▼
+                                                    delete used Pod by UID
 ```
 
-**In this flow:** [pool definitions](../k8s-launcher/README.md) · [workflow handler](../../execution/runs/controller/README.md)
-
-Deleting the used Pod makes the Deployment create a fresh generic replacement. A used Pod never
-returns to the pool.
+Tier 2 uses the same `WarmRuntimeKubernetesStore` port. Its development adapter represents each pool
+with one synthetic Pod and starts the existing Python runtime process only after the workflow saves
+that Pod reservation. This preserves the durable 0.10 workflow and binding path without pretending a
+local process is a Kubernetes Job.
 
 ## Public surface
 
-- `__CreateWarmRuntimeKubernetesStore(options)` creates the Kubernetes adapter.
-- `WarmRuntimeKubernetesStore` defines list, activate, readiness, current-Pod observation, and delete
-  operations.
-- `WarmRuntimePoolProfiles` maps each server-selected runtime profile to one fixed Helm pool.
+- `__CreateWarmRuntimeKubernetesStore(options)` creates the production Kubernetes adapter.
+- `__CreateLocalProcessWarmRuntimeStore(options)` creates the Tier 2 process adapter.
+- `__CreateLocalAgentRuntimeTokenReviewer(options)` authenticates a synthetic Pod UID from a private
+  per-session launch secret.
+- `WarmRuntimeKubernetesStore` defines list, activate, readiness, observation, and deletion.
+- `WarmRuntimePoolProfiles` maps each server-selected profile to one fixed pool.
 - `__AssertWarmRuntimeTiming` checks the claim and pool-miss latency budgets.
 
 ## Safety rules
 
-- Candidate Pods must belong to the configured Deployment and one of its ReplicaSets.
-- The namespace, ServiceAccount, generic profile, Pod UID, and resource version must match.
+- Production candidates must belong to the configured Deployment and one of its ReplicaSets.
+- Namespace, ServiceAccount, profile, Pod UID, and resource version must match.
 - Activation changes only the fixed network-profile label.
-- Readiness is checked after activation.
 - Deletion uses the Pod UID, so a replacement with the same name is not deleted.
-- Every Kubernetes call and readiness probe has a short timeout.
+- Every production Kubernetes call and readiness probe has a short timeout.
+- Tier 2 child processes receive an allowlisted environment containing private file paths, never
+  controller tokens, provider credentials, or launch-secret contents.
+- Each Tier 2 synthetic Pod has its own `0600` token and public proof-evidence path.
 
 ## Boundary
 
-This package does not read Postgres, save run state, create Deployments, select images, or mint
-credentials. Helm owns the pool. The run package owns database authority. The workflow handler owns
-step order and retries.
-
-It does not run arbitrary OCI images. MCP and code-skill executors may reuse the workload-claim
-pattern, but they require their own fixed executor and pool profile.
+This package does not read Postgres, save run state, create production Deployments, select images, or
+mint model credentials. Helm owns the production pool. The run package owns database authority. The
+workflow handler owns step order and retries.
 
 ## Dependency direction
 
-Tagged `scope:agent-runtime-controller` and `layer:infra`: it may depend on warm-pool definitions,
-shared contracts, and observability. It never imports Prisma or an application entrypoint.
-
-## Runtime and permissions
-
-The controller reads Deployments, ReplicaSets, and Pods; conditionally patches the profile label;
-and deletes an exact Pod by UID. Helm creates the Deployment, ServiceAccount, network policy, and
-role bindings.
+Tagged `scope:agent-runtime-controller` and `layer:infra`; it may depend on warm-pool definitions,
+shared contracts, observability, and the pure Tier 2 model-strategy vocabulary. It never imports
+Prisma or an application entrypoint.
 
 ## See also
 

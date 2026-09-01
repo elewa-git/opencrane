@@ -2204,6 +2204,8 @@
 			"apps/opencrane/src/app/mcp-workflow-composition.ts",
 			"apps/opencrane/src/app/mcp-runtime-composition.ts",
 			"apps/opencrane/src/app/runtime-composition.ts",
+			"apps/opencrane/src/development/internal-app.ts",
+			"apps/opencrane/src/development/internal-runtime.ts",
 			"apps/opencrane/src/app/channel-target-composition.ts",
 			"apps/opencrane/src/app/lifecycle.ts",
 			"apps/opencrane/src/app/background-workers.ts",

@@ -55,6 +55,11 @@ app's source.
 | [`libs/backend/server/infra/organization-membership-gateway`](../../libs/backend/server/infra/organization-membership-gateway/README.md) | HTTPS and projected-token transport to Fleet membership and billing authority. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 
+## Shared model libraries
+
+- [`libs/models/local-development`](../../libs/models/local-development/main/README.md) owns the
+  fixed Tier 2 profile, identity, and cross-process development contract vocabulary.
+
 The durable product authority is `Conversation -> canonical timeline`; an `agent_session`
 conditionally owns serial `AgentRun -> ordered RunEvent` streams. Direct and ordinary group messages
 create no run. A runtime receives one immutable input snapshot and proposes output; it never becomes

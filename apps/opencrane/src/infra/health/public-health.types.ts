@@ -37,7 +37,7 @@ export interface PublicHealthClock
 /**
  * Supplies the probes and cache policy for the public health report reader.
  *
- * Non-null probes represent required configured services. The nullable channel probe preserves the
+ * Non-null probes represent required configured services. Nullable probes preserve the
  * difference between a disabled optional capability and a configured service that failed its check.
  * Called by: `_CreatePublicHealthReportReader` after process composition has frozen every target.
  */
@@ -45,12 +45,12 @@ export interface PublicHealthReaderDependencies
 {
 	/** Required product database probe that controls API readiness. */
 	readonly database: PublicHealthProbe;
-	/** Required model-routing probe. */
-	readonly models: PublicHealthProbe;
-	/** Required memory-gateway probe. */
-	readonly memory: PublicHealthProbe;
-	/** Required immutable-file service probe. */
-	readonly files: PublicHealthProbe;
+	/** Model-routing probe; null means the selected application profile disables model access. */
+	readonly models: PublicHealthProbe | null;
+	/** Memory-gateway probe; null means the selected application profile disables memory access. */
+	readonly memory: PublicHealthProbe | null;
+	/** Immutable-file probe; null means the selected application profile disables file access. */
+	readonly files: PublicHealthProbe | null;
 	/** Optional live-channel service probe; null means intentionally disabled. */
 	readonly channels: PublicHealthProbe | null;
 	/** Structured private logger for collapsed dependency failures. */

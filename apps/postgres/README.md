@@ -53,6 +53,12 @@ database library for product code.
 
 ## Runtime and config
 
+Tier 2 local development uses a separate disposable path owned by `npm run dev:tier2`. It starts a
+labelled PostgreSQL 17 container from a pinned multi-platform image digest on loopback, applies the
+same OpenCrane target baseline, and records its baseline digest in local-only state so a changed
+baseline fails with a `--reset` instruction. This path does not invoke CloudNativePG, Helm, backup,
+recovery, or release migration machinery.
+
 The deploy wrapper supplies the PostgreSQL image, database-owner credential Secrets, the target
 baseline ConfigMap, and Kubernetes API addresses for network policy.
 Use `apps/_infra/deploy-k8s/deploy.sh` rather than calling the chart directly for a normal install or

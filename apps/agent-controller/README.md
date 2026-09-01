@@ -68,6 +68,11 @@ the controller change only the fixed generic profile into its fixed personal or 
 AgentRun, skill-authoring, and optional artifact-preprocessing workflow workers, retains the generic
 skill and OCI MCP reconciliation loops, and drains workflows and telemetry on `SIGTERM`/`SIGINT`.
 
+`Development entrypoint:` `src/development/index.ts` runs through `nx run agent-controller:dev-tier2`. It
+keeps the same OpenCrane claim/commit client but replaces the Kubernetes adapter with a local process
+host for Tier 2 Agent profiles. It does not run the skill workload controller and production builds
+never import it.
+
 ## Boundary
 
 The process uses the same release-local OpenCrane database credential as the server so Absurd can
@@ -112,6 +117,12 @@ outside the app root.
   projected-token lifetime, scratch size, deadline, and both containers' resources.
 - `AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON` — optional immutable PDF Job profile emitted
   only when artifact preprocessing is enabled.
+
+The development entrypoint additionally reads the selected `OPENCRANE_DEVELOPMENT_PROFILE`,
+separate controller-token and runtime-launch-secret paths, repository root, and loopback OpenCrane
+internal origin. It derives the runtime-stream URL from that origin and reads A/B's model endpoint
+from `LITELLM_ENDPOINT`. `agent-local` permits a loopback proxy, `agent-remote` requires an explicit
+non-loopback HTTPS proxy, and `agent-simulated` configures no model endpoint.
 
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to

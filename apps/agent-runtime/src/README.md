@@ -12,6 +12,7 @@ results and therefore cannot repeat a provider action after reconnecting.
 
 ```text
 runtime.py  warm binding, process lifecycle, and bounded reconnects
+development_runtime.py  explicit Tier 2 model-strategy composition
 │
 ├── bootstrap/ ───────────────────────┐
 │   proof evidence + one-use binding  │
@@ -35,6 +36,8 @@ config.py · constants.py · observability.py support the components above.
 | Component | Consumes | Produces | Must never own |
 | --- | --- | --- | --- |
 | `runtime.py` | Warm settings, projected identity, and generated proof evidence | One bound outbound stream | Run selection or durable state |
+| `development_runtime.py` | An explicit Tier 2 Agent profile | The same bound stream with real or deterministic model handlers | Production composition or durable candidate writes |
+| `development/` | Accepted compiled input and authorised resume results | Deterministic neutral events for simulated development | Model network, provider keys, tool execution, or database writes |
 | `warm_runtime.py` | Pod UID and fixed claimed profile | Local readiness responses | Run identity or credentials |
 | `bootstrap/` | Projected token and generated public key evidence | One accepted proof-key binding and in-memory model key | Retry after permanent refusal |
 | `transport/` | Authenticated server-sent events and candidate dictionaries | Dispatched commands and bounded HTTP requests | An inbound listener or local queue |
@@ -71,6 +74,13 @@ config.py · constants.py · observability.py support the components above.
    Starting or resuming
    supersedes any prior local worker; a `cancel_attempt` signals the current worker, while dropped
    transport cancels every registered worker and suppresses late runtime output.
+
+For local development, `development_runtime.py` preserves bootstrap, command admission, event
+projection, resume correlation, and candidate delivery. The `litellm` strategy uses the normal model
+driver for Alternatives A and B. The `simulated` strategy replaces only the model request with
+`development/deterministic_model.py`, which emits neutral events into the same projector. The
+simulated profile returns deterministic text and usage events for chat messages. It does not
+propose or execute tools because Tier 2 does not start the server-owned external-action worker.
 
 ## Authority and failure rules
 

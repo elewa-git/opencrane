@@ -7,7 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { findingDelta, inspectPrismaBoundary, prepareBasePolicyForComparison, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prepareBasePolicyForComparison, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
 import { rawPrismaMethodMatches } from "../prisma-boundary/prisma-bindings.mjs";
 import { inspectRawProcedureCall } from "../prisma-boundary/raw-procedure-inspection.mjs";
 
@@ -53,6 +53,12 @@ function _Fixture(name)
 {
 	return readFileSync(join(_FIXTURES, `${name}.ts.txt`), "utf8");
 }
+
+test("excludes app-owned disposable database seed scripts from production ownership checks", function _ExcludesDevelopmentSeed()
+{
+	assert.equal(isProductionTypeScript("apps/opencrane/prisma/development/seed.ts"), false);
+	assert.equal(isProductionTypeScript("apps/opencrane/src/development/index.ts"), true);
+});
 
 test("allows imported repository and unit-of-work contract owners", function _AllowsOwners()
 {

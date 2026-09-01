@@ -25,23 +25,23 @@ complete. Neither path can produce the other's identity or inherit its grants â€
 
 ## Per-run safety contract
 
-The active immutable agent revision supplies three positive technical ceilings: model turns, total
-tokens and elapsed time. Admission refuses a missing or malformed ceiling, derives the wall-clock
-deadline from trusted server time and freezes the resulting policy into the run snapshot. A caller
-cannot provide a larger value or extend the deadline.
+The active immutable agent revision supplies four positive technical ceilings: model turns, total
+tokens, model cost and elapsed time. Admission refuses a missing or malformed ceiling, derives the
+wall-clock deadline from trusted server time and freezes the resulting policy into the run snapshot.
+A caller cannot provide a larger value or extend the deadline.
 
 For a newly onboarded personal assistant, the approved defaults are 64 model turns, 256,000 total
-tokens and 60 minutes. These values apply to one agent run. They do not apply to ordinary Direct or
-Group messages that do not invoke an agent, and they are separate from account or organisation
-spending budgets.
+tokens, 5,000,000 micro-US-dollars (US$5) of model cost and 60 minutes. These values apply to one
+agent run. They do not apply to ordinary Direct or Group messages that do not invoke an agent, and
+they are separate from account or organisation spending budgets.
 
 Because the ceilings are part of the revision's digested content, changing one creates a new
 revision. That preserves which limits governed an older run instead of rewriting its history.
 
 ::: warning Qualification requirement
-The control plane validates and freezes all three ceilings. Before relying on them operationally,
-qualify that the target runtime release produces the expected terminal outcome for the turn, token
-and elapsed-time boundaries. The remaining enforcement work is tracked in
+The control plane validates and freezes all four ceilings. Before relying on them operationally,
+qualify that the target runtime release produces the expected terminal outcome for the turn, token,
+cost and elapsed-time boundaries. The remaining enforcement work is tracked in
 [GitHub issue #651](https://github.com/elewa-git/opencrane/issues/651).
 :::
 

@@ -1,0 +1,89 @@
+"""Run the existing agent-runtime flow with an explicit development model strategy.
+
+Alternatives A and B select ``litellm`` and therefore use the unchanged production handlers against
+their configured local or remote proxy. Alternative C selects ``simulated`` and injects only the
+neutral event source; bootstrap, stream admission, start/resume execution, event projection, and
+candidate delivery remain unchanged. The production ``runtime.py`` entrypoint never imports this
+module or its development adapters.
+"""
+
+import sys
+
+from .attempts.execution import execute_resume_attempt, execute_start_attempt
+from .config import environment
+from .development.deterministic_model import (
+    deterministic_event_source,
+    deterministic_resume_event_source,
+)
+from .observability import log
+from .runtime import run_forever
+from .transport.stream import open_stream
+
+_LITELLM_STRATEGY = "litellm"
+_SIMULATED_STRATEGY = "simulated"
+
+
+def _simulated_start(*args: object, **kwargs: object) -> None:
+    """Run an admitted start command through deterministic events and the existing executor."""
+    execute_start_attempt(*args, **kwargs, event_source=deterministic_event_source)
+
+
+def _simulated_resume(*args: object, **kwargs: object) -> None:
+    """Run an admitted resume command through deterministic events and the existing executor."""
+    execute_resume_attempt(*args, **kwargs, resume_event_source=deterministic_resume_event_source)
+
+
+def development_open_stream(
+    control_plane_url: str,
+    token: str,
+    runtime_instance_id: str,
+    pod_uid: str,
+    *,
+    attempt_model_key: str,
+) -> int:
+    """Open the authority stream with handlers selected before command dispatch.
+
+    Called by ``run_forever`` in this development entrypoint. LiteLLM keeps the production handlers;
+    simulated mode injects deterministic start and resume sources after normal stream admission.
+
+    Args:
+        control_plane_url: Loopback OpenCrane runtime-stream origin.
+        token: Per-attempt bearer read from its private credential file.
+        runtime_instance_id: Runtime instance coordinate used by the stream protocol.
+        pod_uid: Local process identity bound by development token review.
+        attempt_model_key: Attempt-scoped model credential issued by the server after binding.
+
+    Returns:
+        The exit status returned by the normal stream client.
+
+    Raises:
+        RuntimeError: When the coordinator supplied an unsupported model strategy.
+    """
+    strategy = environment("OPENCRANE_RUNTIME_MODEL_STRATEGY")
+    if strategy == _LITELLM_STRATEGY:
+        return open_stream(
+            control_plane_url,
+            token,
+            runtime_instance_id,
+            pod_uid,
+            attempt_model_key=attempt_model_key,
+        )
+    if strategy == _SIMULATED_STRATEGY:
+        return open_stream(
+            control_plane_url,
+            token,
+            runtime_instance_id,
+            pod_uid,
+            attempt_model_key=attempt_model_key,
+            handle_start=_simulated_start,
+            handle_resume=_simulated_resume,
+        )
+    raise RuntimeError("OPENCRANE_RUNTIME_MODEL_STRATEGY is not supported")
+
+
+if __name__ == "__main__":
+    try:
+        run_forever(open_stream=development_open_stream)
+    except KeyboardInterrupt:
+        log("runtime_stopped")
+        sys.exit(0)

@@ -137,8 +137,8 @@ export default [
 			{ sourceTag: "scope:artifact-preprocessor-controller", onlyDependOnLibsWithTags: ["scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:skills-launcher", onlyDependOnLibsWithTags: ["scope:skills-launcher", "scope:shared"] },
             { sourceTag: "scope:skills-controller", onlyDependOnLibsWithTags: ["scope:skills-controller", "scope:skills-launcher", "scope:skills-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
-            { sourceTag: "scope:agent-runtime-controller", onlyDependOnLibsWithTags: ["scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:shared"] },
-            { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:execution-runs", "scope:execution-runs-workflow-contract", "scope:runtime-workloads", "scope:skills-controller", "scope:skills-workflow-contract", "scope:mcp-runtime", "scope:shared", "scope:workflows"] },
+            { sourceTag: "scope:agent-runtime-controller", onlyDependOnLibsWithTags: ["scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:local-development", "scope:shared"] },
+            { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:execution-runs", "scope:execution-runs-workflow-contract", "scope:local-development", "scope:runtime-workloads", "scope:skills-controller", "scope:skills-workflow-contract", "scope:mcp-runtime", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
 			{ sourceTag: "scope:conversation-projection", onlyDependOnLibsWithTags: ["scope:conversation-agent-threads", "scope:conversation-projection", "scope:shared"] },
 			{ sourceTag: "scope:conversation-agent-threads", onlyDependOnLibsWithTags: ["scope:conversation-agent-threads", "scope:shared"] },
@@ -151,6 +151,7 @@ export default [
             { sourceTag: "scope:http", onlyDependOnLibsWithTags: ["scope:http", "scope:shared"] },
             { sourceTag: "scope:channel-targets", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:channel-targets", "scope:membership", "scope:shared"] },
             { sourceTag: "scope:k8s-api", onlyDependOnLibsWithTags: ["scope:k8s-api", "scope:shared"] },
+            { sourceTag: "scope:local-development", onlyDependOnLibsWithTags: ["scope:local-development", "scope:shared"] },
             {
               sourceTag: "scope:identity",
               onlyDependOnLibsWithTags: [
@@ -195,6 +196,7 @@ export default [
               onlyDependOnLibsWithTags: [
                 "scope:agent-runtime-stream",
                 "scope:agent-runtime-continuation",
+                "scope:agent-runtime-controller",
                 "scope:agent-services",
                 "scope:api-spec",
                 "scope:artifacts",
@@ -217,6 +219,7 @@ export default [
                 "scope:groups",
                 "scope:http",
                 "scope:identity",
+                "scope:local-development",
                 "scope:mcp",
                 "scope:memory-gateway-client",
                 "scope:model-routing",

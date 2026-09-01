@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import openCraneUiProject from "../../../project.json";
+import liveProxy from "../../../proxy.dev-live.conf.json";
 
 /** Reads UI Elements targets as test data without creating a source dependency on that library. */
 const _UI_ELEMENTS_PROJECT = JSON.parse(fs.readFileSync(new URL("../../../../../libs/frontend/elements/ui/project.json", import.meta.url), "utf8"));
@@ -67,7 +68,13 @@ describe("OpenCrane UI local-development commands", function _Suite()
 
 	it("keeps development-live internal for the Tier 2 coordinator", function _LiveServe()
 	{
-		expect(openCraneUiProject.targets["serve-browser"].configurations["development-live"].proxyConfig).toBe("apps/opencrane-ui/proxy.dev-live.conf.json");
+		const liveBrowser = openCraneUiProject.targets["serve-browser"].configurations["development-live"];
+		expect(liveBrowser).toMatchObject({
+			host: "local-development.localhost",
+			port: 4200,
+			proxyConfig: "apps/opencrane-ui/proxy.dev-live.conf.json"
+		});
+		expect(liveProxy["/api/v1"].ws).toBe(true);
 		expect(openCraneUiProject.targets.serve.configurations).not.toHaveProperty("live");
 		expect(_ROOT_PACKAGE.scripts).not.toHaveProperty("serve:opencrane-ui:live");
 	});

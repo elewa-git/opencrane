@@ -26,6 +26,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   directly. The same command starts Storybook and its Playwright visual pass; backend-connected
   local development belongs to Tier 2.
 
+- **Application developers can run the real OpenCrane API, PostgreSQL, and Agent chat locally
+  without a Kubernetes cluster.** `npm run dev:tier2` starts the live-gateway UI against a fixed
+  local identity and target-baseline database; the optional Agent profile preserves normal run
+  admission, controller assignment, runtime authentication, streaming, candidate validation, and
+  persistence. Developers can choose a local LiteLLM proxy, an explicit shared HTTPS LiteLLM proxy,
+  or credential-free deterministic model output while unrelated services remain disabled. The
+  local proxy discovers reviewed provider credentials from owner-only files and lets developers
+  select an exact reviewed provider and model without putting the key into the repository.
+
 ## [0.10.0] - 2026-08-31
 
 ### Added
