@@ -31,6 +31,7 @@ describe("conversation computer contracts", function ()
 			state: ConversationComputerStates.Warm,
 			leaseGeneration: 3,
 			workspaceCheckpoint: null,
+			activeExecution: { id: "execution-3", leaseId: "lease-3", leaseGeneration: 3, startedAt: "2026-08-31T20:01:00.000Z", endedAt: null },
 			createdAt: "2026-08-31T20:00:00.000Z",
 			updatedAt: "2026-08-31T20:01:00.000Z",
 		};
@@ -48,6 +49,7 @@ describe("conversation computer contracts", function ()
 		};
 
 		expect(lease.generation).toBe(computer.leaseGeneration);
+		expect(computer.activeExecution?.leaseGeneration).toBe(lease.generation);
 		expect(profile.reviewSurfaces).toContain(ComputerReviewSurfaces.DesktopView);
 	});
 });
