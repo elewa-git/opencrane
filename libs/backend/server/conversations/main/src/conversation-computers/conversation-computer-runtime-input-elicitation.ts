@@ -124,6 +124,7 @@ function _ExistingRequestReceipt(conversation: CurrentConversationHistory, comma
 		&& entry.conversationId === command.conversationId
 		&& entry.elicitationId === command.elicitationId
 		&& entry.computerId === command.computerId
+		&& entry.profileRevisionId === command.profileRevisionId
 		&& entry.requestPayloadRef === command.requestPayloadRef
 		&& entry.requestPayloadDigest === command.requestPayloadDigest
 		&& entry.causationId === command.causationId
@@ -167,6 +168,7 @@ function _Entry(command: ConversationComputerRuntimeInputElicitationCommand, com
 		leaseGeneration: computer.lease.generation,
 		elicitationKind: ConversationElicitationEntryKinds.RuntimeInput,
 		state: ConversationElicitationEntryStates.Requested,
+		profileRevisionId: command.profileRevisionId,
 		addressedParticipantId: participantId,
 		requestPayloadRef: command.requestPayloadRef,
 		requestPayloadDigest: command.requestPayloadDigest,

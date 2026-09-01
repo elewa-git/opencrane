@@ -35,6 +35,7 @@ function _ExistingRequest(overrides: Partial<ElicitationRequestEntry> = {}): Eli
 		leaseGeneration: 3,
 		elicitationKind: ConversationElicitationEntryKinds.RuntimeInput,
 		state: ConversationElicitationEntryStates.Requested,
+		profileRevisionId: "profile-1",
 		addressedParticipantId: "participant-1",
 		requestPayloadRef: "payload://request-1",
 		requestPayloadDigest: `sha256:${"a".repeat(64)}`,
@@ -109,6 +110,14 @@ describe("ConversationComputerRuntimeInputElicitationAuthority", function ()
 		const subject = _Authority({ entries: [_ExistingRequest({ elicitationId: "elicitation-2" })] });
 
 		await expect(subject.authority.request(_Command())).rejects.toThrow("idempotency key already owns a different request");
+		expect(subject.appendAtomic).not.toHaveBeenCalled();
+	});
+
+	it("rejects reuse of a persisted request identifier for a different profile revision", async function ()
+	{
+		const subject = _Authority({ entries: [_ExistingRequest()] });
+
+		await expect(subject.authority.request({ ..._Command(), profileRevisionId: "profile-2" })).rejects.toThrow("idempotency key already owns a different request");
 		expect(subject.appendAtomic).not.toHaveBeenCalled();
 	});
 });
