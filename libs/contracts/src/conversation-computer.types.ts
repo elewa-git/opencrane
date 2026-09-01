@@ -207,6 +207,23 @@ export interface ConversationComputer
 }
 
 /**
+ * Identifies the exact controller-owned Pod that realizes one active sandbox lease.
+ *
+ * The lease retains this immutable Kubernetes identity after the server verifies the ready claim,
+ * Sandbox owner reference, ServiceAccount, and Pod UID together. A later runtime TokenReview must match
+ * all three coordinates before it can act for this computer generation.
+ */
+export interface ComputerLeaseRuntimePod
+{
+	/** Names the release-owned namespace containing the Sandbox Pod. */
+	readonly namespace: string;
+	/** Names the ServiceAccount fixed by the admitted SandboxTemplate. */
+	readonly serviceAccountName: string;
+	/** Identifies the one Kubernetes Pod instance rather than its reusable name. */
+	readonly podUid: string;
+}
+
+/**
  * Represents one fenced live sandbox realization of a conversation computer.
  *
  * Its generation prevents a replaced or stale Pod from acting as the current computer. A logical
@@ -226,6 +243,8 @@ export interface ComputerLease
 	readonly sandboxClaimId: string;
 	/** Identifies the upstream sandbox after assignment. */
 	readonly sandboxId: string | null;
+	/** Records the exact backing Pod after a ready Sandbox assignment is verified. */
+	readonly runtimePod: ComputerLeaseRuntimePod | null;
 	/** States whether this realization may process work. */
 	readonly state: ComputerLeaseStates;
 	/** Records when this lease was claimed. */

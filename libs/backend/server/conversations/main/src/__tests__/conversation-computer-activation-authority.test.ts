@@ -33,6 +33,7 @@ function _PendingCurrent(overrides: Partial<CurrentConversationComputer> = {}): 
 			generation: 2,
 			sandboxClaimId: "computer-1-g2",
 			sandboxId: null,
+			runtimePod: null,
 			state: ComputerLeaseStates.Claimed,
 			claimedAt: "2026-09-01T00:01:00.000Z",
 			expiresAt: "2026-09-01T00:20:00.000Z",
@@ -95,7 +96,7 @@ describe("ConversationComputerActivationClaimAuthority", function _DescribeConve
 		await expect(expired.authority.activate({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2 })).resolves.toBe("denied");
 		const warm = _PendingCurrent({
 			computer: { ..._PendingCurrent().computer, state: ConversationComputerStates.Warm },
-			lease: { ..._PendingCurrent().lease!, sandboxId: "sandbox-1", state: ComputerLeaseStates.Active },
+			lease: { ..._PendingCurrent().lease!, sandboxId: "sandbox-1", runtimePod: { namespace: "sandbox-system", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" }, state: ComputerLeaseStates.Active },
 		});
 		const idempotent = _Authority(warm);
 		await expect(idempotent.authority.activate({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2 })).resolves.toBe("idempotent");
