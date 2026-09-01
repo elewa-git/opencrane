@@ -47,9 +47,9 @@ grep -Fq 'sandboxTemplateRef:' <<<"$pool"
 grep -Fq 'name: opencrane-testv5-developer-template' <<<"$pool"
 grep -Fq 'apiGroups: ["extensions.agents.x-k8s.io"]' <<<"$role"
 grep -Fq 'resources: ["sandboxclaims"]' <<<"$role"
-grep -Fq 'verbs: ["create", "get", "delete"]' <<<"$role"
-if grep -Eq '"(list|watch|patch|update)"' <<<"$role"; then
-  echo "Agent Sandbox server Role is broader than create/get/delete" >&2
+grep -Fq 'verbs: ["create", "get"]' <<<"$role"
+if grep -Eq '"(delete|list|watch|patch|update)"' <<<"$role"; then
+  echo "Agent Sandbox server Role is broader than create/get" >&2
   exit 1
 fi
 grep -Fq 'apiVersions: ["v1beta1"]' <<<"$policy"
