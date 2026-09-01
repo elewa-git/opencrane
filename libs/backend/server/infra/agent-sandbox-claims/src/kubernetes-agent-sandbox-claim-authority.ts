@@ -79,7 +79,7 @@ function _BuildExpectedClaim(command: AgentSandboxClaimCommand): { readonly clai
 	// 1. Reject an impossible claim before deriving the deterministic Kubernetes name.
 	_ValidateCommand(command);
 	// 2. Bind retries to a computer generation rather than a transient request identifier.
-	const claimName = `${command.computerId}-g${command.generation}`;
+	const claimName = __AgentSandboxClaimName(command.computerId, command.generation);
 	return {
 		claimName,
 		manifest: {
@@ -104,6 +104,19 @@ function _BuildExpectedClaim(command: AgentSandboxClaimCommand): { readonly clai
 	};
 }
 
+/** Derives the sole deterministic Kubernetes claim name for one computer generation. */
+export function __AgentSandboxClaimName(computerId: string, generation: number): string
+{
+	if (computerId.length > 63 || !_COMPUTER_ID.test(computerId))
+		throw new Error("Agent Sandbox claim computerId must be a bounded computer DNS label");
+	if (!Number.isSafeInteger(generation) || generation < 1)
+		throw new Error("Agent Sandbox claim generation must be a positive safe integer");
+	const claimName = `${computerId}-g${generation}`;
+	if (claimName.length > 253)
+		throw new Error("Agent Sandbox claim name is too long");
+	return claimName;
+}
+
 /** Refuses malformed input before this authority can submit a Kubernetes request. */
 function _ValidateCommand(command: AgentSandboxClaimCommand): void
 {
@@ -113,10 +126,7 @@ function _ValidateCommand(command: AgentSandboxClaimCommand): void
 	if (!_IsDnsLabel(command.siloId))
 		throw new Error("Agent Sandbox claim siloId must be a DNS label");
 	// 2. Preserve the claim-name and generation fence required by the admission policy.
-	if (command.computerId.length > 63 || !_COMPUTER_ID.test(command.computerId))
-		throw new Error("Agent Sandbox claim computerId must be a bounded computer DNS label");
-	if (!Number.isSafeInteger(command.generation) || command.generation < 1)
-		throw new Error("Agent Sandbox claim generation must be a positive safe integer");
+	__AgentSandboxClaimName(command.computerId, command.generation);
 	// 3. Restrict profile and pool selection to names the release policy can admit.
 	if (!_IsDnsLabel(command.profile))
 		throw new Error("Agent Sandbox claim profile must be a DNS label");
@@ -127,8 +137,6 @@ function _ValidateCommand(command: AgentSandboxClaimCommand): void
 		throw new Error("Agent Sandbox claim reason is unsupported");
 	if (!(command.shutdownTime instanceof Date) || Number.isNaN(command.shutdownTime.getTime()))
 		throw new Error("Agent Sandbox claim shutdownTime must be a valid Date");
-	if (`${command.computerId}-g${command.generation}`.length > 253)
-		throw new Error("Agent Sandbox claim name is too long");
 }
 
 /** Returns whether one value is a Kubernetes DNS label accepted by the released admission policy. */
