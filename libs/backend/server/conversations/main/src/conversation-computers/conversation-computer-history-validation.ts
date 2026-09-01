@@ -1,7 +1,7 @@
 import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer, type ConversationComputerExecution } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot } from "./conversation-computer-history.types";
+import type { ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand } from "./conversation-computer-history.types";
 
 /** Names the one versioned event schema this history authority accepts. */
 const _CONVERSATION_COMPUTER_EVENT_TYPE = "opencrane.conversation-computer.v1";
@@ -31,6 +31,13 @@ export function _ValidateConversationComputerCurrentCommand(command: Conversatio
 		throw new Error("Conversation computer history load requires a server-provided profile revision identifier");
 }
 
+/** Validates computer coordinates without allowing a runtime command to select an AgentIdentity. */
+export function _ValidateConversationComputerRuntimeCurrentCommand(command: ConversationComputerRuntimeCurrentCommand): void
+{
+	if (!_Identifier(command.siloId) || !_Identifier(command.computerId) || !_Identifier(command.conversationId) || !_Identifier(command.profileRevisionId))
+		throw new Error("Conversation computer runtime load requires server-provided computer coordinates");
+}
+
 /** Validates one envelope and closed snapshot before it can contribute to current computer state. */
 export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent, command: ConversationComputerCurrentCommand, streamName: string, expectedRevision: bigint): ConversationComputerHistorySnapshot
 {
@@ -56,6 +63,13 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 	if (snapshot.computer.profileRevisionId !== command.profileRevisionId)
 		throw new Error("Conversation computer history received a computer for a different profile revision");
 	return snapshot;
+}
+
+/** Checks runtime-safe computer coordinates after the identity has been derived from the event. */
+export function _AssertConversationComputerRuntimeCoordinates(snapshot: ConversationComputerHistorySnapshot, command: ConversationComputerRuntimeCurrentCommand): void
+{
+	if (snapshot.computer.siloId !== command.siloId || snapshot.computer.id !== command.computerId || snapshot.computer.conversationId !== command.conversationId || snapshot.computer.profileRevisionId !== command.profileRevisionId)
+		throw new Error("Conversation computer runtime load received foreign computer coordinates");
 }
 
 /** Parses the exact closed computer-and-lease event data without accepting future fields as authority. */
