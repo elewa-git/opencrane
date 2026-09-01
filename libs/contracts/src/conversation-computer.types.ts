@@ -2,8 +2,10 @@
  * States the persisted lifecycle of one logical conversation computer.
  *
  * A computer may cool to zero and later rehydrate, but it is not an always-running Pod. Lifecycle
- * listeners use these closed values to decide whether work may be admitted and whether a lease may
- * exist; an unknown value must not be treated as warm.
+ * listeners use these closed persisted values to decide whether work may be admitted and whether a
+ * lease may exist; an unknown value must not be treated as warm. The string values are written to
+ * the computer stream, so changing them requires a history-contract change rather than a local
+ * listener change.
  *
  * @see https://github.com/elewa-git/opencrane/issues/759 — defines the conversation-computer lifecycle and its zero-or-one lease rule.
  */
@@ -13,6 +15,8 @@ export enum ConversationComputerStates
 	Cold = "cold",
 	/** The computer has requested one sandbox but has not received a live lease. */
 	ClaimPending = "claim_pending",
+	/** The activation consumer recorded its claim request and must retry that exact request until it becomes Warm. */
+	ClaimDispatched = "claim_dispatched",
 	/** The computer has one fenced live sandbox lease. */
 	Warm = "warm",
 	/** The computer has stopped admitting work while an active attempt reaches a safe boundary. */

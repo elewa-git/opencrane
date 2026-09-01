@@ -29,6 +29,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorEnabled: false,
 		artifactPreprocessorMaximumOutputBytes: 1_024,
 		artifactPreprocessorNamespace: undefined,
+		conversationComputerActivation: null,
 		assignmentTtlMilliseconds: 60_000,
 		channelTargets: null,
 		commandRecoveryMilliseconds: 15_000,

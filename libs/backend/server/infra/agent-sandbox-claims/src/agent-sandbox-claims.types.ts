@@ -76,6 +76,53 @@ export interface AgentSandboxClaimAuthority
 }
 
 /**
+ * Supplies the immutable claim coordinates that a status reader must verify before using status.
+ *
+ * The domain authority derives every field from checked computer history and the release profile.
+ * A status reader receives no authority to choose a claim, profile, warm pool, or lease deadline.
+ */
+export interface AgentSandboxClaimObservationCommand extends AgentSandboxClaimCommand {}
+
+/**
+ * States whether an exact immutable claim has a current controller-published sandbox assignment.
+ *
+ * The reader returns this transient observation to a reconciliation authority; neither value is
+ * written as claim lifecycle state. `Ready` is usable only with the accompanying sandbox id after
+ * the authority rechecks its durable lease, while `Pending` leaves that lease unchanged.
+ */
+export enum AgentSandboxClaimObservationStates
+{
+	/** The claim is absent, unready, or reports only stale controller status. */
+	Pending = "pending",
+	/** The exact claim reports its current ready sandbox assignment. */
+	Ready = "ready",
+}
+
+/** Reports the one Agent Sandbox status result safe for ConversationComputer reconciliation. */
+export type AgentSandboxClaimObservation =
+	| { readonly state: AgentSandboxClaimObservationStates.Pending }
+	| { readonly state: AgentSandboxClaimObservationStates.Ready; readonly sandboxId: string };
+
+/**
+ * Reads a deterministic Agent Sandbox claim without taking any lifecycle action.
+ *
+ * The port is deliberately distinct from claim creation: reconciliation may observe only the
+ * exact, immutable claim that checked history already dispatched. It does not list or watch
+ * resources, read Pods or Sandboxes, or mutate an upstream status.
+ */
+export interface AgentSandboxClaimObservationReader
+{
+	/**
+	 * Returns a verified ready sandbox id or a nonterminal pending result for one exact claim.
+	 *
+	 * @param command - Supplies immutable lease coordinates derived from checked history.
+	 * @returns `ready` only after the exact claim reports its current Ready condition and sandbox id.
+	 * @throws {Error} When Kubernetes is unavailable or a found claim differs from the expected lease.
+	 */
+	observe(command: AgentSandboxClaimObservationCommand): Promise<AgentSandboxClaimObservation>;
+}
+
+/**
  * Limits a Kubernetes client to the two namespaced SandboxClaim calls this adapter needs.
  *
  * The release Role grants the same create-and-get pair. Keeping the port equally narrow prevents

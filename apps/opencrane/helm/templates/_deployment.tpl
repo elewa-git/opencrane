@@ -8,6 +8,7 @@
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
 {{- $history := .Values.historyStore.kurrentdb -}}
+{{- $conversationComputerProfiles := printf "%s-conversation-computer-profiles" (include "opencrane.fullname" .) -}}
 {{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
@@ -133,6 +134,10 @@ spec:
             # Absurd runs saved control-plane tasks from the same silo database used by product writes.
             - name: OPENCRANE_SILO_ID
               value: {{ $channelSiloId | quote }}
+            {{- if .Values.agentSandbox.enabled }}
+            - name: OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH
+              value: /var/run/opencrane/conversation-computer/profiles.json
+            {{- end }}
             - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE
               value: {{ .Values.clustertenantManager.workflows.databasePoolSize | quote }}
             - name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY
@@ -351,6 +356,11 @@ spec:
               mountPath: /var/run/opencrane/history-store/credentials
               readOnly: true
             {{- end }}
+            {{- if .Values.agentSandbox.enabled }}
+            - name: conversation-computer-profiles
+              mountPath: /var/run/opencrane/conversation-computer
+              readOnly: true
+            {{- end }}
             {{- if $ociRegistryAuthorization.existingSecret }}
             - name: oci-registry-authorization
               mountPath: /var/run/opencrane/oci-registry
@@ -374,6 +384,12 @@ spec:
           resources:
             {{- toYaml .Values.clustertenantManager.resources | nindent 12 }}
       volumes:
+        {{- if .Values.agentSandbox.enabled }}
+        - name: conversation-computer-profiles
+          configMap:
+            name: {{ $conversationComputerProfiles }}
+            defaultMode: 0444
+        {{- end }}
         - name: artifact-keys
           secret:
             secretName: {{ required "artifactService.keys.catalogExistingSecret is required" .Values.artifactService.keys.catalogExistingSecret | quote }}
