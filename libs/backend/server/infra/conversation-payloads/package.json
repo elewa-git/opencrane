@@ -1,0 +1,6 @@
+{
+  "name": "@opencrane/backend-server-infra-conversation-payloads",
+  "version": "0.11.0",
+  "private": true,
+  "type": "module"
+}

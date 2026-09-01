@@ -193,6 +193,9 @@
       "@opencrane/backend/server/infra/agent-runtime-continuation": [
         "./libs/backend/server/infra/agent-runtime-continuation/src/index.ts"
       ],
+      "@opencrane/backend/server/infra/conversation-payloads": [
+        "./libs/backend/server/infra/conversation-payloads/src/index.ts"
+      ],
       "@opencrane/backend/server/infra/workload-identity": [
         "./libs/backend/server/infra/workload-identity/src/index.ts"
       ],
