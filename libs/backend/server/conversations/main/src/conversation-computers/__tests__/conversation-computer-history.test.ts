@@ -204,6 +204,20 @@ describe("ConversationComputerHistory", function ()
 		await expect(directReplacement.load(_CurrentCommand())).rejects.toThrow("replaced an active execution");
 	});
 
+	it("rejects an execution that predates its lease and an execution identifier reused after termination", async function ()
+	{
+		const afterClaimLease = _Lease({ claimedAt: "2026-09-01T00:05:00.000Z", expiresAt: "2026-09-01T00:25:00.000Z" });
+		const beforeClaimComputer = _Computer({ activeExecution: _Execution({ startedAt: "2026-09-01T00:04:00.000Z" }), updatedAt: "2026-09-01T00:05:00.000Z" });
+		const invalidStart = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, beforeClaimComputer, afterClaimLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 0n }) }));
+		const terminal = _Computer({ activeExecution: _Execution({ endedAt: "2026-09-01T00:01:00.000Z" }), updatedAt: "2026-09-01T00:01:00.000Z" });
+		const idle = _Computer({ activeExecution: null, updatedAt: "2026-09-01T00:02:00.000Z" });
+		const reused = _Computer({ activeExecution: _Execution({ startedAt: "2026-09-01T00:03:00.000Z" }), updatedAt: "2026-09-01T00:03:00.000Z" });
+		const invalidReuse = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, terminal), _Event(2n, idle), _Event(3n, reused)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 3n }) }));
+
+		await expect(invalidStart.load(_CurrentCommand())).rejects.toThrow("execution after its lease claim");
+		await expect(invalidReuse.load(_CurrentCommand())).rejects.toThrow("reused an execution identifier");
+	});
+
 	it("rejects execution metadata that does not attest the stored computer snapshot", async function ()
 	{
 		const event = _Event(0n);

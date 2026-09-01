@@ -149,6 +149,8 @@ function _ValidateActiveExecution(computer: ConversationComputer, lease: Compute
 		return;
 	if (lease === null || execution.leaseId !== lease.id || execution.leaseGeneration !== lease.generation)
 		throw new Error("Conversation computer history requires an execution to match its lease");
+	if (Date.parse(execution.startedAt) < Date.parse(lease.claimedAt))
+		throw new Error("Conversation computer history requires an execution after its lease claim");
 	if (Date.parse(execution.startedAt) < Date.parse(computer.createdAt) || Date.parse(execution.startedAt) > Date.parse(computer.updatedAt) || (execution.endedAt !== null && Date.parse(execution.endedAt) > Date.parse(computer.updatedAt)))
 		throw new Error("Conversation computer history requires execution times within the computer snapshot");
 	if (execution.endedAt === null && (lease.state !== ComputerLeaseStates.Active || (computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling)))

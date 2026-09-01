@@ -87,12 +87,19 @@ export class ConversationComputerHistory
 		const streamName = _ConversationComputerStreamName(command.computerId);
 		let expectedRevision = 0n;
 		let current: ConversationComputerHistorySnapshot | null = null;
+		const executionIds = new Set<string>();
 
 		for await (const event of this.historyStore.readStream({ streamName }))
 		{
 			const snapshot = _ValidatedConversationComputerEvent(event, command, streamName, expectedRevision);
 			if (current !== null)
 				_ValidateSnapshotTransition(current, snapshot);
+			const previousExecutionId = current?.computer.activeExecution?.id ?? null;
+			const executionId = snapshot.computer.activeExecution?.id ?? null;
+			if (executionId !== null && executionId !== previousExecutionId && executionIds.has(executionId))
+				throw new Error("Conversation computer history reused an execution identifier");
+			if (executionId !== null)
+				executionIds.add(executionId);
 			current = snapshot;
 			expectedRevision += 1n;
 		}
