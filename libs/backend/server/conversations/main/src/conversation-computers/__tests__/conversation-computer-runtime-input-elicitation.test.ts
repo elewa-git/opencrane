@@ -53,4 +53,13 @@ describe("ConversationComputerRuntimeInputElicitationAuthority", function ()
 		await expect(subject.authority.request({ ..._Command(), requestId: "not-a-uuid" })).rejects.toThrow("valid request coordinates");
 		expect(subject.loadActiveExecutionForRuntime).not.toHaveBeenCalled();
 	});
+
+	it("propagates an atomic head conflict without reporting an admitted request", async function ()
+	{
+		const subject = _Authority();
+		subject.appendAtomic.mockRejectedValueOnce(new Error("stale expected conversation head"));
+
+		await expect(subject.authority.request(_Command())).rejects.toThrow("stale expected conversation head");
+		expect(subject.appendAtomic).toHaveBeenCalledTimes(1);
+	});
 });
