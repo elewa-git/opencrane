@@ -21,6 +21,7 @@ import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
 
+/** Reuses the OIDC composition's database-client type so this application root does not import Prisma directly. */
 type PrismaClient = Parameters<typeof ___CreateOidcAuthService>[1];
 
 /**

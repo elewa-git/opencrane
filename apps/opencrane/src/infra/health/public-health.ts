@@ -23,7 +23,12 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 	public read(): Promise<PublicHealthReport>
 	{
 		const now = this._dependencies.clock.nowEpochMilliseconds();
-		if (this._cache !== null && now < this._cache.expiresAtEpochMilliseconds) return this._cache.report;
+
+		if (this._cache !== null && now < this._cache.expiresAtEpochMilliseconds)
+		{
+			return this._cache.report;
+		}
+
 		const report = this._ReadFresh();
 		this._cache = { expiresAtEpochMilliseconds: now + this._dependencies.cacheMilliseconds, report };
 		return report;

@@ -114,7 +114,10 @@ export class OpenCraneProviderKeyGateway implements ProviderKeyGateway
 	 *  Never surfaces `detail` — it may contain server internals. */
 	private _errorMessage(error: unknown, fallback: string): string
 	{
-		if (!error || typeof error !== "object") return fallback;
+		if (!error || typeof error !== "object")
+		{
+			return fallback;
+		}
 		const e = error as Record<string, unknown>;
 		if (typeof e["code"] === "string")
 		{
@@ -124,7 +127,10 @@ export class OpenCraneProviderKeyGateway implements ProviderKeyGateway
 				case "FORBIDDEN": return "You do not have permission to perform this action.";
 			}
 		}
-		if (typeof e["error"] === "string" && e["error"]) return e["error"];
+		if (typeof e["error"] === "string" && e["error"])
+		{
+			return e["error"];
+		}
 		return fallback;
 	}
 }

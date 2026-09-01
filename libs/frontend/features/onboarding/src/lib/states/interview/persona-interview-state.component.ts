@@ -133,7 +133,10 @@ export class PersonaInterviewStateComponent
 			return;
 		}
 		// 3. Focus the changed question so keyboard and screen-reader users arrive at the adopted task.
-		if (this._renderedQuestionId === questionId) return;
+		if (this._renderedQuestionId === questionId)
+		{
+			return;
+		}
 		this._renderedQuestionId = questionId;
 		this._questionRegion?.nativeElement.focus();
 	}
