@@ -26,9 +26,10 @@ The template fixes the image digest, RuntimeClass, service account, resources, s
 metadata, and the ConversationComputer runtime bootstrap. The bootstrap contains the release-local
 internal endpoint, one protocol revision, and a 10-minute projected Kubernetes service-account token
 for that runtime route. The claim policy permits only the OpenCrane server identity to create the fixed
-v1beta1 claim shape, and forbids claim environment variables, volume claims, additional Pod metadata
-and every spec update. A mistake therefore denies a computer activation instead of widening its Pod
-profile. The server performs only claim-derived, name-bound reads of the assigned `Sandbox` and
+v1beta1 claim shape. It forbids claim environment variables, volume claims, every spec update, and
+Pod metadata except the release selectors plus the checked computer id used by the runtime's
+Downward API. A mistake therefore denies a computer activation instead of widening its Pod profile.
+The server performs only claim-derived, name-bound reads of the assigned `Sandbox` and
 backing `Pod`, so it can persist the controller-owned Pod UID on the durable computer lease; its
 Role cannot list, watch, or mutate sandbox resources.
 

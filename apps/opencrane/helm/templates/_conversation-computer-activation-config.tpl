@@ -3,7 +3,7 @@
 {{- if $sandbox.enabled -}}
 {{- $profiles := list -}}
 {{- range $profile := $sandbox.profiles -}}
-{{- $profiles = append $profiles (dict "profileRevisionId" $profile.profileRevisionId "namespace" $sandbox.namespace "serviceAccountName" $sandbox.serviceAccountName "sandboxProfile" $profile.name "warmPoolName" $profile.poolName) -}}
+{{- $profiles = append $profiles (dict "profileRevisionId" $profile.profileRevisionId "namespace" $sandbox.namespace "serviceAccountName" $sandbox.serviceAccountName "sandboxProfile" $profile.name "warmPoolName" $profile.poolName "podLabels" (dict "applicationName" (include "opencrane.name" $) "releaseName" $.Release.Name)) -}}
 {{- end -}}
 apiVersion: v1
 kind: ConfigMap
