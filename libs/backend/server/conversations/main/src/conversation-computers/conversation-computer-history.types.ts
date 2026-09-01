@@ -63,6 +63,13 @@ export interface ActiveConversationComputerBootstrapCommand
 	readonly nowEpochMilliseconds: number;
 }
 
+/** Adds the server-owned clock to the durable coordinates that select one execution for command work. */
+export interface ActiveConversationComputerServerCommand extends ConversationComputerActivationCurrentCommand
+{
+	/** Rejects a lease that expired before the server selected the next runtime command. */
+	readonly nowEpochMilliseconds: number;
+}
+
 /** Adds the server-owned clock required to decide whether one warm lease remains usable. */
 export interface ActiveConversationComputerLeaseCommand extends ConversationComputerCurrentCommand
 {

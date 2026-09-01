@@ -267,6 +267,14 @@ describe("ConversationComputerHistory", function ()
 			await expect(history.loadActiveExecutionForBootstrap({ siloId: "silo-1", computerId: "computer-1", nowEpochMilliseconds: Date.parse("2026-09-01T00:10:00.000Z") })).resolves.toEqual(expect.objectContaining({ computer: expect.objectContaining({ agentIdentityId: "identity-1", conversationId: "conversation-1", profileRevisionId: "profile-1" }), execution: _Execution() }));
 		});
 
+		it("derives the active execution for a server command without accepting identity or profile coordinates", async function _LoadsServerCommandExecution()
+		{
+			const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockImplementation(_FreshEvents([_Event(0n)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 0n }) }));
+
+			await expect(history.loadActiveExecutionForServer({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", nowEpochMilliseconds: Date.parse("2026-09-01T00:10:00.000Z") })).resolves.toEqual(expect.objectContaining({ computer: expect.objectContaining({ agentIdentityId: "identity-1", profileRevisionId: "profile-1" }), execution: _Execution() }));
+			await expect(history.loadActiveExecutionForServer({ siloId: "silo-1", computerId: "computer-1", conversationId: "foreign-conversation", nowEpochMilliseconds: Date.parse("2026-09-01T00:10:00.000Z") })).rejects.toThrow("foreign computer coordinates");
+		});
+
 		it("refuses a foreign or absent bootstrap stream before it can select an execution", async function _RejectsForeignBootstrapExecution()
 		{
 			const foreignComputer = _Computer({ siloId: "silo-2" });
