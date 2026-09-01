@@ -23,11 +23,12 @@ install that controller or create Pods itself.
 Sandbox controller reconciles the custom resources into Pods.
 
 The template fixes the image digest, RuntimeClass, service account, resources, security context, Pod
-metadata, and the ConversationComputer runtime bootstrap. The bootstrap contains only the release-local
-internal endpoint, a closed protocol revision, and a 10-minute audience-bound projected service-account
-token. The claim policy permits only the OpenCrane server identity to create the fixed v1beta1 claim
-shape, and forbids claim environment variables, volume claims, additional Pod metadata and every spec
-update. A mistake therefore denies a computer activation instead of widening its Pod profile.
+metadata, and the ConversationComputer runtime bootstrap. The bootstrap contains the release-local
+internal endpoint, one protocol revision, and a 10-minute projected Kubernetes service-account token
+for that runtime route. The claim policy permits only the OpenCrane server identity to create the fixed
+v1beta1 claim shape, and forbids claim environment variables, volume claims, additional Pod metadata
+and every spec update. A mistake therefore denies a computer activation instead of widening its Pod
+profile.
 
 ## Public surface
 
@@ -53,6 +54,9 @@ and owns no product authorization decision.
 an installed `extensions.agents.x-k8s.io/v1beta1` API, a RuntimeClass, one service-account name, and
 at least one named profile. Each profile requires an immutable unique `profileRevisionId`, a unique
 pool name, repository-and-`sha256` image identity, pull policy, and CPU/memory requests and limits.
+`agentSandbox.runtime` pins the protocol revision and a token audience: the value the future server
+route will check before accepting a projected Kubernetes token. The chart derives the internal endpoint
+from the release's OpenCrane server Service, so a sandbox cannot select another server.
 The umbrella chart mounts the resulting revision-to-profile map into the OpenCrane server as an
 immutable ConfigMap, so durable activation events cannot select a different Sandbox profile. It also
 creates an immutable bootstrap ConfigMap in the Sandbox namespace and projects a short-lived token at

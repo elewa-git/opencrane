@@ -13,9 +13,9 @@ current_chart_sources_root()
   cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd
 }
 
-# Packages the umbrella's subcharts into the checkout itself for contracts that render the repository
-# chart directory. The ignored archives must be rebuilt before each render because Helm otherwise
-# reuses a same-version archive whose content no longer matches the checked-out file dependency.
+# This helper rebuilds the ignored subchart archives before a contract render. Helm reuses an archive
+# at the same version even after its file dependency changes, so a rebuild keeps the render on the
+# checked-out chart sources.
 ensure_umbrella_chart_dependencies()
 {
   local umbrella

@@ -166,11 +166,11 @@ agentSandbox:
   runtimeClassName: ""
   # -- Zero-RBAC ServiceAccount created by this chart and referenced by every profile.
   serviceAccountName: ""
-  # -- Release-owned bootstrap for the target ConversationComputer runtime-to-server protocol.
+  # -- This bootstrap gives every sandbox a release-owned runtime-to-server contract.
   runtime:
-    # -- Closed protocol revision that the runtime and the future server route must both enforce.
+    # -- This version keeps the sandbox and future server route on one protocol contract.
     protocolVersion: conversation-computer-runtime.v1
-    # -- Kubernetes TokenReview audience for the short-lived runtime service-account token.
+    # -- This audience lets the future ConversationComputer route reject another workload's token.
     tokenAudience: opencrane-conversation-computer-runtime
   # -- Each profile creates one SandboxTemplate and a zero-replica SandboxWarmPool.
   profiles: []
