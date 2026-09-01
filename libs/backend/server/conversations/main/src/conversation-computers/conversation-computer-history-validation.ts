@@ -146,7 +146,7 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 		throw new Error("Conversation computer history requires the lease to match its computer generation");
 	if (lease.state === ComputerLeaseStates.Claimed)
 	{
-		if (computer.state !== ConversationComputerStates.ClaimPending || lease.sandboxId !== null || lease.releasedAt !== null)
+		if ((computer.state !== ConversationComputerStates.ClaimPending && computer.state !== ConversationComputerStates.ClaimDispatched) || lease.sandboxId !== null || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires a pending claim without a sandbox");
 		return;
 	}
@@ -158,7 +158,7 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 	}
 	if (lease.releasedAt === null)
 		throw new Error("Conversation computer history requires a terminal lease release time");
-	if (computer.state === ConversationComputerStates.Warm || computer.state === ConversationComputerStates.ClaimPending)
+	if (computer.state === ConversationComputerStates.Warm || computer.state === ConversationComputerStates.ClaimPending || computer.state === ConversationComputerStates.ClaimDispatched)
 		throw new Error("Conversation computer history cannot retain a terminal lease on an admitting computer");
 }
 
@@ -185,6 +185,8 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 		throw new Error("Conversation computer history changed stable computer coordinates");
 	if (previous.computer.state === ConversationComputerStates.Retired && current.computer.state !== ConversationComputerStates.Retired)
 		throw new Error("Conversation computer history cannot reactivate a retired computer");
+	if (previous.computer.state === ConversationComputerStates.ClaimDispatched && current.computer.state !== ConversationComputerStates.ClaimDispatched && current.computer.state !== ConversationComputerStates.Warm)
+		throw new Error("Conversation computer history requires claim dispatch to converge before terminal transition");
 	if (current.computer.leaseGeneration < previous.computer.leaseGeneration)
 		throw new Error("Conversation computer history decreased its lease generation");
 	if (previous.lease !== null && current.lease !== null && previous.lease.id !== current.lease.id)
@@ -268,7 +270,7 @@ function _PositiveInteger(value: unknown): value is number
 /** Checks the exact current ConversationComputer state set. */
 function _ComputerState(value: unknown): value is ConversationComputerStates
 {
-	return value === ConversationComputerStates.Cold || value === ConversationComputerStates.ClaimPending || value === ConversationComputerStates.Warm || value === ConversationComputerStates.Cooling || value === ConversationComputerStates.RecoveryRequired || value === ConversationComputerStates.Retired;
+	return value === ConversationComputerStates.Cold || value === ConversationComputerStates.ClaimPending || value === ConversationComputerStates.ClaimDispatched || value === ConversationComputerStates.Warm || value === ConversationComputerStates.Cooling || value === ConversationComputerStates.RecoveryRequired || value === ConversationComputerStates.Retired;
 }
 
 /** Checks the exact current ComputerLease state set. */

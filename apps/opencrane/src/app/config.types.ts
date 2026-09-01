@@ -35,6 +35,36 @@ export interface ChannelTargetRuntimeConfig
 	readonly trustedHost: string;
 }
 
+/**
+ * Names the release-owned Agent Sandbox resources admitted for one immutable computer profile revision.
+ *
+ * Conversation history stores `profileRevisionId`; the mounted release map resolves that identifier
+ * without allowing a queue delivery or a database row to choose a Sandbox profile.
+ */
+export interface ConversationComputerActivationProfileConfig
+{
+	/** Names the immutable ConversationComputer profile revision fixed in history. */
+	readonly profileRevisionId: string;
+	/** Names the namespace containing the release-owned Agent Sandbox resources. */
+	readonly namespace: string;
+	/** Names the Agent Sandbox profile admitted for this immutable revision. */
+	readonly sandboxProfile: string;
+	/** Names the release-owned warm pool paired with the sandbox profile. */
+	readonly warmPoolName: string;
+}
+
+/**
+ * Freezes the file-backed profile contract used by the ConversationComputer activation worker.
+ *
+ * A missing config disables the optional Agent Sandbox activation plane. A configured map must
+ * contain every history-bound profile revision this release intends to realize.
+ */
+export interface ConversationComputerActivationConfig
+{
+	/** Lists every immutable computer profile revision the release admits to Agent Sandbox. */
+	readonly profiles: readonly ConversationComputerActivationProfileConfig[];
+}
+
 /** Settings read once at startup, used to compose workload identity, workflow-controller, and worker routes. */
 export interface InternalRuntimeConfig
 {
@@ -52,6 +82,8 @@ export interface InternalRuntimeConfig
 	readonly artifactPreprocessorNamespace: string | undefined;
 	/** Complete resolver and replay configuration, or null when the channel boundary is disabled. */
 	readonly channelTargets: ChannelTargetRuntimeConfig | null;
+	/** Release-owned profile map used to realize durable ConversationComputer activation commands, when this target plane is enabled. */
+	readonly conversationComputerActivation: ConversationComputerActivationConfig | null;
 	/** Maximum age of a runtime command before it is refused. */
 	readonly commandTtlMilliseconds: number;
 	/** Delay before recovering an unacknowledged runtime command. */

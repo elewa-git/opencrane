@@ -2,13 +2,18 @@
 // the remaining import graph runs. Keep this side-effect import first when editing the entrypoint.
 import "./app/instrument";
 
+import type { PrismaClient } from "@prisma/client";
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
 import { _CreateElicitationInterruptReader } from "@opencrane/backend/agents/execution/elicitation";
-import { _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
+import { ConversationComputerActivationClaimAuthority, ConversationComputerHistory, _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
+import type { ConversationComputerActivationAuthority } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/server/conversation-assets";
+import { _KubernetesAgentSandboxClaimAuthority } from "@opencrane/backend/server/infra/agent-sandbox-claims";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config";
+import { _CreateConversationComputerActivationProfileResolver, _StartConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition";
+import type { OpenCraneConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition.types";
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
 import { _CreateExternalActionWorker } from "./app/external-action-composition";
 import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
@@ -41,7 +46,7 @@ async function _Main(): Promise<void>
 
 	// 2. Freeze process configuration and external clients so every component shares one target.
 	const config = _ReadProcessConfig();
-	const prisma = ___CreatePrismaClient(_log);
+	const prisma: PrismaClient = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
 	const historyStore = _CreateHistoryStoreComposition(config.historyStore);
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
@@ -59,6 +64,16 @@ async function _Main(): Promise<void>
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
 	const externalActions = _CreateExternalActionWorker(prisma, mcpRuntime.authority, _log);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
+	let conversationComputerActivationAuthority: ConversationComputerActivationAuthority | null = null;
+	if (config.runtime.conversationComputerActivation !== null)
+	{
+		conversationComputerActivationAuthority = new ConversationComputerActivationClaimAuthority({
+			history: new ConversationComputerHistory(historyStore.historyStore),
+			profiles: _CreateConversationComputerActivationProfileResolver(config.runtime.conversationComputerActivation, config.runtime.siloId),
+			claims: new _KubernetesAgentSandboxClaimAuthority(kubernetes.customApi),
+			clock: { now: function _Now() { return new Date(); } },
+		});
+	}
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
@@ -67,9 +82,12 @@ async function _Main(): Promise<void>
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution);
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, executionSubjects.retryInputCompiler, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
+	const conversationComputerActivation: OpenCraneConversationComputerActivationWorker | null = conversationComputerActivationAuthority === null
+		? null
+		: await _StartConversationComputerActivationWorker(historyStore.historyStore, conversationComputerActivationAuthority, config.runtime.siloId);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerActivation);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

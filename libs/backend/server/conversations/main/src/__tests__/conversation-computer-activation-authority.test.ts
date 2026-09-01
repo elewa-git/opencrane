@@ -48,16 +48,23 @@ function _Authority(current: CurrentConversationComputer | null, overrides: {
 	readonly receipt?: { readonly namespace: string; readonly claimName: string; readonly disposition: "created" | "existing" };
 } = {})
 {
-	const loadForActivation = vi.fn().mockResolvedValue(current);
+	const dispatched = current === null ? null : {
+		...current,
+		computer: current.computer.state === ConversationComputerStates.ClaimPending
+			? { ...current.computer, state: ConversationComputerStates.ClaimDispatched, updatedAt: "2026-09-01T00:02:00.000Z" }
+			: current.computer,
+	};
+	const append = vi.fn().mockResolvedValue({});
+	const loadForActivation = vi.fn().mockResolvedValueOnce(current).mockResolvedValueOnce(current).mockResolvedValue(dispatched);
 	const resolve = vi.fn().mockResolvedValue(overrides.profile === undefined ? { namespace: "sandbox-system", sandboxProfile: "developer", warmPoolName: "developer-pool" } : overrides.profile);
 	const ensure = vi.fn().mockResolvedValue(overrides.receipt ?? { namespace: "sandbox-system", claimName: "computer-1-g2", disposition: "created" });
 	const authority = new ConversationComputerActivationClaimAuthority({
-		history: { loadForActivation },
+		history: { append, loadForActivation },
 		profiles: { resolve },
 		claims: { ensure },
 		clock: { now: function _Now() { return new Date("2026-09-01T00:02:00.000Z"); } },
 	});
-	return { authority, ensure, loadForActivation, resolve };
+	return { append, authority, ensure, loadForActivation, resolve };
 }
 
 describe("ConversationComputerActivationClaimAuthority", function _DescribeConversationComputerActivationClaimAuthority()
@@ -69,6 +76,11 @@ describe("ConversationComputerActivationClaimAuthority", function _DescribeConve
 		await expect(subject.authority.activate({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2 })).resolves.toBe("activated");
 
 		expect(subject.loadForActivation).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1" });
+		expect(subject.append).toHaveBeenCalledWith(expect.objectContaining({
+			expectedRevision: 4n,
+			computer: expect.objectContaining({ state: ConversationComputerStates.ClaimDispatched }),
+			lease: _PendingCurrent().lease,
+		}));
 		expect(subject.resolve).toHaveBeenCalledWith({ siloId: "silo-1", profileRevisionId: "profile-1" });
 		expect(subject.ensure).toHaveBeenCalledWith(expect.objectContaining({ namespace: "sandbox-system", siloId: "silo-1", computerId: "computer-1", generation: 2, profile: "developer", warmPoolName: "developer-pool", shutdownTime: new Date("2026-09-01T00:20:00.000Z") }));
 	});
@@ -94,6 +106,17 @@ describe("ConversationComputerActivationClaimAuthority", function _DescribeConve
 		expect(idempotent.ensure).not.toHaveBeenCalled();
 	});
 
+	it("retries an already dispatched generation without appending a second dispatch fence", async function _RetriesDispatchedGeneration()
+	{
+		const dispatched = _PendingCurrent({ computer: { ..._PendingCurrent().computer, state: ConversationComputerStates.ClaimDispatched } });
+		const subject = _Authority(dispatched);
+
+		await expect(subject.authority.activate({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2 })).resolves.toBe("activated");
+
+		expect(subject.append).not.toHaveBeenCalled();
+		expect(subject.ensure).toHaveBeenCalledOnce();
+	});
+
 	it("parks an unavailable profile or claim receipt that does not match history", async function _ParksInvalidRealization()
 	{
 		const unavailable = _Authority(_PendingCurrent(), { profile: null });
@@ -104,6 +127,7 @@ describe("ConversationComputerActivationClaimAuthority", function _DescribeConve
 		await expect(mismatchedHistory.authority.activate({ siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2 })).resolves.toEqual({ action: "park", reason: "sandbox claim does not match the recorded computer lease" });
 
 		expect(unavailable.ensure).not.toHaveBeenCalled();
+		expect(unavailable.append).not.toHaveBeenCalled();
 		expect(mismatchedHistory.ensure).not.toHaveBeenCalled();
 	});
 });

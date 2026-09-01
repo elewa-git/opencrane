@@ -186,6 +186,17 @@ describe("ConversationComputerHistory", function ()
 		await expect(directReplacement.load(_CurrentCommand())).rejects.toThrow("replaced a nonterminal lease");
 	});
 
+	it("refuses a terminal transition while one durable claim dispatch still owns the lease", async function _RejectsTerminalDispatchRace()
+	{
+		const dispatchedComputer = _Computer({ state: ConversationComputerStates.ClaimDispatched, activeExecution: null, updatedAt: "2026-09-01T00:01:00.000Z" });
+		const dispatchedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Claimed });
+		const releasedComputer = _Computer({ state: ConversationComputerStates.Cold, activeExecution: null, updatedAt: "2026-09-01T00:02:00.000Z" });
+		const releasedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Released, releasedAt: "2026-09-01T00:02:00.000Z" });
+		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, dispatchedComputer, dispatchedLease), _Event(1n, releasedComputer, releasedLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
+
+		await expect(history.load(_CurrentCommand())).rejects.toThrow("requires claim dispatch to converge");
+	});
+
 	it("rejects a stale active lease before a caller can use its generation", async function ()
 	{
 		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 0n }) }));

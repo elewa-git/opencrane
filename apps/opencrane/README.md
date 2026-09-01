@@ -83,6 +83,11 @@ its resources to the lifecycle owner.
 
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
   the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
+- `src/app/conversation-computer-activation-composition.ts` consumes the deployment-provisioned,
+  silo-scoped KurrentDB activation group and creates the exact Agent Sandbox claim that checked
+  ConversationComputer history permits. History supplies the profile revision, which the immutable
+  ConfigMap mounted by the server release resolves to Agent Sandbox coordinates; an unexpected consumer exit terminates the process so
+  KurrentDB can redeliver to a healthy replacement.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
