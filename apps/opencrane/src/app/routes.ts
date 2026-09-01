@@ -28,6 +28,7 @@ import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
@@ -191,9 +192,9 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream"> | null = null): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution, historyStore);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentRunWorkflowController },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillAuthoringValidationController },
@@ -206,6 +207,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const internalRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringValidationWorker },
 	];
+	const internalConversationComputerRoutes = _OptionalRoute("/api/internal/conversation-computer/runtime", runtime.conversationComputerRuntimeBootstrap);
 	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeStream },
@@ -216,7 +218,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);
 	const internalChannelTargetRoutes = _OptionalRoute("/api/internal/channel-targets:resolve", runtime.channelTargetResolver);
 	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
-	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWarmRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalConversationComputerRoutes, internalWarmRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
 }
 
 /** Return a one-entry route list for a router, or an empty list when the router is null. */

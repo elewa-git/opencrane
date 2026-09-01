@@ -12,12 +12,13 @@ import { PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/s
 import { PrismaRuntimeMembershipEligibilityAuthority, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { MountedRuntimeContinuationCipher } from "@opencrane/backend/server/infra/agent-runtime-continuation";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
-import { _CreateConversationReplayRepository, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
+import { _CreateConversationReplayRepository, ConversationComputerHistory, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationComputerRuntimeBootstrapRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaSkillAuthoringValidationControllerUnitOfWork, PrismaSkillAuthoringValidationWorkerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter, __CreateSkillAuthoringValidationWorkerRouter } from "@opencrane/backend/server/agents/skills";
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateConversationComputerRuntimeTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
 import { PrismaConversationAssetOutputRepository, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
+import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory";
@@ -246,7 +247,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
  * @returns Routers composed from controller, runtime, and optional-worker plane authorities.
  */
-export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
+export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream"> | null = null): InternalRuntimeComposition
 {
 	// 1. Validate all identity planes before constructing a router, so malformed coordinates fail
 	// startup rather than leaving a partially mounted internal API.
@@ -266,10 +267,23 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 
 	// 3. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
 	const skillAuthoringValidationWorker = __CreateSkillAuthoringValidationWorkerRouter({ tokenReviewer: skillAuthoringValidationTokenReviewer, authority: new PrismaSkillAuthoringValidationWorkerUnitOfWork(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log });
+	const sandboxConfig = config.conversationComputerActivation;
+	if (sandboxConfig !== null && historyStore === null)
+		throw new Error("ConversationComputer runtime bootstrap requires HistoryStore composition");
+	const conversationComputerRuntimeBootstrap = sandboxConfig === null
+		? null
+		: __CreateConversationComputerRuntimeBootstrapRouter({
+			history: new ConversationComputerHistory(historyStore!),
+			tokenReviewer: _CreateConversationComputerRuntimeTokenReviewer(authApi, sandboxConfig.profiles[0]!.namespace),
+			siloId: config.siloId,
+			clock: { now: function _Now() { return new Date(); } },
+			logger: _log,
+		});
 	return {
 		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, continuationAuthority),
 		skillAuthoringValidationWorker,
 		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, warmRuntimeTokenReviewer, continuationAuthority),
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace, controllerTokenReviewer, workflowExecution),
+		conversationComputerRuntimeBootstrap,
 	};
 }
