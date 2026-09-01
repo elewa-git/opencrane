@@ -15,6 +15,12 @@
 {{- $fullName := include "opencrane.fullname" . -}}
 {{- $serviceName := printf "%s-kurrentdb" $fullName -}}
 {{- $bootstrapName := printf "%s-kurrentdb-bootstrap" $fullName -}}
+{{- $firstUser := .Values.clustertenantManager.firstUser -}}
+{{- /* The stream uses the server's silo selector, so it cannot receive another silo's activation commands.
+@see apps/opencrane/helm/templates/_deployment.tpl ($channelSiloId) */ -}}
+{{- $activationSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
+{{- $activationStream := printf "computer-activations-%s" $activationSiloId -}}
+{{- $activationSubscription := "opencrane-conversation-computer-activation" -}}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -98,7 +104,7 @@ data:
     esac
     rm -f "$user_body"
 
-    # The Job verifies the existing ACL after an initial write does not succeed.
+    # The Job reads back the ACL so retries reject a configuration that differs from the HistoryStore boundary.
     settings_body="$(mktemp)"
     cat > "$settings_body" <<'JSON'
     [
@@ -155,6 +161,68 @@ data:
       exit 1
     fi
     rm -f "$existing_settings"
+
+    activation_subscription_url="$endpoint/subscriptions/{{ $activationStream }}/{{ $activationSubscription }}"
+    activation_subscription_info="$(mktemp)"
+    activation_subscription_status="$(curl --silent --show-error --output "$activation_subscription_info" --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" "$activation_subscription_url/info")"
+    case "$activation_subscription_status" in
+      200)
+        if ! jq -e '
+          .eventStreamId == "{{ $activationStream }}" and
+          .groupName == "{{ $activationSubscription }}" and
+          .config.resolveLinktos == false and
+          .config.startFrom == 0 and
+          .config.messageTimeoutMilliseconds == 30000 and
+          .config.extraStatistics == false and
+          .config.maxRetryCount == 10 and
+          .config.liveBufferSize == 500 and
+          .config.bufferSize == 500 and
+          .config.readBatchSize == 20 and
+          .config.checkPointAfterMilliseconds == 2000 and
+          .config.minCheckPointCount == 10 and
+          .config.maxCheckPointCount == 1000 and
+          .config.maxSubscriberCount == 1 and
+          .config.namedConsumerStrategy == "DispatchToSingle"
+        ' "$activation_subscription_info" >/dev/null; then
+          rm -f "$activation_subscription_info"
+          echo "The existing ConversationComputer activation subscription is not the exact release contract." >&2
+          exit 1
+        fi
+        ;;
+      404)
+        activation_subscription_body="$(mktemp)"
+        cat > "$activation_subscription_body" <<'JSON'
+    {
+      "resolveLinktos": false,
+      "startFrom": 0,
+      "messageTimeoutMilliseconds": 30000,
+      "extraStatistics": false,
+      "maxRetryCount": 10,
+      "liveBufferSize": 500,
+      "bufferSize": 500,
+      "readBatchSize": 20,
+      "checkPointAfterMilliseconds": 2000,
+      "minCheckPointCount": 10,
+      "maxCheckPointCount": 1000,
+      "maxSubscriberCount": 1,
+      "namedConsumerStrategy": "DispatchToSingle"
+    }
+    JSON
+        create_activation_subscription_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --request PUT --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" --header 'Content-Type: application/json' --data-binary "@$activation_subscription_body" "$activation_subscription_url")"
+        rm -f "$activation_subscription_body"
+        if [ "$create_activation_subscription_status" != "201" ] && [ "$create_activation_subscription_status" != "200" ]; then
+          rm -f "$activation_subscription_info"
+          echo "KurrentDB refused creation of the ConversationComputer activation subscription (HTTP $create_activation_subscription_status)." >&2
+          exit 1
+        fi
+        ;;
+      *)
+        rm -f "$activation_subscription_info"
+        echo "KurrentDB did not return an expected ConversationComputer activation subscription status (HTTP $activation_subscription_status)." >&2
+        exit 1
+        ;;
+    esac
+    rm -f "$activation_subscription_info"
 
     service_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "$history_username:$history_password" "$endpoint/streams/opencrane-history-bootstrap-probe")"
     if [ "$service_status" != "200" ] && [ "$service_status" != "404" ]; then
