@@ -1,4 +1,4 @@
-import type { ComputerLease, ConversationComputer } from "@opencrane/contracts";
+import type { ComputerLease, ConversationComputer, ConversationComputerExecution } from "@opencrane/contracts";
 import type { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
 /** Names the immutable coordinates that select one logical conversation computer. */
@@ -63,4 +63,11 @@ export interface ActiveConversationComputerLease extends CurrentConversationComp
 {
 	/** Carries the only lease that may activate the computer at this checked head. */
 	readonly lease: ComputerLease;
+}
+
+/** Gives a command authority the current open execution and its checked computer-stream head. */
+export interface ActiveConversationComputerExecution extends ActiveConversationComputerLease
+{
+	/** Carries the execution that remains active on the fenced current lease. */
+	readonly execution: ConversationComputerExecution;
 }

@@ -1,4 +1,4 @@
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer, type ConversationComputerExecution } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot } from "./conversation-computer-history.types";
@@ -43,7 +43,7 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 	if (!_UUID_PATTERN.test(event.id))
 		throw new Error("Conversation computer history received an event with an invalid identifier");
 	const snapshot = _ValidatedConversationComputerSnapshot(event.data);
-	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null))
+	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null) || event.metadata.executionId !== (snapshot.computer.activeExecution?.id ?? null) || event.metadata.executionLeaseId !== (snapshot.computer.activeExecution?.leaseId ?? null) || event.metadata.executionLeaseGeneration !== (snapshot.computer.activeExecution?.leaseGeneration ?? null) || event.metadata.executionEndedAt !== (snapshot.computer.activeExecution?.endedAt ?? null))
 		throw new Error("Conversation computer history received an event that does not match its envelope");
 	if (snapshot.computer.siloId !== command.siloId)
 		throw new Error("Conversation computer history received a computer from a different silo");
@@ -72,7 +72,7 @@ export function _ValidatedConversationComputerSnapshot(value: unknown): Conversa
 /** Parses the exact closed ConversationComputer contract at a history boundary. */
 export function _ValidatedConversationComputer(value: unknown): ConversationComputer
 {
-	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "siloId", "conversationId", "agentIdentityId", "profileRevisionId", "state", "leaseGeneration", "workspaceCheckpoint", "createdAt", "updatedAt"]))
+	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "siloId", "conversationId", "agentIdentityId", "profileRevisionId", "state", "leaseGeneration", "workspaceCheckpoint", "activeExecution", "createdAt", "updatedAt"]))
 		throw new Error("Conversation computer history requires a valid computer snapshot");
 	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.siloId) || !_Identifier(value.conversationId) || !_Identifier(value.agentIdentityId) || !_Identifier(value.profileRevisionId) || !_ComputerState(value.state) || !_NonnegativeInteger(value.leaseGeneration) || !_IsoTimestamp(value.createdAt) || !_IsoTimestamp(value.updatedAt))
 		throw new Error("Conversation computer history requires valid computer coordinates");
@@ -80,7 +80,21 @@ export function _ValidatedConversationComputer(value: unknown): ConversationComp
 		throw new Error("Conversation computer history requires a computer update after its creation");
 	if (value.workspaceCheckpoint !== null)
 		_ValidatedWorkspaceCheckpoint(value.workspaceCheckpoint);
+	if (value.activeExecution !== null)
+		_ValidatedConversationComputerExecution(value.activeExecution);
 	return value as unknown as ConversationComputer;
+}
+
+/** Parses the exact fenced execution record retained by one computer snapshot. */
+function _ValidatedConversationComputerExecution(value: unknown): ConversationComputerExecution
+{
+	if (!_Record(value) || !_ExactKeys(value, ["id", "leaseId", "leaseGeneration", "startedAt", "endedAt"]))
+		throw new Error("Conversation computer history requires a valid active execution");
+	if (!_Identifier(value.id) || !_Identifier(value.leaseId) || !_PositiveInteger(value.leaseGeneration) || !_IsoTimestamp(value.startedAt) || (value.endedAt !== null && !_IsoTimestamp(value.endedAt)))
+		throw new Error("Conversation computer history requires valid active execution coordinates");
+	if (value.endedAt !== null && Date.parse(value.endedAt) < Date.parse(value.startedAt))
+		throw new Error("Conversation computer history requires an execution end after its start");
+	return value as unknown as ConversationComputerExecution;
 }
 
 /** Parses the exact closed ComputerLease contract at a history boundary. */
@@ -100,6 +114,7 @@ export function _ValidatedComputerLease(value: unknown): ComputerLease
 /** Checks whether one snapshot has zero or one lease consistent with the computer's lifecycle. */
 function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLease | null): void
 {
+	_ValidateActiveExecution(computer, lease);
 	if (lease === null)
 	{
 		if (computer.state !== ConversationComputerStates.Cold && computer.state !== ConversationComputerStates.RecoveryRequired && computer.state !== ConversationComputerStates.Retired)
@@ -126,6 +141,20 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 		throw new Error("Conversation computer history cannot retain a terminal lease on an admitting computer");
 }
 
+/** Checks that the retained execution is fenced to the current lease and computer lifecycle. */
+function _ValidateActiveExecution(computer: ConversationComputer, lease: ComputerLease | null): void
+{
+	const execution = computer.activeExecution;
+	if (execution === null)
+		return;
+	if (lease === null || execution.leaseId !== lease.id || execution.leaseGeneration !== lease.generation)
+		throw new Error("Conversation computer history requires an execution to match its lease");
+	if (Date.parse(execution.startedAt) < Date.parse(computer.createdAt) || Date.parse(execution.startedAt) > Date.parse(computer.updatedAt) || (execution.endedAt !== null && Date.parse(execution.endedAt) > Date.parse(computer.updatedAt)))
+		throw new Error("Conversation computer history requires execution times within the computer snapshot");
+	if (execution.endedAt === null && (lease.state !== ComputerLeaseStates.Active || (computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling)))
+		throw new Error("Conversation computer history requires an active execution on an active warm lease");
+}
+
 /** Checks stable computer coordinates and lease-generation progress across snapshots. */
 export function _ValidateSnapshotTransition(previous: ConversationComputerHistorySnapshot, current: ConversationComputerHistorySnapshot): void
 {
@@ -144,6 +173,22 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 	}
 	if (previous.lease !== null && current.lease !== null && previous.lease.id === current.lease.id)
 		_ValidateSameLeaseTransition(previous.lease, current.lease);
+	_ValidateExecutionTransition(previous.computer.activeExecution, current.computer.activeExecution);
+}
+
+/** Prevents a live execution from being replaced or reactivated without first recording its end. */
+function _ValidateExecutionTransition(previous: ConversationComputerExecution | null, current: ConversationComputerExecution | null): void
+{
+	if (previous === null)
+		return;
+	if (previous.endedAt === null && (current === null || current.id !== previous.id))
+		throw new Error("Conversation computer history replaced an active execution without ending it");
+	if (current === null || current.id !== previous.id)
+		return;
+	if (previous.leaseId !== current.leaseId || previous.leaseGeneration !== current.leaseGeneration || previous.startedAt !== current.startedAt)
+		throw new Error("Conversation computer history changed stable execution coordinates");
+	if (previous.endedAt !== null && previous.endedAt !== current.endedAt)
+		throw new Error("Conversation computer history reactivated a terminal execution");
 }
 
 /** Preserves immutable computer identity, ownership, profile, and creation coordinates. */
