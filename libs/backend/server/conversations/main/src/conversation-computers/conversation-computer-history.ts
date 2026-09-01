@@ -87,7 +87,16 @@ export class ConversationComputerHistory
 		return this._Load(command);
 	}
 
-	/** Loads current state from a runtime-safe computer coordinate set and derives its bound identity. */
+	/**
+	 * Loads current state from runtime-safe coordinates and derives the bound identity from checked history.
+	 *
+	 * A runtime cannot name an identity because this method validates the first stored snapshot before
+	 * replaying the complete stream under that derived identity. Missing, foreign, malformed, and stale
+	 * histories fail closed.
+	 *
+	 * Called by: ConversationComputerRuntimeInputElicitationAuthority and future loop command authorities.
+	 * @see loadActiveExecutionForRuntime
+	 */
 	public async loadForRuntime(command: ConversationComputerRuntimeCurrentCommand): Promise<CurrentConversationComputer | null>
 	{
 		_ValidateConversationComputerRuntimeCurrentCommand(command);
@@ -114,7 +123,15 @@ export class ConversationComputerHistory
 		return this._Load({ ...command, agentIdentityId: snapshot.computer.agentIdentityId });
 	}
 
-	/** Loads an open execution from runtime-safe coordinates after deriving the bound identity internally. */
+	/**
+	 * Loads an open active execution from runtime-safe coordinates after deriving the bound identity internally.
+	 *
+	 * This rejects a cold, retired, lost, expired, or terminal execution before a command authority can
+	 * use its lease generation as an append fence.
+	 *
+	 * Called by: ConversationComputerRuntimeInputElicitationAuthority and future loop command authorities.
+	 * @see loadForRuntime
+	 */
 	public async loadActiveExecutionForRuntime(command: ActiveConversationComputerRuntimeCommand): Promise<ActiveConversationComputerExecution>
 	{
 		const current = await this.loadForRuntime(command);

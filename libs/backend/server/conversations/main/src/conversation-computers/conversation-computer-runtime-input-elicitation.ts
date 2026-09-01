@@ -13,7 +13,17 @@ import type { ConversationComputerRuntimeInputClock, ConversationComputerRuntime
 /** Limits an ordinary runtime-input request to a short server-owned response window. */
 const _RUNTIME_INPUT_TTL_MILLISECONDS = 300_000;
 
-/** Admits a single system-attested RuntimeInput request against checked computer, identity, and transcript heads. */
+/**
+ * Admits one system-attested RuntimeInput request against checked computer, identity, and transcript heads.
+ *
+ * Runtime code supplies only the logical request facts. This authority derives the identity, lease,
+ * execution, participant, deadline, author, and stream, then fences the new request with one atomic
+ * append. Exact response-lost retries return their durable receipt; stale heads, changed retries,
+ * inactive runtime state, and denied authorization fail closed.
+ *
+ * Called by: no production composition yet; the #759 ConversationComputer loop checkpoint will own it.
+ * @see ConversationComputerHistory
+ */
 export class ConversationComputerRuntimeInputElicitationAuthority
 {
 	public constructor(
@@ -28,7 +38,12 @@ export class ConversationComputerRuntimeInputElicitationAuthority
 	{
 	}
 
-	/** Performs exactly one authorization and one atomic KurrentDB append; stale conditions fail closed. */
+	/**
+	 * Returns an exact durable retry receipt or admits and atomically appends one new RuntimeInput request.
+	 *
+	 * Called by: the future ConversationComputer loop composition described on this class.
+	 * @throws {Error} Rejects changed idempotency reuse, inactive runtime state, denied admission, and stale heads.
+	 */
 	public async request(command: ConversationComputerRuntimeInputElicitationCommand): Promise<ConversationComputerRuntimeInputElicitationResult>
 	{
 		_Validate(command);

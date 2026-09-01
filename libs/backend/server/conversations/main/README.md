@@ -144,6 +144,9 @@ transport for workloads; it is not a browser fallback.
 - `ConversationComputerRuntimeInputElicitationAuthority` derives the computer execution, AgentIdentity,
   participant, expiry, and entry coordinates server-side, records `Conversation/Use`, and makes one
   atomic KurrentDB RuntimeInput request append fenced by computer, conversation, and identity heads.
+  An identical response-lost retry returns the first durable receipt without re-admitting or appending;
+  a changed reuse of the same request identifier fails closed. The authority is intentionally exported
+  but not yet composed: the #759 ConversationComputer loop checkpoint owns that composition.
 
 ## Boundary
 
