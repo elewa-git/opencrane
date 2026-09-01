@@ -82,7 +82,9 @@ its resources to the lifecycle owner.
 
 `Development entrypoint: src/development/index.ts` — the explicit Tier 2 composition used by
 `npm run dev:tier2`. It keeps the real API and database authorities but replaces production OIDC,
-Kubernetes identity review, and optional infrastructure with local-only adapters.
+Kubernetes identity review, and optional infrastructure with local-only adapters. Its fixed local
+session still passes through the shared durable Principal admission on every product request, so
+active membership reconciles the same central collection-root grants used by Tier 3 and production.
 
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
   the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.

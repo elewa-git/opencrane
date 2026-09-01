@@ -26,7 +26,7 @@
     "agent-context:refresh": "node scripts/rag-rat.mjs refresh",
     "agent-context:doctor": "node scripts/rag-rat.mjs doctor",
     "test:agent-context": "node --test scripts/__tests__/rag-rat-integration.test.mjs",
-    "test:agent-style": "node --test scripts/__tests__/inline-conditional-check.test.mjs scripts/__tests__/if-body-newline-check.test.mjs",
+    "test:agent-style": "node --test scripts/__tests__/agent-style-check.test.mjs scripts/__tests__/inline-conditional-check.test.mjs scripts/__tests__/if-body-newline-check.test.mjs",
     "test:local-development": "node --test scripts/__tests__/local-development-*.test.mjs scripts/__tests__/tier3-development.test.mjs",
     "check:prisma-boundaries": "node scripts/prisma-boundary-check.mjs",
     "test:prisma-boundaries": "node --test scripts/__tests__/prisma-boundary-check.test.mjs",

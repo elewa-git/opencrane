@@ -1,7 +1,9 @@
 import { Router, type Request, type RequestHandler } from "express";
+import type { Logger } from "pino";
 
+import { _AdmitBrowserSession, type AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
-import { LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER, type LocalDevelopmentIdentity } from "@opencrane/models/local-development";
+import { LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER, type LocalDevelopmentIdentity } from "@opencrane/models/local-development";
 
 import type { PublicAuthenticationComposition } from "../app/public-app.types";
 
@@ -20,6 +22,9 @@ const _EXPECTED_FORWARDED_ORIGIN = `http://${_EXPECTED_FORWARDED_HOST}`;
 
 /** Methods that cannot mutate Tier 2 application state. */
 const _SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/** Bounds a stalled Tier 2 request to five minutes; every request rebuilds this value instead of reusing an authorization cache. */
+const _DEVELOPMENT_SESSION_AUTHORIZATION_MILLISECONDS = 5 * 60 * 1000;
 
 /** Return true only for the direct local hostname or the exact dedicated UI proxy pair. */
 function _HasExpectedDevelopmentHost(request: Request): boolean
@@ -104,6 +109,8 @@ function _CreateDevelopmentSessionMiddleware(identity: LocalDevelopmentIdentity)
 				sub: identity.subjectId,
 				issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
 				groups: [],
+				siloId: identity.siloId,
+				authorizationExpiresAt: new Date(Date.now() + _DEVELOPMENT_SESSION_AUTHORIZATION_MILLISECONDS).toISOString(),
 				isPlatformOperator: false,
 				email: identity.email,
 				emailVerified: true,
@@ -115,24 +122,20 @@ function _CreateDevelopmentSessionMiddleware(identity: LocalDevelopmentIdentity)
 	};
 }
 
-/** Require the fixed development session before any product route can execute. */
-function _DevelopmentProductAuthentication(identity: LocalDevelopmentIdentity): RequestHandler
+/** Admit the fixed development identity through the shared Principal and product-grant projection. */
+function _DevelopmentProductAuthentication(identity: LocalDevelopmentIdentity, admission: AuthenticatedPrincipalAdmission, logger: Logger): RequestHandler
 {
-	return function _RequireDevelopmentSession(request, response, next): void
+	return async function _RequireDevelopmentSession(request, response, next): Promise<void>
 	{
-		if (!request.session?.authUser)
-		{
-			response.status(401).json({ error: "Tier 2 development session required" });
-			return;
-		}
-
-		request.authenticatedPrincipal = {
-			principalId: LOCAL_DEVELOPMENT_PRINCIPAL_ID,
+		const authority = {
 			siloId: identity.siloId,
 			issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
 			subject: identity.subjectId
 		};
-		next();
+		await _AdmitBrowserSession(request, response, next, admission, authority, "Tier 2 development session required", function _LogUnavailable(err)
+		{
+			logger.warn({ err, siloId: identity.siloId, subject: identity.subjectId }, "Tier 2 Principal admission is unavailable");
+		});
 	};
 }
 
@@ -168,10 +171,24 @@ function _CreateDevelopmentAuthRouter(identity: LocalDevelopmentIdentity, capabi
 	return router;
 }
 
-/** Compose fixed local authentication without importing it from the production entrypoint. */
-export function _CreateDevelopmentAuthentication(identity: LocalDevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader): PublicAuthenticationComposition
+/**
+ * Compose fixed local authentication over the same durable Principal admission used in production.
+ *
+ * Tier 2 still binds every request to its local host, origin, and startup identity. Before a product
+ * route runs, the supplied admission task re-reads that identity and reconciles membership-derived
+ * product grants. This keeps local onboarding subject to central authorization instead of granting
+ * authority merely because the development middleware selected a known Principal identifier.
+ *
+ * Called by: the Tier 2 entrypoint in `apps/opencrane/src/development/index.ts`.
+ * @param identity - Startup-selected local user and silo coordinates.
+ * @param capabilities - Current product capabilities shown by the development session endpoint.
+ * @param admission - Durable Principal and membership-grant projection for protected requests.
+ * @param logger - Structured logger used when identity projection cannot be read.
+ * @returns Authentication routes and middleware for the Tier 2 public listener.
+ */
+export function _CreateDevelopmentAuthentication(identity: LocalDevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, admission: AuthenticatedPrincipalAdmission, logger: Logger): PublicAuthenticationComposition
 {
-	const authMiddleware = _DevelopmentProductAuthentication(identity);
+	const authMiddleware = _DevelopmentProductAuthentication(identity, admission, logger);
 
 	return {
 		authMiddleware,

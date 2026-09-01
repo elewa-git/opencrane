@@ -28,6 +28,7 @@
 import "./session.types";
 
 export type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput, AuthenticatedRequestPrincipal } from "./authenticated-principal-admission.types";
+export { _AdmitBrowserSession } from "./browser-session-admission";
 export { ___DevelopmentAuthMiddleware } from "./development-auth-middleware";
 export { ___LoadOidcAuthConfig } from "./oidc-config";
 export type { OidcAuthConfig } from "./oidc-config.types";

@@ -9,7 +9,7 @@ import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/serve
 import { _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
-import { PrismaAuthenticatedPrincipalCapabilityUnitOfWork } from "@opencrane/backend/server/iam/identity";
+import { PrismaAuthenticatedPrincipalAdmissionUnitOfWork, PrismaAuthenticatedPrincipalCapabilityUnitOfWork } from "@opencrane/backend/server/iam/identity";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
@@ -48,7 +48,9 @@ async function _Main(): Promise<void>
 	const runCancellation = _CreateRunCancellationAuthority(prisma);
 
 	// 3. Compose live browser routes with explicit unavailable infrastructure adapters.
-	const authentication = _CreateDevelopmentAuthentication(config.identity, new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(prisma, _log));
+	const principalAdmission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
+	const principalCapabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(prisma, _log);
+	const authentication = _CreateDevelopmentAuthentication(config.identity, principalCapabilities, principalAdmission, _log);
 	const health = _CreateDevelopmentHealth(prisma, config.profile);
 	const organizationMembership = {
 		mode: OrganizationMembershipDeploymentModes.Standalone,

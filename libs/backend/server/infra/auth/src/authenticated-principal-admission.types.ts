@@ -1,7 +1,7 @@
 /**
  * Carries identity coordinates that server middleware has verified against startup configuration
- * and the request host. Production OIDC and Tier 3 development middleware build this input; request
- * bodies must never supply it.
+ * and the request host. Production OIDC, Tier 2, and Tier 3 development middleware build this input;
+ * request bodies must never supply it.
  */
 export interface AuthenticatedPrincipalAdmissionInput
 {
@@ -40,7 +40,7 @@ export interface AuthenticatedPrincipalAdmission
 	/**
 	 * Resolves a verified identity and returns the Principal whose stored tuple still matches it.
 	 *
-	 * Called by: {@link ___AuthMiddleware} and {@link ___DevelopmentAuthMiddleware} before any authenticated product route runs.
+	 * Called by: {@link _AdmitBrowserSession}, the shared durable identity gate for production, Tier 2, and Tier 3 browser authentication.
 	 * @param input - Identity coordinates established by the active authentication mode.
 	 * @returns The matched local Principal, or `null` when the projection cannot prove the tuple.
 	 * @throws When the identity projection cannot be read or reconciled.

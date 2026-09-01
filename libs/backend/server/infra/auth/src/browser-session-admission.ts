@@ -3,17 +3,17 @@ import type { NextFunction, Request, Response } from "express";
 import type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput, AuthenticatedRequestPrincipal } from "./authenticated-principal-admission.types";
 
 /**
- * Admits a current signed session through the shared durable Principal boundary.
+ * Admits a current server-owned session through the shared durable Principal boundary.
  *
  * Mode-specific middleware resolves the expected authority first. This helper then owns the common
  * expiry check, exact tuple comparison, persistence-outage mapping, Principal-result validation,
  * request attachment, and successful continuation.
  *
- * Called by: production OIDC and Tier 3 development authentication middleware after public bypass.
+ * Called by: production OIDC, Tier 2, and Tier 3 development authentication middleware after public bypass.
  * @param request - Request carrying the server-owned browser session.
  * @param response - Response used for the common 401 and 503 envelopes.
  * @param next - Product-route continuation invoked only after exact Principal admission.
- * @param admission - Durable Principal resolver shared by both browser authentication modes.
+ * @param admission - Durable Principal resolver shared by production, Tier 2, and Tier 3 browser authentication.
  * @param authority - Startup and host-resolved authority, or null when the mode cannot admit it.
  * @param sessionRequiredError - Mode-specific anonymous-session error text.
  * @param onUnavailable - Optional structured logging hook invoked before the common 503 response.

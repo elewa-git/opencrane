@@ -62,7 +62,8 @@ the ordinary exact boundary-matching rules.
   external membership, expands direct Group subjects, loads matching grants, and resolves stored
   boundary context.
 - The managed-grant repository narrowly reconciles one manager's live grants against immutable
-  catalogue references.
+  catalogue references. New grants start at the caller's trusted decision time, so another
+  authorization check in the same transaction can use them immediately.
 - Exact resource retirement rechecks organisation administration and soft-revokes every active
   grant on the retiring coordinates inside the owning product transaction.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from

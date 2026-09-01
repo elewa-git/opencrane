@@ -1,15 +1,14 @@
 import "express-session";
 
 /**
- * The logged-in human, as stored in the session cookie store.
+ * Carries the logged-in human in the server-owned request session.
  *
- * Written once per login by `OidcAuthServiceBase.completeLogin` (through its private
- * `_buildAuthUser`) and read afterwards by {@link ___AuthMiddleware} and
- * `_ResolveRequestPrincipal`. Treat it as a cache of what was true at login: nothing here is
- * refreshed while the session lives.
+ * Production OIDC and Tier 3 write this through their login-backed session stores. Tier 2 builds
+ * the same shape after checking the request host and origin, so the shared Principal admission can
+ * enforce the same identity tuple and expiry contract before product routes run.
  *
- * @see https://github.com/expressjs/session — the `express-session` store that holds
- *      this object; the augmentation at the bottom of this file is what types it.
+ * @see https://github.com/expressjs/session/tree/v1.19.0 — the session store used by production
+ *      and Tier 3; its augmentation at the bottom of this file also types Tier 2's request value.
  */
 export interface AuthUser
 {
@@ -25,7 +24,7 @@ export interface AuthUser
   /** Silo whose OIDC client or standalone admission bound this login; absent until post-login admission succeeds. */
   siloId?: string;
 
-  /** ID-token expiry that bounds how long cached authorization claims remain usable. */
+  /** Expiry that bounds how long this session identity remains usable for Principal admission. */
   authorizationExpiresAt: string;
 
   /**
@@ -57,8 +56,8 @@ declare module "express-session"
   interface SessionData
   {
     /**
-     * The authenticated human identity, established by the OIDC login flow and read by the
-     * authorization gates (see {@link AuthUser}).
+     * The authenticated human identity established by the active login or development adapter and
+     * read by the authorization gates (see {@link AuthUser}).
      */
     authUser?: AuthUser;
 

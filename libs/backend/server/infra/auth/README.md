@@ -41,10 +41,12 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 
 ## Public surface
 
-- `___AuthMiddleware`, `AuthenticatedPrincipalAdmission` — the request authentication middleware and
-  its fail-closed durable-identity admission port.
-- `___DevelopmentAuthMiddleware`, `AuthenticatedPrincipalAdmissionInput` — Tier 3's exact
-  issuer/silo/subject session gate and durable Principal admission boundary.
+- `_AdmitBrowserSession`, `AuthenticatedPrincipalAdmission`, and
+  `AuthenticatedPrincipalAdmissionInput` — the shared fail-closed session expiry, exact identity
+  tuple, durable Principal admission, and request-attachment boundary used by production, Tier 2,
+  and Tier 3 authentication.
+- `___AuthMiddleware` and `___DevelopmentAuthMiddleware` — the production OIDC and Tier 3 host
+  adapters over that shared browser-session boundary.
 - `___CreateBrowserSessionMiddleware`, `BrowserSessionConfig` — the shared signed-session mechanism
   used by production OIDC and disposable Tier 3 authentication.
 - `___LoadOidcAuthConfig`, `OidcAuthConfig`, `_IsDevAuthMode` — OIDC configuration.
