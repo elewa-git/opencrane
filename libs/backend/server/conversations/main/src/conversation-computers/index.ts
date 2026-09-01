@@ -1,2 +1,4 @@
 export { ConversationComputerHistory } from "./conversation-computer-history";
 export type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+export { ConversationComputerRuntimeInputElicitationAuthority } from "./conversation-computer-runtime-input-elicitation";
+export type { ConversationComputerRuntimeInputClock, ConversationComputerRuntimeInputElicitationCommand, ConversationComputerRuntimeInputElicitationResult, ConversationComputerRuntimeInputParticipantResolver } from "./conversation-computer-runtime-input-elicitation.types";
