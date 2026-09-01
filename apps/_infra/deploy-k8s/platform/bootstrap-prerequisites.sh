@@ -7,6 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE_DIR="$SCRIPT_DIR/values/prerequisites/gke-autopilot-dev"
 source "$SCRIPT_DIR/prerequisite-chart-lock.sh"
+source "$SCRIPT_DIR/agent-sandbox-prerequisite.sh"
 
 EXPECTED_CONTEXT=""
 PROJECT_ID=""
@@ -18,6 +19,7 @@ CHART_CACHE_DIR=""
 INGRESS_ARCHIVE=""
 CERT_MANAGER_ARCHIVE=""
 CNPG_ARCHIVE=""
+AGENT_SANDBOX_MANIFEST=""
 
 log()
 {
@@ -40,7 +42,7 @@ Usage: bootstrap-prerequisites.sh \
   --ingress-address-name NAME \
   [--yes]
 
-Installs the pinned ingress-nginx, cert-manager, and CloudNativePG controllers
+Installs the pinned ingress-nginx, cert-manager, CloudNativePG, and Agent Sandbox controllers
 needed by an OpenCrane silo. The command fails closed when the target context,
 regional static address, or existing cluster-wide resources do not match.
 USAGE
@@ -93,7 +95,7 @@ parse_args()
 require_commands()
 {
   local command_name
-  for command_name in gcloud kubectl helm jq; do
+  for command_name in curl gcloud kubectl helm jq; do
     command -v "$command_name" >/dev/null 2>&1 || fail "missing required command: $command_name"
   done
 }
@@ -258,6 +260,11 @@ validate_existing_ownership()
     "$CNPG_NAMESPACE" \
     "${CNPG_CHART}-${CNPG_VERSION}" \
     "${CNPG_CLUSTER_RESOURCES[@]}"
+  assert_absent_manifest_is_clean \
+    "$AGENT_SANDBOX_RELEASE" \
+    "$AGENT_SANDBOX_NAMESPACE" \
+    "${AGENT_SANDBOX_CLUSTER_RESOURCES[@]}" \
+    "${AGENT_SANDBOX_NAMESPACE_RESOURCES[@]}"
 }
 
 sha256_file()
@@ -301,8 +308,9 @@ prepare_chart_archives()
 
 render_pinned_charts()
 {
-  log "rendering the three pinned controller charts before mutation..."
+  log "rendering the pinned controller packages before mutation..."
   prepare_chart_archives
+  prepare_agent_sandbox_manifest
   helm template "$INGRESS_RELEASE" "$INGRESS_ARCHIVE" \
     --namespace "$INGRESS_NAMESPACE" \
     --include-crds \
@@ -316,6 +324,11 @@ render_pinned_charts()
     --namespace "$CNPG_NAMESPACE" \
     --include-crds \
     --values "$PROFILE_DIR/cloudnative-pg.yaml" >/dev/null
+  kubectl --context "$EXPECTED_CONTEXT" apply \
+    --server-side \
+    --dry-run=server \
+    --field-manager=opencrane-prerequisite-bootstrap \
+    --filename "$AGENT_SANDBOX_MANIFEST" >/dev/null
 }
 
 confirm_mutation()
@@ -388,6 +401,8 @@ install_prerequisites()
     "$CNPG_ARCHIVE" \
     "$CNPG_NAMESPACE" \
     "$PROFILE_DIR/cloudnative-pg.yaml"
+
+  install_agent_sandbox_prerequisite
 }
 
 wait_for_ingress_address()
@@ -434,6 +449,7 @@ verify_prerequisites()
   kubectl --context "$EXPECTED_CONTEXT" get ingressclass nginx >/dev/null
   wait_for_established_crds "${CERT_MANAGER_CLUSTER_RESOURCES[@]}"
   wait_for_established_crds "${CNPG_CLUSTER_RESOURCES[@]}"
+  verify_agent_sandbox_prerequisite
   wait_for_ingress_address
 
   log "shared prerequisites are ready; ingress address: $INGRESS_ADDRESS_IP"

@@ -24,8 +24,8 @@ cluster does not match the assumptions needed to do that job safely.
 | `qualify-workflow-engine.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
 | `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
 | `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
-| `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
-| `prerequisite-chart-lock.sh` | Pins the exact upstream controller packages accepted by the bootstrap. Checksums and expected cluster resources make downloaded dependencies reproducible and tamper-evident. |
+| `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, PostgreSQL, and Agent Sandbox controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
+| `prerequisite-chart-lock.sh` | Pins the exact upstream controller packages accepted by the bootstrap. Checksums, controller image digests, and expected cluster resources make downloaded dependencies reproducible and tamper-evident. |
 | `configure-oidc.sh` | Updates OpenID Connect login settings on an existing silo without redeploying unrelated configuration. |
 | `provision.sh` | Creates a supported local, Google Kubernetes Engine (GKE), or virtual-private-server cluster before OpenCrane is installed. The GKE path also creates private storage for Terraform's infrastructure record. |
 | `terraform/` | Defines the optional Google Cloud infrastructure used by a GKE deployment, including encryption, networking, DNS, and the image registry. Application installation remains the deployer's responsibility. |
@@ -113,7 +113,11 @@ cert-manager leader election in its own namespace because Autopilot denies third
 managed `kube-system` namespace. It never installs
 external-dns or DNS credentials and it does not create a cluster-wide certificate issuer. Each silo
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
-ingress Service reports the reserved address.
+ingress Service reports the reserved address. The same explicit bootstrap installs the pinned Agent
+Sandbox controller and v1beta1 CRDs with extension reconcilers enabled, then rewrites its controller
+image to the locked immutable digest. The per-silo chart owns only namespaced profiles and claims;
+it never takes ownership of the shared controller. gVisor remains a GKE runtime prerequisite that
+the testv5 deploy preflight verifies.
 
 The short-lived PostgreSQL privilege proof uses ordinary GKE Autopilot scheduling. Its single Job
 runs one PostgreSQL client container for each logical database, which means two containers in the
