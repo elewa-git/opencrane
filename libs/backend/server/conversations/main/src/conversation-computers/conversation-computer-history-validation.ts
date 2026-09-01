@@ -185,8 +185,10 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 		throw new Error("Conversation computer history changed stable computer coordinates");
 	if (previous.computer.state === ConversationComputerStates.Retired && current.computer.state !== ConversationComputerStates.Retired)
 		throw new Error("Conversation computer history cannot reactivate a retired computer");
-	if (previous.computer.state === ConversationComputerStates.ClaimDispatched && current.computer.state !== ConversationComputerStates.ClaimDispatched && current.computer.state !== ConversationComputerStates.Warm)
-		throw new Error("Conversation computer history requires claim dispatch to converge before terminal transition");
+	if (previous.computer.state === ConversationComputerStates.ClaimPending && current.computer.state === ConversationComputerStates.Warm)
+		throw new Error("Conversation computer history requires claim dispatch before a computer can become warm");
+	if (previous.computer.state === ConversationComputerStates.ClaimDispatched)
+		_ValidateClaimDispatchedTransition(previous, current);
 	if (current.computer.leaseGeneration < previous.computer.leaseGeneration)
 		throw new Error("Conversation computer history decreased its lease generation");
 	if (previous.lease !== null && current.lease !== null && previous.lease.id !== current.lease.id)
@@ -199,6 +201,15 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 	if (previous.lease !== null && current.lease !== null && previous.lease.id === current.lease.id)
 		_ValidateSameLeaseTransition(previous.lease, current.lease);
 	_ValidateExecutionTransition(previous.computer.activeExecution, current.computer.activeExecution);
+}
+
+/** Limits a durable claim fence to controller-backed warmth or one lease-expiry compensation. */
+function _ValidateClaimDispatchedTransition(previous: ConversationComputerHistorySnapshot, current: ConversationComputerHistorySnapshot): void
+{
+	if (current.computer.state === ConversationComputerStates.ClaimDispatched || current.computer.state === ConversationComputerStates.Warm)
+		return;
+	if (current.computer.state !== ConversationComputerStates.RecoveryRequired || previous.lease === null || current.lease === null || current.lease.state !== ComputerLeaseStates.Lost || current.lease.sandboxId !== null || current.lease.releasedAt === null || current.computer.activeExecution !== null)
+		throw new Error("Conversation computer history requires claim dispatch to converge before terminal transition");
 }
 
 /** Prevents a live execution from being replaced or reactivated without first recording its end. */

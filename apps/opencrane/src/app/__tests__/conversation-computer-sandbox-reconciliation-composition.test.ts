@@ -1,0 +1,99 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { ConversationComputerSandboxReconciliationOutcomes } from "@opencrane/backend/server/conversations";
+
+import { _StartConversationComputerSandboxReconciliationWorker } from "../conversation-computer-sandbox-reconciliation-composition";
+
+/** Holds the close signal that lets the fake regular stream stop only after worker shutdown. */
+const _stream = vi.hoisted(function _Stream()
+{
+	let close: (() => void) | undefined;
+	return {
+		close: function _Close() { close?.(); },
+		events: (async function* _Events()
+		{
+			yield { id: "activation-1", streamName: "computer-activations-testv5", type: "opencrane.computer.activation-requested.v1", data: { siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", generation: 2 }, metadata: {}, revision: 0n, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
+			await new Promise<void>(function _Wait(resolve) { close = resolve; });
+		})(),
+	};
+});
+
+vi.mock("../log", function _Log()
+{
+	return { _log: { error: vi.fn(), fatal: vi.fn() } };
+});
+
+describe("ConversationComputer sandbox reconciliation composition", function _ReconciliationCompositionSuite()
+{
+	afterEach(function _RestoreTimers()
+	{
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it("replays the activation stream and stops status polling before its HistoryStore subscription", async function _ReplaysDurableActivations()
+	{
+		vi.useFakeTimers();
+		const subscription = { events: _stream.events, close: vi.fn(async function _Close() { _stream.close(); }) };
+		const subscribe = vi.fn().mockResolvedValue(subscription);
+		const authority = { reconcile: vi.fn().mockResolvedValue("warmed") };
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe } as unknown as HistoryStore, authority as never, "testv5");
+
+		expect(subscribe).toHaveBeenCalledWith({ streamName: "computer-activations-testv5", fromRevision: 0n });
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(authority.reconcile).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", generation: 2 });
+
+		await worker.stop();
+		expect(subscription.close).toHaveBeenCalledOnce();
+	});
+
+	it("waits for an in-flight status pass before its HistoryStore subscription can close", async function _DrainsStatusPass()
+	{
+		vi.useFakeTimers();
+		let resolveStream: () => void;
+		let resolvePass: (() => void) | undefined;
+		const streamClosed = new Promise<void>(function _CreateStreamClose(resolve) { resolveStream = resolve; });
+		const events = (async function* _Events()
+		{
+			yield { id: "activation-2", streamName: "computer-activations-testv5", type: "opencrane.computer.activation-requested.v1", data: { siloId: "testv5", computerId: "computer-2", conversationId: "conversation-1", generation: 3 }, metadata: {}, revision: 1n, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
+			await streamClosed;
+		})();
+		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
+		const authority = { reconcile: vi.fn().mockImplementation(async function _Reconcile() { await new Promise<void>(function _Wait(resolve) { resolvePass = resolve; }); return "pending"; }) };
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, "testv5");
+
+		await vi.advanceTimersByTimeAsync(1_000);
+		const stopping = worker.stop();
+		let stopped = false;
+		void stopping.then(function _Stopped() { stopped = true; });
+		await Promise.resolve();
+		expect(stopped).toBe(false);
+		resolvePass?.();
+		await stopping;
+		expect(subscription.close).toHaveBeenCalledOnce();
+	});
+
+	it("rotates past pending activation races so a later dispatched claim cannot starve", async function _RotatesPendingLocators()
+	{
+		vi.useFakeTimers();
+		let resolveStream: () => void;
+		const streamClosed = new Promise<void>(function _CreateStreamClose(resolve) { resolveStream = resolve; });
+		const events = (async function* _Events()
+		{
+			for (let index = 1; index <= 9; index += 1)
+				yield { id: `activation-${index}`, streamName: "computer-activations-testv5", type: "opencrane.computer.activation-requested.v1", data: { siloId: "testv5", computerId: `computer-${index}`, conversationId: "conversation-1", generation: 1 }, metadata: {}, revision: BigInt(index), recordedAt: new Date("2026-09-01T00:00:00.000Z") };
+			await streamClosed;
+		})();
+		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
+		const authority = { reconcile: vi.fn(async function _Reconcile(command: { readonly computerId: string }) { return command.computerId === "computer-9" ? ConversationComputerSandboxReconciliationOutcomes.Warmed : ConversationComputerSandboxReconciliationOutcomes.Pending; }) };
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, "testv5");
+
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(authority.reconcile).not.toHaveBeenCalledWith(expect.objectContaining({ computerId: "computer-9" }));
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(authority.reconcile).toHaveBeenCalledWith(expect.objectContaining({ computerId: "computer-9" }));
+
+		await worker.stop();
+	});
+});
