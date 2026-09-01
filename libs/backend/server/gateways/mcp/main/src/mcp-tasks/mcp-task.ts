@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { WorkflowTaskRetryBackoffKinds, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryBackoffKinds, WorkflowTaskRetryableError, WorkflowTaskTerminalError, ___RetryWorkflowDependency } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskContext, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { McpTaskEvents, McpTaskStates, McpTaskTaskNames } from "./mcp-task.types";
@@ -13,18 +13,9 @@ const _TERMINAL_STATES = new Set<McpTaskStates>([McpTaskStates.Completed, McpTas
 const _MAXIMUM_ATTEMPTS = 5;
 
 /** Turn unknown database failures into declared workflow retries. */
-async function _Retryable<TResult>(operation: () => Promise<TResult>): Promise<TResult>
+function _Retryable<TResult>(operation: () => Promise<TResult>): Promise<TResult>
 {
-	try
-	{
-		return await operation();
-	}
-	catch (error)
-	{
-		if (error instanceof WorkflowTaskRetryableError || error instanceof WorkflowTaskTerminalError)
-			throw error;
-		throw new WorkflowTaskRetryableError("MCP task persistence is temporarily unavailable");
-	}
+	return ___RetryWorkflowDependency(operation, "MCP task persistence is temporarily unavailable");
 }
 
 /** Load the exact task bound into the saved workflow input. */
@@ -83,7 +74,7 @@ async function _AdmitToolInvocation(context: IWorkflowTaskContext, options: McpT
 		{
 			return options.unitOfWork.execute(async function _Write(transaction): Promise<McpTaskRecord>
 			{
-				const task = await transaction.mcpTasks.admitToolInvocation(input.siloId, input.mcpTaskId, input.callDigest);
+				const task = await transaction.mcpTasks.admitAuthorizedToolInvocation(input.siloId, input.mcpTaskId, input.callDigest);
 				if (task === null)
 					throw new WorkflowTaskTerminalError("MCP task tool invocation is unavailable");
 				return task;

@@ -1,8 +1,6 @@
 /**
- * Shared types for the model-routing registry (Track AIR): provider credentials and
- * model definitions. Provider keys are owned at installation (Global) or ClusterTenant
- * scope, and OpenCrane stores only a reference to the
- * External-Secrets-synced k8s Secret, never the raw key.
+ * Shared types for the model-routing registry (Track AIR): model definitions, routing defaults,
+ * and the durable bring-your-own-key API. Provider key material remains outside PostgreSQL.
  */
 
 /**
@@ -25,42 +23,6 @@ export const GeneratedOutputCapability = {
 
 /** Union of the {@link GeneratedOutputCapability} values. */
 export type GeneratedOutputCapability = (typeof GeneratedOutputCapability)[keyof typeof GeneratedOutputCapability];
-
-/** A provider API credential reference (the raw key lives in a k8s Secret, not here). */
-export interface ProviderCredential
-{
-  /** Stable identifier. */
-  id: string;
-  /** Whether the credential is platform-wide or owned by one ClusterTenant. */
-  scope: ModelRoutingScope;
-  /** Owning ClusterTenant when `scope` is `clusterTenant`; null for Global. */
-  clusterTenant: string | null;
-  /** Free-text provider key (e.g. `openai`, `anthropic`, `bedrock`). */
-  provider: string;
-  /** Name of the External-Secrets-synced k8s Secret carrying the provider key. */
-  secretRef: string;
-  /** LiteLLM `/credentials` name when registered for the dynamic path; null for the env baseline. */
-  litellmCredentialName: string | null;
-  /** Creation timestamp (ISO-8601). */
-  createdAt: string;
-  /** Last-update timestamp (ISO-8601). */
-  updatedAt: string;
-}
-
-/** Create/update body for a {@link ProviderCredential}. */
-export interface ProviderCredentialWrite
-{
-  /** Defaults to `global` when omitted. */
-  scope?: ModelRoutingScope;
-  /** Required when `scope` is `clusterTenant`. */
-  clusterTenant?: string;
-  /** Free-text provider key. */
-  provider: string;
-  /** Name of the External-Secrets-synced k8s Secret carrying the provider key. */
-  secretRef: string;
-  /** Optional LiteLLM `/credentials` name for the dynamic no-restart path. */
-  litellmCredentialName?: string;
-}
 
 /** A routable model registered in LiteLLM (BYOM). */
 export interface ModelDefinition
@@ -92,10 +54,9 @@ export interface ModelDefinition
 }
 
 /**
- * Providers a BYOK upstream key may be set for. Unlike {@link ProviderCredential} (a reference to
- * an externally-synced Secret), a BYOK key is set with its RAW value over HTTPS, persisted to a
- * k8s Secret, and registered with LiteLLM's `/credentials` dynamic path. Add providers here as the
- * runtime gains routing support for them.
+ * Providers a BYOK upstream key may be set for. The API accepts the raw value over HTTPS, then an
+ * admitted provider command stores it in a Kubernetes Secret and registers it through LiteLLM's
+ * `/credentials` API. Add providers here as the runtime gains routing support for them.
  */
 export const ByokProvider = {
   OpenAI: "openai",

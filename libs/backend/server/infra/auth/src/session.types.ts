@@ -3,33 +3,29 @@ import "express-session";
 /**
  * The logged-in human, as stored in the session cookie store.
  *
- * Written once by the selected browser-login service and read afterwards by the matching
- * authentication middleware, the two route guards, and `_ResolveRequestPrincipal`. Treat it as
- * a cache of what was true AT LOGIN: nothing here is refreshed while the session lives.
- *
- * The one exception is {@link AuthUser.isOrgAdmin}, which `/auth/me` recomputes on every
- * call by OR-ing the stored value with current `OrgMembership` rows. So a route guard
- * reading the session may still say "not an org admin" for a user whom `/auth/me` already
- * reports as one, until they log in again or a login hook rewrites the session.
+ * Written once per login by `OidcAuthServiceBase.completeLogin` (through its private
+ * `_buildAuthUser`) and read afterwards by {@link ___AuthMiddleware} and
+ * `_ResolveRequestPrincipal`. Treat it as a cache of what was true at login: nothing here is
+ * refreshed while the session lives.
  *
  * @see https://github.com/expressjs/session — the `express-session` store that holds
  *      this object; the augmentation at the bottom of this file is what types it.
  */
 export interface AuthUser
 {
-  /** Stable subject identifier from the selected authentication authority. */
+  /** Stable subject identifier from the identity provider. */
   sub: string;
 
   /** Issuer that authenticated the user. */
   issuer: string;
 
-  /** The caller's verified group claims, or an empty set for the fixed Tier 3 identity. */
+  /** The caller's group memberships from the OIDC groups/roles claims (empty when none). */
   groups: string[];
 
-  /** Silo whose selected login authority and standalone admission bound this login. */
+  /** Silo whose OIDC client or standalone admission bound this login; absent until post-login admission succeeds. */
   siloId?: string;
 
-  /** Session authorization expiry that bounds how long cached authorization facts remain usable. */
+  /** ID-token expiry that bounds how long cached authorization claims remain usable. */
   authorizationExpiresAt: string;
 
   /**
@@ -40,18 +36,10 @@ export interface AuthUser
    */
   isPlatformOperator: boolean;
 
-  /**
-   * Whether the caller is an organisation admin, as resolved AT LOGIN (groups intersecting
-   * `OPENCRANE_ORG_ADMIN_GROUPS`, or platform-operator superset). `/auth/me` re-derives the
-   * EFFECTIVE flag fresh by OR-ing this with membership (owner/admin of ≥1 org). Empty
-   * config + no membership ⇒ false (fail-closed).
-   */
-  isOrgAdmin: boolean;
-
   /** Human-readable email address when available. */
   email?: string;
 
-  /** Whether the selected authentication authority verified the email. */
+  /** Whether the provider marked the email as verified. */
   emailVerified?: boolean;
 
   /** Display name when available. */
@@ -69,7 +57,7 @@ declare module "express-session"
   interface SessionData
   {
     /**
-     * The authenticated identity established by the selected browser-login flow and read by the
+     * The authenticated human identity, established by the OIDC login flow and read by the
      * authorization gates (see {@link AuthUser}).
      */
     authUser?: AuthUser;

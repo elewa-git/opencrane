@@ -1,5 +1,4 @@
 import { Router, type Request, type Response } from "express";
-import type { AgentRevisionContent } from "@opencrane/models/agents";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle";
 import { _ParseAgentRevisionContent } from "./agent-revision-content.parser";
@@ -9,7 +8,6 @@ import { __PublishAgentRevision } from "./agent-publication";
 import type { PublishAgentRevisionFailureReason } from "./agent-publication.types";
 import { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule";
 import type { AgentScheduleDenial, AgentScheduleOverlapPolicy } from "./agent-schedule.types";
-import { __ValidateBoundaryAttachAuthority } from "./boundary-attachment-authority";
 
 /** Legal observed states a caller may claim on a lifecycle transition. */
 const _SERVICE_STATES = ["draft", "active", "paused", "retired"] as const;
@@ -26,6 +24,7 @@ function _denialStatus(reason: AgentRevisionLifecycleDenial): number
 	switch (reason)
 	{
 		case "invalid_command": return 400;
+		case "unauthorized": return 403;
 		case "service_not_found": return 404;
 		case "revision_not_found": return 404;
 		case "revision_service_mismatch": return 409;
@@ -57,6 +56,7 @@ function _publishDenialStatus(reason: PublishAgentRevisionFailureReason): number
 	switch (reason)
 	{
 		case "invalid_command": return 400;
+		case "unauthorized": return 403;
 		case "service_not_found": return 404;
 		case "revision_not_found": return 404;
 		case "service_retired": return 409;
@@ -88,27 +88,13 @@ function _publishDenialStatus(reason: PublishAgentRevisionFailureReason): number
 export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDependencies): Router
 {
 	const router = Router();
-	const { lifecycle, publicationFor, runAdmission, schedules, boundaryGrantResolver, resolveCaller, clock, logger } = dependencies;
+	const { lifecycle, publicationFor, runAdmission, schedules, resolveCaller, clock, logger } = dependencies;
 
-	/**
-	 * Check the caller holds every boundary the new revision attaches, before anything is stored.
-	 *
-	 * @returns True to carry on. On false it has already sent 403 `FORBIDDEN_BOUNDARY_ATTACHMENT` listing
-	 *   the offending attachments, so the caller must return immediately and not touch the response.
-	 */
-	async function _authoriseAttachments(caller: ManagementCaller, content: AgentRevisionContent, res: Response): Promise<boolean>
-	{
-		const authority = await __ValidateBoundaryAttachAuthority(boundaryGrantResolver, caller.siloId, [caller.principalId], content.boundaryAttachments, clock.now().getTime());
-		if (authority.outcome === "unauthorized") { res.status(403).json({ error: "Caller does not administer every attached boundary.", code: "FORBIDDEN_BOUNDARY_ATTACHMENT", unauthorized: authority.unauthorized }); return false; }
-		return true;
-	}
-
-	/** Returns the caller only if authenticated AND an org admin. On null it has already sent 401 or 403, so the handler must return at once. */
-	function _requireAdmin(req: Request, res: Response): ManagementCaller | null
+	/** Returns the authenticated caller; each write transaction performs the product permission check. */
+	function _requireManagementCaller(req: Request, res: Response): ManagementCaller | null
 	{
 		const caller = resolveCaller(req);
 		if (caller === null) { res.status(401).json({ error: "Authentication required.", code: "UNAUTHORIZED" }); return null; }
-		if (!caller.isOrgAdmin) { res.status(403).json({ error: "Organisation admin role required.", code: "FORBIDDEN_NOT_ORG_ADMIN" }); return null; }
 		return caller;
 	}
 
@@ -125,8 +111,9 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		try
 		{
 			const caller = _requireCaller(req, res);
-			if (caller === null) return;
-			res.status(200).json({ services: await lifecycle.listManagedServices(caller.siloId) });
+			if (caller === null)
+				return;
+			res.status(200).json({ services: await lifecycle.listManagedServices(caller) });
 		}
 		catch (error) { _fail(res, error, "list"); }
 	});
@@ -135,13 +122,13 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 	{
 		try
 		{
-			const caller = _requireAdmin(req, res);
-			if (caller === null) return;
+			const caller = _requireManagementCaller(req, res);
+			if (caller === null)
+				return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			const content = _ParseAgentRevisionContent(body.content);
 			if (!_isNonEmptyString(body.name) || !_isNonEmptyString(body.workloadProfile) || !_isNonEmptyString(body.changeMessage) || content === null) { res.status(400).json({ error: "name, workloadProfile, changeMessage, and valid content are required.", code: "VALIDATION_ERROR" }); return; }
-			if (!await _authoriseAttachments(caller, content, res)) return;
-			const result = await __CreateManagedAgentService(lifecycle, { siloId: caller.siloId, name: body.name, workloadProfile: body.workloadProfile, authoredBy: caller.externalSubject, changeMessage: body.changeMessage, content }, clock.now().toISOString());
+			const result = await __CreateManagedAgentService(lifecycle, { principalId: caller.principalId, siloId: caller.siloId, name: body.name, workloadProfile: body.workloadProfile, authoredBy: caller.externalSubject, changeMessage: body.changeMessage, content }, clock.now().toISOString());
 			if (result.outcome === "denied") { res.status(_denialStatus(result.reason)).json({ error: "Create denied.", code: result.reason.toUpperCase() }); return; }
 			res.status(201).json({ service: result.service, revision: result.revision });
 		}
@@ -152,14 +139,13 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 	{
 		try
 		{
-			const caller = _requireAdmin(req, res);
+			const caller = _requireManagementCaller(req, res);
 			if (caller === null) return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			const content = _ParseAgentRevisionContent(body.content);
 			const expectedParentRevisionId = body.expectedParentRevisionId === undefined || body.expectedParentRevisionId === null ? null : body.expectedParentRevisionId;
 			if (!_isNonEmptyString(body.changeMessage) || content === null || (expectedParentRevisionId !== null && !_isNonEmptyString(expectedParentRevisionId))) { res.status(400).json({ error: "changeMessage, valid content, and an expectedParentRevisionId are required.", code: "VALIDATION_ERROR" }); return; }
-			if (!await _authoriseAttachments(caller, content, res)) return;
-			const result = await __ReviseAgentRevision(lifecycle, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.externalSubject, changeMessage: body.changeMessage, content }, clock.now().toISOString());
+			const result = await __ReviseAgentRevision(lifecycle, { principalId: caller.principalId, siloId: caller.siloId, agentServiceId: String(req.params.serviceId), expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.externalSubject, changeMessage: body.changeMessage, content }, clock.now().toISOString());
 			_sendAppend(res, result);
 		}
 		catch (error) { _fail(res, error, "revise"); }
@@ -169,12 +155,12 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 	{
 		try
 		{
-			const caller = _requireAdmin(req, res);
+			const caller = _requireManagementCaller(req, res);
 			if (caller === null) return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			const expectedParentRevisionId = body.expectedParentRevisionId === undefined || body.expectedParentRevisionId === null ? null : body.expectedParentRevisionId;
 			if (!_isNonEmptyString(body.sourceRevisionId) || !_isNonEmptyString(body.changeMessage) || (expectedParentRevisionId !== null && !_isNonEmptyString(expectedParentRevisionId))) { res.status(400).json({ error: "sourceRevisionId, changeMessage, and an expectedParentRevisionId are required.", code: "VALIDATION_ERROR" }); return; }
-			const result = await __RestoreAgentRevision(lifecycle, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), sourceRevisionId: body.sourceRevisionId, expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.externalSubject, changeMessage: body.changeMessage }, clock.now().toISOString());
+			const result = await __RestoreAgentRevision(lifecycle, { principalId: caller.principalId, siloId: caller.siloId, agentServiceId: String(req.params.serviceId), sourceRevisionId: body.sourceRevisionId, expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.externalSubject, changeMessage: body.changeMessage }, clock.now().toISOString());
 			_sendAppend(res, result);
 		}
 		catch (error) { _fail(res, error, "restore"); }
@@ -188,7 +174,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			if (caller === null) return;
 			const base = typeof req.query.base === "string" ? req.query.base : "";
 			const target = typeof req.query.target === "string" ? req.query.target : "";
-			const result = await __CompareAgentRevisions(lifecycle, caller.siloId, base, target);
+			const result = await __CompareAgentRevisions(lifecycle, caller, base, target);
 			if (result.outcome === "denied") { res.status(_denialStatus(result.reason)).json({ error: "Compare denied.", code: result.reason.toUpperCase() }); return; }
 			if (result.base.agentServiceId !== String(req.params.serviceId)) { res.status(404).json({ error: "Revisions do not belong to this service.", code: "REVISION_SERVICE_MISMATCH" }); return; }
 			res.status(200).json({ base: result.base, target: result.target, diff: result.diff });
@@ -200,7 +186,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 	{
 		try
 		{
-			const caller = _requireAdmin(req, res);
+			const caller = _requireManagementCaller(req, res);
 			if (caller === null) return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			const expectedActiveRevisionId = body.expectedActiveRevisionId === undefined || body.expectedActiveRevisionId === null ? null : body.expectedActiveRevisionId;
@@ -220,11 +206,11 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 	{
 		try
 		{
-			const caller = _requireAdmin(req, res);
+			const caller = _requireManagementCaller(req, res);
 			if (caller === null) return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			if (!_isNonEmptyString(body.requestIdempotencyKey)) { res.status(400).json({ error: "requestIdempotencyKey is required.", code: "VALIDATION_ERROR" }); return; }
-			const result = await __AdmitManagedRunNow(lifecycle, runAdmission, { agentServiceId: String(req.params.serviceId), siloId: caller.siloId, requestedBy: caller.externalSubject, requestIdempotencyKey: body.requestIdempotencyKey, trigger: "managed_invocation", scheduledSlot: null });
+			const result = await __AdmitManagedRunNow(lifecycle, runAdmission, { agentServiceId: String(req.params.serviceId), siloId: caller.siloId, requestedBy: caller.externalSubject, requestedByPrincipalId: caller.principalId, requestIdempotencyKey: body.requestIdempotencyKey, trigger: "managed_invocation", scheduledSlot: null });
 			if (result.outcome === "denied")
 			{
 				if (result.reason === "admission_concurrency_limited") res.set("Retry-After", "1");
@@ -244,36 +230,45 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			if (caller === null) return;
 			const serviceId = String(req.params.serviceId);
 			// Silo-scoped existence guard: a service in another silo is a 404, not an empty history.
-			if (await lifecycle.getService(serviceId, caller.siloId) === null) { res.status(404).json({ error: "Service not found.", code: "SERVICE_NOT_FOUND" }); return; }
+			if (await lifecycle.getService(serviceId, caller) === null)
+			{
+				res.status(404).json({ error: "Service not found.", code: "SERVICE_NOT_FOUND" });
+				return;
+			}
 			const runLimit = typeof req.query.runLimit === "string" && Number.isSafeInteger(Number(req.query.runLimit)) ? Number(req.query.runLimit) : 50;
-			const history = await __ReadAgentServiceHistory(lifecycle, serviceId, caller.siloId, runLimit);
+			const history = await __ReadAgentServiceHistory(lifecycle, serviceId, caller, runLimit);
 			res.status(200).json(history);
 		}
 		catch (error) { _fail(res, error, "history"); }
 	});
 
 	router.get("/:serviceId/schedules", async function _listSchedules(req: Request, res: Response)
+	{
+		try
 		{
-			try
+			const caller = _requireCaller(req, res);
+			if (caller === null)
+				return;
+			const serviceId = String(req.params.serviceId);
+			if (await lifecycle.getService(serviceId, caller) === null)
 			{
-				const caller = _requireCaller(req, res);
-				if (caller === null) return;
-				const serviceId = String(req.params.serviceId);
-				if (await lifecycle.getService(serviceId, caller.siloId) === null) { res.status(404).json({ error: "Service not found.", code: "SERVICE_NOT_FOUND" }); return; }
-				res.status(200).json({ schedules: await schedules.listSchedules(serviceId, caller.siloId) });
+				res.status(404).json({ error: "Service not found.", code: "SERVICE_NOT_FOUND" });
+				return;
 			}
-			catch (error) { _fail(res, error, "list-schedules"); }
-		});
+			res.status(200).json({ schedules: await schedules.listSchedules(serviceId, caller) });
+		}
+		catch (error) { _fail(res, error, "list-schedules"); }
+	});
 
 		router.post("/:serviceId/schedules", async function _createSchedule(req: Request, res: Response)
 		{
 			try
 			{
-				const caller = _requireAdmin(req, res);
+				const caller = _requireManagementCaller(req, res);
 				if (caller === null) return;
 				const spec = _parseScheduleSpec(req.body);
 				if (spec === null) { res.status(400).json({ error: "cron, timezone, overlapPolicy, enabled, and catchupWindowSeconds are required.", code: "VALIDATION_ERROR" }); return; }
-				const result = await __CreateAgentSchedule(schedules, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), ...spec }, clock.now().toISOString());
+				const result = await __CreateAgentSchedule(schedules, { principalId: caller.principalId, siloId: caller.siloId, agentServiceId: String(req.params.serviceId), ...spec }, clock.now().toISOString());
 				if (result.outcome === "denied") { res.status(_scheduleDenialStatus(result.reason)).json({ error: "Schedule create denied.", code: result.reason.toUpperCase() }); return; }
 				res.status(201).json({ schedule: result.schedule });
 			}
@@ -284,11 +279,11 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		{
 			try
 			{
-				const caller = _requireAdmin(req, res);
+				const caller = _requireManagementCaller(req, res);
 				if (caller === null) return;
 				const spec = _parseScheduleSpec(req.body);
 				if (spec === null) { res.status(400).json({ error: "cron, timezone, overlapPolicy, enabled, and catchupWindowSeconds are required.", code: "VALIDATION_ERROR" }); return; }
-				const result = await __UpdateAgentSchedule(schedules, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), scheduleId: String(req.params.scheduleId), ...spec }, clock.now().toISOString());
+				const result = await __UpdateAgentSchedule(schedules, { principalId: caller.principalId, siloId: caller.siloId, agentServiceId: String(req.params.serviceId), scheduleId: String(req.params.scheduleId), ...spec }, clock.now().toISOString());
 				if (result.outcome === "denied") { res.status(_scheduleDenialStatus(result.reason)).json({ error: "Schedule update denied.", code: result.reason.toUpperCase() }); return; }
 				res.status(200).json({ schedule: result.schedule });
 			}
@@ -299,9 +294,9 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		{
 			try
 			{
-				const caller = _requireAdmin(req, res);
+				const caller = _requireManagementCaller(req, res);
 				if (caller === null) return;
-				const result = await schedules.deleteSchedule(String(req.params.serviceId), String(req.params.scheduleId), caller.siloId);
+				const result = await schedules.deleteSchedule({ principalId: caller.principalId, agentServiceId: String(req.params.serviceId), scheduleId: String(req.params.scheduleId), siloId: caller.siloId }, clock.now().toISOString());
 				if (result.outcome === "denied") { res.status(_scheduleDenialStatus(result.reason)).json({ error: "Schedule delete denied.", code: result.reason.toUpperCase() }); return; }
 				res.status(204).end();
 			}
@@ -315,12 +310,12 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		{
 			try
 			{
-				const caller = _requireAdmin(req, res);
+				const caller = _requireManagementCaller(req, res);
 				if (caller === null) return;
 				const body = (req.body ?? {}) as Record<string, unknown>;
 				const expectedState = typeof body.expectedState === "string" ? body.expectedState : "";
 				if (!(_SERVICE_STATES as readonly string[]).includes(expectedState)) { res.status(400).json({ error: "expectedState must be one of draft|active|paused|retired.", code: "VALIDATION_ERROR" }); return; }
-				const result = await __ChangeAgentServiceState(lifecycle, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), expectedState: expectedState as typeof _SERVICE_STATES[number], action }, clock.now().toISOString());
+				const result = await __ChangeAgentServiceState(lifecycle, { principalId: caller.principalId, siloId: caller.siloId, agentServiceId: String(req.params.serviceId), expectedState: expectedState as typeof _SERVICE_STATES[number], action }, clock.now().toISOString());
 				if (result.outcome === "conflict") { res.status(409).json({ error: "Service state changed concurrently.", code: "STATE_CONFLICT", currentState: result.currentState }); return; }
 				if (result.outcome === "denied") { res.status(_denialStatus(result.reason)).json({ error: "State change denied.", code: result.reason.toUpperCase() }); return; }
 				res.status(200).json({ service: result.service });

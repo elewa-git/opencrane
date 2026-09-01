@@ -60,7 +60,7 @@ function _Repository(harness: _Harness): McpTaskRepository
 			harness.task = { ...harness.task, state: McpTaskStates.Working, inputResponse: response };
 			return { ...harness.task };
 		},
-		async admitToolInvocation() { return { ...harness.task }; },
+		async admitAuthorizedToolInvocation() { return { ...harness.task }; },
 		async recordFailure() { return { ...harness.task }; },
 		async cancel(siloId: string, principalId: string, taskId: string)
 		{

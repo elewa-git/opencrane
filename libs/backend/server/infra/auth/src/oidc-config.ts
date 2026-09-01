@@ -11,9 +11,8 @@ import type { OidcAuthConfig } from "./oidc-config.types";
  *     half-configured login is treated as a deployment mistake, never as "disabled".
  *   - All required variables are set — return an enabled config.
  *
- * Group allowlists, the operator seed email, and the org-admin groups are all read even
- * in the disabled case, and all default to empty, so nobody gains a role by leaving a
- * variable unset.
+ * The operator allowlist and seed email are read even in the disabled case and default to
+ * empty, so nobody gains the identity-plane operator claim by leaving a variable unset.
  *
  * Called by: {@link OidcAuthServiceBase} (its `config` field) and
  * {@link ___AuthMiddleware}. Each call re-reads `process.env`, which is what lets a test
@@ -49,7 +48,6 @@ export function ___LoadOidcAuthConfig(): OidcAuthConfig
       groupsClaim: process.env.OIDC_GROUPS_CLAIM?.trim() || "groups",
       rolesClaim: process.env.OIDC_ROLES_CLAIM?.trim() || "roles",
       platformOperatorGroups: _readPlatformOperatorGroups(),
-      orgAdminGroups: _readCsv(process.env.OPENCRANE_ORG_ADMIN_GROUPS),
       platformOperatorSeedEmail: _readPlatformOperatorSeedEmail(),
     };
   }
@@ -83,7 +81,6 @@ export function ___LoadOidcAuthConfig(): OidcAuthConfig
     groupsClaim: process.env.OIDC_GROUPS_CLAIM?.trim() || "groups",
     rolesClaim: process.env.OIDC_ROLES_CLAIM?.trim() || "roles",
     platformOperatorGroups: _readPlatformOperatorGroups(),
-    orgAdminGroups: _readCsv(process.env.OPENCRANE_ORG_ADMIN_GROUPS),
     platformOperatorSeedEmail: _readPlatformOperatorSeedEmail(),
   };
 }

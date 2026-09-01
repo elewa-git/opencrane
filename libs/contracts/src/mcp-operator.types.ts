@@ -5,7 +5,8 @@ import type { JsonValue } from "@opencrane/util";
  *
  * These shapes back the `/api/v1/mcp/*` API the WeOwnAI frontend targets: the
  * entitlement-scoped catalogue, per-user installs / credential connect, and the
- * org-admin governance + access-policy endpoints. This is the sole public MCP contract; there is
+ * governance endpoints protected by the central Organization/Administer grant. This is the sole
+ * public MCP contract; there is
  * no parallel unsiloed registry or credential-inventory API.
  *
  * No type in this file carries submitted credentials. Installs expose connection status and form
@@ -32,7 +33,7 @@ export enum McpServerType
 }
 
 /**
- * Where a catalogue server sits in org-admin review.
+ * Where a catalogue server sits in review by a caller with Organization/Administer authority.
  *
  * Only {@link McpApprovalStatus.Published} servers appear in the user-facing catalogue, so a
  * read path that forgets to filter on it exposes servers an admin has not released. `Approved`
@@ -40,7 +41,7 @@ export enum McpServerType
  */
 export enum McpApprovalStatus
 {
-  /** Newly registered; awaiting an org-admin review. */
+  /** Newly registered; awaiting review by a caller with Organization/Administer authority. */
   PendingReview = "pending-review",
   /** Reviewed and approved, not yet visible to callers. */
   Approved = "approved",
@@ -183,57 +184,4 @@ export interface McpInstalled
   connectionStatus?: McpConnectionStatus;
   /** ISO-8601 timestamp of last use, or null when never used. */
   lastUsed?: string | null;
-}
-
-/**
- * A user entitled to a server, rendered for the admin access editor and directory.
- */
-export interface EntitledUser
-{
-  /** Stable local Principal identifier. */
-  id: string;
-  /** Display name. */
-  name: string;
-  /** Two-letter initials derived from the name. */
-  initials: string;
-  /** Deterministic avatar colour derived from the identifier. */
-  color: string;
-}
-
-/**
- * A group that can receive an MCP authorization grant.
- *
- * The identifier is the durable local Group id. The name is display data and never participates
- * in an authorization decision.
- */
-export interface EntitledGroup
-{
-  /** Stable local Group identifier used by authorization grants. */
-  id: string;
-  /** Human-readable group name shown in the access editor. */
-  name: string;
-}
-
-/**
- * Projection of the authorization grants that let principals and groups use an MCP server.
- */
-export interface McpAccessPolicy
-{
-  /** Identifier of the governed server. */
-  serverId: string;
-  /** Groups with an active allow grant for this server. */
-  groups: EntitledGroup[];
-  /** Principals with an active allow grant for this server. */
-  users?: EntitledUser[];
-}
-
-/**
- * The selectable universe of users and groups for the admin access editor.
- */
-export interface Directory
-{
-  /** All local principals that can receive an MCP authorization grant. */
-  users: EntitledUser[];
-  /** All local groups that can receive an MCP authorization grant. */
-  groups: EntitledGroup[];
 }

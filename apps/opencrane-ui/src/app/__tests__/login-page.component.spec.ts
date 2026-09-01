@@ -10,7 +10,7 @@ import { ActivatedRoute, Router, convertToParamMap } from "@angular/router";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 
 import { LoginPageComponent } from "../login/login-page.component";
 

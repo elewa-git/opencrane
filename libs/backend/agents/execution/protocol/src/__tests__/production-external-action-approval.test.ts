@@ -34,6 +34,7 @@ function _invocation(): ToolInvocationRecord
 		mcpTaskId: null,
 		agentRevisionId: "revision-1",
 		subjectId: "user-1",
+		authorizationEvidence: null,
 		candidateId: "candidate-1",
 		toolInvocationId: "tool-call-1",
 		toolRevisionId: "mcp-tool-revision-calendar-read",

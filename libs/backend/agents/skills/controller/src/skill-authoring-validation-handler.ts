@@ -8,7 +8,7 @@ import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/w
 import type { GovernedJobObservation } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 import { SkillAuthoringValidationRecoveryReasons } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __CreateSkillAuthoringValidationBootstrapReference } from "@opencrane/contracts";
-import { WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskTerminalError, ___DeliveryCheckpointName, ___SleepWithinClaim } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationTaskContext, SkillAuthoringValidationTaskResult } from "./skill-authoring-validation-handler.types";
@@ -70,29 +70,6 @@ async function _Job(record: SkillAuthoringValidationControllerRecord, profile: S
 	const bootstrapReference = await __CreateSkillAuthoringValidationBootstrapReference(record.validationId);
 	const job = __BuildSkillAuthoringValidationJob({ jobId: record.jobId, siloId: record.siloId, namespace: profile.namespace, capabilityReference: bootstrapReference }, profile);
 	return { job, bootstrapReference };
-}
-
-/**
- * Sleeps once before the task checks again for the first Pod its released Job created.
- *
- * The bound carries forward the former controller's supported poll range, so a missing Pod cannot
- * busy-loop Kubernetes or wait longer than that range permits.
- * @see __CreateSkillAuthoringValidationHandler — uses this wait while checking saved task state.
- */
-async function _WaitForPod(context: SkillAuthoringValidationTaskContext, milliseconds: number, claimExpiry: number, stepName: string): Promise<void>
-{
-	if (!Number.isSafeInteger(milliseconds) || milliseconds < 100 || milliseconds > 60_000)
-	{
-		throw new Error("skill authoring validation requires a 100-60000ms Pod wait");
-	}
-	const now = Date.now();
-	await context.sleepUntil(new Date(Math.min(now + milliseconds, claimExpiry)), stepName);
-}
-
-/** Builds one stable checkpoint name for a server-issued delivery cycle. */
-function _CheckpointName(cycle: number, stepName: string): string
-{
-	return `delivery-${cycle}:${stepName}`;
 }
 
 /** Saves one task-owned failure and deletes only the Job UID already bound by the server. */
@@ -180,7 +157,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 				try
 				{
 					// 1. Ask the server for this delivery's claim, so replay cannot select another validation or silo.
-					record = await context.checkpoint({ stepName: _CheckpointName(cycle, "claim-validation") }, async function _ClaimValidation(): Promise<SkillAuthoringValidationControllerRecord>
+					record = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "claim-validation") }, async function _ClaimValidation(): Promise<SkillAuthoringValidationControllerRecord>
 					{
 						const loaded = await options.authority.claimForTask(input.validationId, context.task);
 						if (loaded === null || loaded.siloId !== input.siloId || loaded.claim.workloadClass !== RuntimeWorkloadClaimClasses.SkillAuthoringValidation || loaded.claim.profileName !== "authoring")
@@ -195,14 +172,14 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 
 					// 2. Create or adopt the deterministic suspended Job, then bind its UID before Python can run.
 					prepared = await _Job(record, options.profile);
-					const assigned = await context.checkpoint({ stepName: _CheckpointName(cycle, "ensure-suspended-job") }, async function _EnsureSuspendedJob(): Promise<V1Job>
+					const assigned = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "ensure-suspended-job") }, async function _EnsureSuspendedJob(): Promise<V1Job>
 					{
 						return await options.kubernetes.ensureSuspendedJob(prepared!.job);
 					});
 					const jobUid = _JobUid(assigned);
 					unboundJobUid = jobUid;
 					workloadBinding = { claimId: record.claim.claimId, claimedAt: record.claim.claimedAt, deliveryCount: record.claim.deliveryCount, profileName: record.claim.profileName, workloadUid: jobUid };
-					const workloadOutcome = await context.checkpoint({ stepName: _CheckpointName(cycle, "bind-workload") }, async function _BindWorkload(): Promise<"bound" | "idempotent" | "inactive">
+					const workloadOutcome = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "bind-workload") }, async function _BindWorkload(): Promise<"bound" | "idempotent" | "inactive">
 					{
 						const outcome = await options.authority.bindWorkload(record!.validationId, context.task, { binding: workloadBinding!, bootstrapReference: prepared!.bootstrapReference, namespace: options.profile.namespace });
 						if (outcome === "expired")
@@ -217,12 +194,12 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 						return outcome;
 					});
 					if (workloadOutcome === "inactive")
-						return await _DeleteInactiveJob(options, context, prepared.job, workloadBinding, _CheckpointName(cycle, "workload-bind-inactive"));
+						return await _DeleteInactiveJob(options, context, prepared.job, workloadBinding, ___DeliveryCheckpointName(cycle, "workload-bind-inactive"));
 					workloadBound = true;
 					unboundJobUid = null;
 
 					// 3. Release only the UID the server recorded, then wait until Kubernetes exposes its sole worker Pod.
-					const releaseOutcome = await context.checkpoint({ stepName: _CheckpointName(cycle, "release-job") }, async function _ReleaseJob(): Promise<"released" | "inactive">
+					const releaseOutcome = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "release-job") }, async function _ReleaseJob(): Promise<"released" | "inactive">
 					{
 						const authorization = await options.authority.authorizeRelease(record!.validationId, context.task, workloadBinding!);
 						if (authorization === "expired")
@@ -238,13 +215,13 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 						return "released";
 					});
 					if (releaseOutcome === "inactive")
-						return await _DeleteInactiveJob(options, context, prepared.job, workloadBinding, _CheckpointName(cycle, "release-inactive"));
+						return await _DeleteInactiveJob(options, context, prepared.job, workloadBinding, ___DeliveryCheckpointName(cycle, "release-inactive"));
 					let podObservation = 1;
 					while (pod === null)
 					{
 						try
 						{
-							const observed = await context.checkpoint({ stepName: _CheckpointName(cycle, `find-first-pod-${podObservation}`) }, async function _FindFirstPod(): Promise<{ readonly pod: V1Pod } | { readonly reason: SkillAuthoringValidationRecoveryReasons } | { readonly inactive: SkillAuthoringValidationCurrentStatus }>
+							const observed = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, `find-first-pod-${podObservation}`) }, async function _FindFirstPod(): Promise<{ readonly pod: V1Pod } | { readonly reason: SkillAuthoringValidationRecoveryReasons } | { readonly inactive: SkillAuthoringValidationCurrentStatus }>
 							{
 								const status = await options.authority.loadCurrentStatus(record!.validationId, context.task);
 								if (status !== "active")
@@ -262,21 +239,21 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 							if ("inactive" in observed && observed.inactive === "conflict")
 								throw new WorkflowTaskTerminalError("Skill authoring validation status no longer matches its task.");
 							if ("inactive" in observed)
-								return await _DeleteInactiveJob(options, context, prepared.job, workloadBinding, _CheckpointName(cycle, `pod-${podObservation}-inactive`));
+								return await _DeleteInactiveJob(options, context, prepared.job, workloadBinding, ___DeliveryCheckpointName(cycle, `pod-${podObservation}-inactive`));
 							if ("reason" in observed)
-								return await _FailAndDelete(options, context, record, prepared.job, workloadBinding, observed.reason, _CheckpointName(cycle, `pod-${podObservation}`));
+								return await _FailAndDelete(options, context, record, prepared.job, workloadBinding, observed.reason, ___DeliveryCheckpointName(cycle, `pod-${podObservation}`));
 							pod = observed.pod;
 						}
 						catch (error)
 						{
 							if (!(error instanceof _SkillAuthoringPodNotReadyError))
 								throw error;
-							await _WaitForPod(context, options.podWaitMilliseconds, claimExpiry, _CheckpointName(cycle, `wait-for-pod-${podObservation}`));
+							await ___SleepWithinClaim(context, options.podWaitMilliseconds, claimExpiry, ___DeliveryCheckpointName(cycle, `wait-for-pod-${podObservation}`));
 							podObservation += 1;
 						}
 					}
 					const firstPodUid = _PodUid(pod);
-					const podOutcome = await context.checkpoint({ stepName: _CheckpointName(cycle, "bind-first-pod") }, async function _BindFirstPod(): Promise<"bound" | "idempotent" | "inactive">
+					const podOutcome = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "bind-first-pod") }, async function _BindFirstPod(): Promise<"bound" | "idempotent" | "inactive">
 					{
 						const outcome = await options.authority.bindFirstPod(record!.validationId, context.task, { binding: { ...workloadBinding!, firstPodUid } });
 						if (outcome === "expired")
@@ -291,7 +268,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 						return outcome;
 					});
 					if (podOutcome === "inactive")
-						return await _DeleteInactiveJob(options, context, prepared.job, { ...workloadBinding, firstPodUid }, _CheckpointName(cycle, "pod-bind-inactive"));
+						return await _DeleteInactiveJob(options, context, prepared.job, { ...workloadBinding, firstPodUid }, ___DeliveryCheckpointName(cycle, "pod-bind-inactive"));
 				}
 				catch (error)
 				{
@@ -303,12 +280,12 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 						throw error;
 					if (workloadBound && record !== null && prepared !== null && workloadBinding !== null)
 					{
-						return await _FailAndDelete(options, context, record, prepared.job, workloadBinding, SkillAuthoringValidationRecoveryReasons.ClaimExpiredWithoutWorker, _CheckpointName(cycle, "bound-expiry"));
+						return await _FailAndDelete(options, context, record, prepared.job, workloadBinding, SkillAuthoringValidationRecoveryReasons.ClaimExpiredWithoutWorker, ___DeliveryCheckpointName(cycle, "bound-expiry"));
 					}
 					if (prepared !== null && unboundJobUid !== null)
 					{
 						const jobUid = unboundJobUid;
-						await context.checkpoint({ stepName: _CheckpointName(cycle, "delete-unbound-expired-job") }, async function _DeleteUnboundExpiredJob(): Promise<void> { await options.kubernetes.deleteJob(prepared!.job, jobUid); });
+						await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "delete-unbound-expired-job") }, async function _DeleteUnboundExpiredJob(): Promise<void> { await options.kubernetes.deleteJob(prepared!.job, jobUid); });
 					}
 					if (record === null)
 					{
@@ -319,7 +296,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 						const outcome = await options.authority.failExpiredBeforeWorkload(record.validationId, context.task, record.claim);
 						if (outcome === "not_expired")
 						{
-							await context.sleepUntil(new Date(Date.now() + _RECOVERY_HEARTBEAT_MILLISECONDS), _CheckpointName(cycle, "wait-for-database-expiry"));
+							await context.sleepUntil(new Date(Date.now() + _RECOVERY_HEARTBEAT_MILLISECONDS), ___DeliveryCheckpointName(cycle, "wait-for-database-expiry"));
 							continue;
 						}
 						if (outcome === "conflict")
@@ -346,7 +323,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			{
 				try
 				{
-					const recovered = await context.checkpoint({ stepName: _CheckpointName(cycle, `recover-completion-${completionObservation}`) }, async function _RecoverCompletion(): Promise<{ readonly completion: SkillAuthoringValidationCompletion } | { readonly reason: SkillAuthoringValidationRecoveryReasons } | { readonly inactive: SkillAuthoringValidationCurrentStatus }>
+					const recovered = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, `recover-completion-${completionObservation}`) }, async function _RecoverCompletion(): Promise<{ readonly completion: SkillAuthoringValidationCompletion } | { readonly reason: SkillAuthoringValidationRecoveryReasons } | { readonly inactive: SkillAuthoringValidationCurrentStatus }>
 					{
 						const loaded = await options.authority.loadCurrentCompletion(record!.validationId, context.task);
 						if (loaded !== null)
@@ -362,20 +339,20 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 					if ("inactive" in recovered && recovered.inactive === "conflict")
 						throw new WorkflowTaskTerminalError("Skill authoring validation status no longer matches its task.");
 					if ("inactive" in recovered)
-						return await _DeleteInactiveJob(options, context, prepared.job, { ...workloadBinding, firstPodUid: boundPodUid }, _CheckpointName(cycle, `completion-${completionObservation}-inactive`));
+						return await _DeleteInactiveJob(options, context, prepared.job, { ...workloadBinding, firstPodUid: boundPodUid }, ___DeliveryCheckpointName(cycle, `completion-${completionObservation}-inactive`));
 					if ("reason" in recovered)
-						completion = await _FailAfterPodOrLoadCompletion(options, context, record, prepared.job, { ...workloadBinding, firstPodUid: boundPodUid }, recovered.reason, _CheckpointName(cycle, `completion-${completionObservation}`));
+						completion = await _FailAfterPodOrLoadCompletion(options, context, record, prepared.job, { ...workloadBinding, firstPodUid: boundPodUid }, recovered.reason, ___DeliveryCheckpointName(cycle, `completion-${completionObservation}`));
 					else completion = recovered.completion;
 				}
 				catch (error)
 				{
 					if (!(error instanceof _SkillAuthoringCompletionNotReadyError))
 						throw error;
-					await context.sleepUntil(new Date(Date.now() + _RECOVERY_HEARTBEAT_MILLISECONDS), _CheckpointName(cycle, `wait-for-completion-${completionObservation}`));
+					await context.sleepUntil(new Date(Date.now() + _RECOVERY_HEARTBEAT_MILLISECONDS), ___DeliveryCheckpointName(cycle, `wait-for-completion-${completionObservation}`));
 					completionObservation += 1;
 				}
 			}
-			const completionOutcome = await context.checkpoint({ stepName: _CheckpointName(cycle, "complete-validation") }, async function _CompleteValidation(): Promise<"completed" | "idempotent" | "inactive">
+			const completionOutcome = await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "complete-validation") }, async function _CompleteValidation(): Promise<"completed" | "idempotent" | "inactive">
 			{
 				const outcome = await options.authority.complete(record!.validationId, completion, context.task);
 				if (outcome === "conflict")
@@ -388,8 +365,8 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 				return outcome;
 			});
 			if (completionOutcome === "inactive")
-				return await _DeleteInactiveJob(options, context, prepared.job, { ...workloadBinding, firstPodUid: boundPodUid }, _CheckpointName(cycle, "completion-write-inactive"));
-			await context.checkpoint({ stepName: _CheckpointName(cycle, "delete-completed-job") }, async function _DeleteCompletedJob(): Promise<void> { await options.kubernetes.deleteJob(prepared!.job, workloadBinding!.workloadUid); });
+				return await _DeleteInactiveJob(options, context, prepared.job, { ...workloadBinding, firstPodUid: boundPodUid }, ___DeliveryCheckpointName(cycle, "completion-write-inactive"));
+			await context.checkpoint({ stepName: ___DeliveryCheckpointName(cycle, "delete-completed-job") }, async function _DeleteCompletedJob(): Promise<void> { await options.kubernetes.deleteJob(prepared!.job, workloadBinding!.workloadUid); });
 			return { validationId: record.validationId, completionDigest: completion.completionDigest };
 		},
 	};

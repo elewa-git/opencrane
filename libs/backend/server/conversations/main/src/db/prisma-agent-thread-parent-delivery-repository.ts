@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { __ValidateWarmRuntimeLease } from "@opencrane/backend/agents/execution/runs";
 import { AgentRunState, AgentThreadDeliveryKind, WarmRuntimeReservationState, WorkloadAssignmentState, type Prisma } from "@prisma/client";
 
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
@@ -65,9 +66,12 @@ export class PrismaAgentThreadParentDeliveryRepository implements AgentThreadPar
 	 */
 	async deliver(identity: AgentThreadRuntimeIdentity, command: AgentThreadParentDeliveryCommand): Promise<DeliverAgentThreadParentResult>
 	{
-		const now = new Date();
-		const assignment = await this.transaction.workloadAssignment.findFirst({ where: { runId: command.runId, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, state: WorkloadAssignmentState.Registered, expiresAt: { gt: now }, run: { state: AgentRunState.Running } }, select: { siloId: true, agentServiceId: true, attempt: true, bindingGeneration: true, run: { select: { attempt: true } }, warmRuntimeReservations: { where: { namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WarmRuntimeReservationState.Claimed, idleDeadline: { gt: now } }, select: { generation: true } } } });
-		if (assignment === null || assignment.attempt !== assignment.run.attempt || !assignment.warmRuntimeReservations.some(function _CurrentGeneration(reservation) { return reservation.generation === assignment.bindingGeneration; }))
+		const run = await this.transaction.agentRun.findUnique({ where: { id: command.runId }, select: { attempt: true, state: true } });
+		if (run === null || run.state !== AgentRunState.Running)
+			return { outcome: "denied", reason: "authority_unavailable" };
+		const assignment = await this.transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: command.runId, attempt: run.attempt } } });
+		const reservation = assignment === null ? null : await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt_generation: { runId: command.runId, attempt: run.attempt, generation: assignment.bindingGeneration } } });
+		if (assignment === null || !__ValidateWarmRuntimeLease(identity, assignment, reservation, new Date()))
 			return { outcome: "denied", reason: "authority_unavailable" };
 
 		const thread = await this.transaction.conversationAgentThread.findFirst({ where: { childConversationId: command.childConversationId, siloId: assignment.siloId, agentServiceId: assignment.agentServiceId, childConversation: { lifecycle: "Open" } }, select: { parentConversationId: true } });

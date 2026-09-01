@@ -16,7 +16,6 @@ enforced identically on both sides.
 | [`authorization`](./authorization/main/README.md) | Capabilities, proofs, and the pure allow/deny function. |
 | [`conversations`](./conversations/main/README.md) | Conversation modes, lifecycle, messages, timeline coordinates, and pure command decisions. |
 | [`conversation-assets`](./conversation-assets/main/README.md) | Durable file lifecycle, media policy, and per-message limits. |
-| [`local-development`](./local-development/main/README.md) | Tier 2 application profiles and fixed local identity shape. |
 | [`user-onboarding`](./user-onboarding/main/README.md) | Persona survey/review and first-chat projections with fail-closed validation. |
 
 ```

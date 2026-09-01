@@ -6,8 +6,12 @@ export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, Ag
 export { PrismaAgentRevisionModelSelectionRepository } from "./db/prisma-agent-revision-model-selection";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types";
 export { PrismaAgentRevisionPersonaSelectionRepository } from "./db/prisma-agent-revision-persona-selection";
+export { PrismaRuntimeAgentEffectEligibilityAuthority } from "./db/prisma-runtime-agent-effect-eligibility";
+export type { RuntimeAgentEffectEligibility, RuntimeAgentEffectEligibilityCommand } from "./runtime-agent-effect-eligibility.types";
 export { AgentRevisionPersonaSelectionMaterializationCodes } from "./agent-revision-persona-selection.types";
 export { PrismaPersonalAgentBootstrapRepository } from "./db/prisma-personal-agent-bootstrap-repository";
+export { PersonalAgentProductEffectDenied, PrismaPersonalAgentProductEffectsAuthority } from "./prisma-personal-agent-product-effects";
+export type { PersonalAgentProductEffects } from "./personal-agent-product-effects.types";
 export { InitialPersonalAgentDefaultModelResolutionStatuses } from "./initial-personal-agent-publication.types";
 export type { InitialPersonalAgentDefaultModelResolver } from "./initial-personal-agent-publication.types";
 export { PersonalAgentBootstrapStatuses } from "./personal-agent-bootstrap.types";

@@ -1,16 +1,17 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 import { LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER } from "@opencrane/models/local-development";
 
 import { _CreateDevelopmentAuthentication } from "../authentication";
 
 /** Build the exact development middleware order used by the public app. */
-function _App()
+function _App(capabilities: AuthenticatedPrincipalCapabilityReader = { canAdministerOrganization: vi.fn().mockResolvedValue(true) })
 {
 	const app = express();
-	const authentication = _CreateDevelopmentAuthentication(LOCAL_DEVELOPMENT_IDENTITY);
+	const authentication = _CreateDevelopmentAuthentication(LOCAL_DEVELOPMENT_IDENTITY, capabilities);
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", authentication.router);
 	app.use(authentication.authMiddleware);
@@ -40,6 +41,31 @@ describe("Tier 2 browser authentication", function _Suite()
 		expect(response.body.authenticated).toBe(true);
 		expect(response.body.user.sub).toBe(LOCAL_DEVELOPMENT_IDENTITY.subjectId);
 		expect(response.body.user.clusterTenant).toBe(LOCAL_DEVELOPMENT_IDENTITY.siloId);
+		expect(response.body.user.productCapabilities).toEqual({ administerOrganization: true });
+		expect(response.body.user).not.toHaveProperty("isOrgAdmin");
+	});
+
+	it("fails closed when central authorization denies organization administration", async function _DeniesAdministration(): Promise<void>
+	{
+		const capabilities = { canAdministerOrganization: vi.fn().mockResolvedValue(false) };
+		const response = await request(_App(capabilities))
+			.get("/api/v1/auth/me")
+			.set("host", "local-development.localhost:8080")
+			.expect(200);
+		expect(capabilities.canAdministerOrganization).toHaveBeenCalledWith({
+			siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
+			issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+			subject: LOCAL_DEVELOPMENT_IDENTITY.subjectId
+		});
+		expect(response.body.user.productCapabilities).toEqual({ administerOrganization: false });
+	});
+
+	it("does not synthesize an administrator capability when projection fails", async function _RejectsProjectionFailure(): Promise<void>
+	{
+		await request(_App({ canAdministerOrganization: vi.fn().mockRejectedValue(new Error("authorization unavailable")) }))
+			.get("/api/v1/auth/me")
+			.set("host", "local-development.localhost:8080")
+			.expect(500);
 	});
 
 	it("ignores caller identity headers and retains the installation-selected subject", async function _IgnoresForgedIdentity(): Promise<void>

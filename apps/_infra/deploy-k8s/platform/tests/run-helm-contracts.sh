@@ -8,13 +8,13 @@ for contract in \
   bootstrap-prerequisites-render-contract.sh \
   current-chart-sources-contract.sh \
   provision-contract.sh \
+  preflight-cni-contract.sh \
   kubernetes-api-helm-args-contract.sh \
-  initial-model-provider-helm-args-contract.sh \
   tier3-development-auth-contract.sh \
   runtime-continuation-keyring-secret-contract.sh \
   pooler-deploy-contract.sh \
+  postgres-release-contract.sh \
   server-kubernetes-api-deploy-contract.sh \
-  database-migration-deploy-contract.sh \
   workflow-engine-qualification-contract.sh \
   server-key-permissions-contract.sh \
   server-rbac-contract.sh \
@@ -26,6 +26,7 @@ for contract in \
   cluster-tenant-crd-policy-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
+  retire-legacy-obot-custody-contract.sh \
   retire-legacy-obot-mcp-server-contract.sh \
   skill-authoring-contract.sh; do
   bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/$contract"

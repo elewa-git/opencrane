@@ -111,6 +111,13 @@
           "^build"
         ]
       },
+      "test:sql": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "bash prisma/tests/phase-d-authority-integration.sh",
+          "cwd": "apps/opencrane"
+        }
+      },
       "emit-openapi": {
         "outputs": [
           "{workspaceRoot}/dist/apps/opencrane/openapi.json"

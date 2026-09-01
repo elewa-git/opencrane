@@ -54,6 +54,17 @@ else
 	FILES=("$@")
 fi
 
+# Large file lists fan out across CPU cores: each rule is a handful of grep/awk
+# processes per file, so a big diff serially cost minutes in CI. Chunks re-invoke
+# this script with explicit file arguments; AGENT_STYLE_CHUNK stops recursion.
+if [[ -z "${AGENT_STYLE_CHUNK:-}" && ${#FILES[@]} -gt 40 ]]; then
+	if printf '%s\0' "${FILES[@]}" \
+		| AGENT_STYLE_CHUNK=1 xargs -0 -n 40 -P "$(getconf _NPROCESSORS_ONLN)" "$0"; then
+		exit 0
+	fi
+	exit 1
+fi
+
 # 2. Exclusions — tests, declarations, generated output, vendored code. Test
 #    files follow looser rules; generated files are not hand-maintained.
 CHECKABLE=()

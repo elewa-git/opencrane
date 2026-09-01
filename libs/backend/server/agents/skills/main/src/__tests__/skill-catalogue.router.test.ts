@@ -9,7 +9,7 @@ import type { SkillCatalogueRouterDependencies } from "../skill-catalogue.router
 /** Builds router dependencies with a caller and observable silo-bound catalogue port. */
 function _dependencies(overrides: Partial<SkillCatalogueRouterDependencies> = {}): SkillCatalogueRouterDependencies
 {
-	return { resolveCaller: function _caller() { return { siloId: "silo-1" }; }, catalogue: { listCatalogue: vi.fn().mockResolvedValue([]) }, logger: { error: vi.fn() } as unknown as Logger, ...overrides };
+	return { resolveCaller: function _caller() { return { siloId: "silo-1", principalId: "principal-1" }; }, catalogue: { listCatalogue: vi.fn().mockResolvedValue([]) }, logger: { error: vi.fn() } as unknown as Logger, ...overrides };
 }
 
 /** Mounts the router beneath its public skill catalogue prefix. */
@@ -29,7 +29,7 @@ describe("skill catalogue router", function _suite()
 
 		expect(response.status).toBe(200);
 		expect(response.body.skills).toEqual([{ id: "skill-1" }]);
-		expect(listCatalogue).toHaveBeenCalledWith("silo-1");
+		expect(listCatalogue).toHaveBeenCalledWith("silo-1", "principal-1");
 	});
 
 	it("requires an authenticated caller before catalogue discovery", async function _requiresCaller()

@@ -7,7 +7,7 @@ up only when the work crosses that tier's boundary.
 | --- | --- | --- | --- |
 | 1 | Routed UI, browser state, components, and deterministic failures | `npm run serve:opencrane-ui` | Any Node development machine |
 | 2 | Real API, PostgreSQL persistence, run admission, and local Agent execution | `npm run dev:tier2` | A machine with Docker and 4–6 GB free memory |
-| 3 | Helm, Kubernetes identity, NetworkPolicy, migrations, and the full silo | `npm run dev:tier3:infra` or `npm run dev:tier3:agent` | Minimum: 4 cores, 16 GB memory, 32 GB storage; recommended: 8 cores, 32 GB memory, 64 GB storage |
+| 3 | Helm, Kubernetes identity, NetworkPolicy, target-baseline installation, and the full silo | `npm run dev:tier3` | Minimum: 4 cores, 16 GB memory, 32 GB storage; recommended: 8 cores, 32 GB memory, 64 GB storage |
 
 ## Tier 1: browser-only frontend
 
@@ -69,8 +69,8 @@ npm run dev:tier3:infra
 
 This profile does not read provider keys. The UI and Tier 3 login remain available, but
 personal-agent onboarding deliberately cannot publish an Agent revision because the disposable
-silo has no default model. Use the provider-backed profile below when complete onboarding or Agent
-chat is under test.
+silo has no default model. Configure a provider after login when complete onboarding or Agent chat
+is under test.
 
 Tier 3 protects the minimum disk by using k3d's local-path storage while still deploying every
 application workload. It removes an existing root `node_modules` tree, clears the host npm cache and
@@ -109,59 +109,12 @@ Principal and standalone Owner records before it signs a bounded browser session
 run rotates both the proxy proof and session key, so sessions from an earlier disposable cluster no
 longer authenticate.
 
-### Complete personal-agent onboarding
+### Configure models after login
 
-The agent profile adds one reviewed provider/model to the same full silo and requires it to become
-live through LiteLLM before the browser proxy opens:
-
-```bash
-npm run dev:tier3:agent -- --provider openai
-```
-
-Put the raw upstream key alone in the conventional ignored file; do not add quotes, a variable name,
-or JSON. One trailing newline is fine because the coordinator trims it. The file must be a regular,
-non-symbolic-link file that no group or other user can read:
-
-```bash
-mkdir -p keys
-(umask 077 && touch keys/.openai-key)
-chmod 600 keys/.openai-key
-${EDITOR:-vi} keys/.openai-key
-```
-
-The file permissions and `/keys/*` Git ignore rule protect local custody. They do not impose an
-upstream spending or request limit: configure those limits in the provider project/account that
-issued the key, preferably using a short-lived development key, and rotate or revoke it after
-testing.
-
-The profile reuses Tier 2's tracked provider registry. Without options it selects the first
-recognised key filename in sorted order and uses that provider's `defaultModel`. `--provider` uses
-that provider's default; `--model` selects its owning provider; supplying both requires them to
-agree. An explicit model is published as the exact initial routing default rather than being
-silently replaced by the production catalogue default.
-
-For a personal Codespace, an account-specific Codespaces secret can avoid keeping the raw key in the
-workspace. Scope `OPENCRANE_TIER3_PROVIDER_API_KEY` to only `elewa-git/opencrane`, stop and restart
-the Codespace after adding it, then select the non-secret provider:
-
-```bash
-npm run dev:tier3:agent -- --provider openai
-```
-
-The coordinator rejects an environment key without an explicit provider. It removes the key from
-the general smoke environment before image builds and exposes it only to the release installer,
-which writes the fixed `byok-provider-key-<provider>` Kubernetes Secret without putting the raw
-value in command arguments, Helm values, rendered manifests, generated configuration, or logs.
-The server consumes that mounted value once during bootstrap, removes its environment copy, and
-blanks the startup snapshot whether provisioning succeeds or fails.
-Personal Codespaces secrets are unavailable to prebuilds, so add them only for runtime use. Create
-the Codespace from a trusted commit: repository processes in that Codespace can read its runtime
-environment.
-
-Adding a model to an existing supported provider requires one reviewed registry change and its
-selection tests. Adding a provider also requires the fixed server BYOK provider catalogue, Secret
-name, and least-privilege Kubernetes role-based access control (RBAC) to admit it; Tier 3
-deliberately does not trade that fixed custody boundary for arbitrary runtime provider names.
+Tier 3 deliberately installs without provider credentials. After the fixed development identity
+logs in, configure a provider through the normal authenticated provider settings flow. This keeps
+the durable provider-effect command, central authorization decision, and fixed Secret custody as
+the only supported route; deployment never writes provider keys or chooses a routing default.
 
 The minimum-host command already uses fast local-path storage. Select full storage explicitly when
 the change concerns storage expansion:

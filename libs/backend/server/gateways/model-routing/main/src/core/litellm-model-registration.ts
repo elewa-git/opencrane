@@ -1,7 +1,9 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
+import type { Logger } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log";
+import { _ConvergeLiteLlmModelDeployment } from "./litellm-model-deletion";
 import type { LiteLlmModelRegistration } from "./litellm-model-registration.types";
 
 /**
@@ -17,9 +19,10 @@ import type { LiteLlmModelRegistration } from "./litellm-model-registration.type
  * Per-tenant access is scoped later via the virtual key's `models[]` allowlist, not here.
  *
  * @param input - The public slug, upstream model, and optional api_base/secret env reference.
+ * @param log - Logger that receives registration outcomes.
  * @returns The LiteLLM-returned deployment id, or a deterministic placeholder when unconfigured.
  */
-export async function _RegisterLiteLlmModel(input: LiteLlmModelRegistration): Promise<string>
+export async function _RegisterLiteLlmModel(input: LiteLlmModelRegistration, log: Logger = _log): Promise<string>
 {
   const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
   const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
@@ -34,14 +37,14 @@ export async function _RegisterLiteLlmModel(input: LiteLlmModelRegistration): Pr
       throw new Error(`LiteLLM is not configured to register required model '${input.publicModelName}'`);
     }
     const placeholder = _placeholderModelId(input);
-    _log.debug({ publicModelName: input.publicModelName, configured: false, litellmModelId: placeholder }, "litellm model registration skipped (unconfigured)");
+		log.debug({ publicModelName: input.publicModelName, configured: false, litellmModelId: placeholder }, "litellm model registration skipped (unconfigured)");
     return placeholder;
   }
 
   return ___DoWithTrace(
     "litellm.model.register",
     { publicModelName: input.publicModelName, upstreamModel: input.upstreamModel, scope: input.scope },
-    function _register(): Promise<string> { return _registerLive(endpoint, masterKey, input); },
+		function _register(): Promise<string> { return _registerLive(endpoint, masterKey, input, log); },
   );
 }
 
@@ -51,13 +54,20 @@ export async function _RegisterLiteLlmModel(input: LiteLlmModelRegistration): Pr
  * @param endpoint  - LiteLLM base URL.
  * @param masterKey - LiteLLM bearer credential.
  * @param input     - The registration inputs.
+ * @param log       - Logger that receives registration outcomes.
  * @returns The LiteLLM deployment id, or a placeholder when the call fails.
  */
-async function _registerLive(endpoint: string, masterKey: string, input: LiteLlmModelRegistration): Promise<string>
+async function _registerLive(endpoint: string, masterKey: string, input: LiteLlmModelRegistration, log: Logger): Promise<string>
 {
   try
   {
-    // 2. Register the deployment GLOBALLY. Prefer the BYOK dynamic path: when a credential name is
+    // 2. Reuse the deployment already stored under this product-owned public name. A delivery may
+    //    have reached LiteLLM before its database finalization, so retries reconcile before POST.
+    const existing = await _ConvergeLiteLlmModelDeployment(endpoint, masterKey, input, log);
+    if (existing !== null)
+      return existing;
+
+    // 3. Register the deployment GLOBALLY. Prefer the BYOK dynamic path: when a credential name is
     //    bound, reference it via `litellm_credential_name` so LiteLLM resolves the key from its
     //    encrypted store. Otherwise fall back to the env baseline — `api_key` as an `os.environ/<KEY>`
     //    reference so the raw key never transits OpenCrane (LiteLLM reads it from its own environment).
@@ -86,14 +96,14 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
         litellm_params: litellmParams,
         // Explicit mode (e.g. "embedding") rather than relying on LiteLLM's own model-name
         // inference — omitted (LiteLLM defaults to chat) for the ordinary catalog models.
-        ...(input.mode ? { model_info: { mode: input.mode } } : {}),
+		..._ModelInfo(input),
       }),
       // Startup readiness must bound each upstream registration, just as inventory checks do.
       // Otherwise a stalled LiteLLM socket prevents Kubernetes from ever observing failure.
       signal: AbortSignal.timeout(10_000),
     });
 
-    // 3. On any non-OK upstream response fall back to the placeholder — the row still persists,
+    // 4. On any non-OK upstream response fall back to the placeholder — the row still persists,
     //    and the deployment can be reconciled later; the create must not fail on a flaky LiteLLM.
     if (!response.ok)
     {
@@ -101,7 +111,7 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
       {
         throw new Error(`LiteLLM model registration for '${input.publicModelName}' returned HTTP ${response.status}`);
       }
-      _log.warn({ publicModelName: input.publicModelName, status: response.status }, "litellm model registration failed; using placeholder id");
+	  log.warn({ publicModelName: input.publicModelName, status: response.status }, "litellm model registration failed; using placeholder id");
       return _placeholderModelId(input);
     }
 
@@ -110,7 +120,7 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
     {
       throw new Error(`LiteLLM did not return a deployment id for required model '${input.publicModelName}'`);
     }
-    _log.info({ publicModelName: input.publicModelName, litellmModelId }, "litellm model registered");
+	log.info({ publicModelName: input.publicModelName, litellmModelId }, "litellm model registered");
     return litellmModelId;
   }
   catch (err)
@@ -119,10 +129,21 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
     {
       throw err;
     }
-    // 4. Network / parse failure is non-fatal — keep the create working with a placeholder.
-    _log.warn({ publicModelName: input.publicModelName, err }, "litellm model registration errored; using placeholder id");
+    // 5. Network / parse failure is non-fatal — keep the create working with a placeholder.
+	log.warn({ publicModelName: input.publicModelName, err }, "litellm model registration errored; using placeholder id");
     return _placeholderModelId(input);
   }
+}
+
+/** Build the optional LiteLLM model_info object without inventing absent values. */
+function _ModelInfo(input: LiteLlmModelRegistration): { readonly model_info?: { readonly id?: string; readonly mode?: string } }
+{
+	const modelInfo: { id?: string; mode?: string } = {};
+	if (input.deploymentId)
+		modelInfo.id = input.deploymentId;
+	if (input.mode)
+		modelInfo.mode = input.mode;
+	return Object.keys(modelInfo).length === 0 ? {} : { model_info: modelInfo };
 }
 
 /** Select one non-empty LiteLLM deployment id or use the deterministic local placeholder. */

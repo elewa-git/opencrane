@@ -25,11 +25,6 @@ SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
 SMOKE_HOST_PROFILE="${SMOKE_HOST_PROFILE:-recommended}"
-INITIAL_MODEL_PROVIDER="${OPENCRANE_INITIAL_MODEL_PROVIDER:-}"
-INITIAL_MODEL_NAME="${OPENCRANE_INITIAL_MODEL_NAME:-}"
-TIER3_PROVIDER_API_KEY="${OPENCRANE_TIER3_PROVIDER_API_KEY:-}"
-# The raw key must not reach image builds, controller installers, diagnostics, or the browser proxy.
-unset OPENCRANE_INITIAL_MODEL_API_KEY OPENCRANE_INITIAL_MODEL_NAME OPENCRANE_INITIAL_MODEL_PROVIDER OPENCRANE_TIER3_PROVIDER_API_KEY
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -73,8 +68,6 @@ _retry()
 }
 
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
-source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/initial-model-provider.sh"
-validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_NAME" "$TIER3_PROVIDER_API_KEY"
 
 _diagnostics()
 {
@@ -132,15 +125,12 @@ _build_image()
   local dockerfile="$3"
   local cache_arguments=()
   # CI shares registry layer caches per deployable with the publish jobs (see BUILD_CACHE_IMAGE
-  # in docker.yml). SMOKE_BUILD_CACHE is the trusted cache that integration pushes maintain;
-  # SMOKE_BUILD_CACHE_UNTRUSTED adds the pull-request cache as a second read source; and
+  # in docker.yml). SMOKE_BUILD_CACHE is the cache that integration pushes maintain, and
   # SMOKE_BUILD_CACHE_EXPORT names where this run may write its layers, so the next push builds
-  # warm. Local runs leave all three unset and build without a remote cache.
+  # warm. Pull requests read the cache but never export (the registry export costs 40-50 seconds
+  # per image). Local runs leave both unset and build without a remote cache.
   if [[ -n "${SMOKE_BUILD_CACHE:-}" ]]; then
     cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE}:${project}")
-  fi
-  if [[ -n "${SMOKE_BUILD_CACHE_UNTRUSTED:-}" ]]; then
-    cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE_UNTRUSTED}:${project}")
   fi
   if [[ -n "${SMOKE_BUILD_CACHE_EXPORT:-}" ]]; then
     cache_arguments+=(--cache-to "type=registry,ref=${SMOKE_BUILD_CACHE_EXPORT}:${project},mode=max")
@@ -188,20 +178,40 @@ _prepare_image()
   fi
 }
 
+# Each entry is project|local image|remote image|dockerfile for _prepare_image.
+SMOKE_IMAGE_SPECS=(
+  "opencrane|opencrane/opencrane-server:develop-smoke|opencrane-server|apps/opencrane/deploy/Dockerfile"
+  "opencrane-ui|opencrane/opencrane-ui:develop-smoke|opencrane-ui|apps/opencrane-ui/deploy/Dockerfile"
+  "channel-proxy|opencrane/channel-proxy:develop-smoke|opencrane-channel-proxy|apps/channel-proxy/deploy/Dockerfile"
+  "memory-gateway|opencrane/memory-gateway:develop-smoke|opencrane-memory-gateway|apps/memory-gateway/deploy/Dockerfile"
+  "artifact-service|opencrane/artifact-service:develop-smoke|opencrane-artifact-service|apps/artifact-service/deploy/Dockerfile"
+  "cognee|opencrane/cognee:develop-smoke|opencrane-cognee|apps/_infra/cognee/deploy/Dockerfile"
+)
+
 _prepare_images()
 {
-  _prepare_image opencrane opencrane/opencrane-server:develop-smoke \
-    opencrane-server apps/opencrane/deploy/Dockerfile
-  _prepare_image opencrane-ui opencrane/opencrane-ui:develop-smoke \
-    opencrane-ui apps/opencrane-ui/deploy/Dockerfile
-  _prepare_image channel-proxy opencrane/channel-proxy:develop-smoke \
-    opencrane-channel-proxy apps/channel-proxy/deploy/Dockerfile
-  _prepare_image memory-gateway opencrane/memory-gateway:develop-smoke \
-    opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
-  _prepare_image artifact-service opencrane/artifact-service:develop-smoke \
-    opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
-  _prepare_image cognee opencrane/cognee:develop-smoke \
-    opencrane-cognee apps/_infra/cognee/deploy/Dockerfile
+  # The preparations run concurrently: serially they dominated the smoke's wall clock
+  # (~11 of 15 minutes) while each one mostly waits on registry and npm network I/O.
+  # Every preparation logs to its own file so the concurrent output stays readable.
+  local log_dir project local_image remote_image dockerfile
+  local projects=() pids=() failed=0
+  log_dir="$(mktemp -d)"
+  for spec in "${SMOKE_IMAGE_SPECS[@]}"; do
+    IFS='|' read -r project local_image remote_image dockerfile <<<"$spec"
+    _prepare_image "$project" "$local_image" "$remote_image" "$dockerfile" \
+      >"$log_dir/$project.log" 2>&1 &
+    projects+=("$project")
+    pids+=($!)
+  done
+  for index in "${!pids[@]}"; do
+    if ! wait "${pids[$index]}"; then
+      failed=1
+      echo "[develop-smoke] Image preparation FAILED for ${projects[$index]}"
+    fi
+    cat "$log_dir/${projects[$index]}.log"
+  done
+  rm -rf -- "$log_dir"
+  return "$failed"
 }
 
 _create_database_credentials()
@@ -365,11 +375,10 @@ EOF
 }
 
 # Proves the public health report is complete and every service the smoke can provision is
-# healthy. Model routing is the one exception: CI holds no provider credentials, so LiteLLM
-# serves an empty estate and the models probe reports unavailable. Seeding a placeholder key
-# instead made the server fetch a BYOK Secret through the API server and exit fatally when that
-# call failed, so the report is asserted as-is and models is allowed to be unavailable. Reporting
-# an unconfigured estate as disabled rather than unavailable is tracked separately.
+# healthy. Model routing is the one exception: CI holds no provider credentials, so LiteLLM serves
+# an empty estate and the models probe reports unavailable. Provider setup now begins only through
+# the authenticated durable command path, so a fresh server remains ready while that estate is
+# intentionally empty. Reporting it as disabled rather than unavailable is tracked separately.
 _assert_ingress_health()
 {
   local health_url="https://${CONTROL_PLANE_HOST}:8443/healthz"
@@ -377,15 +386,13 @@ _assert_ingress_health()
   local response=""
   until response="$(curl --connect-timeout 2 --max-time 5 --fail --silent --show-error --insecure \
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
-    && jq -e --argjson modelsRequired "$([[ -n "$INITIAL_MODEL_PROVIDER" ]] && printf true || printf false)" '
+    && jq -e '
       .ready == true
       and (.services | keys == ["api", "channels", "database", "files", "memory", "models"])
       and ([.services | to_entries[] | select(.key != "models") | .value]
         | all(. == "available" or . == "disabled"))
-      and (if $modelsRequired then .services.models == "available"
-        else (.services.models == "available" or .services.models == "unavailable") end)
-      and (if $modelsRequired then .status == "ok"
-        else (.status == "ok" or (.status == "degraded" and .services.models != "available")) end)
+      and (.services.models == "available" or .services.models == "unavailable")
+      and (.status == "ok" or (.status == "degraded" and .services.models != "available"))
     ' >/dev/null <<<"$response"; do
     if [[ $(date +%s) -ge "$deadline" ]]; then
       echo "[develop-smoke] Timed out waiting for the complete public health report at $health_url; last response: $response" >&2
@@ -493,7 +500,6 @@ deploy_arguments=(
   --namespace "$NAMESPACE" \
   --release "$RELEASE_NAME" \
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
-  --from-release-version fresh \
   --image-tag develop-smoke \
   --cognee-tag develop-smoke \
   --storage-class "$SMOKE_STORAGE_CLASS" \
@@ -504,16 +510,9 @@ deploy_arguments=(
   --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml" \
   --set "certManager.mode=selfSigned" \
   --set "certManager.issuerName=opencrane-develop-smoke-issuer")
-if [[ -n "$INITIAL_MODEL_PROVIDER" ]]; then
-  deploy_arguments+=(--initial-model-provider "$INITIAL_MODEL_PROVIDER" --initial-model "$INITIAL_MODEL_NAME")
-fi
-
 # Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
 # host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
-# Scope the raw provider key to this one installer process; it never reaches build or proxy children.
-OPENCRANE_INITIAL_MODEL_API_KEY="$TIER3_PROVIDER_API_KEY" \
-  "$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" "${deploy_arguments[@]}"
-TIER3_PROVIDER_API_KEY=""
+"$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" "${deploy_arguments[@]}"
 
 echo "[develop-smoke] Waiting for every enabled workload and certificate"
 kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"

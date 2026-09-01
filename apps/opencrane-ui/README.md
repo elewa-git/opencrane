@@ -73,8 +73,8 @@ backend permits and gate screens on backend-supplied capability claims.
 ## Dependency direction
 
 Tagged `type:app`, `layer:entrypoint`, `scope:opencrane-ui`. As an entrypoint it composes
-`scope:web` frontend libraries (`@opencrane/features/*`, `@opencrane/state/*`, `@opencrane/core`,
-`@opencrane/platform`); it may not import backend or app code, and nothing imports it.
+legacy `scope:web` frontend libraries plus bounded frontend capabilities such as
+`scope:frontend-session`; it may not import backend or app code, and nothing imports it.
 
 ## Runtime & config
 

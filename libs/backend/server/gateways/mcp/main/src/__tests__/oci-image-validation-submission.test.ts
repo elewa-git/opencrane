@@ -54,7 +54,11 @@ function _Harness(): _SubmissionHarness
 		return Promise.resolve({ created: true, validation: stored });
 	});
 	const workflowTransaction: IWorkflowTransaction = { client: { transaction: "same-database-transaction" } };
-	const transaction = { ociImageValidations: { createOrFind }, mcp: { appendAudit: audit }, workflowTransaction } as unknown as McpOperatorTransaction;
+	const authorization = {
+		listPrincipalEntitled: vi.fn().mockImplementation(function _Allow(command: { resources: readonly unknown[] }) { return Promise.resolve(command.resources); }),
+		admitPrincipal: vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"], evidence: { decisionDigest: `sha256:${"a".repeat(64)}`, policyRevisionHash: `sha256:${"b".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` } }),
+	};
+	const transaction = { ociImageValidations: { createOrFind }, mcp: { appendAudit: audit }, authorization, workflowTransaction } as unknown as McpOperatorTransaction;
 	const execute = vi.fn().mockImplementation(async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return await operation(transaction); });
 	const admit = vi.fn().mockResolvedValue({ taskKey: "workflows:oci-image-validation:test", receipt: { taskId: "task-1", taskName: "oci-image-validation.import", idempotencyKey: "workflows:oci-image-validation:test" } });
 	const artifacts = { resolve: vi.fn().mockImplementation(function _Resolve(siloId: string, artifactId: string, artifactRevisionId: string)
@@ -96,7 +100,7 @@ describe("OCI image validation submission", function _OciImageValidationSubmissi
 		expect(harness.admit).toHaveBeenCalledTimes(1);
 	});
 
-	it("resolves through the authenticated silo and starts no transaction when the artifact is unavailable", async function _KeepsArtifactLookupInsideSilo()
+	it("authorizes then resolves through the authenticated silo when the artifact is unavailable", async function _KeepsArtifactLookupInsideSilo()
 	{
 		const harness = _Harness();
 
@@ -104,7 +108,7 @@ describe("OCI image validation submission", function _OciImageValidationSubmissi
 
 		expect(result.outcome).toBe(OciImageValidationSubmissionOutcomes.ArtifactNotFound);
 		expect(harness.artifacts.resolve).toHaveBeenCalledWith("silo-2", "artifact-1", "revision-1");
-		expect(harness.execute).not.toHaveBeenCalled();
+		expect(harness.execute).toHaveBeenCalledOnce();
 		expect(harness.admit).not.toHaveBeenCalled();
 	});
 });

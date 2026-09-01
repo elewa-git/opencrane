@@ -5,13 +5,14 @@ import type { Logger } from "pino";
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
-import { OidcAuthServiceBase, PrismaOrgMembershipUnitOfWork, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, _saveSession, type AuthUser, type LoginClient } from "@opencrane/backend/server/infra/auth";
+import { OidcAuthServiceBase, PrismaOwnedOrgSummaryRepository, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, _saveSession, type AuthUser, type LoginClient } from "@opencrane/backend/server/infra/auth";
+import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
+import { PrismaAuthenticatedPrincipalCapabilityUnitOfWork } from "../authenticated-principals/prisma-authenticated-principal-capability-unit-of-work";
 import { PrismaGroupClaimProjectionUnitOfWork } from "../group-claims/mirror-groups";
 import { _AdmitStandaloneFirstUser } from "../standalone-first-user/standalone-first-user-admission";
 import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../standalone-first-user/prisma-standalone-first-user-admission-unit-of-work";
 import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "../standalone-first-user/standalone-first-user-admission.types";
-import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
 /**
  * Adds tenant-bound login admission to the shared OIDC flow.
@@ -51,7 +52,7 @@ export class OidcAuthService extends OidcAuthServiceBase
    */
   constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null, standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null = null)
   {
-    super(log, new PrismaOrgMembershipUnitOfWork(prisma));
+    super(log, new PrismaOwnedOrgSummaryRepository(prisma));
     if (standaloneFirstUserAdmission !== null && standaloneFirstUserAudit === null)
     {
       throw new Error("standalone first-user admission requires an audit adapter");
@@ -93,17 +94,25 @@ export class OidcAuthService extends OidcAuthServiceBase
   }
 
   /**
-   * Adds the caller's cluster tenant to `/auth/me` from their verified subject and request host.
+   * Adds the caller's cluster tenant and current organisation-administration capability to `/auth/me`.
    *
-   * A null value means the lookup was unresolved or ambiguous, such as a multi-silo owner on a
-   * host where they have no workspace. The response never accepts a caller-supplied tenant claim.
+   * A null tenant means the lookup was unresolved or ambiguous, such as a multi-silo owner on a
+   * host where they have no workspace. The capability comes from the central authorization
+   * authority after it refreshes membership-managed grants; no identity-provider role flag can
+   * grant product access. Product routes still repeat admission inside their write transaction.
    * Called by: {@link OidcAuthServiceBase.getStatus}.
    * @returns The fresh `clusterTenant` value, which can be null.
    */
   protected override async enrichStatusUser(req: Request, authUser: AuthUser): Promise<Record<string, unknown>>
   {
     const clusterTenant = await _ResolveCallerClusterTenant(this.prisma, authUser.sub, _ClusterTenantFromHost(_RequestHost(req)));
-    return { clusterTenant };
+    if (clusterTenant === null)
+    {
+      return { clusterTenant, productCapabilities: { administerOrganization: false } };
+    }
+    const capabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(this.prisma, this.log);
+    const administerOrganization = await capabilities.canAdministerOrganization({ siloId: clusterTenant, issuer: authUser.issuer, subject: authUser.sub });
+    return { clusterTenant, productCapabilities: { administerOrganization } };
   }
 
   /**
@@ -154,7 +163,10 @@ export class OidcAuthService extends OidcAuthServiceBase
     req.session.authUser = { ...authUser, siloId: hostClusterTenant };
     await _saveSession(req);
 
-    if (this.standaloneFirstUserAdmission === null) return;
+    if (this.standaloneFirstUserAdmission === null)
+    {
+      return;
+    }
 
     const audit = this.standaloneFirstUserAudit;
     if (audit === null)
@@ -177,7 +189,7 @@ export class OidcAuthService extends OidcAuthServiceBase
       throw new Error(`standalone first-user admission denied: ${admission.outcome}`);
     }
 
-    req.session.authUser = { ...authUser, siloId: hostClusterTenant, isOrgAdmin: true };
+    req.session.authUser = { ...authUser, siloId: hostClusterTenant };
     await _saveSession(req);
   }
 

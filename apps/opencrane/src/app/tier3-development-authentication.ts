@@ -1,8 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit";
-import { PrismaAuthenticatedPrincipalAdmissionUnitOfWork, Tier3DevelopmentAuthService, ___Tier3DevelopmentAuthRouter } from "@opencrane/backend/server/iam/identity";
-import { ___CreateBrowserSessionMiddleware, ___DevelopmentAuthMiddleware, PrismaOrgMembershipUnitOfWork } from "@opencrane/backend/server/infra/auth";
+import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit-writer";
+import { PrismaAuthenticatedPrincipalAdmissionUnitOfWork, PrismaAuthenticatedPrincipalCapabilityUnitOfWork, Tier3DevelopmentAuthService, ___Tier3DevelopmentAuthRouter } from "@opencrane/backend/server/iam/identity";
+import { ___CreateBrowserSessionMiddleware, ___DevelopmentAuthMiddleware, PrismaOwnedOrgSummaryRepository } from "@opencrane/backend/server/infra/auth";
 
 import type { OpenCraneTier3DevelopmentAuthenticationConfig } from "./config.types";
 import { _log } from "./log";
@@ -20,8 +20,10 @@ export function _CreateTier3DevelopmentAuthentication(prisma: PrismaClient, conf
 {
 	const authority = { issuer: config.issuer, siloId: config.siloId, subject: config.subject };
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
-	const authMiddleware = ___DevelopmentAuthMiddleware(admission, authority, _log);
-	const authService = new Tier3DevelopmentAuthService(config, prisma, new PrismaOrgMembershipUnitOfWork(prisma), __CreateStandaloneFirstUserAdmissionAuditAppender(), _log);
+	const authMiddleware = ___DevelopmentAuthMiddleware(admission, authority, config.expectedHost, _log);
+	const summaries = new PrismaOwnedOrgSummaryRepository(prisma);
+	const capabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(prisma, _log);
+	const authService = new Tier3DevelopmentAuthService(config, prisma, summaries, __CreateStandaloneFirstUserAdmissionAuditAppender(), _log, capabilities);
 	return {
 		authMiddleware,
 		router: ___Tier3DevelopmentAuthRouter(authService),

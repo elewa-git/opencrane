@@ -19,9 +19,6 @@
 #       --cluster-tenant acme \
 #       --acme-email operator@example.com \
 #       --first-user-email owner@example.com \
-#       --initial-model-provider openai \
-#       --initial-model openai/gpt-5.4-nano \
-#       # OPENCRANE_INITIAL_MODEL_API_KEY is required in the environment \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
 #       --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap \
@@ -32,9 +29,7 @@
 #
 # --base-domain, --cluster-tenant, --acme-email, and --first-user-email are required. The first
 # user must sign in with this exact verified OIDC email to claim the standalone silo's first owner.
-# The initial provider and model arguments plus OPENCRANE_INITIAL_MODEL_API_KEY seed the first
-# selected routable model through LiteLLM. The silo is installed into namespace
-# `opencrane-<cluster-tenant>` unless --namespace overrides it.
+# The silo is installed into namespace `opencrane-<cluster-tenant>` unless --namespace overrides it.
 # Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`. An upgrade may omit
 # either only to retain the exact digest already recorded by the release. Tags are accepted only by
 # the disposable local k3d smoke.
@@ -43,11 +38,6 @@
 # Secrets already present in the target namespace.
 # =============================================================================
 set -euo pipefail
-
-# Capture the provider key before any prerequisite child runs, then expose it only to the core
-# installer that publishes the fixed custody Secret.
-INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
-unset OPENCRANE_INITIAL_MODEL_API_KEY
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The release-specific wrapper and its platform engine have one deployment owner.
@@ -75,8 +65,6 @@ while [[ $# -gt 0 ]]; do
     --first-user-email) FIRST_USER_EMAIL="$2"; PASSTHROUGH+=(--first-user-email "$2"); shift 2 ;;
     --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
     --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
-    --initial-model-provider) PASSTHROUGH+=(--initial-model-provider "$2"); shift 2 ;;
-    --initial-model) PASSTHROUGH+=(--initial-model "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 PASSTHROUGH+=("$1"); shift ;;
   esac
@@ -121,6 +109,7 @@ fi
 # Silo value profile: a per-ClusterTenant install in its own namespace. Shared cluster
 # controllers remain external.
 PROFILE_SET=(
+  --cluster-tenant "$CLUSTER_TENANT"
   --namespace "$NAMESPACE"
   --release "$RELEASE"
   --set "multiInstance.enabled=false"
@@ -136,8 +125,8 @@ PROFILE_SET=(
   # The server is served at the ClusterTenant host `<cluster-tenant>.<base>`.
   --set "ingress.controlPlaneHost=${CLUSTER_TENANT}.${BASE_DOMAIN}"
   # First-owner admission stays a release-local, non-secret contract; durable ownership is
-  # created later from verified OIDC callback evidence, never from Helm data.
+  # created later from the installation-selected authentication evidence, never from Helm data.
   --set-string "clustertenantManager.firstUser.clusterTenant=${CLUSTER_TENANT}"
 )
 echo -e "\033[0;32m[silo]\033[0m Profile: silo for ClusterTenant '$CLUSTER_TENANT' in namespace '$NAMESPACE' on $BASE_DOMAIN"
-OPENCRANE_INITIAL_MODEL_API_KEY="$INITIAL_MODEL_API_KEY" exec "$CORE" "${PROFILE_SET[@]}" "${PASSTHROUGH[@]}"
+exec "$CORE" "${PROFILE_SET[@]}" "${PASSTHROUGH[@]}"

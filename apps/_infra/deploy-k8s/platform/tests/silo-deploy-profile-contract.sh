@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh"
 DEVELOP_SMOKE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh"
-MODEL_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/initial-model-provider.sh"
+PROVIDER_SECRET_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/provider-key-secrets.sh"
 COGNEE_POLICY="$ROOT_DIR/apps/_infra/cognee/deploy/image-policy.sh"
 
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
@@ -12,23 +12,15 @@ ensure_umbrella_chart_dependencies
 
 grep -Fq -- '--acme-email' "$DEPLOY_SCRIPT"
 grep -Fq -- '--first-user-email' "$DEPLOY_SCRIPT"
-grep -Fq -- '--initial-model-provider' "$DEPLOY_SCRIPT"
 grep -Fq -- '--postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap' "$DEPLOY_SCRIPT"
 grep -Fq -- '--opencrane-ui-digest sha256:REVIEWED_BROWSER_BUILD_DIGEST' "$DEPLOY_SCRIPT"
 grep -Fq -- '--cognee-digest sha256:REVIEWED_COGNEE_BUILD_DIGEST' "$DEPLOY_SCRIPT"
 grep -Fq -- 'Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`' "$DEPLOY_SCRIPT"
-grep -Fq -- 'OPENCRANE_INITIAL_MODEL_API_KEY' "$DEPLOY_SCRIPT"
-grep -Fq -- 'validate_initial_model_provider' "$MODEL_HELPER"
-grep -Fq -- 'publish_initial_model_provider_secret' "$MODEL_HELPER"
-grep -Fq -- 'append_initial_model_provider_helm_args' "$MODEL_HELPER"
-grep -Fq -- '--from-file=apiKey=<(printf' "$MODEL_HELPER"
-if grep -Fq -- '--from-literal=apiKey="$api_key"' "$MODEL_HELPER"; then
-  echo "initial model provider key is exposed through kubectl command arguments" >&2
-  exit 1
-fi
+grep -Fq -- 'ensure_provider_key_secrets' "$PROVIDER_SECRET_HELPER"
 grep -Fq -- 'ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-}"' "$DEPLOY_SCRIPT"
 grep -Fq -- 'OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2")' "$DEPLOY_SCRIPT"
 grep -Fq -- 'OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2")' "$DEPLOY_SCRIPT"
+grep -Fq -- '--cluster-tenant "$CLUSTER_TENANT"' "$DEPLOY_SCRIPT"
 grep -Fq -- '--acme-email is required to issue a browser-trusted certificate' "$DEPLOY_SCRIPT"
 grep -Fq -- '--first-user-email is required to claim this standalone silo' "$DEPLOY_SCRIPT"
 grep -Fq -- '--set "certManager.mode=acme"' "$DEPLOY_SCRIPT"
@@ -45,6 +37,10 @@ grep -Fq -- 'export OPENCRANE_TIER3_PROXY_SECRET' "$DEVELOP_SMOKE"
 grep -Fq -- 'export OPENCRANE_TIER3_SESSION_SECRET' "$DEVELOP_SMOKE"
 DEPLOY_CORE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 IMAGE_POLICY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/control-plane-image-policy.sh"
+if grep -Eq -- '--initial-model-provider|OPENCRANE_INITIAL_MODEL_(PROVIDER|API_KEY)' "$DEPLOY_SCRIPT" "$DEPLOY_CORE"; then
+  echo "deploy scripts still accept the retired provider-bootstrap input" >&2
+  exit 1
+fi
 grep -Fq -- 'OPENCRANE_ALLOW_TAG_FLOAT=1 is restricted to a disposable local k3d .test domain' "$IMAGE_POLICY"
 grep -Fq -- '--opencrane-ui-tag (or OPENCRANE_UI_TAG) is only allowed with OPENCRANE_ALLOW_TAG_FLOAT=1' "$IMAGE_POLICY"
 grep -Fq -- "Retaining existing OIDC secret '\$OIDC_SECRET_NAME'" "$DEPLOY_CORE"
@@ -181,37 +177,38 @@ cp "$DEPLOY_SCRIPT" "$wrapper_test_dir/deploy.sh"
 cat >"$wrapper_test_dir/platform/k8s-deploy.sh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$WRAPPER_ARGS_FILE"
-printf '%s' "${OPENCRANE_INITIAL_MODEL_API_KEY:-}" >"$WRAPPER_CORE_KEY_FILE"
+exit "${WRAPPER_CORE_EXIT_CODE:-0}"
 EOF
 cat >"$wrapper_test_dir/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash
-if [[ -n "${OPENCRANE_INITIAL_MODEL_API_KEY:-}" ]]; then
-  printf 'provider key leaked to wrapper prerequisite\n' >>"$WRAPPER_KEY_LEAK_FILE"
-fi
 exit 0
 EOF
 chmod +x "$wrapper_test_dir/platform/k8s-deploy.sh" "$wrapper_test_dir/bin/kubectl"
 wrapper_args_file="$wrapper_test_dir/args"
-wrapper_core_key_file="$wrapper_test_dir/core-key"
-wrapper_key_leak_file="$wrapper_test_dir/key-leak"
 PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
-  WRAPPER_CORE_KEY_FILE="$wrapper_core_key_file" WRAPPER_KEY_LEAK_FILE="$wrapper_key_leak_file" \
-  OPENCRANE_INITIAL_MODEL_API_KEY="provider-secret" \
   bash "$wrapper_test_dir/deploy.sh" \
     --base-domain dev.opencrane.ai \
     --cluster-tenant testv4 \
     --acme-email operator@example.com \
     --first-user-email owner@example.com \
     --oidc-issuer-url https://issuer.example.com/ \
-    --oidc-client-id test-client \
-    --initial-model-provider openai \
-    --initial-model openai/gpt-5.4-nano >/dev/null
+    --oidc-client-id test-client >/dev/null
 wrapper_args="$(tr '\n' ' ' <"$wrapper_args_file")"
 [[ "$wrapper_args" == *"--namespace opencrane-testv4 --release opencrane-testv4"* ]]
-[[ "$(<"$wrapper_core_key_file")" == "provider-secret" ]]
-[[ ! -s "$wrapper_key_leak_file" ]]
+[[ "$wrapper_args" == *"--cluster-tenant testv4"* ]]
+set +e
+PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" WRAPPER_CORE_EXIT_CODE=47 \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv4 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client >/dev/null
+wrapper_status="$?"
+set -e
+[[ "$wrapper_status" -eq 47 ]]
 if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
-  WRAPPER_CORE_KEY_FILE="$wrapper_core_key_file" WRAPPER_KEY_LEAK_FILE="$wrapper_key_leak_file" \
   bash "$wrapper_test_dir/deploy.sh" \
     --base-domain dev.opencrane.ai \
     --cluster-tenant testv4 \
@@ -219,9 +216,7 @@ if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
     --acme-email operator@example.com \
     --first-user-email owner@example.com \
     --oidc-issuer-url https://issuer.example.com/ \
-    --oidc-client-id test-client \
-    --initial-model-provider openai \
-    --initial-model openai/gpt-5.4-nano >/dev/null 2>&1; then
+    --oidc-client-id test-client >/dev/null 2>&1; then
   echo "silo wrapper accepted a release name outside its ClusterTenant boundary" >&2
   exit 1
 fi
@@ -235,7 +230,7 @@ kubectl()
   fi
   return 0
 }
-source "$MODEL_HELPER"
+source "$PROVIDER_SECRET_HELPER"
 ensure_provider_key_secrets "opencrane-testv2"
 if printf '%s\n' "${provider_secret_calls[@]}" | grep -Fq 'create secret'; then
   echo "provider placeholder creation overwrites an existing BYOK Secret" >&2

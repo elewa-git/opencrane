@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnaps
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
@@ -63,7 +64,7 @@ class _PreparedAdmissionDenied<TDenial> extends Error
  * `prisma-session-assembly-authorities.ts`.
  * @implements RunAdmissionRepository
  */
-export class PrismaRunAdmissionRepository implements RunAdmissionRepository
+export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 {
 	/** Canonical OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
@@ -120,6 +121,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 		{
 			return await this.prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RunAdmissionResult<TDenial>>
 			{
+				const authorization = new PrismaAuthorizationAuthority(transaction);
 					// 1. Check the unique user-visible key before loading inputs so a committed duplicate is never recompiled.
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
@@ -139,8 +141,9 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				// 3. Let the caller create the rows its own inputs need, so a child conversation exists
 				// before the conversation source reads it. It runs here, past the duplicate check, so a
 				// retried request cannot create a second child.
-				if (prepare) await prepare({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
-				const compiled = await build({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
+					if (prepare)
+						await prepare({ prisma: transaction, authorization, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
+				const compiled = await build({ prisma: transaction, authorization, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 
 				// 4. Refuse by throwing whenever preparation already wrote rows, because returning would
 				// commit them without a run; see _PreparedAdmissionDenied.

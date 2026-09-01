@@ -28,5 +28,7 @@ export { __CreateMcpOciServerPromotionRouter } from "./runtime/mcp-oci-server-pr
 export { __CreateMcpRuntimeCompanionRouter } from "./runtime/mcp-runtime-companion.router";
 export { __CreateMcpRuntimeControllerRouter } from "./runtime/mcp-runtime-controller.router";
 export { PrismaMcpRuntimeUnitOfWork } from "./runtime/prisma-mcp-runtime-authority";
+export { PrismaRuntimeMcpEffectEligibilityAuthority } from "./runtime/prisma-runtime-mcp-effect-eligibility";
+export type { RuntimeMcpEffectEligibility, RuntimeMcpEffectEligibilityCommand } from "./runtime/runtime-mcp-effect-eligibility.types";
 export type { McpRuntimeAuthority } from "./runtime/mcp-runtime.types";
 export * from "./openapi";

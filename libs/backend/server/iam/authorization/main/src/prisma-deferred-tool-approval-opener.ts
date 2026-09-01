@@ -6,7 +6,7 @@ import { __DigestCanonicalJson } from "./canonical-json-digest";
 import { __DeferToolRequest } from "./deferred-tool-approval";
 import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";
 import type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types";
-import { __MarkToolInvocationApprovalRejectedInTransaction } from "./prisma-tool-invocation-repository";
+import { __MarkToolInvocationApprovalRejectedInTransaction } from "./tool-invocation-transaction";
 
 /** One transaction-scoped operation over the approval-open repository. */
 type ApprovalOpenTransaction = <TResult>(operation: (repository: DeferredToolApprovalOpenRepository) => Promise<TResult>) => Promise<TResult>;

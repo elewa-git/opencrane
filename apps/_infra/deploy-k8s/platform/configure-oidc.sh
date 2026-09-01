@@ -29,8 +29,7 @@
 # The ONLY cross-ClusterTenant superpower is PLATFORM-OPERATOR. It is fail-closed:
 # nobody is an operator unless you explicitly pass --platform-operator-groups
 # and/or --platform-operator-seed-email here. Grant it to the smallest possible
-# set — a platform operator can manage EVERY org. org-admin (--org-admin-groups)
-# is scoped to the orgs the caller actually belongs to and does NOT cross orgs.
+# set — a platform operator can manage EVERY org.
 # ───────────────────────────────────────────────────────────────────────────
 #
 # Usage:
@@ -41,7 +40,6 @@
 #       [--base-domain dev.opencrane.ai]    # derives the redirect URI if --redirect-uri omitted
 #       [--redirect-uri https://platform.<domain>/api/v1/auth/callback]
 #       [--groups-claim groups] [--roles-claim roles]
-#       [--org-admin-groups "org-admins,..."]
 #       [--platform-operator-groups "platform-operators,..."]
 #       [--platform-operator-seed-email you@org]   # bootstrap the FIRST operator
 #       [--session-secret <secret>]         # default: preserve existing, else generate
@@ -74,7 +72,6 @@ REDIRECT_URI=""
 BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 GROUPS_CLAIM="groups"
 ROLES_CLAIM="roles"
-ORG_ADMIN_GROUPS=""
 PLATFORM_OPERATOR_GROUPS=""
 PLATFORM_OPERATOR_SEED_EMAIL=""
 DISABLE=0
@@ -95,7 +92,6 @@ while [[ $# -gt 0 ]]; do
     --base-domain|--domain)        BASE_DOMAIN="$2"; shift 2 ;;
     --groups-claim)                GROUPS_CLAIM="$2"; shift 2 ;;
     --roles-claim)                 ROLES_CLAIM="$2"; shift 2 ;;
-    --org-admin-groups)            ORG_ADMIN_GROUPS="$2"; shift 2 ;;
     --platform-operator-groups)    PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
     --platform-operator-seed-email) PLATFORM_OPERATOR_SEED_EMAIL="$2"; shift 2 ;;
     --context)                     KUBE_CONTEXT="$2"; shift 2 ;;
@@ -200,10 +196,6 @@ helm_args+=(--set-string "clustertenantManager.oidc.redirectUri=$REDIRECT_URI")
 helm_args+=(--set-string "clustertenantManager.oidc.existingSecret=$OIDC_SECRET_NAME")
 helm_args+=(--set-string "clustertenantManager.oidc.groupsClaim=$GROUPS_CLAIM")
 helm_args+=(--set-string "clustertenantManager.oidc.rolesClaim=$ROLES_CLAIM")
-# org-admin is org-scoped (safe). Set only when provided so an empty value never
-# overrides a previously-configured group via --reuse-values.
-[[ -n "$ORG_ADMIN_GROUPS" ]] && helm_args+=(--set-string "clustertenantManager.oidc.orgAdminGroups=$ORG_ADMIN_GROUPS")
-
 # ── Cross-org guardrail: platform-operator grants are EXPLICIT + loudly warned.
 if [[ -n "$PLATFORM_OPERATOR_GROUPS" ]]; then
   warn "Granting PLATFORM-OPERATOR (cross-ClusterTenant) to group(s): $PLATFORM_OPERATOR_GROUPS — these can manage EVERY org."

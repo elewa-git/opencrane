@@ -1,5 +1,17 @@
 import { Router } from "express";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
+
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+
+import { PrismaSpendUnitOfWork } from "../prisma-spend-authority";
+import type { SpendAuthorizationAuthorityFactory, SpendRouteCaller, SpendRouteCallerResolver } from "../spend.types";
+
+/** Resolves token-usage authority from the verified browser Principal. */
+function _ResolveSpendCaller(request: Parameters<SpendRouteCallerResolver>[0]): SpendRouteCaller | null
+{
+	const principal = _ResolveRequestPrincipal(request);
+	return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId };
+}
 
 /**
  * Build the token-usage route: recorded usage per user, newest sample first, with each user's
@@ -10,42 +22,21 @@ import type { PrismaClient } from "@prisma/client";
  * @param prisma - Database client used to read usage samples and both kinds of budget row.
  * @returns An Express router carrying the usage route.
  */
-export function tokenUsageRouter(prisma: PrismaClient): Router
+export function tokenUsageRouter(prisma: PrismaClient, resolveCaller: SpendRouteCallerResolver = _ResolveSpendCaller, createAuthorization?: SpendAuthorizationAuthorityFactory<Prisma.TransactionClient>): Router
 {
   const router = Router();
+  const spend = new PrismaSpendUnitOfWork(prisma, createAuthorization);
 
   /** Lists per-account token usage including resolved ceiling values. */
   router.get("/", async function _listTokenUsage(req, res)
   {
-    const usage = await prisma.tokenUsageSnapshot.findMany({ orderBy: { sampledAt: "desc" } });
-    const globalBudget = await prisma.globalBudgetSetting.findUnique({ where: { id: 1 } });
-
-    const accountBudgets = await prisma.accountBudgetSetting.findMany();
-    const budgetByUser = new Map(accountBudgets.map(function _mapBudget(item)
+    const caller = resolveCaller(req);
+    if (caller === null)
     {
-      return [item.userId, item];
-    }));
-
-    res.json(usage.map(function _mapUsage(item)
-    {
-      const accountBudget = budgetByUser.get(item.userId);
-      const hasGlobalBudget = Boolean(globalBudget) && globalBudget?.currency === item.currency;
-      const budgetCeiling = accountBudget && accountBudget.currency === item.currency
-        ? Number(accountBudget.ceilingAmount)
-        : hasGlobalBudget
-          ? Number(globalBudget?.ceilingAmount ?? 0)
-          : undefined;
-
-      return {
-        userId: item.userId,
-        inputTokens: item.inputTokens,
-        outputTokens: item.outputTokens,
-        totalTokens: item.totalTokens,
-        currency: item.currency,
-        totalCost: Number(item.totalCost),
-        budgetCeiling,
-      };
-    }));
+      res.status(403).json({ error: "Authenticated Principal is required", code: "FORBIDDEN" });
+      return;
+    }
+    res.json(await spend.listTokenUsage(caller));
   });
 
   return router;

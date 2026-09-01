@@ -1,0 +1,18 @@
+{
+	"name": "frontend-state-session-adapter",
+	"$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+	"projectType": "library",
+	"sourceRoot": "libs/frontend/state/session/adapter/src",
+	"prefix": "wo",
+	"tags": ["scope:frontend-session", "type:lib", "layer:frontend", "frontend-role:adapter"],
+	"targets": {
+		"lint": {
+			"executor": "nx:run-commands",
+			"options": { "command": "tsc -p tsconfig.lint.json", "cwd": "libs/frontend/state/session/adapter" }
+		},
+		"test": {
+			"executor": "nx:run-commands",
+			"options": { "command": "vitest run --passWithNoTests", "cwd": "libs/frontend/state/session/adapter" }
+		}
+	}
+}

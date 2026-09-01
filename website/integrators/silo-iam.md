@@ -4,6 +4,7 @@ OpenCrane resolves **membership before grants** and freezes the accepted evidenc
 run. Grants can narrow what an agent may do, but cannot manufacture organisation membership.
 
 > See also: [Organisation boundary](/operators/organisation-boundary) (silo identity),
+> [Central authorization authority](/integrators/authorization-authority) (transaction-bound product decisions),
 > [Governed agent runtime](/integrators/agent-runtime) (run authority), and
 > [Long-term memory, Cognee and dreaming](/integrators/long-term-memory-cognee) (memory RBAC).
 
@@ -16,7 +17,7 @@ authenticated subject
 current silo membership
        │
        ▼
-principal grants ∩ agent-service grants
+actor grants ∩ agent revision ceiling ∩ run ceiling
        │
        ▼
 capability, resource and boundary decision
@@ -30,15 +31,16 @@ Stale, missing or unverifiable evidence denies the request.
 
 ## Grant composition
 
-OpenCrane calculates effective access from grants held by both the acting subject and the
-agent service. This prevents a broadly configured agent from exceeding the user's rights and
-prevents a broadly entitled user from making an under-scoped agent act outside its contract.
+OpenCrane calculates effective access for the actor that actually performs the action. A personal
+agent uses its human Principal's grants intersected with its revision and run limits. A managed
+agent uses its own `AgentService` Principal grants intersected with its revision and run limits. The
+human who invokes or administers a managed agent needs a separate management permission.
 
 | Input | Purpose |
 |---|---|
 | Organisation membership | Establishes that the subject belongs to the `ClusterTenant` |
-| Subject grants | Bounds what the person may delegate |
-| Agent-service grants | Bounds what the agent definition may exercise |
+| Human grants | Bound direct human actions and personal-agent execution |
+| Managed AgentService grants | Bound autonomous managed-agent execution |
 | Resource boundary | Selects an exact group or personal boundary; group coverage can include descendants |
 | Membership revision | Makes the accepted decision auditable |
 
@@ -46,7 +48,9 @@ prevents a broadly entitled user from making an under-scoped agent act outside i
 
 The input compiler records the effective contract digest, identity snapshot, model route,
 integration assignments, skill revisions, memory policy and capability-set digest in one
-`RunInputSnapshot`. The runtime receives compiled literals, not a live grant evaluator.
+`RunInputSnapshot`. The runtime receives compiled literals, not a live grant evaluator. The snapshot
+is a ceiling: OpenCrane rechecks current membership, grants, cancellation, and resource eligibility
+before admitting the next external effect.
 
 ::: warning
 Never treat a cached group, Kubernetes namespace or runtime claim as current silo membership.

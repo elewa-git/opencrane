@@ -4,7 +4,12 @@ import type { PrismaClient } from "@prisma/client";
 import { _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
 import { PrismaAgentRunWarmRuntimeUnitOfWork, PrismaWarmRuntimeBindingUnitOfWork, __CreateAgentRunWorkflowControllerRouter, __CreateWarmRuntimeBindingRouter, type AttemptModelKeyIssuerWithRevocation, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
-import { PrismaRuntimeContinuationAuthorityUnitOfWork, __CreateProductionRuntimeDispatchAuthority, type RuntimeContinuationAuthority } from "@opencrane/backend/agents/execution/protocol";
+import { PrismaRuntimeContinuationAuthorityUnitOfWork, RuntimeExternalActionAuthorizationService, __CreateProductionRuntimeDispatchAuthority, type RuntimeContinuationAuthority, type RuntimeExternalActionEligibilityFactory } from "@opencrane/backend/agents/execution/protocol";
+import { PrismaRuntimePersonalMemoryEffectEligibilityAuthority } from "@opencrane/backend/agents/personal/memory";
+import { PrismaRuntimePersonaEffectEligibilityAuthority } from "@opencrane/backend/agents/personal/personas";
+import { PrismaRuntimeAgentEffectEligibilityAuthority } from "@opencrane/backend/server/agents/agent-services";
+import { PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/server/gateways/mcp";
+import { PrismaRuntimeMembershipEligibilityAuthority, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { MountedRuntimeContinuationCipher } from "@opencrane/backend/server/infra/agent-runtime-continuation";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
 import { _CreateConversationReplayRepository, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
@@ -119,11 +124,23 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
  */
 function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateWarmRuntimeTokenReviewer>, continuationAuthority: RuntimeContinuationAuthority): RuntimeProtocolComposition
 {
+	const eligibility: RuntimeExternalActionEligibilityFactory = {
+		bind(transaction)
+		{
+			return {
+				agentService: new PrismaRuntimeAgentEffectEligibilityAuthority(transaction),
+				membership: new PrismaRuntimeMembershipEligibilityAuthority(transaction, _CreateFleetMembershipEvidenceConfig()),
+				mcp: new PrismaRuntimeMcpEffectEligibilityAuthority(transaction),
+				personalMemory: new PrismaRuntimePersonalMemoryEffectEligibilityAuthority(transaction),
+				persona: new PrismaRuntimePersonaEffectEligibilityAuthority(transaction),
+			};
+		},
+	};
 	const runtimeDispatchAuthority = __CreateProductionRuntimeDispatchAuthority(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
 		managedRuntimeNamespace: namespaces.managedRuntimeNamespace,
 		commandTtlMilliseconds: config.commandTtlMilliseconds,
-	}, continuationAuthority);
+	}, continuationAuthority, new RuntimeExternalActionAuthorizationService(eligibility));
 	return {
 		warmRuntimeBinding: __CreateWarmRuntimeBindingRouter({ tokenReviewer, authority: new PrismaWarmRuntimeBindingUnitOfWork(prisma, { assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, issueAttemptModelKey: _IssueAttemptModelKey }), logger: _log }),
 		warmRuntimeStream: _RegisterInternalAgentRuntimeStream({

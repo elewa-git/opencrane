@@ -47,6 +47,21 @@ projects the caller's active personal Agent only when exactly one service matche
 persona; no match is unavailable and more than one match is ambiguous, so the server never silently
 chooses an Agent.
 
+The directory and create transaction also use the central product catalogue. Selected membership
+references require exact `OrganizationMembership/Read`; an agent target requires
+`AgentService/Read` and admitted `AgentService/Invoke`, while the approved persona requires admitted
+`Persona/Use`. The create itself consumes the silo's typed `ConversationCollection/Create` grant.
+The same transaction writes participant grants for Discover, Read, Edit and Use, plus Delete only
+for the new conversation's creator. Existing conversations without trustworthy creator provenance
+remain fail-closed for Delete after migration.
+
+Every conversation read and mutation evaluates the caller's current Principal plus direct stored
+Group memberships through `AuthorizationAuthority`. A direct Principal grant and an inherited Group
+grant therefore receive the same decision semantics, including deny precedence, expiry, and
+revocation. `ConversationParticipant` remains a lifecycle and projection coordinate: both grant
+forms still require current participation so visible timeline bounds, archive state, unread state,
+and ended access cannot be bypassed by authorization alone.
+
 Participant artifact blocks are delegated to the conversation-assets attachment port inside that
 same ordinary-message or run-admission transaction. Any foreign, unchecked, reused, or oversized
 asset rolls the message back instead of leaving a dangling transcript reference.

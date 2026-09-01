@@ -28,7 +28,7 @@ export function __CreateSelfRunCancellationRouter(dependencies: SelfRunCancellat
 		{
 			const result = await ___DoWithTrace("run.cancellation.request", { runId, siloId: caller.siloId, expectedAttempt: body.expectedAttempt }, async function _requestCancellation()
 			{
-				return dependencies.cancellation.requestOwned({ runId, expectedAttempt: body.expectedAttempt, siloId: caller.siloId, subjectId: caller.subjectId });
+				return dependencies.cancellation.requestOwned({ runId, expectedAttempt: body.expectedAttempt, siloId: caller.siloId, subjectId: caller.subjectId, principalId: caller.principalId });
 			});
 			_RespondToCancellation(response, result);
 		}

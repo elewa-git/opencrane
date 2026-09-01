@@ -1,4 +1,8 @@
-/** Server-verified identity facts admitted against one trusted silo authority. */
+/**
+ * Carries identity coordinates that server middleware has verified against startup configuration
+ * and the request host. Production OIDC and Tier 3 development middleware build this input; request
+ * bodies must never supply it.
+ */
 export interface AuthenticatedPrincipalAdmissionInput
 {
 	/** Silo derived from the trusted request host. */
@@ -9,10 +13,14 @@ export interface AuthenticatedPrincipalAdmissionInput
 	readonly subject: string;
 }
 
-/** Durable local identity attached only after projection and exact Principal resolution succeed. */
+/**
+ * Carries the local Principal admitted after its stored identity matches every verified coordinate.
+ * Product routes use this request value for authorization and ownership; raw session claims alone
+ * cannot replace it.
+ */
 export interface AuthenticatedRequestPrincipal
 {
-	/** Stable local Principal ID used by product authorization and ownership. */
+	/** Identifies the local Principal used by product authorization and ownership. */
 	readonly principalId: string;
 	/** Silo selected from the trusted request host and matched by the local Principal. */
 	readonly siloId: string;
@@ -22,14 +30,20 @@ export interface AuthenticatedRequestPrincipal
 	readonly subject: string;
 }
 
-/** Resolves the exact local Principal established by the silo-bound login before route admission. */
+/**
+ * Converts a server-verified identity tuple into the local Principal attached to a product request.
+ * Returning `null` denies the request as unauthenticated; throwing reports the identity projection
+ * as unavailable, so callers must not treat those outcomes as equivalent.
+ */
 export interface AuthenticatedPrincipalAdmission
 {
 	/**
-	 * Resolve one verified identity and return its exact durable Principal.
+	 * Resolves a verified identity and returns the Principal whose stored tuple still matches it.
 	 *
 	 * Called by: {@link ___AuthMiddleware} and {@link ___DevelopmentAuthMiddleware} before any authenticated product route runs.
-	 * @returns The exact local Principal, or null when the projection cannot prove the identity tuple.
+	 * @param input - Identity coordinates established by the active authentication mode.
+	 * @returns The matched local Principal, or `null` when the projection cannot prove the tuple.
+	 * @throws When the identity projection cannot be read or reconciled.
 	 */
 	admit(input: AuthenticatedPrincipalAdmissionInput): Promise<AuthenticatedRequestPrincipal | null>;
 }
@@ -40,7 +54,7 @@ declare global
 	{
 		interface Request
 		{
-			/** Durable identity established by the authenticated admission middleware. */
+			/** Holds the Principal admitted for this request after authentication succeeds. */
 			authenticatedPrincipal?: AuthenticatedRequestPrincipal;
 		}
 	}

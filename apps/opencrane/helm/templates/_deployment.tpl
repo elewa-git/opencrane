@@ -1,9 +1,8 @@
 {{- define "opencrane.server.deployment" -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
+{{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}
-{{- $initialModel := .Values.clustertenantManager.initialModel -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
 {{- $oidc := .Values.clustertenantManager.oidc -}}
 {{- $tier3Auth := .Values.clustertenantManager.tier3DevelopmentAuthentication -}}
@@ -38,12 +37,6 @@
 {{- end -}}
 {{- if and (eq $membership.mode "fleet") (or (lt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 600) (gt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 3600)) -}}
 {{- fail "clustertenantManager.membership.fleet.billingGatewayProjectedTokenTtlSeconds must be from 600 through 3600" -}}
-{{- end -}}
-{{- if or (ne (empty $initialModel.provider) (empty $initialModel.model)) (ne (empty $initialModel.provider) (empty $initialModel.existingSecret)) -}}
-{{- fail "clustertenantManager.initialModel.provider, model, and existingSecret must be configured together" -}}
-{{- end -}}
-{{- if and $initialModel.provider (empty $initialModel.apiKeySecretKey) -}}
-{{- fail "clustertenantManager.initialModel.apiKeySecretKey is required when an initial model is configured" -}}
 {{- end -}}
 {{- if ne (empty $firstUser.email) (empty $firstUser.clusterTenant) -}}
 {{- fail "clustertenantManager.firstUser.email and clusterTenant must be configured together" -}}
@@ -290,7 +283,6 @@ spec:
               value: {{ .sessionSecret | quote }}
             {{- end }}
             {{- end }}
-            {{- end }}
             {{- if .groupsClaim }}
             - name: OIDC_GROUPS_CLAIM
               value: {{ .groupsClaim | quote }}
@@ -303,16 +295,13 @@ spec:
             - name: OPENCRANE_PLATFORM_OPERATOR_GROUPS
               value: {{ .platformOperatorGroups | quote }}
             {{- end }}
-            {{- if .orgAdminGroups }}
-            - name: OPENCRANE_ORG_ADMIN_GROUPS
-              value: {{ .orgAdminGroups | quote }}
-            {{- end }}
             {{- if .platformOperatorSeedEmail }}
             # -- Per-cluster platform-operator SEED. A caller whose VERIFIED email equals
             #    this becomes a platform operator (OR-ed with the group check). Empty →
             #    rendered as no env var, so the seed grants operator to NOBODY (fail-closed).
             - name: OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
               value: {{ .platformOperatorSeedEmail | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- end }}
@@ -331,21 +320,6 @@ spec:
                   name: {{ include "opencrane.fullname" . }}-litellm
                   {{- end }}
                   key: {{ .Values.litellm.secretKey }}
-            {{- end }}
-            {{- with $initialModel }}
-            {{- if .provider }}
-            # Deployment-time model bootstrap. The raw key remains in the provider custody Secret;
-            # this process consumes it only to register LiteLLM's encrypted credential and catalog.
-            - name: OPENCRANE_INITIAL_MODEL_PROVIDER
-              value: {{ .provider | quote }}
-            - name: OPENCRANE_INITIAL_MODEL_NAME
-              value: {{ .model | quote }}
-            - name: OPENCRANE_INITIAL_MODEL_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .existingSecret }}
-                  key: {{ .apiKeySecretKey }}
-            {{- end }}
             {{- end }}
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
             # Server-owned Kubernetes operations are restricted to this release namespace.

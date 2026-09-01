@@ -63,7 +63,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List every catalogue server regardless of status (org-admin governance view) */
+        /** List every catalogue server after a current Organization/Administer grant check */
         get: operations["listMcpGovernanceServers"];
         put?: never;
         /** Register a remote MCP server and start its protocol check */
@@ -83,7 +83,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a server (pending-review → approved). Org-admin only */
+        /** Approve a server (pending-review → approved). Requires Organization/Administer */
         post: operations["approveMcpServer"];
         delete?: never;
         options?: never;
@@ -100,7 +100,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish a server (approved → published). Org-admin only */
+        /** Publish a server (approved → published). Requires Organization/Administer */
         post: operations["publishMcpServer"];
         delete?: never;
         options?: never;
@@ -117,7 +117,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reject a server (→ disabled). Org-admin only */
+        /** Reject a server (→ disabled). Requires Organization/Administer */
         post: operations["rejectMcpServer"];
         delete?: never;
         options?: never;
@@ -134,26 +134,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Toggle a server's availability (true → published, false → disabled). Org-admin only */
+        /** Toggle a server's availability (true → published, false → disabled). Requires Organization/Administer */
         post: operations["setMcpServerEnabled"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp/servers/{id}/access": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read the authorization grants for an MCP server. Org-admin only */
-        get: operations["getMcpAccessPolicy"];
-        /** Replace the authorization grants for an MCP server. Org-admin only */
-        put: operations["setMcpAccessPolicy"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -169,7 +151,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Save an OCI image admission job. Org-admin only */
+        /** Save an OCI image admission job. Requires Organization/Administer */
         post: operations["submitOciImageValidation"];
         delete?: never;
         options?: never;
@@ -184,7 +166,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read one saved OCI image admission. Org-admin only */
+        /** Read one saved OCI image admission. Requires Organization/Administer */
         get: operations["getOciImageValidation"];
         put?: never;
         post?: never;
@@ -203,25 +185,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create an MCP server revision from an imported OCI image and start discovery. Org-admin only */
+        /** Create an MCP server revision from an imported OCI image and start discovery. Requires Organization/Administer */
         post: operations["promoteOciImageValidationToMcpServer"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp/directory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the selectable users and groups for the access editor. Org-admin only */
-        get: operations["getMcpDirectory"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -413,48 +378,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Set or refresh a provider's raw key (writes a k8s Secret + LiteLLM credential) */
+        /** Admit and deliver a provider key change through the durable effect authority */
         put: operations["setByokProviderKey"];
         post?: never;
-        /** Remove a provider's key (deletes the Secret, LiteLLM credential, and record) */
+        /** Admit and deliver durable removal of a provider key */
         delete: operations["deleteByokProviderKey"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/providers/credentials": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List provider credentials (references only — never the key value) */
-        get: operations["listProviderCredentials"];
-        put?: never;
-        /** Create a provider credential reference (rejects any raw-key field) */
-        post: operations["createProviderCredential"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/providers/credentials/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a single provider credential by id */
-        get: operations["getProviderCredential"];
-        /** Update a provider credential reference (rejects any raw-key field) */
-        put: operations["updateProviderCredential"];
-        post?: never;
-        /** Delete a provider credential */
-        delete: operations["deleteProviderCredential"];
         options?: never;
         head?: never;
         patch?: never;
@@ -470,7 +398,7 @@ export interface paths {
         /** List model definitions */
         get: operations["listModels"];
         put?: never;
-        /** Create a model definition and register it best-effort with LiteLLM */
+        /** Create a model definition and durably register it with LiteLLM */
         post: operations["createModel"];
         delete?: never;
         options?: never;
@@ -487,11 +415,26 @@ export interface paths {
         };
         /** Get a single model definition by id */
         get: operations["getModel"];
-        /** Update a model definition */
-        put: operations["updateModel"];
+        put?: never;
         post?: never;
-        /** Delete a model definition */
-        delete: operations["deleteModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/{id}/registration-commands/{commandId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume one exact durable LiteLLM model registration */
+        post: operations["resumeModelRegistration"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1729,40 +1672,6 @@ export interface components {
              */
             lastUsed?: string | null;
         };
-        /** @description A local principal displayed in the MCP access editor or its selectable directory. */
-        EntitledUser: {
-            /** @description Stable local Principal identifier used by authorization grants. */
-            id: string;
-            /** @description Display name shown in the access editor. */
-            name: string;
-            /** @description Initials derived from the display name for an avatar. */
-            initials: string;
-            /** @description Deterministic avatar colour derived from the identifier. */
-            color: string;
-        };
-        /** @description A local group that can receive an MCP authorization grant. */
-        EntitledGroup: {
-            /** @description Stable local Group identifier used by authorization grants. */
-            id: string;
-            /** @description Display name shown in the access editor. Authorization uses the identifier, not this value. */
-            name: string;
-        };
-        /** @description The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources. */
-        McpAccessPolicy: {
-            /** @description Identifier of the governed server. */
-            serverId: string;
-            /** @description Groups with an active allow grant managed by the MCP access editor. */
-            groups: components["schemas"]["EntitledGroup"][];
-            /** @description Principals with an active allow grant managed by the MCP access editor. */
-            users: components["schemas"]["EntitledUser"][];
-        };
-        /** @description The users and groups that an organisation administrator can select when editing MCP access. */
-        McpDirectory: {
-            /** @description All local principals eligible to receive an MCP authorization grant. */
-            users: components["schemas"]["EntitledUser"][];
-            /** @description All local groups eligible to receive an MCP authorization grant. */
-            groups: components["schemas"]["EntitledGroup"][];
-        };
         /** @description An organisation-admin request to admit one exact published OCI image. The idempotency key makes a retried request return the same saved record. */
         OciImageValidationSubmission: {
             /** @description Caller-chosen key that safely retries this submission. */
@@ -1985,42 +1894,11 @@ export interface components {
         ProviderKeySetRequest: {
             /** @description The raw upstream provider API key. Accepted only over HTTPS; written to a k8s Secret + LiteLLM and never returned by any read. */
             apiKey: string;
-        };
-        ProviderCredential: {
-            /** @description Stable identifier. */
-            id: string;
             /**
-             * @description Whether the credential is platform-wide or owned by one ClusterTenant.
-             * @enum {string}
+             * Format: uuid
+             * @description Command id returned by a previous PROVIDER_EFFECT_PENDING response. Resubmitting it supplies ephemeral key material to that exact admitted command.
              */
-            scope: "global" | "clusterTenant";
-            /** @description Owning ClusterTenant when scope is clusterTenant; null for Global. */
-            clusterTenant?: string | null;
-            /** @description Free-text provider key (e.g. openai, anthropic, bedrock). */
-            provider: string;
-            /** @description Name of the External-Secrets-synced k8s Secret carrying the provider key (never the raw key). */
-            secretRef: string;
-            /** @description LiteLLM /credentials name when registered for the dynamic path; null for the env baseline. */
-            litellmCredentialName?: string | null;
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
-        ProviderCredentialWrite: {
-            /**
-             * @description Defaults to global when omitted.
-             * @enum {string}
-             */
-            scope?: "global" | "clusterTenant";
-            /** @description Required when scope is clusterTenant. */
-            clusterTenant?: string;
-            /** @description Free-text provider key. */
-            provider: string;
-            /** @description Name of the External-Secrets-synced k8s Secret carrying the provider key. A raw key field (apiKey/keyValue/key) is rejected with 400. */
-            secretRef: string;
-            /** @description Optional LiteLLM /credentials name for the dynamic no-restart path. */
-            litellmCredentialName?: string;
+            commandId?: string;
         };
         ModelDefinition: {
             /** @description Stable identifier. */
@@ -2433,7 +2311,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"][];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2488,7 +2366,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2528,7 +2406,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2568,7 +2446,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2608,7 +2486,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2663,105 +2541,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description MCP server not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getMcpAccessPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Access policy. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpAccessPolicy"];
-                };
-            };
-            /** @description Caller is not an organisation admin. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description MCP server not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    setMcpAccessPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Stable local Group identifiers. */
-                    groupIds: string[];
-                    /** @description Stable local Principal identifiers. */
-                    principalIds: string[];
-                };
-            };
-        };
-        responses: {
-            /** @description Access policy updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpAccessPolicy"];
-                };
-            };
-            /** @description groupIds (array) and principalIds (array) are required. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2812,7 +2592,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2870,7 +2650,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2956,7 +2736,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2985,35 +2765,6 @@ export interface operations {
             };
             /** @description MCP runtime authority is unavailable. */
             503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getMcpDirectory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Directory. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpDirectory"];
-                };
-            };
-            /** @description Caller is not an organisation admin. */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3696,11 +3447,47 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Another claimed provider command owns this provider resource; retry or resume the returned command first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_BUSY";
+                        /**
+                         * Format: uuid
+                         * @description Existing command that owns the resource barrier.
+                         */
+                        commandId: string;
+                    };
+                };
+            };
+            /** @description The command is durable but needs a later retry. Resubmit the returned commandId with the same raw key. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                    };
+                };
+            };
         };
     };
     deleteByokProviderKey: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Command id returned by a previous PROVIDER_EFFECT_PENDING response. */
+                commandId?: string;
+            };
             header?: never;
             path: {
                 provider: "openai" | "anthropic" | "gemini" | "mistral" | "deepseek" | "glm";
@@ -3725,196 +3512,38 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-        };
-    };
-    listProviderCredentials: {
-        parameters: {
-            query?: {
-                /** @description Filter to one owning ClusterTenant. */
-                clusterTenant?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Provider credential list. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderCredential"][];
-                };
-            };
-        };
-    };
-    createProviderCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProviderCredentialWrite"];
-            };
-        };
-        responses: {
-            /** @description Provider credential created. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderCredential"];
-                };
-            };
-            /** @description Request body failed validation, or carried a raw key (code RAW_KEY_REJECTED). */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getProviderCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Provider credential detail. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderCredential"];
-                };
-            };
-            /** @description Provider credential not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    updateProviderCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProviderCredentialWrite"];
-            };
-        };
-        responses: {
-            /** @description Provider credential updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderCredential"];
-                };
-            };
-            /** @description Request body failed validation, or carried a raw key (code RAW_KEY_REJECTED). */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Provider credential not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    deleteProviderCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Provider credential deleted. */
-            200: {
+            /** @description Another provider command owns this resource, or selected/frozen deployments still govern the connection. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        id?: string;
-                        status?: string;
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_BUSY";
+                        /** Format: uuid */
+                        commandId: string;
+                    } | {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_CONNECTION_GOVERNED";
                     };
                 };
             };
-            /** @description Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). */
-            403: {
+            /** @description The removal is durable and the background reconciler or this exact command retry may resume it. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Provider credential not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                    };
                 };
             };
         };
@@ -3982,6 +3611,41 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The selected provider has an unsettled custody command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_BUSY";
+                        /**
+                         * Format: uuid
+                         * @description Existing command that owns the resource barrier.
+                         */
+                        commandId: string;
+                    };
+                };
+            };
+            /** @description The model definition and registration command are durable but registration has not completed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                        /** Format: uuid */
+                        modelDefinitionId?: string;
+                    };
+                };
+            };
         };
     };
     getModel: {
@@ -4015,22 +3679,19 @@ export interface operations {
             };
         };
     };
-    updateModel: {
+    resumeModelRegistration: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: string;
+                commandId: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ModelDefinitionWrite"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Model definition updated. */
+            /** @description Model registration completed. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4039,74 +3700,21 @@ export interface operations {
                     "application/json": components["schemas"]["ModelDefinition"];
                 };
             };
-            /** @description Request body failed validation. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Model definition not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    deleteModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Model definition deleted. */
-            200: {
+            /** @description The exact model registration remains pending. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        id?: string;
-                        status?: string;
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                        /** Format: uuid */
+                        modelDefinitionId?: string;
                     };
-                };
-            };
-            /** @description Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Model definition not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -8508,8 +8116,11 @@ export interface operations {
                             groups: string[];
                             /** @description True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point. */
                             isPlatformOperator: boolean;
-                            /** @description True when the authenticated middleware admitted organisation administration authority. Introspection only; the API remains the enforcement point. */
-                            isOrgAdmin: boolean;
+                            /** @description Current product capabilities read from the central authorization authority. These guide the UI; protected routes repeat authorization in their own transaction. */
+                            productCapabilities: {
+                                /** @description Whether the local Principal currently holds organization:administer for this silo. */
+                                administerOrganization: boolean;
+                            };
                             /** @description The caller's admitted silo identifier, or null when the session has no silo projection. */
                             clusterTenant?: string | null;
                             /** @description Organisation administration projections resolved by the server. Empty when none are active. */

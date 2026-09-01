@@ -19,7 +19,8 @@ import type { OidcAuthConfig } from "./oidc-config.types";
  */
 export function ___CreateOidcSessionMiddleware(config: OidcAuthConfig): RequestHandler[]
 {
-	if (!config.enabled) return [function _skipSession(_request, _response, next) { next(); }];
+	if (!config.enabled)
+		return [function _skipSession(_request, _response, next) { next(); }];
 	return ___CreateBrowserSessionMiddleware(config);
 }
 
@@ -58,13 +59,15 @@ function _CsrfOriginCheck(): RequestHandler
 	const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 	return function _csrfCheck(request, response, next)
 	{
-		if (safeMethods.has(request.method) || !request.session?.authUser) return void next();
+		if (safeMethods.has(request.method) || !request.session?.authUser)
+			return void next();
 		const expected = `${request.protocol}://${request.hostname}`;
 		const origin = request.headers.origin;
 		const referer = request.headers.referer;
 		if (origin !== undefined)
 		{
-			if (origin !== expected) response.status(403).json({ error: "CSRF check failed.", code: "CSRF_ORIGIN_MISMATCH" });
+			if (origin !== expected)
+				response.status(403).json({ error: "CSRF check failed.", code: "CSRF_ORIGIN_MISMATCH" });
 			else next();
 			return;
 		}

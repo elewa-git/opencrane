@@ -9,8 +9,8 @@
 ## What it owns
 
 This is the **install root** for one **silo** — one customer's isolated slice of OpenCrane. The
-trusted services run in the release namespace; untrusted personal-agent Jobs run in a sibling runtime
-namespace owned by the same release. Nothing is shared with other customers. Everything else under `apps/` ships a small
+trusted services run in the release namespace; fixed personal and managed warm-runtime pools run in
+two restricted sibling namespaces owned by the same release. Nothing is shared with other customers. Everything else under `apps/` ships a small
 Helm chart; this app is the **umbrella chart** (`opencrane-silo`) that pulls those deployment
 contracts together into one release, plus `deploy.sh`, the entrypoint that installs and upgrades it.
 
@@ -60,15 +60,14 @@ against the checked-out in-repo `file://` sources. The commit is the version aut
 `Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
-identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image is
-deliberately absent from the long-lived Deployment rollup. It is not a
-long-lived silo service: the agent controller creates its bounded, suspended Job for each authorised
-run attempt and commits the Kubernetes-issued Job identity to OpenCrane. Workload lifetime and
-Kubernetes identity therefore remain tied to that attempt. The release still owns the runtime
-namespace, its zero-RBAC ServiceAccount, default-deny and fixed-egress policies, and a uniquely named
-cluster-scoped admission policy that permits only the exact digest-pinned Job shape and its one-time
-unsuspend transition. An aggregate ResourceQuota bounds conforming Jobs, Pods, CPU, and memory even
-if the controller identity is compromised. The admission boundary requires Kubernetes 1.30+.
+identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image runs in
+two fixed warm Deployments rather than one Job per attempt. Each generic Pod has only DNS and
+same-silo OpenCrane reachability. An admitted run claims one Pod once; that fixed profile additionally
+admits the exact controller binding path and same-silo LiteLLM. The release owns both namespaces,
+their zero-RBAC ServiceAccount, default-deny and profile-specific standard `NetworkPolicy` objects,
+and a release-scoped admission policy that permits only the exact generic-to-claimed label change or
+discard. Aggregate quotas bound each Deployment, its Pods, CPU, and memory. The admission boundary
+requires Kubernetes 1.30+.
 
 ## Public surface
 
@@ -78,11 +77,8 @@ install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTen
 (server, LiteLLM, and database administration), and the reviewed single-page application (SPA)
 `--opencrane-ui-digest`. The named email is non-secret and only selects the verified OIDC identity
 that can claim the silo's one subject-bound Owner row at first login; deployment never writes a user
-row directly. A new silo can also pass `--initial-model-provider` and `--initial-model` with
-`OPENCRANE_INITIAL_MODEL_API_KEY` in its environment; the key never enters Helm values and is
-registered through the release-local LiteLLM before the server becomes ready. The named model must
-belong to that provider and becomes the first exact Global routing default without replacing a
-default already chosen by an operator.
+row or provider credential directly. Provider setup begins after deployment through the
+authenticated durable provider API.
 
 `Entrypoint: teardown.sh` — retires one exact standalone silo after checking the kubectl context,
 tenant, namespace, exact chart identities from `releases/<version>.json`, retained CloudNativePG
@@ -92,8 +88,8 @@ change. The caller must also name the currently protected tenant explicitly; env
 tenant policy is never hard-coded in the reusable teardown engine. The retry-safe cleanup uninstalls only the tenant and PostgreSQL releases, then removes the
 exact keep-marked database resources, their doubly-labelled data volumes, release-derived auxiliary
 namespaces, and exact tenant-suffixed cluster role bindings. Shared controllers, custom resource
-definitions, ingress, certificate management, ComputeClass, and the protected active tenant remain
-outside its deletion surface.
+definitions, ingress, certificate management, and the protected active tenant remain outside its
+deletion surface.
 
 ## Boundary
 
@@ -116,13 +112,20 @@ package imports it.
   `values.schema.json`. Its app-owned helper packages the checked-out local chart sources.
 - `agentController.runtimeNamespace` — optional DNS-label override for the sibling runtime namespace;
   empty derives `<release>-runtime`, and the chart rejects the trusted server namespace.
+- `agentController.warmRuntime.managedNamespace` — optional DNS-label override for the managed warm
+  pool; empty derives `<release>-managed-runtime`, distinct from the trusted and personal namespaces.
+- `agentController.warmRuntime` — fixes the generic, personal, and managed profile labels, binding
+  port, two-to-five ready Pods per pool, and one-use idle lifetime. These are deployment profiles,
+  never caller-provided run values.
 - `artifactPreprocessor` — disabled until its immutable image digest is supplied; when enabled, the
   worker runs in a dedicated restricted namespace and receives only ephemeral scratch plus
   broker/DNS/optional-telemetry egress.
 - `artifactScanner` — disabled until its immutable image digest is supplied; when enabled, the
   worker scans quarantined uploads in a separate restricted namespace through the server broker.
-- `agentController.runtimeQuota` — aggregate Job, Pod, CPU, and memory ceilings for the dedicated
-  untrusted runtime namespace.
+- `agentController.runtimeQuota` — aggregate Deployment, Pod, CPU, and memory ceilings applied
+  independently to both untrusted runtime namespaces.
+- Deployment preflight accepts only exact known enforcing-CNI DaemonSet names. GKE Dataplane V2 is
+  detected through `anetd`; similarly prefixed helper or operator DaemonSets do not satisfy the gate.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
   and aggregate Job quota; it contains no standing worker. The deploy engine derives
   `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
@@ -137,10 +140,9 @@ package imports it.
   exists, because a `sub` is scoped to its original OIDC issuer. Later upgrades must restate that
   same `--oidc-issuer-url`; they may not use chart `--values` or `--reset-values`, which could
   replace or erase the binding.
-- `--initial-model-provider` and `--initial-model` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional
-  bootstrap of the first supported model provider and exact default model. The engine writes the key
-  to the release-local provider-custody Secret; the server then registers its encrypted LiteLLM
-  credential and requires the selected live model before accepting work.
+- `platform/provider-key-secrets.sh` — creates only missing fixed-name provider Secret placeholders.
+  Authenticated durable provider commands later fill or clear them; redeployment never overwrites a
+  previously admitted key.
 - `--opencrane-ui-digest` — required Open Container Initiative (OCI) `sha256:` identity of the reviewed SPA build. The engine
   renders `repository@digest`, waits for the SPA rollout, and refuses success if the Deployment or
   ready Pods do not show that image. `OPENCRANE_ALLOW_TAG_FLOAT=1` is only for a disposable local
@@ -166,19 +168,16 @@ package imports it.
   requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
   every `develop` push also prove pinned expandable storage. Neither tier substitutes for
   backup/recovery or production qualification.
-- `npm run dev:tier3` defaults to the 32 GB minimum-host path: it resets the disposable cluster,
-  reclaims reproducible dependencies and build caches, imports images sequentially, and exposes the
-  real ingress through a loopback browser proxy with a fresh fixed-identity login. The successful
-  cluster stays available for diagnosis, and the next run resets it automatically. Recommended
-  8-core/32-GB/64-GB machines can retain dependencies and caches with
-  `SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full`.
+- `npm run dev:tier3` runs that credential-free full-silo workflow for local infrastructure work,
+  retains the qualified k3d cluster, and exposes its `.test` ingress through a loopback proxy. A
+  fresh proxy proof admits only the installation-selected development identity; production and
+  remote environments continue to require OIDC.
 
 ## Sub-docs (the deep detail)
 
 - **[platform/README.md](platform/README.md)** — the cluster and release substrate: the `k8s-platform`
   Helm library (labels, names, RBAC, endpoint/database/identity/observability helpers), the
-  `k8s-deploy.sh` install engine, including the dedicated Prisma migration Job for database changes,
-  explicit shared-controller bootstrap, OIDC configuration, cluster
+  `k8s-deploy.sh` install engine, explicit shared-controller bootstrap, OIDC configuration, cluster
   provisioning, Terraform, values profiles, and the k3d conformance tests.
 ## See also
 

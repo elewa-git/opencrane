@@ -34,6 +34,8 @@ describe("Tier 2 database seed", function _Suite()
 			latestRevision = input.data.revision;
 		});
 		const assertionCreate = vi.fn();
+		const modelDefinitionUpsert = vi.fn();
+		const modelRoutingDefaultUpsert = vi.fn();
 		const transaction = {
 			principal: { upsert: vi.fn() },
 			orgMembership: { upsert: vi.fn() },
@@ -45,8 +47,8 @@ describe("Tier 2 database seed", function _Suite()
 				create: revisionCreate
 			},
 			verifiedFleetMembershipAssertion: { create: assertionCreate },
-			modelDefinition: { upsert: vi.fn() },
-			modelRoutingDefault: { upsert: vi.fn() }
+			modelDefinition: { upsert: modelDefinitionUpsert },
+			modelRoutingDefault: { upsert: modelRoutingDefaultUpsert }
 		};
 		const prisma = {
 			$transaction: vi.fn(async function _Transaction(operation) { await operation(transaction); }),
@@ -68,6 +70,14 @@ describe("Tier 2 database seed", function _Suite()
 		expect(transaction.orgMembership.upsert).toHaveBeenCalledTimes(2);
 		expect(transaction.modelDefinition.upsert).toHaveBeenCalledTimes(2);
 		expect(transaction.modelRoutingDefault.upsert).toHaveBeenCalledTimes(2);
+		expect(modelDefinitionUpsert).toHaveBeenCalledWith(expect.objectContaining({
+			where: { id_siloId: { id: "local-development-model-auto", siloId: "local-development" } },
+			create: expect.objectContaining({ id: "local-development-model-auto", siloId: "local-development" })
+		}));
+		expect(modelRoutingDefaultUpsert).toHaveBeenCalledWith(expect.objectContaining({
+			where: { id_siloId: { id: "local-development-model-routing-default", siloId: "local-development" } },
+			create: expect.objectContaining({ id: "local-development-model-routing-default", siloId: "local-development" })
+		}));
 		expect(dependencies.createMembership.mock.calls).toEqual([[1], [2]]);
 		expect(revisionCreate.mock.calls.map(([input]) => input.data.id)).toEqual([
 			"local-development-membership-revision-1",

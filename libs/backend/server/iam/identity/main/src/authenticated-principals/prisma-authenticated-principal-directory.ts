@@ -2,7 +2,11 @@ import { type Prisma } from "@prisma/client";
 
 import { type AuthenticatedPrincipal, type AuthenticatedPrincipalDirectory } from "./authenticated-principal-directory.types";
 
-/** Resolves verified authentication-authority coordinates against the local Principal projection. */
+/**
+ * Resolves a verified identity tuple through the Principal unique key in a caller-held transaction.
+ * Identity admission and capability transactions use this adapter so Principal resolution and
+ * their later authorization work observe the same database transaction.
+ */
 export class PrismaAuthenticatedPrincipalDirectoryRepository implements AuthenticatedPrincipalDirectory
 {
   /** Product authority used only for the exact principal lookup. */

@@ -16,10 +16,17 @@ describe("channel target route reconciliation", function _ChannelTargetRouteReco
 		const findMany = vi.fn()
 			.mockResolvedValueOnce([{ id: "service-1", siloId: "silo-1" }])
 			.mockResolvedValueOnce([{ id: "service-1", siloId: "silo-1" }, { id: "service-2", siloId: "silo-1" }]);
-		const upsert = vi.fn().mockResolvedValue({});
+		const upsert = vi.fn().mockImplementation(async function _Upsert(args: { create: { siloId: string; agentServiceId: string } })
+		{
+			return { id: `route-${args.create.agentServiceId}`, siloId: args.create.siloId, agentServiceId: args.create.agentServiceId };
+		});
 		const transaction = {
 			agentService: { findMany },
-			channelRuntimeRoute: { updateMany: vi.fn().mockResolvedValue({ count: 0 }), upsert },
+			channelRuntimeRoute: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }), upsert },
+			conversation: { findMany: vi.fn().mockResolvedValue([]) },
+			principal: { findMany: vi.fn().mockResolvedValue([]) },
+			authorizationGrant: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }), create: vi.fn() },
+			auditEntry: { create: vi.fn() },
 		};
 		const prisma = {
 			$transaction: vi.fn(async function _Transaction(work: (client: unknown) => Promise<unknown>) { return work(transaction); }),

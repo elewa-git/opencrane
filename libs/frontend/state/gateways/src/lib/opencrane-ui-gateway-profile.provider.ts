@@ -7,8 +7,8 @@ import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/
 import { ELICITATION_GATEWAY, OpenCraneConversationElicitationGateway } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
 import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace/adapter";
-import { SESSION_GATEWAY } from "@opencrane/state/core";
-import { OpenCraneSessionGateway } from "@opencrane/state/core/adapter";
+import { SESSION_GATEWAY } from "@opencrane/state/session";
+import { OpenCraneSessionGateway } from "@opencrane/state/session/adapter";
 import { MCP_GATEWAY, OpenCraneMcpGateway } from "@opencrane/state/mcp/adapter";
 import { OpenCranePersonaFirstChatGateway, PERSONA_FIRST_CHAT_GATEWAY, PERSONA_GATEWAY } from "@opencrane/state/onboarding";
 import { ORGANIZATION_MEMBERS_GATEWAY } from "@opencrane/state/organization/members";

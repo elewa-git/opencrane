@@ -22,7 +22,7 @@ function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
 		skills: [{ skillId: "skill-a", revisionId: "rev-1" }],
 		mcpToolRevisionIds: ["mcp-tool-revision-a"],
 		boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }],
-		budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 },
+		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 		authoredBy: "user-1",
 		createdAt: "2026-07-20T00:00:00.000Z",
 		publishedAt: null,
@@ -49,7 +49,7 @@ describe("agent revision diff", function _suite()
 		const target = _revision({
 			boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }, { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "org-1", boundaryCoverage: RevisionBoundaryCoverages.Descendants }],
 			skills: [{ skillId: "skill-a", revisionId: "rev-1" }, { skillId: "skill-b", revisionId: "rev-1" }],
-			budget: { maxTurns: 20, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 },
+			budget: { maxTurns: 20, maxTokens: 1000, maxDurationMs: 30000 },
 		});
 		const diff = __DiffAgentRevisions(_revision(), target);
 		const kinds = diff.widenings.map(function _kind(widening) { return widening.kind; });
@@ -60,7 +60,7 @@ describe("agent revision diff", function _suite()
 
 	it("does not flag budget widening when a ceiling is lowered", function _narrower()
 	{
-		const diff = __DiffAgentRevisions(_revision(), _revision({ budget: { maxTurns: 2, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 } }));
+		const diff = __DiffAgentRevisions(_revision(), _revision({ budget: { maxTurns: 2, maxTokens: 1000, maxDurationMs: 30000 } }));
 		expect(diff.widenings).toEqual([]);
 		expect(diff.scalarChanges).toContainEqual({ field: "budget.maxTurns", before: "5", after: "2" });
 	});

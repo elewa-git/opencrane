@@ -28,7 +28,6 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 		budget: {
 			maxTurns: budget.maxTurns,
 			maxTokens: budget.maxTokens,
-			maxCostUsdMicros: budget.maxCostUsdMicros,
 			maxDurationMs: budget.maxDurationMs,
 		},
 		skills: row.skillAssignments.map(function _MapSkill(skill)
@@ -54,14 +53,15 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionCommand): Prisma.AgentRevisionCreateInput
 {
 	return {
-		agentService: { connect: { id: command.agentServiceId } },
+		id: command.agentRevisionId,
+		agentService: { connect: { id_siloId: { id: command.agentServiceId, siloId: command.siloId } } },
 		revision: command.revision,
 		parentRevision: command.parentRevisionId === null
 			? undefined
-			: { connect: { id: command.parentRevisionId } },
+			: { connect: { id_siloId: { id: command.parentRevisionId, siloId: command.siloId } } },
 		sourceRevision: command.sourceRevisionId === null
 			? undefined
-			: { connect: { id: command.sourceRevisionId } },
+			: { connect: { id_siloId: { id: command.sourceRevisionId, siloId: command.siloId } } },
 		changeMessage: command.changeMessage,
 		state: AgentRevisionState.Draft,
 		digest: __DigestAgentRevisionContent(
@@ -71,11 +71,10 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 		),
 		promptPolicyVersion: command.content.promptPolicyVersion,
 		personaRevisionId: command.content.personaRevisionId,
-		modelDefinition: { connect: { id: command.content.modelDefinitionId } },
+		modelDefinition: { connect: { id_siloId: { id: command.content.modelDefinitionId, siloId: command.siloId } } },
 		budget: {
 			maxTurns: command.content.budget.maxTurns,
 			maxTokens: command.content.budget.maxTokens,
-			maxCostUsdMicros: command.content.budget.maxCostUsdMicros,
 			maxDurationMs: command.content.budget.maxDurationMs,
 		},
 		authoredBy: command.authoredBy,

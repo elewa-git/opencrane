@@ -21,6 +21,7 @@ remaining grouped with the server code that composes them.
 | [`oci-registry`](./oci-registry/README.md) | Imports checked OCI images into one configured registry repository by digest. |
 | [`organization-membership-gateway`](./organization-membership-gateway/README.md) | Projected-token-authenticated HTTPS transport to Fleet membership and billing. |
 | [`sandbox-execution`](./sandbox-execution/README.md) | Fail-closed sandboxed tool-execution port. |
+| [`prisma-unit-of-work`](./prisma-unit-of-work/README.md) | The shared transaction envelope: explicit isolation and bounded retry of proven rollbacks. |
 | [`workflows`](./workflows/README.md) | Engine-neutral saved workflow tasks, guardrails, scheduling helpers, adapters, and test support. |
 
 ```text

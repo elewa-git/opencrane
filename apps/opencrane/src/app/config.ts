@@ -1,11 +1,10 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
-import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneTier3DevelopmentAuthenticationConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneTier3DevelopmentAuthenticationConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -90,32 +89,6 @@ function _readArtifactPreprocessorBodyLimit(): number
 	return value;
 }
 
-/**
- * Read the optional initial provider/model credential injected only by the silo deployment contract.
- * The tuple is all-or-nothing so an operator cannot accidentally start with an incomplete routing
- * default or expose a key without a declared LiteLLM provider and model.
- */
-function _readInitialModelBootstrap(): InitialModelBootstrapConfig | null
-{
-	const provider = process.env.OPENCRANE_INITIAL_MODEL_PROVIDER?.trim().toLowerCase() ?? "";
-	const model = process.env.OPENCRANE_INITIAL_MODEL_NAME?.trim() ?? "";
-	const apiKey = process.env.OPENCRANE_INITIAL_MODEL_API_KEY?.trim() ?? "";
-	delete process.env.OPENCRANE_INITIAL_MODEL_API_KEY;
-	if (!provider && !model && !apiKey)
-	{
-		return null;
-	}
-	if (!provider || !model || !apiKey)
-	{
-		throw new Error("OPENCRANE_INITIAL_MODEL_PROVIDER, OPENCRANE_INITIAL_MODEL_NAME, and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together");
-	}
-	if (!Object.values(ByokProvider).includes(provider as ByokProvider))
-	{
-		throw new Error(`OPENCRANE_INITIAL_MODEL_PROVIDER '${provider}' is unsupported`);
-	}
-	return { provider, model, apiKey };
-}
-
 /** Read the email and ClusterTenant that let one verified OIDC user claim this standalone silo's owner slot; both must be set or neither. */
 function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig | null
 {
@@ -175,12 +148,12 @@ function _readTier3DevelopmentAuthentication(): OpenCraneTier3DevelopmentAuthent
 	{
 		throw new Error("Tier 3 development authentication cannot be combined with OIDC");
 	}
+	const email = _readRequired("OPENCRANE_STANDALONE_FIRST_USER_EMAIL").toLowerCase();
+	const siloId = _readRequired("OPENCRANE_STANDALONE_CLUSTER_TENANT");
 	if (process.env.OPENCRANE_MEMBERSHIP_MODE !== FleetMembershipDeploymentModes.Standalone)
 	{
-		throw new Error("Tier 3 development authentication requires standalone membership");
+		throw new Error("Tier 3 development authentication requires OPENCRANE_MEMBERSHIP_MODE=standalone");
 	}
-	const email = _readRequired("OPENCRANE_STANDALONE_FIRST_USER_EMAIL").toLowerCase();
-	const siloId = _readRequired("OPENCRANE_STANDALONE_CLUSTER_TENANT").toLowerCase();
 	const publicBaseUrl = new URL(_readCredentialFreeHttpsOrigin("OPENCRANE_PUBLIC_BASE_URL"));
 	if (!publicBaseUrl.hostname.endsWith(".test") || publicBaseUrl.hostname.split(".")[0] !== siloId)
 	{
@@ -281,7 +254,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 	const tier3DevelopmentAuthentication = _readTier3DevelopmentAuthentication();
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
-		initialModelBootstrap: _readInitialModelBootstrap(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		publicPort: Number(process.env.PORT ?? "8080"),
 			runtime: {

@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { closeTier3BrowserProxy, createTier3BrowserProxy } from "./tier3-browser-proxy.mjs";
 import { createTier3SessionConfiguration, parseTier3Arguments, TIER3_DEVELOPMENT_HELP } from "./tier3-development-options.mjs";
 import { readTier3IngressCertificate } from "./tier3-ingress-certificate.mjs";
-import { resolveTier3ModelProvider } from "./tier3-model-provider.mjs";
 
 const _SMOKE_PATH = "apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh";
 const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -20,13 +19,12 @@ const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
  *
  * Called by: this file's command entrypoint after argument parsing.
  *
- * @param {{ model?: string, profile: "agent" | "infrastructure", provider?: string, proxyPort: number, smokeOnly: boolean, storageMode: "fast" | "full" }} options - Reviewed Tier 3 command options.
+ * @param {{ proxyPort: number, smokeOnly: boolean, storageMode: "fast" | "full" }} options - Reviewed Tier 3 command options.
  * @param {object} operations - Process boundaries replaced by orchestration tests.
  * @param {Function} [operations.createProxy] - Creates a stopped ingress proxy.
  * @param {Function} [operations.listenProxy] - Binds that proxy to a loopback port.
  * @param {NodeJS.ProcessEnv} [operations.parentEnvironment] - Supplies smoke identity and process inputs.
  * @param {Function} [operations.readIngressCertificate] - Reads the smoke-issued ingress certificate.
- * @param {Function} [operations.resolveModelProvider] - Resolves the reviewed provider/model and one credential.
  * @param {Function} [operations.runSmoke] - Runs the app-owned k3d qualification.
  * @param {Function} [operations.waitForShutdown] - Keeps the proxy alive for inspection.
  * @param {Function} [operations.writeOutput] - Reports the ready session.
@@ -36,37 +34,14 @@ const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
 export async function runTier3Development(options, operations = {})
 {
 	const parentEnvironment = operations.parentEnvironment ?? process.env;
-	const resolveModelProvider = operations.resolveModelProvider ?? resolveTier3ModelProvider;
-	let modelProvider;
-	try
-	{
-		modelProvider = resolveModelProvider(options, parentEnvironment, _REPOSITORY_ROOT);
-	}
-	finally
-	{
-		delete parentEnvironment.OPENCRANE_TIER3_PROVIDER_API_KEY;
-	}
-	const configuration = createTier3SessionConfiguration(parentEnvironment, options.storageMode, modelProvider);
+	const configuration = createTier3SessionConfiguration(parentEnvironment, options.storageMode);
 	const runSmoke = operations.runSmoke ?? _RunSmoke;
 	const createProxy = operations.createProxy ?? createTier3BrowserProxy;
 	const listenProxy = operations.listenProxy ?? _ListenProxy;
 	const readIngressCertificate = operations.readIngressCertificate ?? readTier3IngressCertificate;
 	const waitForShutdown = operations.waitForShutdown ?? _WaitForShutdown;
 	const writeOutput = operations.writeOutput ?? function _write(message) { process.stdout.write(message); };
-	let smokeRun;
-	try
-	{
-		smokeRun = runSmoke(configuration.smokeEnvironment);
-	}
-	finally
-	{
-		delete configuration.smokeEnvironment.OPENCRANE_TIER3_PROVIDER_API_KEY;
-		if (modelProvider)
-		{
-			modelProvider.apiKey = "";
-		}
-	}
-	await smokeRun;
+	await runSmoke(configuration.smokeEnvironment);
 
 	if (options.smokeOnly)
 	{
@@ -78,14 +53,7 @@ export async function runTier3Development(options, operations = {})
 	await listenProxy(server, options.proxyPort);
 
 	writeOutput(`\nTier 3 is ready on http://127.0.0.1:${options.proxyPort}.\n`);
-	if (modelProvider)
-	{
-		writeOutput(`Personal-agent onboarding uses ${modelProvider.provider} with ${modelProvider.model}.\n`);
-	}
-	else
-	{
-		writeOutput("This credential-free profile qualifies infrastructure; personal-agent onboarding cannot conclude.\n");
-	}
+	writeOutput("Configure providers after login through the authenticated provider settings flow.\n");
 	writeOutput("In Codespaces, open the forwarded port with the 'OpenCrane Tier 3' label.\n");
 	writeOutput("The k3d cluster remains available after this command stops.\n");
 	await waitForShutdown(server);

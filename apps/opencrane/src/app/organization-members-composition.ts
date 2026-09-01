@@ -13,10 +13,11 @@ function _resolveCaller(request: Request): OrganizationMembershipCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
 	const authUser = request.session?.authUser;
-	if (principal === null || authUser === undefined) return null;
+	if (principal === null || authUser === undefined)
+		return null;
 	const email = authUser.emailVerified === true && typeof authUser.email === "string" ? authUser.email.trim().toLowerCase() : null;
 	const displayName = typeof authUser.name === "string" && authUser.name.trim().length > 0 ? authUser.name.trim() : email ?? principal.externalSubject;
-	return { siloId: principal.siloId, subjectId: principal.externalSubject, verifiedEmail: email, displayName };
+	return { siloId: principal.siloId, principalId: principal.principalId, subjectId: principal.externalSubject, verifiedEmail: email, displayName };
 }
 
 /**

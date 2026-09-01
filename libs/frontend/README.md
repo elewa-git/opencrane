@@ -19,7 +19,7 @@ directory hierarchy in the SPA.
 | Personal asset catalogue | `state/assets/adapter` | server-side artifact authority |
 | Conversation files | `state/conversation/assets` | participant upload and quarantine authority |
 | Conversation file presentation | `features/conversation-assets` | attachment tray, transcript cards, and Files index |
-| Shared browser composition | `core`, `platform`, `elements/*`, `state/core`, `state/gateways` | cross-cutting |
+| Shared browser composition | `core`, `platform`, `elements/*`, `state/session`, `state/gateways` | cross-cutting |
 
 `state/gateways` is Angular dependency-injection composition, not the server `gateways` domain.
 Keep the names distinct: frontend dependencies follow the technical layer policy; server imports

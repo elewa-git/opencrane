@@ -4,9 +4,11 @@ import type { Request } from "express";
 import type { Logger } from "pino";
 
 import { TIER3_DEVELOPMENT_PROXY_PROOF_HEADER } from "@opencrane/contracts";
-import { _destroySession, _regenerateSession, _ResolveOrgMembershipFacts, _sanitizeReturnTo, _saveSession, type AuthStatus, type OrgMembershipRepository } from "@opencrane/backend/server/infra/auth";
+import { _destroySession, _regenerateSession, _ResolveOwnedOrgSummaries, _sanitizeReturnTo, _saveSession, type AuthStatus, type OwnedOrgSummaryRepository } from "@opencrane/backend/server/infra/auth";
 
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork } from "../authenticated-principals/prisma-authenticated-principal-directory-unit-of-work";
+import type { AuthenticatedPrincipalCapabilityReader } from "../authenticated-principals/authenticated-principal-capability.types";
+import { PrismaAuthenticatedPrincipalCapabilityUnitOfWork } from "../authenticated-principals/prisma-authenticated-principal-capability-unit-of-work";
 import { PrismaGroupClaimProjectionUnitOfWork } from "../group-claims/mirror-groups";
 import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../standalone-first-user/prisma-standalone-first-user-admission-unit-of-work";
 import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort } from "../standalone-first-user/standalone-first-user-admission.types";
@@ -21,8 +23,9 @@ export class Tier3DevelopmentAuthService
 {
 	private readonly config: Tier3DevelopmentAuthenticationConfig;
 	private readonly log: Logger;
-	private readonly membership: OrgMembershipRepository;
+	private readonly summaries: OwnedOrgSummaryRepository;
 	private readonly prisma: ConstructorParameters<typeof PrismaGroupClaimProjectionUnitOfWork>[0];
+	private readonly capabilities: AuthenticatedPrincipalCapabilityReader;
 	private readonly ownerAdmission: PrismaStandaloneFirstUserAdmissionUnitOfWork;
 	private readonly expectedProofDigest: Buffer;
 
@@ -31,15 +34,17 @@ export class Tier3DevelopmentAuthService
 	 *
 	 * @param config - Validated fixed identity, expected host, proof, and session lifetime.
 	 * @param prisma - Transaction authority for Principal projection, Owner admission, and resolution.
-	 * @param membership - Active Owner/Admin reader used for current `/auth/me` introspection.
+	 * @param summaries - Owner/Admin presentation reader used for current `/auth/me` introspection.
 	 * @param audit - App-owned append port that records the one-time Owner claim.
 	 * @param log - Parent logger used for structured identity reconciliation events.
+	 * @param capabilities - Central product-capability projection used for current `/auth/me` introspection.
 	 */
-	constructor(config: Tier3DevelopmentAuthenticationConfig, prisma: ConstructorParameters<typeof PrismaGroupClaimProjectionUnitOfWork>[0], membership: OrgMembershipRepository, audit: StandaloneFirstUserAdmissionAuditPort, log: Logger)
+	constructor(config: Tier3DevelopmentAuthenticationConfig, prisma: ConstructorParameters<typeof PrismaGroupClaimProjectionUnitOfWork>[0], summaries: OwnedOrgSummaryRepository, audit: StandaloneFirstUserAdmissionAuditPort, log: Logger, capabilities: AuthenticatedPrincipalCapabilityReader = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(prisma, log))
 	{
 		this.config = config;
 		this.prisma = prisma;
-		this.membership = membership;
+		this.summaries = summaries;
+		this.capabilities = capabilities;
 		this.log = log.child({ component: "tier3-development-auth" });
 		this.ownerAdmission = new PrismaStandaloneFirstUserAdmissionUnitOfWork(prisma, audit);
 		this.expectedProofDigest = _Digest(config.proxySecret);
@@ -61,16 +66,21 @@ export class Tier3DevelopmentAuthService
 		{
 			return { authenticated: false, mode: "development", user: null };
 		}
-		const membership = await _ResolveOrgMembershipFacts(this.membership, this.config.subject);
+		const summaries = await _ResolveOwnedOrgSummaries(this.summaries, this.config.subject);
+		const administerOrganization = await this.capabilities.canAdministerOrganization({
+			issuer: this.config.issuer,
+			siloId: this.config.siloId,
+			subject: this.config.subject,
+		});
 		return {
 			authenticated: true,
 			mode: "development",
 			user: {
 				...user,
 				clusterTenant: this.config.siloId,
-				isOrgAdmin: membership.isOrgAdmin,
 				isPlatformOperator: false,
-				ownedOrgs: membership.ownedOrgs,
+				ownedOrgs: summaries.ownedOrgs,
+				productCapabilities: { administerOrganization },
 			},
 		};
 	}
@@ -99,7 +109,6 @@ export class Tier3DevelopmentAuthService
 			email: this.config.email,
 			emailVerified: false,
 			groups: [],
-			isOrgAdmin: true,
 			isPlatformOperator: false,
 			issuer: this.config.issuer,
 			name: this.config.displayName,

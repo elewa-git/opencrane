@@ -12,9 +12,11 @@
  */
 export function _SafeLoginReturnTo(value: string | null): string
 {
-	if (value === null || value.length === 0 || value.length > 4_096) return "/";
+	if (value === null || value.length === 0 || value.length > 4_096)
+		return "/";
 	const decoded = _DecodeReturnTo(value);
-	if (decoded === null || !_IsSafeRouterUrl(value) || !_IsSafeRouterUrl(decoded)) return "/";
+	if (decoded === null || !_IsSafeRouterUrl(value) || !_IsSafeRouterUrl(decoded))
+		return "/";
 	return value;
 }
 

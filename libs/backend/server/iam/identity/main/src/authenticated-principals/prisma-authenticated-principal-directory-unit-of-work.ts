@@ -3,7 +3,11 @@ import { type Prisma, type PrismaClient } from "@prisma/client";
 import { type AuthenticatedPrincipal, type AuthenticatedPrincipalDirectory } from "./authenticated-principal-directory.types";
 import { PrismaAuthenticatedPrincipalDirectoryRepository } from "./prisma-authenticated-principal-directory";
 
-/** Opens the read transaction that resolves a verified authentication-authority identity to one Principal. */
+/**
+ * Resolves a verified identity tuple through a read transaction.
+ * App route composition and `Tier3DevelopmentAuthService` use this adapter when no wider identity
+ * transaction already exists.
+ */
 export class PrismaAuthenticatedPrincipalDirectoryUnitOfWork implements AuthenticatedPrincipalDirectory
 {
   /** Root product-authority client used only to open the identity read transaction. */

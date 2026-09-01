@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import type { AgentThreadSnapshotView } from "../types/agent-thread-view.types";
 import type { CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunResult, SubmitConversationMessageResult } from "../types/conversation-authority-result.types";
@@ -21,10 +22,11 @@ import type { ConversationQueryRepository } from "./prisma-conversation-query-re
 /**
  * Owns the transactions for everything a signed-in user does with their own conversations.
  *
- * It is one of the few declared UnitOfWork adapters allowed to call `$transaction` at all, which is
- * why the repositories it builds take a transaction client and never a `PrismaClient`; the Prisma
- * boundary checker enforces that split from docs/agents/prisma-boundary-policy.json. Two isolation
- * levels are used on purpose. Reads run through `_read` at repeatable read, so a method that makes
+ * It is one of the few declared UnitOfWork adapters allowed to open transactions at all — through
+ * the shared unit-of-work envelope — which is why the repositories it builds take a transaction
+ * client and never a `PrismaClient`; the Prisma boundary checker enforces that split from
+ * docs/agents/prisma-boundary-policy.json. Two isolation levels are used on purpose. Reads run
+ * through `_read` at repeatable read, so a method that makes
  * several queries — membership, then participant rows, then messages — cannot see the picture change
  * halfway. Writes run through `_mutate` at serializable, so a check made inside the transaction still
  * holds when the write commits; closing a conversation while a run is starting is the case that needs
@@ -122,7 +124,7 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	 */
 	async retryRun(caller: ConversationCaller, conversationId: string, runId: string, request: RetryConversationRunRequest): Promise<RetryConversationRunResult>
 	{
-		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, acceptedAt: new Date().toISOString() }));
+		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, requestedByPrincipalId: caller.principalId, acceptedAt: new Date().toISOString() }));
 	}
 
 	/** Writes the conversation and participant rows atomically; the selected mode can never change. */
@@ -165,18 +167,18 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	/** Runs one read operation against an exact transaction-scoped query repository. */
 	private async _read<T>(operation: (repository: ConversationQueryRepository) => Promise<T>): Promise<T>
 	{
-		return this.prisma.$transaction(async function _Read(transaction)
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Read(transaction): Promise<T>
 		{
 			return operation(new PrismaConversationQueryRepository(transaction));
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+		}, { isolationLevel: "RepeatableRead", operation: "conversation read" });
 	}
 
 	/** Runs one write operation against an exact serializable mutation repository. */
 	private async _mutate<T>(operation: (repository: ConversationMutationRepository) => Promise<T>): Promise<T>
 	{
-		return this.prisma.$transaction(async function _Mutate(transaction)
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Mutate(transaction): Promise<T>
 		{
 			return operation(new PrismaConversationMutationRepository(transaction));
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+		}, { isolationLevel: "Serializable", operation: "conversation mutation" });
 	}
 }

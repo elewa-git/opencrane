@@ -61,7 +61,7 @@ class PrismaToolRecoveryEventAppendRepository implements ToolRecoveryEventAppend
 
 		// 3. Append the fixed, secret-free payload at the next sequence number, inside the caller's transaction.
 		const maximum = await this._transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await this._transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: RunEventTypes.ToolRecoveryRequired, payload: { toolInvocationId: event.toolInvocationId, toolCallId: event.toolInvocationId, expectedAttempt: event.expectedAttempt, preparationRetryCount: event.preparationRetryCount, preparationRetryLimit: event.preparationRetryLimit, providerOutcome: event.providerOutcome }, occurredAt: new Date() } });
+		await this._transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, type: RunEventTypes.ToolRecoveryRequired, payload: { toolInvocationId: event.toolInvocationId, toolCallId: event.toolInvocationId, expectedAttempt: event.expectedAttempt, preparationRetryCount: event.preparationRetryCount, preparationRetryLimit: event.preparationRetryLimit, providerOutcome: event.providerOutcome }, occurredAt: new Date() } });
 		return true;
 	}
 }

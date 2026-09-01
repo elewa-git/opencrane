@@ -8,6 +8,8 @@ import { _CreateElicitationInterruptReader } from "@opencrane/backend/agents/exe
 import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/server/conversation-assets";
 import { _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
+import { _CreateProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
+import { PrismaAuthenticatedPrincipalCapabilityUnitOfWork } from "@opencrane/backend/server/iam/identity";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
@@ -15,7 +17,6 @@ import { ___BindConsole } from "@opencrane/backend/observability";
 import { _CreateRunCancellationAuthority } from "../app/run-cancellation-composition";
 import { _CreateConversationSocketAuthenticator } from "../app/conversation-socket-authenticator";
 import { _CreatePublicApp } from "../app/public-app";
-import { _CreateOrganizationMembersComposition } from "../app/organization-members-composition";
 import { _log } from "../app/log";
 import { _ProcessShutdownSignal } from "../app/process-shutdown";
 import { ___CreatePrismaClient } from "../infra/db/db";
@@ -26,7 +27,6 @@ import { _CreateDevelopmentInternalApp } from "./internal-app";
 import { _StartDevelopmentLifecycle } from "./lifecycle";
 import { _CreateDevelopmentMembershipEnvironment } from "./membership-evidence";
 import { _CreateDevelopmentRuntimeConfig } from "./runtime-config";
-import { _CreateUnavailableDevelopmentCoreApi } from "./unavailable-kubernetes";
 import { _CreateDevelopmentWorkflowComposition } from "./workflow";
 
 /** Compose the real API and PostgreSQL Tier 2 profile without loading production infrastructure. */
@@ -48,7 +48,7 @@ async function _Main(): Promise<void>
 	const runCancellation = _CreateRunCancellationAuthority(prisma);
 
 	// 3. Compose live browser routes with explicit unavailable infrastructure adapters.
-	const authentication = _CreateDevelopmentAuthentication(config.identity);
+	const authentication = _CreateDevelopmentAuthentication(config.identity, new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(prisma, _log));
 	const health = _CreateDevelopmentHealth(prisma, config.profile);
 	const organizationMembership = {
 		mode: OrganizationMembershipDeploymentModes.Standalone,
@@ -58,23 +58,22 @@ async function _Main(): Promise<void>
 			publicBaseUrl: "http://local-development.localhost:4200",
 		},
 	} as const;
-	const organizationMembers = _CreateOrganizationMembersComposition(prisma, organizationMembership);
+	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, null, null, _log);
 	const publicApp = _CreatePublicApp(
 		prisma,
-		_CreateUnavailableDevelopmentCoreApi(),
 		managedRunAdmission,
 		personalRunAdmission,
 		runCancellation,
-		runtimeConfig.serverNamespace,
 		authentication,
-		organizationMembers,
+		organizationMembership,
 		false,
 		false,
 		false,
 		health,
 		workflows.execution,
 		null,
-		null
+		null,
+		providerEffects
 	);
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(
 		prisma,
@@ -82,7 +81,7 @@ async function _Main(): Promise<void>
 		workflows.execution,
 		_CreateConversationAttachmentAdmission,
 		_log,
-		_CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware, organizationMembers.productAccess),
+		_CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware),
 		{
 			interrupts: _CreateElicitationInterruptReader(prisma),
 			shutdownSignal: _ProcessShutdownSignal
@@ -91,7 +90,7 @@ async function _Main(): Promise<void>
 
 	// 4. Add the authenticated workload listener only for Agent profiles, then bind both to loopback.
 	const internalApp = config.controllerTokenPath && config.runtimeLaunchSecretPath && config.continuationKeyringPath
-		? await _CreateDevelopmentInternalApp(prisma, runtimeConfig, config.profile, config.controllerTokenPath, config.runtimeLaunchSecretPath, config.continuationKeyringPath)
+		? await _CreateDevelopmentInternalApp(prisma, runtimeConfig, config.profile, config.controllerTokenPath, config.runtimeLaunchSecretPath, config.continuationKeyringPath, membershipEvidence)
 		: null;
 	_StartDevelopmentLifecycle(publicApp, internalApp, conversationSockets, prisma, workflows.runtime, config.publicPort, config.internalPort, unbindConsole);
 }

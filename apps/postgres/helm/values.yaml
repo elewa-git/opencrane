@@ -111,10 +111,6 @@ privileges:
   # Leave Kubernetes enough time to surface the shell's final PostgreSQL diagnostic
   # after its retry budget expires instead of terminating the Job first.
   jobDeadlineGraceSeconds: 30
-  # Optional scheduler constraints for the one-shot proof Job. Keep this empty for portable
-  # Kubernetes installs; the GKE Autopilot profile selects an owned ComputeClass that can scale
-  # when otherwise-idle node capacity is held by GKE system Pods.
-  nodeSelector: {}
   # The hook starts one small psql container per logical database. Explicit requests avoid a
   # provider default for every container during fresh provisioning and upgrades.
   resources:
@@ -124,31 +120,6 @@ privileges:
     limits:
       cpu: 250m
       memory: 256Mi
-
-# Existing databases change through this Job. Pin its Prisma migration image by digest so the
-# migration files and entrypoint cannot change during a deployment.
-migration:
-  enabled: false
-  sourceVersion: ""
-  # The tagged 0.9.2 IAM prerequisite maps legacy subjects into one exact silo and issuer.
-  siloId: ""
-  oidcIssuer: ""
-  # Required when enabled. Use an exact OCI digest, for example
-  # ghcr.io/elewa-git/opencrane-prisma-migrator@sha256:<64 lowercase hex characters>.
-  image: ""
-  timeoutSeconds: 900
-  jobDeadlineGraceSeconds: 30
-  ttlSecondsAfterFinished: 86400
-  nodeSelector: {}
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-      ephemeral-storage: 32Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
-      ephemeral-storage: 128Mi
 
 backup:
   enabled: false

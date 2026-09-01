@@ -99,20 +99,6 @@ export interface OpenCraneWorkflowConfig
 }
 
 /**
- * One deployment-supplied provider credential that must be registered with the release-local
- * LiteLLM before the silo accepts work. The key is read only from a Kubernetes Secret reference.
- */
-export interface InitialModelBootstrapConfig
-{
-	/** Supported upstream provider whose catalogue LiteLLM will register. */
-	readonly provider: string;
-	/** Exact reviewed model that must become the first routable Global default. */
-	readonly model: string;
-	/** Raw upstream API key consumed and blanked by the one-time bootstrap before startup continues. */
-	apiKey: string;
-}
-
-/**
  * Adds the independent signed-session secret to the validated Tier 3 identity and proxy proof.
  *
  * Called by: `_ReadProcessConfig` and `_CreateTier3DevelopmentAuthentication` in the app composition.
@@ -128,8 +114,6 @@ export interface OpenCraneProcessConfig
 {
 	/** Namespace in which OIDC authentication resources are resolved. */
 	readonly authWatchNamespace: string;
-	/** Optional deployment-time model credential that must be seeded into LiteLLM before startup. */
-	readonly initialModelBootstrap: InitialModelBootstrapConfig | null;
 	/** Port exposed only to platform workloads. */
 	readonly internalPort: number;
 	/** Workload-facing identity and dispatch configuration. */

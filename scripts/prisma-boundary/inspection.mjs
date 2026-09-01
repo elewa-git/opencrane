@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { delegateMatches, rawPrismaMethodMatches, transactionMatches } from "./prisma-bindings.mjs";
+import { rawProcedureSourcePin } from "./policy.mjs";
+import { inspectRawProcedureCall } from "./raw-procedure-inspection.mjs";
 import { authorizedOwner, classes, enclosingClass, importedBindings, isTransactionScopedConstruction, ownerIdentity, repositoryAcceptsTransactionClient, repositoryConstructions } from "./typescript-ownership.mjs";
 
 /** Returns whether a path is hand-maintained production TypeScript. */
@@ -80,12 +84,24 @@ function _IsApprovedRawProcedureCall(path, source, classOwners, imports, match, 
 	const owner = enclosingClass(classOwners, match.index ?? 0);
 	const procedure = authorizedOwner(owner, imports, rawProcedureCalls, path);
 	if (procedure === undefined || procedure.method !== match.method) return false;
-	const callEnd = source.indexOf(");", match.index ?? 0);
-	if (callEnd === -1) return false;
-	const call = source.slice(match.index ?? 0, callEnd + 2);
-	const template = /Prisma\.sql\s*`([\s\S]*)`/u.exec(call)?.[1];
-	if (template === undefined) return false;
-	return template.replace(/\s+/gu, " ").trim() === procedure.sqlTemplate;
+	const approvedSourcePin = rawProcedureSourcePin(procedure.path, procedure.adapter);
+	if (approvedSourcePin === undefined || procedure.sourceSha256 !== approvedSourcePin) return false;
+	if (createHash("sha256").update(source.replace(/\r\n?/gu, "\n")).digest("hex") !== approvedSourcePin) return false;
+	const evidence = _RawProcedureEvidence(source, owner, imports, match, procedure);
+	if (evidence === undefined) return false;
+	return evidence.template.replace(/\s+/gu, " ").trim() === procedure.sqlTemplate;
+}
+
+/** Proves the raw tag's method, receiver binding, transaction guard, and SQL template. */
+function _RawProcedureEvidence(source, owner, imports, match, procedure)
+{
+	if (owner === undefined) return undefined;
+	const prismaNamespace = [...imports.entries()].find(function _PrismaNamespace([, binding]) { return binding.imported === "Prisma" && binding.importPath === "@prisma/client"; })?.[0];
+	if (prismaNamespace === undefined) return undefined;
+	const guard = imports.get("_RequireWorkflowTransactionClient");
+	if (guard?.imported !== "_RequireWorkflowTransactionClient" || guard.importPath !== "./workflow-transaction-client") return undefined;
+	const template = inspectRawProcedureCall(source, match, procedure, prismaNamespace);
+	return template === undefined ? undefined : { template };
 }
 
 /** Validates that policy-declared owners and construction lists still match the live tree. */
@@ -139,11 +155,12 @@ export function validateRawProcedureDeclarations(path, source, rawProcedureCalls
 			findings.push(_Finding(path, source, 0, "PRISMA-POLICY-RAW-PROCEDURE", `raw workflow owner ${declaration.adapter} no longer implements its exact declared contract import`, `class:${declaration.adapter}`));
 			continue;
 		}
-		const approved = rawPrismaMethodMatches(source).filter(function _Approved(match)
+		const rawMatches = rawPrismaMethodMatches(source);
+		const approved = rawMatches.filter(function _Approved(match)
 		{
 			return _IsApprovedRawProcedureCall(path, source, classOwners, imports, match, [declaration]);
 		});
-		if (approved.length !== 1)
+		if (approved.length !== 1 || rawMatches.length !== 1)
 		{
 			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-RAW-PROCEDURE", `raw workflow owner ${declaration.adapter} must contain exactly one fixed ${declaration.method} call`, `class:${declaration.adapter}`));
 		}

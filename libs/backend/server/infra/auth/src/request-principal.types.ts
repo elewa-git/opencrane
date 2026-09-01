@@ -9,18 +9,15 @@ export interface RequestPrincipal
   /** Stable local Principal ID attached after exact identity projection. */
   principalId: string;
 
-  /** Stable authority subject retained alongside the projected Principal ID. */
+  /** Stable external OIDC subject retained for authorities not yet projected to Principal IDs. */
   externalSubject: string;
 
-  /** Verified issuer that namespaces the authority subject. */
+  /** Verified OIDC issuer that namespaces the external subject. */
   externalIssuer: string;
 
   /** Silo selected by the trusted request host. */
   siloId: string;
 
-  /** Whether the authenticated session carries organisation-administrator authority. */
-  isOrgAdmin: boolean;
-
-  /** Server-verified authentication instant, or null for invalid session data. */
+  /** Server-verified OIDC authentication instant, or null for invalid legacy session data. */
   verifiedAuthenticationAt: Date | null;
 }

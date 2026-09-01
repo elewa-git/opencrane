@@ -283,9 +283,9 @@ artifactScanner:
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
 agentController:
   enabled: false
-  # -- Dedicated namespace containing only personal-runtime Jobs, Pods, their zero-RBAC KSA, and
-  # Helm-owned runtime policies. Empty derives `<release-fullname>-runtime`. It must never equal the
-  # server release namespace.
+  # -- Dedicated namespace containing only the personal warm Deployment, Pods, their zero-RBAC KSA,
+  # and Helm-owned runtime policies. Empty derives `<release-fullname>-runtime`. It must never equal
+  # the server release namespace.
   runtimeNamespace: ""
   image:
     repository: ghcr.io/elewa-git/opencrane-agent-controller
@@ -452,14 +452,6 @@ clustertenantManager:
       authorization:
         existingSecret: ""
         secretKey: authorization
-  # -- Optional first model credential. The deploy engine creates the named provider-custody
-  # Secret from OPENCRANE_INITIAL_MODEL_API_KEY, then the server seeds it through LiteLLM before
-  # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.
-  initialModel:
-    provider: ""
-    model: ""
-    existingSecret: ""
-    apiKeySecretKey: apiKey
   # -- One verified OIDC email may claim this standalone silo's first active Owner membership.
   # The deploy profile supplies both values; Helm never writes database membership data itself.
   firstUser:
@@ -582,10 +574,9 @@ clustertenantManager:
       # -- "openai" matches Cognee's own default AND this platform's litellm-proxy
       #    convention (api: openai-completions) for an OpenAI-compatible upstream.
       provider: "openai"
-      # -- "auto" is this platform's own stable model-selection alias (byok-default-models.ts),
-      #    seeded by the BYOK bootstrap alongside every provider's chat models — it currently
-      #    resolves to openai/gpt-5.4-nano on opencrane-dev, but re-points automatically if the
-      #    catalog's cheapest tier changes, so this stays correct without a values.yaml edit.
+      # -- "auto" is this platform's stable model-selection alias (byok-default-models.ts).
+      #    An authorised provider-effect command registers it beside the selected provider's chat
+      #    models and re-points it when the governed global routing default changes.
       #
       #    MUST carry the `openai/` prefix. Cognee's chat path (remember / cognify / graph-
       #    improvement) calls `litellm.acompletion(model=LLM_MODEL, api_base=LLM_ENDPOINT)`
@@ -608,8 +599,8 @@ clustertenantManager:
       #    `.../v1` → `.../v1/embeddings`, which our LiteLLM proxy serves).
       provider: "openai_compatible"
       # -- "auto-embedding" is this platform's stable embedding-selection alias, the embedding-side
-      #    mirror of the chat "auto" above. Registered by the BYOK bootstrap flow
-      #    (`_AUTO_EMBEDDING_MODEL_NAME` and `_EnsureProviderEmbeddingModels` in
+      #    mirror of the chat "auto" above. Registered by the authorised Set-BYOK provider-effect
+      #    command (`_AUTO_EMBEDDING_MODEL_NAME` and `_EnsureProviderEmbeddingModels` in
       #    provider-embedding-models.ts),
       #    pointing at the configured provider's real embedding model — NOT a tenant-selectable
       #    ModelDefinition. This exact string MUST match that constant; re-pointing the backing
@@ -651,11 +642,10 @@ clustertenantManager:
     #    (OIDC_GROUPS_CLAIM / OIDC_ROLES_CLAIM).
     groupsClaim: "groups"
     rolesClaim: "roles"
-    # -- Comma-separated, lowercased group names that grant platform-operator
-    #    (OPENCRANE_PLATFORM_OPERATOR_GROUPS) and org-admin (OPENCRANE_ORG_ADMIN_GROUPS).
-    #    Empty → nobody is granted via groups (fail-closed).
+    # -- Comma-separated, lowercased group names that grant the fleet identity-plane
+    #    platform-operator claim (OPENCRANE_PLATFORM_OPERATOR_GROUPS).
+    #    Empty means nobody receives this claim from a group.
     platformOperatorGroups: ""
-    orgAdminGroups: ""
     # -- Per-cluster platform-operator SEED email (OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL).
     #    Bootstraps the FIRST platform operator before any IdP group mapping exists: a
     #    caller whose VERIFIED email equals this (case-insensitive) becomes a platform
@@ -946,8 +936,8 @@ networkPolicy:
   #    what platform pods can reach OUTBOUND. The two complement each other.
   #
   #    FQDN-BASED EGRESS: the HTTPS egress rules (rules 7, 8) allow port 443 to ANY
-  #    external destination (conservative). If your cluster runs Cilium, replace those
-  #    with CiliumNetworkPolicy objects scoped to the exact FQDNs
+  #    external destination (conservative). If your cluster serves and enforces the exact
+  #    CiliumNetworkPolicy API, replace those rules with objects scoped to the exact FQDNs
   #    (api.openai.com, api.anthropic.com, your Zitadel host, etc.).
   mainNetworkDefaultDeny:
     # -- MANDATORY under the `--multi-ct` profile (`multiCt.enabled`): the template renders

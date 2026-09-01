@@ -49,7 +49,7 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 {
 	// 1. Refuse a malformed command before touching the database. Every field here is required by the
 	// write's conditions, so a blank one would silently widen or narrow what the update matches.
-	if (!command.runId.trim() || !command.siloId.trim() || !command.conversationId.trim() || !command.requestedBy.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)))
+	if (!command.runId.trim() || !command.siloId.trim() || !command.conversationId.trim() || !command.requestedBy.trim() || !command.requestedByPrincipalId.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}

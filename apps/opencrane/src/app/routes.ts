@@ -4,10 +4,11 @@ import type * as k8s from "@kubernetes/client-node";
 
 import { aiBudgetRouter, tokenUsageRouter } from "@opencrane/backend/server/reporting/spend";
 import { auditRouter } from "@opencrane/backend/server/iam/audit";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { _CreateMcpCallerResolver, mcpOperatorRouter, mcpTaskRouter } from "@opencrane/backend/server/gateways/mcp";
-import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
+import { _CreateGlobalModelRoutingDefaultCommandPort, providerByokRouter, modelRegistryRouter, type ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRouter, type ResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
@@ -20,7 +21,7 @@ import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/serve
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission, __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
-import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
+import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RunCancellationRepository, type SelfRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
@@ -45,11 +46,9 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  *
  * @param app - Public Express listener, already protected by browser-session authentication.
  * @param prisma - The main product database client.
- * @param coreApi - Kubernetes client used only by the provider bring-your-own-key capability.
  * @param runAdmission - Shared managed run-now and scheduler admission port.
  * @param personalRunAdmission - Shared personal browser-run admission port.
  * @param runCancellation - Shared attempt-fenced cancellation authority.
- * @param serverNamespace - Namespace in which provider Secrets are managed.
  * @param artifactServiceEnabled - Whether conversation asset routes have a backing service.
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
  * @param skillAuthoringValidationEnabled - Whether a workflow worker can consume validation tasks.
@@ -57,14 +56,15 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  * @param workflowExecution - Shared workflow admission used by runs, conversations, and validation.
  * @param mcpWorkflows - Saved MCP task authorities, or null when the profile omits MCP services.
  * @param mcpRuntime - Runtime routes, or null when the application profile omits Kubernetes workloads.
+ * @param providerEffects - Provider and model mutations routed through the shared effect executor.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, skillAuthoringValidationEnabled: boolean, organizationMembersRouter: Router, workflowExecution: IWorkflowEngine, mcpWorkflows: McpWorkflowComposition | null, mcpRuntime: McpRuntimeComposition | null): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, skillAuthoringValidationEnabled: boolean, organizationMembersRouter: Router, workflowExecution: IWorkflowEngine, mcpWorkflows: McpWorkflowComposition | null, mcpRuntime: McpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
+		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma, function _CreateAuditAuthorization(transaction) { return new PrismaAuthorizationAuthority(transaction); }) },
 		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
 		{ method: "use", path: "/api/v1/organization/members", handler: organizationMembersRouter },
 		{ method: "use", path: "/api/v1/resource-shares", handler: _CreateRateLimitedResourceSharesRouter(prisma) },
@@ -80,7 +80,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow, _CreatePersonaAgentRevisionSelectionFactory()) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(prisma, runCancellation, _log) },
+		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(runCancellation, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, workflowExecution, _CreateConversationAttachmentAdmission, _log) },
 		..._CreateConversationAssetRoutes(prisma, artifactServiceEnabled, artifactScannerEnabled),
@@ -89,10 +89,9 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
 		..._CreateMcpRoutes(mcpWorkflows, mcpRuntime, principalDirectory),
-		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
-		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
-		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace) },
-		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma) },
+		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma, undefined, undefined, _CreateGlobalModelRoutingDefaultCommandPort(prisma, providerEffects)) },
+		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, providerEffects, _log) },
+		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma, providerEffects) },
 	];
 	const knowledgeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/third-party-sources", handler: thirdPartySourcesRouter(prisma) },

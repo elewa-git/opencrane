@@ -7,15 +7,16 @@
 A *skill* is a reusable capability an agent can be given — packaged code plus metadata. Like an
 agent service, a skill has a stable identity and immutable, versioned revisions. The OpenCrane app
 uses this package for the live, read-only catalogue API: an authenticated browser session and
-request host select the silo, and callers receive only safe skill metadata. It also stores the
-server-only record that starts a Python skill validation workflow.
+request host select the silo and local Principal, and the central authorization authority filters
+the bounded candidates through current direct and Group grants. It also stores the server-only
+record that starts a Python skill validation workflow.
 
 ```
  governed Skill + current SkillRevision
         ▼
  ┌──────────────────────────────────┐
- │  skills  ◄── HERE                 │  trusted silo? bounded, deterministic list?
- │                                   │  browser-safe fields only?
+ │  skills  ◄── HERE                 │  trusted Principal? Discover grant?
+ │                                   │  bounded browser-safe fields only?
  └──────────────────────────────────┘
         │  safe catalogue summaries
         ▼
@@ -30,17 +31,20 @@ browser catalogue  ──► discovery only; never a skill bundle or execution a
 
 **In this flow:** [artifacts](../../artifacts/main/README.md) *(holds the bundle)* · [agent-services](../../agent-services/main/README.md) *(assigns skills to managed agent revisions)*
 
-Invariant: the catalogue is limited to 200 skill summaries from the exact trusted silo, in stable
-newest-first order. It exposes no artifact addresses, bundle bytes, manifests, requirements, review
-evidence, signatures, signer identities, or worker coordinates. A failure to read the catalogue
-returns unavailable rather than a partially widened result.
+Invariant: the catalogue loads at most 200 lifecycle candidates from the exact trusted silo in
+stable newest-first order, then uses one transaction-bound `Skill × Discover` authorization batch.
+It exposes no denied row, artifact address, bundle byte, manifest, requirement, review evidence,
+signature, signer identity, or worker coordinate. A failed read returns unavailable rather than a
+partially widened result.
 
 ## Public surface
 
 - `__CreateSkillCatalogueRouter` — serves `GET /api/v1/skills`, a bounded catalogue of skill name,
   description, lifecycle, and current-revision state in the trusted host silo.
 - `_CreateSkillCatalogueRouter` — the ready-to-mount Prisma composition that authenticates through
-  the shared request-principal seam and supplies the catalogue repository.
+  the shared request-principal seam and supplies the catalogue unit of work.
+- `PrismaSkillCatalogueUnitOfWork` — opens the short transaction shared by candidate selection and
+  `AuthorizationAuthority.listPrincipalEntitled`.
 - `SkillCatalogueRepository` and `SkillCatalogueEntry` — the narrow read boundary and safe summary
   shape used by the browser catalogue.
 - `SkillCatalogueStates` and `SkillCatalogueRevisionStates` — the documented serialized lifecycle
@@ -51,8 +55,9 @@ returns unavailable rather than a partially widened result.
   provide the database transaction that also admits that task.
 - `__CreateSkillAuthoringValidationSubmissionRouter` and
   `PrismaSkillAuthoringValidationSubmissionUnitOfWork` — accept only a skill revision ID from an
-  authenticated browser, load the silo and artifact details from the database, and save the
-  validation and its workflow task in one database transaction.
+  authenticated browser, load ownership, lifecycle, and artifact facts from the database, admit
+  `SkillRevision × Review` through the central authority, and save the validation plus workflow task
+  in that same database transaction.
 - `PrismaSkillAuthoringValidationControllerUnitOfWork` — server-side claim, Job/Pod binding, and
   terminal-completion authority for that saved task. It uses short database transactions and only
   accepts the one authoring profile.

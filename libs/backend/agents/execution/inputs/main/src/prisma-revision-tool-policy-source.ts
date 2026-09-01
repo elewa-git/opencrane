@@ -40,6 +40,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: {
 				id: run.agentRevisionId,
+				siloId: command.siloId,
 				agentServiceId: run.agentServiceId,
 				state: AgentRevisionState.Published,
 				agentService: { is: { id: run.agentServiceId, siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } },
@@ -76,6 +77,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 		return {
 			outcome: "loaded",
 			value: {
+				modelDefinitionId: revision.modelDefinition.id,
 				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId },
 				mcpTools,
 				skillRevisionIds,
@@ -104,7 +106,7 @@ export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 	{
 		// 1. Re-check that the exact revision is still published. Do not trust the revision id an earlier caller passed.
 		const revision = await transaction.prisma.agentRevision.findFirst({
-			where: { id: run.agentRevisionId, agentServiceId: run.agentServiceId, state: AgentRevisionState.Published, agentService: { is: { siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } } },
+			where: { id: run.agentRevisionId, siloId: command.siloId, agentServiceId: run.agentServiceId, state: AgentRevisionState.Published, agentService: { is: { siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } } },
 			select: { budget: true },
 		});
 		if (revision === null) return { outcome: "denied", reason: "budget_unavailable" };
@@ -116,23 +118,20 @@ export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 }
 
 /** Returns whether a model definition is global or belongs exactly to the admission silo. */
-function _IsModelAvailable(model: { readonly scope: ModelRoutingScope; readonly clusterTenant: string | null }, siloId: string): boolean
+function _IsModelAvailable(model: { readonly siloId: string; readonly scope: ModelRoutingScope; readonly clusterTenant: string | null }, siloId: string): boolean
 {
-	return model.scope === ModelRoutingScope.Global || (model.scope === ModelRoutingScope.ClusterTenant && model.clusterTenant === siloId);
+	return model.siloId === siloId && ((model.scope === ModelRoutingScope.Global && model.clusterTenant === null) || (model.scope === ModelRoutingScope.ClusterTenant && model.clusterTenant === siloId));
 }
 
 /** Turns the stored JSON budget into the snapshot's budget fields, never filling in a default. */
 function _ParseBudget(value: JsonValue, admittedAtEpochMs: number): BudgetPolicyInput["budgetPolicy"] | null
 {
-	if (value === null || typeof value !== "object" || Array.isArray(value) || !Number.isSafeInteger(admittedAtEpochMs))
-		return null;
+	if (value === null || typeof value !== "object" || Array.isArray(value) || !Number.isSafeInteger(admittedAtEpochMs)) return null;
 	const budget = value as Readonly<Record<string, unknown>>;
-	if (!_IsPositiveSafeInteger(budget.maxTurns) || !_IsPositiveSafeInteger(budget.maxTokens) || !_IsPositiveSafeInteger(budget.maxCostUsdMicros) || !_IsPositiveSafeInteger(budget.maxDurationMs))
-		return null;
+	if (!_IsPositiveSafeInteger(budget.maxTurns) || !_IsPositiveSafeInteger(budget.maxTokens) || !_IsPositiveSafeInteger(budget.maxDurationMs)) return null;
 	const deadline = admittedAtEpochMs + budget.maxDurationMs;
-	if (!Number.isSafeInteger(deadline))
-		return null;
-	return { maxModelTurns: budget.maxTurns, maxTotalTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, wallClockDeadlineEpochMs: deadline };
+	if (!Number.isSafeInteger(deadline)) return null;
+	return { maxModelTurns: budget.maxTurns, maxTotalTokens: budget.maxTokens, wallClockDeadlineEpochMs: deadline };
 }
 
 /** Returns whether a JSON value is a positive safe integer that can be used as a limit. */

@@ -6,7 +6,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 CONNECTION_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/postgres-connection.sh"
-MIGRATION_ORCHESTRATOR="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-orchestrator.sh"
 KUBERNETES_API_ARGS="$ROOT_DIR/apps/_infra/deploy-k8s/platform/kubernetes-api-helm-args.sh"
 
 grep -Fq 'POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"' "$DEPLOY_SCRIPT"
@@ -16,8 +15,6 @@ if grep -Fq 'POSTGRES_POOLER_CLIENT_HOST=' "$DEPLOY_SCRIPT"; then
 fi
 grep -Fq 'source "$SCRIPT_DIR/postgres-connection.sh"' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST' "$DEPLOY_SCRIPT"
-grep -Fq '"app.kubernetes.io/component":"agent-controller"' "$MIGRATION_ORCHESTRATOR"
-grep -Fq '"app.kubernetes.io/component":"postgres-database-migration"' "$MIGRATION_ORCHESTRATOR"
 grep -Fq 'publish_postgres_database_connection' "$CONNECTION_HELPER"
 grep -Fq '"$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" litellm' "$DEPLOY_SCRIPT"

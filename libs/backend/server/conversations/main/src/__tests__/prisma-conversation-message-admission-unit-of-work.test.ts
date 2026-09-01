@@ -9,8 +9,23 @@ import { PrismaConversationMessageAdmissionUnitOfWork } from "../db/prisma-conve
 import { PrismaConversationMutationRepository } from "../db/prisma-conversation-mutation-repository";
 import type { SubmitConversationMessageRequest } from "../types/conversation-request.types";
 
+vi.mock("@opencrane/backend/server/iam/authorization", function _MockAuthorization()
+{
+	return {
+		PrismaAuthorizationAuthority: class
+		{
+			async admitPrincipal() { return { outcome: "allow", evidence: { decisionDigest: "digest" } }; }
+			async listPrincipalEntitled(command: { readonly resources: readonly object[] }) { return command.resources; }
+		},
+		PrismaManagedAuthorizationGrantRepository: class
+		{
+			async reconcileManagedResourceGrants() { return undefined; }
+		},
+	};
+});
+
 /** Fixed caller and message request reused across mode-strategy assertions. */
-const _CALLER = { siloId: "silo-1", issuer: "https://issuer.test", subjectId: "user-1" } as const;
+const _CALLER = { siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" } as const;
 const _REQUEST: SubmitConversationMessageRequest = { idempotencyKey: "request-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 
 /** Builds a canonical persisted message timeline row. */

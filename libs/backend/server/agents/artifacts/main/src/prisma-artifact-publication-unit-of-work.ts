@@ -1,23 +1,19 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
+import { ___IsRolledBackConflict, ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority";
 import { _ArtifactPublicationConflictError, type ArtifactPublicationTransaction, type ArtifactPublicationUnitOfWork, type ArtifactPublicationWork } from "./artifact-unit-of-work.types";
 
-/** Maximum complete transaction attempts for a catalogue race that PostgreSQL rolled back. */
-const _PUBLICATION_ATTEMPT_LIMIT = 3;
-
-/** Prisma conflict codes that prove the database rolled an attempt back before any durable effect. */
-const _RETRYABLE_PUBLICATION_CODES = new Set(["P2002", "P2034"]);
-
 /**
  * Opens one SERIALIZABLE transaction per publication step and retries safe collisions.
  *
- * Up to three complete attempts, with fresh transaction-scoped repositories each time. Only the
- * two codes in `_RETRYABLE_PUBLICATION_CODES` are retried, because they prove the attempt rolled
- * back with nothing written. When the last attempt still collides, the Prisma error is converted
- * into {@link _ArtifactPublicationConflictError} so nothing above this file has to know which
+ * The shared unit-of-work envelope runs up to three complete attempts, with fresh
+ * transaction-scoped repositories each time. Only the envelope's proven-rollback codes (P2002 and
+ * P2034) are retried, because they prove the attempt rolled back with nothing written. When the
+ * last attempt still collides, the Prisma error is converted into
+ * {@link _ArtifactPublicationConflictError} so nothing above this file has to know which
  * database is underneath.
  *
  * Called by: `_CreateArtifactUploadAuthority` in prisma-artifact-authority.composition.ts.
@@ -52,30 +48,23 @@ export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationU
 	async run<Result>(work: ArtifactPublicationWork<Result>): Promise<Result>
 	{
 		const workflow = this.workflow;
-		for (let attempt = 1; attempt <= _PUBLICATION_ATTEMPT_LIMIT; attempt += 1)
+		try
 		{
-			try
+			return await ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction): Promise<Result>
 			{
-				return await this.prisma.$transaction(async function _Run(transaction): Promise<Result>
-				{
-					const authority = new PrismaArtifactAuthorityRepository(transaction, workflow);
-					const repositories: ArtifactPublicationTransaction = { revisions: authority, uploadLeases: authority };
-					return work(repositories);
-				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-			}
-			catch (error)
-			{
-				if (_IsRetryablePublicationConflict(error) && attempt < _PUBLICATION_ATTEMPT_LIMIT) continue;
-				if (_IsRetryablePublicationConflict(error)) throw new _ArtifactPublicationConflictError();
-				throw error;
-			}
+				const authority = new PrismaArtifactAuthorityRepository(transaction, workflow);
+				const repositories: ArtifactPublicationTransaction = { revisions: authority, uploadLeases: authority };
+				return work(repositories);
+			}, { isolationLevel: "Serializable", operation: "artifact publication", attemptLimit: 3 });
 		}
-		throw new Error("artifact publication exhausted without a result");
+		catch (error)
+		{
+			// The envelope rethrows the last proven-rollback conflict unchanged; translate it here so callers never see a Prisma error.
+			if (___IsRolledBackConflict(error))
+			{
+				throw new _ArtifactPublicationConflictError();
+			}
+			throw error;
+		}
 	}
-}
-
-/** Returns whether Prisma confirms that the whole attempted publication transaction rolled back. */
-function _IsRetryablePublicationConflict(error: unknown): boolean
-{
-	return error instanceof Prisma.PrismaClientKnownRequestError && _RETRYABLE_PUBLICATION_CODES.has(error.code);
 }

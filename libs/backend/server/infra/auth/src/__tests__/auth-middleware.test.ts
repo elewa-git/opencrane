@@ -16,7 +16,6 @@ function _AuthUser(overrides: Partial<AuthUser> = {}): AuthUser
 		siloId: "silo-a",
 		authorizationExpiresAt: "2099-08-21T10:00:00.000Z",
 		isPlatformOperator: false,
-		isOrgAdmin: false,
 		authenticatedAt: "2026-08-21T10:00:00.000Z",
 		...overrides,
 	};

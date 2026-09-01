@@ -10,6 +10,7 @@ import type { SelfConversationSocketServer } from "@opencrane/backend/server/con
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 import type { McpRuntimeAuthority } from "@opencrane/backend/server/gateways/mcp";
+import type { ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 
 import { _StartBackgroundWorkers } from "./background-workers";
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
@@ -73,13 +74,13 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime): Promise<void>
+export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor): Promise<void>
 {
 	// 1. Start workers only after application composition has registered every durable task.
 	let backgroundWorkers: OpenCraneBackgroundWorkers;
 	try
 	{
-		backgroundWorkers = await _StartBackgroundWorkers(prisma, managedRunAdmission, config, externalActions, mcpRuntime, workflowRuntime);
+		backgroundWorkers = await _StartBackgroundWorkers(prisma, managedRunAdmission, config, externalActions, mcpRuntime, workflowRuntime, providerEffects);
 	}
 	catch (error)
 	{

@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaSelfRunStatusRepository } from "./prisma-self-run-status-repository";
+import { PrismaSelfRunStatusUnitOfWork } from "./prisma-self-run-status-repository";
 import { __CreateSelfRunStatusRouter } from "./self-run-status.router";
 import type { SelfRunStatusCaller } from "./self-run-status.router.types";
 
@@ -12,7 +12,7 @@ import type { SelfRunStatusCaller } from "./self-run-status.router.types";
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfRunStatusCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { subjectId: principal.externalSubject, siloId: principal.siloId } : null;
+	return principal ? { principalId: principal.principalId, subjectId: principal.externalSubject, siloId: principal.siloId } : null;
 }
 
 /**
@@ -25,7 +25,7 @@ export function _CreateSelfRunStatusRouter(prisma: PrismaClient, logger: Logger)
 {
 	return __CreateSelfRunStatusRouter({
 		resolveCaller: _resolveCaller,
-		repository: new PrismaSelfRunStatusRepository(prisma),
+		repository: new PrismaSelfRunStatusUnitOfWork(prisma),
 		logger,
 	});
 }

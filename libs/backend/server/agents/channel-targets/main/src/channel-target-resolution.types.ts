@@ -153,6 +153,8 @@ export interface ChannelConversationAuthority
 	readonly lifecycle: "open" | "closed";
 	/** Users explicitly participating in the conversation. */
 	readonly participantUserIds: readonly string[];
+	/** Unambiguous local Principal for the verified participant, or null when projection fails closed. */
+	readonly participantPrincipalId: string | null;
 }
 
 /** Exact authorization request after membership and conversation binding. */
@@ -199,6 +201,8 @@ export interface IssueChannelInvocationContextCommand
 	readonly digest: string;
 	/** Verified human subject and required conversation participant. */
 	readonly subjectId: string;
+	/** Local Principal resolved from the verified browser subject. */
+	readonly principalId: string;
 	/** Expected host-selected silo. */
 	readonly siloId: string;
 	/** Expected canonical conversation. */
@@ -209,8 +213,6 @@ export interface IssueChannelInvocationContextCommand
 	readonly action: ChannelResolutionAction;
 	/** Signed membership revision accepted by authorization. */
 	readonly membershipRevision: number;
-	/** Digest of the exact authorization decision. */
-	readonly authorizationDigest: string;
 	/** Trusted issuance instant. */
 	readonly nowEpochMs: number;
 	/** Hard expiry bounded by both configured TTL and membership trust. */
@@ -332,7 +334,7 @@ export interface ReconcileChannelRuntimeRoutesCommand
 export interface ChannelTargetAuthorityRepository
 {
 	/** Loads current conversation coordinates for pre-authorization checks. */
-	getConversationAuthority(conversationId: string): Promise<ChannelConversationAuthority | null>;
+	getConversationAuthority(conversationId: string, subjectId: string): Promise<ChannelConversationAuthority | null>;
 	/** Reconciles one service-specific route per current AgentService for the deployment receiver. */
 	reconcileRuntimeRoutes(command: ReconcileChannelRuntimeRoutesCommand): Promise<number>;
 	/** Rechecks conversation, participant, and selected route while inserting the digest. */
@@ -354,6 +356,13 @@ export interface ChannelTargetAuthorityRepository
  * apps/opencrane/src/app/runtime-composition.ts.
  */
 export type ChannelTargetAuthorityUnitOfWork = ChannelTargetAuthorityRepository;
+
+/** Mirrors exact current Agent-session participation into ChannelTarget send grants. */
+export interface ChannelTargetParticipantGrantProjectionRepository
+{
+	/** Recomputes managed grants for every current route bound to one Agent-session conversation. */
+	reconcileConversation(conversationId: string, siloId: string, now: Date): Promise<number>;
+}
 
 /** Injectable wall clock. */
 export interface ChannelTargetClock

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 
@@ -28,9 +28,9 @@ describe("WorkflowTaskAdmission", function _WorkflowTaskAdmissionSuite()
 
 		expect(receipt).toEqual({ taskId: "task-1", runId: "run-1", attempt: 1, created: true });
 		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
-		const query = vi.mocked(transaction.$queryRaw).mock.calls[0]?.[0] as Prisma.Sql;
-		expect(query.strings.join(" ")).toContain("absurd.spawn_task");
-		expect(query.values).toEqual(["control-plane", "refresh-token", '{"connectionId":"connection-1"}', '{"idempotency_key":"[\\"refresh-token\\",\\"refresh:1\\"]","max_attempts":5,"retry_strategy":{"kind":"exponential","base_seconds":30,"factor":2,"max_seconds":300}}']);
+		const [query, ...values] = vi.mocked(transaction.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
+		expect(query.join(" ")).toContain("absurd.spawn_task");
+		expect(values).toEqual(["control-plane", "refresh-token", '{"connectionId":"connection-1"}', '{"idempotency_key":"[\\"refresh-token\\",\\"refresh:1\\"]","max_attempts":5,"retry_strategy":{"kind":"exponential","base_seconds":30,"factor":2,"max_seconds":300}}']);
 	});
 
 	it("rejects a root Prisma client so admission cannot outlive the product transaction", async function _RejectsRootClient()
@@ -51,9 +51,9 @@ describe("WorkflowTaskAdmission", function _WorkflowTaskAdmissionSuite()
 		await admission.admit(firstTransaction, { taskName: "refresh-token", idempotencyKey: "request-42", input: {}, ..._RETRY });
 		await admission.admit(secondTransaction, { taskName: "rotate-key", idempotencyKey: "request-42", input: {}, ..._RETRY });
 
-		const firstQuery = vi.mocked(firstTransaction.$queryRaw).mock.calls[0]?.[0] as Prisma.Sql;
-		const secondQuery = vi.mocked(secondTransaction.$queryRaw).mock.calls[0]?.[0] as Prisma.Sql;
-		expect(firstQuery.values.at(-1)).not.toBe(secondQuery.values.at(-1));
+		const [, ...firstValues] = vi.mocked(firstTransaction.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
+		const [, ...secondValues] = vi.mocked(secondTransaction.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
+		expect(firstValues.at(-1)).not.toBe(secondValues.at(-1));
 	});
 
 	it("returns the existing task receipt when the same task repeats its idempotency key", async function _RepeatedTaskAdmission()
@@ -93,9 +93,9 @@ describe("WorkflowTaskEventAdmission", function _WorkflowTaskEventAdmissionSuite
 		await admission.emit(transaction, "opencrane-task:task-1:event:completed:1", { preprocessJobId: "preprocess-1", deliveryCount: 1 });
 
 		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
-		const query = vi.mocked(transaction.$queryRaw).mock.calls[0]?.[0] as Prisma.Sql;
-		expect(query.strings.join(" ")).toContain("absurd.emit_event");
-		expect(query.values).toEqual(["control-plane", "opencrane-task:task-1:event:completed:1", '{"preprocessJobId":"preprocess-1","deliveryCount":1}']);
+		const [query, ...values] = vi.mocked(transaction.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
+		expect(query.join(" ")).toContain("absurd.emit_event");
+		expect(values).toEqual(["control-plane", "opencrane-task:task-1:event:completed:1", '{"preprocessJobId":"preprocess-1","deliveryCount":1}']);
 	});
 
 	it("rejects a root client and normalizes database failures", async function _RejectsInvalidPersistence()

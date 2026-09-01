@@ -19,7 +19,7 @@ function _dependencies(): ChannelTargetResolutionDependencies
 		hostSilo: { resolveExactHost: async function _resolveHost() { return { siloId: "silo-1" }; } },
 		membership: { verifyCurrentMembership: async function _membership() { return { outcome: "trusted", revision: 7, trustedUntilEpochMs: _NOW + 120_000 }; } },
 		repository: {
-			getConversationAuthority: async function _Conversation() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"] }; },
+			getConversationAuthority: async function _Conversation() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"], participantPrincipalId: "principal-1" }; },
 			reconcileRuntimeRoutes: async function _Reconcile() { return 0; },
 			issueInvocationContextAtomically: async function _issue() { return { status: "issued", context: { id: "context-1", routeId: "route-1", receiverId: "conversation-replay-v1", endpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" } }; },
 			consumeInvocationContextAtomically: async function _consume() { return { status: "denied", reason: "not_found" }; },
@@ -54,7 +54,6 @@ describe("channel target resolution", function _DescribeChannelTargetResolution(
 		expect(JSON.stringify(issued)).not.toContain(_OPAQUE_CONTEXT);
 		expect(issued?.action).toBe("events.read");
 		expect(issued?.receiverId).toBe("conversation-replay-v1");
-		expect(issued?.authorizationDigest).toMatch(/^sha256:[0-9a-f]{64}$/u);
 	});
 
 	it("rejects an identity that was not verified by cookie session middleware", async function _RejectsUnverifiedIdentity()
@@ -78,7 +77,7 @@ describe("channel target resolution", function _DescribeChannelTargetResolution(
 	it("fails closed when the participant is absent", async function _RejectsMissingParticipant()
 	{
 		const dependencies = _dependencies();
-		dependencies.repository.getConversationAuthority = async function _NoParticipant() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: [] }; };
+		dependencies.repository.getConversationAuthority = async function _NoParticipant() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: [], participantPrincipalId: null }; };
 		const result = await __ResolveChannelTarget(dependencies, _command());
 
 		expect(result).toEqual({ outcome: "denied", reason: "authorization_denied" });
@@ -87,7 +86,7 @@ describe("channel target resolution", function _DescribeChannelTargetResolution(
 	it("fails closed when the conversation is outside the host silo", async function _RejectsWrongSilo()
 	{
 		const dependencies = _dependencies();
-		dependencies.repository.getConversationAuthority = async function _WrongConversation() { return { conversationId: "conversation-1", siloId: "silo-other", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: [] }; };
+		dependencies.repository.getConversationAuthority = async function _WrongConversation() { return { conversationId: "conversation-1", siloId: "silo-other", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: [], participantPrincipalId: null }; };
 
 		const result = await __ResolveChannelTarget(dependencies, _command());
 

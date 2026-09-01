@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
 
-import { AgentServiceKind, AgentServiceState, ModelRoutingScope, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentServiceKind, AgentServiceState, ModelRoutingScope, Prisma } from "@prisma/client";
 
+import { PrismaManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantSpec } from "@opencrane/backend/server/iam/authorization";
 import { AgentServiceStates, type AgentService } from "@opencrane/models/agents";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 
 import { AgentRevisionLifecycleDenials, AgentServiceLifecycleActions } from "../agent-revision-lifecycle.types";
-import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types";
-
+import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AgentServiceReadCaller, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types";
 import { _mapRevision, _mapRun, _mapService, _serviceState } from "./prisma-agent-mappers";
 import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
 import { __CreateManagedAgentServicePrincipalRepository } from "./prisma-managed-agent-service-principal.factory";
+
+/** Isolates grants written atomically for the Principal that created each agent resource. */
+const _AGENT_RESOURCE_CREATOR_GRANT_MANAGER_ID = "agent-resource-creator-bootstrap";
 
 /** Maps a lifecycle action to its target Prisma service state. */
 function _targetServiceState(action: AgentServiceLifecycleAction): AgentServiceState
@@ -55,7 +59,8 @@ type _HeadGuard =
  * Revisions are never edited or deleted. Revise adds a new draft; restore adds a new draft that
  * copies an older revision and records its source, preserving the complete history.
  *
- * Called by: {@link PrismaAgentRevisionLifecycleUnitOfWork} constructs one per transaction.
+ * Called by: `PrismaAgentRevisionLifecycleUnitOfWork` in
+ * `prisma-agent-revision-lifecycle-unit-of-work.ts` constructs one per transaction.
  *
  * @implements AgentRevisionLifecycleRepository
  */
@@ -65,32 +70,42 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 	private readonly prisma: Prisma.TransactionClient;
 	/** Writes immutable draft revisions within the same transaction. */
 	private readonly revisionWriter: PrismaAgentRevisionWriterRepository;
+	/** Reconciles creator grants within the same transaction. */
+	private readonly grantWriter: ManagedAuthorizationGrantRepository;
 
 	/** Creates a lifecycle repository inside the caller's transaction. */
 	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 		this.revisionWriter = new PrismaAgentRevisionWriterRepository(this.prisma);
+		this.grantWriter = new PrismaManagedAuthorizationGrantRepository(this.prisma);
 	}
 
 	/** Lists the newest two hundred managed services from one exact silo. */
-	async listManagedServices(siloId: string): Promise<readonly AgentService[]>
+	async listManagedServices(caller: AgentServiceReadCaller): Promise<readonly AgentService[]>
 	{
-		const rows = await this.prisma.agentService.findMany({ where: { siloId, kind: AgentServiceKind.Managed }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 200 });
+		const rows = await this.prisma.agentService.findMany({ where: { siloId: caller.siloId, kind: AgentServiceKind.Managed }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 200 });
 		return rows.map(_mapService);
 	}
 
 	/** Loads one stable service identity scoped to the caller's silo. */
-	async getService(agentServiceId: string, siloId: string): Promise<Awaited<ReturnType<AgentRevisionLifecycleRepository["getService"]>>>
+	async getService(agentServiceId: string, caller: AgentServiceReadCaller): Promise<Awaited<ReturnType<AgentRevisionLifecycleRepository["getService"]>>>
+	{
+		const row = await this.prisma.agentService.findFirst({ where: { id: agentServiceId, siloId: caller.siloId } });
+		return row === null ? null : _mapService(row);
+	}
+
+	/** Loads internal run-admission eligibility without making a user-facing read decision. */
+	async getServiceForAdmission(agentServiceId: string, siloId: string): Promise<AgentService | null>
 	{
 		const row = await this.prisma.agentService.findFirst({ where: { id: agentServiceId, siloId } });
 		return row === null ? null : _mapService(row);
 	}
 
 	/** Loads one immutable revision whose parent service is in the caller's silo. */
-	async getRevision(agentRevisionId: string, siloId: string): Promise<Awaited<ReturnType<AgentRevisionLifecycleRepository["getRevision"]>>>
+	async getRevision(agentRevisionId: string, caller: AgentServiceReadCaller): Promise<Awaited<ReturnType<AgentRevisionLifecycleRepository["getRevision"]>>>
 	{
-		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, agentService: { is: { siloId } } }, include: _AGENT_REVISION_INCLUDE });
+		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, siloId: caller.siloId, agentService: { is: { siloId: caller.siloId } } }, include: _AGENT_REVISION_INCLUDE });
 		return row === null ? null : _mapRevision(row);
 	}
 
@@ -114,6 +129,9 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			authoredBy: command.authoredBy,
 			createdAt: createdAtDate,
 		});
+		await _SeedCreatorGrants(this.grantWriter, command.siloId, command.principalId, { kind: ProductAuthorizationResourceKinds.AgentService, id: serviceRow.id }, [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read], createdAtDate);
+		await _SeedCreatorGrants(this.grantWriter, command.siloId, command.principalId, { kind: ProductAuthorizationResourceKinds.Schedule, id: serviceRow.id }, [ProductAuthorizationActions.Create], createdAtDate);
+		await _SeedCreatorGrants(this.grantWriter, command.siloId, command.principalId, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: revisionRow.id }, [ProductAuthorizationActions.Read], createdAtDate);
 		return { outcome: _LifecycleOutcomes.Created, service: _mapService(serviceRow), revision: _mapRevision(revisionRow) };
 	}
 
@@ -137,6 +155,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			authoredBy: command.authoredBy,
 			createdAt: createdAtDate,
 		});
+		await _SeedCreatorGrants(this.grantWriter, command.siloId, command.principalId, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: revisionRow.id }, [ProductAuthorizationActions.Read], createdAtDate);
 		return { outcome: _LifecycleOutcomes.Revised, revision: _mapRevision(revisionRow) };
 	}
 
@@ -148,7 +167,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		if (guard.outcome !== _HeadGuardOutcomes.Ready)
 			return guard.result;
 		// Silo scope makes a foreign revision indistinguishable from a missing revision.
-		const source = await this.prisma.agentRevision.findFirst({ where: { id: command.sourceRevisionId, agentService: { is: { siloId: command.siloId } } }, include: _AGENT_REVISION_INCLUDE });
+		const source = await this.prisma.agentRevision.findFirst({ where: { id: command.sourceRevisionId, siloId: command.siloId, agentService: { is: { siloId: command.siloId } } }, include: _AGENT_REVISION_INCLUDE });
 		if (source === null)
 			return { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.RevisionNotFound };
 		if (source.agentServiceId !== command.agentServiceId)
@@ -164,6 +183,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			authoredBy: command.authoredBy,
 			createdAt: createdAtDate,
 		});
+		await _SeedCreatorGrants(this.grantWriter, command.siloId, command.principalId, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: revisionRow.id }, [ProductAuthorizationActions.Read], createdAtDate);
 		return { outcome: _LifecycleOutcomes.Revised, revision: _mapRevision(revisionRow) };
 	}
 
@@ -198,11 +218,11 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 	}
 
 	/** Reads the silo-scoped revision lineage and durable run history for one service. */
-	async readHistory(agentServiceId: string, siloId: string, runLimit: number): Promise<AgentServiceHistory>
+	async readHistory(agentServiceId: string, caller: AgentServiceReadCaller, runLimit: number): Promise<AgentServiceHistory>
 	{
 		const [revisions, runs] = await Promise.all([
-			this.prisma.agentRevision.findMany({ where: { agentServiceId, agentService: { is: { siloId } } }, orderBy: { revision: "desc" }, include: _AGENT_REVISION_INCLUDE }),
-			this.prisma.agentRun.findMany({ where: { agentServiceId, siloId }, orderBy: { acceptedAt: "desc" }, take: Math.max(1, Math.min(runLimit, 200)) }),
+			this.prisma.agentRevision.findMany({ where: { agentServiceId, siloId: caller.siloId, agentService: { is: { siloId: caller.siloId } } }, orderBy: { revision: "desc" }, include: _AGENT_REVISION_INCLUDE }),
+			this.prisma.agentRun.findMany({ where: { agentServiceId, siloId: caller.siloId }, orderBy: { acceptedAt: "desc" }, take: Math.max(1, Math.min(runLimit, 200)) }),
 		]);
 		return { revisions: revisions.map(_mapRevision), runs: runs.map(_mapRun) };
 	}
@@ -210,8 +230,8 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 	/** Returns whether a model definition is global or belongs to the service's tenant scope. */
 	private async _IsModelDefinitionAvailable(modelDefinitionId: string, siloId: string): Promise<boolean>
 	{
-		const definition = await this.prisma.modelDefinition.findUnique({ where: { id: modelDefinitionId }, select: { scope: true, clusterTenant: true } });
-		return definition?.scope === ModelRoutingScope.Global || (definition?.scope === ModelRoutingScope.ClusterTenant && definition.clusterTenant === siloId);
+		const definition = await this.prisma.modelDefinition.findUnique({ where: { id_siloId: { id: modelDefinitionId, siloId } }, select: { scope: true, clusterTenant: true } });
+		return (definition?.scope === ModelRoutingScope.Global && definition.clusterTenant === null) || (definition?.scope === ModelRoutingScope.ClusterTenant && definition.clusterTenant === siloId);
 	}
 
 	/** Claims the exact service row and validates the expected head revision. */
@@ -222,7 +242,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound } };
 		if (_serviceState(service.state) === AgentServiceStates.Retired)
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceRetired } };
-		const head = await this.prisma.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true, revision: true } });
+		const head = await this.prisma.agentRevision.findFirst({ where: { agentServiceId, siloId }, orderBy: { revision: "desc" }, select: { id: true, revision: true } });
 		if (head === null || head.id !== expectedParentRevisionId)
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Conflict, currentHeadRevisionId: head?.id ?? null } };
 		const claimed = await this.prisma.agentService.updateMany({
@@ -236,84 +256,20 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound } };
 		if (_serviceState(winner.state) === AgentServiceStates.Retired)
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceRetired } };
-		const winnerHead = await this.prisma.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true } });
+		const winnerHead = await this.prisma.agentRevision.findFirst({ where: { agentServiceId, siloId }, orderBy: { revision: "desc" }, select: { id: true } });
 		return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Conflict, currentHeadRevisionId: winnerHead?.id ?? null } };
 	}
 }
 
-/**
- * Opens serializable transactions around managed-agent lifecycle repository work.
- *
- * Called by: `_CreateAgentServicesRouter` in `prisma-agent-services.router.ts`.
- *
- * @implements AgentRevisionLifecycleRepository
- */
-export class PrismaAgentRevisionLifecycleUnitOfWork implements AgentRevisionLifecycleRepository
+/** Writes creator-owned exact grants inside the resource-creation transaction. */
+async function _SeedCreatorGrants(grantWriter: ManagedAuthorizationGrantRepository, siloId: string, principalId: string, resource: ProductAuthorizationResourceLocator, actions: readonly ProductAuthorizationActions[], now: Date): Promise<void>
 {
-	/** OpenCrane product-authority database client. */
-	private readonly prisma: PrismaClient;
-
-	/** Creates the lifecycle unit of work over canonical Postgres. */
-	constructor(prisma: PrismaClient)
+	const grants: ManagedAuthorizationGrantSpec[] = actions.map(function _Grant(action): ManagedAuthorizationGrantSpec
 	{
-		this.prisma = prisma;
-	}
-
-	/** Lists managed services inside one serializable transaction. */
-	listManagedServices(siloId: string): Promise<readonly AgentService[]>
-	{
-		return this._Run(function _List(repository) { return repository.listManagedServices(siloId); });
-	}
-
-	/** Loads one service inside one serializable transaction. */
-	getService(agentServiceId: string, siloId: string): ReturnType<AgentRevisionLifecycleRepository["getService"]>
-	{
-		return this._Run(function _GetService(repository) { return repository.getService(agentServiceId, siloId); });
-	}
-
-	/** Loads one revision inside one serializable transaction. */
-	getRevision(agentRevisionId: string, siloId: string): ReturnType<AgentRevisionLifecycleRepository["getRevision"]>
-	{
-		return this._Run(function _GetRevision(repository) { return repository.getRevision(agentRevisionId, siloId); });
-	}
-
-	/** Creates one service and first revision inside one serializable transaction. */
-	createManagedService(command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>
-	{
-		return this._Run(function _Create(repository) { return repository.createManagedService(command, createdAt); });
-	}
-
-	/** Appends one draft revision inside one serializable transaction. */
-	reviseRevision(command: ReviseAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>
-	{
-		return this._Run(function _Revise(repository) { return repository.reviseRevision(command, createdAt); });
-	}
-
-	/** Restores one revision inside one serializable transaction. */
-	restoreRevision(command: RestoreAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>
-	{
-		return this._Run(function _Restore(repository) { return repository.restoreRevision(command, createdAt); });
-	}
-
-	/** Changes one service state inside one serializable transaction. */
-	changeServiceState(command: ChangeAgentServiceStateCommand, changedAt: string): Promise<ChangeAgentServiceStateResult>
-	{
-		return this._Run(function _Change(repository) { return repository.changeServiceState(command, changedAt); });
-	}
-
-	/** Reads one service history inside one serializable transaction. */
-	readHistory(agentServiceId: string, siloId: string, runLimit: number): Promise<AgentServiceHistory>
-	{
-		return this._Run(function _History(repository) { return repository.readHistory(agentServiceId, siloId, runLimit); });
-	}
-
-	/** Runs one lifecycle operation in a serializable transaction. */
-	private _Run<TResult>(operation: (repository: PrismaAgentRevisionLifecycleRepository) => Promise<TResult>): Promise<TResult>
-	{
-		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
-		{
-			const repository = new PrismaAgentRevisionLifecycleRepository(transaction);
-			return operation(repository);
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-	}
+		const capability = __ProductAuthorizationCapability(resource.kind, action);
+		if (capability === null)
+			throw new Error(`creator grant capability is missing for ${resource.kind}:${action}`);
+		return { subject: { kind: AuthorizationSubjectKinds.Principal, principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: principalId };
+	});
+	await grantWriter.reconcileManagedResourceGrants({ siloId, managerId: _AGENT_RESOURCE_CREATOR_GRANT_MANAGER_ID, resource, grants, now });
 }

@@ -32,7 +32,7 @@
     {
       "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
       "owner": "platform",
-      "reason": "Legacy installation engine remains above the size limit while responsibilities are extracted incrementally; initial model-provider custody now lives in initial-model-provider.sh.",
+      "reason": "Legacy installation engine remains above the size limit while responsibilities are extracted incrementally; fixed provider Secret placeholders now live in provider-key-secrets.sh.",
       "expiresOn": "2026-10-01"
     }
   ]

@@ -55,24 +55,8 @@ function _findProviderByModel(providers, requestedModel)
 	return provider;
 }
 
-/**
- * Resolves one reviewed provider/model pair without reading a credential.
- *
- * The optional fallback is the only implicit choice. Tier 2 supplies the first configured key in
- * sorted filename order, while Tier 3's environment-only path deliberately supplies no fallback.
- *
- * Called by: `resolveLocalProviderSelection` and the Tier 3 provider-backed profile.
- *
- * @param {string} registryPath - Reviewed provider registry to read.
- * @param {string | undefined} requestedProvider - Explicit provider name, when supplied.
- * @param {string | undefined} requestedModel - Explicit model name, when supplied.
- * @param {string | undefined} fallbackProvider - Reviewed provider selected by a credential source.
- * @returns {{ provider: ReturnType<typeof readLocalProviderRegistry>[number], model: string }} Exact reviewed selection.
- * @throws When provider/model ownership is invalid or no explicit/fallback provider exists.
- */
-export function resolveReviewedProviderRequest(registryPath, requestedProvider, requestedModel, fallbackProvider)
+function _selectProvider(providers, configuredProviders, requestedProvider, requestedModel)
 {
-	const providers = readLocalProviderRegistry(registryPath);
 	const namedProvider = _findProviderByName(providers, requestedProvider);
 	const modelProvider = _findProviderByModel(providers, requestedModel);
 
@@ -81,10 +65,11 @@ export function resolveReviewedProviderRequest(registryPath, requestedProvider, 
 		throw new Error(`Model ${requestedModel} does not belong to provider ${requestedProvider}`);
 	}
 
-	const provider = namedProvider ?? modelProvider ?? providers.find(candidate => candidate.name === fallbackProvider);
-	if (!provider)
+	const provider = namedProvider ?? modelProvider ?? configuredProviders[0];
+
+	if (!configuredProviders.some(candidate => candidate.name === provider.name))
 	{
-		throw new Error("Select a reviewed provider or model before supplying an environment-only provider key");
+		throw new Error(`Provider ${provider.name} requires the missing key file keys/${createLocalProviderKeyFileName(provider)}`);
 	}
 
 	return {
@@ -135,17 +120,7 @@ export function resolveLocalProviderSelection(configuration)
 		throw new Error(`Alternative A requires one reviewed provider key in keys/: ${expectedNames}`);
 	}
 
-	const selection = resolveReviewedProviderRequest(
-		configuration.localProviderRegistryPath,
-		configuration.provider,
-		configuration.model,
-		configuredProviders[0].name
-	);
-
-	if (!configuredProviders.some(candidate => candidate.name === selection.provider.name))
-	{
-		throw new Error(`Provider ${selection.provider.name} requires the missing key file keys/${createLocalProviderKeyFileName(selection.provider)}`);
-	}
+	const selection = _selectProvider(providers, configuredProviders, configuration.provider, configuration.model);
 
 	return {
 		selectedProvider: selection.provider,

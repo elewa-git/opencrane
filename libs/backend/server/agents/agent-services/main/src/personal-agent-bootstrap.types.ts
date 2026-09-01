@@ -38,6 +38,8 @@ export enum PersonalAgentBootstrapDenialReasons
 	DefaultModelUnavailable = "default_model_unavailable",
 	/** The selected model scope contains more than one default. */
 	DefaultModelAmbiguous = "default_model_ambiguous",
+	/** The trusted owner subject does not resolve to exactly one local Principal. */
+	PrincipalUnavailable = "principal_unavailable",
 }
 
 /** Evidence needed to resolve or create the personal agent for completed onboarding. */

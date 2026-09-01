@@ -26,10 +26,10 @@
       "path": "../skills/adapter/tsconfig.lib.json"
     },
     {
-      "path": "../core"
+      "path": "../session/main"
     },
     {
-      "path": "../core/adapter"
+      "path": "../session/adapter"
     },
     {
       "path": "../onboarding"

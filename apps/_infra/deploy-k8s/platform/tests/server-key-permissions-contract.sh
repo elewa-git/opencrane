@@ -239,63 +239,16 @@ if grep -Eq 'OPENCRANE_BOOTSTRAP_OPENAI_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|env
   exit 1
 fi
 
-initial_model_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
-  --set-string clustertenantManager.initialModel.provider=openai \
-  --set-string clustertenantManager.initialModel.model=openai/gpt-5.4-nano \
-  --set-string clustertenantManager.initialModel.existingSecret=byok-provider-key-openai)"
-initial_model_manifest="$(printf '%s\n' "$initial_model_rendered" | awk '
-  function flush_document() {
-    if (is_deployment && is_server) {
-      printf "%s", document
-    }
-    document = ""
-    is_deployment = 0
-    is_server = 0
-  }
-  /^---$/ {
-    flush_document()
-    next
-  }
-  {
-    document = document $0 ORS
-  }
-  /^kind: Deployment$/ {
-    is_deployment = 1
-  }
-  /^  name: opencrane-silo-opencrane-server$/ {
-    is_server = 1
-  }
-  END {
-    flush_document()
-  }
-')"
-grep -Fq '            - name: OPENCRANE_INITIAL_MODEL_PROVIDER' <<<"$initial_model_manifest"
-grep -Fq '            - name: OPENCRANE_INITIAL_MODEL_NAME' <<<"$initial_model_manifest"
-grep -Fq '              value: "openai/gpt-5.4-nano"' <<<"$initial_model_manifest"
-grep -Fq '              value: "openai"' <<<"$initial_model_manifest"
-grep -Fq '            - name: OPENCRANE_INITIAL_MODEL_API_KEY' <<<"$initial_model_manifest"
-grep -Fq '                  name: byok-provider-key-openai' <<<"$initial_model_manifest"
-grep -Fq '                  key: apiKey' <<<"$initial_model_manifest"
-if ! awk '
-  /- name: OPENCRANE_INITIAL_MODEL_API_KEY/ { found = 1; next }
-  found && /value:/ { inline = 1; exit }
-  found && /valueFrom:/ { exit }
-  END { exit inline }
-' <<<"$initial_model_manifest"; then
-  echo "initial model API key was rendered inline rather than as a Secret reference" >&2
+if grep -Eq 'OPENCRANE_INITIAL_MODEL_(PROVIDER|API_KEY)' <<<"$server_manifest"; then
+  echo "opencrane-server still renders the retired deployment-time provider bootstrap" >&2
   exit 1
 fi
-if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
-  --set-string clustertenantManager.initialModel.provider=openai >/dev/null 2>&1; then
-  echo "partial initial model configuration rendered instead of failing closed" >&2
-  exit 1
-fi
-grep -Fq 'name: opencrane-silo-provider-key-custody' <<<"$initial_model_rendered"
-grep -Fq 'resourceNames:' <<<"$initial_model_rendered"
-grep -Fq '      - byok-provider-key-openai' <<<"$initial_model_rendered"
-grep -Fq '      - byok-provider-key-glm' <<<"$initial_model_rendered"
-grep -Fq 'verbs: ["get", "update", "delete"]' <<<"$initial_model_rendered"
-provider_key_role="$(printf '%s\n' "$initial_model_rendered" | awk '
+grep -Fq 'name: opencrane-silo-provider-key-custody' <<<"$rendered"
+grep -Fq 'resourceNames:' <<<"$rendered"
+grep -Fq '      - byok-provider-key-openai' <<<"$rendered"
+grep -Fq '      - byok-provider-key-glm' <<<"$rendered"
+grep -Fq 'verbs: ["get", "update"]' <<<"$rendered"
+provider_key_role="$(printf '%s\n' "$rendered" | awk '
   function flush_document() {
     if (in_role && document ~ /name: opencrane-silo-provider-key-custody/) {
       printf "%s", document
@@ -311,6 +264,10 @@ provider_key_role="$(printf '%s\n' "$initial_model_rendered" | awk '
 [[ -n "$provider_key_role" ]]
 if grep -Fq 'verbs: ["create"]' <<<"$provider_key_role"; then
   echo "provider-key custody Role must not create arbitrary Secrets" >&2
+  exit 1
+fi
+if grep -Fq 'verbs: ["delete"]' <<<"$provider_key_role"; then
+  echo "provider-key custody Role must retain fixed Secret objects" >&2
   exit 1
 fi
 

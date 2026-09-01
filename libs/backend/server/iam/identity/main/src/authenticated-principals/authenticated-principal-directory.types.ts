@@ -1,20 +1,35 @@
-/** Stable product identity resolved from one verified authentication-authority identity. */
+/**
+ * Identifies the local Principal matched to a verified silo, issuer, and subject.
+ * MCP and resource-sharing caller resolvers use this result instead of treating session claims as
+ * product authority.
+ */
 export interface AuthenticatedPrincipal
 {
-  /** Silo selected independently from the trusted request host. */
+  /** Matches the silo stored on the resolved Principal. */
   siloId: string;
-  /** Stable product principal used by authorization and resource ownership. */
+  /** Identifies the Principal that product authorization and ownership use. */
   principalId: string;
 }
 
-/** Resolves verified authentication-authority coordinates to the exact local principal projection. */
+/**
+ * Maps a server-verified silo, issuer, and subject to a stored Principal.
+ * MCP and resource-sharing routes deny the request when this port returns `null`, so an
+ * implementation must never fall back to session claims.
+ */
 export interface AuthenticatedPrincipalDirectory
 {
   /**
-   * Resolves exactly one issuer-and-subject pair inside the trusted silo.
+   * Looks up the Principal whose stored identity matches all three verified coordinates.
+   * The silo and issuer match prevent the same subject value from another authority from becoming
+   * local product authority.
    *
-   * Called by: authenticated HTTP composition before domain commands receive an actor.
-   * @see AuthenticatedPrincipal
+   * Called by: MCP and resource-sharing caller resolvers, authenticated Principal admission and
+   * capability transactions, and `Tier3DevelopmentAuthService`.
+   * @param siloId - Silo derived from the trusted request host or startup-selected development host.
+   * @param issuer - Authentication authority that verified the subject.
+   * @param subject - Subject identifier issued by that authority.
+   * @returns The matched Principal, or `null` when the stored projection cannot prove the tuple.
+   * @throws When the backing identity store is unavailable.
    */
   resolveAuthenticatedPrincipal(siloId: string, issuer: string, subject: string): Promise<AuthenticatedPrincipal | null>;
 }

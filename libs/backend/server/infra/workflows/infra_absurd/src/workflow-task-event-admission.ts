@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { IWorkflowTaskEventAdmission } from "./workflow-task-event-admission.types";
@@ -51,9 +51,9 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 		}
 		try
 		{
-			await client.$queryRaw<readonly unknown[]>(Prisma.sql`
+			await client.$queryRaw<readonly unknown[]>`
 				SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)
-			`);
+			`;
 		}
 		catch (cause)
 		{

@@ -3,6 +3,8 @@ import type { AgentRevisionContent } from "@opencrane/models/agents";
 /** Complete immutable evidence required to append one agent revision within an existing transaction. */
 export interface CreateAgentRevisionWithinTransactionCommand
 {
+	/** Preallocated revision identity when authorization must run before the write. */
+	readonly agentRevisionId?: string;
 	/** Silo that owns the service and every nested revision assignment. */
 	readonly siloId: string;
 	/** Stable service that owns the revision lineage. */

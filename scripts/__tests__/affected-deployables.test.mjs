@@ -210,8 +210,9 @@ test("overlaps image preparation and keeps the fast direct k3d batch", function 
 	assert.match(smoke, /if ! wait "\$CERT_MANAGER_INSTALL_PID"/u);
 	assert.match(smoke, /docker buildx build --load/u);
 	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE\}:\$\{project\}"/u);
-	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE_UNTRUSTED\}:\$\{project\}"/u);
 	assert.match(smoke, /--cache-to "type=registry,ref=\$\{SMOKE_BUILD_CACHE_EXPORT\}:\$\{project\},mode=max"/u);
+	// The six image preparations must stay concurrent — serially they dominated the smoke.
+	assert.match(smoke, /_prepare_image "\$project" "\$local_image" "\$remote_image" "\$dockerfile" \\\n\s+>"\$log_dir\/\$project\.log" 2>&1 &/u);
 	assert.match(imageStorage, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
 	assert.match(imageStorage, /SMOKE_HOST_PROFILE" == "recommended"[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
 });
@@ -377,7 +378,7 @@ test("uses the validated promotion base only for diff-scoped policy guards", fun
 	assert.match(workflow, /GUARD_BASE: \$\{\{ needs\.prepare\.outputs\.guard_base \}\}/u);
 	assert.match(workflow, /agent-style-check\.sh --diff "\$GUARD_BASE"/u);
 	assert.match(workflow, /check:module-growth -- --diff "\$GUARD_BASE"/u);
-	assert.match(workflow, /check:release-versioning -- --base "\$GUARD_BASE"/u);
+	assert.match(workflow, /check:release-versioning/u);
 	assert.match(workflow, /check:prisma-boundaries -- --diff "\$GUARD_BASE"/u);
 	assert.match(workflow, /npx nx affected -t build test lint/u);
 });

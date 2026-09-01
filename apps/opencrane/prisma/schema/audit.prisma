@@ -1,12 +1,13 @@
 model AuditEntry {
   id        Int      @id @default(autoincrement())
+  siloId    String   @map("silo_id")
   timestamp DateTime @default(now())
   action    String
   resource  String
   message   String
   metadata  Json?
 
-  @@index([timestamp])
+  @@index([siloId, timestamp, id])
   @@map("audit_log")
 }
 

@@ -97,5 +97,5 @@ export interface PersonaOnboardingStatusRepository
 	 * @throws Error when a stored revision's score JSON cannot be validated against its own columns —
 	 * that is a data fault, not a normal outcome.
 	 */
-	readStatus(siloId: string, userId: string): Promise<PersonaOnboardingStatus>;
+	readStatus(siloId: string, principalId: string, userId: string): Promise<PersonaOnboardingStatus>;
 }

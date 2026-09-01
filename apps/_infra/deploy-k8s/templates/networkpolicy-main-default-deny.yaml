@@ -22,7 +22,8 @@
 
   FQDN-BASED EGRESS: rule 7 allows port 443 to ANY external destination (conservative — a
   NetworkPolicy cannot match on FQDN). Replace with CiliumNetworkPolicy scoped to
-  networkPolicy.defaultAllowedDomains / your Zitadel host if the cluster runs Cilium.
+  networkPolicy.defaultAllowedDomains / your Zitadel host only when the cluster serves and
+  enforces that exact API.
 */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -33,15 +34,15 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
     app.kubernetes.io/component: platform-default-deny
 spec:
-  # ArtifactStore, agent-controller, and the PostgreSQL pooler have app-owned policies; each
-  # agent-runtime Job has a controller-built policy. Excluding them prevents this generic
-  # allow-list from widening their stricter boundaries. CNPG identifies generated pooler pods
-  # with cnpg.io/poolerName rather than preserving the Pooler CR's application labels.
+  # ArtifactStore, agent-controller, warm runtimes, LiteLLM, and the PostgreSQL pooler have
+  # app-owned policies. Excluding them prevents this generic allow-list from widening their
+  # stricter boundaries. CNPG identifies generated pooler pods with cnpg.io/poolerName rather
+  # than preserving the Pooler CR's application labels.
   podSelector:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: NotIn
-        values: [artifact-service, agent-controller, agent-runtime, cognee, memory-gateway]
+        values: [artifact-service, agent-controller, warm-runtime, cognee, litellm, memory-gateway]
       - key: cnpg.io/poolerName
         operator: DoesNotExist
   policyTypes:

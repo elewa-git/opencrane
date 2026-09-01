@@ -35,10 +35,21 @@ describe("REDACT_PATHS", function _redactSuite()
   it("redacts nested credential fields via wildcard paths", function _nested()
   {
     const { logger, records } = _redactingLogger();
-    logger.info({ litellm: { apiKey: "sk-nested", masterKey: "mk-nested" } }, "nested");
+    logger.info({ litellm: { apiKey: "sk-nested", masterKey: "mk-nested", providerKey: "pk-nested", materialVerifier: "sha256:secret-verifier" } }, "nested");
     const litellm = records[0]?.["litellm"] as Record<string, unknown>;
     expect(litellm["apiKey"]).toBe("[Redacted]");
     expect(litellm["masterKey"]).toBe("[Redacted]");
+    expect(litellm["providerKey"]).toBe("[Redacted]");
+    expect(litellm["materialVerifier"]).toBe("[Redacted]");
+  });
+
+  it("redacts provider material and its verifier at the record root", function _providerMaterial()
+  {
+    const { logger, records } = _redactingLogger();
+    logger.info({ providerKey: "pk-root", materialVerifier: "sha256:root-verifier", commandId: "command-1" }, "provider effect");
+    expect(records[0]?.["providerKey"]).toBe("[Redacted]");
+    expect(records[0]?.["materialVerifier"]).toBe("[Redacted]");
+    expect(records[0]?.["commandId"]).toBe("command-1");
   });
 
   it("redacts the Authorization request header", function _authHeader()

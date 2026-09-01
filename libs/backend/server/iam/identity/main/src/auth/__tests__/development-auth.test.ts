@@ -38,16 +38,17 @@ function _Fixture()
 			upsert: vi.fn().mockResolvedValue({ id: "principal-tier3" }),
 		},
 	};
-	const findAdminMemberships = vi.fn(async function _FindAdminMemberships()
+	const findOwnedOrgSummaries = vi.fn(async function _FindOwnedOrgSummaries()
 	{
 		return owner === null ? [] : [{ clusterTenant: "smoke", role: owner.role }];
 	});
+	const canAdministerOrganization = vi.fn().mockResolvedValue(true);
 	const prisma = {
 		$transaction: vi.fn(async function _Transaction(callback) { return callback(transaction); }),
 	};
 	const audit = { append };
 	const log = { child: vi.fn(function _Child() { return log; }), warn: vi.fn() };
-	return { append, audit, membership: { findAdminMemberships }, prisma, transaction, log };
+	return { append, audit, capabilities: { canAdministerOrganization }, prisma, summaries: { findOwnedOrgSummaries }, transaction, log };
 }
 
 /** Builds the small Express request session surface used by the development login service. */
@@ -79,7 +80,7 @@ describe("Tier 3 development authentication", function _Suite()
 	it("projects and audits only the installation-selected identity before creating its session", async function _Login(): Promise<void>
 	{
 		const fixture = _Fixture();
-		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.membership, fixture.audit as never, fixture.log as never);
+		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.summaries, fixture.audit as never, fixture.log as never, fixture.capabilities);
 		const request = _Request(_CONFIG.proxySecret);
 		await expect(service.login(request as never, "/onboarding")).resolves.toBe("/onboarding");
 		expect(fixture.transaction.principal.upsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -97,21 +98,22 @@ describe("Tier 3 development authentication", function _Suite()
 			mode: "development",
 			user: {
 				clusterTenant: "smoke",
-				isOrgAdmin: true,
 				ownedOrgs: [{ clusterTenant: "smoke", role: "owner" }],
+				productCapabilities: { administerOrganization: true },
 			}
 		});
-		fixture.membership.findAdminMemberships.mockResolvedValue([]);
+		fixture.summaries.findOwnedOrgSummaries.mockResolvedValue([]);
+		fixture.capabilities.canAdministerOrganization.mockResolvedValue(false);
 		await expect(service.getStatus(request as never)).resolves.toMatchObject({
 			authenticated: true,
-			user: { isOrgAdmin: false, ownedOrgs: [] },
+			user: { ownedOrgs: [], productCapabilities: { administerOrganization: false } },
 		});
 	});
 
 	it("denies an absent, wrong, or wrong-host proof before durable identity work", async function _RejectProof(): Promise<void>
 	{
 		const fixture = _Fixture();
-		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.membership, fixture.audit as never, fixture.log as never);
+		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.summaries, fixture.audit as never, fixture.log as never, fixture.capabilities);
 		await expect(service.login(_Request("wrong-proof-with-at-least-thirty-two-bytes") as never, "/")).resolves.toBeNull();
 		await expect(service.login(_Request(_CONFIG.proxySecret, "attacker.test") as never, "/")).resolves.toBeNull();
 		expect(fixture.prisma.$transaction).not.toHaveBeenCalled();
@@ -120,7 +122,7 @@ describe("Tier 3 development authentication", function _Suite()
 	it("sanitizes the return path and keeps owner admission idempotent", async function _Replay(): Promise<void>
 	{
 		const fixture = _Fixture();
-		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.membership, fixture.audit as never, fixture.log as never);
+		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.summaries, fixture.audit as never, fixture.log as never, fixture.capabilities);
 		await expect(service.login(_Request(_CONFIG.proxySecret) as never, "//attacker.example")).resolves.toBe("/");
 		await expect(service.login(_Request(_CONFIG.proxySecret) as never, "/chat")).resolves.toBe("/chat");
 		expect(fixture.append).toHaveBeenCalledTimes(1);
@@ -187,7 +189,7 @@ describe("Tier 3 development authentication", function _Suite()
 	it("establishes a signed session when a proved login crosses the session middleware and router", async function _SessionLogin(): Promise<void>
 	{
 		const fixture = _Fixture();
-		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.membership, fixture.audit as never, fixture.log as never);
+		const service = new Tier3DevelopmentAuthService(_CONFIG, fixture.prisma as never, fixture.summaries, fixture.audit as never, fixture.log as never, fixture.capabilities);
 		const app = express();
 		app.set("trust proxy", 1);
 		app.use(...___CreateBrowserSessionMiddleware({

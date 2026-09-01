@@ -3,7 +3,7 @@ import { toObservable } from "@angular/core/rxjs-interop";
 import { ActivatedRouteSnapshot, CanActivateFn, Router, RouterStateSnapshot, UrlTree } from "@angular/router";
 import { filter, firstValueFrom } from "rxjs";
 
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 
 /**
  * Gate for every authenticated operator route.

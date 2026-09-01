@@ -32,9 +32,11 @@ gateway through the server-infrastructure HTTP adapter. That adapter presents a 
 audience-bound ServiceAccount token; it has no local repository and cannot fall back when Fleet is
 unavailable. A browser cannot select mode, silo, subject, or verified email.
 
-Invariant: a local mutation rechecks active Owner or Admin state, every create and resend retry has a
-stable idempotency outcome, and token possession never replaces verified-email matching. The database
-also refuses any mutation that would remove, suspend, demote, or move the active owner.
+Invariant: standalone directory and invitation administration use the current exact organisation
+`administer` grant through the central transaction-bound authorization authority. Every create and
+resend retry has a stable idempotency outcome, and token possession never replaces verified-email
+matching. The database also refuses any mutation that would remove, suspend, demote, or move the
+active owner.
 
 Standalone product routes require an active membership after authentication. The exact signed
 invitation-acceptance POST is the only pre-membership exception: it still binds the verified email,
@@ -50,8 +52,8 @@ path and does not install this local database gate.
 - `StandaloneOrganizationMembershipAuthority` owns local validation, tokens, and projections.
 - `FleetOrganizationMembershipAuthority` delegates the same API to Fleet and fails closed while the
   server-infrastructure adapter owns HTTP and projected-token mechanics.
-- `PrismaOrganizationMemberUnitOfWork` opens each mutation transaction; its internal repository
-  owns the transaction-scoped delegates.
+- `PrismaOrganizationMemberUnitOfWork` opens each operation transaction; its internal repository and
+  central authorization authority share the transaction-scoped delegates.
 - `HmacOrganizationInvitationTokenAuthority` reproduces signed links without storing bearer tokens.
 - `_OrganizationMembersOpenapiPaths` and `_OrganizationMembersOpenapiSchemas` generate the shared client.
 - Domain projections, commands, ports, deployment modes, and stable error enums are exported from `src/index.ts`.
@@ -70,7 +72,8 @@ Fleet error bodies and malformed success bodies fail as unavailable.
 ## Dependency direction
 
 Tagged `scope:membership`: it depends on authentication-neutral Express types, Prisma at its declared
-adapter, shared observability, and its own contracts. It never imports frontend or application source.
+adapter, shared observability, central authorization, and its own contracts. It never imports
+frontend or application source.
 
 ## Data & persistence
 

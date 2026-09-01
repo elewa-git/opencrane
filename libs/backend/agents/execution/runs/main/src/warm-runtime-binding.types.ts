@@ -39,7 +39,7 @@ export type WarmRuntimeBindingResult =
  */
 export type WarmRuntimeDatabaseBindingResult =
 	| { readonly outcome: "conflict" }
-	| { readonly outcome: "bound" | "idempotent"; readonly receiptId: string; readonly runId: string; readonly attempt: number; readonly siloId: string; readonly modelRoute: unknown; readonly budgetPolicy: unknown; readonly credentialExpiresAt: Date };
+	| { readonly outcome: "bound" | "idempotent"; readonly receiptId: string; readonly runId: string; readonly attempt: number; readonly siloId: string; readonly modelRoute: unknown; readonly budgetPolicy: unknown; readonly credentialExpiresAt: Date; readonly mintAuthorizationId: string };
 
 /**
  * Spends a warm reservation inside a serializable database transaction opened by its caller.
@@ -61,6 +61,13 @@ export interface WarmRuntimeBindingPersistenceRepository
 	 * @throws WarmRuntimeBindingConflict When ownership, state, expiry, or a compare-and-set changes after checks begin.
 	 */
 	bind(identity: WarmRuntimeBindingIdentity, submission: WarmRuntimeBindingSubmission): Promise<WarmRuntimeDatabaseBindingResult>;
+}
+
+/** Spends one durable post-commit model-key mint authorization. */
+export interface RunModelCredentialMintAuthorizationClaimRepository
+{
+	/** Atomically spend the exact authorization once. */
+	claim(command: { readonly authorizationId: string; readonly runId: string; readonly attempt: number; readonly keyAlias: string; readonly claimedAt: Date }): Promise<boolean>;
 }
 
 /** Owns the database transaction that spends one warm reservation. */

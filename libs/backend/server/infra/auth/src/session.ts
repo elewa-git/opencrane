@@ -20,7 +20,8 @@ export function _buildRedirectUri(req: Request, configuredRedirect: string): str
   const forwardedProto = req.headers["x-forwarded-proto"];
   const protocol = typeof forwardedProto === "string" ? forwardedProto.split(",")[0].trim() : req.protocol;
   const host = _RequestHost(req);
-  if (!host) return configuredRedirect;
+	if (!host)
+		return configuredRedirect;
   const callbackPath = new URL(configuredRedirect).pathname;
   return `${protocol}://${host}${callbackPath}`;
 }
@@ -35,7 +36,8 @@ export function _buildPostLogoutRedirectUri(req: Request, configuredRedirect: st
   const forwardedProto = req.headers["x-forwarded-proto"];
   const protocol = typeof forwardedProto === "string" ? forwardedProto.split(",")[0].trim() : req.protocol;
   const host = _RequestHost(req);
-  if (!host) return configuredRedirect;
+	if (!host)
+		return configuredRedirect;
   const parsed = new URL(configuredRedirect);
   return `${protocol}://${host}${parsed.pathname}${parsed.search}`;
 }

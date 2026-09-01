@@ -5,17 +5,17 @@ export interface SkillAuthoringValidationSubmissionCaller
 {
 	/** Silo derived from the verified session and request host. */
 	readonly siloId: string;
-	/** Local Principal derived from the verified session and required to own the selected skill. */
+	/** Local Principal derived from the verified session and checked for the skill-revision review action. */
 	readonly principalId: string;
 }
 
-/** Reports that the authenticated Principal does not own the selected skill revision. */
+/** Reports that the revision is outside the silo or the authenticated Principal cannot review it. */
 export class SkillAuthoringValidationSubmissionForbiddenError extends Error
 {
 	/** Creates the non-disclosing permission failure returned as HTTP 403. */
 	constructor()
 	{
-		super("skill authoring validation requires ownership of the selected skill");
+		super("skill authoring validation requires permission to review the selected skill revision");
 		this.name = "SkillAuthoringValidationSubmissionForbiddenError";
 	}
 }

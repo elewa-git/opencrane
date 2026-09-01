@@ -40,6 +40,8 @@ export interface ApprovedPersonaInput
 {
 	/** The PersonaRevision that is currently active and approved, or null for a managed run. */
 	personaRevisionId: PersonaRevisionId | null;
+	/** Stable Persona profile resource authorized for Use, or null for a managed run. */
+	personaId: string | null;
 }
 
 /** Holds the conversation's messages in order, as the conversation source read them inside the admission transaction. */
@@ -63,11 +65,15 @@ export interface MemoryScopeInput
 {
 	/** Limits what the runtime may recall from memory later in the run. */
 	memoryQueryPolicy: JsonValue;
+	/** Exact Dataset and MemoryScope resource id, or null when this run has no personal memory. */
+	datasetId: string | null;
 }
 
 /** Holds the model, tools, skills, and artifacts the published revision assigned to this run. */
 export interface ToolPolicyInput
 {
+	/** Exact model definition selected by the published revision. */
+	modelDefinitionId: string;
 	/** Server-selected model route without provider credentials. */
 	modelRoute: JsonValue;
 	/** MCP tool revisions in the Ready state that the AgentRevision selected. */
@@ -76,6 +82,13 @@ export interface ToolPolicyInput
 	skillRevisionIds: readonly SkillRevisionId[];
 	/** Immutable artifact revisions explicitly made available to the run. */
 	artifactRevisionIds: readonly ArtifactRevisionId[];
+}
+
+/** Rechecks every exact product resource selected before the snapshot can commit. */
+export interface ProductResourceAuthorizationSource
+{
+	/** Batch-checks current Use grants through the transaction-bound central authority. */
+	load(command: SessionAssemblyCommand, identity: IdentityEnvelopeInput, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
 }
 
 /** Effective run limits resolved from service, silo, and policy. */
@@ -462,6 +475,8 @@ export interface SessionAssemblyAuthorities
 	toolPolicy: ToolPolicySource;
 	/** Re-checks the named skill revisions last before the snapshot commits. */
 	skillEligibility: SkillRevisionEligibilitySource;
+	/** Batch-checks current Use grants for every resource selected by the preceding sources. */
+	productAuthorization: ProductResourceAuthorizationSource;
 	/** Reads the run's token, turn, and deadline limits. */
 	budgetPolicy: BudgetPolicySource;
 	/** Decides who the run executes as. Must run before the two identity-scoped sources above. */

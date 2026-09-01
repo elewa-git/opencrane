@@ -13,7 +13,6 @@ import { closeTier3BrowserProxy, createTier3BrowserProxy } from "../tier3-browse
 import { createTier3SessionConfiguration, parseTier3Arguments } from "../tier3-development-options.mjs";
 import { runTier3Development } from "../tier3-development.mjs";
 import { readTier3IngressCertificate } from "../tier3-ingress-certificate.mjs";
-import { resolveTier3ModelProvider } from "../tier3-model-provider.mjs";
 
 const _PROXY_SECRET = "tier3-proxy-secret-with-at-least-32-bytes";
 
@@ -21,9 +20,6 @@ test("Tier 3 defaults to the minimum-host storage profile and the Codespaces pro
 {
 	assert.deepEqual(parseTier3Arguments([]), {
 		help: false,
-		model: undefined,
-		profile: "infrastructure",
-		provider: undefined,
 		proxyPort: 4200,
 		smokeOnly: false,
 		storageMode: "fast"
@@ -34,9 +30,6 @@ test("Tier 3 accepts the documented full-storage and smoke-only overrides", func
 {
 	assert.deepEqual(parseTier3Arguments(["--storage-mode", "full", "--proxy-port", "4300", "--smoke-only"]), {
 		help: false,
-		model: undefined,
-		profile: "infrastructure",
-		provider: undefined,
 		proxyPort: 4300,
 		smokeOnly: true,
 		storageMode: "full"
@@ -48,21 +41,7 @@ test("Tier 3 rejects ambiguous storage and port values", function _rejectsInvali
 	assert.throws(function _storage() { parseTier3Arguments(["--storage-mode", "other"]); }, /must be 'fast' or 'full'/u);
 	assert.throws(function _port() { parseTier3Arguments(["--proxy-port", "80"]); }, /1024 through 65535/u);
 	assert.throws(function _unknown() { parseTier3Arguments(["--reuse"]); }, /Unknown Tier 3 option/u);
-	assert.throws(function _infraProvider() { parseTier3Arguments(["--provider", "openai"]); }, /require the Tier 3 agent profile/u);
-	assert.throws(function _profile() { parseTier3Arguments(["--profile", "browser"]); }, /infrastructure.*agent/u);
-});
-
-test("Tier 3 agent accepts reviewed provider and model options", function _agentOptions()
-{
-	assert.deepEqual(parseTier3Arguments(["--profile", "agent", "--provider", "openai", "--model", "openai/gpt-5.4-nano"]), {
-		help: false,
-		model: "openai/gpt-5.4-nano",
-		profile: "agent",
-		provider: "openai",
-		proxyPort: 4200,
-		smokeOnly: false,
-		storageMode: "fast"
-	});
+	assert.throws(function _provider() { parseTier3Arguments(["--provider", "openai"]); }, /Unknown Tier 3 option/u);
 });
 
 test("Tier 3 always keeps the smoke cluster and applies the selected storage mode", function _keepsCluster()
@@ -118,100 +97,13 @@ test("Tier 3 preserves explicit smoke resource overrides", function _preservesRe
 	assert.equal(configuration.smokeEnvironment.TIMEOUT_SECONDS, "900");
 });
 
-test("credential-free Tier 3 strips inherited model credentials", function _stripsModelCredentials()
-{
-	const configuration = createTier3SessionConfiguration({
-		OPENCRANE_INITIAL_MODEL_API_KEY: "broad-key",
-		OPENCRANE_INITIAL_MODEL_NAME: "openai/gpt-5.4-nano",
-		OPENCRANE_INITIAL_MODEL_PROVIDER: "openai",
-		OPENCRANE_TIER3_PROVIDER_API_KEY: "tier3-key"
-	}, "fast");
-	assert.equal(configuration.smokeEnvironment.OPENCRANE_INITIAL_MODEL_API_KEY, undefined);
-	assert.equal(configuration.smokeEnvironment.OPENCRANE_INITIAL_MODEL_NAME, undefined);
-	assert.equal(configuration.smokeEnvironment.OPENCRANE_INITIAL_MODEL_PROVIDER, undefined);
-	assert.equal(configuration.smokeEnvironment.OPENCRANE_TIER3_PROVIDER_API_KEY, undefined);
-});
-
-test("Tier 3 agent reuses sorted key discovery and the provider default model", function _selectsKeyFile(context)
-{
-	const repositoryRoot = _CreateProviderFixture(context);
-	fs.writeFileSync(path.join(repositoryRoot, "keys/.openai-key"), "openai-secret\n", { mode: 0o600 });
-	fs.writeFileSync(path.join(repositoryRoot, "keys/.anthropic-key"), "anthropic-secret\n", { mode: 0o600 });
-	const selection = resolveTier3ModelProvider({ profile: "agent" }, {}, repositoryRoot);
-	assert.deepEqual(selection, {
-		apiKey: "anthropic-secret",
-		model: "anthropic/claude-sonnet-4-5-20250929",
-		provider: "anthropic"
-	});
-});
-
-test("Tier 3 agent accepts one explicit Codespaces key without reading key files", function _selectsEnvironmentKey(context)
-{
-	const repositoryRoot = _CreateProviderFixture(context);
-	const environment = {
-		OPENCRANE_TIER3_PROVIDER_API_KEY: "codespaces-secret"
-	};
-	const selection = resolveTier3ModelProvider({ profile: "agent", provider: "openai" }, environment, repositoryRoot);
-	assert.deepEqual(selection, {
-		apiKey: "codespaces-secret",
-		model: "openai/gpt-5.4-nano",
-		provider: "openai"
-	});
-	assert.equal(environment.OPENCRANE_TIER3_PROVIDER_API_KEY, undefined);
-	assert.throws(function _missingProvider()
-	{
-		resolveTier3ModelProvider({ profile: "agent" }, { OPENCRANE_TIER3_PROVIDER_API_KEY: "codespaces-secret" }, repositoryRoot);
-	}, /requires --provider/u);
-});
-
-test("Tier 3 agent admits a reviewed dynamic model for an existing provider", function _selectsDynamicRegistryModel(context)
-{
-	const repositoryRoot = _CreateProviderFixture(context);
-	const registryPath = path.join(repositoryRoot, "libs/models/local-development/main/provider-contract.json");
-	const registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
-	const openai = registry.providers.find(provider => provider.name === "openai");
-	openai.models.push("openai/gpt-6-preview");
-	fs.writeFileSync(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
-	const selection = resolveTier3ModelProvider({ profile: "agent", provider: "openai", model: "openai/gpt-6-preview" }, {
-		OPENCRANE_TIER3_PROVIDER_API_KEY: "codespaces-secret"
-	}, repositoryRoot);
-	assert.deepEqual(selection, {
-		apiKey: "codespaces-secret",
-		model: "openai/gpt-6-preview",
-		provider: "openai"
-	});
-});
-
-test("Tier 3 rejects unsafe selected key files before smoke starts", function _rejectsUnsafeKey(context)
-{
-	const repositoryRoot = _CreateProviderFixture(context);
-	fs.writeFileSync(path.join(repositoryRoot, "keys/.openai-key"), "provider-secret\n", { mode: 0o644 });
-	assert.throws(function _broadFile()
-	{
-		resolveTier3ModelProvider({ profile: "agent", provider: "openai" }, {}, repositoryRoot);
-	}, /must not be accessible/u);
-});
-
-test("Tier 3 rejects a provider key force-added to Git", function _rejectsTrackedKey(context)
-{
-	const repositoryRoot = _CreateProviderFixture(context);
-	fs.writeFileSync(path.join(repositoryRoot, ".gitignore"), "/keys/*\n");
-	fs.writeFileSync(path.join(repositoryRoot, "keys/.openai-key"), "provider-secret\n", { mode: 0o600 });
-	execFileSync("git", ["init", "--quiet"], { cwd: repositoryRoot });
-	execFileSync("git", ["add", "--force", "keys/.openai-key"], { cwd: repositoryRoot });
-	assert.throws(function _trackedFile()
-	{
-		resolveTier3ModelProvider({ profile: "agent", provider: "openai" }, {}, repositoryRoot);
-	}, /must not be tracked by Git/u);
-});
-
 test("Tier 3 qualifies smoke before it starts and waits on the matching ingress proxy", async function _ordersSession()
 {
 	const events = [];
 	const server = {};
 	const certificate = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n";
 	let runProxySecret;
-	await runTier3Development({ profile: "infrastructure", proxyPort: 4300, smokeOnly: false, storageMode: "fast" }, {
+	await runTier3Development({ proxyPort: 4300, smokeOnly: false, storageMode: "fast" }, {
 		createProxy(options)
 		{
 			assert.equal(options.proxySecret, runProxySecret);
@@ -246,46 +138,6 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 		["listen", server, 4300],
 		["wait", server]
 	]);
-});
-
-test("Tier 3 agent scopes one exact provider tuple to smoke without reporting its key", async function _scopesProviderKey()
-{
-	const output = [];
-	const parentEnvironment = { PATH: "/usr/bin", OPENCRANE_TIER3_PROVIDER_API_KEY: "ambient-copy" };
-	const modelProvider = { apiKey: "never-report-this", model: "openai/gpt-5.4-nano", provider: "openai" };
-	let receivedEnvironment;
-	let receivedKey;
-	await runTier3Development({ profile: "agent", provider: "openai", proxyPort: 4200, smokeOnly: false, storageMode: "fast" }, {
-		parentEnvironment,
-		resolveModelProvider()
-		{
-			return modelProvider;
-		},
-		runSmoke(environment)
-		{
-			receivedEnvironment = environment;
-			receivedKey = environment.OPENCRANE_TIER3_PROVIDER_API_KEY;
-		},
-		readIngressCertificate()
-		{
-			assert.equal(parentEnvironment.OPENCRANE_TIER3_PROVIDER_API_KEY, undefined);
-			assert.equal(receivedEnvironment.OPENCRANE_TIER3_PROVIDER_API_KEY, undefined);
-			assert.equal(modelProvider.apiKey, "");
-			return "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n";
-		},
-		createProxy() { return {}; },
-		listenProxy() {},
-		waitForShutdown() {},
-		writeOutput(message)
-		{
-			output.push(message);
-		}
-	});
-	assert.equal(receivedKey, "never-report-this");
-	assert.equal(receivedEnvironment.OPENCRANE_TIER3_PROVIDER_API_KEY, undefined);
-	assert.equal(receivedEnvironment.OPENCRANE_INITIAL_MODEL_PROVIDER, "openai");
-	assert.equal(receivedEnvironment.OPENCRANE_INITIAL_MODEL_NAME, "openai/gpt-5.4-nano");
-	assert.doesNotMatch(output.join(""), /never-report-this/u);
 });
 
 test("the ingress certificate reader follows the Certificate's exact Secret", async function _readsCertificate()
@@ -371,7 +223,7 @@ test("the HTTPS browser proxy trusts only the supplied smoke certificate", async
 test("Tier 3 smoke-only sessions do not create a browser proxy", async function _skipsProxy()
 {
 	let smokeRuns = 0;
-	await runTier3Development({ profile: "infrastructure", proxyPort: 4200, smokeOnly: true, storageMode: "full" }, {
+	await runTier3Development({ proxyPort: 4200, smokeOnly: true, storageMode: "full" }, {
 		createProxy()
 		{
 			assert.fail("smoke-only must not create a proxy");
@@ -595,8 +447,8 @@ test("the devcontainer enforces the Tier 3 minimum and shares the pinned CI tool
 	assert.equal(devcontainer.hostRequirements.cpus, 4);
 	assert.equal(devcontainer.hostRequirements.memory, "16gb");
 	assert.equal(devcontainer.hostRequirements.storage, "32gb");
-	assert.equal(packageJson.scripts["dev:tier3:infra"], "node scripts/tier3-development.mjs --profile infrastructure");
-	assert.equal(packageJson.scripts["dev:tier3:agent"], "node scripts/tier3-development.mjs --profile agent");
+	assert.equal(packageJson.scripts["dev:tier3:infra"], "node scripts/tier3-development.mjs");
+	assert.equal(packageJson.scripts["dev:tier3:agent"], undefined);
 	assert.match(gitignore, /^\/keys\/\*$/mu);
 	assert.ok(devcontainer.features["ghcr.io/devcontainers/features/docker-in-docker:4.1.0"]);
 	assert.equal(devcontainer.onCreateCommand, "bash .devcontainer/on-create.sh");
@@ -651,9 +503,7 @@ test("the minimum Codespaces path reclaims image storage without slowing CI impo
 	const imageStorage = fs.readFileSync(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh", import.meta.url), "utf8");
 
 	assert.match(smoke, /SMOKE_HOST_PROFILE="\$\{SMOKE_HOST_PROFILE:-recommended\}"/u);
-	assert.match(smoke, /TIER3_PROVIDER_API_KEY="\$\{OPENCRANE_TIER3_PROVIDER_API_KEY:-\}"[\s\S]*?unset OPENCRANE_INITIAL_MODEL_API_KEY OPENCRANE_INITIAL_MODEL_NAME OPENCRANE_INITIAL_MODEL_PROVIDER OPENCRANE_TIER3_PROVIDER_API_KEY/u);
-	assert.match(smoke, /OPENCRANE_INITIAL_MODEL_API_KEY="\$TIER3_PROVIDER_API_KEY" \\\n  "\$ROOT_DIR\/apps\/_infra\/deploy-k8s\/deploy\.sh"/u);
-	assert.doesNotMatch(smoke, /--from-literal=.*TIER3_PROVIDER_API_KEY/u);
+	assert.doesNotMatch(smoke, /OPENCRANE_(?:INITIAL_MODEL|TIER3_PROVIDER)/u);
 	assert.match(smoke, /_reset_smoke_storage[\s\S]*?_prepare_smoke_host_storage[\s\S]*?_prepare_images &/u);
 	assert.match(smoke, /k3d cluster create[\s\S]*?--wait/u);
 	// A 32 GB Codespace needs k3d's default image volume because v5.8.3 rolls back cluster
@@ -706,17 +556,6 @@ function _Get(url, headers)
 		});
 		request.once("error", reject);
 	});
-}
-
-function _CreateProviderFixture(context)
-{
-	const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-tier3-provider-"));
-	context.after(function _removeFixture() { fs.rmSync(repositoryRoot, { force: true, recursive: true }); });
-	const registryDirectory = path.join(repositoryRoot, "libs/models/local-development/main");
-	fs.mkdirSync(path.join(repositoryRoot, "keys"), { recursive: true });
-	fs.mkdirSync(registryDirectory, { recursive: true });
-	fs.copyFileSync(new URL("../../libs/models/local-development/main/provider-contract.json", import.meta.url), path.join(registryDirectory, "provider-contract.json"));
-	return repositoryRoot;
 }
 
 function _Request(url, method, headers)

@@ -1,6 +1,6 @@
 import { InjectionToken } from "@angular/core";
 
-import { McpAccessPolicy, McpCredentialField, McpDirectory, McpEntitledGroup, McpEntitledUser, McpInstalledServer, McpServer } from "@opencrane/core";
+import { McpCredentialField, McpInstalledServer, McpServer } from "@opencrane/core";
 
 /** Wire shape of a catalogue server. */
 export interface McpServerWire
@@ -34,17 +34,6 @@ export interface McpInstalledWire
 	connectionStatus?: string;
 	/** Relative last-used label. */
 	lastUsed?: string | null;
-}
-
-/** Wire shape of an access policy. */
-export interface McpAccessPolicyWire
-{
-	/** Server id. */
-	serverId: string;
-	/** Entitled groups. */
-	groups?: McpEntitledGroup[];
-	/** Entitled users. */
-	users?: McpEntitledUser[];
 }
 
 /**
@@ -87,7 +76,7 @@ export interface McpGateway
 	 */
 	uninstall(serverId: string): Promise<void>;
 
-	// --- Admin (org-admin only; the control plane enforces authorisation) ---
+	// --- Governance (the control plane requires the current Organization/Administer grant) ---
 
 	/**
 	 * List **every** server in the catalogue, including pending/unapproved and
@@ -125,23 +114,6 @@ export interface McpGateway
 	 */
 	setEnabled(serverId: string, enabled: boolean): Promise<McpServer>;
 
-	/**
-	 * Load the access policy (entitlements) for a server.
-	 *
-	 * @param serverId - The server whose policy to read.
-	 */
-	getAccessPolicy(serverId: string): Promise<McpAccessPolicy>;
-
-	/**
-	 * Replace the access policy for a server, returning the saved policy.
-	 *
-	 * @param serverId - The server whose policy to update.
-	 * @param policy   - The new entitlement set (everyone-in-org, groups, users).
-	 */
-	updateAccessPolicy(serverId: string, policy: McpAccessPolicy): Promise<McpAccessPolicy>;
-
-	/** List the users + groups an admin can add to a policy. */
-	getDirectory(): Promise<McpDirectory>;
 }
 
 /** DI token for the active {@link McpGateway} implementation. */

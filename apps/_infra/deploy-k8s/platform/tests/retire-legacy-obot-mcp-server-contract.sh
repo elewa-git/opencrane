@@ -14,6 +14,8 @@ INSPECTION_FAILURE_RESOURCE=""
 RAW_DELETE_FAILURE_RESOURCE=""
 REPLACEMENT_RESOURCE=""
 UPDATED_RESOURCE=""
+MIN_READY_SECONDS_RESOURCE=""
+MIN_READY_SECONDS_VALUE=""
 SERVER_IMAGE="ghcr.io/elewa-git/opencrane-server:sha-aaaaaaaa"
 CONTROLLER_IMAGE="ghcr.io/elewa-git/opencrane-agent-controller@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 SCANNER_IMAGE="ghcr.io/elewa-git/opencrane-artifact-scanner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -171,6 +173,14 @@ kubectl()
     _replacement_image "$resource"
     return
   fi
+  if [[ "$args" == *"jsonpath={.spec.minReadySeconds}"* ]]; then
+    if [[ "$resource" == "$MIN_READY_SECONDS_RESOURCE" ]]; then
+      printf '%s' "$MIN_READY_SECONDS_VALUE"
+    else
+      printf '%s' '10'
+    fi
+    return
+  fi
   if [[ "$args" == *"jsonpath={.metadata.uid}"* ]]; then
     if [[ "$resource" == "$REPLACEMENT_RESOURCE" ]]; then
       printf '%s' "replacement-uid"
@@ -230,6 +240,33 @@ _assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-agent
 _assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-artifact-scanner --namespace opencrane-testv4-artifact-scanning --timeout=30s'
 _assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-personal-warm --namespace opencrane-testv4-runtime --timeout=30s'
 _assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-managed-warm --namespace opencrane-testv4-managed-runtime --timeout=30s'
+_assert_file_contains "$CALLS" 'get deployment/opencrane-testv4-agent-controller --namespace opencrane-testv4 -o jsonpath={.spec.minReadySeconds} --request-timeout=30s'
+_assert_file_contains "$CALLS" 'get deployment/opencrane-testv4-artifact-scanner --namespace opencrane-testv4-artifact-scanning -o jsonpath={.spec.minReadySeconds} --request-timeout=30s'
+_assert_file_excludes "$CALLS" 'get deployment/opencrane-testv4-opencrane-server --namespace opencrane-testv4 -o jsonpath={.spec.minReadySeconds}'
+_assert_file_excludes "$CALLS" 'get deployment/opencrane-testv4-personal-warm --namespace opencrane-testv4-runtime -o jsonpath={.spec.minReadySeconds}'
+_assert_file_excludes "$CALLS" 'get deployment/opencrane-testv4-managed-warm --namespace opencrane-testv4-managed-runtime -o jsonpath={.spec.minReadySeconds}'
+
+: >"$CALLS"
+MIN_READY_SECONDS_RESOURCE="deployment/opencrane-testv4-agent-controller"
+MIN_READY_SECONDS_VALUE=""
+if verify_legacy_obot_replacement_ready opencrane-testv4 opencrane-testv4 30 "$SERVER_IMAGE" "$CONTROLLER_IMAGE" "$SCANNER_IMAGE" "$RUNTIME_IMAGE" opencrane-testv4-artifact-scanning opencrane-testv4-runtime opencrane-testv4-managed-runtime; then
+  echo "Obot replacement readiness accepted a controller without minReadySeconds" >&2
+  exit 1
+fi
+_assert_prefix_count 0 'delete --raw '
+
+: >"$CALLS"
+MIN_READY_SECONDS_RESOURCE="deployment/opencrane-testv4-artifact-scanner"
+MIN_READY_SECONDS_VALUE="0"
+if verify_legacy_obot_replacement_ready opencrane-testv4 opencrane-testv4 30 "$SERVER_IMAGE" "$CONTROLLER_IMAGE" "$SCANNER_IMAGE" "$RUNTIME_IMAGE" opencrane-testv4-artifact-scanning opencrane-testv4-runtime opencrane-testv4-managed-runtime; then
+  echo "Obot replacement readiness accepted a scanner with minReadySeconds=0" >&2
+  exit 1
+fi
+_assert_prefix_count 0 'delete --raw '
+MIN_READY_SECONDS_RESOURCE=""
+MIN_READY_SECONDS_VALUE=""
+
+: >"$CALLS"
 if verify_legacy_obot_replacement_ready opencrane-testv4 opencrane-testv4 30 "$SERVER_IMAGE" "$CONTROLLER_IMAGE" wrong-scanner-image "$RUNTIME_IMAGE" opencrane-testv4-artifact-scanning opencrane-testv4-runtime opencrane-testv4-managed-runtime; then
   echo "Obot replacement readiness accepted the wrong scanner image" >&2
   exit 1
@@ -357,7 +394,7 @@ _assert_prefix_count 1 'delete --raw '
 _assert_file_contains "$CALLS" '/api/v1/namespaces/opencrane-testv4/secrets/sms1obot-mcp-server-mcp-files'
 _assert_file_excludes "$CALLS" 'delete-options secret/sms1obot-mcp-server-mcp-config '
 
-_assert_file_contains "$DEPLOY" '[[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]'
+_assert_file_contains "$DEPLOY" '[[ "$POSTGRES_CLUSTER_EXISTS" == "1" && "$ALLOW_TAG_FLOAT" != "1" ]]'
 _assert_file_contains "$DEPLOY" '[[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]'
 _assert_deploy_order
 

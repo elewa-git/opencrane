@@ -7,7 +7,7 @@ const _TRUNCATED = "[Truncated]";
 /** Maximum object depth inspected before the whole remaining value is removed. */
 const _MAX_DEPTH = 12;
 
-/** Case-insensitive field names whose values must never leave the process in logs. */
+/** Lists case-insensitive field names whose values must never leave the process in logs. */
 const _SENSITIVE_FIELD_NAMES = new Set([
 	"authorization",
 	"cookie",
@@ -28,6 +28,8 @@ const _SENSITIVE_FIELD_NAMES = new Set([
 	"clientsecret",
 	"database_url",
 	"databaseurl",
+	"providerkey",
+	"materialverifier",
 	"reviewedtoolarguments",
 	"finalarguments",
 	"arguments",
@@ -45,14 +47,19 @@ function _isPlainRecord(value: object): boolean
 function _sanitizeLogValue(value: unknown, depth: number, seen: WeakSet<object>): unknown
 {
 	// 1. Preserve primitives and framework-owned special objects for pino's configured serializers.
-	if (value === null || typeof value !== "object") return value;
-	if (value instanceof Error || value instanceof Date || Buffer.isBuffer(value) || (!_isPlainRecord(value) && !Array.isArray(value))) return value;
+	if (value === null || typeof value !== "object")
+		return value;
+	if (value instanceof Error || value instanceof Date || Buffer.isBuffer(value) || (!_isPlainRecord(value) && !Array.isArray(value)))
+		return value;
 
 	// 2. Bound recursion and cycles before traversing attacker-controlled or accidental deep values.
-	if (depth >= _MAX_DEPTH) return _TRUNCATED;
-	if (seen.has(value)) return "[Circular]";
+	if (depth >= _MAX_DEPTH)
+		return _TRUNCATED;
+	if (seen.has(value))
+		return "[Circular]";
 	seen.add(value);
-	if (Array.isArray(value)) return value.map(item => _sanitizeLogValue(item, depth + 1, seen));
+	if (Array.isArray(value))
+		return value.map(item => _sanitizeLogValue(item, depth + 1, seen));
 
 	// 3. Redact exact field names case-insensitively while preserving diagnostic siblings.
 	const sanitized: Record<string, unknown> = {};

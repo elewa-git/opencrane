@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
-
+import { McpOperatorAuthorizationError } from "../core/mcp-operator-authorization";
 import { __ParseMcpOciServerPromotionCommand } from "./mcp-runtime-wire";
 import type { McpOciServerPromotionResult, McpOciServerPromotionRouterDependencies } from "./mcp-runtime.types";
 
@@ -15,12 +14,12 @@ const _PROMOTION_RESPONSE = {
 } as const satisfies Record<McpOciServerPromotionResult["outcome"], readonly [number, string | null]>;
 
 /**
- * Build the administrator-only route that turns an imported OCI image into live discovery work.
+ * Builds the route that turns an imported OCI image into live discovery work after authorization.
  *
  * The public application already authenticates the browser session. This router additionally
- * requires the organisation-admin role and resolves the durable local Principal before it parses
- * promotion fields. The authority derives the silo from that caller and never accepts it in the
- * request body.
+ * resolves the durable local Principal before it parses promotion fields. The transaction-bound
+ * authority then requires the current Organization/Administer grant before it writes the promoted
+ * revision.
  *
  * Called by: the OpenCrane public route composition, mounted below `/api/v1/mcp`.
  *
@@ -30,7 +29,7 @@ const _PROMOTION_RESPONSE = {
 export function __CreateMcpOciServerPromotionRouter(dependencies: McpOciServerPromotionRouterDependencies): Router
 {
 	const router = Router();
-	router.post("/oci-image-validations/:id/server", _RequireOrgAdmin(), async function _Promote(request: Request, response: Response): Promise<void>
+	router.post("/oci-image-validations/:id/server", async function _Promote(request: Request, response: Response): Promise<void>
 	{
 		try
 		{
@@ -72,6 +71,11 @@ export function __CreateMcpOciServerPromotionRouter(dependencies: McpOciServerPr
 		}
 		catch (err)
 		{
+			if (err instanceof McpOperatorAuthorizationError)
+			{
+				_Problem(response, 403, "mcp_promotion_forbidden");
+				return;
+			}
 			dependencies.logger.error({ err, operation: "mcp.oci_server_promotion" }, "MCP OCI server promotion failed");
 			_Problem(response, 503, "mcp_runtime_authority_unavailable");
 		}
