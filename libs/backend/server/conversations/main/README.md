@@ -62,6 +62,13 @@ the matching computer is currently warm. A missing, retired, cooling, released, 
 cross-coordinate snapshot fails closed. This history authority does not create a sandbox claim,
 activate a sandbox, use PostgreSQL, or receive a direct KurrentDB client.
 
+`ConversationComputerExecutionAuthority` is the next boundary after a sandbox claim becomes ready.
+It starts the loop only by appending one server-generated execution to the computer's warm active
+lease. If a caller loses the response while another server process wins the append race, it reloads
+and returns that stored execution instead of starting another one. A sandbox never creates or picks
+this execution: it must remain unavailable whenever the computer is cold, cooling, expired, replaced,
+or already terminal.
+
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also
 projects the caller's active personal Agent only when exactly one service matches their approved
@@ -146,6 +153,10 @@ transport for workloads; it is not a browser fallback.
   deterministic KurrentDB stream. `loadActiveExecution` returns only an open execution whose
   identity and lease generation match the checked current head, so a later command authority can
   fence its participant append to the active loop attempt.
+- `ConversationComputerExecutionAuthority` appends the sole server-generated execution for a warm,
+  active, unexpired computer lease. It returns the stored execution after a concurrent append race,
+  but returns unavailable rather than allowing a sandbox to begin work on a cold, expired, replaced,
+  or terminal computer.
 - `ConversationHistoryReader.readCurrent` replays every participant-visible entry from the
   immutable first position and returns only the KurrentDB head condition that a later atomic
   command append may use. It does not authorize a participant or append an entry itself.
