@@ -22,6 +22,10 @@ already-existing claim as idempotent only when every immutable lease field match
 
 ## Public surface
 
+`__AgentSandboxClaimName` derives the one claim name an admitted computer generation may use. Both
+the Kubernetes adapter and the computer authority use it before create/get I/O, so a history record
+cannot point at a second claim name.
+
 - `AgentSandboxClaimAuthority` exposes `ensure` as the sole application operation.
 - `_KubernetesAgentSandboxClaimAuthority` calls only namespaced custom-object `create` and `get`.
 - `AgentSandboxClaimReason` restricts claims to activation or recovery.

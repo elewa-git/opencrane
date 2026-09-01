@@ -1,7 +1,7 @@
 import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer, type ConversationComputerExecution } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand } from "./conversation-computer-history.types";
+import type { ConversationComputerActivationCurrentCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand } from "./conversation-computer-history.types";
 
 /** Names the one versioned event schema this history authority accepts. */
 const _CONVERSATION_COMPUTER_EVENT_TYPE = "opencrane.conversation-computer.v1";
@@ -36,6 +36,13 @@ export function _ValidateConversationComputerRuntimeCurrentCommand(command: Conv
 {
 	if (!_Identifier(command.siloId) || !_Identifier(command.computerId) || !_Identifier(command.conversationId) || !_Identifier(command.profileRevisionId))
 		throw new Error("Conversation computer runtime load requires server-provided computer coordinates");
+}
+
+/** Validates activation coordinates without allowing an event to choose identity or profile. */
+export function _ValidateConversationComputerActivationCurrentCommand(command: ConversationComputerActivationCurrentCommand): void
+{
+	if (!_Identifier(command.siloId) || !_Identifier(command.computerId) || !_Identifier(command.conversationId))
+		throw new Error("Conversation computer activation load requires server-provided computer coordinates");
 }
 
 /** Validates one envelope and closed snapshot before it can contribute to current computer state. */

@@ -134,6 +134,10 @@ transport for workloads; it is not a browser fallback.
   the computer authority, parks malformed input and an explicitly parked authority outcome,
   acknowledges activated, idempotent, or denied outcomes, retries only a transient authority
   failure, and leaves an acknowledgement failure for KurrentDB to redeliver.
+- `ConversationComputerActivationClaimAuthority` derives the immutable profile, identity, and
+  pending lease from checked computer history before it creates one deterministic Agent Sandbox
+  claim. It parks a profile, lease, or receipt mismatch before that mismatch can become a second
+  computer realization; it does not authorize an agent or observe Sandbox status.
 - `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
   deterministic KurrentDB stream. `loadActiveExecution` returns only an open execution whose
   identity and lease generation match the checked current head, so a later command authority can
