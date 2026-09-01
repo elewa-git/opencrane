@@ -21,11 +21,34 @@ export type AuditDecisionActorKind = "user" | "agent-service" | "workload" | "sy
  */
 export type AuditDecisionOutcome = "allow" | "deny" | "error";
 
-/** Writes one immutable audit decision through its caller's open database transaction. */
+/**
+ * Writes an immutable audit decision through the transaction that owns the protected change.
+ *
+ * The receipt identifies the inserted row so the same transaction can persist that reference beside
+ * its protected change. A caller must not treat the receipt as evidence after the transaction rolls
+ * back. Called by `PrismaAuthorizationAuthority`, membership, agent-service, and first-owner
+ * admission adapters.
+ */
 export interface AuditDecisionWriterRepository
 {
-	/** Appends one final authorization decision. */
-	append(decision: AuditDecisionRecord): Promise<void>;
+	/**
+	 * Inserts one final authorization decision and returns its row identifier.
+	 * @param decision - The decision that the caller's transaction is about to commit.
+	 * @returns The identifier that a caller may persist with its protected change.
+	 */
+	append(decision: AuditDecisionRecord): Promise<AuditDecisionAppendReceipt>;
+}
+
+/**
+ * Identifies the audit row inserted for a transaction-bound authorization decision.
+ *
+ * A protected domain can store this identifier with the change it admits, but both records disappear
+ * when their shared transaction rolls back.
+ */
+export interface AuditDecisionAppendReceipt
+{
+	/** Identifies the immutable AuditDecision row inserted by the caller's transaction. */
+	readonly decisionEvidenceId: string;
 }
 
 /**
