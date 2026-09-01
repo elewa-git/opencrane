@@ -49,6 +49,7 @@ app's source.
 | [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
+| [`libs/backend/server/infra/agent-sandbox-claims`](../../libs/backend/server/infra/agent-sandbox-claims/README.md) | Deterministic create-or-read Agent Sandbox leases for admitted ConversationComputer generations. |
 | [`libs/backend/server/infra/agent-runtime-continuation`](../../libs/backend/server/infra/agent-runtime-continuation/README.md) | Secret-backed encryption for durable AgentRun continuation checkpoints. |
 | [`libs/backend/server/infra/history-store`](../../libs/backend/server/infra/history-store/README.md) | KurrentDB stream reads, checked appends, and subscriptions for event-history owners. |
 | [`apps/_infra/kurrentdb`](../../apps/_infra/kurrentdb/README.md) | Private KurrentDB HistoryStore deployment with persistent TLS-only storage. |
