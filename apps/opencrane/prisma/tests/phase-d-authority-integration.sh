@@ -28,6 +28,21 @@ run_psql < "$SCRIPT_DIR/authorization-active-grant-uniqueness.sql"
 run_psql < "$TEST_FILE"
 run_psql < "$SCRIPT_DIR/run-input-snapshot-admission.sql"
 run_psql < "$SCRIPT_DIR/skill-authoring-validation-authority.sql"
+run_psql <<'SQL'
+CREATE FUNCTION phase_d_execution_subject(scope_silo_id TEXT, scope_agent_identity_id TEXT, scope_principal_id TEXT, scope_run_id TEXT, scope_attempt INTEGER, scope_agent_service_id TEXT, scope_agent_revision_id TEXT, scope_request_idempotency_key TEXT)
+RETURNS JSONB LANGUAGE sql IMMUTABLE AS $$
+  SELECT jsonb_build_object(
+    'schemaVersion', 1, 'siloId', scope_silo_id, 'agentIdentityId', scope_agent_identity_id, 'principalId', scope_principal_id,
+    'identity', jsonb_build_object('agentIdentityId', scope_agent_identity_id, 'principalId', scope_principal_id, 'siloId', scope_silo_id, 'headRevision', '1', 'headDigest', 'sha256:' || repeat('a', 64), 'decisionEvidenceId', 'identity-decision-' || scope_run_id, 'verifiedAt', '2026-09-01T00:00:00.000Z'),
+    'membership', jsonb_build_object('principalId', scope_principal_id, 'siloId', scope_silo_id, 'revision', 1, 'assertionId', 'membership-' || scope_run_id, 'payloadDigest', 'sha256:' || repeat('b', 64), 'decisionEvidenceId', 'membership-decision-' || scope_run_id, 'trustedUntil', '2030-01-01T00:00:00.000Z'),
+    'capability', jsonb_build_object('agentIdentityId', scope_agent_identity_id, 'computerId', 'computer-' || scope_run_id, 'capabilitySetDigest', 'sha256:' || repeat('c', 64), 'effectiveContractDigest', 'sha256:' || repeat('d', 64), 'decisionEvidenceId', 'capability-decision-' || scope_run_id, 'decidedAt', '2026-09-01T00:00:00.000Z'),
+    'runScope', jsonb_build_object('siloId', scope_silo_id, 'runId', scope_run_id, 'attempt', scope_attempt, 'agentServiceId', scope_agent_service_id, 'agentRevisionId', scope_agent_revision_id),
+    'computerScope', jsonb_build_object('siloId', scope_silo_id, 'computerId', 'computer-' || scope_run_id, 'leaseId', 'lease-' || scope_run_id, 'leaseGeneration', 1),
+    'requester', jsonb_build_object('siloId', scope_silo_id, 'requesterPrincipalId', scope_principal_id, 'requestIdempotencyKey', scope_request_idempotency_key, 'authenticatedAt', '2026-09-01T00:00:00.000Z'),
+    'admission', jsonb_build_object('authorizingPrincipalId', scope_principal_id, 'decisionEvidenceId', 'admission-decision-' || scope_run_id, 'admittedAt', '2026-09-01T00:00:00.000Z')
+  );
+$$;
+SQL
 
 RACE_DIR="$(mktemp -d)"
 trap 'rm -rf "$RACE_DIR"' EXIT
@@ -393,10 +408,10 @@ wait_for_holder_sleeping 'phase-d-run-rollover'
 SET application_name = 'phase-d-run-after-rollover';
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-  "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+  "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
   'run-race-superseded', 'silo-race', 'svc-race-run-rollover', 'rev-race-run-rollover-1', 'conversation-race-superseded', 'interactive',
-  'request-race-superseded', 'run-race-superseded', 'sha256:' || repeat('9', 64),
+  'agent-service:svc-race-run-rollover', 'svc-race-run-rollover-principal', phase_d_execution_subject('silo-race', 'agent-service:svc-race-run-rollover', 'svc-race-run-rollover-principal', 'run-race-superseded', 1, 'svc-race-run-rollover', 'rev-race-run-rollover-1', 'request-race-superseded'), 'request-race-superseded', 'run-race-superseded',
   'sha256:' || repeat('a', 64)
 );
 SQL
@@ -448,20 +463,20 @@ SET application_name = 'phase-d-run-first';
 BEGIN;
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-  "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+  "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
   'run-race-before-retirement', 'silo-race', 'svc-race-run-first', 'rev-race-run-first', 'conversation-race-before-retirement', 'interactive',
-  'request-race-before-retirement', 'run-race-before-retirement', 'sha256:' || repeat('c', 64),
+  'agent-service:svc-race-run-first', 'svc-race-run-first-principal', phase_d_execution_subject('silo-race', 'agent-service:svc-race-run-first', 'svc-race-run-first-principal', 'run-race-before-retirement', 1, 'svc-race-run-first', 'rev-race-run-first', 'request-race-before-retirement'), 'request-race-before-retirement', 'run-race-before-retirement',
   'sha256:' || repeat('d', 64)
 );
 INSERT INTO "run_input_snapshots" (
-  "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-  "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-  "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+  "id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+  "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "memory_facts", "model_route",
+  "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest"
 ) VALUES (
-  'run-race-before-retirement-input', 'run-race-before-retirement', 1, 'silo-race', 'svc-race-run-first', 'rev-race-run-first',
-  'sha256:' || repeat('c', 64), 'conversation-race-before-retirement', '[]', '{}', '{}', '[]', '{}', '{}',
-  'sha256:' || repeat('e', 64), 'prompt-v1', 'sha256:' || repeat('d', 64)
+  'run-race-before-retirement-input', 'run-race-before-retirement', 1, 1, 'silo-race', 'svc-race-run-first', 'rev-race-run-first',
+  'agent-service:svc-race-run-first', 'svc-race-run-first-principal', phase_d_execution_subject('silo-race', 'agent-service:svc-race-run-first', 'svc-race-run-first-principal', 'run-race-before-retirement', 1, 'svc-race-run-first', 'rev-race-run-first', 'request-race-before-retirement'), 'conversation-race-before-retirement', '[]', '{}', '[]', '{}', '{}',
+  'prompt-v1', 'sha256:' || repeat('d', 64)
 );
 SELECT pg_sleep(3);
 COMMIT;
@@ -635,30 +650,29 @@ WHERE "id" = 'svc-race-cancel-proof';
 BEGIN;
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
-  "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+  "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
   'run-race-cancel-proof', 'silo-race-cancel-proof', 'svc-race-cancel-proof',
-  'rev-race-cancel-proof', 'interactive', 'request-race-cancel-proof', 'run-race-cancel-proof',
-  'sha256:' || repeat('a', 64), 'sha256:' || repeat('b', 64)
+  'rev-race-cancel-proof', 'interactive', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', phase_d_execution_subject('silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', 'run-race-cancel-proof', 1, 'svc-race-cancel-proof', 'rev-race-cancel-proof', 'request-race-cancel-proof'), 'request-race-cancel-proof', 'run-race-cancel-proof',
+  'sha256:' || repeat('b', 64)
 );
 INSERT INTO "run_input_snapshots" (
-  "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-  "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-  "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+  "id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+  "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "memory_facts", "model_route",
+  "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest"
 ) VALUES (
-  'run-race-cancel-proof-input', 'run-race-cancel-proof', 1, 'silo-race-cancel-proof',
-  'svc-race-cancel-proof', 'rev-race-cancel-proof', 'sha256:' || repeat('a', 64), NULL,
-  '[]', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1',
-  'sha256:' || repeat('b', 64)
+  'run-race-cancel-proof-input', 'run-race-cancel-proof', 1, 1, 'silo-race-cancel-proof',
+  'svc-race-cancel-proof', 'rev-race-cancel-proof', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', phase_d_execution_subject('silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', 'run-race-cancel-proof', 1, 'svc-race-cancel-proof', 'rev-race-cancel-proof', 'request-race-cancel-proof'), NULL,
+  '[]', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('b', 64)
 );
 UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'run-race-cancel-proof';
 INSERT INTO "workload_assignments" (
-  "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
+  "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "execution_subject",
   "audience", "service_account_name", "namespace", "workload_kind", "workload_uid",
   "workload_profile", "pod_uid", "expires_at"
 ) VALUES (
   'run-race-cancel-proof', 1, 'svc-race-cancel-proof', 'rev-race-cancel-proof',
-  'silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof',
+  'silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', phase_d_execution_subject('silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', 'run-race-cancel-proof', 1, 'svc-race-cancel-proof', 'rev-race-cancel-proof', 'request-race-cancel-proof'),
   'opencrane-managed-agent-runtime', 'runtime', 'managed-race-cancel-proof', 'deployment',
   'pod-race-cancel-proof', 'standard', 'pod-race-cancel-proof',
   clock_timestamp() + interval '1 hour'
@@ -675,12 +689,12 @@ INSERT INTO "warm_runtime_reservations" (
   clock_timestamp() + interval '30 minutes'
 );
 INSERT INTO "workload_bootstraps" (
-  "id", "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
+  "id", "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "execution_subject",
   "audience", "service_account_name", "namespace", "workload_kind", "workload_uid",
   "claim_digest", "expires_at"
 ) VALUES (
   'bootstrap-race-cancel-proof', 'run-race-cancel-proof', 1, 'svc-race-cancel-proof',
-  'rev-race-cancel-proof', 'silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof',
+  'rev-race-cancel-proof', 'silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', phase_d_execution_subject('silo-race-cancel-proof', 'agent-service:svc-race-cancel-proof', 'svc-race-cancel-proof-principal', 'run-race-cancel-proof', 1, 'svc-race-cancel-proof', 'rev-race-cancel-proof', 'request-race-cancel-proof'),
   'opencrane-managed-agent-runtime', 'runtime', 'managed-race-cancel-proof', 'deployment',
   'pod-race-cancel-proof', 'sha256:' || repeat('c', 64), clock_timestamp() + interval '30 minutes'
 );
@@ -757,20 +771,20 @@ INSERT INTO "conversations" (
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
   "request_idempotency_key", "root_run_id", "parent_run_id", "attempt", "state",
-  "effective_contract_digest", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
+  "agent_identity_id", "principal_id", "execution_subject", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
 ) VALUES
   (
     'phase-d-child-attempt-parent', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
     'phase-d-attempt-proof-revision',
     'phase-d-child-attempt-conversation', 'interactive', 'phase-d-child-attempt-parent-request',
-    'phase-d-child-attempt-parent', NULL, 1, 'running', 'sha256:' || repeat('1', 64),
+    'phase-d-child-attempt-parent', NULL, 1, 'running', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', phase_d_execution_subject('phase-d-attempt-proof-silo', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', 'phase-d-child-attempt-parent', 1, 'phase-d-attempt-proof-service', 'phase-d-attempt-proof-revision', 'phase-d-child-attempt-parent-request'),
     'sha256:' || repeat('2', 64), clock_timestamp(), NULL, NULL
   ),
   (
     'phase-d-child-attempt-child', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
     'phase-d-attempt-proof-revision', NULL, 'managed_invocation',
     'phase-d-child-attempt-child-request', 'phase-d-child-attempt-parent',
-    'phase-d-child-attempt-parent', 1, 'failed', 'sha256:' || repeat('3', 64),
+    'phase-d-child-attempt-parent', 1, 'failed', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', phase_d_execution_subject('phase-d-attempt-proof-silo', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', 'phase-d-child-attempt-child', 1, 'phase-d-attempt-proof-service', 'phase-d-attempt-proof-revision', 'phase-d-child-attempt-child-request'),
     'sha256:' || repeat('4', 64), clock_timestamp(), clock_timestamp(), 'runtime_failure'
   );
 INSERT INTO "child_run_reservations" (
@@ -861,20 +875,20 @@ INSERT INTO "conversations" (
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
   "request_idempotency_key", "root_run_id", "parent_run_id", "attempt", "state",
-  "effective_contract_digest", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
+  "agent_identity_id", "principal_id", "execution_subject", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
 ) VALUES
   (
     'phase-d-parent-attempt-parent', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
     'phase-d-attempt-proof-revision',
     'phase-d-parent-attempt-conversation', 'interactive', 'phase-d-parent-attempt-parent-request',
-    'phase-d-parent-attempt-parent', NULL, 1, 'failed', 'sha256:' || repeat('5', 64),
+    'phase-d-parent-attempt-parent', NULL, 1, 'failed', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', phase_d_execution_subject('phase-d-attempt-proof-silo', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', 'phase-d-parent-attempt-parent', 1, 'phase-d-attempt-proof-service', 'phase-d-attempt-proof-revision', 'phase-d-parent-attempt-parent-request'),
     'sha256:' || repeat('6', 64), clock_timestamp(), clock_timestamp(), 'runtime_failure'
   ),
   (
     'phase-d-parent-attempt-child', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
     'phase-d-attempt-proof-revision', NULL, 'managed_invocation',
     'phase-d-parent-attempt-child-request', 'phase-d-parent-attempt-parent',
-    'phase-d-parent-attempt-parent', 1, 'completed', 'sha256:' || repeat('7', 64),
+    'phase-d-parent-attempt-parent', 1, 'completed', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', phase_d_execution_subject('phase-d-attempt-proof-silo', 'agent-identity:phase-d-attempt-proof', 'principal:phase-d-attempt-proof', 'phase-d-parent-attempt-child', 1, 'phase-d-attempt-proof-service', 'phase-d-attempt-proof-revision', 'phase-d-parent-attempt-child-request'),
     'sha256:' || repeat('8', 64), clock_timestamp(), clock_timestamp(), 'success'
   );
 INSERT INTO "child_run_reservations" (
@@ -987,3 +1001,5 @@ if [[ "$(<"$RACE_DIR/child-delivery-duplicate.status")" == "0" ]] \
   exit 1
 fi
 echo 'PASS: partial uniqueness rejects a duplicate delivered child attempt'
+
+run_psql --command='DROP FUNCTION phase_d_execution_subject(TEXT, TEXT, TEXT, TEXT, INTEGER, TEXT, TEXT, TEXT);'

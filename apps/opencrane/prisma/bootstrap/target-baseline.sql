@@ -3901,21 +3901,16 @@ ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result
     OR ("state" = 'rejected' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'malformed_zip_package', 'not_oci_image_layout', 'invalid_layout', 'invalid_index', 'invalid_image_manifest', 'validation_failed', 'registry_import_failed') AND "completed_at" IS NOT NULL)
 );
 
--- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when conversation_id is NULL.
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_digest_fkey"
-    FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
-    FOREIGN KEY ("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
+-- Null-safe immutable run/snapshot binding. The generated run/attempt/digest foreign key owns
+-- referential integrity; deferred guards below also compare nullable conversation coordinates and
+-- the serialized execution subject.
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_check" CHECK (
     ("conversation_id" IS NULL OR btrim("conversation_id") <> '')
-    AND btrim("capability_set_digest") <> ''
-    AND "capability_set_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND btrim("agent_identity_id") <> ''
+    AND btrim("principal_id") <> ''
+    AND jsonb_typeof("execution_subject") = 'object'
     AND jsonb_typeof("memory_facts") = 'array'
-	AND jsonb_typeof("mcp_tools") = 'array'
+    AND jsonb_typeof("mcp_tools") = 'array'
 );
 
 -- Channel-target constraints cannot be represented by Prisma relations/indexes alone.
@@ -4704,11 +4699,12 @@ BEGIN
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
         OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
         OR NEW."trigger" IS DISTINCT FROM OLD."trigger"
-        OR NEW."delegated_user_id" IS DISTINCT FROM OLD."delegated_user_id"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+        OR NEW."execution_subject" IS DISTINCT FROM OLD."execution_subject"
         OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key"
         OR NEW."root_run_id" IS DISTINCT FROM OLD."root_run_id"
         OR NEW."parent_run_id" IS DISTINCT FROM OLD."parent_run_id"
-        OR NEW."effective_contract_digest" IS DISTINCT FROM OLD."effective_contract_digest"
         OR NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest" THEN
         RAISE EXCEPTION 'AgentRun identity and accepted inputs are immutable';
     END IF;
@@ -4799,7 +4795,8 @@ BEGIN
         WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
           AND "agent_service_id" = NEW."agent_service_id"
           AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
+          AND "silo_id" = NEW."silo_id" AND "agent_identity_id" = NEW."agent_identity_id"
+          AND "principal_id" = NEW."principal_id"
           AND "audience" = NEW."audience"
           AND "service_account_name" = NEW."service_account_name"
           AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
@@ -4816,7 +4813,10 @@ BEGIN
         OR NEW."generation" IS DISTINCT FROM OLD."generation"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+        OR NEW."execution_subject" IS DISTINCT FROM OLD."execution_subject"
         OR NEW."audience" IS DISTINCT FROM OLD."audience"
         OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
         OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
@@ -4914,7 +4914,10 @@ BEGIN
     IF NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+        OR NEW."execution_subject" IS DISTINCT FROM OLD."execution_subject"
         OR NEW."audience" IS DISTINCT FROM OLD."audience"
         OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
         OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
@@ -5028,7 +5031,8 @@ BEGIN
         FROM "workload_assignments"
         WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
           AND "agent_service_id" = NEW."agent_service_id" AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
+          AND "silo_id" = NEW."silo_id" AND "agent_identity_id" = NEW."agent_identity_id"
+          AND "principal_id" = NEW."principal_id"
           AND "audience" = NEW."workload_audience" AND "service_account_name" = NEW."service_account_name"
           AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
           AND "workload_uid" = NEW."workload_uid" AND "pod_uid" = NEW."pod_uid"
@@ -5053,7 +5057,9 @@ BEGIN
         OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
         OR NEW."proof_key_id" IS DISTINCT FROM OLD."proof_key_id" OR NEW."proof_key_thumbprint" IS DISTINCT FROM OLD."proof_key_thumbprint"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."workload_audience" IS DISTINCT FROM OLD."workload_audience"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+        OR NEW."workload_audience" IS DISTINCT FROM OLD."workload_audience"
         OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
         OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
         OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
@@ -5088,7 +5094,8 @@ BEGIN
         FROM "workload_assignments"
         WHERE "run_id" = OLD."run_id" AND "attempt" = OLD."attempt"
           AND "agent_service_id" = OLD."agent_service_id" AND "agent_revision_id" = OLD."agent_revision_id"
-          AND "silo_id" = OLD."silo_id" AND "subject_id" = OLD."subject_id"
+          AND "silo_id" = OLD."silo_id" AND "agent_identity_id" = OLD."agent_identity_id"
+          AND "principal_id" = OLD."principal_id"
           AND "audience" = OLD."workload_audience" AND "service_account_name" = OLD."service_account_name"
           AND "namespace" = OLD."namespace" AND "workload_kind" = OLD."workload_kind"
           AND "workload_uid" = OLD."workload_uid" AND "pod_uid" = OLD."pod_uid"
@@ -5460,7 +5467,7 @@ BEGIN
             RAISE EXCEPTION 'a new RuntimeSteeringRequest must begin pending without consumption evidence';
         END IF;
 
-        SELECT "attempt", "silo_id", "delegated_user_id", "state"
+        SELECT "attempt", "silo_id", "principal_id", "state"
         INTO run_attempt, run_silo_id, run_subject_id, run_state
         FROM "agent_runs"
         WHERE "id" = NEW."run_id"
@@ -6389,7 +6396,7 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "conversation_id" = NEW."source_conversation_id" AND "user_id" = NEW."user_id" AND "access_ended_position" IS NULL) THEN
             RAISE EXCEPTION 'PersonalConfigurationChange source conversation requires the initiating participant with current access';
         END IF;
-        SELECT "silo_id", "conversation_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_conversation, run_service, run_user
+        SELECT "silo_id", "conversation_id", "agent_service_id", "principal_id" INTO run_silo, run_conversation, run_service, run_user
           FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
         SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
           FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
@@ -7325,9 +7332,9 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_attempt_check" CHECK ("attem
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND
         btrim("agent_revision_id") <> '' AND btrim("request_idempotency_key") <> '' AND
-        btrim("root_run_id") <> '' AND btrim("effective_contract_digest") <> '' AND
+        btrim("root_run_id") <> '' AND btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND
         btrim("input_snapshot_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        jsonb_typeof("execution_subject") = 'object' AND
         "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_check" CHECK (
@@ -7347,8 +7354,9 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" > 0);
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND
-        btrim("effective_contract_digest") <> '' AND btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_digest" ~ '^sha256:[0-9a-f]{64}$'
+        btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND
+        jsonb_typeof("execution_subject") = 'object' AND btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
+        "input_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_positive_limits" CHECK (
     "depth" > 0
@@ -7358,7 +7366,8 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_posi
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
-        btrim("subject_id") <> '' AND "audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime') AND btrim("service_account_name") <> '' AND
+        btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND jsonb_typeof("execution_subject") = 'object' AND
+        "audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime') AND btrim("service_account_name") <> '' AND
         btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND btrim("workload_profile") <> ''
     );
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_expiry_check" CHECK ("expires_at" > "created_at");
@@ -7395,7 +7404,7 @@ ALTER TABLE "capability_catalog_revisions" ADD CONSTRAINT "capability_catalog_re
     );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
         "attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
-        "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND btrim("subject_id") <> '' AND
+		btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND
 		btrim("workload_audience") <> '' AND btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND
 		btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND
 		btrim("resource_kind") NOT IN ('', '*') AND
@@ -7942,7 +7951,7 @@ BEGIN
         OR request_row."purpose_payload_digest" IS DISTINCT FROM NEW."purpose_digest" OR NOT accepted_response
         OR invocation_row."id" IS NULL OR invocation_row."tool_revision_id" <> 'memory:recall'
         OR invocation_row."run_id" IS DISTINCT FROM NEW."run_id" OR invocation_row."attempt" IS DISTINCT FROM NEW."attempt"
-        OR invocation_row."subject_id" IS DISTINCT FROM NEW."execution_subject_id"
+        OR invocation_row."principal_id" IS DISTINCT FROM NEW."execution_subject_id"
         OR invocation_row."state" <> 'ready' OR invocation_row."revision" IS DISTINCT FROM NEW."tool_invocation_revision"
         OR snapshot_row."run_id" IS NULL OR snapshot_row."input_digest" IS DISTINCT FROM NEW."input_snapshot_digest"
         OR snapshot_row."persona_revision_id" IS DISTINCT FROM NEW."persona_revision_id"
@@ -8075,12 +8084,15 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "run_input_snapshots" snapshot
         WHERE snapshot."run_id" = NEW."id"
+          AND snapshot."attempt" = NEW."attempt"
           AND snapshot."input_digest" = NEW."input_snapshot_digest"
           AND snapshot."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND snapshot."silo_id" = NEW."silo_id"
           AND snapshot."agent_service_id" = NEW."agent_service_id"
           AND snapshot."agent_revision_id" = NEW."agent_revision_id"
-          AND snapshot."effective_contract_digest" = NEW."effective_contract_digest"
+          AND snapshot."agent_identity_id" = NEW."agent_identity_id"
+          AND snapshot."principal_id" = NEW."principal_id"
+          AND snapshot."execution_subject" = NEW."execution_subject"
     ) THEN
         RAISE EXCEPTION 'AgentRun requires its exact immutable RunInputSnapshot' USING ERRCODE = '23503';
     END IF;
@@ -8089,7 +8101,7 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete
-AFTER INSERT OR UPDATE OF "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "attempt", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject"
 ON "agent_runs" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_agent_run_input_snapshot_completeness();
 
@@ -8100,12 +8112,15 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "agent_runs" run
         WHERE run."id" = NEW."run_id"
+          AND run."attempt" = NEW."attempt"
           AND run."input_snapshot_digest" = NEW."input_digest"
           AND run."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND run."silo_id" = NEW."silo_id"
           AND run."agent_service_id" = NEW."agent_service_id"
           AND run."agent_revision_id" = NEW."agent_revision_id"
-          AND run."effective_contract_digest" = NEW."effective_contract_digest"
+          AND run."agent_identity_id" = NEW."agent_identity_id"
+          AND run."principal_id" = NEW."principal_id"
+          AND run."execution_subject" = NEW."execution_subject"
     ) THEN
         RAISE EXCEPTION 'RunInputSnapshot must bind the exact AgentRun conversation and authority' USING ERRCODE = '23503';
     END IF;
@@ -8114,7 +8129,7 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
-AFTER INSERT OR UPDATE OF "run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject"
 ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
 
@@ -8785,7 +8800,7 @@ BEGIN
         JOIN "persona_revisions" revision ON revision."id" = snapshot."persona_revision_id"
         WHERE run."id" = NEW."first_run_id" AND run."conversation_id" = NEW."child_conversation_id"
           AND run."silo_id" = NEW."silo_id" AND run."agent_service_id" = NEW."agent_service_id"
-          AND run."delegated_user_id" = NEW."initiator_user_id" AND run."state" = 'accepted'
+          AND run."principal_id" = NEW."initiator_user_id" AND run."state" = 'accepted'
           AND snapshot."persona_revision_id" = NEW."persona_revision_id"
           AND revision."persona_profile_id" = NEW."persona_profile_id" AND revision."state" = 'approved'
     ) THEN
