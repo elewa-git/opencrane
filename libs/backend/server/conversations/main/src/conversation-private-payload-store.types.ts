@@ -32,6 +32,21 @@ export interface StoredConversationPrivatePayload
 	readonly ciphertextDigest: `sha256:${string}`;
 }
 
+/** Carries the server-derived coordinates required to redeem one runtime input body. */
+export interface ConversationPrivatePayloadReadCommand
+{
+	/** Names the tenant that owns the payload and its authenticated ciphertext coordinates. */
+	readonly siloId: string;
+	/** Names the one conversation whose command stream selected the payload. */
+	readonly conversationId: string;
+	/** Names the server-issued input command that owns the private-payload row. */
+	readonly idempotencyKey: string;
+	/** Names the opaque row reference retained in the durable command envelope. */
+	readonly payloadRef: `payload://${string}`;
+	/** Binds the durable command reference to the exact stored ciphertext. */
+	readonly ciphertextDigest: `sha256:${string}`;
+}
+
 /**
  * Represents one encrypted private-payload row between the store and its persistence adapter.
  *
@@ -77,6 +92,8 @@ export interface ConversationPrivatePayloadRepository
 	 * @returns The stored row, or `null` when no write owns the key yet.
 	 */
 	find(command: Pick<ConversationPrivatePayloadStoreCommand, "siloId" | "conversationId" | "idempotencyKey">): Promise<ConversationPrivatePayloadRecord | null>;
+	/** Loads one payload row by its opaque server-generated identifier. */
+	findById(id: string): Promise<ConversationPrivatePayloadRecord | null>;
 	/**
 	 * Attempts to store a candidate without replacing an existing row.
 	 *
@@ -101,4 +118,11 @@ export interface ConversationPrivatePayloadStore
 	 * @throws Error when the command is invalid, the existing row has different text, or storage loses the inserted row.
 	 */
 	storeText(command: ConversationPrivatePayloadStoreCommand): Promise<StoredConversationPrivatePayload>;
+	/**
+	 * Decrypts one exact server-selected payload after the runtime command authority admitted it.
+	 *
+	 * @returns The original bounded UTF-8 text only when the durable reference, owner key, digest,
+	 * and AES-GCM associated data all agree.
+	 */
+	readText(command: ConversationPrivatePayloadReadCommand): Promise<string>;
 }

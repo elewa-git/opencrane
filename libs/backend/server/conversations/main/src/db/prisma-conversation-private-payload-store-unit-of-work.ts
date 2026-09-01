@@ -3,7 +3,7 @@ import { type PrismaClient } from "@prisma/client";
 import type { ConversationPayloadCipher } from "@opencrane/backend/server/infra/conversation-payloads";
 
 import { ConversationPrivatePayloadStore } from "../conversation-private-payload-store";
-import type { ConversationPrivatePayloadStore as ConversationPrivatePayloadStorePort, ConversationPrivatePayloadStoreCommand, StoredConversationPrivatePayload } from "../conversation-private-payload-store.types";
+import type { ConversationPrivatePayloadReadCommand, ConversationPrivatePayloadStore as ConversationPrivatePayloadStorePort, ConversationPrivatePayloadStoreCommand, StoredConversationPrivatePayload } from "../conversation-private-payload-store.types";
 import { PrismaConversationPrivatePayloadRepository } from "./prisma-conversation-private-payload-repository";
 
 /**
@@ -30,12 +30,30 @@ export class PrismaConversationPrivatePayloadStoreUnitOfWork implements Conversa
 	/** Stores one encrypted payload and releases the database transaction before history can append. */
 	async storeText(command: ConversationPrivatePayloadStoreCommand): Promise<StoredConversationPrivatePayload>
 	{
+		return this._UseStore(function _Store(store): Promise<StoredConversationPrivatePayload>
+		{
+			return store.storeText(command);
+		});
+	}
+
+	/** Reads and decrypts one payload in a short transaction before returning plaintext to a lease-fenced Sandbox. */
+	async readText(command: ConversationPrivatePayloadReadCommand): Promise<string>
+	{
+		return this._UseStore(function _Read(store): Promise<string>
+		{
+			return store.readText(command);
+		});
+	}
+
+	/** Opens one short transaction around any payload cipher operation without spanning history I/O. */
+	private async _UseStore<T>(operation: (store: ConversationPrivatePayloadStore) => Promise<T>): Promise<T>
+	{
 		const unit = this;
-		return unit.prisma.$transaction(async function _Store(transaction): Promise<StoredConversationPrivatePayload>
+		return unit.prisma.$transaction(async function _Use(transaction): Promise<T>
 		{
 			const repository = new PrismaConversationPrivatePayloadRepository(transaction);
 			const store = new ConversationPrivatePayloadStore(repository, unit.cipher);
-			return store.storeText(command);
+			return operation(store);
 		});
 	}
 }
