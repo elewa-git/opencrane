@@ -11,7 +11,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
 import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
 import { _RunInputSnapshotData } from "./prisma-run-admission-repository";
-import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
+import { RetryReplayCheckStatuses, type AgentRunAuthoritySnapshot, type AgentRunRetryTransactionRepository, type AtomicRunAttemptResult, type AtomicStartNextRunAttemptCommand, type RetryReplayCheck, type StartNextRunAttemptCommand, type StartNextRunAttemptResult } from "./run-authority.types";
 
 /** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
 function _runState(value: string): DomainAgentRunState
@@ -154,7 +154,8 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 	async getRunAuthority(runId: string): Promise<AgentRunAuthoritySnapshot | null>
 	{
 		const run = await this._transaction.agentRun.findUnique({ where: { id: runId } });
-		if (run === null) return null;
+		if (run === null)
+			return null;
 		const service = await this._transaction.agentService.findUnique({ where: { id: run.agentServiceId } });
 		return {
 			run: _mapRun(run),
@@ -162,6 +163,36 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 			agentServiceState: _serviceState(service?.state ?? null),
 			activeAgentRevisionId: service?.activeRevisionId ?? null,
 		};
+	}
+
+	/**
+	 * Checks current requester authority and settles an exact committed retry before compilation.
+	 *
+	 * An idempotent retry is proven by the next attempt's deterministic workflow task, not by a new
+	 * execution subject. That lets a browser safely replay its request after the prior attempt
+	 * committed, even if the computer lease or service has changed since then.
+	 */
+	async checkRetryReplay(command: StartNextRunAttemptCommand): Promise<RetryReplayCheck>
+	{
+		const transaction = this._transaction;
+		const participant = await transaction.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.requestedBy, accessEndedPosition: null, conversation: { siloId: command.siloId } }, select: { conversationId: true } });
+		if (participant === null)
+			return { status: RetryReplayCheckStatuses.Unauthorized } as const;
+		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
+		if (run === null)
+			return { status: RetryReplayCheckStatuses.NotFound } as const;
+		if (run.siloId !== command.siloId || run.conversationId !== command.conversationId)
+			return { status: RetryReplayCheckStatuses.Unauthorized } as const;
+		const argumentsValue = { runId: run.id, expectedAttempt: command.expectedAttempt };
+		const authorizationAdmission = await this._authorization.admitPrincipal({ siloId: command.siloId, principalId: command.requestedByPrincipalId, actorKind: "user", actorId: command.requestedByPrincipalId, resource: { kind: ProductAuthorizationResourceKinds.AgentRun, id: run.id }, action: ProductAuthorizationActions.Retry, argumentsDigest: ___DigestCanonicalJson(argumentsValue as JsonValue), nowEpochMs: Date.parse(command.acceptedAt) });
+		if (authorizationAdmission.outcome !== AuthorizationDecisionOutcomes.Allow)
+			return { status: RetryReplayCheckStatuses.Unauthorized } as const;
+		if (run.attempt !== command.expectedAttempt + 1)
+			return { status: RetryReplayCheckStatuses.Proceed } as const;
+		const task = await transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } }, select: { taskKey: true } });
+		return _RetryMatches(task, command)
+			? { status: RetryReplayCheckStatuses.Idempotent, run: _mapRun(run) } as const
+			: { status: RetryReplayCheckStatuses.Proceed } as const;
 	}
 
 	/**
@@ -302,16 +333,10 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		if (run.attempt !== nextAttempt)
 			return null;
 		const task = await this._transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: nextAttempt } }, select: { taskKey: true } });
-		return _RetryMatches(task, command) && _RunMatchesNextSnapshot(run, _NextSnapshotForWinner(command))
+		return _RetryMatches(task, command)
 			? { outcome: "idempotent", run: _mapRun(run) }
 			: { outcome: "denied", reason: "attempt_conflict", currentAttempt: run.attempt };
 	}
-}
-
-/** Parses only the snapshot fields available while reading a committed retry winner. */
-function _NextSnapshotForWinner(command: StartNextRunAttemptCommand): StartNextRunAttemptCommand["nextInputSnapshot"] | null
-{
-	return command.nextInputSnapshot;
 }
 
 /** Parses the newly compiled next-attempt snapshot and checks every run and lease coordinate before writing. */

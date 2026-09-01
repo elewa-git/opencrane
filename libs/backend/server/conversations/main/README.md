@@ -36,12 +36,12 @@ does not expose a separate run-start route.
 
 The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
 dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
-the handoff into execution admission's authoritative final transaction. Participant retry first
-uses the required execution-inputs compiler to recheck a fresh AgentIdentity, membership,
-capability decision, and computer lease for the next attempt. Only that fresh immutable snapshot
-then reaches the runs package's `RunRetryAuthority`; browser requester coordinates remain
-provenance and never substitute for execution authority. Conversation composition supplies the
-compiler and route facts but neither constructs a run repository nor owns its transaction retries.
+the handoff into execution admission's authoritative final transaction. Conversation composition
+supplies the route facts and the required execution-inputs compiler. The runs package then checks
+replay, requester, run, and service authority, requires its compiler to recheck the next attempt's
+AgentIdentity, membership, capability decision, and computer lease, and commits its
+immutable snapshot through the same serializable compare-and-swap. Browser requester coordinates
+identify the request and never substitute for execution authority.
 
 `BoundConversationWriter` is the KurrentDB-facing computer boundary. A caller mints one binding for
 one silo, conversation, computer lease generation, agent identity, run, and expected stream

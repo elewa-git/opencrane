@@ -1,5 +1,5 @@
 import type { ExecutionSubjectAdmissionAuthority } from "@opencrane/backend/agents/execution/admission";
-import type { RetryRunInputCompiler } from "@opencrane/backend/server/conversations";
+import type { RetryRunInputCompiler } from "@opencrane/backend/agents/execution/runs";
 
 /**
  * Carries the two execution-subject authorities that the OpenCrane process must compose together.

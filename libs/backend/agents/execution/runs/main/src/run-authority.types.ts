@@ -32,8 +32,6 @@ export interface StartNextRunAttemptCommand
 	readonly requestedByPrincipalId: string;
 	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt`. */
 	readonly acceptedAt: string;
-	/** Fresh immutable input snapshot whose subject binds the next run attempt and current computer lease. */
-	readonly nextInputSnapshot: RunInputSnapshot;
 }
 
 /**
@@ -68,6 +66,8 @@ export interface AgentRunAuthoritySnapshot
  */
 export interface AtomicStartNextRunAttemptCommand extends StartNextRunAttemptCommand
 {
+	/** Fresh immutable input snapshot whose subject binds the next run attempt and current computer lease. */
+	readonly nextInputSnapshot: RunInputSnapshot;
 	/** The AgentService recorded on the run when the domain read it. It cannot change on a run, so a difference here means the wrong run was found. */
 	readonly expectedAgentServiceId: AgentServiceId;
 	/** Silo that service was in. Kept separate from the run's silo so a service moving between silos cannot carry a retry with it. */
@@ -105,47 +105,30 @@ export type AtomicRunAttemptResult =
 	| { readonly status: "not_found" };
 
 /**
- * The database operations a retry needs, kept behind a port so the retry rules can be tested
- * without Postgres.
+ * The complete database operations one serializable retry decision needs.
  *
- * The whole point of this boundary is that one AgentRun row survives being retried: no method here
- * creates a run, and the only write raises the attempt counter on a row that already exists.
+ * One AgentRun row survives each retry: no method here creates a run, and the only write raises
+ * the attempt counter on the existing row. The compiler receives the matching transaction through
+ * the unit of work rather than this repository.
  *
  * Called by: `__StartNextRunAttempt` in run-authority.ts — the only production caller.
- * Implemented by: {@link PrismaAgentRunAuthorityRepository} in prisma-run-authority.ts, and by an
- * in-memory fake in `__tests__/run-authority.test.ts`.
- */
-export interface AgentRunAuthorityRepository
-{
-	/**
-	 * Read the run and the AgentService it points at, as they are at one moment.
-	 *
-	 * @param runId - The run to read.
-	 * @returns The snapshot, or null when no such run exists. Advisory only: everything it reports
-	 * can change before the write, which is why the write re-checks it.
-	 * @throws When the database is unreachable.
-	 */
-	getRunAuthority(runId: AgentRunId): Promise<AgentRunAuthoritySnapshot | null>;
-	/**
-	 * Raise the attempt counter, but only while the run and its service still look the way the
-	 * caller observed them.
-	 *
-	 * @param command - The retry plus the observed run and service coordinates to write against.
-	 * @returns One {@link AtomicRunAttemptResult}. Only `started` and `idempotent` mean an attempt
-	 * exists; the other three mean nothing was written.
-	 * @throws When the database is unreachable or the transaction is rolled back.
-	 */
-	startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>;
-}
-
-/**
- * Adds the committed-winner read needed after the retry unit of work exhausts database conflicts.
- *
  * Called by: `PrismaAgentRunRetryUnitOfWork` after its third P2002 or P2034 rollback.
  * Implemented by: `PrismaAgentRunAuthorityRepository` on a fresh transaction.
  */
-export interface AgentRunRetryTransactionRepository extends AgentRunAuthorityRepository
+export interface AgentRunRetryTransactionRepository
 {
+	/** Reads the run and AgentService that must describe one retry decision. */
+	getRunAuthority(runId: AgentRunId): Promise<AgentRunAuthoritySnapshot | null>;
+	/** Raises the attempt only while all observed run and AgentService facts still hold. */
+	startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>;
+	/**
+	 * Checks requester authority and returns a durable exact replay before retry input compilation.
+	 *
+	 * A replay is accepted only when the requested next attempt owns its deterministic workflow task.
+	 * That check runs before the compiler so a repeated browser request never needs fresh lease or
+	 * capability evidence for an attempt that has already committed.
+	 */
+	checkRetryReplay(command: StartNextRunAttemptCommand): Promise<RetryReplayCheck>;
 	/**
 	 * Checks whether the requested next attempt committed in another transaction.
 	 * @param command - Original owner-bound retry request.
@@ -154,6 +137,26 @@ export interface AgentRunRetryTransactionRepository extends AgentRunAuthorityRep
 	 */
 	readRetryWinner(command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult | null>;
 }
+
+/** States whether the requester/replay gate may proceed, return a winner, or deny the retry. */
+export enum RetryReplayCheckStatuses
+{
+	/** The retry has no committed winner and may continue to current authority checks. */
+	Proceed = "proceed",
+	/** A deterministic next attempt already committed and can return without recomputing inputs. */
+	Idempotent = "idempotent",
+	/** The requester no longer has the participant or product authority to retry. */
+	Unauthorized = "unauthorized",
+	/** No run matches the trusted retry coordinate. */
+	NotFound = "not_found",
+}
+
+/** Internal result of the requester and durable-replay gate that precedes retry compilation. */
+export type RetryReplayCheck =
+	| { readonly status: RetryReplayCheckStatuses.Proceed }
+	| { readonly status: RetryReplayCheckStatuses.Idempotent; readonly run: AgentRun }
+	| { readonly status: RetryReplayCheckStatuses.Unauthorized }
+	| { readonly status: RetryReplayCheckStatuses.NotFound };
 
 /**
  * Runs one participant-authorized retry without exposing persistence to conversation composition.

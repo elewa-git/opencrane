@@ -18,8 +18,6 @@ export { __CreateConversationReplayRouter } from "./conversation-replay.router";
 export { __CreateSelfConversationSocketServer } from "./self-conversation-socket";
 export type { SelfConversationSocketAuthenticator, SelfConversationSocketDependencies, SelfConversationSocketServer } from "./self-conversation-socket.types";
 export type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types";
-export { RetryRunInputCompileOutcomes } from "./retry-run-input.types";
-export type { RetryRunInputCompileCommand, RetryRunInputCompileDenialReason, RetryRunInputCompileResult, RetryRunInputCompiler } from "./retry-run-input.types";
 export { _CreateSelfConversationsRouter } from "./db/prisma-self-conversations.router";
 export { _CreatePrismaSelfConversationSocketServer } from "./db/prisma-self-conversations.router";
 export { _SelfConversationsOpenapiPaths } from "./openapi";

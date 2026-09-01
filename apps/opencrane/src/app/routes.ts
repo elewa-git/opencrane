@@ -19,9 +19,9 @@ import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/person
 import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
-import { _CreateSelfConversationsRouter, type RetryRunInputCompiler } from "@opencrane/backend/server/conversations";
+import { _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission, __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
-import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RunCancellationRepository, type SelfRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
+import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RetryRunInputCompiler, type RunCancellationRepository, type SelfRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
@@ -49,7 +49,7 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  * @param runAdmission - Shared managed run-now and scheduler admission port.
  * @param personalRunAdmission - Shared personal browser-run admission port.
  * @param runCancellation - Shared attempt-fenced cancellation authority.
- * @param retryInputCompiler - Compiles fresh lease-bound snapshots before a participant retry.
+ * @param retryInputCompiler - Compiles fresh lease-bound snapshots within the run-owned retry transaction.
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
  * @param mcpWorkflows - Shared guarded workflow engine plus saved MCP task authorities.

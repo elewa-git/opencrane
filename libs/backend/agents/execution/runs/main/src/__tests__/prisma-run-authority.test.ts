@@ -6,6 +6,7 @@ import type { ExecutionSubject } from "@opencrane/models/agents";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaAgentRunAuthorityRepository } from "../prisma-run-authority";
 import { PrismaAgentRunRetryUnitOfWork } from "../prisma-run-retry-unit-of-work";
+import { RetryRunInputCompileOutcomes, type RetryRunInputCompiler } from "../retry-run-input.types";
 import type { AtomicStartNextRunAttemptCommand } from "../run-authority.types";
 
 /** Creates one participant-authorized atomic retry command. */
@@ -24,6 +25,12 @@ function _subject(attempt: number): ExecutionSubject
 function _snapshot(attempt: number): RunInputSnapshot
 {
 	return { runId: "run-1", attempt, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, executionSubject: _subject(attempt), promptCompilerVersion: "prompt-v1", digest: `sha256:${String(attempt).repeat(64)}`, compiledAt: "2026-07-18T01:00:00.000Z" };
+}
+
+/** Supplies a compiler for transaction-retry tests whose transactions roll back before compiling. */
+function _retryCompiler(): RetryRunInputCompiler
+{
+	return { compile: vi.fn().mockResolvedValue({ outcome: RetryRunInputCompileOutcomes.Compiled, nextInputSnapshot: _snapshot(2) }) };
 }
 
 /** Creates one retryable Prisma run row. */
@@ -158,22 +165,20 @@ describe("Prisma AgentRun authority adapter", function _suite()
 		const uniqueConflict = new Prisma.PrismaClientKnownRequestError("unique conflict", { code: "P2002", clientVersion: "test" });
 		const serializationConflict = new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" });
 		const run = { ..._runRow(2), state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
-		const readTransaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()) }, agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) } };
 		const winnerTransaction = { ..._authority(), agentRun: { findUnique: vi.fn().mockResolvedValue(run) }, agentRunWorkflowTask: { findUnique: vi.fn().mockResolvedValue({ taskKey: "agent-run:silo-1:run-1:attempt:2" }) } };
-		const prisma = { $transaction: vi.fn().mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(uniqueConflict).mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(serializationConflict).mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(serializationConflict).mockImplementationOnce(async function _Winner(work) { return work(winnerTransaction); }) };
+		const prisma = { $transaction: vi.fn().mockRejectedValueOnce(uniqueConflict).mockRejectedValueOnce(serializationConflict).mockRejectedValueOnce(serializationConflict).mockImplementationOnce(async function _Winner(work) { return work(winnerTransaction); }) };
 
-		await expect(new PrismaAgentRunRetryUnitOfWork(prisma as never, _workflow()).retry(_command())).resolves.toMatchObject({ outcome: "idempotent", run: { attempt: 2 } });
-		expect(prisma.$transaction).toHaveBeenCalledTimes(7);
+		await expect(new PrismaAgentRunRetryUnitOfWork(prisma as never, _workflow(), _retryCompiler()).retry(_command())).resolves.toMatchObject({ outcome: "idempotent", run: { attempt: 2 } });
+		expect(prisma.$transaction).toHaveBeenCalledTimes(4);
 	});
 
 	it("rethrows the third rollback when no next-attempt winner committed", async function _ExhaustsRetry()
 	{
 		const conflict = new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" });
 		const last = new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" });
-		const readTransaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()) }, agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) } };
 		const noWinnerTransaction = { ..._authority(), agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()) }, agentRunWorkflowTask: { findUnique: vi.fn() } };
-		const prisma = { $transaction: vi.fn().mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(conflict).mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(conflict).mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(last).mockImplementationOnce(async function _Winner(work) { return work(noWinnerTransaction); }) };
+		const prisma = { $transaction: vi.fn().mockRejectedValueOnce(conflict).mockRejectedValueOnce(conflict).mockRejectedValueOnce(last).mockImplementationOnce(async function _Winner(work) { return work(noWinnerTransaction); }) };
 
-		await expect(new PrismaAgentRunRetryUnitOfWork(prisma as never, _workflow()).retry(_command())).rejects.toBe(last);
+		await expect(new PrismaAgentRunRetryUnitOfWork(prisma as never, _workflow(), _retryCompiler()).retry(_command())).rejects.toBe(last);
 	});
 });
