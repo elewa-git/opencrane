@@ -89,6 +89,7 @@ const _ElicitationEntryBase = {
 const _ElicitationRequestEntrySchema = z.object({
 	..._ElicitationEntryBase,
 	state: z.literal(ConversationElicitationEntryStates.Requested),
+	profileRevisionId: _IdentifierSchema,
 	addressedParticipantId: _IdentifierSchema,
 	requestPayloadRef: _OpaquePayloadReferenceSchema,
 	requestPayloadDigest: _PayloadDigestSchema,
