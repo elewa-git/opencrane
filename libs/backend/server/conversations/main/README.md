@@ -147,6 +147,13 @@ transport for workloads; it is not a browser fallback.
   An identical response-lost retry returns the first durable receipt without re-admitting or appending;
   a changed reuse of the same request identifier fails closed. The authority is intentionally exported
   but not yet composed: the #759 ConversationComputer loop checkpoint owns that composition.
+- `ConversationComputerElicitationResolutionAuthority` accepts only an authenticated caller,
+  conversation, request identifier, retry identifier, and typed answer or decline. It derives the
+  addressed participant, records `Conversation/Use`, checks the request's current computer and
+  AgentIdentity heads, and appends the sole terminal entry atomically. Its protected payload port
+  digest-checks the request and validates and stores the response outside conversation history. It is
+  intentionally uncomposed until the replacement participant interrupt transport is ready; it never
+  resumes a legacy workflow or falls back to the Prisma elicitation authority.
 
 ## Boundary
 
