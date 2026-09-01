@@ -18,6 +18,8 @@
     { "path": "apps/opencrane/src/app/config.types.ts", "owner": "apps/opencrane", "classification": "app-config" },
 	{ "path": "apps/opencrane/src/app/conversation-computer-activation-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/conversation-computer-activation-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+	{ "path": "apps/opencrane/src/app/conversation-computer-sandbox-reconciliation-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+	{ "path": "apps/opencrane/src/app/conversation-computer-sandbox-reconciliation-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/external-action-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/execution-subject-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/execution-subject-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
