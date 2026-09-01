@@ -1,3 +1,4 @@
+import { ConversationElicitationEntryKinds, ConversationElicitationEntryStates, ConversationEntryKinds, type ConversationEntry, type ElicitationRequestEntry } from "@opencrane/contracts";
 import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 import { describe, expect, it, vi } from "vitest";
@@ -12,12 +13,42 @@ function _Command()
 	return { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", profileRevisionId: "profile-1", requestId: _REQUEST_ID, elicitationId: "elicitation-1", requestPayloadRef: "payload://request-1", requestPayloadDigest: `sha256:${"a".repeat(64)}` as const, causationId: "cause-1", correlationId: "correlation-1" };
 }
 
-function _Authority(overrides: { readonly conversationRevision?: bigint | HistoryExpectedRevisions.NoStream; readonly outcome?: AuthorizationDecisionOutcomes } = {})
+function _ExistingRequest(overrides: Partial<ElicitationRequestEntry> = {}): ElicitationRequestEntry
+{
+	return {
+		schemaVersion: 1,
+		id: _REQUEST_ID,
+		conversationId: "conversation-1",
+		position: "7",
+		author: { kind: "system", systemId: "opencrane", name: "OpenCrane" },
+		provenance: "service-attested",
+		visibility: { audience: "participant_subset", participantIds: ["participant-1"] },
+		causationId: "cause-1",
+		correlationId: "correlation-1",
+		idempotencyKey: _REQUEST_ID,
+		occurredAt: _NOW.toISOString(),
+		attestation: { serviceId: "opencrane", receiptId: _REQUEST_ID, domainStream: "conversation-computer-computer-1", domainRevision: "2", decisionEvidenceId: "audit-1" },
+		kind: ConversationEntryKinds.Elicitation,
+		elicitationId: "elicitation-1",
+		computerId: "computer-1",
+		computerExecutionId: "execution-1",
+		leaseGeneration: 3,
+		elicitationKind: ConversationElicitationEntryKinds.RuntimeInput,
+		state: ConversationElicitationEntryStates.Requested,
+		addressedParticipantId: "participant-1",
+		requestPayloadRef: "payload://request-1",
+		requestPayloadDigest: `sha256:${"a".repeat(64)}`,
+		expiresAt: "2026-09-01T00:05:00.000Z",
+		...overrides,
+	};
+}
+
+function _Authority(overrides: { readonly conversationRevision?: bigint | HistoryExpectedRevisions.NoStream; readonly outcome?: AuthorizationDecisionOutcomes; readonly entries?: readonly ConversationEntry[] } = {})
 {
 	const appendAtomic = vi.fn().mockResolvedValue([{ streamName: "conversation-conversation-1", revision: 8n }]);
 	const loadActiveExecutionForRuntime = vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 2n, computer: { id: "computer-1", agentIdentityId: "identity-1" }, lease: { generation: 3 }, execution: { id: "execution-1" } });
 	const loadActiveAuthorization = vi.fn().mockResolvedValue({ identity: { id: "identity-1" }, principalId: "principal-1", actorKind: "agent-service", actorId: "identity-1", expectedIdentityHeads: [{ streamName: "agent-identity-identity-1", revision: 4n }] });
-	const readCurrent = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", expectedRevision: overrides.conversationRevision ?? 7n, entries: [] });
+	const readCurrent = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", expectedRevision: overrides.conversationRevision ?? 7n, entries: overrides.entries ?? [] });
 	const resolve = vi.fn().mockResolvedValue({ participantId: "participant-1" });
 	const admitPrincipal = vi.fn().mockResolvedValue({ outcome: overrides.outcome ?? AuthorizationDecisionOutcomes.Allow, evidence: (overrides.outcome ?? AuthorizationDecisionOutcomes.Allow) === AuthorizationDecisionOutcomes.Allow ? { decisionEvidenceId: "audit-1" } : null });
 	return { authority: new ConversationComputerRuntimeInputElicitationAuthority({ appendAtomic }, { loadActiveExecutionForRuntime } as never, { loadActiveAuthorization } as never, { readCurrent } as never, { resolve }, { admitPrincipal } as never, { now: function _Now(): Date { return _NOW; } }), appendAtomic, loadActiveExecutionForRuntime, loadActiveAuthorization, readCurrent, resolve, admitPrincipal };
@@ -61,5 +92,23 @@ describe("ConversationComputerRuntimeInputElicitationAuthority", function ()
 
 		await expect(subject.authority.request(_Command())).rejects.toThrow("stale expected conversation head");
 		expect(subject.appendAtomic).toHaveBeenCalledTimes(1);
+	});
+
+	it("returns the durable original receipt for a response-lost retry without re-admitting or appending", async function ()
+	{
+		const subject = _Authority({ entries: [_ExistingRequest()] });
+
+		await expect(subject.authority.request(_Command())).resolves.toEqual({ receipt: { streamName: "conversation-conversation-1", revision: 7n } });
+		expect(subject.loadActiveExecutionForRuntime).not.toHaveBeenCalled();
+		expect(subject.admitPrincipal).not.toHaveBeenCalled();
+		expect(subject.appendAtomic).not.toHaveBeenCalled();
+	});
+
+	it("rejects reuse of a persisted request identifier for different RuntimeInput facts", async function ()
+	{
+		const subject = _Authority({ entries: [_ExistingRequest({ elicitationId: "elicitation-2" })] });
+
+		await expect(subject.authority.request(_Command())).rejects.toThrow("idempotency key already owns a different request");
+		expect(subject.appendAtomic).not.toHaveBeenCalled();
 	});
 });

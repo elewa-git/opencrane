@@ -1,11 +1,12 @@
 import { ___ConversationEntrySchema, ConversationElicitationEntryKinds, ConversationElicitationEntryStates, ConversationEntryKinds, type ElicitationRequestEntry } from "@opencrane/contracts";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
-import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { HistoryExpectedRevisions, type HistoryAppendReceipt, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationHistoryReader } from "../conversation-history-reader";
+import type { CurrentConversationHistory } from "../conversation-history-reader.types";
 import { ConversationComputerHistory } from "./conversation-computer-history";
 import type { ConversationComputerRuntimeInputClock, ConversationComputerRuntimeInputElicitationCommand, ConversationComputerRuntimeInputElicitationResult, ConversationComputerRuntimeInputParticipantResolver } from "./conversation-computer-runtime-input-elicitation.types";
 
@@ -33,7 +34,16 @@ export class ConversationComputerRuntimeInputElicitationAuthority
 		_Validate(command);
 		const now = this.clock.now();
 
-		// 1. Check the active runtime state so callers cannot choose the actor, lease, or execution.
+		// 1. Replay the current transcript so a response-lost retry returns its durable winner.
+		const conversation = await this.conversations.readCurrent({
+			siloId: command.siloId,
+			conversationId: command.conversationId,
+		});
+		const existingReceipt = _ExistingRequestReceipt(conversation, command);
+		if (existingReceipt !== null)
+			return { receipt: existingReceipt };
+
+		// 2. Check the active runtime state so callers cannot choose the actor, lease, or execution.
 		const computer = await this.computers.loadActiveExecutionForRuntime({
 			siloId: command.siloId,
 			computerId: command.computerId,
@@ -45,10 +55,6 @@ export class ConversationComputerRuntimeInputElicitationAuthority
 			siloId: command.siloId,
 			agentIdentityId: computer.computer.agentIdentityId,
 		});
-		const conversation = await this.conversations.readCurrent({
-			siloId: command.siloId,
-			conversationId: command.conversationId,
-		});
 		const participant = await this.participants.resolve({
 			siloId: command.siloId,
 			conversationId: command.conversationId,
@@ -58,7 +64,7 @@ export class ConversationComputerRuntimeInputElicitationAuthority
 		if (!_Id(participant.participantId))
 			throw new Error("Conversation computer runtime input could not resolve an active participant");
 
-		// 2. Admit the derived principal with a digest that binds this exact runtime request.
+		// 3. Admit the derived principal with a digest that binds this exact runtime request.
 		const admission = await this.authorization.admitPrincipal({
 			siloId: command.siloId,
 			principalId: identity.principalId,
@@ -75,7 +81,7 @@ export class ConversationComputerRuntimeInputElicitationAuthority
 		if (!___ConversationEntrySchema.safeParse(entry).success)
 			throw new Error("Conversation computer runtime input could not stamp a valid participant entry");
 
-		// 3. Append under all checked heads so any concurrent authority change rejects the request.
+		// 4. Append under all checked heads so any concurrent authority change rejects the request.
 		const receipts = await this.history.appendAtomic({
 			expectedHeads: [
 				{ streamName: computer.streamName, revision: computer.revision },
@@ -104,6 +110,29 @@ export class ConversationComputerRuntimeInputElicitationAuthority
 			throw new Error("Conversation computer runtime input atomic append omitted its conversation receipt");
 		return { receipt };
 	}
+}
+
+/** Returns the original receipt only when the durable request winner exactly matches the retry. */
+function _ExistingRequestReceipt(conversation: CurrentConversationHistory, command: ConversationComputerRuntimeInputElicitationCommand): HistoryAppendReceipt | null
+{
+	const entry = conversation.entries.find(candidate => candidate.idempotencyKey === command.requestId);
+	if (entry === undefined)
+		return null;
+	const isExactRuntimeInput = entry.kind === ConversationEntryKinds.Elicitation
+		&& entry.elicitationKind === ConversationElicitationEntryKinds.RuntimeInput
+		&& entry.state === ConversationElicitationEntryStates.Requested
+		&& entry.conversationId === command.conversationId
+		&& entry.elicitationId === command.elicitationId
+		&& entry.computerId === command.computerId
+		&& entry.requestPayloadRef === command.requestPayloadRef
+		&& entry.requestPayloadDigest === command.requestPayloadDigest
+		&& entry.causationId === command.causationId
+		&& entry.correlationId === command.correlationId
+		&& entry.attestation !== null
+		&& entry.attestation.receiptId === command.requestId;
+	if (!isExactRuntimeInput)
+		throw new Error("Conversation computer runtime input idempotency key already owns a different request");
+	return { streamName: conversation.streamName, revision: BigInt(entry.position) };
 }
 
 /** Builds the immutable conversation entry from server-derived runtime authority. */
