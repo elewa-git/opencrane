@@ -177,13 +177,36 @@ describe("ConversationComputerHistory", function ()
 		const releasedLease = _Lease({ state: ComputerLeaseStates.Released, releasedAt: "2026-09-01T00:05:00.000Z" });
 		const claimedComputer = _Computer({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 2, activeExecution: null, updatedAt: "2026-09-01T00:06:00.000Z" });
 		const claimedLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: null, state: ComputerLeaseStates.Claimed, expiresAt: "2026-09-01T00:26:00.000Z" });
+		const dispatchedComputer = _Computer({ state: ConversationComputerStates.ClaimDispatched, leaseGeneration: 2, activeExecution: null, updatedAt: "2026-09-01T00:06:30.000Z" });
 		const replacementComputer = _Computer({ state: ConversationComputerStates.Warm, leaseGeneration: 2, activeExecution: _Execution({ id: "execution-2", leaseId: "lease-2", leaseGeneration: 2, startedAt: "2026-09-01T00:07:00.000Z" }), updatedAt: "2026-09-01T00:07:00.000Z" });
 		const replacementLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: "sandbox-2", expiresAt: "2026-09-01T00:26:00.000Z" });
-		const valid = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, releasedComputer, releasedLease), _Event(2n, claimedComputer, claimedLease), _Event(3n, replacementComputer, replacementLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 3n }) }));
+		const valid = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, releasedComputer, releasedLease), _Event(2n, claimedComputer, claimedLease), _Event(3n, dispatchedComputer, claimedLease), _Event(4n, replacementComputer, replacementLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 4n }) }));
 		const directReplacement = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, replacementComputer, replacementLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
 
-		await expect(valid.loadActiveLease(_ActiveCommand())).resolves.toEqual({ streamName: "conversation-computer-computer-1", revision: 3n, computer: replacementComputer, lease: replacementLease });
+		await expect(valid.loadActiveLease(_ActiveCommand())).resolves.toEqual({ streamName: "conversation-computer-computer-1", revision: 4n, computer: replacementComputer, lease: replacementLease });
 		await expect(directReplacement.load(_CurrentCommand())).rejects.toThrow("replaced a nonterminal lease");
+	});
+
+	it("refuses a terminal transition while one durable claim dispatch still owns the lease", async function _RejectsTerminalDispatchRace()
+	{
+		const dispatchedComputer = _Computer({ state: ConversationComputerStates.ClaimDispatched, activeExecution: null, updatedAt: "2026-09-01T00:01:00.000Z" });
+		const dispatchedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Claimed });
+		const releasedComputer = _Computer({ state: ConversationComputerStates.Cold, activeExecution: null, updatedAt: "2026-09-01T00:02:00.000Z" });
+		const releasedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Released, releasedAt: "2026-09-01T00:02:00.000Z" });
+		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, dispatchedComputer, dispatchedLease), _Event(1n, releasedComputer, releasedLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
+
+		await expect(history.load(_CurrentCommand())).rejects.toThrow("requires claim dispatch to converge");
+	});
+
+	it("permits only expired-claim compensation from a durable dispatch fence", async function _AllowsLostDispatchCompensation()
+	{
+		const dispatchedComputer = _Computer({ state: ConversationComputerStates.ClaimDispatched, activeExecution: null, updatedAt: "2026-09-01T00:01:00.000Z" });
+		const dispatchedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Claimed });
+		const recoveredComputer = _Computer({ state: ConversationComputerStates.RecoveryRequired, activeExecution: null, updatedAt: "2026-09-01T00:02:00.000Z" });
+		const lostLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Lost, releasedAt: "2026-09-01T00:02:00.000Z" });
+		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, dispatchedComputer, dispatchedLease), _Event(1n, recoveredComputer, lostLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
+
+		await expect(history.load(_CurrentCommand())).resolves.toEqual(expect.objectContaining({ computer: recoveredComputer, lease: lostLease }));
 	});
 
 	it("rejects a stale active lease before a caller can use its generation", async function ()

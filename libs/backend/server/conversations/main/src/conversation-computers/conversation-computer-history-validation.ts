@@ -1,7 +1,7 @@
 import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer, type ConversationComputerExecution } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand } from "./conversation-computer-history.types";
+import type { ConversationComputerActivationCurrentCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand } from "./conversation-computer-history.types";
 
 /** Names the one versioned event schema this history authority accepts. */
 const _CONVERSATION_COMPUTER_EVENT_TYPE = "opencrane.conversation-computer.v1";
@@ -36,6 +36,13 @@ export function _ValidateConversationComputerRuntimeCurrentCommand(command: Conv
 {
 	if (!_Identifier(command.siloId) || !_Identifier(command.computerId) || !_Identifier(command.conversationId) || !_Identifier(command.profileRevisionId))
 		throw new Error("Conversation computer runtime load requires server-provided computer coordinates");
+}
+
+/** Validates activation coordinates without allowing an event to choose identity or profile. */
+export function _ValidateConversationComputerActivationCurrentCommand(command: ConversationComputerActivationCurrentCommand): void
+{
+	if (!_Identifier(command.siloId) || !_Identifier(command.computerId) || !_Identifier(command.conversationId))
+		throw new Error("Conversation computer activation load requires server-provided computer coordinates");
 }
 
 /** Validates one envelope and closed snapshot before it can contribute to current computer state. */
@@ -139,7 +146,7 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 		throw new Error("Conversation computer history requires the lease to match its computer generation");
 	if (lease.state === ComputerLeaseStates.Claimed)
 	{
-		if (computer.state !== ConversationComputerStates.ClaimPending || lease.sandboxId !== null || lease.releasedAt !== null)
+		if ((computer.state !== ConversationComputerStates.ClaimPending && computer.state !== ConversationComputerStates.ClaimDispatched) || lease.sandboxId !== null || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires a pending claim without a sandbox");
 		return;
 	}
@@ -151,7 +158,7 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 	}
 	if (lease.releasedAt === null)
 		throw new Error("Conversation computer history requires a terminal lease release time");
-	if (computer.state === ConversationComputerStates.Warm || computer.state === ConversationComputerStates.ClaimPending)
+	if (computer.state === ConversationComputerStates.Warm || computer.state === ConversationComputerStates.ClaimPending || computer.state === ConversationComputerStates.ClaimDispatched)
 		throw new Error("Conversation computer history cannot retain a terminal lease on an admitting computer");
 }
 
@@ -178,6 +185,10 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 		throw new Error("Conversation computer history changed stable computer coordinates");
 	if (previous.computer.state === ConversationComputerStates.Retired && current.computer.state !== ConversationComputerStates.Retired)
 		throw new Error("Conversation computer history cannot reactivate a retired computer");
+	if (previous.computer.state === ConversationComputerStates.ClaimPending && current.computer.state === ConversationComputerStates.Warm)
+		throw new Error("Conversation computer history requires claim dispatch before a computer can become warm");
+	if (previous.computer.state === ConversationComputerStates.ClaimDispatched)
+		_ValidateClaimDispatchedTransition(previous, current);
 	if (current.computer.leaseGeneration < previous.computer.leaseGeneration)
 		throw new Error("Conversation computer history decreased its lease generation");
 	if (previous.lease !== null && current.lease !== null && previous.lease.id !== current.lease.id)
@@ -190,6 +201,15 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 	if (previous.lease !== null && current.lease !== null && previous.lease.id === current.lease.id)
 		_ValidateSameLeaseTransition(previous.lease, current.lease);
 	_ValidateExecutionTransition(previous.computer.activeExecution, current.computer.activeExecution);
+}
+
+/** Limits a durable claim fence to controller-backed warmth or one lease-expiry compensation. */
+function _ValidateClaimDispatchedTransition(previous: ConversationComputerHistorySnapshot, current: ConversationComputerHistorySnapshot): void
+{
+	if (current.computer.state === ConversationComputerStates.ClaimDispatched || current.computer.state === ConversationComputerStates.Warm)
+		return;
+	if (current.computer.state !== ConversationComputerStates.RecoveryRequired || previous.lease === null || current.lease === null || current.lease.state !== ComputerLeaseStates.Lost || current.lease.sandboxId !== null || current.lease.releasedAt === null || current.computer.activeExecution !== null)
+		throw new Error("Conversation computer history requires claim dispatch to converge before terminal transition");
 }
 
 /** Prevents a live execution from being replaced or reactivated without first recording its end. */
@@ -261,7 +281,7 @@ function _PositiveInteger(value: unknown): value is number
 /** Checks the exact current ConversationComputer state set. */
 function _ComputerState(value: unknown): value is ConversationComputerStates
 {
-	return value === ConversationComputerStates.Cold || value === ConversationComputerStates.ClaimPending || value === ConversationComputerStates.Warm || value === ConversationComputerStates.Cooling || value === ConversationComputerStates.RecoveryRequired || value === ConversationComputerStates.Retired;
+	return value === ConversationComputerStates.Cold || value === ConversationComputerStates.ClaimPending || value === ConversationComputerStates.ClaimDispatched || value === ConversationComputerStates.Warm || value === ConversationComputerStates.Cooling || value === ConversationComputerStates.RecoveryRequired || value === ConversationComputerStates.Retired;
 }
 
 /** Checks the exact current ComputerLease state set. */

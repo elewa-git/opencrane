@@ -18,6 +18,16 @@ function _createInvitationSigningKey(): string
 	return path;
 }
 
+/** Mount one release-owned ConversationComputer profile map for startup-parser tests. */
+function _createConversationComputerProfileConfig(value: unknown): string
+{
+	const directory = mkdtempSync(join(tmpdir(), "opencrane-config-"));
+	const path = join(directory, "conversation-computer-profiles.json");
+	_temporaryDirectories.push(directory);
+	writeFileSync(path, JSON.stringify(value));
+	return path;
+}
+
 describe("opencrane process config", function _ProcessConfigSuite()
 {
 	beforeEach(function _stubRequiredMemoryGatewayEnvironment()
@@ -99,6 +109,34 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				workerConcurrency: 2,
 			},
 		});
+	});
+
+	it("reads only a unique release-owned ConversationComputer profile map", function _ReadConversationComputerProfiles()
+	{
+		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "developer-pool" },
+		]));
+
+		expect(_ReadProcessConfig().runtime.conversationComputerActivation).toEqual({
+			profiles: [{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "developer-pool" }],
+		});
+	});
+
+	it("rejects a malformed or duplicate ConversationComputer profile map", function _RejectInvalidConversationComputerProfiles()
+	{
+		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([]));
+		expect(function _readEmptyProfileMap() { _ReadProcessConfig(); }).toThrow(/one or more profiles/);
+
+		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "developer-pool" },
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "analyst", warmPoolName: "analyst-pool" },
+		]));
+		expect(function _readDuplicateProfileRevision() { _ReadProcessConfig(); }).toThrow(/unique revision ids/);
+
+		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "a".repeat(64) },
+		]));
+		expect(function _readLongWarmPoolName() { _ReadProcessConfig(); }).toThrow(/DNS-label/);
 	});
 
 	it("rejects missing or excessive durable workflow settings", function _RejectInvalidWorkflowConfig()

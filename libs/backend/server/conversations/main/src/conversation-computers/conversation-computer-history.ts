@@ -1,8 +1,8 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
-import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
+import type { ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerActivationCurrentCommand, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -121,6 +121,42 @@ export class ConversationComputerHistory
 		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
 		_AssertConversationComputerRuntimeCoordinates(snapshot, command);
 		return this._Load({ ...command, agentIdentityId: snapshot.computer.agentIdentityId });
+	}
+
+	/**
+	 * Loads current state from a durable activation event without accepting its profile or identity.
+	 *
+	 * The event identifies lifecycle work. The first checked history snapshot supplies the profile and
+	 * agent identity, then the full stream verifies those coordinates before a claim is requested.
+	 *
+	 * Called by: `ConversationComputerActivationAuthority` before requesting an Agent Sandbox claim.
+	 * @see loadForRuntime for the equivalent runtime-safe coordinate derivation.
+	 */
+	public async loadForActivation(command: ConversationComputerActivationCurrentCommand): Promise<CurrentConversationComputer | null>
+	{
+		_ValidateConversationComputerActivationCurrentCommand(command);
+		const streamName = _ConversationComputerStreamName(command.computerId);
+		const iterator = this.historyStore.readStream({ streamName })[Symbol.asyncIterator]();
+		let first: IteratorResult<import("@opencrane/backend/server/infra/history-store").HistoryRecordedEvent>;
+		try
+		{
+			first = await iterator.next();
+		}
+		finally
+		{
+			await iterator.return?.();
+		}
+		if (first.done)
+		{
+			const head = await this.historyStore.readHead(streamName);
+			if (head.streamName !== streamName || head.revision !== null)
+				throw new Error("Conversation computer history omitted a stream event before its reported head");
+			return null;
+		}
+		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
+		if (snapshot.computer.siloId !== command.siloId || snapshot.computer.id !== command.computerId || snapshot.computer.conversationId !== command.conversationId)
+			throw new Error("Conversation computer activation load received foreign computer coordinates");
+		return this._Load({ ...command, agentIdentityId: snapshot.computer.agentIdentityId, profileRevisionId: snapshot.computer.profileRevisionId });
 	}
 
 	/**

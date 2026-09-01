@@ -299,6 +299,7 @@ testv5_forwarded_args="$(tr '\n' ' ' <"$wrapper_args_file")"
 [[ "$testv5_forwarded_args" == *'agentSandbox.namespace=opencrane-testv5'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.runtimeClassName=gvisor'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.serviceAccountName=opencrane-testv5-agent-sandbox'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].profileRevisionId=profile-revision-developer-v1'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].name=developer'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].poolName=developer-pool'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'* ]]

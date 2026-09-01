@@ -15,22 +15,28 @@ already-existing claim as idempotent only when every immutable lease field match
  ┌─────────────────────────────────┐
  │ agent-sandbox-claims  ◄── HERE   │
  └──────────────┬──────────────────┘
-                │ create / exact get on 409
+                │ create / exact get on 409 / status get
                 ▼
        Agent Sandbox SandboxClaim
 ```
 
 ## Public surface
 
-- `AgentSandboxClaimAuthority` exposes `ensure` as the sole application operation.
+`__AgentSandboxClaimName` derives the one claim name an admitted computer generation may use. Both
+the Kubernetes adapter and the computer authority use it before create/get I/O, so a history record
+cannot point at a second claim name.
+
+- `AgentSandboxClaimAuthority` exposes `ensure` as the sole claim-creation operation.
 - `_KubernetesAgentSandboxClaimAuthority` calls only namespaced custom-object `create` and `get`.
+- `AgentSandboxClaimObservationReader` separately reads one exact claim status and exposes a
+  sandbox id only when its immutable lease fields and current `Ready=True` condition match.
 - `AgentSandboxClaimReason` restricts claims to activation or recovery.
 
 ## Boundary
 
 The caller must authorise the computer action, fence its generation, choose an admitted profile,
 and persist durable intent before calling this adapter. This adapter neither authorises a caller,
-selects a profile, watches Pods, patches claims, nor implements a Pod controller. The cluster-wide
+selects a profile, reads Pods or Sandboxes, patches claims, nor implements a Pod controller. The cluster-wide
 Agent Sandbox controller remains the sole reconciler for sandbox resources.
 
 ## Dependency direction
@@ -42,8 +48,9 @@ or an app entrypoint.
 ## Runtime & config
 
 The composing server supplies its own Kubernetes `CustomObjectsApi`. The server's release-scoped
-Role admits only `create` and `get` on `sandboxclaims`; the Kubernetes admission policy rejects any
-resource body outside the generated immutable shape.
+Role admits only `create` and `get` on `sandboxclaims`; the reader uses the same name-bound `get`
+permission and never lists or watches resources. The Kubernetes admission policy rejects any resource
+body outside the generated immutable shape.
 
 ## See also
 

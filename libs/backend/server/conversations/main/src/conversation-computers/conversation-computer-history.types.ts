@@ -29,6 +29,17 @@ export interface ConversationComputerRuntimeCurrentCommand
 	readonly profileRevisionId: string;
 }
 
+/** Names the server-derived coordinates that select one computer activation request. */
+export interface ConversationComputerActivationCurrentCommand
+{
+	/** Identifies the silo that owns the requested computer. */
+	readonly siloId: string;
+	/** Identifies the computer selected by the durable activation event. */
+	readonly computerId: string;
+	/** Identifies the conversation that remains bound to that computer. */
+	readonly conversationId: string;
+}
+
 /** Adds the server-owned current time required to use a runtime-selected computer execution. */
 export interface ActiveConversationComputerRuntimeCommand extends ConversationComputerRuntimeCurrentCommand
 {

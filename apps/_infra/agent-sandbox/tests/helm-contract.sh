@@ -14,6 +14,7 @@ VALUES=(
   --set-string agentSandbox.namespace=opencrane-testv5
   --set-string agentSandbox.runtimeClassName=gvisor
   --set-string agentSandbox.serviceAccountName=agent-sandbox-runtime
+  --set-string 'agentSandbox.profiles[0].profileRevisionId=profile-revision-developer-v1'
   --set-string 'agentSandbox.profiles[0].name=developer'
   --set-string 'agentSandbox.profiles[0].poolName=developer-pool'
   --set-string 'agentSandbox.profiles[0].image.repository=registry.invalid/opencrane-agent-runtime'
@@ -30,8 +31,10 @@ pool="$(awk 'BEGIN { RS="---" } /kind: SandboxWarmPool/ && /name: developer-pool
 role="$(awk 'BEGIN { RS="---" } /kind: Role/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
 policy="$(awk 'BEGIN { RS="---" } /kind: ValidatingAdmissionPolicy/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
 binding="$(awk 'BEGIN { RS="---" } /kind: ValidatingAdmissionPolicyBinding/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
+profile_config="$(awk 'BEGIN { RS="---" } /kind: ConfigMap/ && /name: opencrane-testv5-conversation-computer-profiles/ { print }' <<<"$rendered")"
+server_deployment="$(awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-testv5-opencrane/ { print }' <<<"$rendered")"
 
-[[ -n "$template" && -n "$pool" && -n "$role" && -n "$policy" && -n "$binding" ]]
+[[ -n "$template" && -n "$pool" && -n "$role" && -n "$policy" && -n "$binding" && -n "$profile_config" && -n "$server_deployment" ]]
 grep -Fq 'apiVersion: extensions.agents.x-k8s.io/v1beta1' <<<"$template"
 grep -Fq 'image: "registry.invalid/opencrane-agent-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' <<<"$template"
 grep -Fq 'runtimeClassName: gvisor' <<<"$template"
@@ -65,6 +68,15 @@ grep -Fq 'object.spec.warmPoolRef.name in ["developer-pool"]' <<<"$policy"
 grep -Fq "object.spec.warmPoolRef.name == {\"developer\":\"developer-pool\"}[object.metadata.labels['opencrane.ai/profile']]" <<<"$policy"
 grep -Fq 'envVarsInjectionPolicy: Disallowed' <<<"$template"
 grep -Fq 'validationActions: [Deny]' <<<"$binding"
+grep -Fq 'immutable: true' <<<"$profile_config"
+grep -Fq '\"profileRevisionId\":\"profile-revision-developer-v1\"' <<<"$profile_config"
+grep -Fq '\"namespace\":\"opencrane-testv5\"' <<<"$profile_config"
+grep -Fq '\"sandboxProfile\":\"developer\"' <<<"$profile_config"
+grep -Fq '\"warmPoolName\":\"developer-pool\"' <<<"$profile_config"
+grep -Fq 'OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH' <<<"$server_deployment"
+grep -Fq '/var/run/opencrane/conversation-computer/profiles.json' <<<"$server_deployment"
+grep -Fq 'name: conversation-computer-profiles' <<<"$server_deployment"
+grep -Fq 'name: opencrane-testv5-conversation-computer-profiles' <<<"$server_deployment"
 
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]:0:2}" --set agentSandbox.enabled=true "${VALUES[@]:4}" >/dev/null 2>&1; then
   echo "Agent Sandbox rendered without a namespace" >&2
@@ -74,9 +86,13 @@ if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agen
   echo "Agent Sandbox rendered with a mutable image reference" >&2
   exit 1
 fi
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].poolName=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' >/dev/null 2>&1; then
+  echo "Agent Sandbox rendered with an overlong DNS label" >&2
+  exit 1
+fi
 
 disabled="$(helm template opencrane-testv5 "$CHART_DIR" --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' --show-only templates/app-rollups.yaml)"
-if grep -Eq 'kind: (SandboxTemplate|SandboxWarmPool|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding)' <<<"$disabled"; then
+if grep -Eq 'kind: (ConfigMap|SandboxTemplate|SandboxWarmPool|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding)' <<<"$disabled"; then
   echo "Disabled Agent Sandbox rendered profile or admission resources" >&2
   exit 1
 fi
