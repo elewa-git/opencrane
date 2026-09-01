@@ -72,6 +72,9 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   verified `{siloId, issuer, subject}` tuple.
 - `StandaloneFirstUserAdmissionConfig`, `StandaloneFirstUserAdmissionAuditPort` — composition
   contracts that configure the optional standalone first-owner claim.
+- `AgentIdentityHistory` — appends and loads the checked KurrentDB history of an agent identity,
+  returning current state and stream-head evidence only when silo, service, and acting-principal
+  coordinates agree.
 
 The OIDC service keeps login group projection and standalone first-owner admission as internal
 steps. They are not package entry points because the login flow coordinates their verified inputs,
@@ -87,7 +90,9 @@ unverified or ambiguous identity yields no session or an anonymous one, never a 
 ## Dependency direction
 
 Tagged `scope:identity`: it may depend only on `scope:auth` (the shared OIDC base), `scope:cluster-tenants`,
-`scope:connections`, `scope:projection`, `scope:identity`, and `scope:shared` — never on apps.
+`scope:history-store`, `scope:connections`, `scope:projection`, `scope:identity`, and `scope:shared` — never on apps.
+The history edge exposes only the checked stream port; this package does not receive a KurrentDB
+client, stream administration, or a relational fallback.
 
 ## See also
 

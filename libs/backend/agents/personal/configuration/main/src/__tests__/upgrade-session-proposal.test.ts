@@ -30,9 +30,28 @@ function _snapshot(): PersonalUpgradeSessionSnapshot
 		agentRevisionId: "agent-1",
 		conversationId: "conversation-1",
 		personaRevisionId: "persona-1",
-		identitySnapshot: { kind: "user", executionSubjectId: "user-1" },
+		attempt: 1,
+		executionSubject: _ExecutionSubject(),
 	} as unknown as PersonalUpgradeSessionSnapshot;
 	return snapshot;
+}
+
+/** Builds the admitted execution subject used by the personal proposal tests. */
+function _ExecutionSubject(): PersonalUpgradeSessionSnapshot["executionSubject"]
+{
+	return {
+		schemaVersion: 1,
+		siloId: "silo-1",
+		agentIdentityId: "identity-1",
+		principalId: "user-1",
+		identity: { agentIdentityId: "identity-1", principalId: "user-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-08-01T00:00:00.000Z" },
+		membership: { principalId: "user-1", siloId: "silo-1", revision: 1, assertionId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-08-01T01:00:00.000Z" },
+		capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: "2026-08-01T00:00:00.000Z" },
+		runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "agent-1" },
+		computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+		requester: { siloId: "silo-1", requesterPrincipalId: "user-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-08-01T00:00:00.000Z" },
+		admission: { authorizingPrincipalId: "user-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-08-01T00:00:00.000Z" },
+	};
 }
 
 /** Builds the owner-profile reader used by the pure orchestration tests. */
@@ -87,5 +106,10 @@ describe("upgrade-session proposal orchestration", function _UpgradeSessionPropo
 
 		await expect(_ProposeUpgradeSession(profiles, proposals, _candidate(), _snapshot(), "2026-08-01T00:00:00.000Z")).resolves.toBeNull();
 		expect(proposals.propose).not.toHaveBeenCalled();
+	});
+
+	it("rejects a candidate from a different execution attempt", async function _RejectsAttemptSubstitution()
+	{
+		await expect(_ProposeUpgradeSession(_profiles(), _proposals(), { ..._candidate(), attempt: 2 }, _snapshot(), "2026-08-01T00:00:00.000Z")).rejects.toThrow("requires a personal conversation snapshot");
 	});
 });

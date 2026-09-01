@@ -1,5 +1,5 @@
 /** Issuer reserved for non-human Principal rows owned by managed AgentService lifecycle. */
-export const MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER = "urn:opencrane:agent-service";
+export const MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER = "urn:opencrane:managed-agent";
 
 /**
  * Derives the durable Principal primary key owned by one managed AgentService.
@@ -12,5 +12,5 @@ export const MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER = "urn:opencrane:agent-servi
  */
 export function __ManagedAgentServicePrincipal(agentServiceId: string): string
 {
-	return `agent-service:${agentServiceId}`;
+	return `managed-principal:${agentServiceId}`;
 }

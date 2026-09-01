@@ -183,9 +183,8 @@ export enum FleetMembershipDeploymentModes
 /**
  * The two answers a membership check can give, as the exact string values that appear in `outcome`.
  *
- * Compare against these instead of typing the strings —
- * libs/backend/agents/execution/inputs/main/src/personal-execution-identity-envelope-source.ts does
- * exactly that when it turns `Denied` into a refused run. `Trusted` carries signer-produced
+ * Compare against these instead of typing the strings. Callers turn `Denied` into a refused run.
+ * `Trusted` carries signer-produced
  * evidence; `Denied` carries only a reason code and the revision number that was looked at, because
  * a denial must never leak identity taken from an unproven assertion.
  *

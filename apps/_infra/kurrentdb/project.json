@@ -1,0 +1,16 @@
+{
+  "name": "kurrentdb",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["type:app", "layer:entrypoint", "scope:history-store"],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "helm lint apps/_infra/kurrentdb/helm --set historyStore.kurrentdb.enabled=true --set historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls --set historyStore.kurrentdb.bootstrapAdmin.existingSecret=kurrentdb-bootstrap-admin --set historyStore.kurrentdb.bootstrapOps.existingSecret=kurrentdb-bootstrap-ops --set historyStore.kurrentdb.serviceCredential.existingSecret=kurrentdb-history-service --set historyStore.kurrentdb.bootstrap.image.repository=curlimages/curl --set historyStore.kurrentdb.bootstrap.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set historyStore.kurrentdb.bootstrap.image.pullPolicy=IfNotPresent --set historyStore.kurrentdb.bootstrap.timeoutSeconds=300 --set historyStore.kurrentdb.bootstrap.activeDeadlineSeconds=330 --set historyStore.kurrentdb.bootstrap.resources.requests.cpu=50m --set historyStore.kurrentdb.bootstrap.resources.requests.memory=64Mi --set historyStore.kurrentdb.bootstrap.resources.limits.cpu=100m --set historyStore.kurrentdb.bootstrap.resources.limits.memory=128Mi" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/kurrentdb/tests/helm-contract.sh" }
+    }
+  }
+}

@@ -84,20 +84,27 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying
   only the public call id and an optional server-selected technical classification, never provider
   text, raw arguments, credentials, or retry authority.
+- `ConversationEntry`, its human/agent/service/system authors, encrypted message payload references,
+  explicit log variants, and A2UI mutations — the canonical participant-visible event contract for
+  a `conversation-{id}` history stream. `___ConversationEntrySchema` validates storage and
+  receipt-transformer records; `___ConversationComputerEntrySchema` is stricter and refuses a
+  computer-provided service attestation. Receipt verification and the bound writer's computer/stream
+  checks remain context-specific boundaries outside these structural parsers. Both carry opaque
+  payload and artifact coordinates, never plaintext bodies, storage credentials, or general
+  event-store access.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotMcpTool`,
+  `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by
   personal-configuration validators, persistence, and public schemas. It keeps the readable JSON
   values stable while making patch branches compile against one shared owner.
-- `MemoryFactProvenanceSourceKinds` and `RunInputSnapshotIdentityKinds` — stable memory-source and
-  tagged-execution-identity vocabularies used by catalogue validation and frozen run-input branches.
-  Their readable serialised values remain part of the contract; the enums prevent independent
-  persistence and admission code from drifting on which branch a value selects.
+- `MemoryFactProvenanceSourceKinds` and `ExecutionSubject` — stable memory-source vocabulary and the
+  evidence-bound agent identity, principal, membership, capability, run, computer-lease, requester,
+  and admission coordinates shared by run snapshots and service gates.
 - `AGENT_RUNTIME_PROTOCOL_VERSION`, the protocol-v2 continuation contract, personal and managed runtime audience constants and validators,
   `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and `RuntimeCandidate` — the private workload
   protocol for an agent process that opens its own authenticated stream. The opening frame binds the

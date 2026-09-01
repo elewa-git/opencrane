@@ -16,9 +16,10 @@ every pending identifier, then encrypts it before saving. Every resume command c
 continuation; there is no process-local or protocol-v1 fallback.
 
 Before a command reaches an executor, it checks that the command belongs to the currently assigned
-run attempt, carries the exact frozen input snapshot and tagged user-or-service identity, arrives in
-order, and is still inside its lease. A service principal cannot be interpreted as a user merely
-because both carry signed fleet-membership evidence.
+run attempt, carries the exact frozen input snapshot and one evidence-bound `ExecutionSubject`,
+arrives in order, and is still inside its lease. The stored run, snapshot, and assignment must name
+the same identity, Principal, current evidence, run scope, and computer lease before dispatch can
+mint a frame.
 
 When the executor proposes an event or outside action, it performs the mirror check before another
 domain may persist or execute that proposal.
@@ -84,7 +85,7 @@ the exact profile behind the frozen revision. Revocation therefore blocks a cand
 accepting its id or creating its ToolInvocation.
 
 An allowed candidate carries structured evidence into that `ToolInvocation`: the local Principal,
-human-or-service actor kind, canonical resource/action coordinates, central decision digests,
+workload actor kind, canonical resource/action coordinates, central decision digests,
 signed membership revision, exact AgentRevision/run/attempt/arguments digest, and current assignment
 digest. The evidence and candidate id commit together, so a rollback leaves neither reusable work nor
 an accepted runtime proposal.
@@ -207,9 +208,9 @@ browser connection therefore cannot drop an instruction or force a model turn to
 | `Running` after a prior resume | steering only | Remain idle; do not supersede the active loop. |
 | `Cancelling` | any stale approval, steering marker, or reconnect frontier | Cancellation wins; skip stored start/resume delivery and mint or redeliver the sole newer positive stop command. |
 
-Personal and managed runtime Pods share the same protocol but not an identity plane: every tagged
-snapshot is re-bound to its deployment-owned namespace, projected-token audience, and ServiceAccount
-grammar before a command or candidate is accepted.
+Runtime Pods share one protocol subject model. Every snapshot is re-bound to its assignment's
+computer-selected workload profile, deployment namespace, and ServiceAccount before a command or
+candidate is accepted; no user-or-service branch selects a runtime plane.
 
 ## See also
 

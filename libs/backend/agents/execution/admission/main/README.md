@@ -6,25 +6,26 @@
 
 This package is the internal entry into the shared execution flow for both an agent-session message
 and a managed agent. The conversation authority or managed invocation has already established the
-request shape before it arrives here. Admission composes current evidence, immutable input
+request shape before it arrives here. Admission composes one canonical execution subject, immutable input
 assembly, the durable run repository, and one app-owned process-local capacity boundary.
 
 ```
- conversation message / managed trigger .... server-derived identity + current evidence
+ conversation message / managed trigger .... requester provenance + canonical subject authority
                  │
                  ▼
  ┌────────────────────────────────────────┐
  │ execution/admission  ◄── HERE           │ one shared capacity grant at process/silo/service
- │ compose inputs + runs + evidence        │ then assemble and persist one snapshot
+ │ issue + recheck subject, inputs + runs  │ then assemble and persist one snapshot
  └────────────────────────────────────────┘
                  │  admitted run id / stable denial
                  ▼
  execution/runs ........ durable run + snapshot + workflow task
 ```
 
-**In this flow:** [agent services](../../../../server/agents/agent-services/main/README.md) supplies
-the authorized managed request and evidence · [inputs](../../inputs/main/README.md) assembles the
-immutable snapshot · [runs](../../runs/main/README.md) persists the durable run authority
+**In this flow:** app composition supplies an `ExecutionSubjectAdmissionAuthority` that issues and
+then transaction-rechecks one canonical AgentIdentity, Principal, capability, and computer-lease
+subject · [inputs](../../inputs/main/README.md) assembles the immutable snapshot ·
+[runs](../../runs/main/README.md) persists the durable run authority.
 
 One shared gate serves every personal and managed admission path in the server process. That is
 load-bearing: separate entrypoint gates could each consume the same database budget. Admission is
@@ -32,9 +33,10 @@ granted only when the process, silo, and exact agent service all have capacity. 
 overloaded, or inconsistent input produces a denial before unbounded persistence work begins.
 
 Personal admission has two bounded stages. A synthetic per-silo preflight lane first limits its
-duplicate-key and participant-conversation reads before interactive traffic can touch PostgreSQL. Once
-that lane has derived the real personal AgentService, the normal process/silo/service gate limits
-the final transaction that rechecks all mutable authority. A caller-supplied transaction callback
+participant-conversation read before interactive traffic can touch PostgreSQL. Once that lane has
+derived the real personal AgentService, the normal process/silo/service gate issues the subject,
+checks the duplicate key against its AgentIdentity and Principal, and limits the final transaction
+that rechecks all mutable authority. A caller-supplied transaction callback
 then persists the canonical input message beside the run, immutable snapshot, and Absurd workflow
 task in that same commit. The first lane does not grant product authority; it is overload
 protection for the read path.
@@ -52,13 +54,11 @@ unclassified failures remain `persistence_unavailable`.
 
 ## Public surface
 
-- `__CreateManagedRunAdmissionPort(prisma, capacityGate, evidenceAuthority)` composes the managed
-  port from the durable repository, a mounted-key-backed evidence authority, and the app-owned
-  shared gate.
-- `__CreatePersonalRunAdmissionPort(prisma, capacityGate, membershipEvidence)` composes the
-  personal port from neutral mounted-key fleet-membership trust. It derives an AgentService from a
-  participant-owned open agent session and verifies exactly one signed personal membership assertion
-  in the final admission transaction.
+- `__CreateManagedRunAdmissionPort(prisma, workflow, capacityGate, executionSubjectAuthority)`
+  composes managed admission with a required app-owned canonical subject authority.
+- `__CreatePersonalRunAdmissionPort(prisma, workflow, capacityGate, executionSubjectAuthority)`
+  composes personal admission with the same authority. It derives an AgentService from a
+  participant-owned open agent session; browser credential facts remain requester provenance.
 - `_CreateRunAdmissionCapacityGate(policy)` creates the one hierarchical process/silo/service gate
   injected into both personal and managed ports.
 - `PersonalRunAdmissionPort` and `RunAdmissionCapacityGate` are the only cross-package port types;
@@ -74,8 +74,9 @@ the conversation authority, managed run-now path, and scheduler. This package ha
 router or OpenAPI path: interactive execution begins only at
 `POST /api/v1/me/conversations/:conversationId/messages`. It does not authenticate HTTP requests,
 authorise agent service publication, schedule work, activate Kubernetes Pods, or execute a run. It
-accepts server-owned identity evidence and delegates durable snapshot and run rules to their owning
-packages.
+accepts server-owned requester provenance but never treats it as execution authority. The required
+subject authority issues the target subject before idempotency and rechecks it in the durable
+admission transaction; this package delegates snapshot and run rules to their owning packages.
 
 The in-memory gates are overload protection, not product authority. Silo identity and admission
 eligibility are still re-derived and persisted by the workflow packages. A process

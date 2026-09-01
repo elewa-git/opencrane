@@ -1,23 +1,24 @@
-import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, ProductResourceAuthorizationSource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput } from "./session-assembly.types";
+import type { ApprovedPersonaInput, MemoryScopeInput, ProductResourceAuthorizationSource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput } from "./session-assembly.types";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
 /** Rechecks current Use grants for the complete exact resource set selected during admission. */
 export class TransactionBoundProductResourceAuthorizationSource implements ProductResourceAuthorizationSource
 {
 	/** @inheritdoc */
-	async load(command: SessionAssemblyCommand, identity: IdentityEnvelopeInput, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
+	async load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
 	{
 		if (transaction.authorization === undefined)
+		{
 			return { outcome: "denied", reason: "product_authorization_unavailable" };
-		const principalId = identity.kind === RunInputSnapshotIdentityKinds.User ? identity.principalId : identity.executionSubjectId;
+		}
+		const principalId = executionSubject.principalId;
 		const resources = _Resources(persona, memory, tools);
-		const actorKind = identity.kind === RunInputSnapshotIdentityKinds.User ? "user" : "agent-service";
 		const argumentsDigest = ___DigestCanonicalJson({ runId: command.runId, agentServiceId: command.agentServiceId, conversationId: command.conversationId } as JsonValue);
-		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind, actorId: principalId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision: identity.fleetMembershipRevision, nowEpochMs: transaction.admittedAtEpochMs })));
+		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind: "workload", actorId: executionSubject.agentIdentityId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision: executionSubject.membership.revision, nowEpochMs: transaction.admittedAtEpochMs })));
 		return admissions.length === resources.length ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
 	}
 }

@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
@@ -127,7 +127,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 				if (existing !== null)
 				{
 					if (!_matchesIdempotencyScope(existing, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
-					const existingSnapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: existing.id, digest: existing.inputSnapshotDigest } } });
+					const existingSnapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_attempt_digest: { runId: existing.id, attempt: existing.attempt, digest: existing.inputSnapshotDigest } } });
 					if (existingSnapshot !== null)
 					{
 						if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
@@ -152,7 +152,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 					if (prepare) throw new _PreparedAdmissionDenied(compiled.reason);
 					return compiled;
 				}
-				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command))
+				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionSubject(compiled.value.authority, compiled.value.snapshot, command))
 				{
 					if (prepare) throw new _PreparedAdmissionDenied(RunAdmissionDenialReasons.AuthorityConflict);
 					return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
@@ -179,7 +179,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 					if (existing !== null)
 					{
 						if (!_matchesIdempotencyScope(existing, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
-						const existingSnapshot = await this.prisma.runInputSnapshot.findUnique({ where: { runId_digest: { runId: existing.id, digest: existing.inputSnapshotDigest } } });
+						const existingSnapshot = await this.prisma.runInputSnapshot.findUnique({ where: { runId_attempt_digest: { runId: existing.id, attempt: existing.attempt, digest: existing.inputSnapshotDigest } } });
 						if (existingSnapshot !== null)
 						{
 							if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
@@ -200,35 +200,38 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 }
 
 /** Returns whether an existing same-key row has the durable coordinates needed before loading its snapshot. */
-function _matchesIdempotencyScope(existing: { siloId: string; agentServiceId: string; conversationId: string | null; trigger: string; delegatedUserId: string | null }, command: RunAdmissionCommand): boolean
+function _matchesIdempotencyScope(existing: { readonly siloId: string; readonly agentServiceId: string; readonly conversationId: string | null; readonly trigger: string }, command: RunAdmissionCommand): boolean
 {
 	return existing.siloId === command.siloId
 		&& existing.agentServiceId === command.agentServiceId
 		&& existing.conversationId === command.conversationId
-		&& existing.trigger === _trigger(command.trigger)
-		&& (command.identityKind !== "user" || existing.delegatedUserId === command.executionSubjectId)
-		&& (command.identityKind !== "service" || existing.delegatedUserId === null);
+		&& existing.trigger === _trigger(command.trigger);
 }
 
 /** Returns whether a recovered immutable snapshot belongs to the exact execution subject requesting it. */
-function _matchesSnapshotScope(snapshot: { siloId: string; agentServiceId: string; conversationId: string | null; identitySnapshot: Prisma.JsonValue }, command: RunAdmissionCommand): boolean
+function _matchesSnapshotScope(snapshot: { readonly siloId: string; readonly agentServiceId: string; readonly conversationId: string | null }, command: RunAdmissionCommand): boolean
 {
-	if (snapshot.siloId !== command.siloId || snapshot.agentServiceId !== command.agentServiceId || snapshot.conversationId !== command.conversationId) return false;
-	if (!snapshot.identitySnapshot || typeof snapshot.identitySnapshot !== "object" || Array.isArray(snapshot.identitySnapshot)) return false;
-	const identity = snapshot.identitySnapshot as Record<string, unknown>;
-	if (identity["kind"] !== command.identityKind) return false;
-	if (command.identityKind === "user") return identity["executionSubjectId"] === command.executionSubjectId && identity["executionIssuer"] === command.executionIssuer;
-	return identity["agentServiceId"] === command.agentServiceId && identity["executionSubjectId"] === `agent-service:${command.agentServiceId}`;
+	return snapshot.siloId === command.siloId
+		&& snapshot.agentServiceId === command.agentServiceId
+		&& snapshot.conversationId === command.conversationId;
 }
 
-/** Require authority and snapshot evidence to express only the tagged command identity. */
-function _matchesExecutionIdentity(authority: InitialRunAuthority, snapshot: RunInputSnapshot, command: RunAdmissionCommand): boolean
+/** Requires the command and snapshot to carry one structurally valid, fully bound execution subject. */
+function _matchesExecutionSubject(authority: InitialRunAuthority, snapshot: RunInputSnapshot, command: RunAdmissionCommand): boolean
 {
-	if (command.identityKind === "user")
-	{
-		return authority.agentKind === "personal" && authority.trigger === "interactive" && authority.delegatedUserId === command.executionSubjectId && snapshot.identitySnapshot.kind === "user" && snapshot.identitySnapshot.executionSubjectId === command.executionSubjectId && snapshot.identitySnapshot.executionIssuer === command.executionIssuer;
-	}
-	return authority.agentKind === "managed" && authority.trigger === command.trigger && authority.delegatedUserId === null && snapshot.identitySnapshot.kind === "service" && snapshot.identitySnapshot.agentServiceId === command.agentServiceId && snapshot.identitySnapshot.executionSubjectId === `agent-service:${command.agentServiceId}`;
+	const parsedSnapshotSubject = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
+	if (!parsedSnapshotSubject.success)
+		return false;
+	return authority.agentServiceId === command.agentServiceId
+		&& authority.agentRevisionId === parsedSnapshotSubject.data.runScope.agentRevisionId
+		&& authority.trigger === command.trigger
+		&& snapshot.attempt === 1
+		&& snapshot.agentRevisionId === authority.agentRevisionId
+		&& parsedSnapshotSubject.data.runScope.runId === command.runId
+		&& parsedSnapshotSubject.data.runScope.attempt === 1
+		&& parsedSnapshotSubject.data.runScope.siloId === command.siloId
+		&& parsedSnapshotSubject.data.runScope.agentServiceId === command.agentServiceId
+		&& parsedSnapshotSubject.data.computerScope.siloId === command.siloId;
 }
 
 /** Returns whether the transaction-fenced authority exactly matches immutable caller coordinates. */
@@ -239,7 +242,9 @@ function _matchesCommand(value: RunAdmissionBuild, command: RunAdmissionCommand)
 		&& value.snapshot.siloId === command.siloId
 		&& value.snapshot.agentServiceId === command.agentServiceId
 		&& value.snapshot.conversationId === command.conversationId
-		&& value.authority.trigger === command.trigger;
+		&& value.authority.trigger === command.trigger
+		&& value.snapshot.agentRevisionId === value.authority.agentRevisionId
+		&& value.snapshot.executionSubject.runScope.runId === command.runId;
 }
 
 /** Inserts the run and its only snapshot. */
@@ -252,11 +257,12 @@ async function _persistInitialAdmission(transaction: Prisma.TransactionClient, c
 		agentRevisionId: value.authority.agentRevisionId,
 		conversationId: command.conversationId,
 		trigger: _trigger(value.authority.trigger),
-		delegatedUserId: value.authority.delegatedUserId,
+		agentIdentityId: value.snapshot.executionSubject.agentIdentityId,
+		principalId: value.snapshot.executionSubject.principalId,
+		executionSubject: _json(value.snapshot.executionSubject),
 		requestIdempotencyKey: command.requestIdempotencyKey,
 		rootRunId: value.authority.rootRunId,
 		parentRunId: value.authority.parentRunId,
-		effectiveContractDigest: value.authority.effectiveContractDigest,
 		inputSnapshotDigest: value.snapshot.digest,
 		acceptedAt: admittedAt,
 	} });
@@ -284,25 +290,27 @@ function _trigger(value: InitialRunAuthority["trigger"]): "Interactive" | "Sched
  */
 export function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUncheckedCreateInput
 {
+	const executionSubject = _ExecutionSubjectFrom(snapshot.executionSubject, snapshot.executionSubject.agentIdentityId, snapshot.executionSubject.principalId);
 	const data: Prisma.RunInputSnapshotUncheckedCreateInput = {
 		runId: snapshot.runId,
+		attempt: snapshot.attempt,
 		snapshotVersion: snapshot.snapshotVersion,
 		siloId: snapshot.siloId,
 		agentServiceId: snapshot.agentServiceId,
 		agentRevisionId: snapshot.agentRevisionId,
-		effectiveContractDigest: snapshot.effectiveContractDigest,
+		agentIdentityId: executionSubject.agentIdentityId,
+		principalId: executionSubject.principalId,
+		executionSubject: _json(executionSubject),
 		personaRevisionId: snapshot.personaRevisionId,
 		conversationId: snapshot.conversationId,
 		messageIds: [...snapshot.messageIds],
 		preferenceFactIds: [...snapshot.preferenceFactIds],
 		artifactRevisionIds: [...snapshot.artifactRevisionIds],
-		identitySnapshot: _json(snapshot.identitySnapshot),
 		modelRoute: _json(snapshot.modelRoute),
 		mcpTools: _json(snapshot.mcpTools),
 		skillRevisionIds: [...snapshot.skillRevisionIds],
 		memoryQueryPolicy: _json(snapshot.memoryQueryPolicy),
 		budgetPolicy: _json(snapshot.budgetPolicy),
-		capabilitySetDigest: snapshot.capabilitySetDigest,
 		promptCompilerVersion: snapshot.promptCompilerVersion,
 		digest: snapshot.digest,
 		compiledAt: new Date(snapshot.compiledAt),
@@ -320,8 +328,10 @@ export function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInp
  */
 export function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
+	const executionSubject = _ExecutionSubjectFrom(row.executionSubject, row.agentIdentityId, row.principalId);
 	const snapshot: RunInputSnapshot = {
 		runId: row.runId,
+		attempt: row.attempt,
 		siloId: row.siloId,
 		agentServiceId: row.agentServiceId,
 		agentRevisionId: row.agentRevisionId,
@@ -336,14 +346,21 @@ export function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 		mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"],
 		modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"],
 		budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"],
-		identitySnapshot: row.identitySnapshot as unknown as RunInputSnapshot["identitySnapshot"],
-		capabilitySetDigest: row.capabilitySetDigest,
-		effectiveContractDigest: row.effectiveContractDigest,
+		executionSubject,
 		promptCompilerVersion: row.promptCompilerVersion,
 		digest: row.digest,
 		compiledAt: row.compiledAt.toISOString(),
 	};
 	return snapshot;
+}
+
+/** Parses persisted subject evidence and rejects rows whose indexed identity coordinates diverge. */
+function _ExecutionSubjectFrom(value: unknown, agentIdentityId: string, principalId: string): RunInputSnapshot["executionSubject"]
+{
+	const parsed = ___ExecutionSubjectSchema.safeParse(value);
+	if (!parsed.success || parsed.data.agentIdentityId !== agentIdentityId || parsed.data.principalId !== principalId)
+		throw new Error("run execution subject does not match its persisted identity coordinates");
+	return parsed.data;
 }
 
 /** Makes a JSON-safe deep copy before Prisma owns an immutable snapshot field. */

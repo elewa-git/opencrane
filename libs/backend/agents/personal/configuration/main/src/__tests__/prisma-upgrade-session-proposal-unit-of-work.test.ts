@@ -30,11 +30,30 @@ function _snapshot(personaRevisionId: string | null = "persona-1", conversationI
 		siloId: "silo-1",
 		agentServiceId: "service-1",
 		agentRevisionId: "agent-1",
+		attempt: 1,
 		conversationId,
 		personaRevisionId,
-		identitySnapshot: { kind: "user", executionSubjectId: "user-1" },
+		executionSubject: _ExecutionSubject(),
 	} as unknown as RunInputSnapshot;
 	return snapshot;
+}
+
+/** Builds the sealed execution subject consumed by the proposal transaction tests. */
+function _ExecutionSubject(): RunInputSnapshot["executionSubject"]
+{
+	return {
+		schemaVersion: 1,
+		siloId: "silo-1",
+		agentIdentityId: "identity-1",
+		principalId: "user-1",
+		identity: { agentIdentityId: "identity-1", principalId: "user-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-08-01T00:00:00.000Z" },
+		membership: { principalId: "user-1", siloId: "silo-1", revision: 1, assertionId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-08-01T01:00:00.000Z" },
+		capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: "2026-08-01T00:00:00.000Z" },
+		runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "agent-1" },
+		computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+		requester: { siloId: "silo-1", requesterPrincipalId: "user-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-08-01T00:00:00.000Z" },
+		admission: { authorizingPrincipalId: "user-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-08-01T00:00:00.000Z" },
+	};
 }
 
 /** Builds the database doubles the upgrade-session proposal transaction talks to. */
@@ -94,6 +113,18 @@ describe("Prisma upgrade-session proposal UoW", function _PrismaUpgradeSessionPr
 		await expect(unitOfWork.proposeUpgradeSession(_candidate(), _snapshot("persona-1", null), "2026-08-01T00:00:00.000Z")).rejects.toThrow("requires a personal conversation snapshot");
 		expect(database.prisma.$transaction).not.toHaveBeenCalled();
 		expect(logging.error).not.toHaveBeenCalled();
+	});
+
+	it("rejects a snapshot whose membership evidence names another principal", async function _RejectsSubstitutedMembershipPrincipal()
+	{
+		const database = _database();
+		const logging = _logger();
+		const unitOfWork = new PrismaUpgradeSessionProposalUnitOfWork(database.prisma as never, logging.logger as never);
+		const snapshot = _snapshot();
+		const substituted = { ...snapshot, executionSubject: { ...snapshot.executionSubject, membership: { ...snapshot.executionSubject.membership, principalId: "user-other" } } };
+
+		await expect(unitOfWork.proposeUpgradeSession(_candidate(), substituted, "2026-08-01T00:00:00.000Z")).rejects.toThrow("requires a personal conversation snapshot");
+		expect(database.prisma.$transaction).not.toHaveBeenCalled();
 	});
 
 	it("rejects unsupported patch arguments before transaction creation", async function _RejectsUnsupportedPatch()

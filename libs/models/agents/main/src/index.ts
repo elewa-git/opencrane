@@ -3,7 +3,7 @@ export { __DigestAgentRevisionContent } from "./agent-revision-content";
 export type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening, RevisionWideningKind } from "./agent-revision-diff.types";
 export type { AgentBudget, AgentRevision, AgentRevisionContent, AgentRevisionState, SkillRevisionReference } from "./agent-revision.types";
 export { AgentRunStates } from "./agent-run.types";
-export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger } from "./agent-run.types";
+export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger, ExecutionSubject, ExecutionSubjectAdmissionEvidence, ExecutionSubjectCapabilityEvidence, ExecutionSubjectComputerScope, ExecutionSubjectIdentityEvidence, ExecutionSubjectMembershipEvidence, ExecutionSubjectRequesterProvenance, ExecutionSubjectRunScope } from "./agent-run.types";
 export { AgentServiceKinds, AgentServiceStates } from "./agent-service.types";
 export type { AgentService, AgentServiceKind, AgentServiceState } from "./agent-service.types";
 export { RevisionBoundaryCoverages, RevisionBoundaryKinds } from "./boundary-attachment.types";

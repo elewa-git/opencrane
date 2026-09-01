@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AgentRunTaskNames, type AgentRunTaskInput, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeReservationCommand } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import { PrismaAgentRunWarmRuntimeUnitOfWork } from "../prisma-agent-run-warm-runtime-authority";
 
@@ -10,6 +11,12 @@ import { PrismaAgentRunWarmRuntimeUnitOfWork } from "../prisma-agent-run-warm-ru
 const _INPUT: AgentRunTaskInput = { siloId: "silo-1", runId: "run-1", attempt: 1 };
 const _RECEIPT: IWorkflowTaskReceipt = { taskId: "task-1", taskName: AgentRunTaskNames.Execute, idempotencyKey: "agent-run:silo-1:run-1:attempt:1" };
 const _COMMAND: AgentRunWarmRuntimeDeletionCommand = { generation: 1, podName: "warm-pod-1", podUid: "pod-1", deploymentUid: "deployment-1", profile: "personal" };
+
+/** Creates the evidence subject needed by the workflow task reader. */
+function _ExecutionSubject(): ExecutionSubject
+{
+	return { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-09-01T00:00:00.000Z" }, membership: { principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-01-01T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-09-01T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { siloId: "silo-1", requesterPrincipalId: "requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-09-01T00:00:00.000Z" }, admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-09-01T00:00:00.000Z" } };
+}
 
 /** Builds mutable cancellation authority with a configurable active provider claim count. */
 function _Database(initialActiveClaims: number)
@@ -19,7 +26,7 @@ function _Database(initialActiveClaims: number)
 	let assignmentPresent = true;
 	const assignment = { runId: "run-1", attempt: 1, bindingGeneration: 1 };
 	const reservation = { runId: "run-1", attempt: 1, generation: 1, podName: "warm-pod-1", podUid: "pod-1", deploymentUid: "deployment-1", genericProfile: "generic", claimedProfile: "personal", state: WarmRuntimeReservationState.DeleteRequested as WarmRuntimeReservationState, deletedAt: null as Date | null };
-	const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: AgentRunState.Cancelling as AgentRunState, agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:input", effectiveContractDigest: "sha256:contract", conversationId: "conversation-1", parentRunId: null, rootRunId: "run-1", terminalReason: null as AgentRunTerminalReason | null, finishedAt: null as Date | null, service: { id: "service-1", siloId: "silo-1", kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: "revision-1", workloadProfile: "personal-default" }, inputSnapshot: null };
+	const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: AgentRunState.Cancelling as AgentRunState, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: _ExecutionSubject(), inputSnapshotDigest: "sha256:input", conversationId: "conversation-1", parentRunId: null, rootRunId: "run-1", terminalReason: null as AgentRunTerminalReason | null, finishedAt: null as Date | null, service: { id: "service-1", siloId: "silo-1", kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: "revision-1", workloadProfile: "personal-default" }, inputSnapshot: null };
 	const task = { runId: "run-1", attempt: 1, siloId: "silo-1", taskId: "task-1", taskKey: _RECEIPT.idempotencyKey, taskName: AgentRunTaskNames.Execute, assignmentExpiresAt: new Date("2099-01-01T00:00:00.000Z"), run };
 	const createEvent = vi.fn();
 	const cancelApproval = vi.fn(async function _Cancel() { return { count: 1 }; });
@@ -70,7 +77,7 @@ function _Authority(prisma: PrismaClient): PrismaAgentRunWarmRuntimeUnitOfWork
 /** Builds mutable replacement persistence and real rollback behavior for one current generation. */
 function _ReplacementDatabase(runState: AgentRunState, continuationAvailable: boolean, assignmentCasCount = 1)
 {
-	const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: runState, agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:input", effectiveContractDigest: "sha256:contract", conversationId: "conversation-1", service: { id: "service-1", siloId: "silo-1", kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: "revision-1", workloadProfile: "personal-default" }, inputSnapshot: null };
+	const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: runState, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: _ExecutionSubject(), inputSnapshotDigest: "sha256:input", conversationId: "conversation-1", service: { id: "service-1", siloId: "silo-1", kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: "revision-1", workloadProfile: "personal-default" }, inputSnapshot: null };
 	const task = { runId: "run-1", attempt: 1, siloId: "silo-1", taskId: "task-1", taskKey: _RECEIPT.idempotencyKey, taskName: AgentRunTaskNames.Execute, assignmentExpiresAt: new Date("2099-01-01T00:00:00.000Z"), run };
 	const assignment = { runId: "run-1", attempt: 1, bindingGeneration: 1, state: WorkloadAssignmentState.Registered as WorkloadAssignmentState, registeredAt: new Date(), revokedAt: null as Date | null };
 	const reservation = { runId: "run-1", attempt: 1, generation: 1, podName: "warm-pod-1", podUid: "pod-1", deploymentUid: "deployment-1", genericProfile: "generic", claimedProfile: "personal", state: WarmRuntimeReservationState.Claimed as WarmRuntimeReservationState, deleteRequestedAt: null as Date | null, deletedAt: null as Date | null };
@@ -212,10 +219,11 @@ describe("PrismaAgentRunWarmRuntimeUnitOfWork replacement", function _Suite()
 	it("reuses the task expiry when reserving and reloading a replacement generation", async function _ReplacementExpiryIsStable()
 	{
 		const assignmentExpiresAt = new Date("2098-01-01T00:00:00.000Z");
-		const assignment = { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: "warm-runtime", namespace: "personal-runtime", workloadKind: "Deployment", workloadUid: "logical-workload-1", workloadProfile: "personal-default", podUid: "pod-1", bindingGeneration: 2, state: WorkloadAssignmentState.PendingPod, expiresAt: assignmentExpiresAt, createdAt: new Date("2026-08-29T00:00:00.000Z"), registeredAt: null, revokedAt: null };
-		const inputSnapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", effectiveContractDigest: "sha256:contract", conversationId: "conversation-1", digest: "sha256:input", identitySnapshot: { kind: "user", executionSubjectId: "user-1", fleetMembershipTrustedUntil: "2099-01-01T00:00:00.000Z" }, modelRoute: {}, budgetPolicy: {} };
+		const executionSubject = _ExecutionSubject();
+		const assignment = { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject, audience: "opencrane-agent-runtime", serviceAccountName: "warm-runtime", namespace: "personal-runtime", workloadKind: "Deployment", workloadUid: "logical-workload-1", workloadProfile: "personal-default", podUid: "pod-1", bindingGeneration: 2, state: WorkloadAssignmentState.PendingPod, expiresAt: assignmentExpiresAt, createdAt: new Date("2026-08-29T00:00:00.000Z"), registeredAt: null, revokedAt: null };
+		const inputSnapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject, conversationId: "conversation-1", digest: "sha256:input", modelRoute: {}, budgetPolicy: {} };
 		const service = { id: "service-1", siloId: "silo-1", kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: "revision-1", workloadProfile: "personal-default" };
-		const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: AgentRunState.WaitingForInput, agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:input", effectiveContractDigest: "sha256:contract", conversationId: "conversation-1", service, inputSnapshot };
+		const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: AgentRunState.WaitingForInput, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject, inputSnapshotDigest: "sha256:input", conversationId: "conversation-1", service, inputSnapshot };
 		const task = { runId: "run-1", attempt: 1, siloId: "silo-1", taskId: "task-1", taskKey: _RECEIPT.idempotencyKey, taskName: AgentRunTaskNames.Execute, assignmentExpiresAt, run };
 		let reservation: Record<string, unknown> | null = null;
 		const client = {

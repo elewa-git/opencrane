@@ -14,7 +14,7 @@ This package owns the whole definition plane and the authoritative management AP
 managed service with its first draft revision, accepting only the deployed `managed-default`
 workload profile so an admitted service always has an executable controller target. The same
 transaction mints the service's durable internal `Principal`, using the reserved
-`urn:opencrane:agent-service` issuer and a deterministic `agent-service:<AgentService.id>` primary
+`urn:opencrane:managed-agent` issuer and a deterministic `managed-principal:<AgentService.id>` primary
 key; signed fleet membership and generic grants refer to that stored Principal. The package also appends immutable draft revisions as edits (each
 recording its parent revision and a change message); restores an older revision by cloning it into
 a new revision that records both its parent and its source; publishes a draft (flipping the active
@@ -194,10 +194,12 @@ ready personal AgentService, or a fail-closed denial
   never widens into a descendants attachment.
 - Managed execution evidence derives the stored Principal relation from the active managed service,
   verifies its reserved internal origin and current signed fleet membership, intersects the active
-  revision's non-personal boundary attachments with effective grants, and digests the complete
-  capability-bearing revision inside the run-admission transaction.
-- Run history and management projections expose the immutable `conversationId` coordinate carried
-  by each admitted run; this package does not own the participant conversation or its timeline.
+  revision's non-personal boundary attachments with effective grants, and returns those coordinates
+  and decision digests to the app. It cannot mint an `ExecutionSubject`: the app must also verify a
+  Kurrent-backed AgentIdentity and active ConversationComputer lease in the admission fence.
+- Run history reads the persisted, strict execution subject with every admitted run and refuses a
+  malformed subject or one whose copied identity coordinates disagree; this package does not own the
+  participant conversation or its timeline.
 - Types: the lifecycle commands/results (`CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish

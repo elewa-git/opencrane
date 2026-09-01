@@ -12,8 +12,7 @@ const _SHA256_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
  * Uppercase hex, another algorithm prefix, and bare hex with no prefix are all rejected, so two
  * spellings of the same hash can never both be accepted and compared as different values.
  *
- * Called by: `libs/backend/agents/execution/inputs/main/src/utils/canonical-inputs.ts`,
- * `libs/backend/agents/execution/inputs/main/src/managed-execution-identity-envelope-source.ts`.
+ * Called by: execution-input snapshot compilation and the execution-subject validator.
  * @param value - Candidate digest string.
  * @returns True only for the exact accepted form.
  */

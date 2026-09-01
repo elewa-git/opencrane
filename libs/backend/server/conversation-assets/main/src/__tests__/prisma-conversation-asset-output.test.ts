@@ -2,6 +2,7 @@ import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/
 import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
+import type { ExecutionSubject } from "@opencrane/models/agents";
 import { PrismaConversationAssetOutputRepository } from "../prisma-conversation-asset-output-repository";
 import { PrismaConversationAssetOutputUnitOfWork } from "../prisma-conversation-asset-output-unit-of-work";
 
@@ -24,10 +25,16 @@ const _ADDRESS = `sha256:${"a".repeat(64)}`;
 const _COMMAND = { runId: "run-1", runAttempt: 2, messageId: "message-1", idempotencyKey: "output-1", displayName: "report.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: _ADDRESS } as const;
 const _NOW = new Date("2026-08-11T10:00:00.000Z");
 
+/** Returns the evidence-bound subject persisted with every target workload assignment. */
+function _ExecutionSubject(): ExecutionSubject
+{
+	return { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-09-01T00:00:00.000Z" }, membership: { principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-01-01T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-09-01T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { siloId: "silo-1", requesterPrincipalId: "requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-09-01T00:00:00.000Z" }, admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-09-01T00:00:00.000Z" } };
+}
+
 /** Exact live assignment selected by the output authority. */
 function _Assignment()
 {
-	return { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, revokedAt: null, workloadKind: "Deployment", expiresAt: new Date(Date.now() + 60_000), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	return { runId: "run-1", attempt: 2, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: _ExecutionSubject(), agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, revokedAt: null, workloadKind: "Deployment", expiresAt: new Date(Date.now() + 60_000), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
 }
 
 /** Claimed warm reservation for the assignment's current binding generation. */
@@ -53,7 +60,6 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	it("atomically reserves one generated artifact behind the exact active attempt and message event", async function _Reserves()
 	{
 		const transaction = {
-			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) },
 			conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) },
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
@@ -73,7 +79,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 
 	it("rejects an output from a Pod reservation older than the assignment generation", async function _RejectsOldPod()
 	{
-		const transaction = { workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation(1)) }, conversationRunEvent: { findFirst: vi.fn() }, principal: { findMany: vi.fn() } };
+		const transaction = { workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation(1)) }, conversationRunEvent: { findFirst: vi.fn() } };
 
 		await expect(new PrismaConversationAssetOutputRepository(transaction as never).reserve(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "runtime_unavailable" });
 		expect(transaction.conversationRunEvent.findFirst).not.toHaveBeenCalled();
@@ -86,7 +92,6 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 			return where.attempt === 1 ? _MessageEvent() : null;
 		});
 		const transaction = {
-			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) },
 			conversationRunEvent: { findFirst },
 		};
@@ -98,7 +103,6 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	it("enforces the approved 200 MiB total across all outputs for one message", async function _LimitsMessageTotal()
 	{
 		const transaction = {
-			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) },
 			conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) },
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
@@ -116,7 +120,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	it("returns the same ticket only when every retry coordinate still matches", async function _Idempotent()
 	{
 		const existing = { id: "ticket-1", runEventSequence: 7, outputMessageId: "message-1", asset: { ..._Asset(), uploadLease: { expectedContentAddress: _ADDRESS } } };
-		const transaction = { principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) }, workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) }, conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) }, conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(existing) } };
+		const transaction = { workloadAssignment: { findUnique: vi.fn().mockResolvedValue(_Assignment()) }, warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(_Reservation()) }, conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) }, conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(existing) } };
 		const repository = new PrismaConversationAssetOutputRepository(transaction as never);
 
 		expect(await repository.reserve(_IDENTITY, _COMMAND)).toEqual({ outcome: "idempotent", ticketId: "ticket-1" });
@@ -140,7 +144,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 		const result = await new PrismaConversationAssetOutputRepository(transaction as never).finalize(_IDENTITY, "ticket-1", promotion, `sha256:${"c".repeat(64)}`);
 
 		expect(result).toEqual({ outcome: "accepted" });
-		expect(transaction.artifactRevision.create).toHaveBeenCalledWith({ data: expect.objectContaining({ state: ArtifactRevisionState.Quarantined, sourceRunId: "run-1", sourceMessageId: "message-1", provenance: expect.objectContaining({ kind: "conversation_agent_output", outputTicketId: "ticket-1", runEventSequence: 7 }), createdBy: "user-1" }) });
+		expect(transaction.artifactRevision.create).toHaveBeenCalledWith({ data: expect.objectContaining({ state: ArtifactRevisionState.Quarantined, sourceRunId: "run-1", sourceMessageId: "message-1", provenance: expect.objectContaining({ kind: "conversation_agent_output", outputTicketId: "ticket-1", runEventSequence: 7 }), createdBy: "principal-1" }) });
 		expect(transaction.artifactScanJob.create).toHaveBeenCalledWith({ data: { artifactRevisionId: expect.any(String) } });
 		expect(transaction.conversationAssetOutputTicket.update).toHaveBeenCalledWith({ where: { id: "ticket-1" }, data: { finalizedContentAddress: _ADDRESS, finalizedReceiptDigest: `sha256:${"c".repeat(64)}`, finalizedAt: expect.any(Date) } });
 		expect(transaction.conversationAsset.update).toHaveBeenCalledWith({ where: { id: "asset-1" }, data: { revisionId: expect.any(String), state: ConversationAssetState.Processing } });

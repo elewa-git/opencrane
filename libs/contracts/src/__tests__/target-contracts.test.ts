@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationGrantEffects, AuthorizationSubjectKinds } from "@opencrane/models/authorization";
-import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index";
+import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds } from "../index";
 import type { AgentRun, AgentService, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index";
 
 describe("canonical model exports", function ()
@@ -45,12 +45,23 @@ describe("canonical model exports", function ()
       agentRevisionId: "revision-1",
       conversationId: "conversation-1",
       trigger: "interactive",
-      delegatedUserId: "user-1",
+		executionSubject: {
+			schemaVersion: 1,
+			siloId: "silo-1",
+			agentIdentityId: "identity-1",
+			principalId: "principal-agent-1",
+			identity: { agentIdentityId: "identity-1", principalId: "principal-agent-1", siloId: "silo-1", headRevision: "8", headDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-09-01T00:00:00.000Z" },
+			membership: { principalId: "principal-agent-1", siloId: "silo-1", revision: 21, assertionId: "membership-assertion-1", payloadDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-09-01T01:00:00.000Z" },
+			capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", effectiveContractDigest: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", decisionEvidenceId: "capability-decision-1", decidedAt: "2026-09-01T00:00:00.000Z" },
+			runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "agent-1", agentRevisionId: "revision-1" },
+			computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 4 },
+			requester: { siloId: "silo-1", requesterPrincipalId: "principal-requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-09-01T00:00:00.000Z" },
+			admission: { authorizingPrincipalId: "principal-authorizer-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-09-01T00:00:00.000Z" },
+		},
       requestIdempotencyKey: "request-1",
       lineage: { rootRunId: "run-1", parentRunId: null },
       attempt: 1,
       state: "waiting_for_input",
-      effectiveContractDigest: "sha256:contract",
       inputSnapshotDigest: "sha256:input",
       acceptedAt: "2026-07-18T09:00:00.000Z",
       startedAt: "2026-07-18T09:00:01.000Z",
@@ -83,7 +94,6 @@ describe("canonical model exports", function ()
   it("preserves serialized agent, identity, and memory provenance discriminants", function ()
   {
     expect([AgentServiceKinds.Personal, AgentServiceKinds.Managed]).toEqual(["personal", "managed"]);
-    expect([RunInputSnapshotIdentityKinds.User, RunInputSnapshotIdentityKinds.Service]).toEqual(["user", "service"]);
     expect([MemoryFactProvenanceSourceKinds.Message, MemoryFactProvenanceSourceKinds.Artifact, MemoryFactProvenanceSourceKinds.ExplicitUserFact]).toEqual(["message", "artifact", "explicit-user-fact"]);
   });
 });

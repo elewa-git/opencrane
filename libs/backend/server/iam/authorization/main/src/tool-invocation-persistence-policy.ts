@@ -1,4 +1,5 @@
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
 
 import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
@@ -75,7 +76,10 @@ export function _ToolInvocationRecoveryKeyIsValid(intent: ToolInvocationIntent):
 export function _ToolInvocationAuthorizationEvidenceIsValid(intent: ToolInvocationIntent): boolean
 {
 	const evidence = intent.authorizationEvidence;
-	if (intent.agentRevisionId === null || evidence.principalId.trim().length === 0 || evidence.membershipRevision < 1 || evidence.coordinates.length === 0 || evidence.decisionDigests.length === 0)
+	const subject = ___ExecutionSubjectSchema.safeParse(evidence.executionSubject);
+	if (intent.agentRevisionId === null || evidence.actorKind !== "workload" || !subject.success || evidence.coordinates.length === 0 || evidence.decisionDigests.length === 0)
+		return false;
+	if (subject.data.siloId !== intent.siloId || subject.data.runScope.runId !== intent.runId || subject.data.runScope.attempt !== intent.attempt || subject.data.runScope.agentServiceId !== intent.agentServiceId || subject.data.runScope.agentRevisionId !== intent.agentRevisionId)
 		return false;
 	const coordinateKeys = evidence.coordinates.map(coordinate => `${coordinate.resource.kind}:${coordinate.resource.id}:${coordinate.action}`);
 	if (!_IsSorted(coordinateKeys) || !_IsSorted(evidence.decisionDigests))
@@ -83,11 +87,10 @@ export function _ToolInvocationAuthorizationEvidenceIsValid(intent: ToolInvocati
 	if (!evidence.decisionDigests.every(digest => /^sha256:[0-9a-f]{64}$/u.test(digest)) || !/^sha256:[0-9a-f]{64}$/u.test(evidence.assignmentDigest))
 		return false;
 	const actualDigest = ___DigestCanonicalJson({
-		principalId: evidence.principalId,
 		actorKind: evidence.actorKind,
+		executionSubject: evidence.executionSubject,
 		coordinates: evidence.coordinates,
 		decisionDigests: evidence.decisionDigests,
-		membershipRevision: evidence.membershipRevision,
 		agentRevisionId: intent.agentRevisionId,
 		runId: intent.runId,
 		attempt: intent.attempt,

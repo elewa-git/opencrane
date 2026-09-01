@@ -1,7 +1,6 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState } from "@prisma/client";
 
-import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { AgentServiceKinds } from "@opencrane/models/agents";
+import { RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
 import type { RunAuthoritySource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
@@ -32,14 +31,19 @@ export class PrismaRunAuthoritySource implements RunAuthoritySource
 				id: true,
 				kind: true,
 				activeRevisionId: true,
-				activeRevision: { select: { id: true, state: true, digest: true, promptPolicyVersion: true } },
+				activeRevision: { select: { id: true, state: true, promptPolicyVersion: true } },
 			},
 		});
-		if (service === null || service.activeRevisionId === null || service.activeRevision === null) return { outcome: "denied", reason: "run_not_admittable" };
-		if ((service.kind === AgentServiceKind.Personal && command.identityKind !== "user") || (service.kind === AgentServiceKind.Managed && command.identityKind !== "service")) return { outcome: "denied", reason: "run_not_admittable" };
+		if (service === null || service.activeRevisionId === null || service.activeRevision === null)
+		{
+			return { outcome: "denied", reason: "run_not_admittable" };
+		}
 
 		// 2. The loaded revision and activeRevisionId must match, so an old published revision cannot survive an active-revision swap.
-		if (service.activeRevision.id !== service.activeRevisionId || service.activeRevision.state !== AgentRevisionState.Published) return { outcome: "denied", reason: "revision_unavailable" };
+		if (service.activeRevision.id !== service.activeRevisionId || service.activeRevision.state !== AgentRevisionState.Published)
+		{
+			return { outcome: "denied", reason: "revision_unavailable" };
+		}
 
 		// 3. Build the run facts from the revision just read, not from anything the caller sent.
 		return {
@@ -47,11 +51,11 @@ export class PrismaRunAuthoritySource implements RunAuthoritySource
 			value: {
 				agentServiceId: service.id,
 				agentRevisionId: service.activeRevision.id,
-				agentKind: service.kind === AgentServiceKind.Personal ? AgentServiceKinds.Personal : AgentServiceKinds.Managed,
-				effectiveContractDigest: service.activeRevision.digest,
+				executionPolicy: service.kind === AgentServiceKind.Personal
+					? { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed }
+					: { persona: RunExecutionPersonaPolicies.None, personalMemory: RunExecutionPersonalMemoryPolicies.None },
 				promptCompilerVersion: service.activeRevision.promptPolicyVersion,
 				trigger: command.trigger,
-				delegatedUserId: command.identityKind === "user" ? command.executionSubjectId : null,
 				rootRunId: command.runId,
 				parentRunId: null,
 			},

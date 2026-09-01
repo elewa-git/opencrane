@@ -569,12 +569,12 @@ Each slice introduces its target owner and deletes the authority or runtime path
 - A KurrentDB persistent subscription is the durable activation queue. Delivery is at least once;
   consumers use expected revisions, deterministic resource names, computer generations, retry, and
   parked-message replay instead of assuming exactly-once execution.
-- A Kubebuilder controller in `apps/conversation-computer-controller` reconciles a
-  `ConversationComputer` custom resource into Agent Sandbox `SandboxClaim` resources. The custom
-  resource is an operational projection only and contains no grants or secrets.
-- Agent Sandbox owns sandbox lifecycle through pinned `SandboxTemplate`, `SandboxClaim`, and later
-  `SandboxWarmPool` APIs. OpenSandbox `execd` supplies command, file, and terminal operations inside
-  the computer; OpenCrane does not adopt the full OpenSandbox control plane.
+- The server records desired claims through a narrow Agent Sandbox adapter after its PostgreSQL
+  authority admits a computer generation. The adapter creates or observes deterministic
+  `SandboxClaim` resources but never decides permissions, selects an image, or manages Pods.
+- Agent Sandbox owns sandbox lifecycle through its pinned `SandboxTemplate`, `SandboxClaim`, and
+  later `SandboxWarmPool` APIs. OpenCrane does not add a Kubebuilder controller or a second Pod
+  lifecycle reconciler.
 - Computers share a Kubernetes ServiceAccount per admitted computer profile. A short-lived,
   generation-bound `ComputerLease` proves the exact silo, agent, conversation, computer, audience,
   and expiry. Do not create one Kubernetes ServiceAccount per conversation computer.
@@ -592,9 +592,10 @@ Each slice introduces its target owner and deletes the authority or runtime path
 2. **Queue and authority.** Add the KurrentDB adapter and persistent-subscription consumer. Prove
    duplicate and out-of-order delivery, crash-before-ack, parked replay, revocation, stale leases,
    and cross-silo rejection.
-3. **Cold sandbox path.** Add the Kubebuilder app, CRD, RBAC, reconciliation, and Agent Sandbox
-   prerequisite. Reconcile each admitted computer to one deterministic `SandboxClaim`; make retries
-   and controller restarts converge on the same generation.
+3. **Cold sandbox path.** Add the app-owned Agent Sandbox claim adapter, its least-privilege RBAC,
+   and the Agent Sandbox prerequisite. Reconcile each admitted computer generation to one
+   deterministic `SandboxClaim`; make server retries and upstream-controller restarts converge on
+   the same generation.
 4. **Usable computer and review surface.** Build the pinned computer image and gateway routes for
    commands, files, browser, noVNC, selected outputs, diffs, artifacts, and approved local preview
    ports. A person can inspect work without receiving unrestricted access to the Pod.

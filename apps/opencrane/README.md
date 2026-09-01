@@ -43,9 +43,10 @@ Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. compose one shared-capacity managed admission port and one session-derived personal admission
-   port, both over the same signed membership configuration. A standalone deployment has no Fleet
-   key but deliberately denies run admission until it has a local signed-membership issuer;
+3. require one app-owned target adapter that joins checked AgentIdentity history, current membership
+   and capability evidence, and an active ConversationComputer lease before it composes both initial
+   admission and retry snapshot authorities. Startup stops until that adapter is supplied; it never
+   substitutes retired request identity or a partial PostgreSQL-only authority;
 4. build the public and internal Express applications; and
 5. start the registered workflow and bounded background workers, then open both listeners and attach
    the signed-in conversation WebSocket under one coordinated shutdown path.
@@ -195,6 +196,7 @@ are:
 | --- | --- | --- |
 | `PORT` / `INTERNAL_PORT` | Public and workload-facing listeners | `8080` / `8081` |
 | `DATABASE_URL` | PostgreSQL connection string | required |
+| `OPENCRANE_HISTORY_STORE_*` | TLS-only KurrentDB endpoint plus read-only CA, username, and password mounts used for checked event history | required |
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
 | `AGENT_RUNTIME_CONTINUATION_KEYRING_PATH` | Read-only mounted keyring used to encrypt and decrypt durable runtime continuations | required |

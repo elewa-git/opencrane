@@ -9,19 +9,20 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionWorkerInvocation } from "../external-action-worker.types";
 import { ProductionExternalActionAdapterFactory } from "../production-external-action-adapter";
+import { _ExecutionSubject, _ToolInvocationAuthorizationEvidence } from "./execution-subject.fixture";
 
 /** Build one saved invocation, as it exists just before the provider is called. */
 function _invocation(toolRevisionId: string): ExternalActionWorkerInvocation
 {
 	const proposedArguments = { query: "proposed" };
 	const effectiveArguments = { query: "approved" };
-	return { id: "row-1", siloId: "silo-1", runId: "run-1", attempt: 1, mcpTaskId: null, agentRevisionId: "revision-1", subjectId: "user-1", authorizationEvidence: null, candidateId: "candidate-1", toolInvocationId: "tool-1", toolRevisionId, arguments: proposedArguments, argumentsDigest: ___DigestCanonicalJson(proposedArguments), effectiveArguments, effectiveArgumentsDigest: ___DigestCanonicalJson(effectiveArguments), requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.Ready, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 2 };
+	return { id: "row-1", siloId: "silo-1", runId: "run-1", attempt: 1, mcpTaskId: null, agentRevisionId: "revision-1", authorizationEvidence: _ToolInvocationAuthorizationEvidence(), candidateId: "candidate-1", toolInvocationId: "tool-1", toolRevisionId, arguments: proposedArguments, argumentsDigest: ___DigestCanonicalJson(proposedArguments), effectiveArguments, effectiveArgumentsDigest: ___DigestCanonicalJson(effectiveArguments), requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.Ready, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 2 };
 }
 
 /** Build one immutable personal snapshot. */
 function _context(): ExternalActionExecutionContext
 {
-	return { snapshot: { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", personaRevisionId: "persona-1", conversationId: "conversation-1", identitySnapshot: { kind: "user", executionSubjectId: "user-1" }, memoryQueryPolicy: null } as unknown as RunInputSnapshot };
+	return { snapshot: { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", personaRevisionId: "persona-1", conversationId: "conversation-1", executionSubject: _ExecutionSubject(), memoryQueryPolicy: null } as unknown as RunInputSnapshot };
 }
 
 /** Advance one prepared invocation into the exact dispatch claim passed to the adapter. */

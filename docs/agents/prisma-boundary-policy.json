@@ -805,13 +805,6 @@
 				"constructs": []
 			},
 			{
-				"path": "libs/backend/agents/execution/inputs/main/src/prisma-personal-execution-identity-authority-repository.ts",
-				"adapter": "PrismaPersonalExecutionIdentityAuthorityRepository",
-				"contract": "PersonalExecutionIdentityAuthorityRepository",
-				"contractImportPath": "./personal-execution-identity-envelope-source.types",
-				"constructs": []
-			},
-			{
 				"path": "libs/backend/server/iam/authorization/main/src/prisma-authorization-grants.ts",
 				"adapter": "PrismaAuthorizationGrantRepository",
 				"contract": "AuthorizationContextRepository",
@@ -2218,7 +2211,6 @@
 			"libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 			"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 			"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
-			"libs/backend/agents/execution/inputs/main/src/personal-execution-identity-envelope-source.ts",
 			"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
 			"libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts",
 			"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
@@ -2229,7 +2221,8 @@
 			"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
 			"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 			"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
-			"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts"
+			"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts",
+			"libs/backend/server/iam/authorization/main/src/deferred-tool-approval.ts"
 		]
 	},
 	"rawProcedureCalls": [
@@ -2282,14 +2275,23 @@
 			"reason": "bootstrap chat start must create the child conversation before the parent pin inside one atomic write; extract a dedicated onboarding UnitOfWork with the next onboarding persistence boundary change.",
 			"expiresOn": "2026-12-31"
 		},
-		{
-			"path": "libs/backend/agents/execution/runs/main/src/prisma-run-admission-repository.ts",
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-run-admission-repository.ts",
 			"owner": "execution-runs",
 			"operations": [
 				"delegate"
 			],
 			"reason": "Run admission already owns its serializable transaction and duplicate-recovery semantics; this authorization migration binds the central decision to that transaction without changing durable run persistence, while repository extraction remains a separate execution-safety refactor.",
-			"expiresOn": "2026-12-31"
-		}
+				"expiresOn": "2026-12-31"
+			},
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
+				"owner": "execution-runs",
+				"operations": [
+					"delegate"
+				],
+				"reason": "Terminal reporting owns one caller-opened transaction across the attempt fence, pending-tool check, terminal transition, timeline event, and child delivery; extract its dedicated repository only when replacing the remaining run lifecycle owner.",
+				"expiresOn": "2026-12-31"
+			}
 	]
 }

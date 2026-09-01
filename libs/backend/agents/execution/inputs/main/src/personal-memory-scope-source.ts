@@ -1,9 +1,8 @@
 import { __ResolvePersonalMemoryDataset, PersonalMemoryDatasetResolutionOutcomes, type PersonalMemoryAdmissionRepository } from "@opencrane/backend/agents/personal/memory";
-import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
-import { AgentServiceKinds } from "@opencrane/models/agents";
+import { RunExecutionPersonalMemoryPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { ConversationContextInput, IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
+import type { ConversationContextInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Chooses the personal Cognee dataset for a run and freezes the facts the gateway picked.
@@ -38,15 +37,20 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 	}
 
 	/** Freezes verified recall coordinates without reading personal-memory content. */
-	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, _conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>
+	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, _conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>
 	{
-		// 1. Personal datasets cannot enter a managed-service snapshot, even if a delegated user has signed membership.
-		if (run.agentKind !== AgentServiceKinds.Personal) return { outcome: "denied", reason: "memory_scope_unavailable" };
-		if (identity.kind !== RunInputSnapshotIdentityKinds.User) return { outcome: "denied", reason: "memory_scope_unavailable" };
+		// 1. Personal memory is available only when the explicit run policy allows it.
+		if (run.executionPolicy.personalMemory !== RunExecutionPersonalMemoryPolicies.Allowed)
+		{
+			return { outcome: "denied", reason: "memory_scope_unavailable" };
+		}
 
-		// 2. Find the one personal dataset from the identity already verified during admission.
-		const resolved = await __ResolvePersonalMemoryDataset(this.createPersonalMemory(transaction), { siloId: command.siloId, principalId: identity.principalId, subjectId: identity.executionSubjectId });
-		if (resolved.outcome === PersonalMemoryDatasetResolutionOutcomes.Denied) return resolved;
+		// 2. Find the one personal dataset from the principal already verified during admission.
+		const resolved = await __ResolvePersonalMemoryDataset(this.createPersonalMemory(transaction), { siloId: command.siloId, principalId: executionSubject.principalId, subjectId: executionSubject.principalId });
+		if (resolved.outcome === PersonalMemoryDatasetResolutionOutcomes.Denied)
+		{
+			return resolved;
+		}
 
 		// 3. Freeze only verified dataset coordinates. The model may later propose a bounded query via
 		//    the declared memory tool, but user text and recalled content never enter the snapshot.

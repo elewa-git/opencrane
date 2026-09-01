@@ -2,6 +2,8 @@ import { ChildRunCompletionDeliveryOutcome, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import type { ExecutionSubject } from "@opencrane/models/agents";
+import type { RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaAgentRunAuthorityRepository } from "../prisma-run-authority";
 import { PrismaAgentRunRetryUnitOfWork } from "../prisma-run-retry-unit-of-work";
 import type { AtomicStartNextRunAttemptCommand } from "../run-authority.types";
@@ -9,13 +11,25 @@ import type { AtomicStartNextRunAttemptCommand } from "../run-authority.types";
 /** Creates one participant-authorized atomic retry command. */
 function _command(): AtomicStartNextRunAttemptCommand
 {
-	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", requestedByPrincipalId: "principal-1", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", acceptedAt: "2026-07-18T01:00:00.000Z" };
+	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", requestedByPrincipalId: "principal-1", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", acceptedAt: "2026-07-18T01:00:00.000Z", nextInputSnapshot: _snapshot(2) };
+}
+
+/** Creates one fully bound evidence subject for a single run attempt. */
+function _subject(attempt: number): ExecutionSubject
+{
+	return { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-07-18T00:00:00.000Z" }, membership: { principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-07-18T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-07-18T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: `lease-${attempt}`, leaseGeneration: attempt }, requester: { siloId: "silo-1", requesterPrincipalId: "requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-18T00:00:00.000Z" }, admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-07-18T00:00:00.000Z" } };
+}
+
+/** Creates the next immutable snapshot which owns the fresh computer lease. */
+function _snapshot(attempt: number): RunInputSnapshot
+{
+	return { runId: "run-1", attempt, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, executionSubject: _subject(attempt), promptCompilerVersion: "prompt-v1", digest: `sha256:${String(attempt).repeat(64)}`, compiledAt: "2026-07-18T01:00:00.000Z" };
 }
 
 /** Creates one retryable Prisma run row. */
-function _runRow()
+function _runRow(attempt: number = 1)
 {
-	return { id: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", conversationId: "conversation-1", trigger: "Interactive", delegatedUserId: "user-1", requestIdempotencyKey: "request-1", rootRunId: "run-1", parentRunId: null, attempt: 1, state: "Failed", effectiveContractDigest: `sha256:${"1".repeat(64)}`, inputSnapshotDigest: `sha256:${"2".repeat(64)}`, acceptedAt: new Date("2026-07-18T00:00:00.000Z"), startedAt: new Date("2026-07-18T00:01:00.000Z"), finishedAt: new Date("2026-07-18T00:02:00.000Z"), terminalReason: "RuntimeFailure", costAmount: null, costCurrency: null };
+	return { id: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", conversationId: "conversation-1", trigger: "Interactive", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: _subject(attempt), requestIdempotencyKey: "request-1", rootRunId: "run-1", parentRunId: null, attempt, state: "Failed", inputSnapshotDigest: `sha256:${String(attempt).repeat(64)}`, acceptedAt: new Date("2026-07-18T00:00:00.000Z"), startedAt: new Date("2026-07-18T00:01:00.000Z"), finishedAt: new Date("2026-07-18T00:02:00.000Z"), terminalReason: "RuntimeFailure", costAmount: null, costCurrency: null };
 }
 
 /** Creates the exact Active service authority required by a retry. */
@@ -59,6 +73,7 @@ function _taskStore()
 			updateMany: vi.fn().mockResolvedValue({ count: 1 }),
 			findUnique: vi.fn(),
 		},
+		runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-2" }) },
 	};
 }
 
@@ -67,7 +82,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 	it("commits a single next attempt and its workflow task atomically", async function _retry()
 	{
 		const run = _runRow();
-		const updated = { ...run, attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
+		const updated = { ...run, attempt: 2, state: "Accepted", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: _subject(2), inputSnapshotDigest: _snapshot(2).digest, acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
 		const transaction = { ..._taskStore(), ..._authority(), agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) }, agentRun: { findUnique: vi.fn().mockResolvedValueOnce(run).mockResolvedValueOnce(updated).mockResolvedValue(updated), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
 		const result = await new PrismaAgentRunAuthorityRepository(transaction as never, _workflow(), _authorization()).startNextAttemptAtomically(_command());
 
@@ -79,7 +94,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 	it("redelivers a terminal child that the previous parent attempt had to suppress", async function _RedeliversSuppressedChild()
 	{
 		const run = _runRow();
-		const updated = { ...run, attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
+		const updated = { ..._runRow(2), state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
 		const child = { ...run, id: "child-1", conversationId: null, parentRunId: "run-1", rootRunId: "run-1", attempt: 1, state: "Completed", terminalReason: "Success", finishedAt: new Date("2026-07-18T00:30:00.000Z") };
 		const authority = _authority();
 		authority.childRunCompletionDelivery.findMany.mockResolvedValue([{ childRunId: "child-1" }]);
@@ -111,7 +126,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 
 	it("replays the deterministic workflow task for the next attempt", async function _Idempotency()
 	{
-		const run = { ..._runRow(), attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
+		const run = { ..._runRow(2), state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
 		const transaction = { ..._taskStore(), ..._authority(), agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) }, agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn() } };
 		transaction.agentRunWorkflowTask.findUnique.mockResolvedValue({ taskKey: "agent-run:silo-1:run-1:attempt:2" });
 		const repository = new PrismaAgentRunAuthorityRepository(transaction as never, _workflow(), _authorization());
@@ -124,7 +139,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 	it("returns the same retry when another transaction wins the conditional update", async function _ConcurrentIdempotency()
 	{
 		const initial = _runRow();
-		const updated = { ...initial, attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
+		const updated = { ..._runRow(2), state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
 		const transaction = { ..._taskStore(), ..._authority(), agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) }, agentRun: { findUnique: vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(updated), updateMany: vi.fn().mockResolvedValue({ count: 0 }) } };
 		transaction.agentRunWorkflowTask.findUnique.mockResolvedValue({ taskKey: "agent-run:silo-1:run-1:attempt:2" });
 		await expect(new PrismaAgentRunAuthorityRepository(transaction as never, _workflow(), _authorization()).startNextAttemptAtomically(_command())).resolves.toMatchObject({ status: "idempotent", run: { attempt: 2 } });
@@ -142,7 +157,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 	{
 		const uniqueConflict = new Prisma.PrismaClientKnownRequestError("unique conflict", { code: "P2002", clientVersion: "test" });
 		const serializationConflict = new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" });
-		const run = { ..._runRow(), attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
+		const run = { ..._runRow(2), state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
 		const readTransaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()) }, agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) } };
 		const winnerTransaction = { ..._authority(), agentRun: { findUnique: vi.fn().mockResolvedValue(run) }, agentRunWorkflowTask: { findUnique: vi.fn().mockResolvedValue({ taskKey: "agent-run:silo-1:run-1:attempt:2" }) } };
 		const prisma = { $transaction: vi.fn().mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(uniqueConflict).mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(serializationConflict).mockImplementationOnce(async function _Read(work) { return work(readTransaction); }).mockRejectedValueOnce(serializationConflict).mockImplementationOnce(async function _Winner(work) { return work(winnerTransaction); }) };

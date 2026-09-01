@@ -1,16 +1,15 @@
 import { AgentRevisionState, ArtifactRevisionState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, SkillRevisionState, SkillState } from "@prisma/client";
-import type { RunAdmissionCommand, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
-import { AgentServiceKinds } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PrismaMcpToolAdmissionClaimRepository } from "../prisma-mcp-tool-admission-claim-repository";
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "../prisma-revision-tool-policy-source";
 
 /** The active managed run facts these tests share. */
-const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
+const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.None, personalMemory: RunExecutionPersonalMemoryPolicies.None }, promptCompilerVersion: "v1", trigger: "managed_invocation", rootRunId: "run-1", parentRunId: null } as const;
 /** Fixed session-assembly command scoped to the active managed service. */
-const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", requestingPrincipalId: "principal-1", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
+const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, trigger: "managed_invocation", requestIdempotencyKey: "request-1", requester: { subjectId: "managed-requester", issuer: "server-composed", authenticatedAt: "2026-09-01T00:00:00.000Z" } };
 
 /** Creates one MCP tool assignment backed by a Ready revision on an active, published server. */
 function _McpToolAssignment(overrides: Record<string, unknown> = {})

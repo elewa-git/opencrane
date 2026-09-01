@@ -1,5 +1,5 @@
 import { __DigestCanonicalJson, ToolInvocationStates, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
-import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
+import type { RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
@@ -172,18 +172,21 @@ function _BuildMemoryPermissionPayloadAtRevision(invocation: ToolInvocationRecor
 	// 1. Reduce the query first. It is the one coordinate that can be missing outright, and a recall
 	// with no identifiable query must not become a consent question at all.
 	const queryDigest = _MemoryQueryDigest(invocation.effectiveArguments);
+	const executionPrincipalId = _InvocationExecutionPrincipalId(invocation);
 
 	// 2. Refuse unless the invocation and the run's frozen inputs describe the same recall for the same
-	// person: the declared memory tool, a user identity rather than a service one, the same subject as
-	// the invocation's, and the same run, silo, and agent revision. A conversation and a persona are
+	// person: the declared memory tool, the admitted execution principal, and the same run, silo, and
+	// agent revision. A conversation and a persona are
 	// required too, because the consent question is shown in that conversation and answered against
 	// that persona. Any mismatch here would mean asking one user to consent to another user's recall.
 	if (invocation.toolRevisionId !== PERSONAL_MEMORY_RECALL_TOOL_REVISION
 		|| invocation.runId === null
 		|| invocation.attempt === null
-		|| snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User
-		|| snapshot.identitySnapshot.executionSubjectId !== invocation.subjectId
+		|| executionPrincipalId === null
+		|| !_IsPersonalMemorySubjectBound(snapshot)
+		|| snapshot.executionSubject.principalId !== executionPrincipalId
 		|| snapshot.runId !== invocation.runId
+		|| snapshot.attempt !== invocation.attempt
 		|| snapshot.siloId !== invocation.siloId
 		|| snapshot.agentRevisionId !== invocation.agentRevisionId
 		|| snapshot.conversationId === null
@@ -200,7 +203,49 @@ function _BuildMemoryPermissionPayloadAtRevision(invocation: ToolInvocationRecor
 
 	// 4. Emit the payload. `queryDigest` stands in for the query text, and no remembered fact appears
 	// here, so the stored consent names the recall without repeating its content.
-	return { toolInvocationId: invocation.id, toolInvocationRevision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest, inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: expiresAt.toISOString() };
+	return { toolInvocationId: invocation.id, toolInvocationRevision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: executionPrincipalId, queryDigest, inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: expiresAt.toISOString() };
+}
+
+/** Reads the execution principal only from complete workload authorization evidence. */
+export function _InvocationExecutionPrincipalId(invocation: ToolInvocationRecord): string | null
+{
+	const evidence = invocation.authorizationEvidence;
+	if (evidence === null || !("executionSubject" in evidence))
+		return null;
+	const subject = evidence.executionSubject;
+	return subject.siloId === invocation.siloId
+		&& invocation.runId !== null
+		&& invocation.attempt !== null
+		&& subject.runScope.runId === invocation.runId
+		&& subject.runScope.attempt === invocation.attempt
+		&& subject.runScope.agentRevisionId === invocation.agentRevisionId
+		&& subject.principalId === subject.identity.principalId
+		&& subject.principalId === subject.membership.principalId
+		? subject.principalId
+		: null;
+}
+
+/** Checks that the sealed execution subject still names the snapshot's principal, run, and evidence. */
+function _IsPersonalMemorySubjectBound(snapshot: RunInputSnapshot): boolean
+{
+	const subject = snapshot.executionSubject;
+	return subject.siloId === snapshot.siloId
+		&& subject.principalId.trim().length > 0
+		&& subject.identity.agentIdentityId === subject.agentIdentityId
+		&& subject.identity.principalId === subject.principalId
+		&& subject.identity.siloId === snapshot.siloId
+		&& subject.membership.principalId === subject.principalId
+		&& subject.membership.siloId === snapshot.siloId
+		&& subject.membership.revision > 0
+		&& subject.membership.assertionId.trim().length > 0
+		&& subject.membership.payloadDigest.trim().length > 0
+		&& subject.capability.agentIdentityId === subject.agentIdentityId
+		&& subject.capability.computerId === subject.computerScope.computerId
+		&& subject.runScope.siloId === snapshot.siloId
+		&& subject.runScope.runId === snapshot.runId
+		&& subject.runScope.attempt === snapshot.attempt
+		&& subject.runScope.agentServiceId === snapshot.agentServiceId
+		&& subject.runScope.agentRevisionId === snapshot.agentRevisionId;
 }
 
 /**

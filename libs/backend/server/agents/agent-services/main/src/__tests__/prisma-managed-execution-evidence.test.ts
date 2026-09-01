@@ -13,7 +13,7 @@ function _Revision(principal: { readonly issuer: string; readonly subject: strin
 	return {
 		id: "revision-1",
 		digest: `sha256:${"a".repeat(64)}`,
-		agentService: { principalId: "agent-service:service-1", principal },
+		agentService: { principalId: "managed-principal:service-1", principal },
 		modelDefinitionId: "model-1",
 		budget: {},
 		boundaryAttachments: [],

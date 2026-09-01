@@ -74,7 +74,7 @@ CREATE TYPE "ExternalActionClaimKind" AS ENUM ('dispatch', 'reconcile');
 CREATE TYPE "ToolResultDeliveryState" AS ENUM ('pending', 'consumed');
 
 -- CreateEnum
-CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('user', 'agent-service');
+CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('workload');
 
 -- CreateEnum
 CREATE TYPE "ChannelInvocationAction" AS ENUM ('events.read');
@@ -602,7 +602,8 @@ CREATE TABLE "approval_requests" (
     "silo_id" TEXT NOT NULL,
     "proof_key_id" TEXT NOT NULL,
     "proof_key_thumbprint" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
     "workload_audience" TEXT NOT NULL,
     "service_account_name" TEXT NOT NULL,
     "namespace" TEXT NOT NULL,
@@ -643,12 +644,12 @@ CREATE TABLE "tool_invocations" (
     "agent_service_id" TEXT,
     "agent_revision_id" TEXT,
     "mcp_task_id" TEXT,
-    "subject_id" TEXT NOT NULL,
-    "authorization_principal_id" TEXT,
+    "agent_identity_id" TEXT,
+    "principal_id" TEXT NOT NULL,
     "authorization_actor_kind" "ToolInvocationAuthorizationActorKind",
+    "authorization_execution_subject" JSONB,
     "authorization_coordinates" JSONB,
     "authorization_decision_digests" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "authorization_membership_revision" INTEGER,
     "authorization_assignment_digest" TEXT,
     "authorization_evidence_digest" TEXT,
     "runtime_instance_id" TEXT NOT NULL,
@@ -1752,13 +1753,14 @@ CREATE TABLE "agent_runs" (
     "agent_revision_id" TEXT NOT NULL,
     "conversation_id" TEXT,
     "trigger" "AgentRunTrigger" NOT NULL,
-    "delegated_user_id" TEXT,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "execution_subject" JSONB NOT NULL,
     "request_idempotency_key" TEXT NOT NULL,
     "root_run_id" TEXT NOT NULL,
     "parent_run_id" TEXT,
     "attempt" INTEGER NOT NULL DEFAULT 1,
     "state" "AgentRunState" NOT NULL DEFAULT 'accepted',
-    "effective_contract_digest" TEXT NOT NULL,
     "input_snapshot_digest" TEXT NOT NULL,
     "accepted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "started_at" TIMESTAMP(3),
@@ -1847,24 +1849,25 @@ CREATE TABLE "child_run_reservations" (
 CREATE TABLE "run_input_snapshots" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
     "snapshot_version" INTEGER NOT NULL,
     "silo_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
-    "effective_contract_digest" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "execution_subject" JSONB NOT NULL,
     "persona_revision_id" TEXT,
     "conversation_id" TEXT,
     "message_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "preference_fact_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "artifact_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_facts" JSONB NOT NULL DEFAULT '[]',
-    "identity_snapshot" JSONB NOT NULL,
     "model_route" JSONB NOT NULL,
     "mcp_tools" JSONB NOT NULL,
     "skill_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_query_policy" JSONB NOT NULL,
     "budget_policy" JSONB NOT NULL,
-    "capability_set_digest" TEXT NOT NULL,
     "prompt_compiler_version" TEXT NOT NULL,
     "input_digest" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1879,7 +1882,9 @@ CREATE TABLE "workload_assignments" (
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "execution_subject" JSONB NOT NULL,
     "audience" TEXT NOT NULL,
     "service_account_name" TEXT NOT NULL,
     "namespace" TEXT NOT NULL,
@@ -1906,7 +1911,9 @@ CREATE TABLE "workload_bootstraps" (
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "execution_subject" JSONB NOT NULL,
     "audience" TEXT NOT NULL,
     "service_account_name" TEXT NOT NULL,
     "namespace" TEXT NOT NULL,
@@ -2472,7 +2479,7 @@ CREATE UNIQUE INDEX "approval_requests_elicitation_request_id_key" ON "approval_
 CREATE INDEX "approval_requests_state_expires_at_idx" ON "approval_requests"("state", "expires_at");
 
 -- CreateIndex
-CREATE INDEX "approval_requests_subject_id_idx" ON "approval_requests"("subject_id");
+CREATE INDEX "approval_requests_agent_identity_id_principal_id_idx" ON "approval_requests"("agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "approval_requests_run_id_attempt_action_digest_key" ON "approval_requests"("run_id", "attempt", "action_digest");
@@ -2482,6 +2489,9 @@ CREATE UNIQUE INDEX "tool_invocations_mcp_task_id_key" ON "tool_invocations"("mc
 
 -- CreateIndex
 CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
+
+-- CreateIndex
+CREATE INDEX "tool_invocations_silo_id_agent_identity_id_principal_id_idx" ON "tool_invocations"("silo_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "tool_invocations_run_id_attempt_state_idx" ON "tool_invocations"("run_id", "attempt", "state");
@@ -3070,6 +3080,9 @@ CREATE UNIQUE INDEX "agent_runs_id_agent_service_id_agent_revision_id_key" ON "a
 CREATE UNIQUE INDEX "agent_runs_id_attempt_key" ON "agent_runs"("id", "attempt");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "agent_run_attempt_snapshot_key" ON "agent_runs"("id", "attempt", "input_snapshot_digest");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_id_silo_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id");
 
 -- CreateIndex
@@ -3085,7 +3098,7 @@ CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("convers
 CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
+CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "warm_runtime_reservations_state_idle_deadline_idx" ON "warm_runtime_reservations"("state", "idle_deadline");
@@ -3112,31 +3125,31 @@ CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservatio
 CREATE INDEX "child_run_reservations_root_run_id_idx" ON "child_run_reservations"("root_run_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_key" ON "run_input_snapshots"("run_id");
+CREATE UNIQUE INDEX "run_input_snapshots_input_digest_key" ON "run_input_snapshots"("input_digest");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_input_digest_key" ON "run_input_snapshots"("input_digest");
+CREATE INDEX "run_input_snapshots_run_id_attempt_idx" ON "run_input_snapshots"("run_id", "attempt");
 
 -- CreateIndex
 CREATE INDEX "run_input_snapshots_agent_service_id_agent_revision_id_idx" ON "run_input_snapshots"("agent_service_id", "agent_revision_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_snapshots"("run_id", "input_digest");
+CREATE UNIQUE INDEX "run_input_snapshots_run_id_attempt_input_digest_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
+CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
-CREATE INDEX "workload_assignments_silo_id_subject_id_idx" ON "workload_assignments"("silo_id", "subject_id");
+CREATE INDEX "workload_assignments_silo_id_agent_identity_id_principal_id_idx" ON "workload_assignments"("silo_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "workload_assignments_state_expires_at_idx" ON "workload_assignments"("state", "expires_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "workload_assignment_bootstrap_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid");
+CREATE UNIQUE INDEX "workload_assignment_bootstrap_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "workload_assignment_action_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid");
+CREATE UNIQUE INDEX "workload_assignment_action_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "service_account_name", "namespace", "workload_kind", "workload_uid");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "workload_assignments_run_attempt_workload_key" ON "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid");
@@ -3436,7 +3449,7 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_re
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_proof_key_id_run_id_attempt_workload_kin_fkey" FOREIGN KEY ("proof_key_id", "run_id", "attempt", "workload_kind", "workload_uid", "proof_key_thumbprint", "pod_uid") REFERENCES "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_attempt_agent_service_id_agent_re_fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "workload_audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_attempt_agent_service_id_agent_re_fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "workload_audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3760,13 +3773,13 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_pare
 ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_conversation_id_si_fkey" FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_attempt_input_digest_fkey" FOREIGN KEY ("run_id", "attempt", "input_digest") REFERENCES "agent_runs"("id", "attempt", "input_snapshot_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_silo_id_agent_service_id_agent_fkey" FOREIGN KEY ("run_id", "silo_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_generation_fkey" FOREIGN KEY ("run_id", "attempt", "generation") REFERENCES "warm_runtime_reservations"("run_id", "attempt", "generation") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -6964,7 +6977,7 @@ BEGIN
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
         OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."runtime_instance_id" IS DISTINCT FROM OLD."runtime_instance_id"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id" OR NEW."runtime_instance_id" IS DISTINCT FROM OLD."runtime_instance_id"
         OR NEW."command_id" IS DISTINCT FROM OLD."command_id" OR NEW."candidate_id" IS DISTINCT FROM OLD."candidate_id"
         OR NEW."tool_revision_id" IS DISTINCT FROM OLD."tool_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
         OR NEW."arguments" IS DISTINCT FROM OLD."arguments" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
@@ -7003,36 +7016,33 @@ DECLARE
     has_evidence BOOLEAN;
 BEGIN
     IF TG_OP = 'UPDATE' AND (
-        NEW."authorization_principal_id" IS DISTINCT FROM OLD."authorization_principal_id"
-        OR NEW."authorization_actor_kind" IS DISTINCT FROM OLD."authorization_actor_kind"
+        NEW."authorization_actor_kind" IS DISTINCT FROM OLD."authorization_actor_kind"
+        OR NEW."authorization_execution_subject" IS DISTINCT FROM OLD."authorization_execution_subject"
         OR NEW."authorization_coordinates" IS DISTINCT FROM OLD."authorization_coordinates"
         OR NEW."authorization_decision_digests" IS DISTINCT FROM OLD."authorization_decision_digests"
-        OR NEW."authorization_membership_revision" IS DISTINCT FROM OLD."authorization_membership_revision"
         OR NEW."authorization_assignment_digest" IS DISTINCT FROM OLD."authorization_assignment_digest"
         OR NEW."authorization_evidence_digest" IS DISTINCT FROM OLD."authorization_evidence_digest"
     ) THEN
         RAISE EXCEPTION 'ToolInvocation authorization evidence is immutable';
     END IF;
 
-    has_evidence := NEW."authorization_principal_id" IS NOT NULL
-        OR NEW."authorization_actor_kind" IS NOT NULL
+    has_evidence := NEW."authorization_actor_kind" IS NOT NULL
+        OR NEW."authorization_execution_subject" IS NOT NULL
         OR NEW."authorization_coordinates" IS NOT NULL
         OR cardinality(NEW."authorization_decision_digests") > 0
-        OR NEW."authorization_membership_revision" IS NOT NULL
         OR NEW."authorization_assignment_digest" IS NOT NULL
         OR NEW."authorization_evidence_digest" IS NOT NULL;
 
     IF NEW."run_id" IS NULL THEN
         IF TG_OP = 'INSERT' OR has_evidence THEN
-            IF NEW."authorization_principal_id" IS NULL
-                OR btrim(NEW."authorization_principal_id") = ''
-                OR NEW."authorization_actor_kind" IS DISTINCT FROM 'user'::"ToolInvocationAuthorizationActorKind"
+            IF NEW."agent_identity_id" IS NOT NULL
+                OR NEW."authorization_actor_kind" IS NOT NULL
+                OR NEW."authorization_execution_subject" IS NOT NULL
                 OR NEW."authorization_coordinates" IS NULL
                 OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
                 OR jsonb_array_length(NEW."authorization_coordinates") = 0
                 OR NEW."authorization_decision_digests" IS NULL
                 OR cardinality(NEW."authorization_decision_digests") = 0
-                OR NEW."authorization_membership_revision" IS NOT NULL
                 OR NEW."authorization_assignment_digest" IS NOT NULL
                 OR NEW."authorization_evidence_digest" IS NULL
                 OR NEW."authorization_evidence_digest" !~ '^sha256:[0-9a-f]{64}$'
@@ -7055,16 +7065,28 @@ BEGIN
     END IF;
 
     IF TG_OP = 'INSERT' OR has_evidence THEN
-        IF NEW."authorization_principal_id" IS NULL
-            OR btrim(NEW."authorization_principal_id") = ''
-            OR NEW."authorization_actor_kind" IS NULL
+        IF NEW."agent_identity_id" IS NULL
+            OR btrim(NEW."agent_identity_id") = ''
+            OR NEW."authorization_actor_kind" IS DISTINCT FROM 'workload'::"ToolInvocationAuthorizationActorKind"
+            OR NEW."authorization_execution_subject" IS NULL
+            OR jsonb_typeof(NEW."authorization_execution_subject") <> 'object'
+            OR NEW."authorization_execution_subject"->>'siloId' IS DISTINCT FROM NEW."silo_id"
+            OR NEW."authorization_execution_subject"->>'agentIdentityId' IS DISTINCT FROM NEW."agent_identity_id"
+            OR NEW."authorization_execution_subject"->>'principalId' IS DISTINCT FROM NEW."principal_id"
+            OR NEW."authorization_execution_subject"->'identity'->>'agentIdentityId' IS DISTINCT FROM NEW."agent_identity_id"
+            OR NEW."authorization_execution_subject"->'identity'->>'principalId' IS DISTINCT FROM NEW."principal_id"
+            OR NEW."authorization_execution_subject"->'membership'->>'principalId' IS DISTINCT FROM NEW."principal_id"
+            OR NEW."authorization_execution_subject"->'capability'->>'agentIdentityId' IS DISTINCT FROM NEW."agent_identity_id"
+            OR NEW."authorization_execution_subject"->'capability'->>'capabilitySetDigest' !~ '^sha256:[0-9a-f]{64}$'
+            OR NEW."authorization_execution_subject"->'runScope'->>'runId' IS DISTINCT FROM NEW."run_id"
+            OR NEW."authorization_execution_subject"->'runScope'->>'attempt' IS DISTINCT FROM NEW."attempt"::TEXT
+            OR NEW."authorization_execution_subject"->'runScope'->>'agentServiceId' IS DISTINCT FROM NEW."agent_service_id"
+            OR NEW."authorization_execution_subject"->'runScope'->>'agentRevisionId' IS DISTINCT FROM NEW."agent_revision_id"
             OR NEW."authorization_coordinates" IS NULL
             OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
             OR jsonb_array_length(NEW."authorization_coordinates") = 0
             OR NEW."authorization_decision_digests" IS NULL
             OR cardinality(NEW."authorization_decision_digests") = 0
-            OR NEW."authorization_membership_revision" IS NULL
-            OR NEW."authorization_membership_revision" < 1
             OR NEW."authorization_assignment_digest" IS NULL
             OR NEW."authorization_assignment_digest" !~ '^sha256:[0-9a-f]{64}$'
             OR NEW."authorization_evidence_digest" IS NULL
@@ -7376,11 +7398,11 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check
 		("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
 	);
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" CHECK (
-        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
+        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("principal_id") <> '' AND
         (("mcp_task_id" IS NULL AND btrim("run_id") <> '' AND "attempt" > 0 AND
-          btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '') OR
+          btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("agent_identity_id") <> '') OR
          (btrim("mcp_task_id") <> '' AND "run_id" IS NULL AND "attempt" IS NULL AND
-          "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND NOT "approval_required")) AND
+          "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND "agent_identity_id" IS NULL AND NOT "approval_required")) AND
         btrim("runtime_instance_id") <> '' AND btrim("command_id") <> '' AND btrim("candidate_id") <> '' AND
         btrim("tool_revision_id") <> '' AND btrim("tool_invocation_id") <> '' AND
         jsonb_typeof("arguments") = 'object' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
@@ -7719,7 +7741,6 @@ ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_prom
     );
 -- Partial indexes
 CREATE UNIQUE INDEX "memory_fact_catalog_single_successor_key" ON "memory_fact_catalog"("supersedes_fact_id") WHERE "supersedes_fact_id" IS NOT NULL;
-
 -- Triggers
 CREATE TRIGGER "agent_revisions_immutable"
     BEFORE UPDATE ON "agent_revisions"

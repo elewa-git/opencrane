@@ -10,7 +10,34 @@ import { PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes, type Pers
 /** Builds the server-side command the personal admission port takes. */
 function _Command(): Parameters<ReturnType<typeof __CreatePersonalRunAdmissionPortWithGate>["admitPersonalRun"]>[0]
 {
-	return { siloId: "silo-1", executionIssuer: "https://issuer.test", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
+	return { siloId: "silo-1", requesterIssuer: "https://issuer.test", requesterSubjectId: "user-1", requesterAuthenticatedAt: "2026-09-01T00:00:00.000Z", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
+}
+
+/** Provides a target subject producer; individual admission tests do not need to inspect its evidence. */
+function _ExecutionSubjectAuthority(): never
+{
+	return {
+		issue: vi.fn(async function _issue(command)
+		{
+			return {
+				outcome: "loaded",
+				value: {
+					schemaVersion: 1,
+					siloId: command.siloId,
+					agentIdentityId: "identity-1",
+					principalId: "principal-1",
+					identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: command.siloId, headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-09-01T00:00:00.000Z" },
+					membership: { principalId: "principal-1", siloId: command.siloId, revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-09-01T00:00:00.000Z" },
+					capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-09-01T00:00:00.000Z" },
+					runScope: { siloId: command.siloId, runId: command.runId, attempt: 1, agentServiceId: command.agentServiceId, agentRevisionId: "revision-1" },
+					computerScope: { siloId: command.siloId, computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+					requester: { siloId: command.siloId, requesterPrincipalId: "requester-1", requestIdempotencyKey: command.requester.requestIdempotencyKey, authenticatedAt: command.requester.authenticatedAt },
+					admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-09-01T00:00:00.000Z" },
+				},
+			} as const;
+		}),
+		load: vi.fn(),
+	} as never;
 }
 
 /** Builds a default set of dependencies, so each test can replace just one of them. */
@@ -29,7 +56,7 @@ describe("personal run admission", function _describePersonalRunAdmission()
 {
 	it("returns an original snapshot before a later conversation change is consulted", async function _returnsDurableDuplicateFirst()
 	{
-		const repository = { resolve: vi.fn(async function _resolve() { return { outcome: PersonalRunIdempotencyOutcomes.Idempotent, runId: "original-run" } as const; }), resolveConversation: vi.fn(async function _resolveConversation() { return null; }), hasActiveConversationRun: vi.fn(async function _hasActiveConversationRun() { return false; }) };
+		const repository = { resolve: vi.fn(async function _resolve() { return { outcome: PersonalRunIdempotencyOutcomes.Idempotent, runId: "original-run" } as const; }), resolveConversation: vi.fn(async function _resolveConversation() { return { agentServiceId: "service-1" }; }), hasActiveConversationRun: vi.fn(async function _hasActiveConversationRun() { return false; }) };
 		const assemble = vi.fn();
 		const port = __CreatePersonalRunAdmissionPortWithGate(_Dependencies({
 			repository,
@@ -37,7 +64,7 @@ describe("personal run admission", function _describePersonalRunAdmission()
 		}));
 
 		await expect(port.admitPersonalRun(_Command())).resolves.toEqual({ outcome: PersonalRunAdmissionOutcomes.Idempotent, runId: "original-run" });
-		expect(repository.resolveConversation).not.toHaveBeenCalled();
+		expect(repository.resolveConversation).toHaveBeenCalledTimes(1);
 		expect(assemble).not.toHaveBeenCalled();
 	});
 

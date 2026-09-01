@@ -45,7 +45,7 @@ export class PrismaUpgradeSessionProposalUnitOfWork implements UpgradeSessionPro
 		const unitOfWork = this;
 		try
 		{
-			return await ___DoWithTrace("personal_configuration.propose", { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId, sourceRunId: snapshot.runId }, async function _TraceProposal()
+			return await ___DoWithTrace("personal_configuration.propose", { siloId: snapshot.siloId, userId: snapshot.executionSubject.principalId, sourceRunId: snapshot.runId }, async function _TraceProposal()
 			{
 				return unitOfWork.runTransaction(candidate, snapshot, now);
 			});

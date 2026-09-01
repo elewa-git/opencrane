@@ -14,7 +14,7 @@ import { _ElicitationPurposeStrategies } from "./elicitation-purpose-strategies"
 import type { ElicitationPurposeRequest, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types";
 import { _Projection, _ProjectionAt, _PublicPurpose, _PublicState, _Record } from "./elicitation-prisma-mapping";
 import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types";
-import { _BuildMemoryPermissionPayload, _BuildMemoryPermissionPayloadForClaimedInvocation, _MemoryPurposeMatchesReceipt, _MemoryQueryDigest } from "./personal-memory-permission-payload";
+import { _BuildMemoryPermissionPayload, _BuildMemoryPermissionPayloadForClaimedInvocation, _InvocationExecutionPrincipalId, _MemoryPurposeMatchesReceipt, _MemoryQueryDigest } from "./personal-memory-permission-payload";
 import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator";
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
@@ -93,7 +93,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			conversationId: snapshot.conversationId as string,
 			runId: payload.runId,
 			attempt: payload.attempt,
-			assignedParticipantId: invocation.subjectId,
+			assignedParticipantId: payload.executionSubjectId,
 			requestKey: `memory-permission:${invocation.id}`,
 			purpose: ElicitationPurposes.PersonalMemoryPermission,
 			body,
@@ -110,7 +110,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	async verifyMemoryPermission(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>
 	{
 		const expectedPayload = _BuildMemoryPermissionPayloadForClaimedInvocation(invocation, snapshot);
-		if (expectedPayload === null || !await this._toolInvocations.verifyActiveDispatchClaim(invocation, claim, now))
+		const executionPrincipalId = _InvocationExecutionPrincipalId(invocation);
+		if (expectedPayload === null || executionPrincipalId === null || !await this._toolInvocations.verifyActiveDispatchClaim(invocation, claim, now))
 			return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
 		const receipt = await this._transaction.personalMemoryPermissionReceipt.findUnique({ where: { toolInvocationId: invocation.id }, include: { request: true } });
 		if (receipt === null)
@@ -122,15 +123,15 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			&& receipt.toolInvocationRevision + 1 === invocation.revision
 			&& receipt.runId === invocation.runId
 			&& receipt.attempt === invocation.attempt
-			&& receipt.executionSubjectId === invocation.subjectId
-			&& receipt.respondingSubjectId === invocation.subjectId
+			&& receipt.executionSubjectId === executionPrincipalId
+			&& receipt.respondingSubjectId === executionPrincipalId
 			&& receipt.queryDigest === expectedPayload.queryDigest
 			&& receipt.inputSnapshotDigest === expectedPayload.inputSnapshotDigest
 			&& receipt.personaRevisionId === expectedPayload.personaRevisionId
 			&& request.purpose === ElicitationPurpose.PersonalMemoryPermission
 			&& request.state === ElicitationRequestState.Answered
-			&& request.assignedParticipantId === invocation.subjectId
-			&& request.resolvedBy === invocation.subjectId
+			&& request.assignedParticipantId === executionPrincipalId
+			&& request.resolvedBy === executionPrincipalId
 			&& request.purposePayloadDigest === receipt.purposeDigest
 			&& _MemoryPurposeMatchesReceipt(request.purposePayload, receipt);
 		return { outcome: matches ? PersonalMemoryPermissionVerificationOutcomes.Authorized : PersonalMemoryPermissionVerificationOutcomes.Denied };
@@ -291,7 +292,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			return false;
 		const decision = response.approved ? DeferredToolDecisionKinds.Approved : DeferredToolDecisionKinds.Denied;
 		const approvedArguments = response.approved ? approval.reviewedToolArguments as JsonValue : undefined;
-		const result = await __DecideDeferredToolRequest(this._transaction, { approvalRequestId: approval.id, siloId: approval.siloId, subjectId, decision, arguments: approvedArguments, decidedBy: subjectId, now });
+		const result = await __DecideDeferredToolRequest(this._transaction, { approvalRequestId: approval.id, siloId: approval.siloId, reviewerSubjectId: subjectId, decision, arguments: approvedArguments, decidedBy: subjectId, now });
 		return result.outcome === DeferredToolDecisionOutcomes.Approved || result.outcome === DeferredToolDecisionOutcomes.Denied || result.outcome === DeferredToolDecisionOutcomes.AlreadyDecided;
 	}
 
@@ -304,15 +305,18 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		if (payload === null || __DigestCanonicalJson(request.purposePayload as JsonValue) !== request.purposePayloadDigest)
 			return false;
 		const invocation = await this._toolInvocations.findById(payload.toolInvocationId);
-		const snapshot = await this._transaction.runInputSnapshot.findUnique({ where: { runId: request.runId } });
+		const snapshot = await this._transaction.runInputSnapshot.findUnique({ where: { runId_attempt_digest: { runId: request.runId, attempt: request.attempt, digest: payload.inputSnapshotDigest } } });
 		if (invocation === null || snapshot === null)
+			return false;
+		const executionPrincipalId = _InvocationExecutionPrincipalId(invocation);
+		if (executionPrincipalId === null)
 			return false;
 		const exact = invocation.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION
 			&& invocation.state === ToolInvocationStates.AwaitingApproval
 			&& invocation.revision === payload.toolInvocationRevision
 			&& invocation.runId === request.runId
 			&& invocation.attempt === request.attempt
-			&& invocation.subjectId === subjectId
+			&& executionPrincipalId === subjectId
 			&& request.assignedParticipantId === subjectId
 			&& payload.executionSubjectId === subjectId
 			&& payload.queryDigest === _MemoryQueryDigest(invocation.effectiveArguments as unknown as JsonValue)
@@ -364,14 +368,16 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			|| payload.expiresAt !== request.expiresAt.toISOString())
 			throw new Error("personal-memory permission expiry lost its protected payload fence");
 		const invocation = await this._toolInvocations.findById(payload.toolInvocationId);
+		const executionPrincipalId = invocation === null ? null : _InvocationExecutionPrincipalId(invocation);
 		if (invocation === null
+			|| executionPrincipalId === null
 			|| invocation.id !== payload.toolInvocationId
 			|| invocation.toolRevisionId !== PERSONAL_MEMORY_RECALL_TOOL_REVISION
 			|| invocation.state !== ToolInvocationStates.AwaitingApproval
 			|| invocation.revision !== payload.toolInvocationRevision
 			|| invocation.runId !== payload.runId
 			|| invocation.attempt !== payload.attempt
-			|| invocation.subjectId !== payload.executionSubjectId)
+			|| executionPrincipalId !== payload.executionSubjectId)
 			throw new Error("personal-memory permission expiry lost its invocation fence");
 		if (!await this._toolInvocations.reject({ invocationId: payload.toolInvocationId, now, failureCode: "memory_permission_expired" }))
 			throw new Error("personal-memory permission expiry lost its invocation fence");

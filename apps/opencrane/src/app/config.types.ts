@@ -2,6 +2,19 @@ import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/serv
 import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
 import type { FleetOrganizationMembershipHttpClientConfig } from "@opencrane/backend/server/infra/organization-membership-gateway";
 
+/** TLS-only KurrentDB coordinates owned by the HistoryStore deployment boundary. */
+export interface OpenCraneHistoryStoreConfig
+{
+	/** File path of the mounted KurrentDB certificate authority bundle. */
+	readonly caCertificatePath: string;
+	/** Silo-local KurrentDB host and port without a scheme or credentials. */
+	readonly endpoint: string;
+	/** File path of the mounted least-privilege KurrentDB service password. */
+	readonly passwordPath: string;
+	/** File path of the mounted least-privilege KurrentDB service username. */
+	readonly usernamePath: string;
+}
+
 /**
  * Selects the sole authority for organisation directory, invitation, seat, and payment decisions.
  * The application composes one branch at startup, so request data cannot switch modes or trigger a
@@ -103,6 +116,8 @@ export interface OpenCraneProcessConfig
 {
 	/** Namespace in which OIDC authentication resources are resolved. */
 	readonly authWatchNamespace: string;
+	/** TLS-only KurrentDB history connection settings frozen for this process. */
+	readonly historyStore: OpenCraneHistoryStoreConfig;
 	/** Port exposed only to platform workloads. */
 	readonly internalPort: number;
 	/** Workload-facing identity and dispatch configuration. */

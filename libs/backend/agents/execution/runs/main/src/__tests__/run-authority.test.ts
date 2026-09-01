@@ -1,13 +1,14 @@
 import type { AgentRevisionId, AgentRun, AgentRunId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
+import type { RunInputSnapshot } from "@opencrane/contracts";
 import { __StartNextRunAttempt } from "../run-authority";
 import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand } from "../run-authority.types";
 
 /** Creates one participant-authorized retry command. */
 function _command(): AtomicStartNextRunAttemptCommand
 {
-	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", requestedByPrincipalId: "principal-1", acceptedAt: "2026-07-18T01:00:00.000Z", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1" };
+	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", requestedByPrincipalId: "principal-1", acceptedAt: "2026-07-18T01:00:00.000Z", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", nextInputSnapshot: _nextSnapshot() };
 }
 
 /** Creates a failed first attempt for one logical run. */
@@ -20,18 +21,25 @@ function _run(): AgentRun
 		agentRevisionId: "revision-1",
 		conversationId: "conversation-1",
 		trigger: "interactive",
-		delegatedUserId: "user-1",
+		executionSubject: { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-07-18T00:00:00.000Z" }, membership: { principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-07-18T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-07-18T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { siloId: "silo-1", requesterPrincipalId: "requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-18T00:00:00.000Z" }, admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-07-18T00:00:00.000Z" } },
 		requestIdempotencyKey: "request-1",
 		lineage: { rootRunId: "run-1", parentRunId: null },
 		attempt: 1,
 		state: "failed",
-		effectiveContractDigest: "sha256:contract",
 		inputSnapshotDigest: "sha256:input",
 		acceptedAt: "2026-07-18T00:00:00.000Z",
 		startedAt: "2026-07-18T00:00:01.000Z",
 		finishedAt: "2026-07-18T00:00:02.000Z",
 		terminalReason: "runtime_failure",
 	};
+}
+
+/** Creates a fresh immutable retry snapshot with the next lease-scoped subject. */
+function _nextSnapshot(): RunInputSnapshot
+{
+	const previousSubject = _run().executionSubject;
+	const executionSubject = { ...previousSubject, runScope: { ...previousSubject.runScope, attempt: 2 }, computerScope: { ...previousSubject.computerScope, leaseId: "lease-2", leaseGeneration: 2 } };
+	return { runId: "run-1", attempt: 2, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, executionSubject, promptCompilerVersion: "prompt-v1", digest: `sha256:${"e".repeat(64)}`, compiledAt: "2026-07-18T01:00:00.000Z" };
 }
 
 /** In-memory compare-and-swap adapter for attempt-concurrency tests. */
@@ -115,6 +123,8 @@ class _RunRepository implements AgentRunAuthorityRepository
 		this.run = {
 			...this.run,
 			attempt: this.run.attempt + 1,
+			executionSubject: command.nextInputSnapshot.executionSubject,
+			inputSnapshotDigest: command.nextInputSnapshot.digest,
 			state: "accepted",
 			acceptedAt: command.acceptedAt,
 			startedAt: null,

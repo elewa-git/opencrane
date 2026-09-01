@@ -29,29 +29,32 @@ export class PrismaRuntimeMembershipEligibilityAuthority implements RuntimeMembe
 	/** @inheritdoc */
 	async isEligible(command: RuntimeMembershipEligibilityCommand): Promise<boolean>
 	{
-		const identity = command.identity;
-		if (identity.fleetMembershipIssuer !== this.config.trustedIssuerId)
+		const subject = command.executionSubject;
+		if (subject.siloId !== command.siloId
+			|| subject.principalId !== subject.identity.principalId
+			|| subject.principalId !== subject.membership.principalId
+			|| subject.membership.siloId !== command.siloId
+			|| subject.identity.siloId !== command.siloId)
 			return false;
 		const repository = new PrismaFleetMembershipAuthorityRepository(this.transaction);
 		const result = await __VerifyCurrentFleetMembershipEvidence(repository, this.config.verifier, {
 			trustedIssuerId: this.config.trustedIssuerId,
 			siloId: command.siloId,
-			subjectId: identity.executionSubjectId,
-			assertionId: identity.fleetMembershipAssertionId,
+			subjectId: subject.principalId,
+			assertionId: subject.membership.assertionId,
 			nowEpochMs: command.nowEpochMs,
 			maximumStalenessMs: this.config.maximumStalenessMs,
 		});
 		if (result.outcome === "denied")
 			return false;
-		const trustedUntilEpochMs = Date.parse(identity.fleetMembershipTrustedUntil);
+		const trustedUntilEpochMs = Date.parse(subject.membership.trustedUntil);
 		return Number.isFinite(trustedUntilEpochMs)
 			&& trustedUntilEpochMs >= command.nowEpochMs
-			&& result.evidence.issuerId === identity.fleetMembershipIssuer
-			&& result.evidence.issuerKeyId === identity.fleetMembershipIssuerKeyId
-			&& result.evidence.revision === identity.fleetMembershipRevision
-			&& result.evidence.assertionId === identity.fleetMembershipAssertionId
-			&& result.evidence.subjectId === identity.executionSubjectId
-			&& result.evidence.payloadDigest === identity.fleetMembershipPayloadDigest
+			&& result.evidence.issuerId === this.config.trustedIssuerId
+			&& result.evidence.revision === subject.membership.revision
+			&& result.evidence.assertionId === subject.membership.assertionId
+			&& result.evidence.subjectId === subject.principalId
+			&& result.evidence.payloadDigest === subject.membership.payloadDigest
 			&& result.evidence.trustedUntilEpochMs === trustedUntilEpochMs;
 	}
 }

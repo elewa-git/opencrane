@@ -73,7 +73,14 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	{
 		throw new Error(`prompt compiler ${PROMPT_COMPILER_VERSION} cannot compile snapshot version ${snapshot.promptCompilerVersion}`);
 	}
-	if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("prompt compiler requires a positive live attempt");
+	if (!Number.isSafeInteger(snapshot.attempt) || snapshot.attempt < 1)
+	{
+		throw new Error("prompt compiler requires a positive snapshot attempt");
+	}
+	if (attempt !== snapshot.attempt)
+	{
+		throw new Error("prompt compiler requires the live attempt to match the immutable snapshot attempt");
+	}
 
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
@@ -86,7 +93,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 3. Assemble instructions and budget deterministically, then seal the payload with its digest.
 	const instructions = _assembleInstructions(personaInstructions, artifactSummaries, skillSummaries);
 	const budget = _resolveBudget(snapshot.budgetPolicy);
-	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt, instructions, messages, tools, model, budget };
+	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt: snapshot.attempt, instructions, messages, tools, model, budget };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
 

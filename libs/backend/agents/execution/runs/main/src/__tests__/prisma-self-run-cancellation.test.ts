@@ -19,8 +19,8 @@ describe("Prisma owner run cancellation", function _Suite()
 	it("hides a foreign run before consulting product authorization", async function _HidesForeignRun()
 	{
 		const dependencies = _Dependencies(false, true);
-		await expect(dependencies.repository.requestOwned({ runId: "run-1", expectedAttempt: 3, siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }, new Date(1))).resolves.toEqual({ outcome: SelfRunCancellationOutcomes.NotFound });
-		expect(dependencies.findFirst).toHaveBeenCalledWith({ where: { id: "run-1", siloId: "silo-1", delegatedUserId: { equals: "user-1" } }, select: { id: true } });
+		await expect(dependencies.repository.requestOwned({ runId: "run-1", expectedAttempt: 3, siloId: "silo-1", principalId: "principal-1" }, new Date(1))).resolves.toEqual({ outcome: SelfRunCancellationOutcomes.NotFound });
+		expect(dependencies.findFirst).toHaveBeenCalledWith({ where: { id: "run-1", siloId: "silo-1", principalId: { equals: "principal-1" } }, select: { id: true } });
 		expect(dependencies.admitPrincipal).not.toHaveBeenCalled();
 	});
 
@@ -28,7 +28,7 @@ describe("Prisma owner run cancellation", function _Suite()
 	{
 		const dependencies = _Dependencies(true, false);
 		const cancel = vi.spyOn(dependencies.repository, "requestCancellation");
-		await expect(dependencies.repository.requestOwned({ runId: "run-1", expectedAttempt: 3, siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }, new Date(1))).resolves.toEqual({ outcome: SelfRunCancellationOutcomes.NotFound });
+		await expect(dependencies.repository.requestOwned({ runId: "run-1", expectedAttempt: 3, siloId: "silo-1", principalId: "principal-1" }, new Date(1))).resolves.toEqual({ outcome: SelfRunCancellationOutcomes.NotFound });
 		expect(dependencies.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1", resource: { kind: "agent-run", id: "run-1" }, action: "cancel" }));
 		expect(cancel).not.toHaveBeenCalled();
 	});
@@ -37,7 +37,7 @@ describe("Prisma owner run cancellation", function _Suite()
 	{
 		const dependencies = _Dependencies(true, true);
 		vi.spyOn(dependencies.repository, "requestCancellation").mockResolvedValue({ status: "cancelling", runId: "run-1", attempt: 3 });
-		await expect(dependencies.repository.requestOwned({ runId: "run-1", expectedAttempt: 3, siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }, new Date(1))).resolves.toEqual({ outcome: SelfRunCancellationOutcomes.Cancelling, runId: "run-1", attempt: 3 });
+		await expect(dependencies.repository.requestOwned({ runId: "run-1", expectedAttempt: 3, siloId: "silo-1", principalId: "principal-1" }, new Date(1))).resolves.toEqual({ outcome: SelfRunCancellationOutcomes.Cancelling, runId: "run-1", attempt: 3 });
 		expect(dependencies.repository.requestCancellation).toHaveBeenCalledWith({ runId: "run-1", expectedAttempt: 3 }, new Date(1));
 	});
 });

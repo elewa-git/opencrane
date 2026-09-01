@@ -100,6 +100,123 @@
         "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     },
+    "historyStore": {
+      "type": "object",
+      "properties": {
+        "kurrentdb": {
+          "type": "object",
+          "required": ["bootstrapOps", "serviceCredential", "bootstrap"],
+          "properties": {
+            "bootstrapOps": {
+              "type": "object",
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": { "type": "string", "maxLength": 253 }
+              }
+            },
+            "serviceCredential": {
+              "type": "object",
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": { "type": "string", "maxLength": 253 }
+              }
+            },
+            "bootstrap": {
+              "type": "object",
+              "required": ["image", "resources", "activeDeadlineSeconds", "backoffLimit", "timeoutSeconds"],
+              "properties": {
+                "image": {
+                  "type": "object",
+                  "required": ["repository", "digest", "pullPolicy"],
+                  "properties": {
+                    "repository": { "type": "string" },
+                    "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+                    "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "required": ["requests", "limits"],
+                  "properties": {
+                    "requests": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    },
+                    "limits": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    }
+                  }
+                },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+                "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
+                "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3599 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "agentSandbox": {
+      "type": "object",
+      "required": ["enabled", "namespace", "runtimeClassName", "serviceAccountName", "profiles"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "runtimeClassName": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "serviceAccountName": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "poolName", "image", "resources"],
+            "properties": {
+              "name": { "type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+              "poolName": { "type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+              "image": {
+                "type": "object",
+                "required": ["repository", "digest", "pullPolicy"],
+                "properties": {
+                  "repository": { "type": "string", "minLength": 1 },
+                  "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+                  "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+                }
+              },
+              "resources": {
+                "type": "object",
+                "required": ["requests", "limits"],
+                "properties": {
+                  "requests": {
+                    "type": "object",
+                    "required": ["cpu", "memory"],
+                    "properties": {
+                      "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                      "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                    }
+                  },
+                  "limits": {
+                    "type": "object",
+                    "required": ["cpu", "memory"],
+                    "properties": {
+                      "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                      "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "agentController": {
       "type": "object",
       "required": ["enabled", "image", "claimLeaseSeconds", "assignmentTtlSeconds", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort", "runtimeQuota", "runtimeProfile", "warmRuntime"],

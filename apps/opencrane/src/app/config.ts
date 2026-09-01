@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -69,6 +69,31 @@ function _readRequiredAbsolutePath(name: string): string
 	if (!value.startsWith("/"))
 		throw new Error(`${name} must be an absolute path`);
 	return value;
+}
+
+/** Read a KurrentDB endpoint without accepting credentials, paths, or a transport override. */
+function _readHistoryStoreEndpoint(): string
+{
+	const value = _readRequired("OPENCRANE_HISTORY_STORE_ENDPOINT");
+	if (value.includes("://") || value.includes("/") || value.includes("?") || value.includes("#") || value.includes("@"))
+		throw new Error("OPENCRANE_HISTORY_STORE_ENDPOINT must be one credential-free host:port without a scheme, path, or query");
+	let endpoint: URL;
+	try { endpoint = new URL(`kurrentdb://${value}`); }
+	catch { throw new Error("OPENCRANE_HISTORY_STORE_ENDPOINT must be one credential-free host:port without a scheme, path, or query"); }
+	if (!endpoint.hostname || !endpoint.port || Number(endpoint.port) < 1)
+		throw new Error("OPENCRANE_HISTORY_STORE_ENDPOINT must be one credential-free host:port without a scheme, path, or query");
+	return endpoint.host;
+}
+
+/** Read the complete mounted KurrentDB HistoryStore connection contract. */
+function _readHistoryStoreConfig(): OpenCraneHistoryStoreConfig
+{
+	return {
+		caCertificatePath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH"),
+		endpoint: _readHistoryStoreEndpoint(),
+		passwordPath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_PASSWORD_PATH"),
+		usernamePath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_USERNAME_PATH"),
+	};
 }
 
 /** Read the maximum artifact-preprocessor output size; the server-side promotion broker uses the same limit. */
@@ -189,6 +214,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
+		historyStore: _readHistoryStoreConfig(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		publicPort: Number(process.env.PORT ?? "8080"),
 			runtime: {

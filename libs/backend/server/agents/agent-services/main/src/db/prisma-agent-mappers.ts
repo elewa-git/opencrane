@@ -1,3 +1,4 @@
+import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
 import { AgentServiceKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentRun, type AgentRunState, type AgentRunTerminalReason, type AgentRunTrigger, type AgentService, type AgentServiceKind, type AgentServiceState, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
 import type { AgentRevisionRow, AgentRunRow, AgentServiceRow } from "./prisma-agent-mappers.types";
@@ -146,6 +147,9 @@ export function _mapRevision(row: AgentRevisionRow): AgentRevision
 /** Maps one durable Prisma run row to the dependency-light run-history contract. */
 export function _mapRun(row: AgentRunRow): AgentRun
 {
+	const parsedSubject = ___ExecutionSubjectSchema.safeParse(row.executionSubject);
+	if (!parsedSubject.success || parsedSubject.data.agentIdentityId !== row.agentIdentityId || parsedSubject.data.principalId !== row.principalId)
+		throw new Error("invalid persisted execution subject for agent run history");
 	return {
 		id: row.id,
 		siloId: row.siloId,
@@ -153,12 +157,11 @@ export function _mapRun(row: AgentRunRow): AgentRun
 		agentRevisionId: row.agentRevisionId,
 		conversationId: row.conversationId,
 		trigger: _runTrigger(row.trigger),
-		delegatedUserId: row.delegatedUserId,
+		executionSubject: parsedSubject.data,
 		requestIdempotencyKey: row.requestIdempotencyKey,
 		lineage: { rootRunId: row.rootRunId, parentRunId: row.parentRunId },
 		attempt: row.attempt,
 		state: _runState(row.state),
-		effectiveContractDigest: row.effectiveContractDigest,
 		inputSnapshotDigest: row.inputSnapshotDigest,
 		acceptedAt: row.acceptedAt.toISOString(),
 		startedAt: row.startedAt?.toISOString() ?? null,

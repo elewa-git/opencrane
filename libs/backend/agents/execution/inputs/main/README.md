@@ -8,7 +8,7 @@ This package is part of the **shared execution flow** used by both personal and 
 Before an agent runtime executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
 **`RunInputSnapshot`**: which messages, which persona, which memory query coordinates, which tools and budgets,
-and which verified identity. This package owns the **assembly** of that snapshot: it gathers each
+and which evidence-bound execution subject. This package owns the **assembly** of that snapshot: it gathers each
 input from an injected authority, validates the combination, and hands the finished snapshot to the
 run-admission transaction that persists it. After that instant nothing about the run's input can
 change — a retry, an audit, or a replay all see the exact same record, identified by its digest
@@ -31,7 +31,7 @@ change — a retry, an audit, or a replay all see the exact same record, identif
 
 **In this flow:** [execution/runs](../../runs/main/README.md) *(owns the admission transaction, the digest
 function, and the durable rows)* · [membership](../../../../server/iam/membership/main/README.md)
-*(supplies the signed fleet-membership evidence behind the identity envelope)*
+*(supplies signed fleet-membership evidence consumed by the execution-subject authority)*
 
 Every input is loaded through a port (`RunAuthoritySource`, `ApprovedPersonaSource`, and the other
 named sources) inside the
@@ -55,23 +55,14 @@ caller input.
 
 - `__AssembleRunInputSnapshot(command, authorities)` — the end-to-end assembly: validate → load all
   sources inside the admission transaction → compile, digest, and persist.
-- `ManagedExecutionIdentityEnvelopeSource` — adapts the agent-service authority's current signed
-  fleet-membership and effective non-personal boundary evidence into a tagged `service` identity. Its
-  canonical `agent-service:<id>` principal must match the admitted service; a requester never
-  becomes that service's execution identity.
-- `__CreatePrismaManagedSessionAssemblyAuthorities` — composes the package-private production
-  readers with the caller-owned identity and final skill-eligibility authorities.
-- `__CreatePrismaPersonalSessionAssemblyAuthorities` — composes the corresponding personal-run
-  readers, including one transaction-scoped personal-memory repository shared by the preference
-  and memory-scope sources. It freezes only the verified user's active Cognee dataset coordinates.
+- `ExecutionSubjectAuthority` — injects one current AgentIdentity, Principal, membership,
+  capability, run, and ConversationComputer-lease proof. A requester remains provenance, never
+  an execution identity.
+- `__CreatePrismaSessionAssemblyAuthorities` — composes the production readers around that subject
+  authority and an explicit run policy. It freezes only the verified principal's active Cognee
+  dataset coordinates when that policy allows personal memory.
   Admission never stores the recall query, reads fact content, or calls Cognee. The model chooses a
   query only through the approval-required `memory_recall` tool; safe content delivery is deferred to #601.
-- `PersonalExecutionIdentityEnvelopeSource` — selects the sole current personal-scope assertion
-  from signed fleet membership, re-reads that exact verified revision after its high-watermark is
-  advanced, admits the current exact `AgentService/Invoke` grant through the central authorization
-  authority, and includes that decision evidence in the frozen capability ceiling. Browser input
-  never selects the organisation, assertion, or capabilities. The frozen digest limits the admitted
-  run; it is not a reusable grant, and later external effects recheck current authorization.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
@@ -97,23 +88,23 @@ the sealed snapshot; memory dataset coordinates never enter compiled input. It
 cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
 non-canonical digest, or any single source refusal denies the run.
 
-The OpenCrane app composes both managed and personal admission variants. The participant-owned
-conversation route derives the subject and silo from the authenticated session and host, then the
-personal assembly path re-resolves the open `agent_session`, its AgentService, and the exact signed
-membership assertion inside the admission transaction. The message body contains only bounded
-content blocks and an idempotency key. The conversation ID comes from the route; user, silo, service,
-dataset and membership coordinates never come from the browser.
+The OpenCrane app composes one admission variant. The participant-owned conversation route derives
+requester provenance from the authenticated session and host; the injected subject authority then
+resolves the exact AgentIdentity, Principal, membership, capability, run, and computer lease inside
+the admission fence. The message body contains only bounded content blocks and an idempotency key.
+The conversation ID comes from the route; identity, principal, silo, service, dataset, and membership
+coordinates never come from the browser.
 
 There is no public run-start endpoint. Direct and group messages never enter this package; only an
 agent-session message or an internal managed trigger can request snapshot assembly.
 
 ## Dependency direction
 
-Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:agent-services`,
-`scope:artifacts`, `scope:authorization`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
-`scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. The
-agent-services dependency is one-way: this package consumes managed-service evidence but never
-decides service publication, membership, grant, or boundary attachment policy.
+Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:artifacts`,
+`scope:authorization`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
+`scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. It receives its
+execution subject through a narrow port and never decides identity, membership, grant, capability,
+or ConversationComputer-lease policy.
 
 ## See also
 

@@ -1,7 +1,6 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, AuthorizationBoundaryCoverage, AuthorizationBoundaryKind, PrincipalProvenance } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
-import { RunInputSnapshotIdentityKinds, type ManagedRunInputBoundaryAttachment } from "@opencrane/contracts";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityRepository } from "@opencrane/backend/server/iam/membership";
 import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
@@ -20,10 +19,7 @@ import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand
  * A managed agent acts as itself, not on behalf of whoever pressed run-now, so nothing about the
  * human requester reaches this class — the access it grants must be the agent's own.
  *
- * Called by: `ManagedExecutionIdentityEnvelopeSource` in
- * libs/backend/agents/execution/inputs/main/src/managed-execution-identity-envelope-source.ts;
- * constructed by `_CreateManagedExecutionEvidenceAuthority` in
- * `managed-execution-evidence.factory.ts`.
+ * Called by the target execution-subject composition while it rechecks managed-service evidence.
  */
 export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecutionEvidenceAuthority
 {
@@ -47,10 +43,11 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 	 * Re-reads everything a managed run's access depends on, inside the caller's transaction.
 	 *
 	 * In order: the revision must still be the published active revision of an active managed service
-	 * in this silo; the agent's principal must have exactly one signed membership assertion in the
+	 * in this silo; the service Principal must have exactly one signed membership assertion in the
 	 * issuer's newest revision, and that signature must verify and be within the staleness limit; the
 	 * revision must declare no personal boundary; and every declared boundary must be backed by a real
-	 * grant. Only then are the identity and capability digest built.
+	 * grant. Only then are the execution-subject prerequisites returned. This class cannot fabricate
+	 * an AgentIdentity head or ConversationComputer lease, so it never returns an ExecutionSubject.
 	 *
 	 * @param command - Silo, service, and the revision the caller believes is active.
 	 * @param transaction - The caller's open transaction and the admission time.
@@ -132,12 +129,12 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 		// 5. Sort each list before hashing, so database row order cannot change the evidence.
 		const attachments = _CanonicalAttachments(declared);
 		const attachmentDigest = __DigestCanonicalJson(attachments as unknown as JsonValue);
-		const capabilitySetDigest = __DigestCanonicalJson({
+		const effectiveContractDigest = __DigestCanonicalJson({
 			siloId: command.siloId,
 			agentServiceId: command.agentServiceId,
 			agentRevisionId: revision.id,
 			agentRevisionDigest: revision.digest,
-			executionSubjectId: principal,
+			principalId: principal,
 			fleetMembershipRevision: membership.evidence.revision,
 			fleetMembershipPayloadDigest: membership.evidence.payloadDigest,
 			authorizationDecisionDigests: admissions.map(admission => admission.evidence?.decisionDigest ?? "").sort(_CompareCanonicalCoordinate),
@@ -151,19 +148,25 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			outcome: "loaded",
 			value: {
 				identity: {
-					kind: RunInputSnapshotIdentityKinds.Service,
-					executionSubjectId: principal,
+					siloId: command.siloId,
 					agentServiceId: command.agentServiceId,
-					fleetMembershipRevision: membership.evidence.revision,
-					fleetMembershipIssuer: membership.evidence.issuerId,
-					fleetMembershipIssuerKeyId: membership.evidence.issuerKeyId,
-					fleetMembershipAssertionId: membership.evidence.assertionId,
-					fleetMembershipPayloadDigest: membership.evidence.payloadDigest,
-					fleetMembershipTrustedUntil: new Date(membership.evidence.trustedUntilEpochMs).toISOString(),
+					agentRevisionId: revision.id,
+					principalId: principal,
+				},
+				membership: {
+					revision: membership.evidence.revision,
+					issuerId: membership.evidence.issuerId,
+					issuerKeyId: membership.evidence.issuerKeyId,
+					assertionId: membership.evidence.assertionId,
+					payloadDigest: membership.evidence.payloadDigest,
+					trustedUntil: new Date(membership.evidence.trustedUntilEpochMs).toISOString(),
+				},
+				capability: {
+					effectiveContractDigest,
 					effectiveBoundaryAttachments: attachments,
 					effectiveBoundaryAttachmentDigest: attachmentDigest,
+					authorizationDecisionDigests: admissions.map(admission => admission.evidence?.decisionDigest ?? "").sort(_CompareCanonicalCoordinate),
 				},
-				capabilitySetDigest,
 			},
 		};
 	}
@@ -235,7 +238,7 @@ function _CompareCanonicalCoordinate(left: string, right: string): number
 }
 
 /**
- * Copies the authorised attachments and sorts them by boundary kind, id, and coverage.
+ * Sorts the authorised attachments by boundary kind, id, and coverage.
  *
  * The sort is not cosmetic. RFC 8785 fixes object key order but leaves array order alone, so if this
  * list arrived in whatever order Postgres returned it, the same revision would produce a different
@@ -243,10 +246,9 @@ function _CompareCanonicalCoordinate(left: string, right: string): number
  * @see https://www.rfc-editor.org/rfc/rfc8785 — why array order must be fixed here rather than by
  *   the JSON serializer.
  */
-function _CanonicalAttachments(values: readonly RevisionBoundaryAttachment[]): readonly ManagedRunInputBoundaryAttachment[]
+function _CanonicalAttachments(values: readonly RevisionBoundaryAttachment[]): readonly RevisionBoundaryAttachment[]
 {
 	return [...values]
-		.map(function _Copy(value): ManagedRunInputBoundaryAttachment { return { boundaryKind: value.boundaryKind, boundaryId: value.boundaryId, boundaryCoverage: value.boundaryCoverage }; })
 		.sort(function _ByBoundary(left, right): number { return _CompareCanonicalCoordinate(`${left.boundaryKind}\u0000${left.boundaryId}\u0000${left.boundaryCoverage}`, `${right.boundaryKind}\u0000${right.boundaryId}\u0000${right.boundaryCoverage}`); });
 }
 

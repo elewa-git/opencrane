@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExternalActionWorker } from "../external-action-worker";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionExecutionContextLoader, type ExternalActionWorkerDependencies, type ExternalActionWorkerEvent, type ExternalActionWorkerInvocation, type ExternalActionWorkerUnitOfWork, type PreparedExternalActionAdapter, type ToolInvocationWorkSource } from "../external-action-worker.types";
+import { _ExecutionSubject, _ToolInvocationAuthorizationEvidence } from "./execution-subject.fixture";
 
 /** Trace span names recorded during one worker test. */
 const _traceOperations = vi.hoisted(function _TraceOperations() { return [] as string[]; });
@@ -39,8 +40,7 @@ function _invocation(state: ToolInvocationStates, recoveryMode: ExternalActionRe
 		attempt: 1,
 		mcpTaskId: null,
 		agentRevisionId: "revision-1",
-		subjectId: "user-1",
-		authorizationEvidence: null,
+		authorizationEvidence: _ToolInvocationAuthorizationEvidence(),
 		candidateId: "candidate-1",
 		toolInvocationId: "tool-call-1",
 		toolRevisionId: "integration:calendar:calendar.read",
@@ -77,7 +77,7 @@ function _agentRunCoordinates(invocation: ExternalActionWorkerInvocation): { rea
 /** Build the few snapshot fields the worker compares against the invocation. */
 function _context(): ExternalActionExecutionContext
 {
-	return { snapshot: { runId: "run-1", siloId: "silo-1", agentRevisionId: "revision-1", identitySnapshot: { executionSubjectId: "user-1" } } as unknown as RunInputSnapshot };
+	return { snapshot: { runId: "run-1", siloId: "silo-1", agentRevisionId: "revision-1", executionSubject: _ExecutionSubject() } as unknown as RunInputSnapshot };
 }
 
 /** Work source that always returns the same single row. */

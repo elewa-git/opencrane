@@ -15,6 +15,23 @@ grep -Fq -- '--first-user-email' "$DEPLOY_SCRIPT"
 grep -Fq -- '--postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap' "$DEPLOY_SCRIPT"
 grep -Fq -- '--opencrane-ui-digest sha256:REVIEWED_BROWSER_BUILD_DIGEST' "$DEPLOY_SCRIPT"
 grep -Fq -- '--cognee-digest sha256:REVIEWED_COGNEE_BUILD_DIGEST' "$DEPLOY_SCRIPT"
+grep -Fq -- '--kurrentdb-image-digest sha256:REVIEWED_KURRENTDB_IMAGE_DIGEST' "$DEPLOY_SCRIPT"
+grep -Fq -- '--kurrentdb-bootstrap-ops-secret' "$DEPLOY_SCRIPT"
+grep -Fq -- '--kurrentdb-service-credential-secret' "$DEPLOY_SCRIPT"
+grep -Fq -- '--kurrentdb-bootstrap-image-repository' "$DEPLOY_SCRIPT"
+grep -Fq -- '--kurrentdb-bootstrap-image-digest' "$DEPLOY_SCRIPT"
+grep -Fq -- '--agent-sandbox-image-repository' "$DEPLOY_SCRIPT"
+grep -Fq -- '--agent-sandbox-image-digest' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the Kubernetes Agent Sandbox CRD' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the Agent Sandbox controller to use an immutable image digest' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the Agent Sandbox extensions reconciler' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires a Ready Agent Sandbox controller' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the approved gvisor RuntimeClass' "$DEPLOY_SCRIPT"
+grep -Fq -- "requires key '\$required_tls_key'" "$DEPLOY_SCRIPT"
+grep -Fq -- "requires key 'password'" "$DEPLOY_SCRIPT"
+grep -Fq -- "must set immutable: true" "$DEPLOY_SCRIPT"
+grep -Fq -- "must use username 'opencrane-history'" "$DEPLOY_SCRIPT"
+grep -Fq -- 'historyStore.kurrentdb.enabled=true' "$DEPLOY_SCRIPT"
 grep -Fq -- 'Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`' "$DEPLOY_SCRIPT"
 grep -Fq -- 'ensure_provider_key_secrets' "$PROVIDER_SECRET_HELPER"
 grep -Fq -- 'ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-}"' "$DEPLOY_SCRIPT"
@@ -111,6 +128,11 @@ grep -Fq -- 'wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa"'
 grep -Fq -- '_verify_control_plane_spa_rollout' "$DEPLOY_CORE"
 grep -Fq -- 'wait_for_final_deployment_if_present "${RELEASE}-cognee"' "$DEPLOY_CORE"
 grep -Fq -- '_verify_cognee_rollout' "$DEPLOY_CORE"
+grep -Fq -- 'wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb"' "$DEPLOY_CORE"
+grep -Fq -- 'wait_for_final_kurrentdb_bootstrap_job_if_present' "$DEPLOY_CORE"
+grep -Fq -- 'kubectl wait --for=condition=complete "job/$job_name"' "$DEPLOY_CORE"
+grep -Fq -- 'kubectl describe "job/$job_name"' "$DEPLOY_CORE"
+grep -Fq -- 'kubectl logs "job/$job_name"' "$DEPLOY_CORE"
 
 # Even an operator override assembled through normal Helm passthrough loses to the digest that the
 # deployer verified. This renders the actual chart to prove Helm receives the authority tuple last.
@@ -179,7 +201,7 @@ exit 0
 EOF
 chmod +x "$wrapper_test_dir/platform/k8s-deploy.sh" "$wrapper_test_dir/bin/kubectl"
 wrapper_args_file="$wrapper_test_dir/args"
-PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
+PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY=absent-key \
   bash "$wrapper_test_dir/deploy.sh" \
     --base-domain dev.opencrane.ai \
     --cluster-tenant testv4 \
@@ -214,6 +236,134 @@ if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
   echo "silo wrapper accepted a release name outside its ClusterTenant boundary" >&2
   exit 1
 fi
+
+cat >"$wrapper_test_dir/bin/kubectl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "get crd" && "$*" == *jsonpath* ]]; then
+  printf '%s' "${AGENT_SANDBOX_V1BETA1_STATE:-true:true}"
+fi
+if [[ "$1 $2 $3" == "get deployment agent-sandbox-controller" ]]; then
+  if [[ "$*" == *args* ]]; then
+    printf '%s\n' '--extensions'
+  else
+    printf '%s\n' 'registry.invalid/agent-sandbox-controller@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  fi
+fi
+if [[ "$*" == *"jsonpath={.immutable}"* ]]; then
+  printf '%s' "${KURRENTDB_SECRET_IMMUTABLE:-true}"
+fi
+if [[ "$*" == *'jsonpath={.data.username}'* ]]; then
+  printf '%s' "${KURRENTDB_SERVICE_USERNAME_BASE64:-b3BlbmNyYW5lLWhpc3Rvcnk=}"
+fi
+if [[ "$*" == *'go-template='* && "$*" != *"$MISSING_KURRENTDB_SECRET_KEY"* ]]; then
+  printf '%s' 'present'
+fi
+EOF
+chmod +x "$wrapper_test_dir/bin/kubectl"
+
+testv5_required_args=(
+  --kurrentdb-image-digest sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  --kurrentdb-tls-secret kurrentdb-tls
+  --kurrentdb-bootstrap-admin-secret kurrentdb-bootstrap
+  --kurrentdb-bootstrap-ops-secret kurrentdb-bootstrap-ops
+  --kurrentdb-service-credential-secret kurrentdb-history-service
+  --kurrentdb-bootstrap-image-repository registry.invalid/opencrane-kurrentdb-bootstrap
+  --kurrentdb-bootstrap-image-digest sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  --kurrentdb-bootstrap-image-pull-policy IfNotPresent
+  --kurrentdb-bootstrap-cpu-request 50m
+  --kurrentdb-bootstrap-memory-request 64Mi
+  --kurrentdb-bootstrap-cpu-limit 100m
+  --kurrentdb-bootstrap-memory-limit 128Mi
+  --kurrentdb-bootstrap-active-deadline-seconds 330
+  --kurrentdb-bootstrap-backoff-limit 0
+  --kurrentdb-bootstrap-timeout-seconds 300
+  --agent-sandbox-image-repository registry.invalid/opencrane-agent-runtime
+  --agent-sandbox-image-digest sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  --agent-sandbox-image-pull-policy IfNotPresent)
+PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY=absent-key \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv5 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client \
+    "${testv5_required_args[@]}" >/dev/null
+testv5_forwarded_args="$(tr '\n' ' ' <"$wrapper_args_file")"
+[[ "$testv5_forwarded_args" == *'historyStore.kurrentdb.bootstrapOps.existingSecret=kurrentdb-bootstrap-ops'* ]]
+[[ "$testv5_forwarded_args" == *'historyStore.kurrentdb.serviceCredential.existingSecret=kurrentdb-history-service'* ]]
+[[ "$testv5_forwarded_args" == *'historyStore.kurrentdb.bootstrap.image.repository=registry.invalid/opencrane-kurrentdb-bootstrap'* ]]
+[[ "$testv5_forwarded_args" == *'historyStore.kurrentdb.bootstrap.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'* ]]
+[[ "$testv5_forwarded_args" == *'historyStore.kurrentdb.bootstrap.backoffLimit=0'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.enabled=true'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.namespace=opencrane-testv5'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.runtimeClassName=gvisor'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.serviceAccountName=opencrane-testv5-agent-sandbox'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].name=developer'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].poolName=developer-pool'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'* ]]
+
+testv5_immutable_error_file="$wrapper_test_dir/testv5-kurrentdb-immutable.error"
+if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY=absent-key KURRENTDB_SECRET_IMMUTABLE=false \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv5 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client \
+    "${testv5_required_args[@]}" > /dev/null 2>"$testv5_immutable_error_file"; then
+  echo "testv5 accepted a mutable KurrentDB Secret" >&2
+  exit 1
+fi
+grep -Fq 'must set immutable: true' "$testv5_immutable_error_file"
+
+testv5_service_username_error_file="$wrapper_test_dir/testv5-kurrentdb-service-username.error"
+if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY=absent-key KURRENTDB_SERVICE_USERNAME_BASE64=b3RoZXItdXNlcg== \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv5 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client \
+    "${testv5_required_args[@]}" > /dev/null 2>"$testv5_service_username_error_file"; then
+  echo "testv5 accepted a KurrentDB service credential for another username" >&2
+  exit 1
+fi
+grep -Fq "must use username 'opencrane-history'" "$testv5_service_username_error_file"
+
+for missing_kurrentdb_secret_key in tls.crt tls.key ca.crt password username; do
+  testv5_error_file="$wrapper_test_dir/testv5-$missing_kurrentdb_secret_key.error"
+  if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY="$missing_kurrentdb_secret_key" \
+    bash "$wrapper_test_dir/deploy.sh" \
+      --base-domain dev.opencrane.ai \
+      --cluster-tenant testv5 \
+      --acme-email operator@example.com \
+      --first-user-email owner@example.com \
+      --oidc-issuer-url https://issuer.example.com/ \
+      --oidc-client-id test-client \
+      "${testv5_required_args[@]}" > /dev/null 2>"$testv5_error_file"; then
+    echo "testv5 accepted KurrentDB Secret without '$missing_kurrentdb_secret_key'" >&2
+    exit 1
+  fi
+  grep -Fq "requires key '$missing_kurrentdb_secret_key'" "$testv5_error_file"
+done
+
+testv5_version_error_file="$wrapper_test_dir/testv5-agent-sandbox-version.error"
+if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" AGENT_SANDBOX_V1BETA1_STATE='true:false' \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv5 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client \
+    "${testv5_required_args[@]}" > /dev/null 2>"$testv5_version_error_file"; then
+  echo "testv5 accepted an Agent Sandbox CRD without v1beta1 storage" >&2
+  exit 1
+fi
+grep -Fq "to serve and store v1beta1 resources" "$testv5_version_error_file"
 
 provider_secret_calls=()
 kubectl()

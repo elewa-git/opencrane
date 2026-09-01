@@ -41,8 +41,6 @@ export interface SelfRunCancellationCaller
 	readonly siloId: string;
 	/** Durable local Principal used by the central product authorization authority. */
 	readonly principalId: string;
-	/** Stable authenticated subject who owns the personal run. */
-	readonly subjectId: string;
 }
 
 /** Owner-bound request to cancel one exact run attempt. */
@@ -71,7 +69,7 @@ export type SelfRunCancellationResult = SelfRunCancellationSuccess | { readonly 
 /** Persistence boundary that hides foreign runs before invoking cancellation authority. */
 export interface SelfRunCancellationRepository
 {
-	/** Request cancellation only when the exact session subject owns the run in the selected silo. */
+	/** Request cancellation only when the exact session principal owns the run in the selected silo. */
 	requestOwned(command: SelfRunCancellationCommand): Promise<SelfRunCancellationResult>;
 }
 

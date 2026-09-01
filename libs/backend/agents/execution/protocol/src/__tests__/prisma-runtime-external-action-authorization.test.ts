@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { AGENT_RUNTIME_PROTOCOL_VERSION, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, RuntimeCandidateKinds, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
@@ -9,21 +9,22 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 import type { RuntimeDispatchContext } from "../prisma-runtime-dispatch-authority.types";
 import { RuntimeExternalActionAuthorizationService } from "../prisma-runtime-external-action-authorization";
 import type { RuntimeExternalActionEligibilityPorts } from "../runtime-external-action-authorization.types";
+import { _ExecutionSubject } from "./execution-subject.fixture";
 
 /** Frozen runtime context whose full snapshot retains the local Principal coordinate. */
 function _Context(overrides: Partial<RuntimeDispatchContext> = {}): RuntimeDispatchContext
 {
+	const executionSubject = _ExecutionSubject();
 	const snapshot = {
-		runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1,
+		runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1,
 		conversationId: "conversation-1", messageIds: [], personaRevisionId: "persona-revision-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [],
 		memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-1" }, mcpTools: [], modelRoute: {}, budgetPolicy: {},
-		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "issuer", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 7, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: "sha256:membership", fleetMembershipTrustedUntil: "2026-08-30T00:00:00.000Z" },
-		capabilitySetDigest: "sha256:capabilities", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-08-29T00:00:00.000Z",
+		executionSubject, promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-08-29T00:00:00.000Z",
 	} as const;
 	return {
 		runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", runState: "Running", terminalReason: null,
 		assignmentDigest: `sha256:${"a".repeat(64)}`, inputSnapshotDigest: "sha256:snapshot", snapshot, conversationId: "conversation-1", personaRevisionId: "persona-revision-1",
-		identity: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", fleetMembershipRevision: 7 }, capabilitySetDigest: "sha256:capabilities",
+		executionSubject, workloadProfile: "profile",
 		serviceAccountName: "runtime", workloadKind: "Deployment", podUid: "pod-1", leaseExpiresAtEpochMs: Date.parse("2026-08-29T01:00:00.000Z"), assignmentIssuedAt: "2026-08-29T00:00:00.000Z", assignmentExpiresAt: "2026-08-29T01:00:00.000Z",
 		...overrides,
 	} as RuntimeDispatchContext;
@@ -78,8 +79,8 @@ describe("RuntimeExternalActionAuthorizationService", function _DescribeRuntimeA
 		const adapter = _Service(_Eligibility(), authority);
 		const candidate = _Candidate("mcp-tool-1");
 
-		await expect(adapter.admitInTransaction({} as never, _Context(), candidate, new Date("2026-08-29T00:01:00.000Z"))).resolves.toEqual(expect.objectContaining({ principalId: "principal-1", agentRevisionId: "revision-1", runId: "run-1", attempt: 1, argumentsDigest: candidate.argumentsDigest, assignmentDigest: `sha256:${"a".repeat(64)}` }));
-		expect(authority.admitPrincipalBatch).toHaveBeenCalledWith([expect.objectContaining({ principalId: "principal-1", actorKind: "user", membershipRevision: 7, resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "mcp-tool-1" }, action: ProductAuthorizationActions.Invoke, argumentsDigest: candidate.argumentsDigest })]);
+		await expect(adapter.admitInTransaction({} as never, _Context(), candidate, new Date("2026-08-29T00:01:00.000Z"))).resolves.toEqual(expect.objectContaining({ actorKind: "workload", executionSubject: expect.objectContaining({ principalId: "principal-1" }), agentRevisionId: "revision-1", runId: "run-1", attempt: 1, argumentsDigest: candidate.argumentsDigest, assignmentDigest: `sha256:${"a".repeat(64)}` }));
+		expect(authority.admitPrincipalBatch).toHaveBeenCalledWith([expect.objectContaining({ principalId: "principal-1", actorKind: "workload", actorId: "identity-1", membershipRevision: 1, resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "mcp-tool-1" }, action: ProductAuthorizationActions.Invoke, argumentsDigest: candidate.argumentsDigest })]);
 	});
 
 	it("refuses an MCP action whose current publication lifecycle is unavailable", async function _RefusesUnpublishedMcp()

@@ -1,3 +1,4 @@
+import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { AgentRevisionId, AgentRun, AgentRunId, AgentServiceId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 
 /**
@@ -31,6 +32,8 @@ export interface StartNextRunAttemptCommand
 	readonly requestedByPrincipalId: string;
 	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt`. */
 	readonly acceptedAt: string;
+	/** Fresh immutable input snapshot whose subject binds the next run attempt and current computer lease. */
+	readonly nextInputSnapshot: RunInputSnapshot;
 }
 
 /**

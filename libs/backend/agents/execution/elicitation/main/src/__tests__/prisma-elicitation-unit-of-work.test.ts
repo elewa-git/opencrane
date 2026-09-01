@@ -11,12 +11,13 @@ vi.mock("../elicitation-product-authorization", function _MockProductAuthorizati
 	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = _productAuthorization.canRead; filterReadableConversationIds = _productAuthorization.filterReadable; admitResponse = _productAuthorization.admitResponse; } };
 });
 
-import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
-import { ElicitationBodyKinds, ElicitationPurposes, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
+import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationAuthorizationEvidence, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { ElicitationBodyKinds, ElicitationPurposes, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
 import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
 import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work";
+import { _BuildMemoryPermissionPayload } from "../personal-memory-permission-payload";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
 
@@ -58,17 +59,49 @@ function _ResponseTransaction(request = _Request())
 /** Exact personal-memory ToolInvocation projection used by open and verify cases. */
 function _MemoryInvocation(overrides: Partial<ToolInvocationRecord> = {}): ToolInvocationRecord
 {
-	return { id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, mcpTaskId: null, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "memory-call-1", toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, arguments: { query: "remember this" }, argumentsDigest: __DigestCanonicalJson({ query: "remember this" }), effectiveArguments: { query: "remember this" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "remember this" }), requestFingerprint: "sha256:fingerprint", approvalRequired: true, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: NOW, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 4, ...overrides, authorizationEvidence: overrides.authorizationEvidence ?? null };
+	const authorizationEvidence = _MemoryAuthorizationEvidence();
+	return { id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, mcpTaskId: null, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "user-1", authorizationActorKind: "Workload", authorizationExecutionSubject: authorizationEvidence.executionSubject, authorizationCoordinates: authorizationEvidence.coordinates, authorizationDecisionDigests: authorizationEvidence.decisionDigests, authorizationAssignmentDigest: authorizationEvidence.assignmentDigest, authorizationEvidenceDigest: authorizationEvidence.evidenceDigest, candidateId: "candidate-1", toolInvocationId: "memory-call-1", toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, arguments: { query: "remember this" }, argumentsDigest: __DigestCanonicalJson({ query: "remember this" }), effectiveArguments: { query: "remember this" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "remember this" }), requestFingerprint: "sha256:fingerprint", approvalRequired: true, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: NOW, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 4, authorizationEvidence, ...overrides } as ToolInvocationRecord;
+}
+
+/** Builds the workload evidence that is the only source of a memory invocation principal. */
+function _MemoryAuthorizationEvidence(): ToolInvocationAuthorizationEvidence
+{
+	return { actorKind: "workload", executionSubject: _MemoryExecutionSubject(), coordinates: [], decisionDigests: [`sha256:${"e".repeat(64)}`], assignmentDigest: `sha256:${"f".repeat(64)}`, evidenceDigest: `sha256:${"0".repeat(64)}` };
 }
 
 /** Immutable personal run snapshot whose digest and persona bind the permission. */
 function _MemorySnapshot(): RunInputSnapshot
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", personaRevisionId: "persona-1", conversationId: "conversation-1", identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1" }, digest: `sha256:${"d".repeat(64)}` } as unknown as RunInputSnapshot;
+	return { runId: "run-1", attempt: 2, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", personaRevisionId: "persona-1", conversationId: "conversation-1", executionSubject: _MemoryExecutionSubject(), digest: `sha256:${"d".repeat(64)}` } as unknown as RunInputSnapshot;
+}
+
+/** Builds the sealed subject that grants the test recall its principal and attempt. */
+function _MemoryExecutionSubject(): RunInputSnapshot["executionSubject"]
+{
+	return {
+		schemaVersion: 1,
+		siloId: "silo-1",
+		agentIdentityId: "identity-1",
+		principalId: "user-1",
+		identity: { agentIdentityId: "identity-1", principalId: "user-1", siloId: "silo-1", headRevision: "7", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: NOW.toISOString() },
+		membership: { principalId: "user-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: new Date("2026-08-11T12:00:00.000Z").toISOString() },
+		capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: NOW.toISOString() },
+		runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1" },
+		computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+		requester: { siloId: "silo-1", requesterPrincipalId: "user-1", requestIdempotencyKey: "request-1", authenticatedAt: NOW.toISOString() },
+		admission: { authorizingPrincipalId: "user-1", decisionEvidenceId: "admission-decision-1", admittedAt: NOW.toISOString() },
+	};
 }
 
 describe("PrismaElicitationUnitOfWork", function _Suite()
 {
+	it("builds a memory permission from the sealed execution subject", function _BuildsSubjectBoundPermission()
+	{
+		const payload = _BuildMemoryPermissionPayload(_MemoryInvocation(), _MemorySnapshot());
+
+		expect(payload).toMatchObject({ runId: "run-1", attempt: 2, executionSubjectId: "user-1" });
+	});
+
 	beforeEach(function _ResetProductAuthorization()
 	{
 		_productAuthorization.canRead.mockReset().mockResolvedValue(true);
@@ -170,7 +203,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	{
 		const invocation = _MemoryInvocation();
 		const snapshot = _MemorySnapshot();
-		const payload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T10:15:00.000Z" };
+		const payload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: "user-1", queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T10:15:00.000Z" };
 		const request = _Request({ purpose: ElicitationPurpose.PersonalMemoryPermission, bodyKind: "Approval", body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow memory?", action: "Recall", target: "personal memory", dataUse: "Use remembered facts", consequence: "One answer may use memory" }, purposePayload: payload, purposePayloadDigest: __DigestCanonicalJson(payload), expiresAt: new Date(payload.expiresAt) });
 		const transaction = _ResponseTransaction(request);
 		transaction.toolInvocation.findUnique.mockResolvedValue({ ...invocation, state: ToolInvocationState.AwaitingApproval, createdAt: NOW });
@@ -185,7 +218,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	{
 		const invocation = _MemoryInvocation();
 		const snapshot = _MemorySnapshot();
-		const payload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T10:15:00.000Z" };
+		const payload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: "user-1", queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T10:15:00.000Z" };
 		const request = _Request({ purpose: ElicitationPurpose.PersonalMemoryPermission, bodyKind: "Approval", body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow memory?", action: "Recall", target: "personal memory", dataUse: "Use remembered facts", consequence: "One answer may use memory" }, purposePayload: payload, purposePayloadDigest: __DigestCanonicalJson(payload), expiresAt: new Date(payload.expiresAt) });
 		const transaction = _ResponseTransaction(request);
 		transaction.toolInvocation.findUnique.mockResolvedValue({ ...invocation, state: ToolInvocationState.AwaitingApproval, createdAt: NOW });
@@ -200,7 +233,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	{
 		const invocation = _MemoryInvocation();
 		const snapshot = _MemorySnapshot();
-		const payload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T09:59:00.000Z" };
+		const payload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: "user-1", queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T09:59:00.000Z" };
 		const request = _Request({ purpose: ElicitationPurpose.PersonalMemoryPermission, purposePayload: payload, purposePayloadDigest: __DigestCanonicalJson(payload), expiresAt: new Date(payload.expiresAt) });
 		const transaction = _ResponseTransaction(request);
 		transaction.toolInvocation.findUnique.mockResolvedValue({ ...invocation, state: ToolInvocationState.AwaitingApproval, createdAt: NOW });
@@ -214,7 +247,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	{
 		const invocation = _MemoryInvocation();
 		const snapshot = _MemorySnapshot();
-		const basePayload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T09:59:00.000Z" };
+		const basePayload = { toolInvocationId: invocation.id, toolInvocationRevision: invocation.revision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: "user-1", queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T09:59:00.000Z" };
 		const cases = [
 			{ payload: basePayload, digest: `sha256:${"f".repeat(64)}` },
 			{ payload: { ...basePayload, runId: "run-other" }, digest: null },
@@ -253,6 +286,20 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		await expect(_Unit(transaction).openMemoryPermission(invocation, _MemorySnapshot(), NOW)).resolves.toBe(false);
 		expect(transaction.elicitationRequest.findUnique).not.toHaveBeenCalled();
 		expect(transaction.elicitationRequest.create).not.toHaveBeenCalled();
+	});
+
+	it("does not open a memory request when the subject principal differs from the invocation", async function _RejectsSubjectSubstitution()
+	{
+		const transaction = {
+			..._Access(),
+			elicitationRequest: { findUnique: vi.fn(), create: vi.fn() },
+			agentRun: { findUnique: vi.fn(), updateMany: vi.fn() },
+		};
+		const snapshot = _MemorySnapshot();
+		const substituted = { ...snapshot, executionSubject: { ...snapshot.executionSubject, principalId: "user-other", identity: { ...snapshot.executionSubject.identity, principalId: "user-other" }, membership: { ...snapshot.executionSubject.membership, principalId: "user-other" } } };
+
+		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), substituted, NOW)).resolves.toBe(false);
+		expect(transaction.elicitationRequest.findUnique).not.toHaveBeenCalled();
 	});
 
 	it("keeps ordinary conversation elicitation access unchanged", async function _AllowsOrdinaryConversation()
@@ -300,7 +347,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const invocation = _MemoryInvocation({ state: ToolInvocationStates.Claimed, revision: 6, claimKind: ExternalActionClaimKinds.Dispatch, claimFence: 7, claimExpiresAt: new Date("2026-08-11T10:01:00.000Z") });
 		const claim: ToolInvocationClaim = { invocationId: invocation.id, kind: ExternalActionClaimKinds.Dispatch, fence: 7, revision: 6 };
 		const snapshot = _MemorySnapshot();
-		const purposePayload = { toolInvocationId: invocation.id, toolInvocationRevision: 4, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T10:15:00.000Z" };
+		const purposePayload = { toolInvocationId: invocation.id, toolInvocationRevision: 4, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: "user-1", queryDigest: __DigestCanonicalJson("remember this"), inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: "2026-08-11T10:15:00.000Z" };
 		const request = _Request({ purpose: ElicitationPurpose.PersonalMemoryPermission, state: ElicitationRequestState.Answered, assignedParticipantId: "user-1", resolvedAt: NOW, resolvedBy: "user-1", purposePayload, purposePayloadDigest: __DigestCanonicalJson(purposePayload), expiresAt: new Date(purposePayload.expiresAt) });
 		const receipt = { state: PersonalMemoryPermissionReceiptState.Active, consumedAt: null, expiresAt: new Date(purposePayload.expiresAt), toolInvocationRevision: 5, runId: "run-1", attempt: 2, executionSubjectId: "user-1", respondingSubjectId: "user-1", queryDigest: purposePayload.queryDigest, inputSnapshotDigest: snapshot.digest, personaRevisionId: "persona-1", purposeDigest: request.purposePayloadDigest, toolInvocationId: invocation.id, request };
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue({ ...invocation, state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch }) }, agentRun: { findUnique: vi.fn().mockResolvedValue({ attempt: 2, state: AgentRunState.Running }) }, personalMemoryPermissionReceipt: { findUnique: vi.fn().mockResolvedValue(receipt) } };

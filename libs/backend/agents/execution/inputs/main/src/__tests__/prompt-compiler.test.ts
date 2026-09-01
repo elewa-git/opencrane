@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { PROMPT_COMPILER_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler";
@@ -25,6 +25,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
 	return {
 		runId: "run-1",
+		attempt: 1,
 		siloId: "silo-1",
 		agentServiceId: "svc-1",
 		agentRevisionId: "rev-1",
@@ -39,14 +40,18 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
-		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: "sha256:c", fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" },
-		capabilitySetDigest: "sha256:cap",
-		effectiveContractDigest: "sha256:contract",
+		executionSubject: _executionSubject(),
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,
 		digest: "sha256:snap",
 		compiledAt: "2026-07-20T00:00:00.000Z",
 		...overrides,
 	};
+}
+
+/** Builds the required evidence-bound subject without affecting prompt compilation. */
+function _executionSubject(): RunInputSnapshot["executionSubject"]
+{
+	return { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-07-20T00:00:00.000Z" }, membership: { principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-08-20T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: "2026-07-20T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-20T00:00:00.000Z" }, admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-07-20T00:00:00.000Z" } };
 }
 
 /** Two tool definitions returned in grant order to prove name ordering is applied. */
@@ -136,21 +141,19 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(first.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 	});
 
-	it("seals the authoritative live attempt without changing the stored snapshot", async function _BindsLiveAttempt()
+	it("seals the immutable snapshot attempt and refuses a mismatched live attempt", async function _BindsLiveAttempt()
 	{
 		const snapshot = _snapshot({ snapshotVersion: 1 });
 		const first = await __CompileRunInput(snapshot, 1, _repositories());
-		const second = await __CompileRunInput(snapshot, 2, _repositories());
 
 		expect(first.attempt).toBe(1);
-		expect(second.attempt).toBe(2);
-		expect(second.digest).not.toBe(first.digest);
+		await expect(__CompileRunInput(snapshot, 2, _repositories())).rejects.toThrow(/live attempt to match/);
 		expect(snapshot.snapshotVersion).toBe(1);
 	});
 
 	it("rejects a malformed live attempt", async function _RejectsMalformedAttempt()
 	{
-		await expect(__CompileRunInput(_snapshot(), 0, _repositories())).rejects.toThrow(/positive live attempt/);
+		await expect(__CompileRunInput(_snapshot(), 0, _repositories())).rejects.toThrow(/live attempt to match/);
 	});
 
 	it("changes the digest when any compiled input changes", async function _digestSensitive()

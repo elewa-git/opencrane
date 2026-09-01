@@ -21,9 +21,11 @@ Conversation -> ordered ConversationTimelineEntry
                               +-> governed artifact references
 ```
 
-PostgreSQL is authoritative for agents, revisions, runs, conversations, approvals, memberships,
-grants, budgets, and audit evidence. Artifact bytes live behind `ArtifactStore`; database records
-own their identity, version, authorization, and lineage.
+The 0.11.0 target records participant-visible conversation, computer, run, effect, artifact, and
+receipt history in KurrentDB; PostgreSQL holds rebuildable projections. PostgreSQL remains
+authoritative for memberships, grants, approvals, budgets, and transaction-bound decision evidence.
+See [ADR 0016](../adr/0016-conversation-history-and-computers.md). Artifact bytes live behind
+`ArtifactStore`; database records own their identity, version, authorization, and lineage.
 
 A claimed runtime Pod is an attempt-scoped worker. It receives a frozen snapshot, reports candidates
 and events, and owns no durable product state. A generic warm Pod has no attempt authority until the

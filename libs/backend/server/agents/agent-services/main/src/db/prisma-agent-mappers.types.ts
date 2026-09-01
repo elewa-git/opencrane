@@ -46,13 +46,14 @@ export interface AgentRunRow
 	readonly agentRevisionId: string;
 	readonly conversationId: string | null;
 	readonly trigger: string;
-	readonly delegatedUserId: string | null;
+	readonly agentIdentityId: string;
+	readonly principalId: string;
+	readonly executionSubject: Prisma.JsonValue;
 	readonly requestIdempotencyKey: string;
 	readonly rootRunId: string;
 	readonly parentRunId: string | null;
 	readonly attempt: number;
 	readonly state: string;
-	readonly effectiveContractDigest: string;
 	readonly inputSnapshotDigest: string;
 	readonly acceptedAt: Date;
 	readonly startedAt: Date | null;

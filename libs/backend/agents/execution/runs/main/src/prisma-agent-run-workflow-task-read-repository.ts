@@ -2,9 +2,11 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentServiceKind, AgentServiceState, WorkloadKind, type Prisma, type WorkloadAssignment } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { AgentRunTaskNames, type AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { JsonValue } from "@opencrane/util";
 
 import { __AgentRunWorkflowBootstrapReference } from "./agent-run-workflow-bootstrap-reference";
 import type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
@@ -28,10 +30,12 @@ const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
 			agentServiceId: true,
 			agentRevisionId: true,
 			inputSnapshotDigest: true,
-			effectiveContractDigest: true,
+			agentIdentityId: true,
+			principalId: true,
+			executionSubject: true,
 			conversationId: true,
 			service: { select: { id: true, siloId: true, kind: true, state: true, activeRevisionId: true, workloadProfile: true } },
-			inputSnapshot: { select: { runId: true, siloId: true, agentServiceId: true, agentRevisionId: true, effectiveContractDigest: true, conversationId: true, digest: true, identitySnapshot: true, modelRoute: true, budgetPolicy: true } },
+			inputSnapshot: { select: { runId: true, siloId: true, agentServiceId: true, agentRevisionId: true, agentIdentityId: true, principalId: true, executionSubject: true, conversationId: true, digest: true, modelRoute: true, budgetPolicy: true } },
 		},
 	},
 } as const satisfies Prisma.AgentRunWorkflowTaskSelect;
@@ -76,7 +80,7 @@ export function __AgentRunWorkflowBootstrapReferenceForTask(task: AgentRunWorkfl
 /** Digests immutable assignment fields so a binding reference cannot move to another workload. */
 export function __AgentRunWorkflowBootstrapClaimDigest(reference: string, assignment: WorkloadAssignment): string
 {
-	const canonical = JSON.stringify(["opencrane-workload-bootstrap-integrity-v1", reference, assignment.runId, assignment.attempt, assignment.agentServiceId, assignment.agentRevisionId, assignment.siloId, assignment.subjectId, assignment.audience, assignment.serviceAccountName, assignment.namespace, assignment.workloadKind, assignment.workloadUid, assignment.workloadProfile, assignment.expiresAt.toISOString(), assignment.createdAt.toISOString()]);
+	const canonical = JSON.stringify(["opencrane-workload-bootstrap-integrity-v1", reference, assignment.runId, assignment.attempt, assignment.agentServiceId, assignment.agentRevisionId, assignment.siloId, assignment.agentIdentityId, assignment.principalId, __DigestCanonicalJson(assignment.executionSubject as JsonValue), assignment.audience, assignment.serviceAccountName, assignment.namespace, assignment.workloadKind, assignment.workloadUid, assignment.workloadProfile, assignment.expiresAt.toISOString(), assignment.createdAt.toISOString()]);
 	return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 
@@ -96,24 +100,16 @@ export function __CurrentAgentRunWorkflowTask(task: AgentRunWorkflowTaskRow, inp
 	{
 		return null;
 	}
-	if (service.id !== run.agentServiceId || service.siloId !== run.siloId || service.state !== AgentServiceState.Active || service.activeRevisionId !== run.agentRevisionId || snapshot.runId !== run.id || snapshot.siloId !== run.siloId || snapshot.agentServiceId !== run.agentServiceId || snapshot.agentRevisionId !== run.agentRevisionId || snapshot.effectiveContractDigest !== run.effectiveContractDigest || snapshot.conversationId !== run.conversationId || snapshot.digest !== run.inputSnapshotDigest)
+	if (service.id !== run.agentServiceId || service.siloId !== run.siloId || service.state !== AgentServiceState.Active || service.activeRevisionId !== run.agentRevisionId || snapshot.runId !== run.id || snapshot.siloId !== run.siloId || snapshot.agentServiceId !== run.agentServiceId || snapshot.agentRevisionId !== run.agentRevisionId || snapshot.agentIdentityId !== run.agentIdentityId || snapshot.principalId !== run.principalId || snapshot.conversationId !== run.conversationId || snapshot.digest !== run.inputSnapshotDigest)
 	{
 		return null;
 	}
-	const identity = _SnapshotIdentity(snapshot.identitySnapshot);
+	const identity = _SnapshotIdentity(snapshot.executionSubject, run);
 	if (identity === null || identity.trustedUntil.getTime() <= Date.now())
 	{
 		return null;
 	}
-	if (service.kind === AgentServiceKind.Personal && identity.managedServiceId === null)
-	{
-		return identity;
-	}
-	if (service.kind === AgentServiceKind.Managed && identity.managedServiceId === service.id && identity.subjectId === `agent-service:${service.id}`)
-	{
-		return identity;
-	}
-	return null;
+	return identity;
 }
 
 /** Checks whether an AgentRun state still permits setup or observation by its current task. */
@@ -139,33 +135,17 @@ function __AgentRunWorkflowInputMatchesRun(input: AgentRunTaskInput, run: AgentR
 }
 
 /** Parses the minimal frozen identity evidence that controls runtime assignment. */
-function _SnapshotIdentity(value: unknown): AgentRunWorkflowSnapshotIdentity | null
+function _SnapshotIdentity(value: unknown, run: AgentRunWorkflowTaskRow["run"]): AgentRunWorkflowSnapshotIdentity | null
 {
-	if (value === null || typeof value !== "object" || Array.isArray(value))
+	const parsed = ___ExecutionSubjectSchema.safeParse(value);
+	if (!parsed.success || parsed.data.agentIdentityId !== run.agentIdentityId || parsed.data.principalId !== run.principalId || parsed.data.runScope.runId !== run.id || parsed.data.runScope.attempt !== run.attempt || parsed.data.runScope.siloId !== run.siloId || parsed.data.runScope.agentServiceId !== run.agentServiceId || parsed.data.runScope.agentRevisionId !== run.agentRevisionId)
 	{
 		return null;
 	}
-	const identity = value as Record<string, unknown>;
-	const kind = identity["kind"];
-	const subjectId = identity["executionSubjectId"];
-	const trustedUntil = identity["fleetMembershipTrustedUntil"];
-	if ((kind !== RunInputSnapshotIdentityKinds.User && kind !== RunInputSnapshotIdentityKinds.Service) || typeof subjectId !== "string" || subjectId.trim().length === 0 || typeof trustedUntil !== "string")
+	const trustedUntil = new Date(parsed.data.membership.trustedUntil);
+	if (trustedUntil.getTime() <= Date.now())
 	{
 		return null;
 	}
-	const parsedTrustedUntil = new Date(trustedUntil);
-	if (Number.isNaN(parsedTrustedUntil.getTime()) || parsedTrustedUntil.toISOString() !== trustedUntil)
-	{
-		return null;
-	}
-	if (kind === RunInputSnapshotIdentityKinds.User)
-	{
-		return { subjectId, managedServiceId: null, trustedUntil: parsedTrustedUntil };
-	}
-	const managedServiceId = identity["agentServiceId"];
-	if (typeof managedServiceId !== "string" || managedServiceId.trim().length === 0)
-	{
-		return null;
-	}
-	return { subjectId, managedServiceId, trustedUntil: parsedTrustedUntil };
+	return { agentIdentityId: parsed.data.agentIdentityId, principalId: parsed.data.principalId, executionSubject: parsed.data, trustedUntil };
 }

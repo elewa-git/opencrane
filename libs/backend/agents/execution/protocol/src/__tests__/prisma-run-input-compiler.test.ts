@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 
-import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
+import { PROMPT_COMPILER_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "../prisma-run-input-compiler";
+import { _ExecutionSubject } from "./execution-subject.fixture";
 
 /** Prisma test double whose model lookup remains inspectable by the assertions. */
 type TestTransaction = Prisma.TransactionClient & { readonly modelDefinition: { readonly findFirst: ReturnType<typeof vi.fn> } };
@@ -14,6 +15,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
 	return {
 		runId: "run-1",
+		attempt: 1,
 		siloId: "silo-1",
 		agentServiceId: "svc-1",
 		agentRevisionId: "rev-1",
@@ -28,9 +30,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		mcpTools: [],
 		modelRoute: { alias: "silo-default", modelDefinitionId: "model-definition-1" },
 		budgetPolicy: {},
-		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: `sha256:${"c".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-05T00:00:00.000Z" },
-		capabilitySetDigest: `sha256:${"d".repeat(64)}`,
-		effectiveContractDigest: `sha256:${"e".repeat(64)}`,
+		executionSubject: _ExecutionSubject(),
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,
 		digest: `sha256:${"f".repeat(64)}`,
 		compiledAt: "2026-08-04T00:00:00.000Z",

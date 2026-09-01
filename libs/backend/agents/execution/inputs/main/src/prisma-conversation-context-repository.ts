@@ -1,6 +1,7 @@
 import { AgentRunState, ConversationLifecycle, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
 import { RunAdmissionDenialReasons, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import type { ConversationContextInput, ConversationContextRepository, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
@@ -29,23 +30,34 @@ export class PrismaConversationContextRepository implements ConversationContextR
 	}
 
 	/** Returns no messages for non-conversational work; otherwise only completed messages the caller may see. */
-	async load(command: SessionAssemblyCommand, run: InitialRunAuthority): Promise<SessionAssemblyLoad<ConversationContextInput>>
+	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject): Promise<SessionAssemblyLoad<ConversationContextInput>>
 	{
 		// 1. Avoid an unnecessary conversation lookup for scheduled and other non-conversational work.
-		if (command.conversationId === null) return { outcome: "loaded", value: { messageIds: [], pendingUserMessage: null } };
-		if (command.identityKind !== "user") return { outcome: "denied", reason: "conversation_unavailable" };
+		if (command.conversationId === null)
+		{
+			return { outcome: "loaded", value: { messageIds: [], pendingUserMessage: null } };
+		}
 
-		// 2. Re-check the caller's organization membership in this transaction before returning any conversation or run state.
-		const membership = await this.transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.executionSubjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
-		if (membership === null) return { outcome: "denied", reason: "conversation_unavailable" };
+		// 2. Re-check the verified principal's organization membership before returning any conversation state.
+		const membership = await this.transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: executionSubject.principalId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
+		if (membership === null)
+		{
+			return { outcome: "denied", reason: "conversation_unavailable" };
+		}
 
 		// 3. Bind the conversation to its silo, service, mode, open lifecycle, and participant.
 		const conversation = await this.transaction.conversation.findFirst({
-			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: command.executionSubjectId, accessEndedPosition: null } } },
+			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: executionSubject.principalId, accessEndedPosition: null } } },
 			select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } }, take: 1, select: { id: true } } },
 		});
-		if (conversation === null) return { outcome: "denied", reason: "conversation_unavailable" };
-		if (conversation.runs.length > 0) return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun };
+		if (conversation === null)
+		{
+			return { outcome: "denied", reason: "conversation_unavailable" };
+		}
+		if (conversation.runs.length > 0)
+		{
+			return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun };
+		}
 
 		// 4. Take only completed messages, in transcript order. A message still being written stays out of the snapshot.
 		const entries = await this.transaction.conversationTimelineEntry.findMany({

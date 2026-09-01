@@ -21,11 +21,10 @@ for contract in \
   post-deploy-health-contract.sh \
   qualified-release-image-contract.sh \
   control-plane-image-policy-contract.sh \
+  agent-sandbox-contract.sh \
   cluster-tenant-crd-policy-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
-  retire-legacy-obot-custody-contract.sh \
-  retire-legacy-obot-mcp-server-contract.sh \
   skill-authoring-contract.sh; do
   bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/$contract"
 done

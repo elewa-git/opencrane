@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type AssembleRunInputSnapshotResult } from "@opencrane/backend/agents/execution/inputs";
 import { RunAdmissionConcurrencyOutcomes, RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 
-import type { PersonalRunAdmissionDependencies, PersonalRunAdmissionPort, PersonalRunAdmissionResult } from "./personal-run-admission.types";
+import type { PersonalRunAdmissionAssemblyCommand, PersonalRunAdmissionDependencies, PersonalRunAdmissionPort, PersonalRunAdmissionResult } from "./personal-run-admission.types";
 import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types";
 
 /** Fake service id used as the gate key for the preflight reads, which run before the real service is known. */
@@ -18,11 +18,7 @@ const _PERSONAL_ADMISSION_PREFLIGHT_SERVICE_ID = "__personal_admission_preflight
  */
 enum _PersonalRunPreflightOutcomes
 {
-	/** This idempotency key already has a saved run, so the original `runId` is returned and nothing new is written. */
-	Idempotent = "idempotent",
-	/** The key is in use by a different subject, trigger, or conversation. Refuse; a retry with the same key cannot succeed. */
-	Conflict = "conflict",
-	/** No duplicate exists, but the caller is not a participant in an open personal conversation. Refuse without assembling. */
+	/** The caller is not a participant in an open personal conversation. Refuse without assembling. */
 	ConversationUnavailable = "conversation_unavailable",
 	/** The conversation resolved to an AgentService, so the call may take a slot on that service's lane and assemble. Carries `agentServiceId`. */
 	Resolved = "resolved",
@@ -36,9 +32,11 @@ enum _PersonalRunPreflightOutcomes
  * transaction and refuses there if the caller's participation has since ended.
  */
 type _PersonalRunPreflightResult =
-	| { readonly outcome: _PersonalRunPreflightOutcomes.Idempotent; readonly runId: string }
-	| { readonly outcome: _PersonalRunPreflightOutcomes.Conflict | _PersonalRunPreflightOutcomes.ConversationUnavailable }
+	| { readonly outcome: _PersonalRunPreflightOutcomes.ConversationUnavailable }
 	| { readonly outcome: _PersonalRunPreflightOutcomes.Resolved; readonly agentServiceId: string };
+
+/** Combines a durable duplicate outcome with normal input assembly after transaction-scoped subject resolution. */
+type _PersonalRunAssemblyResult = AssembleRunInputSnapshotResult | { readonly outcome: "idempotent"; readonly runId: string } | { readonly outcome: "conflict" };
 
 /**
  * Creates the personal run admission port. It knows nothing about HTTP.
@@ -79,21 +77,16 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 			// 1. Hash the caller's key together with the conversation id, so keys from different conversations cannot collide in the silo-wide run table.
 			const scopedCommand = { ...command, requestIdempotencyKey: _conversationScopedIdempotencyKey(command.conversationId, command.requestIdempotencyKey) };
 
-			// 2. Put the duplicate and conversation reads behind the capacity gate, so browser traffic cannot hit Prisma unbounded.
+			// 2. Put the participant-bound conversation read behind the capacity gate, so browser traffic cannot hit Prisma unbounded.
 			const preflight = await dependencies.capacityGate.execute(
 				{ siloId: command.siloId, agentServiceId: _PERSONAL_ADMISSION_PREFLIGHT_SERVICE_ID },
 				async function _ResolvePreflight(): Promise<_PersonalRunPreflightResult>
 				{
-					const duplicate = await dependencies.repository.resolve(scopedCommand);
-					if (duplicate.outcome === PersonalRunIdempotencyOutcomes.Idempotent) return { outcome: _PersonalRunPreflightOutcomes.Idempotent, runId: duplicate.runId };
-					if (duplicate.outcome === PersonalRunIdempotencyOutcomes.Conflict) return { outcome: _PersonalRunPreflightOutcomes.Conflict };
 					const authority = await dependencies.repository.resolveConversation(scopedCommand);
 					return authority === null ? { outcome: _PersonalRunPreflightOutcomes.ConversationUnavailable } : { outcome: _PersonalRunPreflightOutcomes.Resolved, agentServiceId: authority.agentServiceId };
 				},
 			);
 			if (preflight.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: preflight.reason };
-			if (preflight.value.outcome === _PersonalRunPreflightOutcomes.Idempotent) return { outcome: PersonalRunAdmissionOutcomes.Idempotent, runId: preflight.value.runId };
-			if (preflight.value.outcome === _PersonalRunPreflightOutcomes.Conflict) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.AuthorityConflict };
 			if (preflight.value.outcome === _PersonalRunPreflightOutcomes.ConversationUnavailable) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.ConversationUnavailable };
 			if (preflight.value.outcome !== _PersonalRunPreflightOutcomes.Resolved) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.AuthorityConflict };
 			const agentServiceId = preflight.value.agentServiceId;
@@ -101,9 +94,15 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 			// 3. Take a slot from the same gate managed admission uses, before opening the expensive assembly transaction.
 			const bounded = await dependencies.capacityGate.execute(
 				{ siloId: command.siloId, agentServiceId },
-				async function _assembleAfterCapacityGrant(): Promise<AssembleRunInputSnapshotResult>
+				async function _assembleAfterCapacityGrant(): Promise<_PersonalRunAssemblyResult>
 				{
-					const assembled = await dependencies.assemble(scopedCommand, { agentServiceId }, commit);
+					const assemblyCommand = _assembleCommand(scopedCommand, agentServiceId);
+					const duplicate = await dependencies.repository.resolve(assemblyCommand);
+					if (duplicate.outcome === PersonalRunIdempotencyOutcomes.Idempotent)
+						return { outcome: "idempotent", runId: duplicate.runId };
+					if (duplicate.outcome === PersonalRunIdempotencyOutcomes.Conflict)
+						return { outcome: "conflict" };
+					const assembled = await dependencies.assemble(assemblyCommand, { agentServiceId }, commit);
 					if (assembled.outcome !== SessionAssemblyOutcomes.Denied || assembled.reason !== RunAdmissionDenialReasons.PersistenceUnavailable) return assembled;
 					try
 					{
@@ -118,6 +117,8 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 				},
 			);
 			if (bounded.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.reason };
+			if (bounded.value.outcome === "idempotent") return { outcome: PersonalRunAdmissionOutcomes.Idempotent, runId: bounded.value.runId };
+			if (bounded.value.outcome === "conflict") return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.AuthorityConflict };
 			if (bounded.value.outcome === SessionAssemblyOutcomes.Denied) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.value.reason };
 			return {
 				outcome: bounded.value.admissionOutcome === RunInputSnapshotAdmissionOutcomes.Accepted ? PersonalRunAdmissionOutcomes.Accepted : PersonalRunAdmissionOutcomes.Idempotent,
@@ -139,7 +140,7 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 				{ siloId: command.siloId, agentServiceId },
 				async function _AssembleFirstThreadRun(): Promise<AssembleRunInputSnapshotResult>
 				{
-					return dependencies.assemble(scopedCommand, { agentServiceId }, commit, prepare);
+					return dependencies.assemble(_assembleCommand(scopedCommand, agentServiceId), { agentServiceId }, commit, prepare);
 				},
 			);
 
@@ -152,6 +153,12 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 			return { outcome: bounded.value.admissionOutcome === RunInputSnapshotAdmissionOutcomes.Accepted ? PersonalRunAdmissionOutcomes.Accepted : PersonalRunAdmissionOutcomes.Idempotent, runId: bounded.value.snapshot.runId };
 		},
 	};
+}
+
+/** Allocates run coordinates; the transaction-scoped input authority resolves the subject after preparation. */
+function _assembleCommand(command: Parameters<PersonalRunAdmissionPort["admitPersonalRun"]>[0], agentServiceId: string): PersonalRunAdmissionAssemblyCommand
+{
+	return { ...command, runId: randomUUID(), agentServiceId };
 }
 
 /**

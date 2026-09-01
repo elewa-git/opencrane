@@ -16,6 +16,9 @@
     "skill-authoring",
     "cognee",
     "litellm",
+    "kurrentdb",
+    "kurrentdb-bootstrap",
+    "agent-sandbox",
     "postgres-database",
     "postgres-pooler",
     "postgres-database-privileges"
@@ -71,6 +74,35 @@
         "Deployment/opencrane-managed-warm",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm"
+      ]
+    },
+    {
+      "id": "history-store",
+      "setValues": [
+        "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "memoryGateway.kubernetesApiServerPort=443",
+        "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
+        "memoryGateway.kubernetesApiServerEndpointPort=443",
+        "historyStore.kurrentdb.enabled=true",
+        "historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls",
+        "historyStore.kurrentdb.bootstrapAdmin.existingSecret=kurrentdb-bootstrap",
+        "historyStore.kurrentdb.bootstrapOps.existingSecret=kurrentdb-bootstrap-ops",
+        "historyStore.kurrentdb.serviceCredential.existingSecret=kurrentdb-history-service",
+        "historyStore.kurrentdb.bootstrap.image.repository=registry.invalid/opencrane-kurrentdb-bootstrap",
+        "historyStore.kurrentdb.bootstrap.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "historyStore.kurrentdb.bootstrap.image.pullPolicy=IfNotPresent"
+      ],
+      "expectedRenderedPodClasses": [
+        "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-opencrane-ui-spa",
+        "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-memory-gateway",
+        "Deployment/opencrane-artifact-service",
+        "Deployment/opencrane-cognee",
+        "Deployment/opencrane-litellm",
+        "StatefulSet/opencrane-kurrentdb",
+        "Job/opencrane-kurrentdb-bootstrap"
       ]
     }
   ],
@@ -234,6 +266,32 @@
       "owner": "apps/_infra/litellm",
       "source": { "type": "file", "path": "apps/_infra/litellm/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.litellm.deployment\"" }
+    },
+    {
+      "id": "kurrentdb",
+      "podClass": "StatefulSet/kurrentdb",
+      "renderedPodClass": "StatefulSet/opencrane-kurrentdb",
+      "image": "docker.kurrent.io/kurrent-latest/kurrentdb@sha256:<release-digest>",
+      "owner": "apps/_infra/kurrentdb",
+      "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_resources.tpl", "anchor": "kind: StatefulSet", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
+    },
+    {
+      "id": "kurrentdb-bootstrap",
+      "podClass": "Job/kurrentdb-bootstrap",
+      "renderedPodClass": "Job/opencrane-kurrentdb-bootstrap",
+      "image": "purpose-built bootstrap image at immutable OCI digest",
+      "owner": "apps/_infra/kurrentdb",
+      "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_resources.tpl", "anchor": "kind: Job", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
+    },
+    {
+      "id": "agent-sandbox",
+      "podClass": "Pod/AgentSandbox-profile",
+      "image": "profile-configured immutable OCI digest",
+      "owner": "apps/_infra/agent-sandbox",
+      "source": { "type": "file", "path": "apps/_infra/agent-sandbox/helm/templates/_resources.tpl", "anchor": "kind: SandboxTemplate" },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentSandbox.resources\"" }
     },
     {
       "id": "postgres-database",

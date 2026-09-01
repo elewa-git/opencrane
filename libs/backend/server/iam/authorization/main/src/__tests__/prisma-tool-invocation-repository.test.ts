@@ -9,12 +9,27 @@ import { PrismaToolInvocationUnitOfWork } from "../prisma-tool-invocation-unit-o
 import { __AdmitPreparingToolInvocationInTransaction } from "../tool-invocation-transaction";
 import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "../tool-invocation.types";
 
+/** Valid execution authority that every run-owned test invocation must carry. */
+const EXECUTION_SUBJECT = {
+	schemaVersion: 1,
+	siloId: "silo-1",
+	agentIdentityId: "identity-1",
+	principalId: "principal-1",
+	identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-evidence", verifiedAt: "2026-08-11T10:00:00.000Z" },
+	membership: { principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-08-11T11:00:00.000Z" },
+	capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-evidence", decidedAt: "2026-08-11T10:00:00.000Z" },
+	runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1" },
+	computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+	requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-08-11T10:00:00.000Z" },
+	admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-evidence", admittedAt: "2026-08-11T10:00:00.000Z" },
+} as const;
+
 /** Build one complete persistence row around a focused state override. */
 function _row(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown>
 {
 	return {
-		id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1",
-		authorizationPrincipalId: null, authorizationActorKind: null, authorizationCoordinates: null, authorizationDecisionDigests: [], authorizationMembershipRevision: null, authorizationAssignmentDigest: null, authorizationEvidenceDigest: null,
+		id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1",
+		authorizationActorKind: null, authorizationExecutionSubject: null, authorizationCoordinates: null, authorizationDecisionDigests: [], authorizationAssignmentDigest: null, authorizationEvidenceDigest: null,
 		runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1",
 		arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: false,
 		recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.Preparing, preparationAttempt: 1,
@@ -29,11 +44,10 @@ function _authorizationEvidence()
 {
 	const assignmentDigest = `sha256:${"a".repeat(64)}` as const;
 	const evidence = {
-		principalId: "principal-1",
-		actorKind: "user" as const,
+		actorKind: "workload" as const,
+		executionSubject: EXECUTION_SUBJECT,
 		coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "integration:calendar:create" }, action: ProductAuthorizationActions.Invoke }],
 		decisionDigests: [`sha256:${"b".repeat(64)}`] as const,
-		membershipRevision: 3,
 		agentRevisionId: "revision-1",
 		runId: "run-1",
 		attempt: 2,
@@ -56,7 +70,7 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const created = _row({ preparationAttempt: 0 });
 		const create = vi.fn().mockResolvedValue(created);
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(null), create } } as unknown as Prisma.TransactionClient;
-		const intent = { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1", authorizationEvidence: _authorizationEvidence(), requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1", arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null } as const;
+		const intent = { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", authorizationEvidence: _authorizationEvidence(), requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1", arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null } as const;
 		const result = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date("2026-08-11T10:00:00.000Z"), _policy());
 		expect(result.outcome).toBe("admitted");
 		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z") }) });

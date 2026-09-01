@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationModes, MessageContentBlockKinds, MessageSources } from "@opencrane/models/conversations";
 import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs";
 import { __DecodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
+import { RetryRunInputCompileOutcomes, type RetryRunInputCompileResult, type RetryRunInputCompiler } from "../retry-run-input.types";
 
 import { PrismaConversationUnitOfWork } from "../db/prisma-conversation-unit-of-work";
 import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types";
@@ -57,9 +58,11 @@ function _ActiveMembership(): object
 	return { findFirst: vi.fn().mockResolvedValue({ id: "member-1", clusterTenant: "silo-1" }), findMany: vi.fn(async function _Memberships(command: { readonly where?: { readonly id?: { readonly in?: readonly string[] }; readonly subject?: { readonly in?: readonly string[] } } })
 	{
 		const ids = command.where?.id?.in;
-		if (ids !== undefined) return rows.filter(function _Id(row): boolean { return ids.includes(row.id); });
+		if (ids !== undefined)
+			return rows.filter(function _Id(row): boolean { return ids.includes(row.id); });
 		const subjects = command.where?.subject?.in;
-		if (subjects !== undefined) return rows.filter(function _Subject(row): boolean { return subjects.includes(row.subject); });
+		if (subjects !== undefined)
+			return rows.filter(function _Subject(row): boolean { return subjects.includes(row.subject); });
 		return rows;
 	}) };
 }
@@ -70,10 +73,16 @@ function _Participant(lifecycle: ConversationLifecycle = ConversationLifecycle.O
 	return { visibleFromPosition: 1n, accessEndedPosition: null, archivedAt: null, readThroughPosition: 0n, conversation: { id: "conversation-1", mode: ConversationMode.Direct, lifecycle, agentServiceId: null, updatedAt: new Date("2026-08-10T10:00:00.000Z"), participants: [{ userId: "user-1" }, { userId: "user-2" }] } };
 }
 
-/** Creates the aggregate authority with a replaceable message-admission collaborator. */
-function _Authority(prisma: object, messageAdmission: Partial<ConversationMessageAdmissionUnitOfWork> = {}, runRetry: RunRetryAuthority = { retry: vi.fn().mockResolvedValue({ outcome: "denied", reason: "run_not_found" }) }): PrismaConversationUnitOfWork
+/** Builds a compiler test double that returns the supplied current-evidence retry snapshot. */
+function _RetryInputCompiler(result: RetryRunInputCompileResult = { outcome: RetryRunInputCompileOutcomes.Compiled, nextInputSnapshot: {} as never }): RetryRunInputCompiler
 {
-	return new PrismaConversationUnitOfWork(prisma as never, messageAdmission as ConversationMessageAdmissionUnitOfWork, runRetry);
+	return { compile: vi.fn().mockResolvedValue(result) };
+}
+
+/** Creates the aggregate authority with replaceable message-admission and retry collaborators. */
+function _Authority(prisma: object, messageAdmission: Partial<ConversationMessageAdmissionUnitOfWork> = {}, runRetry: RunRetryAuthority = { retry: vi.fn().mockResolvedValue({ outcome: "denied", reason: "run_not_found" }) }, retryInputCompiler: RetryRunInputCompiler = _RetryInputCompiler()): PrismaConversationUnitOfWork
+{
+	return new PrismaConversationUnitOfWork(prisma as never, messageAdmission as ConversationMessageAdmissionUnitOfWork, runRetry, retryInputCompiler);
 }
 
 describe("PrismaConversationUnitOfWork", function _Suite()
@@ -148,12 +157,24 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 	it("delegates retries through the injected run authority without opening an aggregate transaction", async function _DelegatesRunRetry()
 	{
 		const retry = vi.fn().mockResolvedValue({ outcome: "started", run: { id: "run-1", attempt: 2 } });
+		const retryInputCompiler = _RetryInputCompiler();
 		const transaction = vi.fn();
-		const authority = _Authority({ $transaction: transaction }, {}, { retry } as never);
+		const authority = _Authority({ $transaction: transaction }, {}, { retry } as never, retryInputCompiler);
 
 		await expect(authority.retryRun(_CALLER, "conversation-1", "run-1", { expectedAttempt: 1 })).resolves.toMatchObject({ outcome: "started", run: { attempt: 2 } });
-		expect(retry).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1" }));
+		expect(retryInputCompiler.compile).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requesterSubjectId: "user-1", requesterPrincipalId: "principal-1" }));
+		expect(retry).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", requestedByPrincipalId: "principal-1", nextInputSnapshot: {} }));
 		expect(transaction).not.toHaveBeenCalled();
+	});
+
+	it("refuses a retry when the inputs authority cannot compile its fresh execution subject", async function _RefusesRetryWithoutCurrentSubject()
+	{
+		const retry = vi.fn();
+		const retryInputCompiler = _RetryInputCompiler({ outcome: RetryRunInputCompileOutcomes.Denied, reason: "unauthorized" });
+		const authority = _Authority({ $transaction: vi.fn() }, {}, { retry } as never, retryInputCompiler);
+
+		await expect(authority.retryRun(_CALLER, "conversation-1", "run-1", { expectedAttempt: 1 })).resolves.toEqual({ outcome: "denied", reason: "unauthorized" });
+		expect(retry).not.toHaveBeenCalled();
 	});
 
 	it("returns the active-run closure conflict only after a durable foreground-run check", async function _RefusesCloseWithRun()

@@ -1,8 +1,9 @@
-import { AGENT_RUNTIME_PROTOCOL_VERSION, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, RuntimeCandidateKinds, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../runtime-protocol-authority";
 import type { RuntimeAttemptAuthority } from "../runtime-protocol-authority.types";
+import { _ExecutionSubject } from "./execution-subject.fixture";
 
 /** Build the attempt authority these admission tests check against. */
 function _authority(): RuntimeAttemptAuthority
@@ -28,7 +29,9 @@ type RuntimeStartAttemptCommand = Extract<RuntimeCommandEnvelope, { readonly kin
 /** Returns the canonical input snapshot for a start command. */
 function _snapshot(): RunInputSnapshot
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "agent-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: "sha256:membership", fleetMembershipTrustedUntil: "2026-07-20T00:05:00.000Z" }, capabilitySetDigest: "sha256:capabilities", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-07-20T00:00:00.000Z" };
+	const baseSubject = _ExecutionSubject();
+	const executionSubject = _ExecutionSubject({ agentIdentityId: "identity-1", runScope: { ...baseSubject.runScope, agentServiceId: "agent-1", attempt: 2 } });
+	return { runId: "run-1", attempt: 2, siloId: "silo-1", agentServiceId: "agent-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, executionSubject, promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-07-20T00:00:00.000Z" };
 }
 
 /** Returns the compiled literal input carried alongside the snapshot on a start command. */
@@ -48,7 +51,7 @@ function _command(): RuntimeStartAttemptCommand
 		fence: 7,
 		issuedAt: "2026-07-20T00:00:00.000Z",
 		expiresAt: "2026-07-20T00:05:00.000Z",
-		assignment: { runId: "run-1", attempt: 2, agentServiceId: "agent-1", agentRevisionId: "revision-1", siloId: "silo-1", identity: { kind: "user", executionSubjectId: "user-1", fleetMembershipRevision: 1 }, capabilitySetDigest: "sha256:capabilities", serviceAccountName: "runtime", podUid: "pod-1", assignmentDigest: "sha256:assignment", issuedAt: "2026-07-20T00:00:00.000Z", expiresAt: "2026-07-20T00:05:00.000Z" },
+		assignment: { runId: "run-1", attempt: 2, agentServiceId: "agent-1", agentRevisionId: "revision-1", siloId: "silo-1", executionSubject: _snapshot().executionSubject, serviceAccountName: "runtime", podUid: "pod-1", assignmentDigest: "sha256:assignment", issuedAt: "2026-07-20T00:00:00.000Z", expiresAt: "2026-07-20T00:05:00.000Z" },
 		kind: "start_attempt",
 		payload: { snapshot: _snapshot(), compiledInput: _compiledInput() },
 	};

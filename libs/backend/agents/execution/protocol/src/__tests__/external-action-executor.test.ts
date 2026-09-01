@@ -34,11 +34,10 @@ describe("composition-root external action executor", function _suite()
 		await expect(executor.execute()).rejects.toMatchObject({ name: "PersonalMemorySafeDeliveryRequiredError" });
 	});
 
-	it("selects personal memory only from the frozen user policy", function _selectsFrozenMemory()
+	it("selects personal memory only from the frozen admitted memory policy", function _selectsFrozenMemory()
 	{
-		const snapshot = { identitySnapshot: { kind: "user" }, memoryQueryPolicy: { scope: "personal", cogneeDatasetId: "personal-1" } } as unknown as RunInputSnapshot;
+		const snapshot = { memoryQueryPolicy: { scope: "personal", cogneeDatasetId: "personal-1" } } as unknown as RunInputSnapshot;
 		expect(__PersonalMemoryDatasetId(snapshot)).toBe("personal-1");
-		expect(__PersonalMemoryDatasetId({ ...snapshot, identitySnapshot: { kind: "service" } } as unknown as RunInputSnapshot)).toBeNull();
 		expect(__PersonalMemoryDatasetId({ ...snapshot, memoryQueryPolicy: { scope: "personal" } } as unknown as RunInputSnapshot)).toBeNull();
 	});
 

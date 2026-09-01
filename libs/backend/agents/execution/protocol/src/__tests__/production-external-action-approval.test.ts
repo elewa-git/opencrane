@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ExternalActionRecoveryModes, ToolInvocationStates, __DigestCanonicalJson, type OpenDeferredToolApprovalCommand, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
-import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
+import type { RunInputSnapshot } from "@opencrane/contracts";
 
 import { __CreateProductionExternalActionApprovalOpener } from "../production-external-action-approval";
+import { _ExecutionSubject } from "./execution-subject.fixture";
 
 /** Mock of the authorization module, used to inspect the open command it receives. */
 const _openApproval = vi.hoisted(function _openMock()
@@ -33,7 +34,6 @@ function _invocation(): ToolInvocationRecord
 		attempt: 1,
 		mcpTaskId: null,
 		agentRevisionId: "revision-1",
-		subjectId: "user-1",
 		authorizationEvidence: null,
 		candidateId: "candidate-1",
 		toolInvocationId: "tool-call-1",
@@ -66,6 +66,7 @@ function _snapshot(): RunInputSnapshot
 	const parametersSchema = { type: "object", additionalProperties: false, required: ["calendarId", "token"], properties: { calendarId: { type: "string" }, token: { type: "string", writeOnly: true } } };
 	return {
 		runId: "run-1",
+		attempt: 1,
 		siloId: "silo-1",
 		agentServiceId: "service-1",
 		agentRevisionId: "revision-1",
@@ -80,9 +81,7 @@ function _snapshot(): RunInputSnapshot
 		mcpTools: [{ toolRevisionId: "mcp-tool-revision-calendar-read", name: "read", description: "Read a calendar", inputSchema: parametersSchema, inputSchemaDigest: __DigestCanonicalJson(parametersSchema) }],
 		modelRoute: {},
 		budgetPolicy: {},
-		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-11T11:00:00.000Z" },
-		capabilitySetDigest: `sha256:${"c".repeat(64)}`,
-		effectiveContractDigest: `sha256:${"d".repeat(64)}`,
+		executionSubject: _ExecutionSubject(),
 		promptCompilerVersion: "prompt-v1",
 		digest: `sha256:${"e".repeat(64)}`,
 		compiledAt: "2026-08-11T09:59:00.000Z",
@@ -123,7 +122,7 @@ describe("production external-action approval opener", function _suite()
 			argumentsDigest: invocation.argumentsDigest,
 			parametersSchema: definition.inputSchema,
 			parametersSchemaDigest: definition.inputSchemaDigest,
-			capabilitySetDigest: context.snapshot.capabilitySetDigest,
+			capabilitySetDigest: context.snapshot.executionSubject.capability.capabilitySetDigest,
 			invocationId: "invocation-row-1",
 			now: _NOW,
 			expiresAt: new Date("2026-08-11T10:15:00.000Z"),

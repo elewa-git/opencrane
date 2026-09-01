@@ -1,3 +1,5 @@
+import type { ExecutionSubject } from "@opencrane/models/agents";
+
 /** Runtime execution coordinates that must still identify the active published service revision. */
 export interface RuntimeAgentEffectEligibilityCommand
 {
@@ -7,10 +9,8 @@ export interface RuntimeAgentEffectEligibilityCommand
 	readonly agentServiceId: string;
 	/** Published revision assigned to the current run. */
 	readonly agentRevisionId: string;
-	/** Whether the frozen identity represents a person or a managed service. */
-	readonly executionKind: "personal" | "managed";
-	/** Local Principal that will authorize the external effect. */
-	readonly principalId: string;
+	/** Checked subject that owns the exact run, identity, Principal, and computer lease. */
+	readonly executionSubject: ExecutionSubject;
 }
 
 /** Rechecks the AgentService lifecycle before a runtime may create new outside work. */

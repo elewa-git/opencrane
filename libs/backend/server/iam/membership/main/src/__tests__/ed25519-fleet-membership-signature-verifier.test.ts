@@ -17,7 +17,7 @@ function _Revision(privateKey: KeyObject, issuerKeyId = "fleet-key-1"): SignedFl
 		siloId: "silo-1",
 		issuedAtEpochMs: 1_000,
 		expiresAtEpochMs: 10_000,
-		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "agent-service:service-1" }],
+		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "principal-1" }],
 	};
 	const payloadDigest = __DigestFleetMembershipSignedPayload(payload);
 	return { ...payload, payloadDigest, signature: sign(null, Buffer.from(payloadDigest, "utf8"), privateKey).toString("base64url") };
@@ -35,8 +35,8 @@ describe("Ed25519FleetMembershipSignatureVerifier", function ()
 			issuedAtEpochMs: 1_000,
 			expiresAtEpochMs: 10_000,
 			assertions: [
-				{ assertionId: "assertion-z", siloId: "silo-1", subjectId: "agent-service:service-1" },
-				{ assertionId: "assertion-a", siloId: "silo-1", subjectId: "agent-service:service-1" },
+				{ assertionId: "assertion-z", siloId: "silo-1", subjectId: "principal-1" },
+				{ assertionId: "assertion-a", siloId: "silo-1", subjectId: "principal-1" },
 			],
 		};
 		expect(__DigestFleetMembershipSignedPayload(payload)).toBe(__DigestFleetMembershipSignedPayload({ ...payload, assertions: [...payload.assertions].reverse() }));
@@ -50,7 +50,7 @@ describe("Ed25519FleetMembershipSignatureVerifier", function ()
 		const revision = _Revision(pair.privateKey);
 
 		await expect(verifier.verify(revision)).resolves.toMatchObject({ verified: true, issuerKeyId: "fleet-key-1", payloadDigest: revision.payloadDigest });
-		await expect(verifier.verify({ ...revision, assertions: [{ ...revision.assertions[0], subjectId: "agent-service:attacker" }] })).resolves.toMatchObject({ verified: false });
+		await expect(verifier.verify({ ...revision, assertions: [{ ...revision.assertions[0], subjectId: "principal-attacker" }] })).resolves.toMatchObject({ verified: false });
 		await expect(verifier.verify({ ...revision, payloadDigest: `sha256:${"b".repeat(64)}` })).resolves.toMatchObject({ verified: false });
 		await expect(verifier.verify(_Revision(pair.privateKey, "unknown-key"))).resolves.toMatchObject({ verified: false });
 	});

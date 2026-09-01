@@ -8,8 +8,8 @@ description: >-
   `crds.install` defaults true, while a release that uses a separately managed shared CRD
   bundle sets it false. Still depends on the cert-manager issuer.
 type: application
-version: 0.10.0
-appVersion: "0.10.0"
+version: 0.11.0
+appVersion: "0.11.0"
 keywords:
   - governed-agents
   - cluster-tenant
@@ -64,3 +64,9 @@ dependencies:
   - name: opencrane-litellm
     version: ">=0.0.0-0"
     repository: "file://../litellm/helm"
+  - name: opencrane-kurrentdb
+    version: ">=0.0.0-0"
+    repository: "file://../kurrentdb/helm"
+  - name: opencrane-agent-sandbox
+    version: ">=0.0.0-0"
+    repository: "file://../agent-sandbox/helm"

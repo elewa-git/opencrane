@@ -1,33 +1,4 @@
-import type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaRevisionId, SiloId } from "@opencrane/models/agents";
-
-/** Immutable user identity projected into a runtime assignment frame. */
-export interface UserRuntimeAssignmentIdentity
-{
-	/** Discriminant that keeps a human membership revision distinct from service authority. */
-	kind: "user";
-	/** Human subject whose membership authorized this run. */
-	executionSubjectId: string;
-	/** Highest verified fleet-membership revision used for authorization. */
-	fleetMembershipRevision: number;
-}
-
-/** Immutable managed-service identity projected into a runtime assignment frame. */
-export interface ServiceRuntimeAssignmentIdentity
-{
-	/** Discriminant that keeps a service principal distinct from a human member. */
-	kind: "service";
-	/** Canonical `agent-service:<AgentServiceId>` principal authorized for this run. */
-	executionSubjectId: string;
-	/** Active managed service whose immutable revision owns the execution authority. */
-	agentServiceId: AgentServiceId;
-	/** Highest verified fleet-membership revision used for this service principal. */
-	fleetMembershipRevision: number;
-	/** Digest binding the effective boundary-attachment set into the service authority. */
-	effectiveBoundaryAttachmentDigest: string;
-}
-
-/** Tagged immutable identity carried by every runtime assignment. */
-export type RuntimeAssignmentIdentity = UserRuntimeAssignmentIdentity | ServiceRuntimeAssignmentIdentity;
+import type { AgentRevisionId, AgentRunId, AgentServiceId, ExecutionSubject, PersonaRevisionId, SiloId } from "@opencrane/models/agents";
 
 /** Immutable proof-bound assignment consumed by an agent runtime Pod. */
 export interface RuntimeAssignment
@@ -44,10 +15,8 @@ export interface RuntimeAssignment
 	readonly personaRevisionId?: PersonaRevisionId;
 	/** Silo in which the assignment is valid. */
 	readonly siloId: SiloId;
-	/** Tagged user or service identity whose signed membership evidence authorized the run. */
-	readonly identity: RuntimeAssignmentIdentity;
-	/** Digest of the effective proof-bound capability set. */
-	readonly capabilitySetDigest: string;
+	/** Exact evidence-bound subject that may exercise this workload assignment. */
+	readonly executionSubject: ExecutionSubject;
 	/** Expected Kubernetes service account name. */
 	readonly serviceAccountName: string;
 	/** Expected runtime Pod UID. */

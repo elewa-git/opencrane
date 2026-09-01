@@ -153,6 +153,17 @@ spec:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
   egress:
+    {{- if .Values.historyStore.kurrentdb.enabled }}
+    # The server reaches the release-local HistoryStore through KurrentDB's TLS listener only.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: kurrentdb
+      ports:
+        - protocol: TCP
+          port: {{ .Values.historyStore.kurrentdb.service.port }}
+    {{- end }}
     {{- if .Values.agentController.kubernetesApiServerCidrs }}
     # TokenReview is the application-layer identity gate for controller and runtime calls. Keep the
     # server's API-server path on the same exact Service-IP allow-list as the controller.
