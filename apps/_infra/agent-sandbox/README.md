@@ -49,8 +49,11 @@ and owns no product authorization decision.
 
 `agentSandbox.enabled` is false by default. Enabling it requires the pre-existing target namespace,
 an installed `extensions.agents.x-k8s.io/v1beta1` API, a RuntimeClass, one service-account name, and
-at least one named profile. Each profile requires a unique pool name, repository-and-`sha256` image
-identity, pull policy, and CPU/memory requests and limits. Every resulting warm pool has
+at least one named profile. Each profile requires an immutable unique `profileRevisionId`, a unique
+pool name, repository-and-`sha256` image identity, pull policy, and CPU/memory requests and limits.
+The umbrella chart mounts the resulting revision-to-profile map into the OpenCrane server as an
+immutable ConfigMap, so durable activation events cannot select a different Sandbox profile. Every
+resulting warm pool has
 `replicas: 0`; claims start the configured profile only after the durable computer authority admits one.
 
 ## See also
