@@ -1,5 +1,4 @@
 import type * as k8s from "@kubernetes/client-node";
-import type { PrismaClient } from "@prisma/client";
 import express, { type Express } from "express";
 
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
@@ -21,6 +20,9 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
+
+/** Reuses the OIDC composition's database-client type so this application root does not import Prisma directly. */
+type PrismaClient = Parameters<typeof ___CreateOidcAuthService>[1];
 
 /**
  * Build the audit-log appender for the standalone first-owner claim, or null when that claim is not configured.
