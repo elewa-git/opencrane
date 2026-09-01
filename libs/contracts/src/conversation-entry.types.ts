@@ -388,6 +388,8 @@ export interface ElicitationRequestEntry extends ElicitationEntryBase
 {
 	/** States that the request remains open for the addressed participant. */
 	readonly state: ConversationElicitationEntryStates.Requested;
+	/** Names the immutable computer profile that admitted this request. */
+	readonly profileRevisionId: string;
 	/** Identifies the participant whose response the server must authorize. */
 	readonly addressedParticipantId: string;
 	/** Identifies the private request payload outside immutable history. */

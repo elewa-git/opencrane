@@ -16,6 +16,26 @@ export interface ConversationComputerCurrentCommand
 	readonly profileRevisionId: string;
 }
 
+/** Names the trusted computer coordinates a runtime command may supply without selecting an identity. */
+export interface ConversationComputerRuntimeCurrentCommand
+{
+	/** Identifies the silo that owns the requested computer. */
+	readonly siloId: string;
+	/** Identifies the computer selected by the server activation route. */
+	readonly computerId: string;
+	/** Identifies the conversation already bound to that computer. */
+	readonly conversationId: string;
+	/** Identifies the profile revision already bound to that computer. */
+	readonly profileRevisionId: string;
+}
+
+/** Adds the server-owned current time required to use a runtime-selected computer execution. */
+export interface ActiveConversationComputerRuntimeCommand extends ConversationComputerRuntimeCurrentCommand
+{
+	/** Rejects a lease that expired before this command was admitted. */
+	readonly nowEpochMilliseconds: number;
+}
+
 /** Adds the server-owned clock required to decide whether one warm lease remains usable. */
 export interface ActiveConversationComputerLeaseCommand extends ConversationComputerCurrentCommand
 {

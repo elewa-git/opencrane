@@ -141,6 +141,12 @@ transport for workloads; it is not a browser fallback.
 - `ConversationHistoryReader.readCurrent` replays every participant-visible entry from the
   immutable first position and returns only the KurrentDB head condition that a later atomic
   command append may use. It does not authorize a participant or append an entry itself.
+- `ConversationComputerRuntimeInputElicitationAuthority` derives the computer execution, AgentIdentity,
+  participant, expiry, and entry coordinates server-side, records `Conversation/Use`, and makes one
+  atomic KurrentDB RuntimeInput request append fenced by computer, conversation, and identity heads.
+  An identical response-lost retry returns the first durable receipt without re-admitting or appending;
+  a changed reuse of the same request identifier fails closed. The authority is intentionally exported
+  but not yet composed: the #759 ConversationComputer loop checkpoint owns that composition.
 
 ## Boundary
 
