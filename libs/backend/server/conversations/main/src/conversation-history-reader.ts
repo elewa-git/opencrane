@@ -1,7 +1,7 @@
 import { ___ConversationEntrySchema, type ConversationEntry } from "@opencrane/contracts";
-import { type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationHistoryReadCommand, ConversationHistoryReadResult } from "./conversation-history-reader.types";
+import type { ConversationHistoryReadCommand, ConversationHistoryReadResult, CurrentConversationHistory } from "./conversation-history-reader.types";
 
 /** Names the sole versioned event that this reader exposes as a participant-visible entry. */
 const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
@@ -19,8 +19,8 @@ const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{
  */
 export class ConversationHistoryReader
 {
-	/** Connects the reader to the stream-only HistoryStore port without granting append access. */
-	public constructor(private readonly historyStore: Pick<HistoryStore, "readStream">) {}
+	/** Connects the reader to the checked HistoryStore read ports without granting append access. */
+	public constructor(private readonly historyStore: Pick<HistoryStore, "readHead" | "readStream">) {}
 
 	/**
 	 * Reads one validated stream range and returns only its participant-visible entries in revision order.
@@ -47,6 +47,33 @@ export class ConversationHistoryReader
 
 		// 3. Return the finite ordered stream result without constructing a relational or projection fallback.
 		return { streamName, entries };
+	}
+
+	/**
+	 * Replays the complete current conversation stream and verifies its head did not move.
+	 *
+	 * ConversationComputer command admission uses the returned condition with HistoryStore.appendAtomic.
+	 * It therefore cannot authorize an elicitation against a stale transcript and append it after a
+	 * concurrent participant event changed the current conversation.
+	 *
+	 * @param command - Supplies trusted silo and conversation coordinates for the complete stream.
+	 * @returns Every validated current entry and the exact later append condition for its checked head.
+	 * @throws {Error} Rejects malformed history, a missing event before a reported head, or a changed head.
+	 */
+	public async readCurrent(command: ConversationHistoryReadCommand): Promise<CurrentConversationHistory>
+	{
+		if (command.fromRevision !== undefined)
+			throw new Error("Conversation history current read cannot start after the immutable first entry");
+		const current = await this.read(command);
+		const head = await this.historyStore.readHead(current.streamName);
+		const lastEntry = current.entries.at(-1);
+		const expectedHeadRevision = lastEntry === undefined ? null : BigInt(lastEntry.position);
+		if (head.streamName !== current.streamName || head.revision !== expectedHeadRevision)
+			throw new Error("Conversation history changed while loading its current state");
+		return {
+			...current,
+			expectedRevision: head.revision ?? HistoryExpectedRevisions.NoStream,
+		};
 	}
 }
 

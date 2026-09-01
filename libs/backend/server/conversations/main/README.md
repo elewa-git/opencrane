@@ -138,6 +138,9 @@ transport for workloads; it is not a browser fallback.
   deterministic KurrentDB stream. `loadActiveExecution` returns only an open execution whose
   identity and lease generation match the checked current head, so a later command authority can
   fence its participant append to the active loop attempt.
+- `ConversationHistoryReader.readCurrent` replays every participant-visible entry from the
+  immutable first position and returns only the KurrentDB head condition that a later atomic
+  command append may use. It does not authorize a participant or append an entry itself.
 
 ## Boundary
 
