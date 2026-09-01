@@ -20,13 +20,13 @@ export class _KubernetesAgentSandboxClaimObservationReader implements AgentSandb
 	/** Connects this read-only adapter to the server identity's namespaced custom-object client. */
 	public constructor(private readonly customApi: AgentSandboxClaimCustomObjectsApi) {}
 
-/**
- * Reads and validates the exact deterministic claim before returning its ready sandbox id.
- *
- * @param command - Supplies the immutable coordinates previously derived from checked history.
- * @returns `Pending` for a missing, unready, or stale claim, or `Ready` with its current sandbox id.
- * @throws {Error} Propagates Kubernetes failure and rejects a found claim with mismatched fields.
- */
+	/**
+	 * Reads and validates the exact deterministic claim before returning its ready sandbox id.
+	 *
+	 * @param command - Supplies the immutable coordinates previously derived from checked history.
+	 * @returns `Pending` for a missing, unready, or stale claim, or `Ready` with its current sandbox id.
+	 * @throws {Error} Propagates Kubernetes failure and rejects a found claim with mismatched fields.
+	 */
 	public async observe(command: AgentSandboxClaimObservationCommand): Promise<AgentSandboxClaimObservation>
 	{
 		const claimName = __AgentSandboxClaimName(command.computerId, command.generation);
@@ -63,7 +63,12 @@ function _ReadObservation(value: unknown, command: AgentSandboxClaimObservationC
 		"opencrane.ai/computer-id": command.computerId,
 		"opencrane.ai/computer-generation": String(command.generation),
 		"opencrane.ai/profile": command.profile,
-	}) || !_MatchesExpectedRecord(metadata.annotations, { "opencrane.ai/lease-reason": command.reason }) || !_MatchesExpectedRecord(spec.warmPoolRef, { name: command.warmPoolName }) || !_MatchesExpectedRecord(spec.lifecycle, { shutdownPolicy: "DeleteForeground", shutdownTime: command.shutdownTime.toISOString() }))
+	}) || !_MatchesExpectedRecord(metadata.annotations, { "opencrane.ai/lease-reason": command.reason }) || !_MatchesExpectedRecord(spec.warmPoolRef, { name: command.warmPoolName }) || !_MatchesExpectedRecord(spec.lifecycle, { shutdownPolicy: "DeleteForeground", shutdownTime: command.shutdownTime.toISOString() }) || !_MatchesExpectedRecord(_NestedRecord(spec.additionalPodMetadata, "labels"), {
+		"app.kubernetes.io/name": command.podLabels.applicationName,
+		"app.kubernetes.io/instance": command.podLabels.releaseName,
+		"app.kubernetes.io/component": "agent-sandbox",
+		"opencrane.ai/computer-id": command.computerId,
+	}))
 		throw new Error(`Agent Sandbox claim '${claimName}' conflicts with the expected immutable lease`);
 	const status = value.status;
 	if (!_IsRecord(status) || !_IsRecord(status.sandbox) || !_IsDnsLabel(status.sandbox.name))
@@ -87,6 +92,12 @@ function _IsReadyCondition(value: unknown): value is { readonly observedGenerati
 function _MatchesExpectedRecord(value: unknown, expected: Record<string, string>): boolean
 {
 	return _IsRecord(value) && Object.keys(value).length === Object.keys(expected).length && Object.entries(expected).every(([key, expectedValue]) => value[key] === expectedValue);
+}
+
+/** Reads one controller-owned nested record without accepting an unstructured Pod metadata field. */
+function _NestedRecord(value: unknown, key: string): Record<string, unknown> | null
+{
+	return _IsRecord(value) && _IsRecord(value[key]) ? value[key] : null;
 }
 
 /** Narrows untrusted Kubernetes data without accepting arrays as resource records. */

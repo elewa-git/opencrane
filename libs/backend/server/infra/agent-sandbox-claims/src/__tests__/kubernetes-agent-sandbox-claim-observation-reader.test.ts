@@ -12,6 +12,7 @@ function _Command(overrides: Partial<AgentSandboxClaimObservationCommand> = {}):
 		generation: 2,
 		profile: "developer",
 		warmPoolName: "developer-pool",
+		podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" },
 		reason: AgentSandboxClaimReason.ActivationRequested,
 		shutdownTime: new Date("2026-09-01T00:20:00.000Z"),
 		...overrides,
@@ -35,7 +36,7 @@ function _Claim(command: AgentSandboxClaimObservationCommand, overrides: Record<
 			},
 			annotations: { "opencrane.ai/lease-reason": command.reason },
 		},
-		spec: { warmPoolRef: { name: command.warmPoolName }, lifecycle: { shutdownPolicy: "DeleteForeground", shutdownTime: command.shutdownTime.toISOString() } },
+		spec: { warmPoolRef: { name: command.warmPoolName }, lifecycle: { shutdownPolicy: "DeleteForeground", shutdownTime: command.shutdownTime.toISOString() }, additionalPodMetadata: { labels: { "app.kubernetes.io/name": command.podLabels.applicationName, "app.kubernetes.io/instance": command.podLabels.releaseName, "app.kubernetes.io/component": "agent-sandbox", "opencrane.ai/computer-id": command.computerId } } },
 		status: { sandbox: { name: "sandbox-41" }, conditions: [{ type: "Ready", status: "True", observedGeneration: 1 }] },
 		...overrides,
 	};
@@ -73,6 +74,15 @@ describe("_KubernetesAgentSandboxClaimObservationReader", function _ObservationR
 		const command = _Command();
 		const foreign = _Claim(command);
 		(foreign.metadata as Record<string, unknown>).labels = { ...(foreign.metadata as Record<string, Record<string, string>>).labels, "opencrane.ai/profile": "foreign" };
+
+		await expect(new _KubernetesAgentSandboxClaimObservationReader(_Api(foreign).api).observe(command)).rejects.toThrow("conflicts with the expected immutable lease");
+	});
+
+	it("rejects a ready claim whose Pod labels no longer identify its admitted computer", async function _RejectsForeignPodIdentity()
+	{
+		const command = _Command();
+		const foreign = _Claim(command);
+		((((foreign["spec"] as Record<string, unknown>)["additionalPodMetadata"] as Record<string, unknown>)["labels"] as Record<string, unknown>)["opencrane.ai/computer-id"]) = "computer-99";
 
 		await expect(new _KubernetesAgentSandboxClaimObservationReader(_Api(foreign).api).observe(command)).rejects.toThrow("conflicts with the expected immutable lease");
 	});

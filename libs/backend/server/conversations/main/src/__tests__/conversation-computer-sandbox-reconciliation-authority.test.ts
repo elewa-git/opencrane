@@ -20,7 +20,7 @@ function _Current(overrides: Record<string, unknown> = {})
 function _Authority(current = _Current(), now = new Date("2026-09-01T00:10:00.000Z"))
 {
 	const history = { loadForActivation: vi.fn().mockResolvedValue(current), append: vi.fn().mockResolvedValue(undefined) };
-	const profiles = { resolve: vi.fn().mockResolvedValue({ namespace: "testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool" }) };
+	const profiles = { resolve: vi.fn().mockResolvedValue({ namespace: "testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }) };
 	const observations = { observe: vi.fn().mockResolvedValue({ state: AgentSandboxClaimObservationStates.Ready, sandboxId: "sandbox-1" }) };
 	const runtimePods = { read: vi.fn().mockResolvedValue({ namespace: "testv5", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" }) };
 	return { authority: new ConversationComputerSandboxReconciliationAuthority({ history, profiles, observations, runtimePods, clock: { now: vi.fn().mockReturnValue(now) } }), history, profiles, observations, runtimePods };

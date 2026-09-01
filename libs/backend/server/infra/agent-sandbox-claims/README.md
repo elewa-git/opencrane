@@ -5,8 +5,9 @@
 ## What it owns
 
 This package turns an already-admitted ConversationComputer generation into exactly one
-Agent Sandbox `SandboxClaim`. It creates the release-policy-safe resource body, and treats an
-already-existing claim as idempotent only when every immutable lease field matches exactly.
+Agent Sandbox `SandboxClaim`. It creates the release-policy-safe resource body, including the
+four Pod labels that preserve the server release boundary and identify that computer, and treats
+an already-existing claim as idempotent only when every immutable lease field matches exactly.
 
 ```
  durable computer activation
@@ -29,7 +30,8 @@ cannot point at a second claim name.
 - `AgentSandboxClaimAuthority` exposes `ensure` as the sole claim-creation operation.
 - `_KubernetesAgentSandboxClaimAuthority` calls only namespaced custom-object `create` and `get`.
 - `AgentSandboxClaimObservationReader` separately reads one exact claim status and exposes a
-  Sandbox id only when its immutable lease fields and current `Ready=True` condition match.
+  Sandbox id only when its immutable lease fields, stamped Pod labels, and current `Ready=True`
+  condition match.
 - `AgentSandboxRuntimePodReader` resolves the assigned Sandbox's v1 name-matched backing Pod, then
   accepts it only when its namespace, ServiceAccount, controller owner reference, and immutable UID
   all match the release-bound realization.

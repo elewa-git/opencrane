@@ -34,10 +34,21 @@ export interface AgentSandboxClaimCommand
 	readonly profile: string;
 	/** Selects the release-owned warm pool mapped to that profile. */
 	readonly warmPoolName: string;
+	/** Carries the immutable release labels that identify the admitted Sandbox Pods. */
+	readonly podLabels: AgentSandboxClaimPodLabels;
 	/** States whether activation or recovery requested the lease. */
 	readonly reason: AgentSandboxClaimReason;
 	/** Sets the foreground-delete deadline accepted by the admission policy. */
 	readonly shutdownTime: Date;
+}
+
+/** Names the release selectors a claim controller must stamp onto its resulting Sandbox Pod. */
+export interface AgentSandboxClaimPodLabels
+{
+	/** Names the Helm application label shared with the server NetworkPolicy selector. */
+	readonly applicationName: string;
+	/** Names the immutable Helm release label shared with the server NetworkPolicy selector. */
+	readonly releaseName: string;
 }
 
 /**

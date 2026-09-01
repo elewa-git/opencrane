@@ -53,6 +53,8 @@ export interface ConversationComputerActivationProfileConfig
 	readonly sandboxProfile: string;
 	/** Names the release-owned warm pool paired with the sandbox profile. */
 	readonly warmPoolName: string;
+	/** Names the release selector labels the claim controller stamps onto the resulting Sandbox Pod. */
+	readonly podLabels: { readonly applicationName: string; readonly releaseName: string };
 }
 
 /**

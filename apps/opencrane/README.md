@@ -86,7 +86,8 @@ its resources to the lifecycle owner.
 - `src/app/conversation-computer-activation-composition.ts` consumes the deployment-provisioned,
   silo-scoped KurrentDB activation group and creates the exact Agent Sandbox claim that checked
   ConversationComputer history permits. History supplies the profile revision, which the immutable
-  ConfigMap mounted by the server release resolves to Agent Sandbox coordinates; an unexpected consumer exit terminates the process so
+  ConfigMap mounted by the server release resolves to Agent Sandbox coordinates and the release
+  selectors that its admission policy permits on the resulting Pod; an unexpected consumer exit terminates the process so
   KurrentDB can redeliver to a healthy replacement.
 - `src/app/conversation-computer-sandbox-reconciliation-composition.ts` replays the same durable
   activation history and keeps only outstanding computer generations in a bounded status-polling
