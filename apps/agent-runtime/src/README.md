@@ -12,6 +12,7 @@ results and therefore cannot repeat a provider action after reconnecting.
 
 ```text
 runtime.py  warm binding, process lifecycle, and bounded reconnects
+conversation_computer/  mounted Sandbox bootstrap contract and fenced execution exchange
 │
 ├── bootstrap/ ───────────────────────┐
 │   proof evidence + one-use binding  │
