@@ -16,7 +16,10 @@ export function buildEvidence(input, evaluation)
 	});
 	return {
 		repository: input.repository,
-		snapshotDigest: digestEvidence(input.pullRequests),
+		snapshotDigest: digestEvidence({
+			pullRequests: input.pullRequests,
+			mergedPullRequests: input.mergedPullRequests ?? [],
+		}),
 		event: input.event ?? null,
 		pullRequests: input.pullRequests.map(function _EvidencePullRequest(pullRequest) {
 			return {
@@ -30,6 +33,19 @@ export function buildEvidence(input, evaluation)
 		}),
 		edges: Array.from(evaluation.topology.parents, function _Edge([child, parent]) { return { parent, child }; })
 			.sort(function _ByChild(left, right) { return left.child - right.child; }),
+		mergedBridges: Array.from(evaluation.topology.bridges, function _Bridge([child, mergedLayers]) {
+			return {
+				child,
+				mergedLayers: mergedLayers.map(function _MergedLayer(layer) {
+					return {
+						number: layer.number,
+						head: layer.head,
+						base: layer.base,
+						mergeCommitSha: layer.mergeCommitSha,
+					};
+				}),
+			};
+		}).sort(function _ByChild(left, right) { return left.child - right.child; }),
 		reviewLevels: reviewLevels(input.pullRequests, evaluation.topology.parents),
 		currentChain: evaluation.currentChain,
 		current: evaluation.current ? {

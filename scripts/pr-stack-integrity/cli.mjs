@@ -27,6 +27,7 @@ function _Failure(repository, event, error)
 			event,
 			pullRequests: [],
 			edges: [],
+			mergedBridges: [],
 			reviewLevels: [],
 			currentChain: [],
 			current: null,
@@ -70,10 +71,14 @@ export function runCli(arguments_, dependencies = {})
 				valid: true,
 				evidence: {
 					repository,
-					snapshotDigest: digestEvidence(inspection.pullRequests),
+					snapshotDigest: digestEvidence({
+						pullRequests: inspection.pullRequests,
+						mergedPullRequests: inspection.mergedPullRequests ?? [],
+					}),
 					event: null,
 					pullRequests: inspection.pullRequests,
 					edges: [],
+					mergedBridges: [],
 					reviewLevels: [],
 					currentChain: [],
 					current: null,

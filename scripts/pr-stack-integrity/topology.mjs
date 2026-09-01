@@ -1,8 +1,39 @@
-/** Build direct open-PR parent edges and rule-coded structural findings. */
-export function buildTopology(pullRequests, integrationBranches)
+/** Follow closed base layers until an open PR or integration branch is reached, accepting each layer only when GitHub records its merge commit. */
+function _MergedStackParent(pullRequest, byHead, mergedByHead, integrationBranches)
+{
+	let base = pullRequest.base;
+	let bridged = false;
+	const mergedLayers = [];
+	const seen = new Set();
+	while (!integrationBranches.has(base.ref))
+	{
+		const openParent = byHead.get(base.ref);
+		if (openParent)
+		{
+			return { parent: openParent, base, bridged, mergedLayers };
+		}
+		const mergedParent = mergedByHead.get(base.ref)?.find(function _MergeCommitMatches(candidate) {
+			return candidate.mergeCommitSha === base.sha;
+		});
+		if (!mergedParent || seen.has(mergedParent.number))
+		{
+			return undefined;
+		}
+		seen.add(mergedParent.number);
+		bridged = true;
+		mergedLayers.push(mergedParent);
+		base = mergedParent.base;
+	}
+	return { parent: undefined, base, bridged, mergedLayers };
+}
+
+/** Build open-PR edges while treating merge-commit-pinned closed layers as bridges so a native stack remains reviewable after a parent merges. */
+export function buildTopology(pullRequests, integrationBranches, mergedPullRequests = [])
 {
 	const findings = [];
 	const byHead = new Map();
+	const mergedByHead = new Map();
+	const bridges = new Map();
 	const byNumber = new Map(pullRequests.map(function _Entry(pullRequest) {
 		return [pullRequest.number, pullRequest];
 	}));
@@ -17,11 +48,22 @@ export function buildTopology(pullRequests, integrationBranches)
 		}
 		byHead.set(pullRequest.head.ref, pullRequest);
 	}
+	for (const pullRequest of mergedPullRequests)
+	{
+		const mergedLayers = mergedByHead.get(pullRequest.head.ref) ?? [];
+		mergedLayers.push(pullRequest);
+		mergedByHead.set(pullRequest.head.ref, mergedLayers);
+	}
 
 	const parents = new Map();
 	for (const pullRequest of pullRequests)
 	{
-		const parent = byHead.get(pullRequest.base.ref);
+		const resolved = _MergedStackParent(pullRequest, byHead, mergedByHead, integrationBranches);
+		const parent = resolved?.parent;
+		if (resolved && resolved.mergedLayers.length > 0)
+		{
+			bridges.set(pullRequest.number, resolved.mergedLayers);
+		}
 		if (parent)
 		{
 			parents.set(pullRequest.number, parent.number);
@@ -29,15 +71,15 @@ export function buildTopology(pullRequests, integrationBranches)
 			{
 				findings.push({ code: "SELF_BASE", message: `#${pullRequest.number} targets its own head branch.` });
 			}
-			if (pullRequest.base.sha !== parent.head.sha)
+			if (!resolved.bridged && resolved.base.sha !== parent.head.sha)
 			{
 				findings.push({
 					code: "STALE_PARENT_SHA",
-					message: `#${pullRequest.number} records ${pullRequest.base.sha} for #${parent.number}, whose live head is ${parent.head.sha}.`,
+					message: `#${pullRequest.number} records ${resolved.base.sha} for #${parent.number}, whose live head is ${parent.head.sha}.`,
 				});
 			}
 		}
-		else if (!integrationBranches.has(pullRequest.base.ref))
+		else if (!resolved)
 		{
 			findings.push({
 				code: "ORPHANED_BASE",
@@ -61,7 +103,7 @@ export function buildTopology(pullRequests, integrationBranches)
 			cursor = parents.get(cursor);
 		}
 	}
-	return { findings, parents, byNumber };
+	return { findings, parents, byNumber, bridges };
 }
 
 /** Return the open ancestry chain from root to the selected PR. */

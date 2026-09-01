@@ -1,5 +1,19 @@
 import { createHash } from "node:crypto";
 
+/** Look up remote base refs without fetching them because merged parent branches may have been deleted. */
+function _RemoteBaseHeads(commands, baseRefs)
+{
+	const references = baseRefs.map(function _Reference(baseRef) { return `refs/heads/${baseRef}`; });
+	const output = commands.run("git", ["ls-remote", "--refs", "origin", ...references]);
+	const remoteHeads = new Map();
+	for (const line of output.split("\n").filter(Boolean))
+	{
+		const [sha, reference] = line.split(/\s+/u);
+		remoteHeads.set(reference.slice("refs/heads/".length), sha);
+	}
+	return remoteHeads;
+}
+
 /** Create the Git evidence adapter over an injected bounded command runner. */
 export function createGitAdapter(commands)
 {
@@ -12,12 +26,8 @@ export function createGitAdapter(commands)
 			const baseRefs = Array.from(new Set(pullRequests.map(function _Base(pullRequest) {
 				return pullRequest.base.ref;
 			}))).sort();
-			for (const baseRef of baseRefs)
-			{
-				refspecs.push(`+refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`);
-			}
 			commands.run("git", ["fetch", "--quiet", "--no-tags", "origin", ...refspecs]);
-			const baseHeads = new Map();
+			const baseHeads = _RemoteBaseHeads(commands, baseRefs);
 			for (const pullRequest of pullRequests)
 			{
 				const fetchedHead = commands.run("git", ["rev-parse", `refs/remotes/origin/open-pr/${pullRequest.number}`]);
@@ -32,15 +42,7 @@ export function createGitAdapter(commands)
 		},
 		remoteBaseHeads(baseRefs)
 		{
-			const references = baseRefs.map(function _Reference(baseRef) { return `refs/heads/${baseRef}`; });
-			const output = commands.run("git", ["ls-remote", "--refs", "origin", ...references]);
-			const remoteHeads = new Map();
-			for (const line of output.split("\n").filter(Boolean))
-			{
-				const [sha, reference] = line.split(/\s+/u);
-				remoteHeads.set(reference.slice("refs/heads/".length), sha);
-			}
-			return remoteHeads;
+			return _RemoteBaseHeads(commands, baseRefs);
 		},
 		evidence(pullRequests)
 		{

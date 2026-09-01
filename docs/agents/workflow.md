@@ -25,6 +25,19 @@ Three files track work, each with a distinct role — keep them from drifting:
 
 ## PR Ancestry And Single-Review Gate
 
+### Native GitHub stacks are the default
+
+Use GitHub's native stack workflow for every change that has an open predecessor. After committing
+the incremental checkpoint, add its branch to the current stack with `gh stack add <branch>` and
+publish or refresh the complete chain with `gh stack submit --auto --open`. This creates each pull
+request against its immediate predecessor rather than repeating its ancestor's diff against
+`develop`.
+
+Start a new chain with `gh stack init` only when the stack does not already exist. Before opening,
+refreshing, rebasing, or reporting a stack, inspect it with `gh stack view` and run the repository
+stack-integrity check below. Use `gh stack sync` or `gh stack rebase` when a predecessor changes;
+do not manually retarget child pull requests as a substitute for restacking.
+
 Before creating, refreshing, rebasing, or reporting a pull request, inspect the **live** PR list and
 the candidate's actual commit/diff ancestry. Identify every earlier PR whose branch, commits, or
 functional diff the candidate builds on. Resolve each predecessor in exactly one of these ways:
@@ -61,7 +74,7 @@ earlier conclusion, and at least once per hour while a task remains active:
 |-------|---------------------|
 | Slice/wave commit or review-fix commit | Record the new `HEAD`; review the explicit `WAVE_BASE...HEAD` range plus staged, unstaged, and untracked overlays. |
 | Parent push, force-update, or rebase | Re-fetch the parent SHA and restack every descendant before unrelated work continues. |
-| Parent PR merged | Before merging its child, retarget that child to the integration branch and prove the merged parent head is now ancestral there. Never merge a child into an already-merged feature branch. |
+| Parent PR merged | Run `gh stack sync` to cascade-rebase every open child onto the updated stack, push their refreshed ancestry, and sync their PR bases. Before merging a child, prove the merged parent head is ancestral there. Never merge a child into an already-merged feature branch. |
 | Authorized push | Confirm the remote head equals the reviewed local `HEAD`; stale local evidence is invalid. |
 | PR open, refresh, edit, or base change | Run the live stack checker and record the PR number, base ref/SHA, head ref/SHA, and review order. |
 | Pre-handoff or pre-merge report | Validate both the incremental `base...head` diff and the cumulative integration-base-to-stack-tip range. If integration is not ancestral to the tip, require a clean `git merge-tree --write-tree <integration-sha> <tip-sha>` simulation. |

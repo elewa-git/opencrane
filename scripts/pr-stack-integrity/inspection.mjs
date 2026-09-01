@@ -16,6 +16,7 @@ function _IsRetryable(error)
 export function inspectLiveStack(input)
 {
 	const snapshotA = input.github.openPullRequests(input.repository);
+	const mergedSnapshotA = input.github.mergedPullRequests?.(input.repository, snapshotA) ?? [];
 	let selectedEventNumber = input.event?.number ?? 0;
 	if (!selectedEventNumber && input.currentBranch)
 	{
@@ -33,7 +34,9 @@ export function inspectLiveStack(input)
 
 	const baseHeads = input.git.fetchAndVerify(snapshotA);
 	const snapshotB = input.github.openPullRequests(input.repository);
-	if (JSON.stringify(snapshotA) !== JSON.stringify(snapshotB))
+	const mergedSnapshotB = input.github.mergedPullRequests?.(input.repository, snapshotB) ?? [];
+	if (JSON.stringify(snapshotA) !== JSON.stringify(snapshotB)
+		|| JSON.stringify(mergedSnapshotA) !== JSON.stringify(mergedSnapshotB))
 	{
 		throw new Error("SNAPSHOT_DRIFT: the live PR graph changed during inspection; rerun against a stable snapshot.");
 	}
@@ -44,7 +47,9 @@ export function inspectLiveStack(input)
 	}
 	const gitEvidence = input.git.evidence(snapshotA);
 	const snapshotC = input.github.openPullRequests(input.repository);
-	if (JSON.stringify(snapshotA) !== JSON.stringify(snapshotC))
+	const mergedSnapshotC = input.github.mergedPullRequests?.(input.repository, snapshotC) ?? [];
+	if (JSON.stringify(snapshotA) !== JSON.stringify(snapshotC)
+		|| JSON.stringify(mergedSnapshotA) !== JSON.stringify(mergedSnapshotC))
 	{
 		throw new Error("FINAL_SNAPSHOT_DRIFT: the live PR graph changed while Git evidence was computed; rerun against a stable snapshot.");
 	}
@@ -55,6 +60,7 @@ export function inspectLiveStack(input)
 	}
 	return {
 		pullRequests: snapshotA,
+		mergedPullRequests: mergedSnapshotA,
 		baseHeads,
 		...gitEvidence,
 		event: selectedEventNumber ? {
