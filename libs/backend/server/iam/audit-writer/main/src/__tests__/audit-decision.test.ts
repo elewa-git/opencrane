@@ -9,7 +9,7 @@ describe("audit decision append port", function _suite()
 		const create = vi.fn().mockResolvedValue({ id: "audit-1" });
 		const transaction = { auditDecision: { create } };
 
-		await new PrismaAuditDecisionWriterRepository(transaction as never).append({
+		const receipt = await new PrismaAuditDecisionWriterRepository(transaction as never).append({
 			decisionDigest: `sha256:${"1".repeat(64)}`,
 			siloId: "silo-1",
 			actorKind: "system",
@@ -28,5 +28,6 @@ describe("audit decision append port", function _suite()
 		});
 
 		expect(create).toHaveBeenCalledOnce();
+		expect(receipt).toEqual({ decisionEvidenceId: "audit-1" });
 	});
 });

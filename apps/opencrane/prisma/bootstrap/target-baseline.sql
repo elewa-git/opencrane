@@ -1691,6 +1691,7 @@ CREATE TABLE "provider_effect_commands" (
     "desired_generation" INTEGER NOT NULL,
     "arguments_digest" TEXT NOT NULL,
     "material_verifier" TEXT,
+    "authorization_decision_evidence_id" TEXT NOT NULL,
     "authorization_decision_digest" TEXT NOT NULL,
     "authorization_policy_revision_hash" TEXT NOT NULL,
     "effective_authorization_digest" TEXT NOT NULL,
@@ -3998,6 +3999,7 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
     AND btrim("resource_kind") <> ''
     AND btrim("resource_id") <> ''
     AND btrim("resource_revision") <> ''
+    AND btrim("authorization_decision_evidence_id") <> ''
     AND "desired_generation" > 0
     AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND "authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'

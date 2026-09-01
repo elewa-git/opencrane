@@ -4,7 +4,7 @@
   "database": {
     "schemaVersion": "0.11.0",
     "baselinePath": "apps/opencrane/prisma/bootstrap/target-baseline.sql",
-    "baselineSha256": "639fc5ee6922673d8f9da265a2b4e9c22d88013c00684129e795d59da0f055b2",
+    "baselineSha256": "324bfc588a00f0a3e85027359178e7797a54bd5c28246d96bc1c281eeb9103c5",
     "operandImage": "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-be461113253b9cd6d51532cf007775ec8385bfe7@sha256:9c27816e67b9f0b23e771a4c8a8a4c8eb4c84abeefead14f727747d21d7d70c7"
   },
   "projects": {

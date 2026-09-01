@@ -120,7 +120,7 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
 const _ALLOW_AUTHORIZATION = (function _CreateAuthorization()
 {
 	return {
-		admitPrincipal: async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; },
+		admitPrincipal: async function _Admit() { return { outcome: "allow", evidence: { decisionEvidenceId: "audit-1", decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; },
 		listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return command.resources; },
 		replaceManagedGrants: async function _Replace() { return { outcome: "allow", changedCount: 1, evidence: {} }; },
 	};
@@ -166,7 +166,7 @@ describe("modelRegistryRouter", function _suite()
 			["model-2", { id: "model-2", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/anthropic", litellmModelId: "y", upstreamModel: "anthropic/claude", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
 		]);
 			const listPrincipalEntitled = vi.fn(async function _List(command: { resources: readonly { id: string }[] }) { return command.resources.filter(resource => resource.id !== "model-1"); });
-		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
+		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionEvidenceId: "audit-1", decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
 		const replaceManagedGrants = vi.fn(async function _Replace() { return { outcome: "allow" }; });
 		const factory = (function _CreateAuthorization() { return { listPrincipalEntitled, admitPrincipal, replaceManagedGrants }; }) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
 		const app = _buildApp(_mockPrisma(store), _platformOperator(), factory);
