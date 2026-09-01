@@ -4,7 +4,7 @@ import { buildTopology, stackChain } from "./topology.mjs";
 /** Evaluate ancestry, absorption, replay, event, and review-order policy. */
 export function evaluateStack(input)
 {
-	const topology = buildTopology(input.pullRequests, input.integrationBranches);
+	const topology = buildTopology(input.pullRequests, input.integrationBranches, input.mergedPullRequests);
 	const findings = [...topology.findings];
 	for (const [childNumber, parentNumber] of topology.parents)
 	{

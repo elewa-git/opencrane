@@ -13,6 +13,12 @@ export function renderMarkdown(result)
 	{
 		lines.push(`Review chain: ${result.evidence.currentChain.map(function _PR(number) { return `#${number}`; }).join(" -> ")}`);
 	}
+	for (const bridge of result.evidence.mergedBridges ?? [])
+	{
+		lines.push(`Merged bridge: #${bridge.child} via ${bridge.mergedLayers.map(function _Layer(layer) {
+			return `#${layer.number} (${layer.mergeCommitSha})`;
+		}).join(" -> ")}`);
+	}
 	lines.push("", "Review levels:");
 	for (let index = 0; index < result.evidence.reviewLevels.length; index += 1)
 	{

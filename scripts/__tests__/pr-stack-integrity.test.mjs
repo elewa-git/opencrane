@@ -33,6 +33,7 @@ function _Validate(pullRequests, options = {})
 	const input = {
 		repository: "example/opencrane",
 		pullRequests,
+		mergedPullRequests: options.mergedPullRequests ?? [],
 		integrationBranches: new Set(["develop"]),
 		baseHeads: new Map(pullRequests.map(function _BaseHead(pr) { return [pr.base.ref, pr.base.sha]; })),
 		ancestry: options.ancestry ?? new Set(),
@@ -41,6 +42,16 @@ function _Validate(pullRequests, options = {})
 		event: options.event,
 	};
 	return validationResult(input, evaluateStack(input));
+}
+
+/** Create a merged native-stack PR fixture that can bridge open layers. */
+function _MergedPullRequest(number, headRef, headSha, baseRef, baseSha, mergeCommitSha)
+{
+	return {
+		..._PullRequest(number, headRef, headSha, baseRef, baseSha),
+		mergedAt: "2026-09-01T00:00:00Z",
+		mergeCommitSha,
+	};
 }
 
 test("canonicalizes GitHub API order and parses only the Review order section", function _CanonicalEvidence()
@@ -52,6 +63,30 @@ test("canonicalizes GitHub API order and parses only the Review order section", 
 	});
 	assert.deepEqual(github.openPullRequests("example/opencrane").map(function _Number(pr) { return pr.number; }), [1, 2]);
 	assert.deepEqual(parseReviewOrder(first.body), [1, 2]);
+});
+
+test("queries only unresolved base branches for merged native stack layers", function _RelevantMergedQueries()
+{
+	const calls = [];
+	const github = createGitHubAdapter({
+		run(command, arguments_)
+		{
+			calls.push([command, arguments_]);
+			return JSON.stringify([[]]);
+		},
+	});
+	github.mergedPullRequests("example/opencrane", [
+		_PullRequest(1, "feat/one", "a", "develop", "d"),
+		_PullRequest(2, "feat/two", "b", "feat/one", "a"),
+		_PullRequest(3, "feat/three", "c", "feat/deleted", "m"),
+	]);
+	assert.equal(calls.length, 2);
+	assert.ok(calls.some(function _DeletedBase(call) {
+		return call[1].at(-1).includes("head=example%3Afeat%2Fdeleted");
+	}));
+	assert.ok(calls.some(function _IntegrationBase(call) {
+		return call[1].at(-1).includes("head=example%3Adevelop");
+	}));
 });
 
 test("accepts an independent integration-root PR", function _Independent()
@@ -95,6 +130,69 @@ test("rejects stale parent SHAs and non-ancestral stack edges", function _StaleP
 test("rejects a feature base whose predecessor is no longer open", function _OrphanedBase()
 {
 	const result = _Validate([_PullRequest(2, "feat/two", "b", "feat/merged-one", "a")]);
+	assert.equal(result.valid, false);
+	assert.equal(result.evidence.findings[0].code, "ORPHANED_BASE");
+});
+
+test("bridges only merge-commit-pinned native stack layers", function _MergedStackBridge()
+{
+	const pullRequests = [
+		_PullRequest(1, "feat/one", "merged-tip", "develop", "d"),
+		_PullRequest(3, "feat/three", "c", "feat/two", "merged-tip", "## Review order\n\n1. #1\n2. #3"),
+	];
+	const mergedPullRequests = [_MergedPullRequest(2, "feat/two", "merged-tip", "feat/one", "previous-tip", "merged-tip")];
+	const result = _Validate(pullRequests, {
+		mergedPullRequests,
+		ancestry: new Set(["1:3"]),
+		event: { number: 3, action: "synchronize", headSha: "c" },
+	});
+	assert.equal(result.valid, true);
+	assert.deepEqual(result.evidence.currentChain, [1, 3]);
+	assert.deepEqual(result.evidence.mergedBridges, [{
+		child: 3,
+		mergedLayers: [{
+			number: 2,
+			head: { ref: "feat/two", sha: "merged-tip" },
+			base: { ref: "feat/one", sha: "previous-tip" },
+			mergeCommitSha: "merged-tip",
+		}],
+	}]);
+});
+
+test("selects a merged stack layer by its recorded merge commit", function _RepeatedMergedHead()
+{
+	const pullRequests = [
+		_PullRequest(1, "feat/one", "merged-tip", "develop", "d"),
+		_PullRequest(3, "feat/three", "c", "feat/two", "merged-tip", "## Review order\n\n1. #1\n2. #3"),
+	];
+	const mergedPullRequests = [
+		_MergedPullRequest(2, "feat/two", "old-tip", "develop", "d", "old-tip"),
+		_MergedPullRequest(4, "feat/two", "merged-tip", "feat/one", "previous-tip", "merged-tip"),
+	];
+	const result = _Validate(pullRequests, {
+		mergedPullRequests,
+		ancestry: new Set(["1:3"]),
+	});
+	assert.equal(result.valid, true);
+});
+
+test("binds merged stack layers into the inspection snapshot digest", function _MergedSnapshotDigest()
+{
+	const pullRequests = [_PullRequest(3, "feat/three", "c", "feat/two", "merged-tip")];
+	const matching = _Validate(pullRequests, {
+		mergedPullRequests: [_MergedPullRequest(2, "feat/two", "merged-tip", "develop", "d", "merged-tip")],
+	});
+	const missing = _Validate(pullRequests);
+	assert.equal(matching.valid, true);
+	assert.deepEqual(matching.evidence.mergedBridges.map(function _Child(bridge) { return bridge.child; }), [3]);
+	assert.notEqual(matching.evidence.snapshotDigest, missing.evidence.snapshotDigest);
+});
+
+test("rejects a merged-layer base that is not pinned to its merge commit", function _UnpinnedMergedStackBase()
+{
+	const pullRequests = [_PullRequest(3, "feat/three", "c", "feat/two", "stale-tip")];
+	const mergedPullRequests = [_MergedPullRequest(2, "feat/two", "merged-tip", "develop", "d", "merged-tip")];
+	const result = _Validate(pullRequests, { mergedPullRequests });
 	assert.equal(result.valid, false);
 	assert.equal(result.evidence.findings[0].code, "ORPHANED_BASE");
 });
@@ -300,6 +398,28 @@ test("fails when a fetched PR ref does not match GitHub's head SHA", function _F
 	assert.throws(function _Fetch() {
 		git.fetchAndVerify([_PullRequest(1, "feat/one", "expected", "develop", "d")]);
 	}, /FETCHED_HEAD_DRIFT/u);
+});
+
+test("does not fetch a deleted merged parent branch", function _DeletedMergedBase()
+{
+	const calls = [];
+	const git = createGitAdapter({
+		run(command, arguments_)
+		{
+			calls.push([command, arguments_]);
+			if (arguments_[0] === "rev-parse")
+			{
+				return "child";
+			}
+			return "";
+		},
+	});
+	git.fetchAndVerify([_PullRequest(3, "feat/three", "child", "feat/deleted-merged", "merge")]);
+	const fetch = calls.find(function _Fetch(call) { return call[1][0] === "fetch"; });
+	assert.ok(fetch);
+	assert.equal(fetch[1].some(function _DeletedBase(argument) {
+		return argument.includes("refs/heads/feat/deleted-merged");
+	}), false);
 });
 
 test("keeps distinct binary identities without buffering patch payloads", function _BinaryDiffMetadata()
