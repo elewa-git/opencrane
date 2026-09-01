@@ -134,6 +134,24 @@ export interface MessageContentBlockBase
 /** Lists the safe payload references a participant-visible message may contain. */
 export type MessageContentBlock = TextMessageContentBlock | ArtifactMessageContentBlock | MentionMessageContentBlock;
 
+/**
+ * Selects how a history reader decodes a persisted conversation entry.
+ *
+ * The validator accepts this closed set when it reads `conversation-{id}`. A new member therefore
+ * needs a reader and validator change before any writer may append it.
+ */
+export enum ConversationEntryKinds
+{
+	/** Records a participant-visible message. */
+	Message = "message",
+	/** Records a structured execution or policy fact. */
+	Log = "log",
+	/** Records a server-attested request for participant input or its resolution. */
+	Elicitation = "elicitation",
+	/** Records a participant-visible A2UI surface mutation. */
+	A2ui = "a2ui",
+}
+
 /** References encrypted text without embedding plaintext in the event ledger. */
 export interface TextMessageContentBlock extends MessageContentBlockBase
 {
@@ -291,6 +309,114 @@ export interface ApprovalLogEntry extends LogEntryBase
 }
 
 /**
+ * States where an elicitation request ended up in conversation history.
+ *
+ * Readers branch on this closed set to decide whether the request still awaits a server-accepted
+ * resolution. The validator rejects an unknown state instead of letting a projector guess whether
+ * the request is still open.
+ */
+export enum ConversationElicitationEntryStates
+{
+	/** The request awaits a server-accepted resolution before its deadline. */
+	Requested = "requested",
+	/** The addressed participant supplied a server-accepted response payload. */
+	Answered = "answered",
+	/** The server accepted that the addressed participant declined the request. */
+	Declined = "declined",
+	/** The response window ended before an answer was accepted. */
+	Expired = "expired",
+	/** The server cancelled the request for its fenced computer before it accepted a response. */
+	Cancelled = "cancelled",
+}
+
+/**
+ * Names the interaction a ConversationComputer asks the server to present.
+ *
+ * The server records the selected member in immutable history, so projectors can render the right
+ * private payload without inferring an interaction from a free-form prompt. The validator rejects
+ * any member outside this set.
+ */
+export enum ConversationElicitationEntryKinds
+{
+	/** Requests ordinary participant input for the model loop. */
+	RuntimeInput = "runtime_input",
+	/** Requests a decision for one governed tool operation. */
+	ToolApproval = "tool_approval",
+	/** Requests one-use permission before a personal-memory operation. */
+	PersonalMemoryPermission = "personal_memory_permission",
+	/** Requests confirmation before the server applies an A2UI action. */
+	A2uiAction = "a2ui_action",
+}
+
+/** Lists the durable request and terminal-response entries for one computer elicitation. */
+export type ElicitationEntry = ElicitationRequestEntry | ElicitationResolutionEntry;
+
+/** Holds the conversation coordinates that no longer identify a retired AgentRun. */
+export type ConversationComputerEntryBase = Omit<ConversationEntryBase, "runId">;
+
+/**
+ * Holds the coordinates shared by every immutable elicitation entry.
+ *
+ * The service-attested entry binds a request and its resolution to the computer execution and
+ * lease generation that opened it. A later command authority uses those coordinates to reject a
+ * response from another execution or lease.
+ */
+export interface ElicitationEntryBase extends ConversationComputerEntryBase
+{
+	/** Selects the conversation elicitation entry handler. */
+	readonly kind: ConversationEntryKinds.Elicitation;
+	/** Identifies the request whose lifecycle this entry records. */
+	readonly elicitationId: string;
+	/** Identifies the computer that owns the elicitation. */
+	readonly computerId: string;
+	/** Identifies the fenced execution instance that opened the elicitation. */
+	readonly computerExecutionId: string;
+	/** Fences this interaction to the computer lease generation that opened it. */
+	readonly leaseGeneration: number;
+	/** Names the interaction selected by the server. */
+	readonly elicitationKind: ConversationElicitationEntryKinds;
+}
+
+/**
+ * Records an opaque request that the server accepted from an active ConversationComputer.
+ *
+ * The history entry names an addressed participant but does not give that participant a writer.
+ * The later command authority authorizes a response and appends its separate service-attested
+ * resolution entry.
+ */
+export interface ElicitationRequestEntry extends ElicitationEntryBase
+{
+	/** States that the request remains open for the addressed participant. */
+	readonly state: ConversationElicitationEntryStates.Requested;
+	/** Identifies the participant whose response the server must authorize. */
+	readonly addressedParticipantId: string;
+	/** Identifies the private request payload outside immutable history. */
+	readonly requestPayloadRef: string;
+	/** Stores the request payload digest. */
+	readonly requestPayloadDigest: string;
+	/** Records the server-owned deadline after which no answer may be accepted. */
+	readonly expiresAt: string;
+}
+
+/**
+ * Records the server-accepted answer or terminal no-answer outcome for one request.
+ *
+ * The addressed participant never appends this entry directly. The service attestation records the
+ * authorization result separately from the private response payload.
+ */
+export interface ElicitationResolutionEntry extends ElicitationEntryBase
+{
+	/** States the accepted answer or terminal non-answer outcome. */
+	readonly state: ConversationElicitationEntryStates.Answered | ConversationElicitationEntryStates.Declined | ConversationElicitationEntryStates.Expired | ConversationElicitationEntryStates.Cancelled;
+	/** Identifies the earlier request entry that this terminal entry resolves. */
+	readonly requestEntryId: string;
+	/** References the private response payload when the addressed participant answered. */
+	readonly responsePayloadRef: string | null;
+	/** Stores the response payload digest when the addressed participant answered. */
+	readonly responsePayloadDigest: string | null;
+}
+
+/**
  * Lists append-only A2UI surface mutations a conversation stream may carry.
  *
  * Each event holds a governed payload reference or records a removal, so replay can reconstruct the
@@ -338,4 +464,4 @@ export interface A2UIRemoveEntry extends A2UIEntryBase
  * not grant a writer access to another conversation or let an entry claim an external effect without
  * the service-attestation boundary.
  */
-export type ConversationEntry = MessageEntry | LogEntry | A2UIEntry;
+export type ConversationEntry = MessageEntry | LogEntry | ElicitationEntry | A2UIEntry;
