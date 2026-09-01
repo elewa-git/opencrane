@@ -302,6 +302,24 @@ the PostgreSQL volume, and the fixed local identity. Press `Ctrl+C` once and wai
 starting another profile. `Ctrl+Z` now requests the same cleanup instead of suspending the command,
 so no `fg` sequence or repeated signal is required.
 
+### Recover stale frontend dependencies
+
+Clear the Angular and Nx caches only when the browser console reports `504 Outdated Optimize Dep`.
+This error can appear after switching branches whose Angular or Vite dependency graph differs. It
+does not indicate a database-baseline mismatch, so do not add `--reset` for this recovery.
+
+Stop the Tier 2 coordinator with `Ctrl+C`, wait for cleanup, then run:
+
+```bash
+rm -rf .angular/cache
+npx nx reset
+npm run dev:tier2:agent
+```
+
+Restart the profile you were using if it was not the default Agent profile. For an ordinary branch
+switch without the `504 Outdated Optimize Dep` error, stop the coordinator, switch branches, and
+restart the profile without clearing either cache.
+
 ## Add a gateway-backed feature
 
 A **gateway** is the narrow state-layer interface through which a feature reads or changes data.
