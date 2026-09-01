@@ -45,6 +45,8 @@ export interface ConversationComputerActivationProfile
 {
 	/** Names the namespace containing this release's Agent Sandbox claims and warm pools. */
 	readonly namespace: string;
+	/** Names the ServiceAccount fixed by this profile's immutable SandboxTemplate. */
+	readonly serviceAccountName: string;
 	/** Names the admission-policy-approved SandboxTemplate profile. */
 	readonly sandboxProfile: string;
 	/** Names the release-owned zero-replica warm pool for the sandbox profile. */

@@ -1,4 +1,4 @@
-import type { AgentSandboxClaimObservationReader } from "@opencrane/backend/server/infra/agent-sandbox-claims";
+import type { AgentSandboxClaimObservationReader, AgentSandboxRuntimePodReader } from "@opencrane/backend/server/infra/agent-sandbox-claims";
 
 import type { ConversationComputerActivationClock, ConversationComputerActivationProfileResolver } from "./conversation-computer-activation-authority.types";
 import type { ConversationComputerHistory } from "./conversation-computers";
@@ -32,8 +32,8 @@ export type ConversationComputerSandboxReconciliationOutcome = ConversationCompu
  * Supplies the checked ports that reconcile one already-dispatched computer claim.
  *
  * History owns the persisted computer lifecycle, profile resolution admits release-owned claim
- * coordinates, and observation reads controller status without acting on Pods. Separating those
- * ports prevents a status pass from selecting a claim, profile, or lease deadline.
+ * coordinates, and read-only observations verify controller status and Pod ownership. Separating
+ * those ports prevents a status pass from selecting a claim, profile, Pod, or lease deadline.
  */
 export interface ConversationComputerSandboxReconciliationAuthorityDependencies
 {
@@ -43,6 +43,8 @@ export interface ConversationComputerSandboxReconciliationAuthorityDependencies
 	readonly profiles: ConversationComputerActivationProfileResolver;
 	/** Reads only the exact immutable SandboxClaim that the checked lease recorded. */
 	readonly observations: AgentSandboxClaimObservationReader;
+	/** Reads only the exact controller-owned Pod that a ready assigned Sandbox identifies. */
+	readonly runtimePods: AgentSandboxRuntimePodReader;
 	/** Supplies the server-owned instant that determines whether a pending lease has expired. */
 	readonly clock: ConversationComputerActivationClock;
 }

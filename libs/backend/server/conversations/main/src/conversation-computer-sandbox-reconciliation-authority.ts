@@ -58,6 +58,13 @@ export class ConversationComputerSandboxReconciliationAuthority
 		});
 		if (observation.state !== AgentSandboxClaimObservationStates.Ready)
 			return ConversationComputerSandboxReconciliationOutcomes.Pending;
+		const runtimePod = await this.dependencies.runtimePods.read({
+			namespace: profile.namespace,
+			sandboxId: observation.sandboxId,
+			serviceAccountName: profile.serviceAccountName,
+		});
+		if (runtimePod === null)
+			return ConversationComputerSandboxReconciliationOutcomes.Pending;
 		const warmedAt = this.dependencies.clock.now();
 		if (Date.parse(current.lease.expiresAt) <= warmedAt.getTime())
 			return this._CompensateExpiredDispatch(current, warmedAt);
@@ -65,7 +72,7 @@ export class ConversationComputerSandboxReconciliationAuthority
 			expectedRevision: current.revision,
 			eventId: randomUUID(),
 			computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: warmedAt.toISOString() },
-			lease: { ...current.lease, state: ComputerLeaseStates.Active, sandboxId: observation.sandboxId },
+			lease: { ...current.lease, state: ComputerLeaseStates.Active, sandboxId: observation.sandboxId, runtimePod },
 		});
 		return ConversationComputerSandboxReconciliationOutcomes.Warmed;
 	}

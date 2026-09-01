@@ -47,6 +47,8 @@ export interface ConversationComputerActivationProfileConfig
 	readonly profileRevisionId: string;
 	/** Names the namespace containing the release-owned Agent Sandbox resources. */
 	readonly namespace: string;
+	/** Names the ServiceAccount fixed by each admitted Agent SandboxTemplate. */
+	readonly serviceAccountName: string;
 	/** Names the Agent Sandbox profile admitted for this immutable revision. */
 	readonly sandboxProfile: string;
 	/** Names the release-owned warm pool paired with the sandbox profile. */
