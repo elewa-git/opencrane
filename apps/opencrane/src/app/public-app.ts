@@ -38,7 +38,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
 {
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
-	const authMiddleware = ___AuthMiddleware(admission);
+	const authMiddleware = ___AuthMiddleware(admission, _log);
 	return {
 		authMiddleware,
 		router: ___AuthRouter(authService),

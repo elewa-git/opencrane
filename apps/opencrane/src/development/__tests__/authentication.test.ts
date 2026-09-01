@@ -1,17 +1,33 @@
 import express from "express";
+import type { Logger } from "pino";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
+import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 import { LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER } from "@opencrane/models/local-development";
 
 import { _CreateDevelopmentAuthentication } from "../authentication";
 
+/** Build an admission result that matches the identity stored by the Tier 2 seed. */
+function _PrincipalAdmission(): AuthenticatedPrincipalAdmission
+{
+	return {
+		admit: vi.fn().mockResolvedValue({
+			principalId: LOCAL_DEVELOPMENT_PRINCIPAL_ID,
+			siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
+			issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+			subject: LOCAL_DEVELOPMENT_IDENTITY.subjectId
+		})
+	};
+}
+
 /** Build the exact development middleware order used by the public app. */
-function _App(capabilities: AuthenticatedPrincipalCapabilityReader = { canAdministerOrganization: vi.fn().mockResolvedValue(true) })
+function _App(capabilities: AuthenticatedPrincipalCapabilityReader = { canAdministerOrganization: vi.fn().mockResolvedValue(true) }, admission: AuthenticatedPrincipalAdmission = _PrincipalAdmission())
 {
 	const app = express();
-	const authentication = _CreateDevelopmentAuthentication(LOCAL_DEVELOPMENT_IDENTITY, capabilities);
+	const logger = { warn: vi.fn() } as unknown as Logger;
+	const authentication = _CreateDevelopmentAuthentication(LOCAL_DEVELOPMENT_IDENTITY, capabilities, admission, logger);
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", authentication.router);
 	app.use(authentication.authMiddleware);
@@ -19,7 +35,9 @@ function _App(capabilities: AuthenticatedPrincipalCapabilityReader = { canAdmini
 	{
 		response.json({
 			subjectId: request.session.authUser?.sub,
-			principal: request.authenticatedPrincipal
+			principal: request.authenticatedPrincipal,
+			sessionSiloId: request.session.authUser?.siloId,
+			authorizationExpiresAt: request.session.authUser?.authorizationExpiresAt
 		});
 	});
 	app.post("/api/v1/protected", function _MutateProtected(_request, response): void
@@ -70,14 +88,16 @@ describe("Tier 2 browser authentication", function _Suite()
 
 	it("ignores caller identity headers and retains the installation-selected subject", async function _IgnoresForgedIdentity(): Promise<void>
 	{
-		const response = await request(_App())
+		const admission = _PrincipalAdmission();
+		const response = await request(_App(undefined, admission))
 			.get("/api/v1/protected")
 			.set("host", "local-development.localhost:8080")
 			.set("x-opencrane-subject", "forged-user")
 			.set("x-opencrane-silo", "forged-silo")
 			.expect(200);
-		expect(response.body).toEqual({
+		expect(response.body).toMatchObject({
 			subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
+			sessionSiloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
 			principal: {
 				principalId: LOCAL_DEVELOPMENT_PRINCIPAL_ID,
 				siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
@@ -85,6 +105,37 @@ describe("Tier 2 browser authentication", function _Suite()
 				subject: LOCAL_DEVELOPMENT_IDENTITY.subjectId
 			}
 		});
+		expect(new Date(response.body.authorizationExpiresAt).getTime()).toBeGreaterThan(Date.now());
+		expect(admission.admit).toHaveBeenCalledWith({
+			siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
+			issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+			subject: LOCAL_DEVELOPMENT_IDENTITY.subjectId
+		});
+	});
+
+	it("fails closed when durable Principal and membership-grant projection is unavailable", async function _RejectsUnavailableAdmission(): Promise<void>
+	{
+		const admission: AuthenticatedPrincipalAdmission = { admit: vi.fn().mockRejectedValue(new Error("database unavailable")) };
+		await request(_App(undefined, admission))
+			.get("/api/v1/protected")
+			.set("host", "local-development.localhost:8080")
+			.expect(503, { error: "identity_projection_unavailable" });
+	});
+
+	it("rejects an invalid durable Principal projection", async function _RejectsInvalidAdmission(): Promise<void>
+	{
+		const admission: AuthenticatedPrincipalAdmission = {
+			admit: vi.fn().mockResolvedValue({
+				principalId: "",
+				siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
+				issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+				subject: LOCAL_DEVELOPMENT_IDENTITY.subjectId
+			})
+		};
+		await request(_App(undefined, admission))
+			.get("/api/v1/protected")
+			.set("host", "local-development.localhost:8080")
+			.expect(401, { error: "authenticated_principal_required" });
 	});
 
 	it("rejects unexpected direct and forwarded hosts before attaching a session", async function _RejectsHostMismatch(): Promise<void>

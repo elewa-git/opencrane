@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import type { Logger } from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ___AuthMiddleware } from "../auth-middleware";
@@ -21,7 +22,7 @@ function _AuthUser(overrides: Partial<AuthUser> = {}): AuthUser
 }
 
 /** Invoke the middleware against one server-owned session fixture without opening a listener. */
-async function _Invoke(admission: AuthenticatedPrincipalAdmission, authUser: AuthUser, host = "silo-a.opencrane.test"): Promise<{ readonly request: Request; readonly status: number; readonly body: unknown; readonly admitted: boolean }>
+async function _Invoke(admission: AuthenticatedPrincipalAdmission, authUser: AuthUser, host = "silo-a.opencrane.test"): Promise<{ readonly request: Request; readonly status: number; readonly body: unknown; readonly admitted: boolean; readonly warn: ReturnType<typeof vi.fn> }>
 {
 	const incoming = {
 		path: "/api/product",
@@ -37,8 +38,9 @@ async function _Invoke(admission: AuthenticatedPrincipalAdmission, authUser: Aut
 		json: function _Json(nextBody: unknown) { body = nextBody; return response; },
 	} as unknown as Response;
 	const next = function _Next() { admitted = true; } as NextFunction;
-	await ___AuthMiddleware(admission)(incoming, response, next);
-	return { request: incoming, status, body, admitted };
+	const warn = vi.fn();
+	await ___AuthMiddleware(admission, { warn } as unknown as Logger)(incoming, response, next);
+	return { request: incoming, status, body, admitted, warn };
 }
 
 describe("___AuthMiddleware durable Principal admission", function _Suite()
@@ -110,5 +112,6 @@ describe("___AuthMiddleware durable Principal admission", function _Suite()
 
 		expect(response.status).toBe(503);
 		expect(response.body).toEqual({ error: "identity_projection_unavailable" });
+		expect(response.warn).toHaveBeenCalledWith({ err: expect.any(Error), siloId: "silo-a" }, "OIDC Principal admission is unavailable");
 	});
 });

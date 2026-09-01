@@ -41,8 +41,11 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 
 ## Public surface
 
-- `___AuthMiddleware`, `AuthenticatedPrincipalAdmission` — the request authentication middleware and
-  its fail-closed durable-identity admission port.
+- `_AdmitBrowserSession`, `AuthenticatedPrincipalAdmission`, and
+  `AuthenticatedPrincipalAdmissionInput` — the shared fail-closed session expiry, exact identity
+  tuple, durable Principal admission, and request-attachment boundary used by production and Tier 2
+  authentication.
+- `___AuthMiddleware` — the production OIDC adapter over that shared browser-session boundary.
 - `___LoadOidcAuthConfig`, `OidcAuthConfig`, `_IsDevAuthMode` — OIDC configuration.
 - `OidcAuthServiceBase`, `LoginClient`, `AuthStatus` — the login-flow service and per-org login seam.
   Subclasses may declare a post-login admission failure fatal when silently continuing would present

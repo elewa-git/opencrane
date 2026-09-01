@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import express, { Router, type Express } from "express";
+import type { Logger } from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
@@ -43,7 +44,7 @@ function _buildAuthApp(): Express
   app.use(express.json());
   // Mirror production middleware order: the per-IP limiter is mounted before auth + routes.
   app.use(_RateLimit());
-  app.use(___AuthMiddleware({ admit: vi.fn() }));
+  app.use(___AuthMiddleware({ admit: vi.fn() }, { warn: vi.fn() } as unknown as Logger));
 
   app.get("/healthz", function _healthz(req, res)
   {

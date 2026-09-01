@@ -5,7 +5,16 @@ import type { AuthorizationBoundary, AuthorizationResourceLocator, Authorization
 import { __ManagedAuthorizationGrantKey, __PlanManagedAuthorizationGrantReconciliation } from "./managed-authorization-grant-policy";
 import type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand } from "./managed-authorization-grants.types";
 
-/** Reconciles managed grants through the repository bound to the caller's exact transaction. */
+/**
+ * Reconciles managed grants through the transaction already held by the deferred-approval workflow.
+ *
+ * Called by: `__ReconcileDeferredToolApprovalGrants` in `deferred-tool-approval.ts` while its
+ * approval state and grants must commit together.
+ * @param transaction - Transaction that owns the surrounding product change.
+ * @param command - Complete desired grant set and the decision time shared by its writes.
+ * @returns The number of grants created or revoked.
+ * @throws When the command is invalid or a database operation fails.
+ */
 export function __ReconcileManagedAuthorizationGrantsInTransaction(transaction: Prisma.TransactionClient, command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>
 {
 	return PrismaManagedAuthorizationGrantRepository.reconcileInTransaction(transaction, command);
@@ -51,14 +60,29 @@ function _Spec(row: _Row): ManagedAuthorizationGrantSpec
 	return { subject: _Subject(row), boundary: _Boundary(row), boundaryCoverage: row.boundaryCoverage === "Exact" ? AuthorizationBoundaryCoverages.Exact : AuthorizationBoundaryCoverages.Descendants, capability: { catalog: { catalogId: row.catalogId, revision: row.catalogRevision, digest: row.catalogDigest as `sha256:${string}` }, capabilityId: row.capabilityId }, resource: { kind: row.resourceKind, id: row.resourceId }, priority: row.priority, createdByPrincipalId: row.createdBy };
 }
 
-/** Transaction-scoped adapter for one product editor's isolated grants. */
+/**
+ * Reconciles one product editor's grants through a transaction the owning workflow already holds.
+ * New grants use the command's decision time, allowing that transaction to authorize against them
+ * before it commits.
+ * @implements ManagedAuthorizationGrantRepository
+ */
 export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthorizationGrantRepository
 {
 	private readonly _transaction: Prisma.TransactionClient;
 
+	/** Binds every grant and audit write to the caller's product transaction. */
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
 
-	/** Applies one validated managed-grant plan through an already-open transaction. */
+	/**
+	 * Applies one managed-grant plan through the supplied transaction.
+	 *
+	 * The planner validates the complete replacement before this method writes anything. Creation and
+	 * revocation share the command's decision time; their audit entry shares the same transaction.
+	 * @param transaction - Transaction that owns the surrounding product change.
+	 * @param command - Complete desired grant set and the decision time shared by its writes.
+	 * @returns The number of grants created or revoked.
+	 * @throws When the command is invalid or a database operation fails.
+	 */
 	static async reconcileInTransaction(transaction: Prisma.TransactionClient, command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>
 	{
 		const plan = __PlanManagedAuthorizationGrantReconciliation(command);
@@ -72,7 +96,26 @@ export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthori
 		{
 			if (currentByKey.has(key))
 				continue;
-			await transaction.authorizationGrant.create({ data: { siloId: command.siloId, managerId: command.managerId, ..._SubjectData(grant.subject), ..._BoundaryData(grant.boundary), boundaryCoverage: grant.boundaryCoverage === AuthorizationBoundaryCoverages.Exact ? "Exact" : "Descendants", catalogId: grant.capability.catalog.catalogId, catalogRevision: grant.capability.catalog.revision, catalogDigest: grant.capability.catalog.digest, capabilityId: grant.capability.capabilityId, resourceKind: command.resource.kind, resourceId: command.resource.id, effect: "Allow", priority: grant.priority, createdBy: grant.createdByPrincipalId } });
+			await transaction.authorizationGrant.create({
+				data: {
+					siloId: command.siloId,
+					managerId: command.managerId,
+					..._SubjectData(grant.subject),
+					..._BoundaryData(grant.boundary),
+					boundaryCoverage: grant.boundaryCoverage === AuthorizationBoundaryCoverages.Exact ? "Exact" : "Descendants",
+					catalogId: grant.capability.catalog.catalogId,
+					catalogRevision: grant.capability.catalog.revision,
+					catalogDigest: grant.capability.catalog.digest,
+					capabilityId: grant.capability.capabilityId,
+					resourceKind: command.resource.kind,
+					resourceId: command.resource.id,
+					effect: "Allow",
+					priority: grant.priority,
+					validFrom: command.now,
+					createdBy: grant.createdByPrincipalId,
+					createdAt: command.now
+				}
+			});
 			createdCount += 1;
 		}
 		const changedCount = revokedIds.length + createdCount;
@@ -81,6 +124,7 @@ export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthori
 		return changedCount;
 	}
 
+	/** Applies the managed-grant port through this repository's existing transaction. */
 	async reconcileManagedResourceGrants(command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>
 	{
 		return PrismaManagedAuthorizationGrantRepository.reconcileInTransaction(this._transaction, command);
