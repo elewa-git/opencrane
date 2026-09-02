@@ -2,13 +2,20 @@ import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/serv
 import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
 import type { FleetOrganizationMembershipHttpClientConfig } from "@opencrane/backend/server/infra/organization-membership-gateway";
 
-/** Lists the service kinds for which a release may select one immutable computer profile. */
+/**
+ * Lists the AgentService kinds that mounted release configuration may map to a computer profile.
+ *
+ * The parser rejects an unknown or duplicate kind before the server starts, which lets composition
+ * select one profile without treating request data as a profile choice.
+ */
 export const ConversationComputerProfileAgentServiceKinds = {
+	/** Configures the profile for a platform-managed AgentService. */
 	Managed: "managed",
+	/** Configures the profile for a participant-owned personal AgentService. */
 	Personal: "personal",
 } as const;
 
-/** Names a durable AgentService kind that the release profile-selection policy recognizes. */
+/** Names an AgentService kind that the mounted release map recognizes. */
 export type ConversationComputerProfileAgentServiceKind = typeof ConversationComputerProfileAgentServiceKinds[keyof typeof ConversationComputerProfileAgentServiceKinds];
 
 /** TLS-only KurrentDB coordinates owned by the HistoryStore deployment boundary. */
@@ -54,7 +61,7 @@ export interface ConversationComputerActivationProfileConfig
 {
 	/** Names the immutable ConversationComputer profile revision fixed in history. */
 	readonly profileRevisionId: string;
-	/** Lists the service kinds this release binds to this immutable profile revision. */
+	/** Lists the service kinds that select this revision; startup rejects an empty or duplicate list. */
 	readonly agentServiceKinds: readonly ConversationComputerProfileAgentServiceKind[];
 	/** Names the namespace containing the release-owned Agent Sandbox resources. */
 	readonly namespace: string;

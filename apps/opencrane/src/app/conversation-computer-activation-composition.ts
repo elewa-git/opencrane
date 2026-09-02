@@ -67,7 +67,17 @@ export function _CreateConversationComputerActivationProfileResolver(config: Con
 	return new _ReleaseConversationComputerActivationProfileResolver(config, siloId);
 }
 
-/** Creates the release-owned policy that assigns one immutable profile to each resolved service kind. */
+/**
+ * Builds the release-owned selector that maps a trusted AgentService kind to a computer profile revision.
+ *
+ * The configuration reader has already rejected duplicate kinds, so this composition keeps a request
+ * from choosing a profile or a foreign silo from using this release's map.
+ *
+ * Called by: `conversation-computer-activation-composition.test.ts`.
+ * @param config - Supplies the validated mounted release map.
+ * @param siloId - Restricts selections to this deployment.
+ * @returns A selector that returns a configured profile revision or `null`.
+ */
 export function _CreateConversationComputerAgentServiceProfileSelector(config: ConversationComputerActivationConfig, siloId: string): ConversationComputerProfileSelector
 {
 	return new _ReleaseConversationComputerAgentServiceProfileSelector(config, siloId);
@@ -107,7 +117,7 @@ class _ReleaseConversationComputerActivationProfileResolver
 	}
 }
 
-/** Selects exactly one configured profile after the service authority has resolved a trusted kind. */
+/** Maps validated release selections after the service authority has resolved a trusted kind. */
 class _ReleaseConversationComputerAgentServiceProfileSelector implements ConversationComputerProfileSelector
 {
 	/** Holds one immutable profile revision per service kind after startup validation has rejected duplicates. */
@@ -126,7 +136,7 @@ class _ReleaseConversationComputerAgentServiceProfileSelector implements Convers
 		this.siloId = siloId;
 	}
 
-	/** Returns the fixed profile revision for the exact deployment and service kind, or null when unavailable. */
+	/** Returns the configured revision for this deployment and kind, or `null` when it has none. */
 	public async select(command: { readonly siloId: string; readonly agentServiceKind: ConversationComputerAgentServiceKind }): Promise<{ readonly profileRevisionId: string } | null>
 	{
 		if (command.siloId !== this.siloId)
