@@ -48,7 +48,7 @@ export class ConversationAgentBindingResolver implements ConversationAgentBindin
 	public async bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>
 	{
 		const verification = await this.verifier.verify(command);
-		if (verification.outcome === "denied")
+		if (!("value" in verification))
 			return verification;
 		const candidate = verification.value;
 		const profile = await this.dependencies.profiles.select({ siloId: command.siloId, agentServiceKind: candidate.agentServiceKind });
