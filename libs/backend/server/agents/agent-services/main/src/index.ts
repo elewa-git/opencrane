@@ -21,6 +21,6 @@ export type { AgentServicesRouterDependencies, ManagementCaller, ManagementClock
 export { _AgentServicesOpenapiPaths } from "./openapi";
 export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule";
 export { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleDenial, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "./agent-schedule.types";
-export { __ManagedAgentServicePrincipal } from "./managed-agent-service-principal";
+export { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "./managed-agent-service-principal";
 export { _CreateManagedExecutionEvidenceAuthority } from "./managed-execution-evidence.factory";
 export type { ManagedExecutionCapabilityEvidence, ManagedExecutionEvidence, ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction, ManagedExecutionIdentityCoordinates, ManagedExecutionMembershipEvidence } from "./managed-execution-evidence.types";
