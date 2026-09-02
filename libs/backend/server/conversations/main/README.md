@@ -191,10 +191,13 @@ transport for workloads; it is not a browser fallback.
   remains valid, so a temporary runtime outage cannot strand FIFO history behind an arbitrary
   per-command timeout.
 - `ConversationComputerParticipantInputAuthority` records a human-authored, encrypted input entry
-  before the computer is warm. It checks that the requested computer is the one frozen into the
-  agent conversation anchor and that the caller is an anchored participant, then writes the opaque
-  entry under the checked history head. A later command worker may issue work from that entry only
-  after the computer has an active execution; cold-start inputs therefore do not need an AgentRun.
+  before the computer is warm. `ConversationComputerParticipantInputAdmission` first asks its
+  injected authorizer to recheck current membership, continuing participation, the creation-bound
+  computer, and `Conversation/Use`; only then does the history authority validate the immutable
+  anchor and write the opaque entry under the checked history head. It returns `accepted` for a new
+  append and `idempotent` for an exact response-lost retry. A later command worker may issue work
+  from that entry only after the computer has an active execution; cold-start inputs therefore do
+  not need an AgentRun.
 - `ConversationComputerParticipantInputDispatchAuthority` replays those retained start entries when
   Sandbox reconciliation has admitted an execution and on each later bounded reconciliation pass.
   Each entry is narrowed to its text payload and passed in transcript order to the command authority,

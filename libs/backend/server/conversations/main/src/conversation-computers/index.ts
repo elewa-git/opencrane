@@ -8,6 +8,8 @@ export type { ConversationComputerRuntimeCommandAuthorityDependencies, Conversat
 export { ConversationComputerParticipantInputAuthority } from "./conversation-computer-participant-input-authority";
 export { ConversationComputerParticipantInputOutcomes } from "./conversation-computer-participant-input-authority.types";
 export type { ConversationComputerParticipantInputAuthor, ConversationComputerParticipantInputAuthorityDependencies, ConversationComputerParticipantInputClock, ConversationComputerParticipantInputCommand, ConversationComputerParticipantInputEntry, ConversationComputerParticipantInputPayloadStore, ConversationComputerParticipantInputResult } from "./conversation-computer-participant-input-authority.types";
+export { ConversationComputerParticipantInputAdmission } from "./conversation-computer-participant-input-admission";
+export type { AuthorizedConversationComputerParticipantInput, ConversationComputerParticipantInputAdmissionResult, ConversationComputerParticipantInputAuthorizer, ConversationComputerParticipantInputRequest } from "./conversation-computer-participant-input-admission.types";
 export { ConversationComputerParticipantInputDispatchAuthority } from "./conversation-computer-participant-input-dispatch-authority";
 export type { ConversationComputerParticipantInputDispatchAuthorityDependencies, ConversationComputerParticipantInputDispatchCommand, ConversationComputerParticipantInputDispatchResult } from "./conversation-computer-participant-input-dispatch-authority.types";
 export { ConversationComputerRuntimeOutputAuthority } from "./conversation-computer-runtime-output-authority";
