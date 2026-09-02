@@ -1,5 +1,5 @@
 import { ConversationComputerExecutionStartOutcomes, ConversationComputerSandboxReconciliationOutcomes, type ConversationComputerActivationCommand } from "@opencrane/backend/server/conversations";
-import type { ConversationComputerExecutionAuthority, ConversationComputerSandboxReconciliationAuthority } from "@opencrane/backend/server/conversations";
+import type { ConversationComputerExecutionAuthority, ConversationComputerParticipantInputDispatchAuthority, ConversationComputerSandboxReconciliationAuthority } from "@opencrane/backend/server/conversations";
 import type { HistoryRecordedEvent, HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { OpenCraneConversationComputerSandboxReconciliationWorker } from "./conversation-computer-sandbox-reconciliation-composition.types";
@@ -27,7 +27,7 @@ const _RECONCILIATION_INTERVAL_MILLISECONDS = 1_000;
  * @returns A worker that stops polling and closes its regular stream before KurrentDB closes.
  * @throws {Error} Propagates a failure to open the regular history subscription.
  */
-export async function _StartConversationComputerSandboxReconciliationWorker(historyStore: HistoryStore, authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, siloId: string): Promise<OpenCraneConversationComputerSandboxReconciliationWorker>
+export async function _StartConversationComputerSandboxReconciliationWorker(historyStore: HistoryStore, authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, inputs: Pick<ConversationComputerParticipantInputDispatchAuthority, "dispatch">, siloId: string): Promise<OpenCraneConversationComputerSandboxReconciliationWorker>
 {
 	const streamName = `computer-activations-${siloId}`;
 	const subscription = await historyStore.subscribe({ streamName, fromRevision: 0n });
@@ -49,7 +49,7 @@ export async function _StartConversationComputerSandboxReconciliationWorker(hist
 	{
 		if (reconciliationPass !== null)
 			return;
-		reconciliationPass = _ReconcileOutstanding(authority, executions, outstanding, reconciliationCursor).then(function _AdvanceReconciliationCursor(nextCursor)
+		reconciliationPass = _ReconcileOutstanding(authority, executions, inputs, outstanding, reconciliationCursor).then(function _AdvanceReconciliationCursor(nextCursor)
 		{
 			reconciliationCursor = nextCursor;
 		}).catch(function _LogReconciliationFailure(error: unknown)
@@ -86,7 +86,7 @@ async function _ReadActivationLocators(events: AsyncIterable<HistoryRecordedEven
 }
 
 /** Reconciles one bounded batch and retains exact warm generations until execution admission converges. */
-async function _ReconcileOutstanding(authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, outstanding: Map<string, ConversationComputerActivationCommand>, cursor: number): Promise<number>
+async function _ReconcileOutstanding(authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, inputs: Pick<ConversationComputerParticipantInputDispatchAuthority, "dispatch">, outstanding: Map<string, ConversationComputerActivationCommand>, cursor: number): Promise<number>
 {
 	const entries = [...outstanding.entries()];
 	if (entries.length === 0)
@@ -103,7 +103,7 @@ async function _ReconcileOutstanding(authority: ConversationComputerSandboxRecon
 			// 2. Retire the polling locator once durable state moved beyond a pending claim or execution admission.
 			if (executionPending)
 			{
-				await _StartExecution(executions, command);
+				await _StartExecution(executions, inputs, command);
 				outstanding.delete(key);
 			}
 			else if (outcome !== ConversationComputerSandboxReconciliationOutcomes.Pending)
@@ -121,11 +121,15 @@ async function _ReconcileOutstanding(authority: ConversationComputerSandboxRecon
 }
 
 /** Starts the sole server-owned execution after its exact Sandbox-backed lease became warm. */
-async function _StartExecution(executions: Pick<ConversationComputerExecutionAuthority, "start">, command: ConversationComputerActivationCommand): Promise<void>
+async function _StartExecution(executions: Pick<ConversationComputerExecutionAuthority, "start">, inputs: Pick<ConversationComputerParticipantInputDispatchAuthority, "dispatch">, command: ConversationComputerActivationCommand): Promise<void>
 {
 	const result = await executions.start(command);
 	if (result.outcome === ConversationComputerExecutionStartOutcomes.Unavailable)
+	{
 		_log.warn({ computerId: command.computerId, generation: command.generation, siloId: command.siloId }, "conversation computer became unavailable before execution admission");
+		return;
+	}
+	await inputs.dispatch({ siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId });
 }
 
 /** Validates one status-reconciliation locator without treating arbitrary stream data as a claim target. */

@@ -193,6 +193,10 @@ transport for workloads; it is not a browser fallback.
   agent conversation anchor and that the caller is an anchored participant, then writes the opaque
   entry under the checked history head. A later command worker may issue work from that entry only
   after the computer has an active execution; cold-start inputs therefore do not need an AgentRun.
+- `ConversationComputerParticipantInputDispatchAuthority` replays those retained start entries when
+  Sandbox reconciliation has admitted an execution. Each entry is narrowed to its text payload and
+  passed to the command authority, which rechecks the execution and deduplicates by input entry id.
+  A failed replay leaves the activation locator available for a later retry instead of losing work.
 - `PrismaConversationPrivatePayloadStoreUnitOfWork` owns the short PostgreSQL transaction that
   retains one encrypted output row through package-private storage. It returns only `payload://…`
   and a ciphertext digest; a retry with the same text returns the original row, while changed text
