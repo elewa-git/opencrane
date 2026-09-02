@@ -65,6 +65,15 @@ describe("participant conversation OpenAPI", function _Suite()
 		} } } });
 	});
 
+	it("publishes immutable ConversationComputer input as a separate AgentSession contract", function _ReturnsComputerInputOutcomes()
+	{
+		const accepted = _SuccessSchema("/me/conversations/{conversationId}/input", "post", 201);
+		const idempotent = _SuccessSchema("/me/conversations/{conversationId}/input", "post", 200);
+
+		expect(accepted).toMatchObject({ additionalProperties: false, required: ["outcome", "inputEntryId"], properties: { outcome: { enum: ["accepted"] }, inputEntryId: { format: "uuid" } } });
+		expect(idempotent).toMatchObject({ additionalProperties: false, required: ["outcome", "inputEntryId"], properties: { outcome: { enum: ["idempotent"] }, inputEntryId: { format: "uuid" } } });
+	});
+
 	it("keeps conversation OpenAPI vocabularies owned by the domain model", function _OwnsConversationVocabularies()
 	{
 		const list = _SuccessSchema("/me/conversations", "get", 200) as { readonly properties: { readonly conversations: { readonly items: { readonly properties: Record<string, { readonly enum: readonly string[] }> } } } };

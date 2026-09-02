@@ -2,6 +2,7 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
+import { ConversationModes } from "@opencrane/models/conversations";
 import { ConversationEventStreamMessageError, type ConversationEventStream } from "@opencrane/state/conversation/stream";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, ConversationWorkspaceGatewayErrorKinds } from "@opencrane/state/conversation/workspace";
 
@@ -20,14 +21,14 @@ describe("OpenCraneConversationWorkspaceGateway", function _Suite()
 	{
 		const submit = vi.fn().mockResolvedValue(undefined);
 		const stream = { stream: vi.fn(), submit } as unknown as ConversationEventStream;
-		await expect(_Gateway(stream).send({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).resolves.toBeUndefined();
-		expect(submit).toHaveBeenCalledWith({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] });
+		await expect(_Gateway(stream).send({ conversationId: "conversation-1", mode: ConversationModes.AgentSession, idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).resolves.toBeUndefined();
+		expect(submit).toHaveBeenCalledWith({ conversationId: "conversation-1", mode: ConversationModes.AgentSession, idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] });
 	});
 
 	it("maps a transport-proven access loss to the workspace authority error", async function _MapsAccessLoss()
 	{
 		const submit = vi.fn().mockRejectedValue(new ConversationEventStreamMessageError("conversation_unavailable"));
 		const stream = { stream: vi.fn(), submit } as unknown as ConversationEventStream;
-		await expect(_Gateway(stream).send({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).rejects.toMatchObject({ kind: ConversationWorkspaceGatewayErrorKinds.AccessChanged });
+		await expect(_Gateway(stream).send({ conversationId: "conversation-1", mode: ConversationModes.AgentSession, idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).rejects.toMatchObject({ kind: ConversationWorkspaceGatewayErrorKinds.AccessChanged });
 	});
 });

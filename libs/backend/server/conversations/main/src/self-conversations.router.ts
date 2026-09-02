@@ -3,10 +3,14 @@ import type { Logger } from "pino";
 import { z } from "zod";
 
 import { ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
+import { ConversationComputerParticipantInputOutcomes } from "./conversation-computers/conversation-computer-participant-input-authority.types";
 
 import { _ConversationCreationRequestSchema } from "./validators/conversation-creation.validator";
 import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial } from "./types/conversation-authority-result.types";
 import type { SelfConversationsRouterDependencies } from "./self-conversations.router.types";
+
+/** Bounded text input for a ConversationComputer-owned agent session. */
+const _ComputerInputSchema = z.object({ inputId: z.string().uuid(), text: z.string().trim().min(1).max(64 * 1024) }).strict();
 
 /** Bounded idempotent participant message body. */
 const _MessageSchema = z.object({
@@ -33,8 +37,8 @@ const _RunRetrySchema = z.object({ expectedAttempt: z.number().int().min(1) }).s
 
 /**
  * Build the HTTP routes a signed-in user uses for their own conversations: read the creation
- * directory, list, create, open, open an Agent thread, mark one read, post a message, retry a run,
- * archive, close.
+ * directory, list, create, open, open an Agent thread, mark one read, post direct/group message or
+ * AgentSession input, retry a run, archive, close.
  *
  * The router owns three jobs and nothing else. It derives the caller from the session (never
  * from the path or body, so there is no route for reading someone else's conversations), checks
@@ -68,7 +72,11 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 	router.get("/directory", async function _Directory(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);
-		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
+		if (caller === null)
+		{
+			response.status(401).json({ error: "conversation_authentication_required" });
+			return;
+		}
 		try
 		{
 			response.status(200).json({ directory: await dependencies.authority.directory(caller) });
@@ -83,7 +91,11 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 	router.get("/", async function _List(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);
-		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
+		if (caller === null)
+		{
+			response.status(401).json({ error: "conversation_authentication_required" });
+			return;
+		}
 		try
 		{
 			const conversations = await dependencies.authority.list(caller, request.query["includeArchived"] === "true");
@@ -191,6 +203,44 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		catch (err)
 		{
 			_log(dependencies.logger, err, "conversation.message.submit", caller.siloId);
+			response.status(503).json({ error: "persistence_unavailable" });
+		}
+	});
+
+	/** Write AgentSession input through its immutable history authority rather than AgentRun admission. */
+	router.post("/:conversationId/input", async function _SubmitComputerInput(request: Request, response: Response)
+	{
+		const caller = dependencies.resolveCaller(request);
+		if (caller === null)
+		{
+			response.status(401).json({ error: "conversation_authentication_required" });
+			return;
+		}
+		const conversationId = _parameter(request.params["conversationId"]);
+		const parsed = _ComputerInputSchema.safeParse(request.body);
+		if (conversationId === null || !parsed.success)
+		{
+			response.status(400).json({ error: "invalid_conversation_input" });
+			return;
+		}
+		if (dependencies.computerInputs === null)
+		{
+			response.status(503).json({ error: "conversation_computer_unavailable" });
+			return;
+		}
+		try
+		{
+			const result = await dependencies.computerInputs.admit(caller, conversationId, parsed.data);
+			if (result === null)
+			{
+				response.status(404).json({ error: "conversation_unavailable" });
+				return;
+			}
+			response.status(result.outcome === ConversationComputerParticipantInputOutcomes.Accepted ? 201 : 200).json(result);
+		}
+		catch (err)
+		{
+			_log(dependencies.logger, err, "conversation.computer.input", caller.siloId);
 			response.status(503).json({ error: "persistence_unavailable" });
 		}
 	});

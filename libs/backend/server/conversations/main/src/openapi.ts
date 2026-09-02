@@ -2,6 +2,7 @@ import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, Me
 
 import { ConversationAuthorityOutcomes } from "./types/conversation-authority-result.types";
 import { PersonalAgentDirectoryStatuses } from "./types/conversation-directory.types";
+import { ConversationComputerParticipantInputOutcomes } from "./conversation-computers/conversation-computer-participant-input-authority.types";
 
 /**
  * Shared participant conversation summary schema kept local to the owning OpenAPI fragment.
@@ -223,8 +224,8 @@ export const _SelfConversationsOpenapiPaths = {
 	"/me/conversations/{conversationId}/messages": {
 		post: {
 			operationId: "submitMyConversationMessage",
-			summary: "Submit participant input through the immutable mode strategy",
-			description: "Agent-session input is committed atomically with a governed run. Direct and ordinary group input is committed without creating an AgentRun.",
+			summary: "Submit direct or group participant input",
+			description: "Direct and ordinary group input is committed without creating an AgentRun. Agent-session input uses the separate immutable ConversationComputer input contract.",
 			tags: ["Conversations"],
 			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
 			requestBody: {
@@ -255,6 +256,24 @@ export const _SelfConversationsOpenapiPaths = {
 				},
 			},
 			responses: { 201: { description: "Message accepted.", content: { "application/json": { schema: _AcceptedConversationMessageEnvelopeSchema } } }, 200: { description: "Exact idempotent retry returned the canonical message.", content: { "application/json": { schema: _IdempotentConversationMessageEnvelopeSchema } } }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 429: { description: "Conversation admission capacity is currently full; retry later." }, 503: { description: "Admission authority unavailable." } },
+		},
+	},
+	"/me/conversations/{conversationId}/input": {
+		post: {
+			operationId: "submitMyConversationComputerInput",
+			summary: "Append one AgentSession text input to immutable ConversationComputer history",
+			description: "Requires current membership, participant access, an open AgentSession creation binding, and Conversation/Use evidence. The text is encrypted before history receives its opaque payload reference; a retry with the same inputId returns the same entry.",
+			tags: ["Conversations"],
+			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
+			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["inputId", "text"], properties: { inputId: { type: "string", format: "uuid" }, text: { type: "string", minLength: 1, maxLength: 65536 } } } } } },
+			responses: {
+				201: { description: "Input appended to immutable history.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "inputEntryId"], properties: { outcome: { type: "string", enum: [ConversationComputerParticipantInputOutcomes.Accepted] }, inputEntryId: { type: "string", format: "uuid" } } } } } },
+				200: { description: "Exact idempotent input retry returned its existing history entry.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "inputEntryId"], properties: { outcome: { type: "string", enum: [ConversationComputerParticipantInputOutcomes.Idempotent] }, inputEntryId: { type: "string", format: "uuid" } } } } } },
+				400: { description: "Malformed input id or text." },
+				401: { description: "Authentication required." },
+				404: { description: "Conversation unavailable to this participant." },
+				503: { description: "ConversationComputer input authority unavailable." },
+			},
 		},
 	},
 	// Retry increases the attempt counter on the SAME run rather than creating a second one, which

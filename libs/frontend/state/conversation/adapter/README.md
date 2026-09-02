@@ -13,7 +13,8 @@ Opening a conversation creates a same-origin WebSocket at
 `/api/v1/me/conversations/:conversationId/socket`. The browser sends its existing cookie session
 during the upgrade; the server restores that session, derives the caller and silo, and rechecks
 participant membership before accepting the connection. The socket returns structured snapshot and
-live AG-UI frames, then carries participant message commands and their idempotent acknowledgements.
+live AG-UI frames, then carries direct/group message commands or AgentSession text input and their
+idempotent acknowledgements. An AgentSession never uses the message command as a fallback.
 The adapter validates every complete projection frame with the shared AG-UI state package before
 publishing browser view state.
 The backend [conversation projection package](../../../../backend/conversations/projection/main/README.md)
@@ -39,7 +40,8 @@ frames fail closed, and access revocation purges the reduced projection.
 ## Public surface
 
 - `OpenCraneConversationEventStream` — cookie-session socket adapter that implements the separate
-  [`ConversationEventStream`](../stream/README.md) port and submits participant messages.
+  [`ConversationEventStream`](../stream/README.md) port. It uses the immutable ConversationComputer
+  input frame for AgentSession text and preserves the message frame for direct/group content.
 
 ## Boundary
 

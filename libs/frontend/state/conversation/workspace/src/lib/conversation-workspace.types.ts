@@ -256,6 +256,8 @@ export interface SubmitConversationMessageCommand
 {
 	/** Selected conversation that owns every referenced asset. */
 	readonly conversationId: string;
+	/** Immutable mode that selects the public transport's input contract. */
+	readonly mode: ConversationModes;
 	/** Client command coordinate reused only for an exact retry. */
 	readonly idempotencyKey: string;
 	/** Stable text and asset blocks reused byte-for-byte for an exact retry. */

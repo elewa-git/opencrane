@@ -267,9 +267,10 @@ export class ConversationWorkspaceStore
 	{
 		const selected = this._selected();
 		const text = this._draft().trim();
-		if (selected === null || (text.length === 0 && assetIds.length === 0) || !this._CanSend(assetIds.length > 0)) return false;
+		if (selected === null || (text.length === 0 && assetIds.length === 0) || (selected.mode === ConversationModes.AgentSession && assetIds.length > 0) || !this._CanSend(assetIds.length > 0))
+			return false;
 		const generation = this._generation;
-		const command = this._PendingMessageCommand(selected.id, text, assetIds);
+		const command = this._PendingMessageCommand(selected.id, selected.mode, text, assetIds);
 		this._sending.set(true);
 		this._error.set(null);
 		try
@@ -426,12 +427,13 @@ export class ConversationWorkspaceStore
 	}
 
 	/** Reuse the exact pending command, or freeze a fresh command from the current composer. */
-	private _PendingMessageCommand(conversationId: string, text: string, assetIds: readonly string[]): SubmitConversationMessageCommand
+	private _PendingMessageCommand(conversationId: string, mode: ConversationModes, text: string, assetIds: readonly string[]): SubmitConversationMessageCommand
 	{
-		if (this._pendingMessage !== null && _PendingMessageMatches(this._pendingMessage, conversationId, text, assetIds)) return this._pendingMessage;
+		if (this._pendingMessage !== null && _PendingMessageMatches(this._pendingMessage, conversationId, mode, text, assetIds))
+			return this._pendingMessage;
 		const textBlocks: readonly SubmitConversationMessageBlock[] = text.length === 0 ? [] : [{ id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Text, value: text }];
 		const assetBlocks: readonly SubmitConversationMessageBlock[] = assetIds.map(function _AssetBlock(assetId) { return { id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Artifact, value: assetId }; });
-		const command: SubmitConversationMessageCommand = { conversationId, idempotencyKey: globalThis.crypto.randomUUID(), blocks: [...textBlocks, ...assetBlocks] };
+		const command: SubmitConversationMessageCommand = { conversationId, mode, idempotencyKey: globalThis.crypto.randomUUID(), blocks: [...textBlocks, ...assetBlocks] };
 		this._pendingMessage = command;
 		return command;
 	}
@@ -464,9 +466,12 @@ export class ConversationWorkspaceStore
 }
 
 /** Check whether the current composer still exactly matches a command retained for an ambiguous retry. */
-function _PendingMessageMatches(command: SubmitConversationMessageCommand, conversationId: string, text: string, assetIds: readonly string[]): boolean
+function _PendingMessageMatches(command: SubmitConversationMessageCommand, conversationId: string, mode: ConversationModes, text: string, assetIds: readonly string[]): boolean
 {
-	if (command.conversationId !== conversationId) return false;
+	if (command.conversationId !== conversationId)
+		return false;
+	if (command.mode !== mode)
+		return false;
 	const expected = [...(text.length === 0 ? [] : [{ kind: MessageContentBlockKinds.Text, value: text }]), ...assetIds.map(function _AssetInput(assetId) { return { kind: MessageContentBlockKinds.Artifact, value: assetId }; })];
 	return command.blocks.length === expected.length && command.blocks.every(function _SameInput(block, index) { return block.kind === expected[index]?.kind && block.value === expected[index]?.value; });
 }

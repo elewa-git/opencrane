@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import type { ConversationReplayUnitOfWork } from "./replay-reader.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 import type { ConversationUnitOfWork } from "./types/conversation-unit-of-work.types";
+import type { ConversationComputerParticipantInputAdmission } from "./conversation-computers/conversation-computer-participant-input-admission";
 
 /**
  * Authenticates an HTTP upgrade before the socket server takes ownership of its connection.
@@ -54,8 +55,10 @@ export interface SelfConversationSocketDependencies
 {
 	/** Restores an authenticated participant before accepting an upgrade. */
 	readonly authenticator: SelfConversationSocketAuthenticator;
-	/** Admits participant messages with the same mode and idempotency checks as the HTTP API. */
+	/** Admits direct and group messages with the same idempotency checks as the HTTP API. */
 	readonly authority: ConversationUnitOfWork;
+	/** Admits AgentSession text through immutable history; null rejects it rather than using `authority`. */
+	readonly computerInputs: Pick<ConversationComputerParticipantInputAdmission, "admit"> | null;
 	/** Re-reads authorized timeline rows for the current socket cursor. */
 	readonly repository: ConversationReplayUnitOfWork;
 	/** Supplies current approval and elicitation overlays when enabled. */
