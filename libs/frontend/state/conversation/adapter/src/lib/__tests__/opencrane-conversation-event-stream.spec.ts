@@ -1,6 +1,7 @@
 import { EventType } from "@ag-ui/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ConversationModes } from "@opencrane/models/conversations";
 import { AgUiRunStatuses } from "@opencrane/state/conversation/ag-ui";
 import { ConversationEventStreamMessageError, ConversationEventStreamStatuses } from "@opencrane/state/conversation/stream";
 
@@ -111,10 +112,27 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		const stream = new OpenCraneConversationEventStream();
 		const tail = stream.stream({ conversationId: "conversation-1", signal: controller.signal });
 		await vi.waitFor(() => expect(_Socket.connections[0]?.readyState).toBe(_Socket.OPEN));
-		const submitted = stream.submit({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] });
+		const submitted = stream.submit({ conversationId: "conversation-1", mode: ConversationModes.Direct, idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] });
 		const command = JSON.parse(_Socket.connections[0]!.sent[0] ?? "{}") as { readonly requestId: string; readonly type: string };
 		expect(command.type).toBe("conversation.message.submit");
 		_Socket.connections[0]!.deliver(JSON.stringify({ type: "conversation.message.accepted", requestId: command.requestId, outcome: "accepted" }));
+		await expect(submitted).resolves.toBeUndefined();
+		controller.abort();
+		await tail;
+	});
+
+	it("submits AgentSession input through the immutable ConversationComputer frame", async function _SubmitsComputerInput()
+	{
+		vi.stubGlobal("location", { origin: "https://testv4.dev.opencrane.ai" });
+		vi.stubGlobal("WebSocket", _Socket);
+		const controller = new AbortController();
+		const stream = new OpenCraneConversationEventStream();
+		const tail = stream.stream({ conversationId: "conversation-1", signal: controller.signal });
+		await vi.waitFor(() => expect(_Socket.connections[0]?.readyState).toBe(_Socket.OPEN));
+		const submitted = stream.submit({ conversationId: "conversation-1", mode: ConversationModes.AgentSession, idempotencyKey: "f8b48e77-9e1c-4dac-8e24-fac21e751ef5", blocks: [{ id: "block-1", kind: "text", value: "hello" }] });
+		const command = JSON.parse(_Socket.connections[0]!.sent[0] ?? "{}") as { readonly requestId: string; readonly type: string; readonly inputId: string; readonly text: string };
+		expect(command).toMatchObject({ type: "conversation.computer.input.submit", inputId: "f8b48e77-9e1c-4dac-8e24-fac21e751ef5", text: "hello" });
+		_Socket.connections[0]!.deliver(JSON.stringify({ type: "conversation.computer.input.accepted", requestId: command.requestId, outcome: "accepted", inputEntryId: command.inputId }));
 		await expect(submitted).resolves.toBeUndefined();
 		controller.abort();
 		await tail;

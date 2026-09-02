@@ -1,5 +1,6 @@
 import { Injectable } from "@angular/core";
 
+import { ConversationModes, ConversationSocketFrameKinds, MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSocketRecord, __ReduceAgUiStream, __RevokeAgUiStreamAccess, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 import { ConversationEventStreamMessageError, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand, type SubmitConversationEventStreamMessageCommand } from "@opencrane/state/conversation/stream";
 
@@ -107,7 +108,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 		{
 			const timeout = setTimeout(() => this._rejectMessage(requestId), _MESSAGE_ACKNOWLEDGEMENT_TIMEOUT_MILLISECONDS);
 			this._pendingMessages.set(requestId, { socket, resolve, reject, timeout });
-			try { socket.send(JSON.stringify({ type: "conversation.message.submit", requestId, idempotencyKey: command.idempotencyKey, blocks: command.blocks })); }
+			try { socket.send(JSON.stringify(_SubmissionFrame(command, requestId))); }
 			catch { this._rejectMessage(requestId); }
 		});
 	}
@@ -208,9 +209,22 @@ function _HandleMessageAcknowledgement(raw: string, pendingMessages: ReadonlyMap
 	if (pending === undefined) return true;
 	clearTimeout(pending.timeout);
 	(pendingMessages as Map<string, PendingMessage>).delete(requestId);
-	if (value["type"] === "conversation.message.accepted") pending.resolve();
-	else pending.reject(new ConversationEventStreamMessageError(typeof value["error"] === "string" ? value["error"] : undefined));
+	if (value["type"] === ConversationSocketFrameKinds.MessageAccepted || value["type"] === ConversationSocketFrameKinds.ComputerInputAccepted)
+		pending.resolve();
+	else
+		pending.reject(new ConversationEventStreamMessageError(typeof value["error"] === "string" ? value["error"] : undefined));
 	return true;
+}
+
+/** Selects the immutable Computer contract for AgentSession input and leaves direct and group blocks unchanged. */
+function _SubmissionFrame(command: SubmitConversationEventStreamMessageCommand, requestId: string): Record<string, unknown>
+{
+	if (command.mode !== ConversationModes.AgentSession)
+		return { type: ConversationSocketFrameKinds.MessageSubmit, requestId, idempotencyKey: command.idempotencyKey, blocks: command.blocks };
+	const block = command.blocks[0];
+	if (command.blocks.length !== 1 || block?.kind !== MessageContentBlockKinds.Text)
+		throw new ConversationEventStreamMessageError("Agent sessions accept one text input.");
+	return { type: ConversationSocketFrameKinds.ComputerInputSubmit, requestId, inputId: command.idempotencyKey, text: block.value };
 }
 
 /** Recognize the server's transport heartbeat without feeding it to the AG-UI decoder. */

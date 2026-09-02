@@ -4,7 +4,7 @@ import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 
-import { ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
+import { ConversationSocketFrameKinds, ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
 import { __DecodeConversationProjectionCursor, __StreamConversationProjection, ConversationProjectionOutcomes, type ConversationProjectionDependencies, type ConversationProjectionSink } from "@opencrane/backend/conversations/projection";
 
 import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./types/conversation-authority-result.types";
@@ -22,22 +22,33 @@ type _ConversationSocketSelection = {
 	readonly cursor: string | null;
 };
 
-/** Validates participant message submissions and rejects every other browser command. */
-const _CommandSchema = z.object({
-	type: z.literal("conversation.message.submit"),
+/** Validates direct and group participant message submissions. */
+const _MessageCommandSchema = z.object({
+	type: z.literal(ConversationSocketFrameKinds.MessageSubmit),
 	requestId: z.string().uuid(),
 	idempotencyKey: z.string().trim().min(1).max(128),
 	blocks: ___ParticipantInputBlocksSchema,
 	agentTarget: z.object({ agentServiceId: z.string().trim().min(1).max(128) }).strict().optional(),
 }).strict();
 
+/** Validates one AgentSession text input before it reaches immutable ConversationComputer history. */
+const _ComputerInputCommandSchema = z.object({
+	type: z.literal(ConversationSocketFrameKinds.ComputerInputSubmit),
+	requestId: z.string().uuid(),
+	inputId: z.string().uuid(),
+	text: z.string().trim().min(1).max(64 * 1024),
+}).strict();
+
+/** Accepts exactly the two public submission frames that their separate authorities own. */
+const _CommandSchema = z.discriminatedUnion("type", [_MessageCommandSchema, _ComputerInputCommandSchema]);
+
 /**
- * Builds a WebSocket endpoint for one participant's conversation projection and message submissions.
+ * Builds a WebSocket endpoint for one participant's projection and input submissions.
  *
  * The HTTP listener receives every upgrade, so this boundary rejects unrelated paths before `ws`
- * takes a socket. It authenticates the request, then passes that caller to the replay and message
- * authorities; a message frame cannot choose a participant or conversation. `attach` may be called
- * once; `close` asks active sockets to reconnect while the process drains.
+ * takes a socket. It authenticates the request, then passes that caller to the replay, direct/group
+ * message, and AgentSession input authorities; no frame can choose a participant or conversation.
+ * `attach` may be called once; `close` asks active sockets to reconnect while the process drains.
  *
  * Called by: `_CreatePrismaSelfConversationSocketServer`, composed by `apps/opencrane/src/index.ts`.
  *
@@ -168,7 +179,7 @@ async function _UpgradeConversation(socketServer: WebSocketServer, dependencies:
 	}
 }
 
-/** Run the projection tail and receive idempotent participant messages on one authenticated socket. */
+/** Runs one projection tail and serializes its caller's direct/group messages or AgentSession input. */
 async function _ServeConversationSocket(socket: WebSocket, dependencies: SelfConversationSocketDependencies, caller: ConversationCaller, conversationId: string, cursor: ReturnType<typeof __DecodeConversationProjectionCursor>): Promise<void>
 {
 	const abort = new AbortController();
@@ -187,7 +198,7 @@ async function _ServeConversationSocket(socket: WebSocket, dependencies: SelfCon
 
 		commands = commands.then(function _Submit()
 		{
-			return _SubmitMessage(socket, dependencies, caller, conversationId, data.toString());
+			return __SubmitSelfConversationSocketCommand(socket, dependencies, caller, conversationId, data.toString());
 		});
 	});
 	try
@@ -224,31 +235,53 @@ function _ProjectionOptions(dependencies: SelfConversationSocketDependencies): C
 	return { ...required, interrupts: dependencies.interrupts };
 }
 
-/** Submit a parsed participant command and answer only its caller with a correlation id. */
-async function _SubmitMessage(socket: WebSocket, dependencies: SelfConversationSocketDependencies, caller: ConversationCaller, conversationId: string, raw: string): Promise<void>
+/**
+ * Submits one validated participant frame and returns its correlated result to that socket only.
+ *
+ * Called by: `_ServeConversationSocket` and the socket-command contract test.
+ */
+export async function __SubmitSelfConversationSocketCommand(socket: WebSocket, dependencies: SelfConversationSocketDependencies, caller: ConversationCaller, conversationId: string, raw: string): Promise<void>
 {
 	const command = _CommandSchema.safeParse(_Json(raw));
 	if (!command.success)
 	{
-		_Send(socket, { type: "conversation.message.rejected", requestId: _RequestId(raw), error: "invalid_conversation_message" });
+		_Send(socket, { type: ConversationSocketFrameKinds.MessageRejected, requestId: _RequestId(raw), error: "invalid_conversation_message" });
 		return;
 	}
 
 	try
 	{
-		const result = await dependencies.authority.submitMessage(caller, conversationId, command.data);
-		if (result.outcome === ConversationAuthorityOutcomes.Denied)
+		if (command.data.type === ConversationSocketFrameKinds.MessageSubmit)
 		{
-			_Send(socket, { type: "conversation.message.rejected", requestId: command.data.requestId, error: result.reason });
+			const result = await dependencies.authority.submitMessage(caller, conversationId, command.data);
+			if (result.outcome === ConversationAuthorityOutcomes.Denied)
+			{
+				_Send(socket, { type: ConversationSocketFrameKinds.MessageRejected, requestId: command.data.requestId, error: result.reason });
+				return;
+			}
+
+			_Send(socket, { type: ConversationSocketFrameKinds.MessageAccepted, requestId: command.data.requestId, outcome: result.outcome });
 			return;
 		}
 
-		_Send(socket, { type: "conversation.message.accepted", requestId: command.data.requestId, outcome: result.outcome });
+		if (dependencies.computerInputs === null)
+		{
+			_Send(socket, { type: ConversationSocketFrameKinds.ComputerInputRejected, requestId: command.data.requestId, error: "conversation_computer_unavailable" });
+			return;
+		}
+		const result = await dependencies.computerInputs.admit(caller, conversationId, { inputId: command.data.inputId, text: command.data.text });
+		if (result === null)
+		{
+			_Send(socket, { type: ConversationSocketFrameKinds.ComputerInputRejected, requestId: command.data.requestId, error: "conversation_unavailable" });
+			return;
+		}
+		_Send(socket, { type: ConversationSocketFrameKinds.ComputerInputAccepted, requestId: command.data.requestId, outcome: result.outcome, inputEntryId: result.inputEntryId });
 	}
 	catch (error)
 	{
-		dependencies.logger.error({ err: error, operation: "conversation.socket.message.submit", siloId: caller.siloId }, "Conversation socket message submission failed");
-		_Send(socket, { type: "conversation.message.rejected", requestId: command.data.requestId, error: ConversationWriteDenialReasons.PersistenceUnavailable });
+		dependencies.logger.error({ err: error, operation: "conversation.socket.command.submit", siloId: caller.siloId }, "Conversation socket command submission failed");
+		const type = command.data.type === ConversationSocketFrameKinds.MessageSubmit ? ConversationSocketFrameKinds.MessageRejected : ConversationSocketFrameKinds.ComputerInputRejected;
+		_Send(socket, { type, requestId: command.data.requestId, error: ConversationWriteDenialReasons.PersistenceUnavailable });
 	}
 }
 

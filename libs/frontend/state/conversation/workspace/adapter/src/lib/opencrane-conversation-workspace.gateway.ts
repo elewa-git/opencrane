@@ -103,7 +103,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
 		const blocks = command.blocks.map(function _Block(block) { return { ...block }; });
-		try { await this._eventStream.submit({ conversationId: command.conversationId, idempotencyKey: command.idempotencyKey, blocks }); }
+		try { await this._eventStream.submit({ conversationId: command.conversationId, mode: command.mode, idempotencyKey: command.idempotencyKey, blocks }); }
 		catch (error)
 		{
 			if (!(error instanceof ConversationEventStreamMessageError)) throw _InvalidResponse();

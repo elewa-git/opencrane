@@ -9,7 +9,7 @@ function _App(authority: object, authenticated = true): Express
 {
 	const app = express();
 	app.use(express.json());
-	app.use(__CreateSelfConversationsRouter({ resolveCaller: function _Caller() { return authenticated ? { siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" } : null; }, authority: authority as never, logger: { error: vi.fn(), warn: vi.fn() } as never }));
+	app.use(__CreateSelfConversationsRouter({ resolveCaller: function _Caller() { return authenticated ? { siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" } : null; }, authority: authority as never, computerInputs: (authority as { computerInputs?: object }).computerInputs as never ?? null, logger: { error: vi.fn(), warn: vi.fn() } as never }));
 	return app;
 }
 
@@ -66,6 +66,22 @@ describe("self conversations router", function _Suite()
 	{
 		const submitMessage = vi.fn().mockResolvedValue({ outcome: "denied", reason: "capacity_limited" });
 		await request(_App({ submitMessage })).post("/conversation-1/messages").send({ idempotencyKey: "request-1", blocks: [{ id: "block-1", kind: "text", value: "Later" }] }).expect(429, { error: "capacity_limited" });
+	});
+
+	it("admits AgentSession text through the dedicated immutable input route", async function _AdmitsComputerInput()
+	{
+		const admit = vi.fn().mockResolvedValueOnce({ outcome: "accepted", inputEntryId: "input-1" }).mockResolvedValueOnce({ outcome: "idempotent", inputEntryId: "input-1" });
+		const app = _App({ computerInputs: { admit } });
+		const body = { inputId: "f8b48e77-9e1c-4dac-8e24-fac21e751ef5", text: "Hello" };
+
+		await request(app).post("/conversation-1/input").send(body).expect(201, { outcome: "accepted", inputEntryId: "input-1" });
+		await request(app).post("/conversation-1/input").send(body).expect(200, { outcome: "idempotent", inputEntryId: "input-1" });
+		expect(admit).toHaveBeenCalledWith({ siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.test", subjectId: "user-1" }, "conversation-1", body);
+	});
+
+	it("does not expose a partially composed ConversationComputer input route", async function _FailsClosedWithoutComputerInput()
+	{
+		await request(_App({})).post("/conversation-1/input").send({ inputId: "f8b48e77-9e1c-4dac-8e24-fac21e751ef5", text: "Hello" }).expect(503, { error: "conversation_computer_unavailable" });
 	});
 
 	it("starts and idempotently replays an exact participant run retry", async function _RetriesRun()

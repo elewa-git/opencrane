@@ -294,35 +294,6 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 	}
 
 	/**
-	 * Writes the user's message inside the transaction that is already starting an agent run.
-	 *
-	 * Unlike the other methods here it throws instead of returning a denial, because by this point the
-	 * run is staged in the same transaction: the only correct way to refuse is to make the whole
-	 * transaction roll back, taking the run with it. A returned denial would leave a run with no message
-	 * that asked for it.
-	 *
-	 * @param runId - The run staged in this transaction; stored on the message so the two are linked.
-	 * @throws Error when membership, participant access, or the mode decision no longer allows the
-	 *   message — which discards the staged run as well.
-	 */
-	async persistAgentMessage(caller: ConversationCaller, conversationId: string, messageId: string, runId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<void>
-	{
-		// 1. Revalidate current silo membership and participant access inside run admission's final transaction.
-		const context = await this.query.loadCommandContext(caller, conversationId);
-		if (context === null) throw new Error("Conversation authority unavailable");
-
-		// 2. Re-dispatch persisted mode and lifecycle through the exhaustive strategy after the run is staged.
-		const decision = __DecideConversationCommand({ ...context, command: { kind: ConversationCommandKinds.SubmitMessage } });
-		if (!decision.allowed || decision.action !== ConversationCommandActions.AdmitAgentRun) throw new Error("Conversation command unavailable");
-		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Use, { idempotencyKey: request.idempotencyKey, messageId, runId }))
-			throw new Error("Conversation product authorization unavailable");
-
-		// 3. Persist the message only after every caller and immutable-mode fence remains valid.
-		await this.transaction.conversationMessage.create({ data: _messageData(messageId, conversationId, caller.subjectId, request, runId) });
-		await attachments.bindReadyAssets(caller, conversationId, messageId, request.blocks);
-	}
-
-	/**
 	 * Writes the message that asks an Agent something in a group, plus the child conversation the Agent
 	 * will answer in.
 	 *

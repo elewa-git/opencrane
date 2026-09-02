@@ -51,15 +51,9 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 				? this._admitAgentThreadMessage(caller, conversationId, request)
 				: _denied(ConversationWriteDenialReasons.CommandNotSupported);
 
-			switch (decision.action)
-			{
-				case ConversationCommandActions.AdmitOrdinaryMessage:
-					return this._admitOrdinaryMessage(caller, conversationId, request);
-				case ConversationCommandActions.AdmitAgentRun:
-					return this._admitAgentMessage(caller, conversationId, request);
-				default:
-					return _denied(ConversationWriteDenialReasons.CommandNotSupported);
-			}
+			if (decision.action !== ConversationCommandActions.AdmitOrdinaryMessage)
+				return _denied(ConversationWriteDenialReasons.CommandNotSupported);
+			return this._admitOrdinaryMessage(caller, conversationId, request);
 		});
 	}
 
@@ -87,22 +81,6 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 		{
 			return this._resolveIdempotencyConflict(error, caller, conversationId, request);
 		}
-	}
-
-	/** Commits a user message inside the run repository's sole final transaction. */
-	private async _admitAgentMessage(caller: ConversationCaller, conversationId: string, request: SubmitConversationMessageRequest): Promise<SubmitConversationMessageResult>
-	{
-		const messageId = randomUUID();
-		const createAttachmentAdmission = this.createAttachmentAdmission;
-		const createMutationRepository = this.createMutationRepository;
-		const result = await this.runAdmission.admitPersonalRun({ siloId: caller.siloId, requesterSubjectId: caller.subjectId, requesterIssuer: caller.issuer, requesterAuthenticatedAt: new Date().toISOString(), conversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: messageId, inputMessageBlocks: request.blocks }, async function _PersistMessage(transaction: RunAdmissionTransaction, value: RunAdmissionBuild)
-		{
-			await createMutationRepository(transaction).persistAgentMessage(caller, conversationId, messageId, value.snapshot.runId, request, createAttachmentAdmission(transaction));
-		});
-		if (result.outcome === PersonalRunAdmissionOutcomes.Denied) return _denied(_runAdmissionDenial(result.reason));
-		const message = await this._findOwnMessage(caller, conversationId, request.idempotencyKey);
-		if (message === null) return _denied(ConversationWriteDenialReasons.PersistenceUnavailable);
-		return result.outcome === PersonalRunAdmissionOutcomes.Idempotent ? _duplicateResult(message, request) : _accepted(message);
 	}
 
 	/** Atomically creates the parent root message, child session, first run, and immutable origin. */

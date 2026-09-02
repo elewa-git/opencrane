@@ -11,16 +11,16 @@ not bind an agent and their ordinary messages never manufacture runs.
 
 ```
  authenticated participant
-          │ directory · list · create · open · message · retry run · archive · close · replay
+          │ directory · list · create · open · input · message · retry run · archive · close · replay
           ▼
  ┌──────────────────────────────────────────┐
  │ conversations  ◄── HERE                   │
  │ immutable mode · participant coordinates │
  │ atomic admission · authorised event read │
  └──────────────────────────────────────────┘
-          │ agent-session message       │ direct/group message
+          │ AgentSession input           │ direct/group message
           ▼                             ▼
- execution/admission              canonical message only
+ ConversationComputer history     canonical message only
 ```
 
 **In this flow:** [execution admission](../../../agents/execution/admission/main/README.md) ·
@@ -29,15 +29,17 @@ not bind an agent and their ordinary messages never manufacture runs.
 [AG-UI browser state](../../../../frontend/state/conversation/ag-ui/README.md)
 
 Message admission dispatches through the persisted mode strategy. A direct or group message commits
-as a canonical message without an `AgentRun`. An agent-session message enters the internal personal
-run-admission port so the message, immutable input snapshot, run, and first dispatch intent commit in
-one transaction. A single active foreground run blocks another agent-session message. The public API
-does not expose a separate run-start route.
+as a canonical message without an `AgentRun`. An AgentSession rejects that message path. Its dedicated
+`input` contract rechecks current access, encrypts one text body, and appends the opaque reference to
+immutable ConversationComputer history. The reconciliation worker later issues a start-turn command
+when the creation-bound computer has an active execution. The public API does not expose a separate
+run-start route.
 
 The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
-dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
-the handoff into execution admission's authoritative final transaction. Conversation composition
-supplies the route facts and the required execution-inputs compiler. The runs package then checks
+dedicated message-admission unit owns direct and group submission routing, retry recovery, and denial
+translation. ConversationComputer participant-input admission owns the AgentSession write and never
+falls back to message or execution admission. Conversation composition supplies the route facts and
+the required execution-inputs compiler. The runs package then checks
 replay, requester, run, and service authority, requires its compiler to recheck the next attempt's
 AgentIdentity, membership, capability decision, and computer lease, and commits its
 immutable snapshot through the same serializable compare-and-swap. Browser requester coordinates
@@ -131,14 +133,15 @@ the tool, while credentials and provider details are never exposed.
 The server rechecks organisation membership and participant bounds on every page. The public
 browser transport is one same-origin WebSocket: it restores the signed-in cookie session during the
 upgrade, rejects a mismatched origin, replays the canonical timeline as structured frames, and
-accepts only idempotent participant-message commands. Projection pauses when a peer is congested
+accepts direct/group message commands plus the separate AgentSession immutable-input command.
+Projection pauses when a peer is congested
 and rechecks access before every replay page, so revocation closes the socket instead of becoming an
 empty successful stream. The separate internal replay route remains a one-use channel-context
 transport for workloads; it is not a browser fallback.
 
 ## Public surface
 
-- `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, open, message,
+- `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, open, AgentSession input, direct/group message,
   Agent-thread mark-read, failed-run retry, archive, and close API over Prisma and the internal
   execution ports. Retry accepts only the observed terminal attempt; all
   identity and authority coordinates come from the signed-in route and are rechecked transactionally.
@@ -146,7 +149,7 @@ transport for workloads; it is not a browser fallback.
   access-ending races cannot expose later events.
 - `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.
 - `_CreatePrismaSelfConversationSocketServer` composes the signed-in participant WebSocket from the
-  same message authority and replay repository as the REST conversation metadata API.
+  direct/group message authority, the AgentSession history-input authority, and the replay repository.
 - `_SelfConversationsOpenapiPaths` contributes the remaining REST metadata and lifecycle APIs to the
   server-owned OpenAPI document.
 - `BoundConversationWriter` is a one-use, stream-bound KurrentDB append boundary for a currently
@@ -267,9 +270,9 @@ transport for workloads; it is not a browser fallback.
 ## Boundary
 
 The self API receives only server-derived session and host identity. It never accepts silo,
-membership, user, agent authority, or run identifiers as browser-selected trust facts. It creates a
-run only by calling the internal execution-admission port for an eligible agent-session message; it
-does not assemble inputs, dispatch workloads, or execute agents. The channel replay route separately
+membership, user, agent authority, or run identifiers as browser-selected trust facts. AgentSession
+input becomes immutable history before the computer command worker can issue work; the browser does
+not assemble inputs, dispatch workloads, or execute agents. The channel replay route separately
 requires a consumed one-use context and the exact controller-selected route identifier.
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
@@ -292,8 +295,9 @@ import an app, frontend state, or deployment package.
 Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
 `ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
 transactions and projects create, archive, and close results from the same authorised write
-snapshot. Message admission separately uses serialisable ordinary-message writes and binds agent
-messages to execution admission's final transaction. The replay adapter is read-only and joins
+snapshot. Message admission separately uses serialisable ordinary-message writes. AgentSession input
+uses its own transaction to recheck current authority before appending immutable history. The replay
+adapter is read-only and joins
 timeline references to canonical messages and `RunEvent`; neither path
 reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
 in the caller's host-selected silo; participant rows alone never preserve authority after revocation.

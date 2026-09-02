@@ -1,4 +1,5 @@
 import type { AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import type { ConversationModes } from "@opencrane/models/conversations";
 
 /**
  * Reports where a conversation stream is in its lifecycle so browser state can distinguish a
@@ -72,6 +73,8 @@ export interface SubmitConversationEventStreamMessageCommand
 {
 	/** Conversation selected by the active event stream. */
 	readonly conversationId: string;
+	/** Chooses the mode-owned public command frame without trusting a server-side default. */
+	readonly mode: ConversationModes;
 	/** Retry key the server uses to deduplicate uncertain submissions. */
 	readonly idempotencyKey: string;
 	/** Display-safe participant blocks retained unchanged for an exact retry. */

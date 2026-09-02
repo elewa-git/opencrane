@@ -82,27 +82,6 @@ describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 		expect(persistAgentThread).toHaveBeenCalledWith(_CALLER, expect.objectContaining({ firstRunId: "run-1", personaRevisionId: "persona-1" }), "profile-1", expect.any(String), request, expect.objectContaining({ blocks: request.blocks }), expect.any(Object));
 	});
 
-	it("routes agent-session input through run admission and persists the message in its transaction", async function _AdmitsAgentMessage()
-	{
-		const create = vi.fn().mockResolvedValue({});
-		const findFirst = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(_Entry("run-1"));
-		const admitPersonalRun = vi.fn(async function _Admit(command, commit)
-		{
-			await commit({ prisma: { orgMembership: _ActiveMembership(), conversation: { findFirst: vi.fn().mockResolvedValue({ mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, agentServiceId: "service-1", runs: [{ id: "run-1" }] }) }, conversationMessage: { create } } }, { snapshot: { runId: "run-1" } });
-			return { outcome: PersonalRunAdmissionOutcomes.Accepted, runId: "run-1" };
-		});
-		const transaction = {
-			orgMembership: _ActiveMembership(),
-			conversationTimelineEntry: { findFirst },
-			conversation: { findFirst: vi.fn().mockResolvedValue({ mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, agentServiceId: "service-1", runs: [] }) },
-		};
-		const admission = _Admission(_Prisma(transaction), { admitPersonalRun } as never);
-
-		await expect(admission.submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual(expect.objectContaining({ outcome: "accepted", message: expect.objectContaining({ runId: "run-1", position: "2" }) }));
-		expect(admitPersonalRun).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", requesterSubjectId: "user-1", requesterIssuer: "https://issuer.test", requesterAuthenticatedAt: expect.any(String), conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageBlocks: _REQUEST.blocks, inputMessageId: expect.any(String) }), expect.any(Function));
-		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", userId: "user-1", idempotencyKey: "request-1", source: "user_input" }) });
-	});
-
 	it("persists direct input without creating an AgentRun", async function _AdmitsDirectMessage()
 	{
 		const create = vi.fn().mockResolvedValue({});
@@ -110,11 +89,9 @@ describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 		const context = { mode: ConversationMode.Direct, lifecycle: ConversationLifecycle.Open, agentServiceId: null, runs: [] };
 		const transaction = { orgMembership: _ActiveMembership(), conversation: { findFirst: vi.fn().mockResolvedValue(context) }, conversationMessage: { create } };
 		Object.assign(transaction, { conversationTimelineEntry: { findFirst } });
-		const admitPersonalRun = vi.fn();
 		const prisma = _Prisma(transaction) as { readonly $transaction: ReturnType<typeof vi.fn> };
 
-		await expect(_Admission(prisma, { admitPersonalRun }).submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual(expect.objectContaining({ outcome: "accepted", message: expect.objectContaining({ runId: null }) }));
-		expect(admitPersonalRun).not.toHaveBeenCalled();
+		await expect(_Admission(prisma, {}).submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual(expect.objectContaining({ outcome: "accepted", message: expect.objectContaining({ runId: null }) }));
 		expect(prisma.$transaction).toHaveBeenNthCalledWith(2, expect.any(Function), { isolationLevel: "Serializable" });
 		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: null, role: ConversationMessageRole.User, state: ConversationMessageState.Completed }) });
 	});
@@ -125,10 +102,8 @@ describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 			orgMembership: _ActiveMembership(),
 			conversationTimelineEntry: { findFirst: vi.fn().mockResolvedValue(_Entry(null)) },
 		};
-		const admitPersonalRun = vi.fn();
 
-		await expect(_Admission(_Prisma(transaction), { admitPersonalRun }).submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual(expect.objectContaining({ outcome: "idempotent", message: expect.objectContaining({ id: "message-1" }) }));
-		expect(admitPersonalRun).not.toHaveBeenCalled();
+		await expect(_Admission(_Prisma(transaction), {}).submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual(expect.objectContaining({ outcome: "idempotent", message: expect.objectContaining({ id: "message-1" }) }));
 	});
 
 	it("rejects changed-body reuse of a participant-owned idempotency key", async function _RejectsChangedDuplicate()
@@ -142,25 +117,16 @@ describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 		await expect(_Admission(_Prisma(transaction), {}).submit(_CALLER, "conversation-1", changedRequest)).resolves.toEqual({ outcome: "denied", reason: "idempotency_conflict" });
 	});
 
-	it.each([
-		["conversation_unavailable", "conversation_unavailable"],
-		["authority_conflict", "idempotency_conflict"],
-		["admission_concurrency_limited", "capacity_limited"],
-		["active_run", "active_run"],
-		["run_not_admittable", "agent_service_unavailable"],
-		["revision_unavailable", "agent_service_unavailable"],
-		["persona_unavailable", "agent_service_unavailable"],
-		["future_failure", "persistence_unavailable"],
-	])("maps run-admission refusal %s to %s", async function _MapsAdmissionRefusal(reason, expected)
+
+	it("rejects AgentSession messages so its immutable input authority remains the sole owner", async function _RejectsAgentSessionMessage()
 	{
 		const transaction = {
 			orgMembership: _ActiveMembership(),
 			conversationTimelineEntry: { findFirst: vi.fn().mockResolvedValue(null) },
 			conversation: { findFirst: vi.fn().mockResolvedValue({ mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, agentServiceId: "service-1", runs: [] }) },
 		};
-		const runAdmission = { admitPersonalRun: vi.fn().mockResolvedValue({ outcome: PersonalRunAdmissionOutcomes.Denied, reason }) };
 
-		await expect(_Admission(_Prisma(transaction), runAdmission).submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual({ outcome: "denied", reason: expected });
+		await expect(_Admission(_Prisma(transaction), {}).submit(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual({ outcome: "denied", reason: "command_not_supported" });
 	});
 
 	it("returns the caller's canonical message after losing a concurrent insert race", async function _RecoversOwnConcurrentInsert()
