@@ -3,7 +3,7 @@ import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/histor
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerParticipantInputAuthority } from "../conversation-computer-participant-input-authority";
-import type { ConversationComputerParticipantInputAuthorityDependencies, ConversationComputerParticipantInputCommand } from "../conversation-computer-participant-input-authority.types";
+import { ConversationComputerParticipantInputOutcomes, type ConversationComputerParticipantInputAuthorityDependencies, type ConversationComputerParticipantInputCommand } from "../conversation-computer-participant-input-authority.types";
 import type { ConversationHistoryReader } from "../../conversation-history-reader";
 
 /** Fixes the server timestamp that target participant input entries record. */
@@ -93,7 +93,7 @@ describe("ConversationComputerParticipantInputAuthority", function _ParticipantI
 	{
 		const subject = _Subject();
 
-		await expect(subject.authority.admit(_Command())).resolves.toEqual({ inputEntryId: _INPUT_ID });
+		await expect(subject.authority.admit(_Command())).resolves.toEqual({ outcome: ConversationComputerParticipantInputOutcomes.Accepted, inputEntryId: _INPUT_ID });
 
 		expect(subject.payloads.storeText).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", idempotencyKey: _INPUT_ID, text: "Please prepare the release notes." });
 		expect(subject.history.appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "conversation-conversation-1", revision: 3n }] }));
@@ -105,7 +105,7 @@ describe("ConversationComputerParticipantInputAuthority", function _ParticipantI
 	{
 		const subject = _Subject({ entries: [_ExistingInput()] });
 
-		await expect(subject.authority.admit(_Command())).resolves.toEqual({ inputEntryId: _INPUT_ID });
+		await expect(subject.authority.admit(_Command())).resolves.toEqual({ outcome: ConversationComputerParticipantInputOutcomes.Idempotent, inputEntryId: _INPUT_ID });
 
 		expect(subject.history.appendAtomic).not.toHaveBeenCalled();
 		expect(subject.payloads.storeText).toHaveBeenCalledTimes(1);
