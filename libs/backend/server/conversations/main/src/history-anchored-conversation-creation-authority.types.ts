@@ -1,6 +1,6 @@
 import type { ConversationCreated } from "@opencrane/contracts";
 
-import type { AnchorConversationCreationReservationCommand, ConversationCreationReservationStates, ReserveConversationCreationCommand, ReserveConversationCreationResult, ReservedConversationCreation } from "./conversation-creation-reservation.types";
+import type { AnchorConversationCreationReservationCommand, ConversationCreationReservationStates, RecoverConversationCreationReservationCommand, ReserveConversationCreationCommand, ReserveConversationCreationResult, ReservedConversationCreation } from "./conversation-creation-reservation.types";
 
 /**
  * States how the creation authority handled a server-resolved create command.
@@ -97,6 +97,13 @@ export interface ConversationCreationReservationUnitOfWork
 	 * @returns The admitted command, a conflicting retry key, or an authorization denial.
 	 */
 	reserve(command: ReserveConversationCreationCommand): Promise<ReserveConversationCreationResult>;
+	/**
+	 * Recovers one caller-scoped reservation before fresh request compilation consults mutable facts.
+	 *
+	 * Called by: {@link HistoryAnchoredConversationCreationAuthority.resume}. It never opens a
+	 * history transaction and returns `null` only when this retry key has not been admitted before.
+	 */
+	recover(command: RecoverConversationCreationReservationCommand): Promise<ReserveConversationCreationResult | null>;
 	/**
 	 * Advances an already-proven history anchor in a new serializable PostgreSQL operation.
 	 *

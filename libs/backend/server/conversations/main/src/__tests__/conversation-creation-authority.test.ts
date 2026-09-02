@@ -9,10 +9,13 @@ import { ConversationWriteDenialReasons } from "../types/conversation-authority-
 const _CALLER = { siloId: "silo-1", principalId: "principal-1", subjectId: "user-1", issuer: "https://issuer.test" };
 
 /** Builds the authority with a programmable compiler, binding resolver, and history factory. */
-function _Authority(overrides: { readonly compiled?: { readonly participantUserIds: readonly string[]; readonly agentServiceId: string | null } | null; readonly binding?: { readonly outcome: "bound"; readonly value: { readonly agentServiceId: string; readonly agentRevisionId: string; readonly agentIdentityId: string; readonly profileRevisionId: string } } | { readonly outcome: "denied"; readonly reason: "service_unavailable" }; readonly historyResult?: { readonly outcome: "projection_needed"; readonly reservation: { readonly conversationId: string } } | { readonly outcome: "projected"; readonly reservation: { readonly conversationId: string } } | { readonly outcome: "denied" } | { readonly outcome: "idempotency_conflict" } } = {})
+function _Authority(overrides: { readonly compiled?: { readonly participantUserIds: readonly string[]; readonly agentServiceId: string | null } | null; readonly binding?: { readonly outcome: "bound"; readonly value: { readonly agentServiceId: string; readonly agentRevisionId: string; readonly agentIdentityId: string; readonly profileRevisionId: string } } | { readonly outcome: "denied"; readonly reason: "service_unavailable" }; readonly historyResult?: { readonly outcome: "projection_needed"; readonly reservation: { readonly conversationId: string } } | { readonly outcome: "projected"; readonly reservation: { readonly conversationId: string } } | { readonly outcome: "denied" } | { readonly outcome: "idempotency_conflict" }; readonly recovered?: { readonly outcome: "projection_needed"; readonly reservation: { readonly conversationId: string } } | { readonly outcome: "projected"; readonly reservation: { readonly conversationId: string } } | { readonly outcome: "denied" } | { readonly outcome: "idempotency_conflict" } | null } = {})
 {
 	const create = vi.fn().mockResolvedValue(overrides.historyResult ?? { outcome: "projection_needed", reservation: { conversationId: "conversation-1" } });
-	return { subject: new HistoryAnchoredConversationCreationService({ compiler: { compile: vi.fn().mockResolvedValue(overrides.compiled ?? { participantUserIds: ["user-1", "user-2"], agentServiceId: null }) }, agentBindings: { bind: vi.fn().mockResolvedValue(overrides.binding ?? { outcome: "bound", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" } }) }, history: { create: vi.fn().mockReturnValue({ create }) }, clock: { now: function _Now() { return new Date("2026-09-02T00:00:00.000Z"); } } }), create };
+	const resume = vi.fn().mockResolvedValue(overrides.recovered ?? null);
+	const compile = vi.fn().mockResolvedValue(overrides.compiled ?? { participantUserIds: ["user-1", "user-2"], agentServiceId: null });
+	const bind = vi.fn().mockResolvedValue(overrides.binding ?? { outcome: "bound", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" } });
+	return { subject: new HistoryAnchoredConversationCreationService({ compiler: { compile }, agentBindings: { bind }, history: { create: vi.fn().mockReturnValue({ create, resume }) }, clock: { now: function _Now() { return new Date("2026-09-02T00:00:00.000Z"); } } }), create, resume, compile, bind };
 }
 
 describe("HistoryAnchoredConversationCreationService", function _Suite()
@@ -35,5 +38,15 @@ describe("HistoryAnchoredConversationCreationService", function _Suite()
 	{
 		const authority = _Authority({ historyResult: { outcome: "idempotency_conflict" } });
 		await expect(authority.subject.create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000003", mode: ConversationModes.Direct, participantRefs: ["member-2"] })).resolves.toEqual({ outcome: "denied", reason: ConversationWriteDenialReasons.IdempotencyConflict });
+	});
+
+	it("resumes an anchored request before mutable participant or Agent facts are compiled again", async function _ResumesBeforeCompilation()
+	{
+		const authority = _Authority({ compiled: null, recovered: { outcome: "projection_needed", reservation: { conversationId: "conversation-recovered" } } });
+		await expect(authority.subject.create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000004", mode: ConversationModes.AgentSession, personalAgentRef: "service-removed" })).resolves.toEqual({ outcome: "created", conversationId: "conversation-recovered" });
+		expect(authority.resume).toHaveBeenCalledOnce();
+		expect(authority.compile).not.toHaveBeenCalled();
+		expect(authority.bind).not.toHaveBeenCalled();
+		expect(authority.create).not.toHaveBeenCalled();
 	});
 });

@@ -3,7 +3,7 @@ import { ConversationCreationReservationState, ConversationMode, type Prisma } f
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ConversationModes } from "@opencrane/models/conversations";
 
-import { ConversationCreationReservationOutcomes, ConversationCreationReservationStates, type AnchorConversationCreationReservationCommand, type ConversationCreationReservationRepository, type ProjectConversationCreationReservationCommand, type ReserveConversationCreationCommand, type ReserveConversationCreationResult, type ReservedConversationCreation } from "../conversation-creation-reservation.types";
+import { ConversationCreationReservationOutcomes, ConversationCreationReservationStates, type AnchorConversationCreationReservationCommand, type ConversationCreationReservationRepository, type ProjectConversationCreationReservationCommand, type RecoverConversationCreationReservationCommand, type ReserveConversationCreationCommand, type ReserveConversationCreationResult, type ReservedConversationCreation } from "../conversation-creation-reservation.types";
 import { __ConversationCreationReservationAuthorizationArguments, __ValidateConversationCreationReservation } from "../conversation-creation-reservation.validation";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 import { PrismaConversationProductAuthorizationRepository } from "./conversation-product-authorization";
@@ -54,6 +54,21 @@ export class PrismaConversationCreationReservationRepository implements Conversa
 			include: { participants: { orderBy: { ordinal: "asc" } } },
 		});
 		return { outcome: ConversationCreationReservationOutcomes.Reserved, value: _Reserved(created) };
+	}
+
+	/** @inheritdoc */
+	public async recover(command: RecoverConversationCreationReservationCommand): Promise<ReserveConversationCreationResult | null>
+	{
+		_ValidateRecoveryCommand(command);
+		const prior = await this.transaction.conversationCreationReservation.findUnique({
+			where: { siloId_principalId_requestId: { siloId: this.caller.siloId, principalId: this.caller.principalId, requestId: command.requestId } },
+			include: { participants: { orderBy: { ordinal: "asc" } } },
+		});
+		if (prior === null)
+			return null;
+		return prior.requestDigest === command.requestDigest
+			? { outcome: ConversationCreationReservationOutcomes.Idempotent, value: _Reserved(prior) }
+			: { outcome: ConversationCreationReservationOutcomes.IdempotencyConflict };
 	}
 
 	/** @inheritdoc */
@@ -158,6 +173,15 @@ function _ValidateAnchorCommand(command: AnchorConversationCreationReservationCo
 {
 	if (command.reservationId.trim().length === 0 || command.reservationId !== command.reservationId.trim())
 		throw new Error("Conversation creation history anchoring requires a reservation identifier");
+}
+
+/** Refuses malformed caller retry coordinates before a recovery lookup reaches PostgreSQL. */
+function _ValidateRecoveryCommand(command: RecoverConversationCreationReservationCommand): void
+{
+	if (command.requestId.trim().length === 0 || command.requestId !== command.requestId.trim())
+		throw new Error("Conversation creation recovery requires a request identifier");
+	if (!/^sha256:[a-f0-9]{64}$/u.test(command.requestDigest))
+		throw new Error("Conversation creation recovery requires a request digest");
 }
 
 /** Refuses an empty projection coordinate before it reaches the durable state machine. */

@@ -53,6 +53,7 @@ function _Ports(reservation: ReservedConversationCreation = _Reservation())
 	const phases: string[] = [];
 	const reservations: ConversationCreationReservationUnitOfWork = {
 		reserve: vi.fn(async function _Reserve() { phases.push("reserve"); return { outcome: ConversationCreationReservationOutcomes.Reserved, value: reservation } as const; }),
+		recover: vi.fn(async function _Recover() { phases.push("recover"); return { outcome: ConversationCreationReservationOutcomes.Idempotent, value: reservation } as const; }),
 		markHistoryAnchored: vi.fn(async function _Mark() { phases.push("mark"); return { ...reservation, state: ConversationCreationReservationStates.HistoryAnchored }; }),
 	};
 	const historyCreate = vi.fn(async function _Create(): Promise<HistoryAppendReceipt> { phases.push("history"); return { streamName: `conversation-${_CONVERSATION_ID}`, revision: 0n }; });
@@ -114,6 +115,17 @@ describe("HistoryAnchoredConversationCreationAuthority", function _Suite()
 		await expect(authority.create({ reservation: _Command() })).resolves.toMatchObject({ outcome: HistoryAnchoredConversationCreationOutcomes.ProjectionNeeded });
 		expect(ports.history.create).not.toHaveBeenCalled();
 		expect(ports.phases).toEqual(["reserve", "mark", "projection"]);
+	});
+
+	it("recovers the stored reservation without creating a fresh command", async function _RecoversBeforeCreate()
+	{
+		const anchored = _Reservation({ state: ConversationCreationReservationStates.HistoryAnchored });
+		const ports = _Ports(anchored);
+		const authority = new HistoryAnchoredConversationCreationAuthority(ports.reservations, ports.history, ports.anchorVerifier, ports.projection);
+		await expect(authority.resume({ requestId: _REQUEST_ID, requestDigest: _Command().requestDigest })).resolves.toMatchObject({ outcome: HistoryAnchoredConversationCreationOutcomes.ProjectionNeeded, reservation: { conversationId: _CONVERSATION_ID } });
+		expect(ports.reservations.reserve).not.toHaveBeenCalled();
+		expect(ports.history.create).not.toHaveBeenCalled();
+		expect(ports.phases).toEqual(["recover", "mark", "projection"]);
 	});
 
 	it("recovers an Agent anchor with its originally frozen binding after the progress transaction fails", async function _RecoversAgentAnchor()
