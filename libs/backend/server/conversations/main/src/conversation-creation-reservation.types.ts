@@ -57,6 +57,14 @@ export interface ConversationCreationReservationAgentCoordinates
 	readonly computerId: string;
 	/** Supplies the server-generated event id for the computer's retriable revision-zero provision. */
 	readonly computerHistoryEventId: string;
+	/** Supplies the server-generated computer-stream event id for the first claimed lease snapshot. */
+	readonly computerClaimEventId: string;
+	/** Supplies the server-generated activation-stream event id for the first claimed lease. */
+	readonly computerActivationEventId: string;
+	/** Records when the first lease was durably claimed. */
+	readonly computerLeaseClaimedAt: string;
+	/** Records when the first claim ceases to be eligible for activation. */
+	readonly computerLeaseExpiresAt: string;
 }
 
 /**

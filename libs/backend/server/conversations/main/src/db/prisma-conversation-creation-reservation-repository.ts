@@ -47,6 +47,10 @@ export class PrismaConversationCreationReservationRepository implements Conversa
 				agentRevisionId: command.agent?.agentRevisionId ?? null,
 				computerId: command.agent?.computerId ?? null,
 				computerHistoryEventId: command.agent?.computerHistoryEventId ?? null,
+				computerClaimEventId: command.agent?.computerClaimEventId ?? null,
+				computerActivationEventId: command.agent?.computerActivationEventId ?? null,
+				computerLeaseClaimedAt: command.agent === null ? null : new Date(command.agent.computerLeaseClaimedAt),
+				computerLeaseExpiresAt: command.agent === null ? null : new Date(command.agent.computerLeaseExpiresAt),
 				agentIdentityId: command.agentBinding?.agentIdentityId ?? null,
 				profileRevisionId: command.agentBinding?.profileRevisionId ?? null,
 				participants: { create: command.participants.map(function _Participant(participant, index) { return { ordinal: index + 1, userId: participant.userId, visibleFromPosition: BigInt(participant.visibleFromPosition), joinedAt: new Date(participant.joinedAt) }; }) },
@@ -148,7 +152,7 @@ function _Mode(mode: ConversationModes): ConversationMode
 }
 
 /** Converts a fully persisted row to the domain port without exposing Prisma records. */
-function _Reserved(reservation: { readonly id: string; readonly siloId: string; readonly principalId: string; readonly requestId: string; readonly requestDigest: string; readonly conversationId: string; readonly historyEventId: string; readonly authorizationDecisionEvidenceId: string; readonly mode: ConversationMode; readonly agentServiceId: string | null; readonly agentRevisionId: string | null; readonly agentIdentityId: string | null; readonly profileRevisionId: string | null; readonly computerId: string | null; readonly computerHistoryEventId: string | null; readonly reservedAt: Date; readonly state: ConversationCreationReservationState; readonly participants: readonly { readonly userId: string; readonly visibleFromPosition: bigint; readonly joinedAt: Date }[] }): ReservedConversationCreation
+function _Reserved(reservation: { readonly id: string; readonly siloId: string; readonly principalId: string; readonly requestId: string; readonly requestDigest: string; readonly conversationId: string; readonly historyEventId: string; readonly authorizationDecisionEvidenceId: string; readonly mode: ConversationMode; readonly agentServiceId: string | null; readonly agentRevisionId: string | null; readonly agentIdentityId: string | null; readonly profileRevisionId: string | null; readonly computerId: string | null; readonly computerHistoryEventId: string | null; readonly computerClaimEventId: string | null; readonly computerActivationEventId: string | null; readonly computerLeaseClaimedAt: Date | null; readonly computerLeaseExpiresAt: Date | null; readonly reservedAt: Date; readonly state: ConversationCreationReservationState; readonly participants: readonly { readonly userId: string; readonly visibleFromPosition: bigint; readonly joinedAt: Date }[] }): ReservedConversationCreation
 {
 	return {
 		reservationId: reservation.id,
@@ -201,13 +205,13 @@ function _AssertAnchorBinding(reservation: ReservedConversationCreation): void
 }
 
 /** Restores agent coordinates only from the all-or-nothing reserved database columns. */
-function _Agent(reservation: { readonly agentServiceId: string | null; readonly agentRevisionId: string | null; readonly computerId: string | null; readonly computerHistoryEventId: string | null }): ReservedConversationCreation["agent"]
+function _Agent(reservation: { readonly agentServiceId: string | null; readonly agentRevisionId: string | null; readonly computerId: string | null; readonly computerHistoryEventId: string | null; readonly computerClaimEventId: string | null; readonly computerActivationEventId: string | null; readonly computerLeaseClaimedAt: Date | null; readonly computerLeaseExpiresAt: Date | null }): ReservedConversationCreation["agent"]
 {
-	if (reservation.agentServiceId === null && reservation.agentRevisionId === null && reservation.computerId === null && reservation.computerHistoryEventId === null)
+	if (reservation.agentServiceId === null && reservation.agentRevisionId === null && reservation.computerId === null && reservation.computerHistoryEventId === null && reservation.computerClaimEventId === null && reservation.computerActivationEventId === null && reservation.computerLeaseClaimedAt === null && reservation.computerLeaseExpiresAt === null)
 		return null;
-	if (reservation.agentServiceId === null || reservation.agentRevisionId === null || reservation.computerId === null || reservation.computerHistoryEventId === null)
+	if (reservation.agentServiceId === null || reservation.agentRevisionId === null || reservation.computerId === null || reservation.computerHistoryEventId === null || reservation.computerClaimEventId === null || reservation.computerActivationEventId === null || reservation.computerLeaseClaimedAt === null || reservation.computerLeaseExpiresAt === null)
 		throw new Error("Conversation creation reservation has incomplete agent coordinates");
-	return { agentServiceId: reservation.agentServiceId, agentRevisionId: reservation.agentRevisionId, computerId: reservation.computerId, computerHistoryEventId: reservation.computerHistoryEventId };
+	return { agentServiceId: reservation.agentServiceId, agentRevisionId: reservation.agentRevisionId, computerId: reservation.computerId, computerHistoryEventId: reservation.computerHistoryEventId, computerClaimEventId: reservation.computerClaimEventId, computerActivationEventId: reservation.computerActivationEventId, computerLeaseClaimedAt: reservation.computerLeaseClaimedAt.toISOString(), computerLeaseExpiresAt: reservation.computerLeaseExpiresAt.toISOString() };
 }
 
 /** Restores the all-or-nothing Agent binding frozen with the reservation without exposing Prisma records. */
