@@ -44,8 +44,9 @@ function _expectedOpenDecision(mode: ConversationModes, kind: ConversationComman
 
 	if (kind === ConversationCommandKinds.SubmitMessage)
 	{
-		const action = mode === ConversationModes.AgentSession ? ConversationCommandActions.AdmitAgentRun : ConversationCommandActions.AdmitOrdinaryMessage;
-		return { allowed: true, action };
+		if (mode === ConversationModes.AgentSession)
+			return { allowed: false, reason: ConversationCommandDenialReasons.CommandNotSupportedByMode };
+		return { allowed: true, action: ConversationCommandActions.AdmitOrdinaryMessage };
 	}
 
 	if (mode === ConversationModes.AgentSession)

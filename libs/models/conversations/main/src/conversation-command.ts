@@ -20,12 +20,6 @@ function _deny(reason: ConversationCommandDenialReasons): ConversationCommandDec
 	return { allowed: false, reason };
 }
 
-/** Routes agent-session input through run admission. */
-function _admitAgentRun(): ConversationCommandDecision
-{
-	return _allow(ConversationCommandActions.AdmitAgentRun);
-}
-
 /** Routes direct or group input through ordinary message admission. */
 function _admitOrdinaryMessage(): ConversationCommandDecision
 {
@@ -66,9 +60,9 @@ function _targetActiveRun(context: ConversationCommandContext): ConversationComm
 	return _allow(ConversationCommandActions.TargetActiveRun);
 }
 
-/** Exhaustive agent-session strategy: all input remains under run authority. */
+/** Exhaustive agent-session strategy: immutable ConversationComputer history owns new input. */
 const _AGENT_SESSION_STRATEGY: _ModeCommandStrategy = {
-	[ConversationCommandKinds.SubmitMessage]: _admitAgentRun,
+	[ConversationCommandKinds.SubmitMessage]: _denyUnsupportedModeCommand,
 	[ConversationCommandKinds.SteerRun]: _targetActiveRun,
 	[ConversationCommandKinds.AnswerElicitation]: _targetActiveRun,
 	[ConversationCommandKinds.Close]: _closeConversation,

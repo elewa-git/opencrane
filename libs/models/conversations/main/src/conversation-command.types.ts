@@ -26,14 +26,35 @@ export enum ConversationCommandKinds
  */
 export enum ConversationCommandActions
 {
-	/** Route participant input through governed run admission. */
-	AdmitAgentRun = "admit_agent_run",
 	/** Persist an ordinary message without creating a synthetic run. */
 	AdmitOrdinaryMessage = "admit_ordinary_message",
 	/** Forward steering or elicitation to the exact currently active run. */
 	TargetActiveRun = "target_active_run",
 	/** Apply the only legal open-to-closed lifecycle transition. */
 	CloseConversation = "close_conversation",
+}
+
+/**
+ * Frames exchanged by the browser conversation socket for participant submissions.
+ *
+ * The browser adapter and server transport branch on these serialized values, so they are a
+ * closed wire contract. Renaming a member breaks active clients but does not change stored data.
+ * A frame selects a transport handler; it never grants conversation access by itself.
+ */
+export enum ConversationSocketFrameKinds
+{
+	/** Carries a direct or group participant message to the ordinary message authority. */
+	MessageSubmit = "conversation.message.submit",
+	/** Acknowledges an ordinary message append or idempotent retry. */
+	MessageAccepted = "conversation.message.accepted",
+	/** Refuses an ordinary message before it can enter a conversation. */
+	MessageRejected = "conversation.message.rejected",
+	/** Carries one AgentSession text body to immutable ConversationComputer history. */
+	ComputerInputSubmit = "conversation.computer.input.submit",
+	/** Acknowledges an immutable AgentSession input append or idempotent retry. */
+	ComputerInputAccepted = "conversation.computer.input.accepted",
+	/** Refuses an AgentSession input before it can enter immutable history. */
+	ComputerInputRejected = "conversation.computer.input.rejected",
 }
 
 /**
