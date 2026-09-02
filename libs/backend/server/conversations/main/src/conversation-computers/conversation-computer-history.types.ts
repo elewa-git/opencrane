@@ -93,18 +93,24 @@ export interface ConversationComputerAppendCommand
 }
 
 /**
- * Carries the cold revision-zero record that establishes a computer history stream.
+ * Atomically establishes a computer's cold record, first claimed lease, and activation delivery.
  *
- * `ConversationComputerHistory.provision` accepts this before any lease or execution exists. Later
- * lifecycle appends must name a nonnegative expected revision, so they cannot replace the provision
- * record at `NoStream`.
+ * The caller freezes every identifier and timestamp in the creation reservation before history I/O.
+ * A durable activation consumer can therefore begin the Sandbox claim only after it reads this
+ * exact computer generation from the same KurrentDB transaction.
  */
-export interface ConversationComputerProvisionCommand
+export interface ConversationComputerProvisionAndActivationCommand
 {
-	/** Supplies the caller-chosen UUID that keeps a response-lost provision retry byte-stable. */
-	readonly eventId: string;
-	/** Carries the cold, zero-generation computer bound to its conversation, identity, and profile. */
+	/** Supplies the immutable provision event identifier for revision zero. */
+	readonly provisionEventId: string;
+	/** Supplies the immutable first-lease event identifier for revision one. */
+	readonly claimEventId: string;
+	/** Supplies the immutable activation-stream event identifier for generation one. */
+	readonly activationEventId: string;
+	/** Carries the cold computer record that must establish the computer stream. */
 	readonly computer: ConversationComputer;
+	/** Carries the first claimed lease that follows the cold provision record. */
+	readonly lease: ComputerLease;
 }
 
 /** Carries the checked computer and lease state stored at one history revision. */

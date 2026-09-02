@@ -64,37 +64,41 @@ function _CurrentCommand(overrides: Partial<ConversationComputerCurrentCommand> 
 }
 
 /** Creates a narrow HistoryStore fake that cannot add any general KurrentDB capability to the test. */
-function _Store(overrides: Partial<Pick<HistoryStore, "append" | "readHead" | "readStream">> = {}): Pick<HistoryStore, "append" | "readHead" | "readStream">
+function _Store(overrides: Partial<Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">> = {}): Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">
 {
-	return { append: vi.fn(), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: null }), readStream: vi.fn().mockReturnValue(_Events([])), ...overrides };
+	return { append: vi.fn(), appendAtomic: vi.fn(), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: null }), readStream: vi.fn().mockReturnValue(_Events([])), ...overrides };
 }
 
 /** Creates a fresh readable stream for helpers that inspect its first event before replaying it. */
-function _ProvisionedStore(events: readonly HistoryRecordedEvent[]): Pick<HistoryStore, "append" | "readHead" | "readStream">
+function _ProvisionedStore(events: readonly HistoryRecordedEvent[]): Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">
 {
 	return _Store({ readStream: vi.fn().mockImplementation(function _ReadEvents() { return _Events(events); }), readHead: vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: events.at(-1)?.revision ?? null }) });
 }
 
 describe("ConversationComputerHistory", function _DescribeConversationComputerHistory()
 {
-	it("provisions only a cold zero-generation computer at no stream on its canonical stream", async function _ProvisionsColdComputer()
+	it("atomically commits a cold computer, pending lease, and activation request", async function _RequestsInitialActivation()
 	{
-		const append = vi.fn().mockResolvedValue({ streamName: "computer-computer-1", revision: 0n });
-		const history = new ConversationComputerHistory(_Store({ append }));
+		const appendAtomic = vi.fn().mockResolvedValue([{ streamName: "computer-computer-1", revision: 1n }, { streamName: "computer-activations-silo-1", revision: 0n }]);
+		const history = new ConversationComputerHistory(_Store({ appendAtomic, readHead: vi.fn().mockResolvedValue({ streamName: "computer-activations-silo-1", revision: null }) }));
+		const cold = _ColdComputer();
+		const claimed = _Lease({ sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Claimed });
 
-		await expect(history.provision({ eventId: _EVENT_ID, computer: _ColdComputer() })).resolves.toEqual({ streamName: "computer-computer-1", revision: 0n });
-		expect(append).toHaveBeenCalledWith(expect.objectContaining({ streamName: "computer-computer-1", expectedRevision: HistoryExpectedRevisions.NoStream, events: [expect.objectContaining({ type: "opencrane.computer-provisioned.v1", data: { computer: _ColdComputer(), lease: null } })] }));
+		await history.provisionAndRequestActivation({ provisionEventId: _EVENT_ID, claimEventId: "31c1f1dc-0011-4f13-9c2f-d3841ffd6651", activationEventId: "31c1f1dc-0012-4f13-9c2f-d3841ffd6651", computer: cold, lease: claimed });
+
+		expect(appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "computer-computer-1", revision: HistoryExpectedRevisions.NoStream }, { streamName: "computer-activations-silo-1", revision: HistoryExpectedRevisions.NoStream }], appends: [expect.objectContaining({ streamName: "computer-computer-1", events: [expect.objectContaining({ type: "opencrane.computer-provisioned.v1" }), expect.objectContaining({ type: "opencrane.conversation-computer.v1", data: expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 1 }) }) })] }), expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 1 } })] })] }));
 	});
 
-	it("rejects a warm, leased, checkpointed, or changed-time computer before it can establish a stream", async function _RejectsUnprovenComputer()
+	it("rejects a warm, checkpointed, or changed-time computer before it can establish a stream", async function _RejectsUnprovenComputer()
 	{
-		const append = vi.fn();
-		const history = new ConversationComputerHistory(_Store({ append }));
+		const appendAtomic = vi.fn();
+		const history = new ConversationComputerHistory(_Store({ appendAtomic, readHead: vi.fn().mockResolvedValue({ streamName: "computer-activations-silo-1", revision: null }) }));
 		const checkpointed = _ColdComputer({ workspaceCheckpoint: { artifactRevisionId: "artifact-1", digest: "sha256:checkpoint", format: "v1", checkpointedAt: "2026-09-02T00:00:00.000Z" } });
+		const lease = _Lease({ sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Claimed });
 
-		await expect(history.provision({ eventId: _EVENT_ID, computer: _WarmComputer() })).rejects.toThrow("requires a lease");
-		await expect(history.provision({ eventId: _EVENT_ID, computer: checkpointed })).rejects.toThrow("cold zero-generation");
-		expect(append).not.toHaveBeenCalled();
+		await expect(history.provisionAndRequestActivation({ provisionEventId: _EVENT_ID, claimEventId: "31c1f1dc-0011-4f13-9c2f-d3841ffd6651", activationEventId: "31c1f1dc-0012-4f13-9c2f-d3841ffd6651", computer: _WarmComputer(), lease })).rejects.toThrow("requires a lease");
+		await expect(history.provisionAndRequestActivation({ provisionEventId: _EVENT_ID, claimEventId: "31c1f1dc-0011-4f13-9c2f-d3841ffd6651", activationEventId: "31c1f1dc-0012-4f13-9c2f-d3841ffd6651", computer: checkpointed, lease })).rejects.toThrow("cold zero-generation");
+		expect(appendAtomic).not.toHaveBeenCalled();
 	});
 
 	it("loads a cold anchor then later warm lease state at its checked head", async function _LoadsProvisionedComputer()
