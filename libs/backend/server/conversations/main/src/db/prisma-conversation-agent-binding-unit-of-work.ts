@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { ConversationAgentBindingResolver } from "../conversation-agent-binding-authority";
-import type { ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCommand, ConversationAgentBindingResult } from "../conversation-agent-binding.types";
+import { ConversationAgentBindingVerificationResolver } from "../conversation-agent-binding-authority";
+import type { ConversationAgentBindingCommand, ConversationAgentBindingVerificationResult, ConversationAgentBindingVerifier, ConversationManagedAgentPrincipalValidator } from "../conversation-agent-binding.types";
 import { PrismaConversationAgentBindingRepository } from "./prisma-conversation-agent-binding-repository";
 
 /**
@@ -13,10 +13,10 @@ import { PrismaConversationAgentBindingRepository } from "./prisma-conversation-
  * checkpoint does not own their data.
  * @implements ConversationAgentBindingAuthority
  */
-export class PrismaConversationAgentBindingUnitOfWork implements ConversationAgentBindingAuthorityPort
+export class PrismaConversationAgentBindingUnitOfWork implements ConversationAgentBindingVerifier
 {
 	/** Holds the product database client and the non-database authorities used by the resolver. */
-	public constructor(private readonly prisma: PrismaClient, private readonly dependencies: ConversationAgentBindingAuthorityDependencies) {}
+	public constructor(private readonly prisma: PrismaClient, private readonly managedPrincipalValidator: ConversationManagedAgentPrincipalValidator) {}
 
 /**
  * Resolves a binding against one serializable database snapshot.
@@ -25,14 +25,13 @@ export class PrismaConversationAgentBindingUnitOfWork implements ConversationAge
  * cannot be read separately. A returned denial leaves no creation history to persist.
  * @returns A complete binding or the reason the later creation flow must not continue.
  */
-	public async bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>
+	public async verify(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingVerificationResult>
 	{
-		const dependencies = this.dependencies;
-		return this.prisma.$transaction(async function _BindConversationAgent(transaction)
+		const candidate = await this.prisma.$transaction(async function _LoadConversationAgentBinding(transaction)
 		{
 			const repository = new PrismaConversationAgentBindingRepository(transaction);
-			const authority = new ConversationAgentBindingResolver(repository, dependencies);
-			return authority.bind(command);
+			return repository.load(command);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+		return new ConversationAgentBindingVerificationResolver({ load: async () => candidate }, this.managedPrincipalValidator).verify(command);
 	}
 }

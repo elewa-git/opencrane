@@ -36,6 +36,7 @@ export class PrismaConversationAgentBindingRepository implements ConversationAge
 			},
 			select: {
 				id: true,
+				name: true,
 				kind: true,
 				activeRevisionId: true,
 				principalId: true,
@@ -46,6 +47,7 @@ export class PrismaConversationAgentBindingRepository implements ConversationAge
 		if (service === null || service.activeRevision === null || service.activeRevisionId === null || service.activeRevision.id !== service.activeRevisionId)
 			return null;
 		return {
+			agentServiceName: service.name,
 			agentServiceId: service.id,
 			agentRevisionId: service.activeRevision.id,
 			agentServiceKind: _ConversationComputerAgentServiceKind(service.kind),

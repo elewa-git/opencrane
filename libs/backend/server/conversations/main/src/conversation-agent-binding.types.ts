@@ -33,6 +33,8 @@ export interface ConversationAgentBindingCommand
 /** Holds service facts before their Principal, profile, and AgentIdentity checks complete. */
 export interface ConversationAgentBindingCandidate
 {
+	/** Supplies the trusted service name for an initial deterministic AgentIdentity snapshot. */
+	readonly agentServiceName: string;
 	/** Identifies the active service in the command silo. */
 	readonly agentServiceId: string;
 	/** Identifies the published revision selected by the service's current pointer. */
@@ -64,6 +66,8 @@ export interface ConversationAgentIdentitySelectionCommand
 	readonly agentServiceId: string;
 	/** Identifies the exact principal the identity must represent. */
 	readonly principalId: string;
+	/** Supplies the checked service name for a first deterministic identity-history append. */
+	readonly agentServiceName: string;
 }
 
 /**
@@ -74,7 +78,7 @@ export interface ConversationAgentIdentitySelectionCommand
  */
 export interface ConversationAgentIdentitySelector
 {
-	select(command: ConversationAgentIdentitySelectionCommand): Promise<{ readonly agentIdentityId: string } | null>;
+	ensure(command: ConversationAgentIdentitySelectionCommand): Promise<{ readonly agentIdentityId: string } | null>;
 }
 
 /**
@@ -125,13 +129,22 @@ export interface ConversationAgentBindingAuthority
 	bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>;
 }
 
+/** Returns a verified managed service snapshot without selecting an external profile or identity. */
+export interface ConversationAgentBindingVerifier
+{
+	verify(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingVerificationResult>;
+}
+
+/** Carries only the SQL-backed facts a later external resolution phase may consume. */
+export type ConversationAgentBindingVerificationResult
+	= { readonly outcome: "verified"; readonly value: ConversationAgentBindingCandidate & { readonly agentServiceKind: "managed"; readonly principalId: string; readonly principal: { readonly issuer: string; readonly provenance: "internal" | "external"; readonly subject: string } } }
+	| { readonly outcome: "denied"; readonly reason: ConversationAgentBindingDenialReasons };
+
 /** Lists the separately owned policy ports that complete a repository candidate. */
 export interface ConversationAgentBindingAuthorityDependencies
 {
 	/** Selects one release-owned profile after the authority resolves the trusted service kind. */
 	readonly profiles: ConversationComputerProfileSelector;
-	/** Verifies managed Principal facts through the independently-owned AgentService contract. */
-	readonly managedPrincipalValidator: ConversationManagedAgentPrincipalValidator;
-	/** Resolves an existing server-owned identity; this authority never manufactures an identity id. */
+	/** Ensures the server-owned identity; this authority never accepts a browser identity id. */
 	readonly identities: ConversationAgentIdentitySelector;
 }

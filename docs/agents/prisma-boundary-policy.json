@@ -1826,7 +1826,7 @@
 			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-agent-binding-unit-of-work.ts",
 				"adapter": "PrismaConversationAgentBindingUnitOfWork",
-				"contract": "ConversationAgentBindingAuthority",
+				"contract": "ConversationAgentBindingVerifier",
 				"contractImportPath": "../conversation-agent-binding.types",
 				"constructs": [
 					{
