@@ -11,6 +11,9 @@ import type { ConversationCaller } from "./types/conversation-caller.types";
 import type { CreateConversationRequest } from "./types/conversation-request.types";
 import type { ConversationCreationAuthority, ConversationCreationAuthorityDependencies, ConversationCreationAuthorityResult } from "./conversation-creation-authority.types";
 
+/** Bounds the first Agent Sandbox claim while its durable activation consumer begins reconciliation. */
+const _INITIAL_COMPUTER_LEASE_MILLISECONDS = 20 * 60 * 1_000;
+
 /** Turns a parsed browser request into one immutable, history-authoritative conversation. */
 export class HistoryAnchoredConversationCreationService implements ConversationCreationAuthority
 {
@@ -65,7 +68,7 @@ function _Command(caller: ConversationCaller, request: CreateConversationRequest
 {
 	const agent = binding === null
 		? null
-		: { agentServiceId: binding.agentServiceId, agentRevisionId: binding.agentRevisionId, computerId: randomUUID(), computerHistoryEventId: randomUUID() };
+		: _AgentCoordinates(binding, createdAt);
 	return {
 		siloId: caller.siloId,
 		principalId: caller.principalId,
@@ -78,6 +81,12 @@ function _Command(caller: ConversationCaller, request: CreateConversationRequest
 		agent,
 		agentBinding: binding === null ? null : { agentIdentityId: binding.agentIdentityId, profileRevisionId: binding.profileRevisionId },
 	};
+}
+
+/** Freezes every first-lease coordinate before history I/O makes a retry externally visible. */
+function _AgentCoordinates(binding: { readonly agentServiceId: string; readonly agentRevisionId: string }, createdAt: Date)
+{
+	return { agentServiceId: binding.agentServiceId, agentRevisionId: binding.agentRevisionId, computerId: randomUUID(), computerHistoryEventId: randomUUID(), computerClaimEventId: randomUUID(), computerActivationEventId: randomUUID(), computerLeaseClaimedAt: createdAt.toISOString(), computerLeaseExpiresAt: new Date(createdAt.getTime() + _INITIAL_COMPUTER_LEASE_MILLISECONDS).toISOString() };
 }
 
 /** Maps failed reference compilation back to the route's existing non-disclosing denial vocabulary. */

@@ -25,7 +25,7 @@ export function __ValidateConversationCreationReservation(command: ReserveConver
 		throw new Error("Agent conversation reservation requires one participant, server agent coordinates, and a frozen binding");
 	if (command.mode !== ConversationModes.AgentSession && (command.agent !== null || command.agentBinding !== null))
 		throw new Error("Direct and group conversation reservation must not carry agent coordinates or a binding");
-	if (command.agent !== null && (!_Identifier(command.agent.agentServiceId) || !_Identifier(command.agent.agentRevisionId) || !_Uuid(command.agent.computerId) || !_Uuid(command.agent.computerHistoryEventId)))
+	if (command.agent !== null && (!_Identifier(command.agent.agentServiceId) || !_Identifier(command.agent.agentRevisionId) || !_Uuid(command.agent.computerId) || !_Uuid(command.agent.computerHistoryEventId) || !_Uuid(command.agent.computerClaimEventId) || !_Uuid(command.agent.computerActivationEventId) || Number.isNaN(Date.parse(command.agent.computerLeaseClaimedAt)) || Number.isNaN(Date.parse(command.agent.computerLeaseExpiresAt)) || Date.parse(command.agent.computerLeaseExpiresAt) <= Date.parse(command.agent.computerLeaseClaimedAt)))
 		throw new Error("Agent conversation reservation requires complete server agent coordinates");
 	if (command.agentBinding !== null && (!_Identifier(command.agentBinding.agentIdentityId) || !_Identifier(command.agentBinding.profileRevisionId)))
 		throw new Error("Agent conversation reservation requires a complete frozen binding");

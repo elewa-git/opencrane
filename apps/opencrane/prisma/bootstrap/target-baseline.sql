@@ -822,6 +822,10 @@ CREATE TABLE "conversation_creation_reservations" (
     "profile_revision_id" TEXT,
     "computer_id" TEXT,
     "computer_history_event_id" TEXT,
+    "computer_claim_event_id" TEXT,
+    "computer_activation_event_id" TEXT,
+    "computer_lease_claimed_at" TIMESTAMP(3),
+    "computer_lease_expires_at" TIMESTAMP(3),
     "state" "ConversationCreationReservationState" NOT NULL DEFAULT 'reserved',
     "history_revision" BIGINT,
     "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2663,6 +2667,12 @@ CREATE UNIQUE INDEX "conversation_creation_reservations_history_event_id_key" ON
 CREATE UNIQUE INDEX "conversation_creation_reservations_computer_history_event_i_key" ON "conversation_creation_reservations"("computer_history_event_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservations_computer_claim_event_id_key" ON "conversation_creation_reservations"("computer_claim_event_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservations_computer_activation_event_key" ON "conversation_creation_reservations"("computer_activation_event_id");
+
+-- CreateIndex
 CREATE INDEX "conversation_creation_reservations_silo_id_state_reserved_a_idx" ON "conversation_creation_reservations"("silo_id", "state", "reserved_at");
 
 -- CreateIndex
@@ -4097,7 +4107,10 @@ ALTER TABLE "conversation_creation_reservations" ADD CONSTRAINT "conversation_cr
 	  "agent_identity_id" IS NOT NULL AND btrim("agent_identity_id") <> '' AND
 	  "profile_revision_id" IS NOT NULL AND btrim("profile_revision_id") <> '' AND
       "computer_id" IS NOT NULL AND "computer_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
-      "computer_history_event_id" IS NOT NULL AND "computer_history_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')) AND
+      "computer_history_event_id" IS NOT NULL AND "computer_history_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+      "computer_claim_event_id" IS NOT NULL AND "computer_claim_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+      "computer_activation_event_id" IS NOT NULL AND "computer_activation_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+      "computer_lease_claimed_at" IS NOT NULL AND "computer_lease_expires_at" IS NOT NULL AND "computer_lease_expires_at" > "computer_lease_claimed_at")) AND
 	(("state" = 'reserved' AND "history_revision" IS NULL AND "history_anchored_at" IS NULL AND "projected_at" IS NULL) OR
      ("state" = 'history_anchored' AND "history_revision" = 0 AND "history_anchored_at" IS NOT NULL AND "projected_at" IS NULL AND
       (("mode" = 'agent_session' AND "agent_identity_id" IS NOT NULL AND btrim("agent_identity_id") <> '' AND
@@ -4125,7 +4138,9 @@ BEGIN
         OR OLD."mode" IS DISTINCT FROM NEW."mode" OR OLD."agent_service_id" IS DISTINCT FROM NEW."agent_service_id"
 		OR OLD."agent_revision_id" IS DISTINCT FROM NEW."agent_revision_id" OR OLD."agent_identity_id" IS DISTINCT FROM NEW."agent_identity_id"
 		OR OLD."profile_revision_id" IS DISTINCT FROM NEW."profile_revision_id" OR OLD."computer_id" IS DISTINCT FROM NEW."computer_id"
-        OR OLD."computer_history_event_id" IS DISTINCT FROM NEW."computer_history_event_id" OR OLD."reserved_at" IS DISTINCT FROM NEW."reserved_at" THEN
+        OR OLD."computer_history_event_id" IS DISTINCT FROM NEW."computer_history_event_id" OR OLD."computer_claim_event_id" IS DISTINCT FROM NEW."computer_claim_event_id"
+        OR OLD."computer_activation_event_id" IS DISTINCT FROM NEW."computer_activation_event_id" OR OLD."computer_lease_claimed_at" IS DISTINCT FROM NEW."computer_lease_claimed_at"
+        OR OLD."computer_lease_expires_at" IS DISTINCT FROM NEW."computer_lease_expires_at" OR OLD."reserved_at" IS DISTINCT FROM NEW."reserved_at" THEN
         RAISE EXCEPTION 'ConversationCreationReservation command coordinates are immutable';
     END IF;
     IF OLD."state" = 'reserved' AND NEW."state" = 'history_anchored' THEN RETURN NEW; END IF;

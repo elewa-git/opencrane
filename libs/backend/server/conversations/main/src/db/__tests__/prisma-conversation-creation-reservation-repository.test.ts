@@ -53,6 +53,10 @@ function _Stored(overrides: Record<string, unknown> = {})
 		profileRevisionId: null,
 		computerId: null,
 		computerHistoryEventId: null,
+		computerClaimEventId: null,
+		computerActivationEventId: null,
+		computerLeaseClaimedAt: null,
+		computerLeaseExpiresAt: null,
 		reservedAt: new Date("2026-09-02T00:00:00.000Z"),
 		state: ConversationCreationReservationState.Reserved,
 		participants: [
@@ -173,9 +177,9 @@ describe("PrismaConversationCreationReservationRepository", function _Suite()
 
 	it("commits the full Agent binding with its initial reservation before history I/O", async function _ReservesAgent()
 	{
-		const agent = { agentServiceId: "service-1", agentRevisionId: "revision-1", computerId: _CONVERSATION_ID, computerHistoryEventId: _HISTORY_EVENT_ID };
+		const agent = { agentServiceId: "service-1", agentRevisionId: "revision-1", computerId: _CONVERSATION_ID, computerHistoryEventId: _HISTORY_EVENT_ID, computerClaimEventId: "31c1f1dc-0013-4f13-9c2f-d3841ffd6651", computerActivationEventId: "31c1f1dc-0014-4f13-9c2f-d3841ffd6651", computerLeaseClaimedAt: "2026-09-02T00:00:00.000Z", computerLeaseExpiresAt: "2026-09-02T00:20:00.000Z" };
 		const agentBinding = { agentIdentityId: "identity-1", profileRevisionId: "profile-1" };
-		const stored = _Stored({ mode: ConversationMode.AgentSession, participants: [_Stored().participants[0]], ...agent, ...agentBinding });
+		const stored = _Stored({ mode: ConversationMode.AgentSession, participants: [_Stored().participants[0]], ...agent, computerLeaseClaimedAt: new Date(agent.computerLeaseClaimedAt), computerLeaseExpiresAt: new Date(agent.computerLeaseExpiresAt), ...agentBinding });
 		const database = { conversationCreationReservation: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue(stored) } };
 		vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "admitEvidence").mockResolvedValue(_EVIDENCE);
 		await expect(new PrismaConversationCreationReservationRepository(database as never, _Caller()).reserve(_Command({ mode: ConversationModes.AgentSession, participants: [_Command().participants[0]], agent, agentBinding }))).resolves.toMatchObject({ value: { agentBinding } });
@@ -184,7 +188,7 @@ describe("PrismaConversationCreationReservationRepository", function _Suite()
 
 	it("returns an exact anchored retry without rewriting its frozen Agent binding", async function _RecoversAnchoredAgent()
 	{
-		const anchored = _Stored({ mode: ConversationMode.AgentSession, agentServiceId: "service-1", agentRevisionId: "revision-1", computerId: _CONVERSATION_ID, computerHistoryEventId: _HISTORY_EVENT_ID, state: ConversationCreationReservationState.HistoryAnchored, historyRevision: 0n, historyAnchoredAt: new Date("2026-09-02T00:01:00.000Z"), agentIdentityId: "identity-1", profileRevisionId: "profile-1" });
+		const anchored = _Stored({ mode: ConversationMode.AgentSession, agentServiceId: "service-1", agentRevisionId: "revision-1", computerId: _CONVERSATION_ID, computerHistoryEventId: _HISTORY_EVENT_ID, computerClaimEventId: "31c1f1dc-0013-4f13-9c2f-d3841ffd6651", computerActivationEventId: "31c1f1dc-0014-4f13-9c2f-d3841ffd6651", computerLeaseClaimedAt: new Date("2026-09-02T00:00:00.000Z"), computerLeaseExpiresAt: new Date("2026-09-02T00:20:00.000Z"), state: ConversationCreationReservationState.HistoryAnchored, historyRevision: 0n, historyAnchoredAt: new Date("2026-09-02T00:01:00.000Z"), agentIdentityId: "identity-1", profileRevisionId: "profile-1" });
 		const database = { conversationCreationReservation: { findUnique: vi.fn().mockResolvedValue(anchored), update: vi.fn() } };
 		await expect(new PrismaConversationCreationReservationRepository(database as never, _Caller()).markHistoryAnchored({ reservationId: "reservation-1" })).resolves.toMatchObject({ agentBinding: { agentIdentityId: "identity-1" } });
 		expect(database.conversationCreationReservation.update).not.toHaveBeenCalled();
