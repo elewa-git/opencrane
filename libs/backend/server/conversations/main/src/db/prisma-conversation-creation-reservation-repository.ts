@@ -3,7 +3,7 @@ import { ConversationCreationReservationState, ConversationMode, type Prisma } f
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ConversationModes } from "@opencrane/models/conversations";
 
-import { ConversationCreationReservationOutcomes, ConversationCreationReservationStates, type AnchorConversationCreationReservationCommand, type ConversationCreationReservationRepository, type ReserveConversationCreationCommand, type ReserveConversationCreationResult, type ReservedConversationCreation } from "../conversation-creation-reservation.types";
+import { ConversationCreationReservationOutcomes, ConversationCreationReservationStates, type AnchorConversationCreationReservationCommand, type ConversationCreationReservationRepository, type ProjectConversationCreationReservationCommand, type ReserveConversationCreationCommand, type ReserveConversationCreationResult, type ReservedConversationCreation } from "../conversation-creation-reservation.types";
 import { __ConversationCreationReservationAuthorizationArguments, __ValidateConversationCreationReservation } from "../conversation-creation-reservation.validation";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 import { PrismaConversationProductAuthorizationRepository } from "./conversation-product-authorization";
@@ -83,6 +83,43 @@ export class PrismaConversationCreationReservationRepository implements Conversa
 		});
 		return _Reserved(updated);
 	}
+
+	/** @inheritdoc */
+	public async markProjected(command: ProjectConversationCreationReservationCommand): Promise<ReservedConversationCreation>
+	{
+		_ValidateProjectionCommand(command);
+		const reservation = await this.transaction.conversationCreationReservation.findUnique({
+			where: { id: command.reservationId },
+			include: { participants: { orderBy: { ordinal: "asc" } } },
+		});
+		if (reservation === null)
+			throw new Error("Conversation creation reservation is unavailable");
+		if (reservation.siloId !== this.caller.siloId || reservation.principalId !== this.caller.principalId)
+			throw new Error("Conversation creation reservation is unavailable");
+		const existing = _Reserved(reservation);
+		if (existing.state === ConversationCreationReservationStates.Projected)
+			return existing;
+		if (existing.state !== ConversationCreationReservationStates.HistoryAnchored)
+			throw new Error("Conversation creation projection requires a history-anchored reservation");
+		// Advance only the anchored row so a concurrent projector cannot overwrite its own completed transition.
+		const transitioned = await this.transaction.conversationCreationReservation.updateMany({
+			where: { id: command.reservationId, state: ConversationCreationReservationState.HistoryAnchored },
+			data: { state: ConversationCreationReservationState.Projected, projectedAt: new Date() },
+		});
+		// Reload the row so a competing projector's completed transition becomes this call's idempotent replay.
+		const current = await this.transaction.conversationCreationReservation.findUnique({
+			where: { id: command.reservationId },
+			include: { participants: { orderBy: { ordinal: "asc" } } },
+		});
+		if (current === null || current.siloId !== this.caller.siloId || current.principalId !== this.caller.principalId)
+			throw new Error("Conversation creation reservation is unavailable");
+		const projected = _Reserved(current);
+		if (projected.state === ConversationCreationReservationStates.Projected)
+			return projected;
+		if (transitioned.count === 0)
+			throw new Error("Conversation creation projection did not converge");
+		throw new Error("Conversation creation projection did not persist");
+	}
 }
 
 /** Maps model-owned mode values to the generated Prisma enum without accepting arbitrary strings. */
@@ -121,6 +158,13 @@ function _ValidateAnchorCommand(command: AnchorConversationCreationReservationCo
 {
 	if (command.reservationId.trim().length === 0 || command.reservationId !== command.reservationId.trim())
 		throw new Error("Conversation creation history anchoring requires a reservation identifier");
+}
+
+/** Refuses an empty projection coordinate before it reaches the durable state machine. */
+function _ValidateProjectionCommand(command: ProjectConversationCreationReservationCommand): void
+{
+	if (command.reservationId.trim().length === 0 || command.reservationId !== command.reservationId.trim())
+		throw new Error("Conversation creation projection requires a reservation identifier");
 }
 
 /** Ensures direct/group never gain agent facts, while Agent reservations retain a complete frozen binding. */

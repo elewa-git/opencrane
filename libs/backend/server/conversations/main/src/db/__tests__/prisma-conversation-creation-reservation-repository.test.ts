@@ -139,6 +139,38 @@ describe("PrismaConversationCreationReservationRepository", function _Suite()
 		expect(database.conversationCreationReservation.update).not.toHaveBeenCalled();
 	});
 
+	it("marks a history-anchored reservation projected only after directory convergence", async function _Projects()
+	{
+		const projected = _Stored({ state: ConversationCreationReservationState.Projected, historyRevision: 0n, historyAnchoredAt: new Date("2026-09-02T00:01:00.000Z"), projectedAt: new Date("2026-09-02T00:02:00.000Z") });
+		const anchored = _Stored({ state: ConversationCreationReservationState.HistoryAnchored, historyRevision: 0n, historyAnchoredAt: new Date("2026-09-02T00:01:00.000Z") });
+		const database = { conversationCreationReservation: { findUnique: vi.fn().mockResolvedValueOnce(anchored).mockResolvedValueOnce(projected), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
+		await expect(new PrismaConversationCreationReservationRepository(database as never, _Caller()).markProjected({ reservationId: "reservation-1" })).resolves.toMatchObject({ state: "projected" });
+		expect(database.conversationCreationReservation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "reservation-1", state: ConversationCreationReservationState.HistoryAnchored }, data: expect.objectContaining({ state: ConversationCreationReservationState.Projected, projectedAt: expect.any(Date) }) }));
+	});
+
+	it("does not project an unanchored reservation", async function _RejectsUnanchoredProjection()
+	{
+		const database = { conversationCreationReservation: { findUnique: vi.fn().mockResolvedValue(_Stored()), update: vi.fn() } };
+		await expect(new PrismaConversationCreationReservationRepository(database as never, _Caller()).markProjected({ reservationId: "reservation-1" })).rejects.toThrow("requires a history-anchored reservation");
+		expect(database.conversationCreationReservation.update).not.toHaveBeenCalled();
+	});
+
+	it("returns a projected reservation without attempting a second transition", async function _RecoversProjected()
+	{
+		const projected = _Stored({ state: ConversationCreationReservationState.Projected, historyRevision: 0n, historyAnchoredAt: new Date("2026-09-02T00:01:00.000Z"), projectedAt: new Date("2026-09-02T00:02:00.000Z") });
+		const database = { conversationCreationReservation: { findUnique: vi.fn().mockResolvedValue(projected), updateMany: vi.fn() } };
+		await expect(new PrismaConversationCreationReservationRepository(database as never, _Caller()).markProjected({ reservationId: "reservation-1" })).resolves.toMatchObject({ state: "projected" });
+		expect(database.conversationCreationReservation.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("returns the competing projector's completed transition after a lost compare-and-swap race", async function _RecoversProjectionRace()
+	{
+		const anchored = _Stored({ state: ConversationCreationReservationState.HistoryAnchored, historyRevision: 0n, historyAnchoredAt: new Date("2026-09-02T00:01:00.000Z") });
+		const projected = _Stored({ state: ConversationCreationReservationState.Projected, historyRevision: 0n, historyAnchoredAt: new Date("2026-09-02T00:01:00.000Z"), projectedAt: new Date("2026-09-02T00:02:00.000Z") });
+		const database = { conversationCreationReservation: { findUnique: vi.fn().mockResolvedValueOnce(anchored).mockResolvedValueOnce(projected), updateMany: vi.fn().mockResolvedValue({ count: 0 }) } };
+		await expect(new PrismaConversationCreationReservationRepository(database as never, _Caller()).markProjected({ reservationId: "reservation-1" })).resolves.toMatchObject({ state: "projected" });
+	});
+
 	it("commits the full Agent binding with its initial reservation before history I/O", async function _ReservesAgent()
 	{
 		const agent = { agentServiceId: "service-1", agentRevisionId: "revision-1", computerId: _CONVERSATION_ID, computerHistoryEventId: _HISTORY_EVENT_ID };
