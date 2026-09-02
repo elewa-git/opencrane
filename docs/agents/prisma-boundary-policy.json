@@ -1860,6 +1860,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-participant-input-authorizer-unit-of-work.ts",
+				"adapter": "PrismaConversationComputerParticipantInputAuthorizerUnitOfWork",
+				"contract": "ConversationComputerParticipantInputAuthorizer",
+				"contractImportPath": "../conversation-computers/conversation-computer-participant-input-admission.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerParticipantInputAuthorizationAuthority",
+						"importPath": "./prisma-conversation-computer-participant-input-authorizer"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-compiler-unit-of-work.ts",
 				"adapter": "PrismaConversationCreationCompilerUnitOfWork",
 				"contract": "ConversationCreationCompiler",
