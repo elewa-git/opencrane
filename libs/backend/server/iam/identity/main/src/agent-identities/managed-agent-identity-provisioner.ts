@@ -7,6 +7,9 @@ import { AgentIdentityHistory } from "./agent-identity-history";
 import type { CurrentAgentIdentity } from "./agent-identity-history.types";
 import type { ManagedAgentIdentityProvisionCommand, ManagedAgentIdentityProvisioner, ManagedAgentIdentityProvisionerClock } from "./managed-agent-identity-provisioner.types";
 
+/** Names the one discriminated identity variant this provisioner may create or accept. */
+const _MANAGED_IDENTITY_KIND: ManagedAgentIdentity["kind"] = "managed";
+
 /** Derives the sole AgentIdentity coordinate a managed AgentService may realize. */
 export function __ManagedAgentIdentityId(agentServiceId: string): string
 {
@@ -60,7 +63,7 @@ function _ManagedIdentity(command: ManagedAgentIdentityProvisionCommand, agentId
 		state: AgentIdentityStates.Active,
 		createdByPrincipalId: command.principalId,
 		createdAt: createdAt.toISOString(),
-		kind: "managed",
+		kind: _MANAGED_IDENTITY_KIND,
 		principalId: command.principalId,
 	};
 }
@@ -69,7 +72,7 @@ function _ManagedIdentity(command: ManagedAgentIdentityProvisionCommand, agentId
 function _ManagedIdentityResult(current: CurrentAgentIdentity, command: ManagedAgentIdentityProvisionCommand, agentIdentityId: string): { readonly agentIdentityId: string }
 {
 	const identity = current.identity;
-	if (identity.kind !== "managed" || identity.state !== AgentIdentityStates.Active
+	if (identity.kind !== _MANAGED_IDENTITY_KIND || identity.state !== AgentIdentityStates.Active
 		|| identity.id !== agentIdentityId || identity.siloId !== command.siloId
 		|| identity.agentServiceId !== command.agentServiceId || identity.principalId !== command.principalId
 		|| identity.createdByPrincipalId !== command.principalId || identity.avatarArtifactRevisionId !== null)
