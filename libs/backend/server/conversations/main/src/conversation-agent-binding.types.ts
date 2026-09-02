@@ -28,6 +28,10 @@ export interface ConversationAgentBindingCommand
 	readonly siloId: string;
 	/** Identifies the AgentService selected by an already-authorized creation flow. */
 	readonly agentServiceId: string;
+	/** Identifies the authenticated Principal that a personal service may proxy. */
+	readonly callerPrincipalId: string;
+	/** Identifies the authenticated user whose active persona owns a personal service. */
+	readonly callerSubjectId: string;
 }
 
 /** Holds service facts before their Principal, profile, and AgentIdentity checks complete. */
@@ -58,8 +62,8 @@ export interface ConversationAgentBindingRepository
 }
 
 /** Carries checked service and Principal coordinates for an existing AgentIdentity lookup. */
-export interface ConversationAgentIdentitySelectionCommand
-{
+export type ConversationAgentIdentitySelectionCommand
+	= {
 	/** Identifies the silo where the identity stream must be owned. */
 	readonly siloId: string;
 	/** Identifies the already-validated service the identity must realize. */
@@ -68,7 +72,23 @@ export interface ConversationAgentIdentitySelectionCommand
 	readonly principalId: string;
 	/** Carries the database-selected service name when provisioning the first AgentIdentity history event. */
 	readonly agentServiceName: string;
+	/** Selects the managed identity provisioner. */
+	readonly agentServiceKind: "managed";
 }
+	| {
+		/** Identifies the silo where the identity stream must be owned. */
+		readonly siloId: string;
+		/** Identifies the personal AgentService that the caller verified. */
+		readonly agentServiceId: string;
+		/** Identifies the user Principal whose current authority the personal agent may proxy. */
+		readonly principalId: string;
+		/** Carries the personal-agent display name for the immutable identity snapshot. */
+		readonly agentServiceName: string;
+		/** Selects the proxied identity provisioner. */
+		readonly agentServiceKind: "personal";
+		/** Pins the active revision policy as the personal delegation ceiling. */
+		readonly delegationPolicyId: string;
+	};
 
 /**
  * Returns or provisions the deterministic AgentIdentity from its owning authority.
@@ -105,8 +125,8 @@ export interface ConversationAgentBinding
 	readonly agentServiceId: string;
 	/** Identifies the active published revision. */
 	readonly agentRevisionId: string;
-	/** Identifies the managed service kind. */
-	readonly agentServiceKind: "managed";
+	/** Identifies the managed or proxied personal service kind. */
+	readonly agentServiceKind: ConversationComputerAgentServiceKind;
 	/** Identifies the service's verified dedicated Principal. */
 	readonly principalId: string;
 	/** Identifies the stable AgentIdentity selected by the trusted identity authority. */
@@ -153,6 +173,7 @@ export interface ConversationAgentBindingVerifier
  */
 export type ConversationAgentBindingVerificationResult
 	= { readonly outcome: "verified"; readonly value: ConversationAgentBindingCandidate & { readonly agentServiceKind: "managed"; readonly principalId: string; readonly principal: { readonly issuer: string; readonly provenance: "internal" | "external"; readonly subject: string } } }
+	| { readonly outcome: "verified"; readonly value: ConversationAgentBindingCandidate & { readonly agentServiceKind: "personal"; readonly principalId: string; readonly delegationPolicyId: string } }
 	| { readonly outcome: "denied"; readonly reason: ConversationAgentBindingDenialReasons };
 
 /** Lists the separately owned policy ports that complete a repository candidate. */
