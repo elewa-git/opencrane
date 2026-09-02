@@ -188,6 +188,11 @@ transport for workloads; it is not a browser fallback.
   reference; a Sandbox can only receive its oldest command and report that command's terminal state.
   An exact duplicate terminal report is an idempotent no-op; a stale, foreign, expired, skipped, or
   malformed report fails closed.
+- `ConversationComputerParticipantInputAuthority` records a human-authored, encrypted input entry
+  before the computer is warm. It checks that the requested computer is the one frozen into the
+  agent conversation anchor and that the caller is an anchored participant, then writes the opaque
+  entry under the checked history head. A later command worker may issue work from that entry only
+  after the computer has an active execution; cold-start inputs therefore do not need an AgentRun.
 - `PrismaConversationPrivatePayloadStoreUnitOfWork` owns the short PostgreSQL transaction that
   retains one encrypted output row through package-private storage. It returns only `payload://…`
   and a ciphertext digest; a retry with the same text returns the original row, while changed text
