@@ -62,10 +62,10 @@ INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", 
 VALUES ('steering-revision', 'silo-steering', 'steering-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'steering-model', '{}', 'user-steering');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'steering-revision';
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'steering-revision' WHERE "id" = 'steering-service';
-INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "trigger", "delegated_user_id", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest")
-VALUES ('steering-run', 'silo-steering', 'steering-service', 'steering-revision', 'interactive', 'user-steering', 'steering-request', 'steering-run', 'sha256:' || repeat('b', 64), 'sha256:' || repeat('c', 64));
-INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "identity_snapshot", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
-VALUES ('steering-input', 'steering-run', 1, 'silo-steering', 'steering-service', 'steering-revision', 'sha256:' || repeat('b', 64), '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1', 'sha256:' || repeat('c', 64));
+INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "attempt", "input_snapshot_digest")
+VALUES ('steering-run', 'silo-steering', 'steering-service', 'steering-revision', 'interactive', 'steering-identity', 'user-steering', '{}', 'steering-request', 'steering-run', 1, 'sha256:' || repeat('c', 64));
+INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "memory_facts", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
+VALUES ('steering-input', 'steering-run', 1, 1, 'silo-steering', 'steering-service', 'steering-revision', 'steering-identity', 'user-steering', '{}', '[]', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64));
 SET CONSTRAINTS ALL IMMEDIATE;
 SET CONSTRAINTS ALL DEFERRED;
 UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'steering-run';
