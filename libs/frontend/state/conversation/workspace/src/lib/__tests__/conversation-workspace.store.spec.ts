@@ -217,6 +217,21 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		expect(store.selected()?.id).toBe("conversation-1");
 	});
 
+	it("reuses the exact creation UUID after an ambiguous gateway failure", async function _RetriesCreate()
+	{
+		const [store, gateway] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
+		store.selectCreationMode(ConversationModes.Direct);
+		store.toggleParticipant("other-ref");
+		gateway.createResult = Promise.reject(new Error("response lost"));
+		await expect(store.create()).resolves.toBeNull();
+		gateway.createResult = null;
+		await expect(store.create()).resolves.toEqual({ conversationId: "created-1" });
+		expect(gateway.created).toHaveLength(2);
+		expect(gateway.created[1]?.requestId).toBe(gateway.created[0]?.requestId);
+	});
+
 	it("does not navigate to a created conversation after the participant selects another row", async function _StaleCreate()
 	{
 		const [store, gateway] = _CreateStore();

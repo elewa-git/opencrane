@@ -2300,6 +2300,7 @@
 			"libs/backend/server/gateways/providers/main/src/provider-byok-composition.ts",
 			"libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
 			"apps/opencrane/src/index.ts",
+			"apps/opencrane/src/app/conversation-history-creation-composition.ts",
 			"libs/backend/server/agents/agent-services/main/src/prisma-agent-services.router.ts",
 			"apps/opencrane/src/app/routes.ts",
 			"libs/backend/server/iam/groups/main/src/routes/groups.ts",

@@ -20,6 +20,7 @@ import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 import type { ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
+import type { ConversationCreationAuthority } from "@opencrane/backend/server/conversations";
 
 /**
  * Build the audit-log appender for the standalone first-owner claim, or null when that claim is not configured.
@@ -48,13 +49,14 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param personalRunAdmission - Browser-session personal run admission port.
  * @param runCancellation - Shared attempt-fenced cancellation authority.
  * @param retryInputCompiler - Compiles the fresh snapshot required for participant run retries.
+ * @param creation - Creates conversations through the history-anchored authority shared with sockets.
  * @param authentication - One browser-session composition shared with the internal resolver.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
  * @param health - Cached public service report reader with no topology or error details.
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, retryInputCompiler: RetryRunInputCompiler, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor): Express
+export function _CreatePublicApp(prisma: PrismaClient, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, retryInputCompiler: RetryRunInputCompiler, creation: ConversationCreationAuthority, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor): Express
 {
 	const app = express();
 
@@ -81,7 +83,7 @@ export function _CreatePublicApp(prisma: PrismaClient, runAdmission: ManagedRunA
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, runAdmission, personalRunAdmission, runCancellation, retryInputCompiler, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects);
+	_RegisterRoutes(app, prisma, runAdmission, personalRunAdmission, runCancellation, retryInputCompiler, creation, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

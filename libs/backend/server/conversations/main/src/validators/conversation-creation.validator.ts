@@ -16,12 +16,11 @@
  * `__tests__/self-conversations.router.test.ts`.
  *
  * The references themselves are still unproven after this file. They are resolved against current
- * membership and personal-Agent ownership inside the write transaction, in
- * `PrismaConversationMutationRepository._creationAuthority`, which is also where a duplicate
- * reference and the caller's own reference are refused. Nothing here can tell whether a reference
- * exists, and it deliberately does not try.
+ * membership and personal-Agent ownership inside the history-anchored creation compiler before its
+ * reservation transaction. That compiler also refuses a duplicate reference and the caller's own
+ * reference. Nothing here can tell whether a reference exists, and it deliberately does not try.
  *
- * @see PrismaConversationMutationRepository — resolves these references to real subjects.
+ * @see PrismaConversationCreationCompilerUnitOfWork — resolves these references to real subjects.
  * @see ___ConversationCreationRequestSchema in `@opencrane/models/conversations` — the same
  * per-mode participant rules over internal user ids, for values already inside the server.
  */
@@ -42,7 +41,7 @@ const _ReferenceSchema = z.string().trim().min(1).max(128);
 /**
  * Agent-session creation names the caller's own personal Agent and no participants.
  *
- * The reference is checked in the write transaction against the single Active personal
+ * The reference is checked by the server-side creation compiler against the single Active personal
  * AgentService built from the caller's approved persona revision, so naming somebody else's Agent
  * here is refused there rather than here.
  */

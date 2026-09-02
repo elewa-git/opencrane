@@ -17,6 +17,7 @@ import { __CreateSelfConversationSocketServer } from "../self-conversation-socke
 import type { SelfConversationSocketAuthenticator, SelfConversationSocketServer } from "../self-conversation-socket.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 import type { ConversationAttachmentAdmissionFactory } from "../conversation-message-admission.types";
+import type { ConversationCreationAuthority } from "../conversation-creation-authority.types";
 
 /** Maps authenticated request facts to the caller contract owned by conversations. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): ConversationCaller | null
@@ -45,23 +46,40 @@ function _createMutationRepository(transaction: RunAdmissionTransaction): Prisma
  *   triggered it.
  * @param workflow - Guarded engine that saves a retry task in the retry transaction.
  * @param retryInputCompiler - Inputs authority that compiles the exact new retry subject and snapshot.
+ * @param createAttachmentAdmission - Admits upload references before a message transaction uses them.
+ * @param creation - Creates conversations through reservation, immutable history, and projection.
  * @param logger - Used only for unexpected failures; never receives message content.
  * @returns An Express router ready to mount.
  */
-export function _CreateSelfConversationsRouter(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, workflow: Pick<IWorkflowEngine, "spawn">, retryInputCompiler: RetryRunInputCompiler, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger): Router
+export function _CreateSelfConversationsRouter(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, workflow: Pick<IWorkflowEngine, "spawn">, retryInputCompiler: RetryRunInputCompiler, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, creation: ConversationCreationAuthority, logger: Logger): Router
 {
 	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);
 	const runRetry = new PrismaAgentRunRetryUnitOfWork(prisma, workflow, retryInputCompiler);
-	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, runRetry);
+	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, runRetry, creation);
 	return __CreateSelfConversationsRouter({ resolveCaller: _resolveCaller, authority, logger });
 }
 
-/** Build the socket endpoint over the same Prisma authorities as the participant HTTP router. */
-export function _CreatePrismaSelfConversationSocketServer(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, workflow: Pick<IWorkflowEngine, "spawn">, retryInputCompiler: RetryRunInputCompiler, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger, authenticator: SelfConversationSocketAuthenticator, options: { readonly interrupts?: ConversationOpenInterruptReader; readonly shutdownSignal?: AbortSignal } = {}): SelfConversationSocketServer
+/**
+ * Builds the participant socket endpoint over the same authorities as the HTTP router.
+ *
+ * Sharing `creation` keeps a socket-triggered create subject to the same caller-bound reservation
+ * and history projection as an HTTP create. Called by: {@link _Main} in apps/opencrane/src/index.ts.
+ * @param prisma - Opens read and remaining mutation transactions.
+ * @param runAdmission - Admits personal agent runs started by participant messages.
+ * @param workflow - Saves retries from participant-owned run commands.
+ * @param retryInputCompiler - Compiles the fresh retry snapshot.
+ * @param createAttachmentAdmission - Admits attachments before a message transaction uses them.
+ * @param creation - Reserves, anchors, and projects a conversation creation request.
+ * @param logger - Records unexpected transport failures without message content.
+ * @param authenticator - Resolves the socket session to its conversation caller.
+ * @param options - Supplies optional interruption reads and process shutdown handling.
+ * @returns A socket server that shares the participant conversation authority.
+ */
+export function _CreatePrismaSelfConversationSocketServer(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, workflow: Pick<IWorkflowEngine, "spawn">, retryInputCompiler: RetryRunInputCompiler, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, creation: ConversationCreationAuthority, logger: Logger, authenticator: SelfConversationSocketAuthenticator, options: { readonly interrupts?: ConversationOpenInterruptReader; readonly shutdownSignal?: AbortSignal } = {}): SelfConversationSocketServer
 {
 	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);
 	const runRetry = new PrismaAgentRunRetryUnitOfWork(prisma, workflow, retryInputCompiler);
-	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, runRetry);
+	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, runRetry, creation);
 	const interruptOptions = options.interrupts === undefined ? {} : { interrupts: options.interrupts };
 	const shutdownOptions = options.shutdownSignal === undefined ? {} : { shutdownSignal: options.shutdownSignal };
 	return __CreateSelfConversationSocketServer({ authenticator, authority, repository: _CreateConversationReplayRepository(prisma), clock: CONVERSATION_PROJECTION_CLOCK, limits: CONVERSATION_PROJECTION_LIMITS, ...interruptOptions, ...shutdownOptions, logger });

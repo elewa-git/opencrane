@@ -3,9 +3,10 @@ import { randomUUID } from "node:crypto";
 import { ConversationModes } from "@opencrane/models/conversations";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { ConversationCreationReservationOutcomes, type ReserveConversationCreationCommand } from "./conversation-creation-reservation.types";
-import { HistoryAnchoredConversationCreationOutcomes } from "./history-anchored-conversation-creation-authority.types";
+import type { ReserveConversationCreationCommand } from "./conversation-creation-reservation.types";
+import { HistoryAnchoredConversationCreationOutcomes, type HistoryAnchoredConversationCreationResult } from "./history-anchored-conversation-creation-authority.types";
 import { ConversationWriteDenialReasons } from "./types/conversation-authority-result.types";
+import type { ConversationAgentBindingResult } from "./conversation-agent-binding.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 import type { CreateConversationRequest } from "./types/conversation-request.types";
 import type { ConversationCreationAuthority, ConversationCreationAuthorityDependencies, ConversationCreationAuthorityResult } from "./conversation-creation-authority.types";
@@ -19,32 +20,48 @@ export class HistoryAnchoredConversationCreationService implements ConversationC
 	/** @inheritdoc */
 	public async create(caller: ConversationCaller, request: CreateConversationRequest): Promise<ConversationCreationAuthorityResult>
 	{
-		// 1. Resolve opaque browser references while their membership and resource access are current.
+		const requestDigest = ___DigestCanonicalJson(request as unknown as JsonValue);
+		const history = this.dependencies.history.create(caller);
+		// 1. Resume a known command before mutable references or Agent policy can strand its anchor.
+		const recovered = await history.resume({ requestId: request.requestId, requestDigest });
+		if (recovered !== null)
+			return _Result(recovered, request);
+		// 2. Resolve opaque browser references while their membership and resource access are current.
 		const compiled = await this.dependencies.compiler.compile(caller, request);
 		if (compiled === null)
 			return _Denied(request);
-
-		// 2. Freeze an Agent-only binding before a reservation may carry computer coordinates.
-		const binding = request.mode === ConversationModes.AgentSession
-			? await this.dependencies.agentBindings.bind({ siloId: caller.siloId, agentServiceId: compiled.agentServiceId!, callerPrincipalId: caller.principalId, callerSubjectId: caller.subjectId })
-			: null;
+		// 3. Freeze an Agent-only binding before a reservation may carry computer coordinates.
+		let binding: ConversationAgentBindingResult | null = null;
+		if (request.mode === ConversationModes.AgentSession)
+		{
+			const agentServiceId = compiled.agentServiceId;
+			if (agentServiceId === null)
+				return _Denied(request);
+			binding = await this.dependencies.agentBindings.bind({ siloId: caller.siloId, agentServiceId, callerPrincipalId: caller.principalId, callerSubjectId: caller.subjectId });
+		}
 		if (binding !== null && !("value" in binding))
 			return { outcome: "denied", reason: ConversationWriteDenialReasons.AgentServiceUnavailable };
 
-		// 3. Reserve, anchor, confirm, and project through a caller-bound authority without direct row creation.
+		// 4. Reserve, anchor, confirm, and project through a caller-bound authority without direct row creation.
 		const boundAgent = binding === null || !("value" in binding) ? null : binding.value;
-		const command = _Command(caller, request, compiled.participantUserIds, boundAgent, this.dependencies.clock.now());
-		const result = await this.dependencies.history.create(caller).create({ reservation: command });
+		const command = _Command(caller, request, requestDigest, compiled.participantUserIds, boundAgent, this.dependencies.clock.now());
+		const result = await history.create({ reservation: command });
+		return _Result(result, request);
+	}
+}
+
+/** Maps durable authority outcomes to the route's narrow create result. */
+function _Result(result: HistoryAnchoredConversationCreationResult, request: CreateConversationRequest): ConversationCreationAuthorityResult
+{
 		if (result.outcome === HistoryAnchoredConversationCreationOutcomes.Denied)
 			return _Denied(request);
 		if (result.outcome === HistoryAnchoredConversationCreationOutcomes.IdempotencyConflict)
 			return { outcome: "denied", reason: ConversationWriteDenialReasons.IdempotencyConflict };
 		return { outcome: "created", conversationId: result.reservation.conversationId };
-	}
 }
 
 /** Builds a complete server-resolved durable creation command from checked references and Agent facts. */
-function _Command(caller: ConversationCaller, request: CreateConversationRequest, participantUserIds: readonly string[], binding: { readonly agentServiceId: string; readonly agentRevisionId: string; readonly agentIdentityId: string; readonly profileRevisionId: string } | null, createdAt: Date): ReserveConversationCreationCommand
+function _Command(caller: ConversationCaller, request: CreateConversationRequest, requestDigest: `sha256:${string}`, participantUserIds: readonly string[], binding: { readonly agentServiceId: string; readonly agentRevisionId: string; readonly agentIdentityId: string; readonly profileRevisionId: string } | null, createdAt: Date): ReserveConversationCreationCommand
 {
 	const agent = binding === null
 		? null
@@ -53,7 +70,7 @@ function _Command(caller: ConversationCaller, request: CreateConversationRequest
 		siloId: caller.siloId,
 		principalId: caller.principalId,
 		requestId: request.requestId,
-		requestDigest: ___DigestCanonicalJson(request as unknown as JsonValue),
+		requestDigest,
 		conversationId: randomUUID(),
 		historyEventId: randomUUID(),
 		mode: request.mode,

@@ -83,6 +83,15 @@ export interface AnchorConversationCreationReservationCommand
 	readonly reservationId: string;
 }
 
+/** Names one parsed browser retry while its existing reservation is recovered before mutable compilation. */
+export interface RecoverConversationCreationReservationCommand
+{
+	/** Identifies the caller-scoped browser retry key. */
+	readonly requestId: string;
+	/** Binds recovery to the same parsed request body that created the reservation. */
+	readonly requestDigest: `sha256:${string}`;
+}
+
 /**
  * Requests the `Projected` transition after the directory has applied a confirmed revision-zero
  * Kurrent anchor.
@@ -172,6 +181,14 @@ export interface ConversationCreationReservationRepository
 	 * @returns The persisted command, a retry conflict, or an authorization denial.
 	 */
 	reserve(command: ReserveConversationCreationCommand): Promise<ReserveConversationCreationResult>;
+	/**
+	 * Recovers the exact reservation before mutable participant or Agent facts are compiled again.
+	 *
+	 * The repository scopes the lookup to the authenticated caller. A matching digest returns frozen
+	 * coordinates for history/projection recovery; a changed body returns a conflict; an absent key
+	 * lets the creation authority perform a fresh authorization and compilation.
+	 */
+	recover(command: RecoverConversationCreationReservationCommand): Promise<ReserveConversationCreationResult | null>;
 	/**
 	 * Advances one reservation only after its exact revision-zero anchor is present in KurrentDB.
 	 *

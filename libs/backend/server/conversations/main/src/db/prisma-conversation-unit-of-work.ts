@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import type { PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
@@ -7,7 +5,8 @@ import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import type { AgentThreadSnapshotView } from "../types/agent-thread-view.types";
-import type { CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunResult, SubmitConversationMessageResult } from "../types/conversation-authority-result.types";
+import { ConversationAuthorityOutcomes, type CreateConversationResult, type MarkAgentThreadReadResult, type MutateConversationResult, type RetryConversationRunResult, type SubmitConversationMessageResult } from "../types/conversation-authority-result.types";
+import type { ConversationCreationAuthority } from "../conversation-creation-authority.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 import type { ConversationCreationDirectory } from "../types/conversation-directory.types";
 import type { CreateConversationRequest, RetryConversationRunRequest, SubmitConversationMessageRequest } from "../types/conversation-request.types";
@@ -28,9 +27,9 @@ import type { ConversationQueryRepository } from "./prisma-conversation-query-re
  * docs/agents/prisma-boundary-policy.json. Two isolation levels are used on purpose. Reads run
  * through `_read` at repeatable read, so a method that makes
  * several queries — membership, then participant rows, then messages — cannot see the picture change
- * halfway. Writes run through `_mutate` at serializable, so a check made inside the transaction still
- * holds when the write commits; closing a conversation while a run is starting is the case that needs
- * it.
+ * halfway. Remaining relational mutations run through `_mutate` at serializable, so a check made
+ * inside the transaction still holds when the write commits; closing a conversation while a run is
+ * starting is the case that needs it. Creation instead delegates to its history-anchored authority.
  *
  * Two methods do not follow that pattern. `submitMessage` hands over to the message-admission
  * authority, which has to open an agent run and write the message in one transaction of its own, and
@@ -51,13 +50,16 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	private readonly messageAdmission: ConversationMessageAdmissionUnitOfWork;
 	/** Run-owned authority that validates and persists participant retry requests. */
 	private readonly runRetry: RunRetryAuthority;
+	/** Delegates creation to the authority that reserves, anchors, and projects immutable history. */
+	private readonly creation: ConversationCreationAuthority;
 
-	/** Creates the aggregate authority with its message-admission and run-retry collaborators. */
-	constructor(prisma: PrismaClient, messageAdmission: ConversationMessageAdmissionUnitOfWork, runRetry: RunRetryAuthority)
+	/** Creates the aggregate authority with its message, retry, and history-anchored creation collaborators. */
+	constructor(prisma: PrismaClient, messageAdmission: ConversationMessageAdmissionUnitOfWork, runRetry: RunRetryAuthority, creation: ConversationCreationAuthority)
 	{
 		this.prisma = prisma;
 		this.messageAdmission = messageAdmission;
 		this.runRetry = runRetry;
+		this.creation = creation;
 	}
 
 	/**
@@ -132,13 +134,26 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		});
 	}
 
-	/** Writes the conversation and participant rows atomically; the selected mode can never change. */
+	/**
+	 * Creates immutable conversation history first, then reads its reconstructed relational projection.
+	 *
+	 * The creation authority owns request-id recovery and refuses direct row creation. This adapter
+	 * re-reads the projection through the caller's participant coordinate, so an accepted creation
+	 * cannot return a conversation the caller is no longer allowed to open.
+	 * @returns `Created` with the readable projection, or `Denied` with the authority's existing reason.
+	 * @throws {Error} When history accepted the reservation but projection is not readable yet.
+	 */
 	async create(caller: ConversationCaller, request: CreateConversationRequest): Promise<CreateConversationResult>
 	{
 		return ___DoWithTrace("conversation.create", { siloId: caller.siloId, mode: request.mode }, async () =>
 		{
-			const conversationId = randomUUID();
-			return this._mutate(function _Create(repository) { return repository.create(caller, conversationId, request); });
+			const created = await this.creation.create(caller, request);
+			if ("reason" in created)
+				return { outcome: ConversationAuthorityOutcomes.Denied, reason: created.reason };
+			const conversation = await this._read(function _ReadCreated(query) { return query.open(caller, created.conversationId); });
+			if (conversation === null)
+				throw new Error("History-anchored conversation projection unavailable");
+			return { outcome: ConversationAuthorityOutcomes.Created, conversation };
 		});
 	}
 

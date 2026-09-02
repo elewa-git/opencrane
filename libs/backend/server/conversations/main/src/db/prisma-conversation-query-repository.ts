@@ -59,8 +59,8 @@ const _STATE_BY_PERSISTED_STATE: Readonly<Record<ConversationMessageState, Messa
  * it is handed, which is how the same reads serve both a read-only query and a write that has to
  * check its own preconditions. {@link PrismaConversationUnitOfWork} builds it inside `_read`
  * (repeatable read) and `PrismaConversationMessageAdmissionUnitOfWork` does the same;
- * {@link PrismaConversationMutationRepository} builds it over its own serializable write
- * transaction, so a check made here and the write that follows see the same snapshot.
+ * {@link PrismaConversationMutationRepository} builds it over its own serializable mutation
+ * transaction, so a check made here and the remaining mutation that follows see the same snapshot.
  *
  * Two rules hold across every method. Organisation membership is re-read on each call rather than
  * trusted from the session, so a removed user immediately stops being able to read. And nothing
@@ -71,7 +71,7 @@ const _STATE_BY_PERSISTED_STATE: Readonly<Record<ConversationMessageState, Messa
  * caller cannot probe for other people's conversations.
  *
  * Called by: `PrismaConversationUnitOfWork._read`, `PrismaConversationMessageAdmissionUnitOfWork`,
- * and `PrismaConversationMutationRepository` (as its `query` collaborator).
+ * and `PrismaConversationMutationRepository` for surviving message and lifecycle mutations.
  *
  * @see ConversationQueryRepository for the port this implements.
  */
@@ -100,8 +100,8 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	 *
 	 * This exists so the browser never has to hold a login identity. Each member is returned as an
 	 * opaque OrgMembership reference, and those references are the only participant values creation
-	 * accepts — see `_creationAuthority` in prisma-conversation-mutation-repository.ts, which resolves
-	 * them again at write time. `openapi.test.ts` asserts the published response schema mentions
+ * accepts — the history-anchored creation compiler resolves them before it reserves the immutable
+ * creation command. `openapi.test.ts` asserts the published response schema mentions
 	 * neither `subject` nor `email`, and the router test asserts the response body does not contain
 	 * the caller's own subject.
 	 *

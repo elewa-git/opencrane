@@ -3,7 +3,7 @@ import { ConversationModes } from "@opencrane/models/conversations";
 
 import { ConversationCreationAnchorVerifier } from "./conversation-creation-anchor-verifier";
 import { ConversationCreationAnchorConfirmationOutcomes } from "./conversation-creation-anchor-verifier.types";
-import { ConversationCreationReservationOutcomes, ConversationCreationReservationStates, type ReservedConversationCreation } from "./conversation-creation-reservation.types";
+import { ConversationCreationReservationOutcomes, ConversationCreationReservationStates, type RecoverConversationCreationReservationCommand, type ReservedConversationCreation } from "./conversation-creation-reservation.types";
 import { ConversationHistoryAuthority } from "./conversation-history-authority";
 import { HistoryAnchoredConversationCreationOutcomes, type ConversationCreationProjectionCommand, type ConversationCreationProjectionPort, type ConversationCreationReservationUnitOfWork, type CreateHistoryAnchoredConversationCommand, type HistoryAnchoredConversationCreationResult } from "./history-anchored-conversation-creation-authority.types";
 
@@ -37,7 +37,25 @@ export class HistoryAnchoredConversationCreationAuthority
 			return { outcome: HistoryAnchoredConversationCreationOutcomes.Denied };
 		if (reservedResult.outcome === ConversationCreationReservationOutcomes.IdempotencyConflict)
 			return { outcome: HistoryAnchoredConversationCreationOutcomes.IdempotencyConflict };
-		const reservation = reservedResult.value;
+		return this._Continue(reservedResult.value);
+	}
+
+	/** Recovers an exact admitted command without recompiling mutable participants or Agent bindings. */
+	public async resume(command: RecoverConversationCreationReservationCommand): Promise<HistoryAnchoredConversationCreationResult | null>
+	{
+		const recovered = await this.reservations.recover(command);
+		if (recovered === null)
+			return null;
+		if (recovered.outcome === ConversationCreationReservationOutcomes.IdempotencyConflict)
+			return { outcome: HistoryAnchoredConversationCreationOutcomes.IdempotencyConflict };
+		if (recovered.outcome !== ConversationCreationReservationOutcomes.Idempotent)
+			throw new Error("Conversation creation recovery returned an unadmitted reservation");
+		return this._Continue(recovered.value);
+	}
+
+	/** Progresses a stored command through anchor confirmation and its replayable projection handoff. */
+	private async _Continue(reservation: ReservedConversationCreation): Promise<HistoryAnchoredConversationCreationResult>
+	{
 		const created = _Created(reservation);
 		if (reservation.state === ConversationCreationReservationStates.Projected)
 			return { outcome: HistoryAnchoredConversationCreationOutcomes.Projected, reservation, created };

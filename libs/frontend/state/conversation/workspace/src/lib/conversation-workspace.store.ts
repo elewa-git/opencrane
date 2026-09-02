@@ -48,6 +48,8 @@ export class ConversationWorkspaceStore
 	private readonly _sending = signal(false);
 	/** Exact command retained after an ambiguous response so retry cannot duplicate the message. */
 	private _pendingMessage: SubmitConversationMessageCommand | null = null;
+	/** Retains the failed creation command so retry sends the same request id and cannot create another conversation. */
+	private _pendingCreation: CreateConversationCommand | null = null;
 	/** Whether a conversation command is active. */
 	private readonly _conversationCommandBusy = signal(false);
 	/** Browser-safe error for the latest failed operation. */
@@ -186,6 +188,7 @@ export class ConversationWorkspaceStore
 	{
 		this._creationMode.set(mode);
 		this._selectedParticipantRefs.set(new Set());
+		this._pendingCreation = null;
 		this._creationState.set(ConversationCreationStates.Idle);
 		this._error.set(null);
 	}
@@ -201,12 +204,20 @@ export class ConversationWorkspaceStore
 		else selected.add(participantRef);
 		if (this._creationMode() === ConversationModes.Direct && selected.size > 1) this._selectedParticipantRefs.set(new Set([participantRef]));
 		else this._selectedParticipantRefs.set(selected);
+		this._pendingCreation = null;
 	}
 
-	/** Create the exact selected immutable mode and adopt its returned snapshot. */
+	/**
+	 * Creates the selected mode and returns the server's conversation id for navigation.
+	 *
+	 * A gateway failure retains the complete command, including its request id, until the participant
+	 * changes the mode or selected coordinates. Retrying then lets the server resume the original
+	 * reservation instead of admitting another conversation.
+	 * @returns A navigation target after success, or `null` while the command is invalid, active, or failed.
+	 */
 	public async create(): Promise<ConversationWorkspaceNavigationIntent | null>
 	{
-		const command = this._CreateCommand();
+		const command = this._pendingCreation ?? this._CreateCommand();
 		if (command === null || this._creationState() === ConversationCreationStates.Creating) return null;
 		const generation = this._generation;
 		this._creationState.set(ConversationCreationStates.Creating);
@@ -215,12 +226,14 @@ export class ConversationWorkspaceStore
 		{
 			const detail = await this._gateway.create(command);
 			this._conversations.update(current => [detail, ...current.filter(candidate => candidate.id !== detail.id)]);
+			this._pendingCreation = null;
 			this._creationState.set(ConversationCreationStates.Idle);
 			if (generation !== this._generation) return null;
 			return { conversationId: detail.id };
 		}
 		catch (error)
 		{
+			this._pendingCreation = command;
 			this._creationState.set(ConversationCreationStates.Failed);
 			this._error.set(_Message(error, "OpenCrane could not create this conversation."));
 			return null;

@@ -7,6 +7,7 @@ import { __DecodeConversationProjectionCursor } from "@opencrane/backend/convers
 
 import { PrismaConversationUnitOfWork } from "../db/prisma-conversation-unit-of-work";
 import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types";
+import type { ConversationCreationAuthority } from "../conversation-creation-authority.types";
 import type { SubmitConversationMessageRequest } from "../types/conversation-request.types";
 
 const _channelProjection = vi.hoisted(function _CreateChannelProjectionState()
@@ -73,9 +74,9 @@ function _Participant(lifecycle: ConversationLifecycle = ConversationLifecycle.O
 }
 
 /** Creates the aggregate authority with replaceable message-admission and retry collaborators. */
-function _Authority(prisma: object, messageAdmission: Partial<ConversationMessageAdmissionUnitOfWork> = {}, runRetry: RunRetryAuthority = { retry: vi.fn().mockResolvedValue({ outcome: "denied", reason: "run_not_found" }) }): PrismaConversationUnitOfWork
+function _Authority(prisma: object, messageAdmission: Partial<ConversationMessageAdmissionUnitOfWork> = {}, runRetry: RunRetryAuthority = { retry: vi.fn().mockResolvedValue({ outcome: "denied", reason: "run_not_found" }) }, creation: ConversationCreationAuthority = { create: vi.fn().mockResolvedValue({ outcome: "created", conversationId: "conversation-1" }) }): PrismaConversationUnitOfWork
 {
-	return new PrismaConversationUnitOfWork(prisma as never, messageAdmission as ConversationMessageAdmissionUnitOfWork, runRetry);
+	return new PrismaConversationUnitOfWork(prisma as never, messageAdmission as ConversationMessageAdmissionUnitOfWork, runRetry, creation);
 }
 
 describe("PrismaConversationUnitOfWork", function _Suite()
@@ -313,41 +314,22 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		expect(updateConversation).not.toHaveBeenCalled();
 	});
 
-	it("creates a direct conversation and projects it in one serializable unit of work", async function _CreatesConversation()
+	it("returns the history-anchored creation projection through one repeatable-read query", async function _ReadsCreatedProjection()
 	{
-		const createConversation = vi.fn().mockResolvedValue({});
-		const createParticipant = vi.fn().mockResolvedValue({});
 		const transaction = {
 			orgMembership: _ActiveMembership(),
-			conversation: { create: createConversation },
 			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1", subject: "user-1" }, { id: "principal-2", subject: "user-2" }]) },
-			conversationParticipant: { create: createParticipant, findFirst: vi.fn().mockResolvedValue(_Participant()) },
+			conversationParticipant: { findFirst: vi.fn().mockResolvedValue(_Participant()) },
 			conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue([]) },
 		};
 		const prisma = _Prisma(transaction) as { readonly $transaction: ReturnType<typeof vi.fn> };
+		const creation: ConversationCreationAuthority = { create: vi.fn().mockResolvedValue({ outcome: "created", conversationId: "conversation-1" }) };
 
-		await expect(_Authority(prisma).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000001", mode: ConversationModes.Direct, participantRefs: ["member-2"] })).resolves.toEqual(expect.objectContaining({ outcome: "created", conversation: expect.objectContaining({ id: "conversation-1", mode: ConversationModes.Direct, participantRefs: ["member-1", "member-2"] }) }));
+		await expect(_Authority(prisma, {}, undefined, creation).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000001", mode: ConversationModes.Direct, participantRefs: ["member-2"] })).resolves.toEqual(expect.objectContaining({ outcome: "created", conversation: expect.objectContaining({ id: "conversation-1", mode: ConversationModes.Direct, participantRefs: ["member-1", "member-2"] }) }));
+		expect(creation.create).toHaveBeenCalledWith(_CALLER, { requestId: "00000000-0000-4000-8000-000000000001", mode: ConversationModes.Direct, participantRefs: ["member-2"] });
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
-		expect(createConversation).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", mode: ConversationMode.Direct, agentServiceId: null }) });
-		expect(createParticipant).toHaveBeenCalledTimes(2);
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ isolationLevel: "RepeatableRead" }));
 		expect(_channelProjection.reconcileConversation).not.toHaveBeenCalled();
-	});
-
-	it("projects exact ChannelTarget grants with a new Agent-session participant relation", async function _ProjectsAgentSessionTarget()
-	{
-		const transaction = {
-			orgMembership: _ActiveMembership(),
-			personaProfile: { findUnique: vi.fn().mockResolvedValue({ id: "persona-profile-1", activeRevisionId: "persona-revision-1" }) },
-			agentService: { findMany: vi.fn().mockResolvedValue([{ id: "service-1" }]) },
-			conversation: { create: vi.fn().mockResolvedValue({}) },
-			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1", subject: "user-1" }]) },
-			conversationParticipant: { create: vi.fn().mockResolvedValue({}), findFirst: vi.fn().mockResolvedValue({ ..._Participant(), conversation: { ...(_Participant() as { readonly conversation: object }).conversation, mode: ConversationMode.AgentSession, agentServiceId: "service-1", participants: [{ userId: "user-1" }] } }) },
-			conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue([]) },
-		};
-
-		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000002", mode: ConversationModes.AgentSession, personalAgentRef: "service-1" })).resolves.toMatchObject({ outcome: "created" });
-		expect(_channelProjection.reconcileConversation).toHaveBeenCalledWith(expect.any(String), "silo-1", expect.any(Date));
 	});
 
 	it("archives a participant and projects the result in one serializable unit of work", async function _ArchivesConversation()
@@ -394,7 +376,7 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		expect(_channelProjection.reconcileConversation).toHaveBeenCalledWith("conversation-1", "silo-1", expect.any(Date));
 	});
 
-	it("rolls back by throwing when a written conversation cannot be projected", async function _RejectsMissingWriteProjection()
+	it("throws when a confirmed history anchor has no relational projection", async function _RejectsMissingHistoryProjection()
 	{
 		const transaction = {
 			orgMembership: _ActiveMembership(),
@@ -403,6 +385,6 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 			conversationParticipant: { create: vi.fn().mockResolvedValue({}), findFirst: vi.fn().mockResolvedValue(null) },
 		};
 
-		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000003", mode: ConversationModes.Direct, participantRefs: ["member-2"] })).rejects.toThrow("Written conversation projection unavailable");
+		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000003", mode: ConversationModes.Direct, participantRefs: ["member-2"] })).rejects.toThrow("History-anchored conversation projection unavailable");
 	});
 });

@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
-import type { AnchorConversationCreationReservationCommand, ReserveConversationCreationCommand, ReserveConversationCreationResult, ReservedConversationCreation } from "../conversation-creation-reservation.types";
+import type { AnchorConversationCreationReservationCommand, RecoverConversationCreationReservationCommand, ReserveConversationCreationCommand, ReserveConversationCreationResult, ReservedConversationCreation } from "../conversation-creation-reservation.types";
 import type { ConversationCreationReservationUnitOfWork } from "../history-anchored-conversation-creation-authority.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 import { PrismaConversationCreationReservationRepository } from "./prisma-conversation-creation-reservation-repository";
@@ -17,6 +17,12 @@ export class PrismaConversationCreationReservationUnitOfWork implements Conversa
 	public async reserve(command: ReserveConversationCreationCommand): Promise<ReserveConversationCreationResult>
 	{
 		return this._Run(function _Reserve(repository): Promise<ReserveConversationCreationResult> { return repository.reserve(command); }, "conversation creation reservation");
+	}
+
+	/** @inheritdoc */
+	public async recover(command: RecoverConversationCreationReservationCommand): Promise<ReserveConversationCreationResult | null>
+	{
+		return this._Run(function _Recover(repository): Promise<ReserveConversationCreationResult | null> { return repository.recover(command); }, "conversation creation recovery");
 	}
 
 	/** @inheritdoc */
