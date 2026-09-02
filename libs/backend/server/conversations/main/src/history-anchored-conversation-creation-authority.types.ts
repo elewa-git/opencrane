@@ -72,6 +72,13 @@ export interface ConversationCreationProjectionPort
 	request(command: ConversationCreationProjectionCommand): Promise<void>;
 }
 
+/** Applies one history record through the transaction that the projection unit of work opened. */
+export interface ConversationCreationProjectionRepository
+{
+	/** Rebuilds directory state and advances the matching durable reservation as one transaction. */
+	project(command: ConversationCreationProjectionCommand, created: ConversationCreated): Promise<void>;
+}
+
 /**
  * Opens separate serializable PostgreSQL operations on either side of KurrentDB history I/O.
  *

@@ -83,6 +83,20 @@ export interface AnchorConversationCreationReservationCommand
 	readonly reservationId: string;
 }
 
+/**
+ * Requests the `Projected` transition after the directory has applied a confirmed revision-zero
+ * Kurrent anchor.
+ *
+ * The command carries no creation data because the projection must preserve that immutable anchor;
+ * retrying it returns the stored `Projected` reservation instead of advancing it again.
+ * @see ConversationCreationReservationStates.Projected
+ */
+export interface ProjectConversationCreationReservationCommand
+{
+	/** Identifies the durable command whose confirmed anchor the directory has projected. */
+	readonly reservationId: string;
+}
+
 /** Names the complete, resolved command that a transaction stores before any history I/O. */
 export interface ReserveConversationCreationCommand
 {
@@ -171,4 +185,15 @@ export interface ConversationCreationReservationRepository
 	 * match its conversation mode.
 	 */
 	markHistoryAnchored(command: AnchorConversationCreationReservationCommand): Promise<ReservedConversationCreation>;
+	/**
+	 * Records that the directory and grant projections have converged from the immutable creation anchor.
+	 *
+	 * The repository accepts an already projected reservation as an idempotent replay, but it never
+	 * advances a reserved command: KurrentDB must be confirmed before relational state can claim to
+	 * represent it.
+	 * @param command The durable reservation whose history-derived projection has completed.
+	 * @returns The projected reservation, including an exact idempotent replay.
+	 * @throws {Error} The reservation is unavailable to this caller or has no confirmed anchor.
+	 */
+	markProjected(command: ProjectConversationCreationReservationCommand): Promise<ReservedConversationCreation>;
 }
