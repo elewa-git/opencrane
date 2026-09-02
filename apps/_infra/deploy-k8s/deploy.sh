@@ -8,10 +8,10 @@
 # per-CT networking, and one app-owned PostgreSQL server with isolated logical databases
 # and credentials for OpenCrane and LiteLLM.
 #
-# The CLUSTER-WIDE infrastructure (ingress controller, CloudNativePG, cert-manager) is an
-# external prerequisite. A silo never installs these shared controllers. It creates only
-# its namespaced app releases and requires one pre-created PostgreSQL basic-auth credentials
-# Secret for each logical database.
+# The CLUSTER-WIDE infrastructure is installed only through the pinned prerequisite bootstrap when
+# an operator explicitly asks for it. A normal silo deploy never adopts, upgrades, or removes shared
+# controllers. It creates its namespaced app release and requires one pre-created PostgreSQL basic-auth
+# credentials Secret for each logical database.
 #
 # Usage:
 #   apps/_infra/deploy-k8s/deploy.sh \
@@ -81,6 +81,11 @@ KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS="${OPENCRANE_KURRENTDB_BOOTSTRAP_TIMEOUT_SEC
 AGENT_SANDBOX_IMAGE_REPOSITORY="${OPENCRANE_AGENT_SANDBOX_IMAGE_REPOSITORY:-}"
 AGENT_SANDBOX_IMAGE_DIGEST="${OPENCRANE_AGENT_SANDBOX_IMAGE_DIGEST:-}"
 AGENT_SANDBOX_IMAGE_PULL_POLICY="${OPENCRANE_AGENT_SANDBOX_IMAGE_PULL_POLICY:-}"
+BOOTSTRAP_PREREQUISITES=0
+BOOTSTRAP_CONTEXT=""
+BOOTSTRAP_PROJECT_ID=""
+BOOTSTRAP_REGION="europe-west1"
+BOOTSTRAP_INGRESS_ADDRESS_NAME=""
 PASSTHROUGH=()
 
 err() { echo -e "\033[0;31m[silo]\033[0m $1" >&2; }
@@ -112,6 +117,11 @@ while [[ $# -gt 0 ]]; do
     --agent-sandbox-image-repository) AGENT_SANDBOX_IMAGE_REPOSITORY="$2"; shift 2 ;;
     --agent-sandbox-image-digest) AGENT_SANDBOX_IMAGE_DIGEST="$2"; shift 2 ;;
     --agent-sandbox-image-pull-policy) AGENT_SANDBOX_IMAGE_PULL_POLICY="$2"; shift 2 ;;
+    --bootstrap-prerequisites) BOOTSTRAP_PREREQUISITES=1; shift ;;
+    --bootstrap-context) BOOTSTRAP_CONTEXT="$2"; shift 2 ;;
+    --bootstrap-project-id) BOOTSTRAP_PROJECT_ID="$2"; shift 2 ;;
+    --bootstrap-region) BOOTSTRAP_REGION="$2"; shift 2 ;;
+    --bootstrap-ingress-address-name) BOOTSTRAP_INGRESS_ADDRESS_NAME="$2"; shift 2 ;;
     --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
     --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -124,7 +134,14 @@ done
 [[ -n "$ACME_EMAIL" ]]      || { err "--acme-email is required to issue a browser-trusted certificate for this public silo host."; exit 1; }
 [[ -n "$FIRST_USER_EMAIL" ]] || { err "--first-user-email is required to claim this standalone silo's first owner from a verified OIDC login."; exit 1; }
 
-# Fail fast if the external CloudNativePG prerequisite is absent.
+if [[ "$BOOTSTRAP_PREREQUISITES" == "1" ]]; then
+  [[ -n "$BOOTSTRAP_CONTEXT" ]] || { err "--bootstrap-prerequisites requires --bootstrap-context."; exit 1; }
+  [[ -n "$BOOTSTRAP_PROJECT_ID" ]] || { err "--bootstrap-prerequisites requires --bootstrap-project-id."; exit 1; }
+  [[ -n "$BOOTSTRAP_INGRESS_ADDRESS_NAME" ]] || { err "--bootstrap-prerequisites requires --bootstrap-ingress-address-name."; exit 1; }
+  "$SCRIPT_DIR/platform/bootstrap-prerequisites.sh" --context "$BOOTSTRAP_CONTEXT" --project-id "$BOOTSTRAP_PROJECT_ID" --region "$BOOTSTRAP_REGION" --ingress-address-name "$BOOTSTRAP_INGRESS_ADDRESS_NAME" --yes
+fi
+
+# Fail fast if pinned bootstrap was not explicitly requested or did not establish the shared prerequisites.
 command -v kubectl >/dev/null 2>&1 || { err "kubectl not found."; exit 1; }
 if ! kubectl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then
   err "CloudNativePG operator not found (CRD clusters.postgresql.cnpg.io absent). Install it as a cluster prerequisite before OpenCrane."
