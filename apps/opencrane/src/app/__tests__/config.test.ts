@@ -115,12 +115,12 @@ describe("opencrane process config", function _ProcessConfigSuite()
 	it("reads only a unique release-owned ConversationComputer profile map", function _ReadConversationComputerProfiles()
 	{
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal", "managed"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
 		]));
 		vi.stubEnv("OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH", "/var/run/opencrane/conversation-payload/keyring.json");
 
 		expect(_ReadProcessConfig().runtime.conversationComputerActivation).toEqual({
-			profiles: [{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }],
+			profiles: [{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal", "managed"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }],
 		});
 		expect(_ReadProcessConfig().runtime.conversationPayloadKeyringPath).toBe("/var/run/opencrane/conversation-payload/keyring.json");
 	});
@@ -128,7 +128,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 	it("requires a payload keyring when ConversationComputer activation is configured", function _RequiresConversationPayloadKeyring()
 	{
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal", "managed"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
 		]));
 
 		expect(_ReadProcessConfig).toThrow("OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH is required");
@@ -140,20 +140,31 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readEmptyProfileMap() { _ReadProcessConfig(); }).toThrow(/one or more profiles/);
 
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "analyst", warmPoolName: "analyst-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["managed"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "analyst", warmPoolName: "analyst-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
 		]));
 		expect(function _readDuplicateProfileRevision() { _ReadProcessConfig(); }).toThrow(/unique revision ids/);
 
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "a".repeat(64), podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal", "managed"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "a".repeat(64), podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
 		]));
 		expect(function _readLongWarmPoolName() { _ReadProcessConfig(); }).toThrow(/DNS-label/);
 
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool" },
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal", "managed"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool" },
 		]));
 		expect(function _readProfileWithoutPodLabels() { _ReadProcessConfig(); }).toThrow(/release Pod labels/);
+
+		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: [], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+		]));
+		expect(function _readProfileWithoutServiceKinds() { _ReadProcessConfig(); }).toThrow(/nonempty unique service kinds/);
+
+		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
+			{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+			{ profileRevisionId: "profile-revision-analyst-v1", agentServiceKinds: ["personal", "managed"], namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "analyst", warmPoolName: "analyst-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } },
+		]));
+		expect(function _readDuplicateServiceKind() { _ReadProcessConfig(); }).toThrow(/each agent service kind/);
 	});
 
 	it("rejects missing or excessive durable workflow settings", function _RejectInvalidWorkflowConfig()

@@ -32,7 +32,7 @@ vi.mock("../log", function _Log()
 function _ActivationConfig(): ConversationComputerActivationConfig
 {
 	return {
-		profiles: [{ profileRevisionId: "profile-revision-developer-v1", namespace: "agent-sandbox", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-warm", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }],
+		profiles: [{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal", "managed"], namespace: "agent-sandbox", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-warm", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }],
 	};
 }
 

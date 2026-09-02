@@ -214,6 +214,8 @@ if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
     --set-string "agentSandbox.runtimeClassName=gvisor"
     --set-string "agentSandbox.serviceAccountName=${RELEASE}-agent-sandbox"
     --set-string "agentSandbox.profiles[0].profileRevisionId=profile-revision-developer-v1"
+    --set-string "agentSandbox.profiles[0].agentServiceKinds[0]=personal"
+    --set-string "agentSandbox.profiles[0].agentServiceKinds[1]=managed"
     --set-string "agentSandbox.profiles[0].name=developer"
     --set-string "agentSandbox.profiles[0].poolName=developer-pool"
     --set-string "agentSandbox.profiles[0].image.repository=$AGENT_SANDBOX_IMAGE_REPOSITORY"

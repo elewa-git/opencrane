@@ -2,6 +2,15 @@ import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/serv
 import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
 import type { FleetOrganizationMembershipHttpClientConfig } from "@opencrane/backend/server/infra/organization-membership-gateway";
 
+/** Lists the service kinds for which a release may select one immutable computer profile. */
+export const ConversationComputerProfileAgentServiceKinds = {
+	Managed: "managed",
+	Personal: "personal",
+} as const;
+
+/** Names a durable AgentService kind that the release profile-selection policy recognizes. */
+export type ConversationComputerProfileAgentServiceKind = typeof ConversationComputerProfileAgentServiceKinds[keyof typeof ConversationComputerProfileAgentServiceKinds];
+
 /** TLS-only KurrentDB coordinates owned by the HistoryStore deployment boundary. */
 export interface OpenCraneHistoryStoreConfig
 {
@@ -45,6 +54,8 @@ export interface ConversationComputerActivationProfileConfig
 {
 	/** Names the immutable ConversationComputer profile revision fixed in history. */
 	readonly profileRevisionId: string;
+	/** Lists the service kinds this release binds to this immutable profile revision. */
+	readonly agentServiceKinds: readonly ConversationComputerProfileAgentServiceKind[];
 	/** Names the namespace containing the release-owned Agent Sandbox resources. */
 	readonly namespace: string;
 	/** Names the ServiceAccount fixed by each admitted Agent SandboxTemplate. */
