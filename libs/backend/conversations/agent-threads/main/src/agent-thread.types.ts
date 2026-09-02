@@ -95,8 +95,8 @@ export enum AgentThreadSummaryStates
  * an Agent thread is asked for without it. A direct or agent-session conversation must not carry one.
  *
  * Used by: `SubmitConversationMessageRequest.agentTarget`
- * (server/conversations/main/src/types/agent-thread-view.types.ts) and checked without I/O by
- * {@link AgentThreadTargetDecision}.
+ * (server/conversations/main/src/types/agent-thread-view.types.ts). The HTTP boundary validates
+ * its shape and the conversation authority rechecks its ownership and active revision.
  */
 export interface AgentThreadTarget
 {
@@ -206,15 +206,3 @@ export interface AgentThreadSummary
 	/** When the thread last moved, as an ISO 8601 string. */
 	readonly updatedAt: string;
 }
-
-/**
- * Says whether an Agent target is well-formed enough to act on.
- *
- * The refusing arm has no field for a reason, so a caller cannot tell which check failed and can only
- * map it to one refusal. `allowed: true` means the shape passed; it says nothing about whether the
- * service exists, belongs to the caller, or is active, all of which are re-checked against the database
- * afterwards.
- *
- * @see __DecideAgentThreadTarget — the check that returns this.
- */
-export type AgentThreadTargetDecision = { readonly allowed: true } | { readonly allowed: false };
