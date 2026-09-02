@@ -17,6 +17,9 @@ function _Dependencies(): ConversationAgentBindingAuthorityDependencies
 {
 	return {
 		profiles: { select: vi.fn().mockResolvedValue({ profileRevisionId: "profile-1" }) },
+		managedPrincipalValidator: {
+			validate: vi.fn().mockImplementation(command => command.principalId === `managed-principal:${command.agentServiceId}` && command.issuer === "urn:opencrane:managed-agent" && command.provenance === "internal" && command.subject === command.agentServiceId),
+		},
 		identities: { select: vi.fn().mockResolvedValue({ agentIdentityId: "identity-1" }) },
 	};
 }
@@ -31,6 +34,7 @@ describe("ConversationAgentBindingResolver", function _ConversationAgentBindingR
 
 		expect(result).toEqual({ outcome: "bound", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentServiceKind: "managed", principalId: "managed-principal:service-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" } });
 		expect(dependencies.profiles.select).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceKind: "managed" });
+		expect(dependencies.managedPrincipalValidator.validate).toHaveBeenCalledWith({ agentServiceId: "service-1", principalId: "managed-principal:service-1", issuer: "urn:opencrane:managed-agent", provenance: "internal", subject: "service-1" });
 		expect(dependencies.identities.select).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", principalId: "managed-principal:service-1" });
 	});
 

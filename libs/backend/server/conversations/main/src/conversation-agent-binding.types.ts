@@ -64,6 +64,12 @@ export interface ConversationAgentIdentitySelector
 	select(command: ConversationAgentIdentitySelectionCommand): Promise<{ readonly agentIdentityId: string } | null>;
 }
 
+/** Verifies that service Principal facts satisfy the managed-Agent issuer and subject contract. */
+export interface ConversationManagedAgentPrincipalValidator
+{
+	validate(command: { readonly agentServiceId: string; readonly principalId: string; readonly issuer: string; readonly provenance: "internal" | "external"; readonly subject: string }): boolean;
+}
+
 /** Represents the complete immutable agent binding later persisted with conversation and computer history anchors. */
 export interface ConversationAgentBinding
 {
@@ -97,6 +103,8 @@ export interface ConversationAgentBindingAuthorityDependencies
 {
 	/** Selects one release-owned profile after the authority resolves the trusted service kind. */
 	readonly profiles: ConversationComputerProfileSelector;
+	/** Verifies managed Principal facts through the independently-owned AgentService contract. */
+	readonly managedPrincipalValidator: ConversationManagedAgentPrincipalValidator;
 	/** Resolves an existing server-owned identity; this authority never manufactures an identity id. */
 	readonly identities: ConversationAgentIdentitySelector;
 }

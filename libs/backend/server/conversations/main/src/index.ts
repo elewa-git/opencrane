@@ -41,7 +41,7 @@ export type { ConversationComputerActivationAuthorityDependencies, ConversationC
 export { ConversationComputerAgentServiceKinds } from "./conversation-computer-profile-selection.types";
 export type { ConversationComputerAgentServiceKind, ConversationComputerProfileSelectionCommand, ConversationComputerProfileSelector } from "./conversation-computer-profile-selection.types";
 export { PrismaConversationAgentBindingUnitOfWork } from "./db/prisma-conversation-agent-binding-unit-of-work";
-export type { ConversationAgentBinding, ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCommand, ConversationAgentBindingResult, ConversationAgentIdentitySelectionCommand, ConversationAgentIdentitySelector } from "./conversation-agent-binding.types";
+export type { ConversationAgentBinding, ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCommand, ConversationAgentBindingResult, ConversationAgentIdentitySelectionCommand, ConversationAgentIdentitySelector, ConversationManagedAgentPrincipalValidator } from "./conversation-agent-binding.types";
 export { ConversationAgentBindingDenialReasons } from "./conversation-agent-binding.types";
 export { ConversationComputerSandboxReconciliationAuthority } from "./conversation-computer-sandbox-reconciliation-authority";
 export { ConversationComputerSandboxReconciliationOutcomes } from "./conversation-computer-sandbox-reconciliation-authority.types";

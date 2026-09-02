@@ -72,8 +72,9 @@ or already terminal.
 
 `PrismaConversationAgentBindingUnitOfWork` supplies the pre-creation binding an eventual
 history-anchored agent-session creation command needs. In one serializable snapshot it accepts only
-an active service in the selected silo whose exact active revision is published, verifies a managed
-service's deterministic internal Principal, selects the release-owned computer profile, and asks a
+an active service in the selected silo whose exact active revision is published, asks the separately
+owned AgentService contract to verify a managed service's deterministic internal Principal, selects
+the release-owned computer profile, and asks a
 separate identity authority for the stable `AgentIdentity`. Any missing or malformed coordinate
 denies without returning a partial binding. Personal services are explicitly unavailable here until
 their owned delegation policy can provide a proxied identity; this boundary never invents an

@@ -1,5 +1,3 @@
-import { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "@opencrane/backend/server/agents/agent-services";
-
 import { ConversationAgentBindingDenialReasons, type ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, type ConversationAgentBindingAuthorityDependencies, type ConversationAgentBindingCommand, type ConversationAgentBindingRepository, type ConversationAgentBindingResult } from "./conversation-agent-binding.types";
 
 /** Resolves exact managed-agent facts for a later history-anchored conversation creation command. */
@@ -19,12 +17,8 @@ export class ConversationAgentBindingResolver implements ConversationAgentBindin
 		if (candidate.agentServiceKind === "personal")
 			return _Denied(ConversationAgentBindingDenialReasons.PersonalDelegationUnavailable);
 		const principalId = candidate.principalId;
-		if (principalId === null
-			|| principalId !== __ManagedAgentServicePrincipal(candidate.agentServiceId)
-			|| candidate.principal === null
-			|| candidate.principal.provenance !== "internal"
-			|| candidate.principal.issuer !== MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER
-			|| candidate.principal.subject !== candidate.agentServiceId)
+		if (principalId === null || candidate.principal === null
+			|| !this.dependencies.managedPrincipalValidator.validate({ agentServiceId: candidate.agentServiceId, principalId, ...candidate.principal }))
 			return _Denied(ConversationAgentBindingDenialReasons.ManagedPrincipalUnavailable);
 		const profile = await this.dependencies.profiles.select({ siloId: command.siloId, agentServiceKind: candidate.agentServiceKind });
 		if (profile === null)
