@@ -9,6 +9,12 @@ enum ConversationLifecycle {
   Closed @map("closed")
 }
 
+enum ConversationCreationReservationState {
+  Reserved        @map("reserved")
+  HistoryAnchored @map("history_anchored")
+  Projected       @map("projected")
+}
+
 enum ConversationMessageRole {
   User      @map("user")
   Assistant @map("assistant")
@@ -78,6 +84,57 @@ model Conversation {
   @@index([siloId, mode, lifecycle, activitySequence])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
+}
+
+/// Durable, server-owned recovery command for one history-anchored conversation creation.
+///
+/// The reservation exists before a Kurrent append, so a response-lost retry must resume the
+/// exact command rather than create another conversation. Audit evidence is deliberately a soft
+/// identifier: an authorized product deletion must not erase the decision that admitted it.
+model ConversationCreationReservation {
+  id                              String                               @id @default(cuid())
+  siloId                          String                               @map("silo_id")
+  principalId                     String                               @map("principal_id")
+  requestId                       String                               @map("request_id")
+  requestDigest                   String                               @map("request_digest")
+  conversationId                  String                               @unique @map("conversation_id")
+  historyEventId                  String                               @unique @map("history_event_id")
+  authorizationDecisionEvidenceId String                               @map("authorization_decision_evidence_id")
+  authorizationDecisionDigest     String                               @map("authorization_decision_digest")
+  authorizationPolicyRevisionHash String                               @map("authorization_policy_revision_hash")
+  effectiveAuthorizationDigest    String                               @map("effective_authorization_digest")
+  mode                            ConversationMode
+  agentServiceId                  String?                              @map("agent_service_id")
+  agentRevisionId                 String?                              @map("agent_revision_id")
+  agentIdentityId                 String?                              @map("agent_identity_id")
+  profileRevisionId               String?                              @map("profile_revision_id")
+  computerId                      String?                              @map("computer_id")
+  computerHistoryEventId          String?                              @unique @map("computer_history_event_id")
+  state                           ConversationCreationReservationState @default(Reserved)
+  historyRevision                 BigInt?                              @map("history_revision")
+  reservedAt                      DateTime                             @default(now()) @map("reserved_at")
+  historyAnchoredAt               DateTime?                            @map("history_anchored_at")
+  projectedAt                     DateTime?                            @map("projected_at")
+  participants                    ConversationCreationReservationParticipant[]
+
+  @@unique([siloId, principalId, requestId])
+  @@index([siloId, state, reservedAt])
+  @@map("conversation_creation_reservations")
+}
+
+/// Stores one replayable initial participant coordinate outside the legacy conversation projection.
+model ConversationCreationReservationParticipant {
+  reservationId       String                         @map("reservation_id")
+  ordinal             Int
+  userId              String                         @map("user_id")
+  visibleFromPosition BigInt                          @map("visible_from_position")
+  joinedAt            DateTime                        @map("joined_at")
+  reservation         ConversationCreationReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+
+  @@id([reservationId, ordinal])
+  @@unique([reservationId, userId], map: "conversation_creation_reservation_participant_user_key")
+  @@unique([reservationId, visibleFromPosition], map: "conversation_creation_reservation_participant_position_key")
+  @@map("conversation_creation_reservation_participants")
 }
 
 model ConversationParticipant {

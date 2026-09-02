@@ -92,6 +92,9 @@ CREATE TYPE "ConversationMode" AS ENUM ('agent_session', 'direct', 'group');
 CREATE TYPE "ConversationLifecycle" AS ENUM ('open', 'closed');
 
 -- CreateEnum
+CREATE TYPE "ConversationCreationReservationState" AS ENUM ('reserved', 'history_anchored', 'projected');
+
+-- CreateEnum
 CREATE TYPE "ConversationMessageRole" AS ENUM ('user', 'assistant', 'tool', 'system');
 
 -- CreateEnum
@@ -797,6 +800,46 @@ CREATE TABLE "conversations" (
     "activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
 
     CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_creation_reservations" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "request_id" TEXT NOT NULL,
+    "request_digest" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "history_event_id" TEXT NOT NULL,
+    "authorization_decision_evidence_id" TEXT NOT NULL,
+    "authorization_decision_digest" TEXT NOT NULL,
+    "authorization_policy_revision_hash" TEXT NOT NULL,
+    "effective_authorization_digest" TEXT NOT NULL,
+    "mode" "ConversationMode" NOT NULL,
+    "agent_service_id" TEXT,
+    "agent_revision_id" TEXT,
+    "agent_identity_id" TEXT,
+    "profile_revision_id" TEXT,
+    "computer_id" TEXT,
+    "computer_history_event_id" TEXT,
+    "state" "ConversationCreationReservationState" NOT NULL DEFAULT 'reserved',
+    "history_revision" BIGINT,
+    "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "history_anchored_at" TIMESTAMP(3),
+    "projected_at" TIMESTAMP(3),
+
+    CONSTRAINT "conversation_creation_reservations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_creation_reservation_participants" (
+    "reservation_id" TEXT NOT NULL,
+    "ordinal" INTEGER NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "visible_from_position" BIGINT NOT NULL,
+    "joined_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "conversation_creation_reservation_participants_pkey" PRIMARY KEY ("reservation_id","ordinal")
 );
 
 -- CreateTable
@@ -2611,6 +2654,27 @@ CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "
 CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservations_conversation_id_key" ON "conversation_creation_reservations"("conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservations_history_event_id_key" ON "conversation_creation_reservations"("history_event_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservations_computer_history_event_i_key" ON "conversation_creation_reservations"("computer_history_event_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_creation_reservations_silo_id_state_reserved_a_idx" ON "conversation_creation_reservations"("silo_id", "state", "reserved_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservations_silo_id_principal_id_req_key" ON "conversation_creation_reservations"("silo_id", "principal_id", "request_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservation_participant_user_key" ON "conversation_creation_reservation_participants"("reservation_id", "user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_creation_reservation_participant_position_key" ON "conversation_creation_reservation_participants"("reservation_id", "visible_from_position");
+
+-- CreateIndex
 CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
 
 -- CreateIndex
@@ -3530,6 +3594,9 @@ ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "conversation_creation_reservation_participants" ADD CONSTRAINT "conversation_creation_reservation_participants_reservation_fkey" FOREIGN KEY ("reservation_id") REFERENCES "conversation_creation_reservations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -4013,6 +4080,75 @@ CREATE TRIGGER "org_memberships_last_owner_guard"
     FOR EACH ROW EXECUTE FUNCTION "protect_org_membership_last_owner"();
 
 -- Database-native authority guards omitted by Prisma schema diff.
+ALTER TABLE "conversation_creation_reservations" ADD CONSTRAINT "conversation_creation_reservations_exact_check" CHECK (
+    btrim("silo_id") <> '' AND btrim("principal_id") <> '' AND
+    "request_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+    "request_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    "conversation_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+    "history_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+    btrim("authorization_decision_evidence_id") <> '' AND
+    "authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    "authorization_policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$' AND
+    "effective_authorization_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    (("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND
+      "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL AND "computer_id" IS NULL AND "computer_history_event_id" IS NULL) OR
+     ("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> '' AND
+      "agent_revision_id" IS NOT NULL AND btrim("agent_revision_id") <> '' AND
+      "computer_id" IS NOT NULL AND "computer_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+      "computer_history_event_id" IS NOT NULL AND "computer_history_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')) AND
+    (("state" = 'reserved' AND "history_revision" IS NULL AND "history_anchored_at" IS NULL AND "projected_at" IS NULL AND
+      "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL) OR
+     ("state" = 'history_anchored' AND "history_revision" = 0 AND "history_anchored_at" IS NOT NULL AND "projected_at" IS NULL AND
+      (("mode" = 'agent_session' AND "agent_identity_id" IS NOT NULL AND btrim("agent_identity_id") <> '' AND
+        "profile_revision_id" IS NOT NULL AND btrim("profile_revision_id") <> '') OR
+       ("mode" IN ('direct', 'group') AND "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL))) OR
+     ("state" = 'projected' AND "history_revision" = 0 AND "history_anchored_at" IS NOT NULL AND "projected_at" IS NOT NULL AND
+      (("mode" = 'agent_session' AND "agent_identity_id" IS NOT NULL AND btrim("agent_identity_id") <> '' AND
+        "profile_revision_id" IS NOT NULL AND btrim("profile_revision_id") <> '') OR
+       ("mode" IN ('direct', 'group') AND "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL))))
+);
+ALTER TABLE "conversation_creation_reservation_participants" ADD CONSTRAINT "conversation_creation_reservation_participants_exact_check" CHECK (
+    "ordinal" > 0 AND "visible_from_position" = "ordinal" AND btrim("user_id") <> ''
+);
+CREATE FUNCTION "enforce_conversation_creation_reservation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ConversationCreationReservation rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN RETURN NEW; END IF;
+    IF OLD."silo_id" IS DISTINCT FROM NEW."silo_id" OR OLD."principal_id" IS DISTINCT FROM NEW."principal_id"
+        OR OLD."request_id" IS DISTINCT FROM NEW."request_id" OR OLD."request_digest" IS DISTINCT FROM NEW."request_digest"
+        OR OLD."conversation_id" IS DISTINCT FROM NEW."conversation_id" OR OLD."history_event_id" IS DISTINCT FROM NEW."history_event_id"
+        OR OLD."authorization_decision_evidence_id" IS DISTINCT FROM NEW."authorization_decision_evidence_id"
+        OR OLD."authorization_decision_digest" IS DISTINCT FROM NEW."authorization_decision_digest"
+        OR OLD."authorization_policy_revision_hash" IS DISTINCT FROM NEW."authorization_policy_revision_hash"
+        OR OLD."effective_authorization_digest" IS DISTINCT FROM NEW."effective_authorization_digest"
+        OR OLD."mode" IS DISTINCT FROM NEW."mode" OR OLD."agent_service_id" IS DISTINCT FROM NEW."agent_service_id"
+        OR OLD."agent_revision_id" IS DISTINCT FROM NEW."agent_revision_id" OR OLD."computer_id" IS DISTINCT FROM NEW."computer_id"
+        OR OLD."computer_history_event_id" IS DISTINCT FROM NEW."computer_history_event_id" OR OLD."reserved_at" IS DISTINCT FROM NEW."reserved_at" THEN
+        RAISE EXCEPTION 'ConversationCreationReservation command coordinates are immutable';
+    END IF;
+    IF OLD."state" = 'reserved' AND NEW."state" = 'history_anchored' THEN RETURN NEW; END IF;
+    IF OLD."state" = 'history_anchored' AND NEW."state" = 'projected'
+        AND OLD."agent_identity_id" IS NOT DISTINCT FROM NEW."agent_identity_id"
+        AND OLD."profile_revision_id" IS NOT DISTINCT FROM NEW."profile_revision_id"
+        AND OLD."history_revision" IS NOT DISTINCT FROM NEW."history_revision"
+        AND OLD."history_anchored_at" IS NOT DISTINCT FROM NEW."history_anchored_at" THEN RETURN NEW; END IF;
+    RAISE EXCEPTION 'ConversationCreationReservation must progress from reserved to history anchored to projected';
+END;
+$$;
+CREATE FUNCTION "enforce_conversation_creation_reservation_participant"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE reservation_state "ConversationCreationReservationState";
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'ConversationCreationReservationParticipant rows are immutable'; END IF;
+    SELECT "state" INTO reservation_state FROM "conversation_creation_reservations" WHERE "id" = NEW."reservation_id" FOR UPDATE;
+    IF reservation_state IS DISTINCT FROM 'reserved' THEN RAISE EXCEPTION 'ConversationCreationReservationParticipant requires a reserved command'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "conversation_creation_reservations_progression" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_creation_reservations"
+FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_creation_reservation"();
+CREATE TRIGGER "conversation_creation_reservation_participants_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_creation_reservation_participants"
+FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_creation_reservation_participant"();
+
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (
     btrim("id") <> ''
     AND btrim("silo_id") <> ''

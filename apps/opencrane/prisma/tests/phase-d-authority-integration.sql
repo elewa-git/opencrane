@@ -72,6 +72,22 @@ AS $$
     );
 $$;
 
+SELECT pg_temp.expect_failure(
+    'agent creation reservation requires non-null server agent coordinates',
+    $statement$
+        INSERT INTO "conversation_creation_reservations" (
+            "id", "silo_id", "principal_id", "request_id", "request_digest", "conversation_id", "history_event_id",
+            "authorization_decision_evidence_id", "authorization_decision_digest", "authorization_policy_revision_hash",
+            "effective_authorization_digest", "mode"
+        ) VALUES (
+            'reservation-agent-missing-coordinates', 'silo-1', 'user-1', '31c1f1dc-0010-4f13-9c2f-d3841ffd6651',
+            'sha256:' || repeat('a', 64), '31c1f1dc-0011-4f13-9c2f-d3841ffd6651', '31c1f1dc-0012-4f13-9c2f-d3841ffd6651',
+            'decision-1', 'sha256:' || repeat('b', 64), 'sha256:' || repeat('c', 64), 'sha256:' || repeat('d', 64), 'agent_session'
+        )
+    $statement$,
+    'conversation_creation_reservations_exact_check'
+);
+
 INSERT INTO "agent_services" (
     "id", "silo_id", "kind", "name",
     "state", "workload_profile", "principal_id", "created_at", "updated_at"
