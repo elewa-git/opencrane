@@ -33,9 +33,27 @@ export class PrismaConversationAgentBindingRepository implements ConversationAge
 		return {
 			agentServiceId: service.id,
 			agentRevisionId: service.activeRevision.id,
-			agentServiceKind: service.kind === AgentServiceKind.Managed ? "managed" : "personal",
+			agentServiceKind: _ConversationComputerAgentServiceKind(service.kind),
 			principalId: service.principalId,
-			principal: service.principal === null ? null : { issuer: service.principal.issuer, provenance: service.principal.provenance === "Internal" ? "internal" : "external", subject: service.principal.subject },
+			principal: _Principal(service.principal),
 		};
 	}
+}
+
+/** Converts the database enum to the closed set accepted by computer profile selection. */
+function _ConversationComputerAgentServiceKind(kind: AgentServiceKind): ConversationAgentBindingCandidate["agentServiceKind"]
+{
+	return kind === AgentServiceKind.Managed ? "managed" : "personal";
+}
+
+/** Maps optional persistent Principal facts without broadening their provenance vocabulary. */
+function _Principal(principal: { readonly issuer: string; readonly provenance: string; readonly subject: string } | null): ConversationAgentBindingCandidate["principal"]
+{
+	if (principal === null)
+		return null;
+	return {
+		issuer: principal.issuer,
+		provenance: principal.provenance === "Internal" ? "internal" : "external",
+		subject: principal.subject,
+	};
 }

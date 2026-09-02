@@ -3,7 +3,7 @@ import { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER 
 import { ConversationAgentBindingDenialReasons, type ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, type ConversationAgentBindingAuthorityDependencies, type ConversationAgentBindingCommand, type ConversationAgentBindingRepository, type ConversationAgentBindingResult } from "./conversation-agent-binding.types";
 
 /** Resolves exact managed-agent facts for a later history-anchored conversation creation command. */
-export class ConversationAgentBindingAuthority implements ConversationAgentBindingAuthorityPort
+export class ConversationAgentBindingResolver implements ConversationAgentBindingAuthorityPort
 {
 	/** Reads transactional service facts and uses only deployment- and identity-owned selection ports. */
 	public constructor(private readonly repository: ConversationAgentBindingRepository, private readonly dependencies: ConversationAgentBindingAuthorityDependencies) {}

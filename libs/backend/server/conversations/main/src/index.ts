@@ -40,9 +40,8 @@ export { ConversationComputerActivationClaimAuthority } from "./conversation-com
 export type { ConversationComputerActivationAuthorityDependencies, ConversationComputerActivationClock, ConversationComputerActivationProfile, ConversationComputerActivationProfileCommand, ConversationComputerActivationProfileResolver } from "./conversation-computer-activation-authority.types";
 export { ConversationComputerAgentServiceKinds } from "./conversation-computer-profile-selection.types";
 export type { ConversationComputerAgentServiceKind, ConversationComputerProfileSelectionCommand, ConversationComputerProfileSelector } from "./conversation-computer-profile-selection.types";
-export { ConversationAgentBindingAuthority } from "./conversation-agent-binding-authority";
 export { PrismaConversationAgentBindingUnitOfWork } from "./db/prisma-conversation-agent-binding-unit-of-work";
-export type { ConversationAgentBinding, ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCandidate, ConversationAgentBindingCommand, ConversationAgentBindingRepository, ConversationAgentBindingResult, ConversationAgentIdentitySelectionCommand, ConversationAgentIdentitySelector } from "./conversation-agent-binding.types";
+export type { ConversationAgentBinding, ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCommand, ConversationAgentBindingResult, ConversationAgentIdentitySelectionCommand, ConversationAgentIdentitySelector } from "./conversation-agent-binding.types";
 export { ConversationAgentBindingDenialReasons } from "./conversation-agent-binding.types";
 export { ConversationComputerSandboxReconciliationAuthority } from "./conversation-computer-sandbox-reconciliation-authority";
 export { ConversationComputerSandboxReconciliationOutcomes } from "./conversation-computer-sandbox-reconciliation-authority.types";

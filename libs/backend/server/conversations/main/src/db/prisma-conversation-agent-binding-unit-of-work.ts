@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { ConversationAgentBindingAuthority } from "../conversation-agent-binding-authority";
+import { ConversationAgentBindingResolver } from "../conversation-agent-binding-authority";
 import type { ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCommand, ConversationAgentBindingResult } from "../conversation-agent-binding.types";
 import { PrismaConversationAgentBindingRepository } from "./prisma-conversation-agent-binding-repository";
 
@@ -13,6 +13,12 @@ export class PrismaConversationAgentBindingUnitOfWork implements ConversationAge
 	/** Resolves the binding inside one serializable snapshot before later creation persists its history anchors. */
 	public async bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>
 	{
-		return this.prisma.$transaction(async transaction => new ConversationAgentBindingAuthority(new PrismaConversationAgentBindingRepository(transaction), this.dependencies).bind(command), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+		const dependencies = this.dependencies;
+		return this.prisma.$transaction(async function _BindConversationAgent(transaction)
+		{
+			const repository = new PrismaConversationAgentBindingRepository(transaction);
+			const authority = new ConversationAgentBindingResolver(repository, dependencies);
+			return authority.bind(command);
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }
