@@ -2,6 +2,21 @@ import type { ConversationEntry } from "@opencrane/contracts";
 import type { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
 /**
+ * Identifies the immutable creation record that a history-backed projection may read.
+ *
+ * The projection supplies server-derived coordinates and receives the validated revision-zero
+ * record. It cannot select a later range because every conversation projection starts from its
+ * creation anchor.
+ */
+export interface ConversationCreationReadCommand
+{
+	/** Names the silo whose envelope metadata must own the creation record. */
+	readonly siloId: string;
+	/** Names the sole conversation stream whose revision-zero record may be read. */
+	readonly conversationId: string;
+}
+
+/**
  * Identifies a finite read that an authorized conversation transport may make from a KurrentDB stream.
  *
  * The transport supplies server-derived coordinates after it checks current PostgreSQL membership

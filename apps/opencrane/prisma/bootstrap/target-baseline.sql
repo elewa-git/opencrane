@@ -4094,10 +4094,11 @@ ALTER TABLE "conversation_creation_reservations" ADD CONSTRAINT "conversation_cr
       "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL AND "computer_id" IS NULL AND "computer_history_event_id" IS NULL) OR
      ("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> '' AND
       "agent_revision_id" IS NOT NULL AND btrim("agent_revision_id") <> '' AND
+	  "agent_identity_id" IS NOT NULL AND btrim("agent_identity_id") <> '' AND
+	  "profile_revision_id" IS NOT NULL AND btrim("profile_revision_id") <> '' AND
       "computer_id" IS NOT NULL AND "computer_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
       "computer_history_event_id" IS NOT NULL AND "computer_history_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')) AND
-    (("state" = 'reserved' AND "history_revision" IS NULL AND "history_anchored_at" IS NULL AND "projected_at" IS NULL AND
-      "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL) OR
+	(("state" = 'reserved' AND "history_revision" IS NULL AND "history_anchored_at" IS NULL AND "projected_at" IS NULL) OR
      ("state" = 'history_anchored' AND "history_revision" = 0 AND "history_anchored_at" IS NOT NULL AND "projected_at" IS NULL AND
       (("mode" = 'agent_session' AND "agent_identity_id" IS NOT NULL AND btrim("agent_identity_id") <> '' AND
         "profile_revision_id" IS NOT NULL AND btrim("profile_revision_id") <> '') OR
@@ -4122,7 +4123,8 @@ BEGIN
         OR OLD."authorization_policy_revision_hash" IS DISTINCT FROM NEW."authorization_policy_revision_hash"
         OR OLD."effective_authorization_digest" IS DISTINCT FROM NEW."effective_authorization_digest"
         OR OLD."mode" IS DISTINCT FROM NEW."mode" OR OLD."agent_service_id" IS DISTINCT FROM NEW."agent_service_id"
-        OR OLD."agent_revision_id" IS DISTINCT FROM NEW."agent_revision_id" OR OLD."computer_id" IS DISTINCT FROM NEW."computer_id"
+		OR OLD."agent_revision_id" IS DISTINCT FROM NEW."agent_revision_id" OR OLD."agent_identity_id" IS DISTINCT FROM NEW."agent_identity_id"
+		OR OLD."profile_revision_id" IS DISTINCT FROM NEW."profile_revision_id" OR OLD."computer_id" IS DISTINCT FROM NEW."computer_id"
         OR OLD."computer_history_event_id" IS DISTINCT FROM NEW."computer_history_event_id" OR OLD."reserved_at" IS DISTINCT FROM NEW."reserved_at" THEN
         RAISE EXCEPTION 'ConversationCreationReservation command coordinates are immutable';
     END IF;

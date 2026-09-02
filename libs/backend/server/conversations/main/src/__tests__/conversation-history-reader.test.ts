@@ -3,7 +3,7 @@ import { HistoryExpectedRevisions, type HistoryRecordedEvent } from "@opencrane/
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationHistoryReader } from "../conversation-history-reader";
-import type { ConversationHistoryReadCommand } from "../conversation-history-reader.types";
+import type { ConversationCreationReadCommand, ConversationHistoryReadCommand } from "../conversation-history-reader.types";
 
 /** Reuses a valid UUID for the first immutable participant-visible entry. */
 const _FIRST_ENTRY_ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
@@ -12,6 +12,12 @@ const _SECOND_ENTRY_ID = "e97a2af7-81a2-4f48-96b8-cf2ea37f3d5f";
 
 /** Builds trusted command coordinates so each test changes only the integrity condition under test. */
 function _Command(overrides: Partial<ConversationHistoryReadCommand> = {}): ConversationHistoryReadCommand
+{
+	return { siloId: "silo-1", conversationId: "conversation-1", ...overrides };
+}
+
+/** Builds creation-only coordinates so the projector cannot request a participant-entry range. */
+function _CreationCommand(overrides: Partial<ConversationCreationReadCommand> = {}): ConversationCreationReadCommand
 {
 	return { siloId: "silo-1", conversationId: "conversation-1", ...overrides };
 }
@@ -125,6 +131,26 @@ describe("ConversationHistoryReader", function ()
 
 		await expect(reader.readCurrent(_Command())).resolves.toEqual(expect.objectContaining({ streamName: "conversation-conversation-1", expectedRevision: 2n, entries: expect.arrayContaining([expect.objectContaining({ position: "1" }), expect.objectContaining({ position: "2" })]) }));
 		expect(readHead).toHaveBeenCalledWith("conversation-conversation-1");
+	});
+
+	it("returns the revision-zero creation record only after it validates the complete stream", async function _ReadsCreation()
+	{
+		const created = _CreatedEvent().data.created;
+		const reader = new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events(_History([_Event(1n)]))), readHead: vi.fn() });
+
+		await expect(reader.readCreation(_CreationCommand())).resolves.toEqual(created);
+	});
+
+	it("fails closed when the creation stream is absent or malformed", async function _RejectsInvalidCreation()
+	{
+		const malformedCreation = { ..._CreatedEvent(), data: { created: { ..._CreatedEvent().data.created as object, mode: "unknown" } } };
+		const absent = new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([])), readHead: vi.fn() });
+		const malformedAnchor = new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([malformedCreation])), readHead: vi.fn() });
+		const malformedTail = new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events(_History([_Event(2n)]))), readHead: vi.fn() });
+
+		await expect(absent.readCreation(_CreationCommand())).rejects.toThrow("requires a creation event");
+		await expect(malformedAnchor.readCreation(_CreationCommand())).rejects.toThrow("invalid creation event");
+		await expect(malformedTail.readCreation(_CreationCommand())).rejects.toThrow("noncontiguous");
 	});
 
 	it("preserves the no-stream condition and fails closed when the current head moves or a partial range is requested", async function ()

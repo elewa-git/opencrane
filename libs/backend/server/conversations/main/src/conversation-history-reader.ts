@@ -1,7 +1,7 @@
-import { ___ConversationCreatedSchema, ___ConversationEntrySchema, type ConversationEntry } from "@opencrane/contracts";
+import { ___ConversationCreatedSchema, ___ConversationEntrySchema, type ConversationCreated, type ConversationEntry } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationHistoryReadCommand, ConversationHistoryReadResult, CurrentConversationHistory } from "./conversation-history-reader.types";
+import type { ConversationCreationReadCommand, ConversationHistoryReadCommand, ConversationHistoryReadResult, CurrentConversationHistory } from "./conversation-history-reader.types";
 
 /** Names the sole versioned event that this reader exposes as a participant-visible entry. */
 const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
@@ -45,14 +45,48 @@ export class ConversationHistoryReader
 		// 2. Check every immutable envelope before exposing its entry to a participant transport.
 		for await (const event of this.historyStore.readStream(request))
 		{
-			const entry = _ValidatedEvent(event, command, streamName, expectedRevision);
-			if (entry !== null && (command.fromRevision === undefined || event.revision >= command.fromRevision))
-				entries.push(entry);
+			const validated = _ValidatedEvent(event, command, streamName, expectedRevision);
+			if (validated.entry !== null && (command.fromRevision === undefined || event.revision >= command.fromRevision))
+				entries.push(validated.entry);
 			expectedRevision += 1n;
 		}
 
 		// 3. Return the finite ordered stream result without constructing a relational or projection fallback.
 		return { streamName, revision: expectedRevision === 0n ? null : expectedRevision - 1n, entries };
+	}
+
+	/**
+	 * Reads the immutable revision-zero creation record after validating the complete stream.
+	 *
+	 * A history projector must call this before it writes relational conversation rows, participants,
+	 * or grants. Reading every event makes a damaged tail an integrity failure rather than allowing
+	 * a projection to use an anchor from a stream whose later records cannot be trusted.
+	 *
+	 * @param command - Supplies server-derived silo and conversation coordinates for the creation anchor.
+	 * @returns The validated `ConversationCreated@0` payload for this conversation.
+	 * @throws {Error} Rejects an absent stream, an invalid creation record, or any malformed stream event.
+	 */
+	public async readCreation(command: ConversationCreationReadCommand): Promise<ConversationCreated>
+	{
+		// 1. Derive one stream before reading so a projection cannot widen its history scope.
+		const streamName = _StreamName(command);
+		const request = { streamName };
+		let expectedRevision = 0n;
+		let created: ConversationCreated | null = null;
+
+		// 2. Validate the complete stream before returning its revision-zero creation record.
+		for await (const event of this.historyStore.readStream(request))
+		{
+			const validated = _ValidatedEvent(event, command, streamName, expectedRevision);
+			if (validated.created !== null)
+				created = validated.created;
+			expectedRevision += 1n;
+		}
+
+		// 3. Reject an absent stream so a projection cannot invent relational state without history.
+		if (created === null)
+			throw new Error("Conversation history creation read requires a creation event at revision zero");
+		return created;
 	}
 
 	/**
@@ -82,19 +116,19 @@ export class ConversationHistoryReader
 }
 
 /** Validates trusted command coordinates and derives the only stream that this reader may request. */
-function _StreamName(command: ConversationHistoryReadCommand): string
+function _StreamName(command: ConversationCreationReadCommand | ConversationHistoryReadCommand): string
 {
 	if (!_Identifier(command.siloId))
 		throw new Error("Conversation history read requires a server-provided silo identifier");
 	if (!_Identifier(command.conversationId))
 		throw new Error("Conversation history read requires a server-provided conversation identifier");
-	if (command.fromRevision !== undefined && command.fromRevision < 0n)
+	if ("fromRevision" in command && command.fromRevision !== undefined && command.fromRevision < 0n)
 		throw new Error("Conversation history read requires a nonnegative starting revision");
 	return `conversation-${command.conversationId}`;
 }
 
 /** Validates one recorded event before the reader returns its participant-visible entry. */
-function _ValidatedEvent(event: HistoryRecordedEvent, command: ConversationHistoryReadCommand, streamName: string, expectedRevision: bigint): ConversationEntry | null
+function _ValidatedEvent(event: HistoryRecordedEvent, command: ConversationCreationReadCommand | ConversationHistoryReadCommand, streamName: string, expectedRevision: bigint): { readonly created: ConversationCreated | null; readonly entry: ConversationEntry | null }
 {
 	if (event.streamName !== streamName)
 		throw new Error("Conversation history read received an event from a different stream");
@@ -105,7 +139,7 @@ function _ValidatedEvent(event: HistoryRecordedEvent, command: ConversationHisto
 	if (event.metadata.conversationId !== command.conversationId)
 		throw new Error("Conversation history read received an event for a different conversation");
 	if (event.revision === 0n)
-		return _ValidatedCreation(event, command);
+		return { created: _ValidatedCreation(event, command), entry: null };
 	if (event.type !== _CONVERSATION_ENTRY_EVENT_TYPE)
 		throw new Error("Conversation history read received an unsupported event type");
 	const entry = ___ConversationEntrySchema.safeParse(event.data.entry);
@@ -119,11 +153,11 @@ function _ValidatedEvent(event: HistoryRecordedEvent, command: ConversationHisto
 		throw new Error("Conversation history read received an entry with an invalid idempotency key");
 	if (event.id !== entry.data.id || event.metadata.causationId !== entry.data.causationId || event.metadata.correlationId !== entry.data.correlationId || event.metadata.idempotencyKey !== entry.data.idempotencyKey)
 		throw new Error("Conversation history read received an entry that does not match its envelope");
-	return entry.data;
+	return { created: null, entry: entry.data };
 }
 
 /** Validates the required immutable revision-zero creation record without exposing it as a participant entry. */
-function _ValidatedCreation(event: HistoryRecordedEvent, command: ConversationHistoryReadCommand): null
+function _ValidatedCreation(event: HistoryRecordedEvent, command: ConversationCreationReadCommand | ConversationHistoryReadCommand): ConversationCreated
 {
 	if (event.type !== _CONVERSATION_CREATED_EVENT_TYPE)
 		throw new Error("Conversation history read requires a creation event at revision zero");
@@ -134,7 +168,7 @@ function _ValidatedCreation(event: HistoryRecordedEvent, command: ConversationHi
 		throw new Error("Conversation history creation belongs to a different conversation");
 	if (event.metadata.idempotencyKey !== event.id || !_UUID_PATTERN.test(event.id))
 		throw new Error("Conversation history read received a creation event with an invalid idempotency key");
-	return null;
+	return created.data;
 }
 
 /** Checks a trusted identifier without altering the coordinate used to derive a stream name. */
