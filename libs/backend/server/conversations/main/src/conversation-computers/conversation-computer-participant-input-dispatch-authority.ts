@@ -28,36 +28,28 @@ export class ConversationComputerParticipantInputDispatchAuthority
 	}
 
 	/**
-	 * Issues or replays every retained human start entry for the current computer execution.
+	 * Advances an idle current execution by the first unissued retained human start entry.
 	 *
 	 * The conversation reader validates KurrentDB event envelopes before this method sees an entry.
 	 * This method narrows further to the one target input shape, then hands each entry to the command
-	 * authority in transcript order. A cold, replaced, or expired computer fails in that authority;
-	 * callers retry after reconciliation rather than manufacturing a command from a stale lease.
+	 * authority in transcript order. That authority atomically refuses to append while another command
+	 * remains pending, so a cold-start backlog cannot consume delivery time before the Sandbox polls it.
 	 *
 	 * @param command - Names trusted conversation and computer coordinates selected by the app.
-	 * @returns The count of inputs that reached the idempotent command issuer.
+	 * @returns One when an idle command queue advanced, otherwise zero.
 	 * @throws {Error} Rejects malformed coordinates or an invalid retained target input entry.
 	 */
 	public async dispatch(command: ConversationComputerParticipantInputDispatchCommand): Promise<ConversationComputerParticipantInputDispatchResult>
 	{
 		_Validate(command);
 		const conversation = await this.dependencies.conversations.readCurrent({ siloId: command.siloId, conversationId: command.conversationId });
-		const inputs = conversation.entries.filter(_IsParticipantStartInput);
-	for (const input of inputs)
-	{
-		const block = input.blocks[0];
-		const payload = _PayloadCoordinates(block);
-		await this.dependencies.commands.issueStartTurn({
-				siloId: command.siloId,
-				conversationId: command.conversationId,
-				computerId: command.computerId,
-				inputEntryId: input.id,
-			inputPayloadRef: payload.payloadRef,
-			inputPayloadDigest: payload.ciphertextDigest,
-			});
-		}
-		return { dispatchedInputCount: inputs.length };
+		const candidates = conversation.entries.filter(_IsParticipantStartInput).map(function _Candidate(input)
+		{
+			const payload = _PayloadCoordinates(input.blocks[0]);
+			return { inputEntryId: input.id, inputPayloadRef: payload.payloadRef, inputPayloadDigest: payload.ciphertextDigest };
+		});
+		const result = await this.dependencies.commands.issueNextStartTurn({ siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, candidates });
+		return { dispatchedInputCount: result.command === null ? 0 : 1 };
 	}
 }
 

@@ -17,13 +17,13 @@ export interface ConversationComputerParticipantInputDispatchAuthorityDependenci
 {
 	/** Replays participant history before the dispatcher selects input entries. */
 	readonly conversations: Pick<ConversationHistoryReader, "readCurrent">;
-	/** Issues idempotent start-turn commands after it has rechecked the active execution. */
-	readonly commands: Pick<ConversationComputerRuntimeCommandAuthority, "issueStartTurn">;
+	/** Advances an idle execution queue by at most one retained input after it rechecks active state. */
+	readonly commands: Pick<ConversationComputerRuntimeCommandAuthority, "issueNextStartTurn">;
 }
 
 /** Reports how many retained input entries the dispatcher offered to the current execution. */
 export interface ConversationComputerParticipantInputDispatchResult
 {
-	/** Counts entries whose idempotency key the command authority accepted or replayed. */
+	/** Counts the single retained entry issued to an idle runtime queue, if any. */
 	readonly dispatchedInputCount: number;
 }

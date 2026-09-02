@@ -85,6 +85,28 @@ describe("ConversationComputer sandbox reconciliation composition", function _Re
 		await worker.stop();
 	});
 
+	it("retains a warm activation locator as a restart-safe input scheduler cursor", async function _RetainsWarmScheduler()
+	{
+		vi.useFakeTimers();
+		let resolveStream: () => void;
+		const streamClosed = new Promise<void>(function _CreateStreamClose(resolve) { resolveStream = resolve; });
+		const events = (async function* _Events()
+		{
+			yield { id: "activation-scheduler", streamName: "computer-activations-testv5", type: "opencrane.computer.activation-requested.v1", data: { siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", generation: 2 }, metadata: {}, revision: 2n, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
+			await streamClosed;
+		})();
+		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
+		const inputs = _Inputs();
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, { reconcile: vi.fn().mockResolvedValue(ConversationComputerSandboxReconciliationOutcomes.ExecutionPending) } as never, _Executions() as never, inputs as never, "testv5");
+
+		await vi.advanceTimersByTimeAsync(1_000);
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(inputs.dispatch).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1" });
+		expect(inputs.dispatch).toHaveBeenCalledTimes(2);
+
+		await worker.stop();
+	});
+
 	it("retries a transient execution-admission failure against the same warm generation", async function _RetriesExecutionAdmission()
 	{
 		vi.useFakeTimers();

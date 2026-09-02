@@ -17,8 +17,9 @@ const _RECONCILIATION_INTERVAL_MILLISECONDS = 1_000;
  *
  * Persistent activation delivery acknowledges claim submission; this regular subscription supplies
  * the independent, restart-safe source needed to observe controller status after that acknowledgement.
- * Every locator is revalidated by the domain authority, and completed, stale, or blocked locators
- * leave the bounded in-memory polling set without changing durable history.
+ * Every locator is revalidated by the domain authority. Warm locators stay in the bounded polling
+ * set, and the activation stream rebuilds that scheduler state after a process restart. Completed,
+ * stale, or blocked locators leave without changing durable history.
  *
  * Called by: `_Main` in `apps/opencrane/src/index.ts`.
  * @param historyStore - Opens the silo-scoped activation history from its first revision.
@@ -85,7 +86,7 @@ async function _ReadActivationLocators(events: AsyncIterable<HistoryRecordedEven
 	}
 }
 
-/** Reconciles one bounded batch and retains exact warm generations until execution admission converges. */
+/** Reconciles one bounded batch and keeps warm generations available to schedule later participant input. */
 async function _ReconcileOutstanding(authority: ConversationComputerSandboxReconciliationAuthority, executions: Pick<ConversationComputerExecutionAuthority, "start">, inputs: Pick<ConversationComputerParticipantInputDispatchAuthority, "dispatch">, outstanding: Map<string, ConversationComputerActivationCommand>, cursor: number): Promise<number>
 {
 	const entries = [...outstanding.entries()];
@@ -100,12 +101,9 @@ async function _ReconcileOutstanding(authority: ConversationComputerSandboxRecon
 			const outcome = await authority.reconcile(command);
 			// 1. Admit an execution only after reconciliation persisted the checked active Sandbox Pod.
 			const executionPending = outcome === ConversationComputerSandboxReconciliationOutcomes.Warmed || outcome === ConversationComputerSandboxReconciliationOutcomes.ExecutionPending;
-			// 2. Retire the polling locator once durable state moved beyond a pending claim or execution admission.
+			// 2. Retain a warm locator so a later pass can schedule input after the current command becomes terminal.
 			if (executionPending)
-			{
 				await _StartExecution(executions, inputs, command);
-				outstanding.delete(key);
-			}
 			else if (outcome !== ConversationComputerSandboxReconciliationOutcomes.Pending)
 				outstanding.delete(key);
 			// 3. Surface release contradictions without inventing a replacement claim or lease.

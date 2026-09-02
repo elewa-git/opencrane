@@ -42,10 +42,10 @@ function _Input(overrides: Partial<MessageEntry> = {}): MessageEntry
 function _Subject(entries: readonly ConversationEntry[] = [_Input()])
 {
 	const conversations = { readCurrent: vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", expectedRevision: 1n, entries }) };
-	const commands = { issueStartTurn: vi.fn().mockResolvedValue({ command: {} }) };
+	const commands = { issueNextStartTurn: vi.fn().mockResolvedValue({ command: {} }) };
 	const dependencies = {
 		conversations: conversations as Pick<ConversationHistoryReader, "readCurrent">,
-		commands: commands as Pick<ConversationComputerRuntimeCommandAuthority, "issueStartTurn">,
+		commands: commands as Pick<ConversationComputerRuntimeCommandAuthority, "issueNextStartTurn">,
 	} satisfies ConversationComputerParticipantInputDispatchAuthorityDependencies;
 	const authority = new ConversationComputerParticipantInputDispatchAuthority(dependencies);
 	return { authority, conversations, commands };
@@ -59,16 +59,17 @@ describe("ConversationComputerParticipantInputDispatchAuthority", function _Part
 
 		await expect(subject.authority.dispatch({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1" })).resolves.toEqual({ dispatchedInputCount: 1 });
 
-		expect(subject.commands.issueStartTurn).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1", inputEntryId: _INPUT_ID, inputPayloadRef: _PAYLOAD.payloadRef, inputPayloadDigest: _PAYLOAD.ciphertextDigest });
+		expect(subject.commands.issueNextStartTurn).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1", candidates: [{ inputEntryId: _INPUT_ID, inputPayloadRef: _PAYLOAD.payloadRef, inputPayloadDigest: _PAYLOAD.ciphertextDigest }] });
 	});
 
 	it("skips ordinary messages that do not activate the ConversationComputer", async function _SkipsOrdinaryMessage()
 	{
 		const subject = _Subject([{ ..._Input(), activation: "none" }]);
+		subject.commands.issueNextStartTurn.mockResolvedValue({ command: null });
 
 		await expect(subject.authority.dispatch({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1" })).resolves.toEqual({ dispatchedInputCount: 0 });
 
-		expect(subject.commands.issueStartTurn).not.toHaveBeenCalled();
+		expect(subject.commands.issueNextStartTurn).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1", candidates: [] });
 	});
 
 	it("rejects a retained start entry whose payload could not be redeemed by the runtime route", async function _RejectsMalformedPayload()
@@ -77,7 +78,7 @@ describe("ConversationComputerParticipantInputDispatchAuthority", function _Part
 
 		await expect(subject.authority.dispatch({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1" })).rejects.toThrow("invalid retained payload");
 
-		expect(subject.commands.issueStartTurn).not.toHaveBeenCalled();
+		expect(subject.commands.issueNextStartTurn).not.toHaveBeenCalled();
 	});
 
 	it("rejects a start entry that does not carry the same idempotency and causation identifier", async function _RejectsMismatchedInput()
@@ -86,6 +87,6 @@ describe("ConversationComputerParticipantInputDispatchAuthority", function _Part
 
 		await expect(subject.authority.dispatch({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1" })).rejects.toThrow("invalid retained input entry");
 
-		expect(subject.commands.issueStartTurn).not.toHaveBeenCalled();
+		expect(subject.commands.issueNextStartTurn).not.toHaveBeenCalled();
 	});
 });

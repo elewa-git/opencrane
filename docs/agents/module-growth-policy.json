@@ -34,6 +34,12 @@
       "owner": "platform",
       "reason": "Legacy installation engine remains above the size limit while responsibilities are extracted incrementally; fixed provider Secret placeholders now live in provider-key-secrets.sh.",
       "expiresOn": "2026-10-01"
+    },
+    {
+      "path": "libs/backend/server/conversations/main/src/conversation-computers/conversation-computer-runtime-command-authority.ts",
+      "owner": "issue-759",
+      "reason": "The lease-fenced command queue keeps replay parsing and one-at-a-time scheduler writes together for the cutover checkpoint; extract command-state replay before the next scheduler capability.",
+      "expiresOn": "2026-09-09"
     }
   ]
 }
