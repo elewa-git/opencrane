@@ -10,7 +10,15 @@ import type { ManagedAgentIdentityProvisionCommand, ManagedAgentIdentityProvisio
 /** Names the one discriminated identity variant this provisioner may create or accept. */
 const _MANAGED_IDENTITY_KIND: ManagedAgentIdentity["kind"] = "managed";
 
-/** Derives the sole AgentIdentity coordinate a managed AgentService may realize. */
+/**
+ * Derives the deterministic AgentIdentity coordinate for one managed AgentService.
+ *
+ * Creation and reuse must address this same stream. The function therefore rejects an empty or
+ * normalized service coordinate instead of deriving an identity from a browser-supplied id.
+ * @param agentServiceId - Supplies the verified managed AgentService identifier.
+ * @returns The stable identity id used by this provisioner's history stream.
+ * @throws {Error} When the service identifier is blank or has surrounding whitespace.
+ */
 export function __ManagedAgentIdentityId(agentServiceId: string): string
 {
 	if (!_Identifier(agentServiceId))
@@ -18,13 +26,29 @@ export function __ManagedAgentIdentityId(agentServiceId: string): string
 	return `managed-agent-identity:${agentServiceId}`;
 }
 
-/** Ensures one active managed identity history stream from already-verified managed service facts. */
+/**
+ * Establishes the active managed AgentIdentity history for already-verified service facts.
+ *
+ * The authority appends only at {@link HistoryExpectedRevisions.NoStream}, then reloads the active
+ * snapshot. A concurrent creator is accepted only when that reload realizes the same managed
+ * service, silo, and Principal; treating any successful append race as interchangeable could bind
+ * the service to a different actor. This boundary owns history creation, not AgentService lookup or
+ * a relational identity catalog.
+ * @see ManagedAgentIdentityProvisioner for the contract callers receive.
+ */
 export class ManagedAgentIdentityHistoryProvisioner implements ManagedAgentIdentityProvisioner
 {
 	/** Uses identity history for durable state and a server clock only when the stream is new. */
 	public constructor(private readonly history: AgentIdentityHistory, private readonly clock: ManagedAgentIdentityProvisionerClock) {}
 
-	/** Returns the exact active managed identity after first append or a concurrent stream creator. */
+	/**
+	 * Creates or reuses this service's deterministic managed identity stream.
+	 *
+	 * @param command - Supplies service facts that the upstream binding authority already verified.
+	 * @returns The managed identity id after a matching active history snapshot is loaded.
+	 * @throws {Error} When inputs are incomplete, persistence did not produce a stream, or the loaded
+	 * stream realizes a different, inactive, or non-managed identity.
+	 */
 	public async ensure(command: ManagedAgentIdentityProvisionCommand): Promise<{ readonly agentIdentityId: string }>
 	{
 		_ValidateCommand(command);
