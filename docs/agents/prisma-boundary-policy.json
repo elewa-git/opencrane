@@ -706,6 +706,13 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-history-replay-authorization-repository.ts",
+				"adapter": "PrismaConversationHistoryReplayAuthorizationRepository",
+				"contract": "ConversationHistoryReplayAuthorizationRepository",
+				"contractImportPath": "../replay-reader.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-projection-repository.ts",
 				"adapter": "PrismaConversationCreationProjectionRepository",
 				"contract": "ConversationCreationProjectionRepository",
@@ -1868,6 +1875,18 @@
 					{
 						"adapter": "PrismaConversationComputerParticipantInputAuthorizationAuthority",
 						"importPath": "./prisma-conversation-computer-participant-input-authorizer"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-history-replay-unit-of-work.ts",
+				"adapter": "PrismaConversationHistoryReplayUnitOfWork",
+				"contract": "ConversationReplayUnitOfWork",
+				"contractImportPath": "../replay-reader.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationHistoryReplayAuthorizationRepository",
+						"importPath": "./prisma-conversation-history-replay-authorization-repository"
 					}
 				]
 			},
