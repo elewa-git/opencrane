@@ -21,18 +21,20 @@ export function __ValidateConversationCreationReservation(command: ReserveConver
 		throw new Error("Direct conversation reservation requires two participants");
 	if (command.mode === ConversationModes.Group && command.participants.length < 2)
 		throw new Error("Group conversation reservation requires at least two participants");
-	if (command.mode === ConversationModes.AgentSession && (command.participants.length !== 1 || command.agent === null))
-		throw new Error("Agent conversation reservation requires one participant and server agent coordinates");
-	if (command.mode !== ConversationModes.AgentSession && command.agent !== null)
-		throw new Error("Direct and group conversation reservation must not carry agent coordinates");
+	if (command.mode === ConversationModes.AgentSession && (command.participants.length !== 1 || command.agent === null || command.agentBinding === null))
+		throw new Error("Agent conversation reservation requires one participant, server agent coordinates, and a frozen binding");
+	if (command.mode !== ConversationModes.AgentSession && (command.agent !== null || command.agentBinding !== null))
+		throw new Error("Direct and group conversation reservation must not carry agent coordinates or a binding");
 	if (command.agent !== null && (!_Identifier(command.agent.agentServiceId) || !_Identifier(command.agent.agentRevisionId) || !_Uuid(command.agent.computerId) || !_Uuid(command.agent.computerHistoryEventId)))
 		throw new Error("Agent conversation reservation requires complete server agent coordinates");
+	if (command.agentBinding !== null && (!_Identifier(command.agentBinding.agentIdentityId) || !_Identifier(command.agentBinding.profileRevisionId)))
+		throw new Error("Agent conversation reservation requires a complete frozen binding");
 }
 
 /** Builds the canonical authorization arguments that bind a decision to this exact durable command. */
 export function __ConversationCreationReservationAuthorizationArguments(command: ReserveConversationCreationCommand): JsonValue
 {
-	return { requestId: command.requestId, requestDigest: command.requestDigest, conversationId: command.conversationId, historyEventId: command.historyEventId, mode: command.mode, participants: command.participants, agent: command.agent } as unknown as JsonValue;
+	return { requestId: command.requestId, requestDigest: command.requestDigest, conversationId: command.conversationId, historyEventId: command.historyEventId, mode: command.mode, participants: command.participants, agent: command.agent, agentBinding: command.agentBinding } as unknown as JsonValue;
 }
 
 /** Checks an opaque server identifier without changing the durable coordinate. */

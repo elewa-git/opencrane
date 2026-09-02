@@ -17,6 +17,24 @@ export enum ConversationCreationReservationStates
 	Projected = "projected",
 }
 
+/**
+ * States the outcome of reserving one server-resolved conversation creation command.
+ *
+ * The values cross the reservation port and determine whether history I/O may begin; only a new
+ * or exact-idempotent reservation permits the history-anchored creation authority to continue.
+ */
+export enum ConversationCreationReservationOutcomes
+{
+	/** A new command and its authorization evidence committed in the reservation transaction. */
+	Reserved = "reserved",
+	/** The same principal, retry key, and request digest already identify a durable command. */
+	Idempotent = "idempotent",
+	/** The retry key identifies another request digest, so no replacement command may be stored. */
+	IdempotencyConflict = "idempotency_conflict",
+	/** Product authorization denied the command before a reservation or history append occurred. */
+	Denied = "denied",
+}
+
 /** Carries one resolved participant coordinate that the immutable creation anchor must replay exactly. */
 export interface ConversationCreationReservationParticipant
 {
@@ -42,9 +60,9 @@ export interface ConversationCreationReservationAgentCoordinates
 }
 
 /**
- * Carries the Agent identity and profile revision recorded when an agent conversation reaches its
+ * Carries the Agent identity and profile revision frozen before an agent conversation reaches its
  * history anchor. Direct and group conversations carry no binding, while an agent conversation
- * must carry both values so a retry can compare the persisted pair without changing it.
+ * must carry both values so a retry rebuilds the same creation payload after an ambiguous append.
  */
 export interface ConversationCreationReservationAgentBinding
 {
@@ -56,15 +74,13 @@ export interface ConversationCreationReservationAgentBinding
 
 /**
  * Requests the reservation transition after KurrentDB has confirmed its revision-zero creation
- * anchor. Callers use `null` for direct and group conversations; agent conversations supply the
- * resolved {@link ConversationCreationReservationAgentBinding} that is persisted with the anchor.
+ * anchor. The reservation already carries its immutable Agent binding, so callers cannot alter
+ * identity or profile facts after history I/O begins.
  */
 export interface AnchorConversationCreationReservationCommand
 {
 	/** Identifies the durable command whose Kurrent creation anchor has been verified. */
 	readonly reservationId: string;
-	/** Supplies Agent-only identity/profile facts, or null for direct and group conversations. */
-	readonly agentBinding: ConversationCreationReservationAgentBinding | null;
 }
 
 /** Names the complete, resolved command that a transaction stores before any history I/O. */
@@ -88,6 +104,8 @@ export interface ReserveConversationCreationCommand
 	readonly participants: readonly ConversationCreationReservationParticipant[];
 	/** Carries agent-only server coordinates, or null for direct and group conversations. */
 	readonly agent: ConversationCreationReservationAgentCoordinates | null;
+	/** Carries the Agent-only identity/profile pair frozen into the initial reservation, or null otherwise. */
+	readonly agentBinding: ConversationCreationReservationAgentBinding | null;
 }
 
 /** Gives callers the fixed durable command after reservation or idempotent recovery. */
@@ -95,10 +113,15 @@ export interface ReservedConversationCreation extends ReserveConversationCreatio
 {
 	/** Identifies the durable reservation row. */
 	readonly reservationId: string;
+	/**
+	 * Records the server-owned instant at which PostgreSQL admitted the creation command.
+	 *
+	 * The history anchor reuses this exact value as `ConversationCreated.createdAt`, so a retry
+	 * rebuilds byte-identical revision-zero payload without trusting a new request timestamp.
+	 */
+	readonly createdAt: string;
 	/** Identifies the same-transaction authorization decision that admitted the reservation. */
 	readonly authorizationEvidenceId: string;
-	/** Carries the persisted agent identity/profile pair after history anchoring, or null when no agent owns the conversation. */
-	readonly resolvedAgentBinding: ConversationCreationReservationAgentBinding | null;
 	/** States whether the command has been anchored and projected. */
 	readonly state: ConversationCreationReservationStates;
 }
@@ -111,10 +134,10 @@ export interface ReservedConversationCreation extends ReserveConversationCreatio
  * and must not append history after `denied`.
  */
 export type ReserveConversationCreationResult
-	= { readonly outcome: "reserved"; readonly value: ReservedConversationCreation }
-	| { readonly outcome: "idempotent"; readonly value: ReservedConversationCreation }
-	| { readonly outcome: "idempotency_conflict" }
-	| { readonly outcome: "denied" };
+	= { readonly outcome: ConversationCreationReservationOutcomes.Reserved; readonly value: ReservedConversationCreation }
+	| { readonly outcome: ConversationCreationReservationOutcomes.Idempotent; readonly value: ReservedConversationCreation }
+	| { readonly outcome: ConversationCreationReservationOutcomes.IdempotencyConflict }
+	| { readonly outcome: ConversationCreationReservationOutcomes.Denied };
 
 /**
  * Persists and reloads creation commands inside the caller's serializable PostgreSQL transaction.
@@ -138,13 +161,14 @@ export interface ConversationCreationReservationRepository
 	/**
 	 * Advances one reservation only after its exact revision-zero anchor is present in KurrentDB.
 	 *
-	 * The repository accepts a direct/group null binding or the full Agent identity/profile pair and
-	 * returns the already-advanced command for an exact retry. It never accepts a partial binding.
-	 * @param command The reservation and, when applicable, the Agent identity/profile pair to persist.
-	 * @returns The anchored reservation, including the persisted binding. Matching anchored retries
-	 * return the stored reservation without another update.
-	 * @throws {Error} The reservation is unavailable, its binding does not match its conversation
-	 * mode or stored retry value, or an agent binding is incomplete.
+	 * The repository validates the immutable binding fixed in the reservation and returns the
+	 * already-advanced command for an exact retry. It never accepts replacement identity or profile
+	 * facts after history I/O begins.
+	 * @param command The durable reservation whose exact history anchor has been confirmed.
+	 * @returns The anchored reservation. Matching anchored retries return the stored reservation
+	 * without another update.
+	 * @throws {Error} The reservation is unavailable to this caller, or its stored binding does not
+	 * match its conversation mode.
 	 */
 	markHistoryAnchored(command: AnchorConversationCreationReservationCommand): Promise<ReservedConversationCreation>;
 }
