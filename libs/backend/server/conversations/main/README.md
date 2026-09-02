@@ -204,6 +204,10 @@ transport for workloads; it is not a browser fallback.
   before it records `Conversation/Use`. The audit arguments retain the UUID input id and a text
   digest, never plaintext; it returns only the creation-bound computer and server-derived human
   display coordinates.
+- `_CreateConversationHistoryReplayRepository` rechecks active membership and the participant's
+  visibility bounds before and after it reads `conversation-{id}`. It discards the immutable page
+  if access changed during the read, then decrypts only the selected text references for the
+  still-authorized participant; it never returns relational message or timeline rows.
 - `ConversationComputerParticipantInputDispatchAuthority` replays those retained start entries when
   Sandbox reconciliation has admitted an execution and on each later bounded reconciliation pass.
   Each entry is narrowed to its text payload and passed in transcript order to the command authority,
