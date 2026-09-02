@@ -15,7 +15,13 @@ export enum ConversationLifecycleModes
 	Agent = "agent",
 }
 
-/** Records one initial participant and the visibility boundary that the creation stream establishes. */
+/**
+ * Records one initial participant and the visibility boundary that a rebuilt projection must restore.
+ *
+ * The history-anchored creation authority writes these records in creation order and the projection
+ * writer replays that order into `ConversationParticipant` rows. Changing a field changes the
+ * persisted creation event and must preserve that replay contract.
+ */
 export interface ConversationCreatedParticipant
 {
 	/** Identifies the user whose conversation projection begins at this history position. */
@@ -26,7 +32,12 @@ export interface ConversationCreatedParticipant
 	readonly joinedAt: string;
 }
 
-/** Records the immutable service, identity, profile, and computer coordinates for an agent conversation. */
+/**
+ * Records the immutable service, identity, profile, and computer coordinates for an agent conversation.
+ *
+ * History replay uses these identifiers to rebuild the agent conversation and must never replace
+ * them with current browser or service-selection data.
+ */
 export interface ConversationCreatedAgentBinding
 {
 	/** Identifies the AgentService selected by the creation authority. */
@@ -53,7 +64,7 @@ export interface ConversationCreationProvenance
 	readonly principalId: string;
 	/** Names the durable authorization evidence retained by the creation authority. */
 	readonly authorizationEvidenceId: string;
-	/** Identifies the browser retry that the creation authority may resume exactly once. */
+	/** Identifies the browser request whose retry the creation authority may resume. */
 	readonly requestId: string;
 }
 
