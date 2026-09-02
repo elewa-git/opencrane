@@ -1836,6 +1836,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-reservation-unit-of-work.ts",
+				"adapter": "PrismaConversationCreationReservationUnitOfWork",
+				"contract": "ConversationCreationReservationUnitOfWork",
+				"contractImportPath": "../history-anchored-conversation-creation-authority.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationCreationReservationRepository",
+						"importPath": "./prisma-conversation-creation-reservation-repository"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-projection-unit-of-work.ts",
 				"adapter": "PrismaConversationCreationProjectionUnitOfWork",
 				"contract": "ConversationCreationProjectionPort",
