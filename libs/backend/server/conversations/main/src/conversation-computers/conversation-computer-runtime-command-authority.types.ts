@@ -3,10 +3,10 @@ import type { HistoryAppend, HistoryExpectedHead, HistoryStore } from "@opencran
 
 import type { ConversationComputerHistory } from "./conversation-computer-history";
 
-/** Supplies the server-owned clock used to issue and expire target runtime commands. */
+/** Supplies the server-owned clock used to timestamp target runtime commands. */
 export interface ConversationComputerRuntimeCommandClock
 {
-	/** Returns the current server time without letting a runtime choose a command deadline. */
+	/** Returns the current server time without letting a runtime choose a command issuance timestamp. */
 	now(): Date;
 }
 
@@ -17,7 +17,7 @@ export interface ConversationComputerRuntimeCommandAuthorityDependencies
 	readonly history: Pick<HistoryStore, "appendAtomic" | "readHead" | "readStream">;
 	/** Derives the active execution from trusted computer history before every command operation. */
 	readonly computers: Pick<ConversationComputerHistory, "loadActiveExecutionForServer">;
-	/** Supplies the server time that fences command eligibility and expiry. */
+	/** Supplies the server time that timestamps command issue independently from the Sandbox. */
 	readonly clock: ConversationComputerRuntimeCommandClock;
 }
 
@@ -41,6 +41,24 @@ export interface ConversationComputerRuntimeStartTurnIssueCommand extends Conver
 	readonly inputPayloadRef: ConversationComputerRuntimePrivatePayloadReference;
 	/** Binds the protected input reference to its canonical content digest. */
 	readonly inputPayloadDigest: `sha256:${string}`;
+}
+
+/** Carries one retained input candidate in transcript order for a single queue-advance attempt. */
+export interface ConversationComputerRuntimeStartTurnCandidate
+{
+	/** Supplies the UUID conversation entry identifier that makes this candidate idempotent. */
+	readonly inputEntryId: string;
+	/** References the protected input without storing plaintext in the command stream. */
+	readonly inputPayloadRef: ConversationComputerRuntimePrivatePayloadReference;
+	/** Binds the protected input reference to its canonical ciphertext digest. */
+	readonly inputPayloadDigest: `sha256:${string}`;
+}
+
+/** Requests the first unissued retained input only when the current execution queue is idle. */
+export interface ConversationComputerRuntimeNextStartTurnIssueCommand extends ConversationComputerRuntimeCommandCurrentCommand
+{
+	/** Lists validated participant inputs in immutable conversation transcript order. */
+	readonly candidates: readonly ConversationComputerRuntimeStartTurnCandidate[];
 }
 
 /** Asks for the oldest uncompleted command on the exact current computer execution. */
@@ -89,6 +107,13 @@ export interface ConversationComputerRuntimeCommandIssueResult
 {
 	/** Carries the exact queued command, including its server-generated sequence and expiry. */
 	readonly command: ConversationComputerRuntimeCommandEnvelope;
+}
+
+/** Reports the one retained input that advanced an idle command queue, if any. */
+export interface ConversationComputerRuntimeCommandNextIssueResult
+{
+	/** Carries one newly issued command, or null when input is exhausted or a command remains pending. */
+	readonly command: ConversationComputerRuntimeCommandEnvelope | null;
 }
 
 /** Returns the oldest pending command, or null when the active execution has no runnable work. */

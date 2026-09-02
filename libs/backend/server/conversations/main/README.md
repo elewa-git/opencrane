@@ -186,8 +186,22 @@ transport for workloads; it is not a browser fallback.
 - `ConversationComputerRuntimeCommandAuthority` keeps one execution-fenced, first-in-first-out
   command stream in KurrentDB. A server can issue a start-turn command from a protected input
   reference; a Sandbox can only receive its oldest command and report that command's terminal state.
-  An exact duplicate terminal report is an idempotent no-op; a stale, foreign, expired, skipped, or
-  malformed report fails closed.
+  An exact duplicate terminal report is an idempotent no-op; a stale, foreign, skipped, or malformed
+  report fails closed. Command delivery remains valid only while the server-rechecked active lease
+  remains valid, so a temporary runtime outage cannot strand FIFO history behind an arbitrary
+  per-command timeout.
+- `ConversationComputerParticipantInputAuthority` records a human-authored, encrypted input entry
+  before the computer is warm. It checks that the requested computer is the one frozen into the
+  agent conversation anchor and that the caller is an anchored participant, then writes the opaque
+  entry under the checked history head. A later command worker may issue work from that entry only
+  after the computer has an active execution; cold-start inputs therefore do not need an AgentRun.
+- `ConversationComputerParticipantInputDispatchAuthority` replays those retained start entries when
+  Sandbox reconciliation has admitted an execution and on each later bounded reconciliation pass.
+  Each entry is narrowed to its text payload and passed in transcript order to the command authority,
+  which rechecks the execution and issues at most one unissued input while no command is pending.
+  The durable activation stream rebuilds the scheduler cursor after warmth, so a process
+  replacement cannot strand a post-warm participant turn or input after a command completes or
+  records output.
 - `PrismaConversationPrivatePayloadStoreUnitOfWork` owns the short PostgreSQL transaction that
   retains one encrypted output row through package-private storage. It returns only `payload://…`
   and a ciphertext digest; a retry with the same text returns the original row, while changed text

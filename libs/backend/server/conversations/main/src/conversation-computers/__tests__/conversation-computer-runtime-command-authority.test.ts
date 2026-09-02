@@ -43,7 +43,7 @@ function _Command(sequence = 1, commandId = _COMMAND_ID): ConversationComputerRu
 		executionId: "execution-1",
 		leaseGeneration: 2,
 		issuedAt: _NOW.toISOString(),
-		expiresAt: "2026-09-01T00:15:00.000Z",
+		expiresAt: "2026-09-01T00:20:00.000Z",
 		kind: ConversationComputerRuntimeCommandKinds.StartTurn,
 		payload: { inputEntryId: commandId, inputPayloadRef: "payload://31c1f1dc-0010-4f13-9c2f-d3841ffd6651", inputPayloadDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
 	};
@@ -76,16 +76,24 @@ async function *_Events(events: readonly HistoryRecordedEvent[]): AsyncIterable<
 }
 
 /** Builds the authority with controllable command events and exact active-execution reads. */
-function _Subject(events: readonly HistoryRecordedEvent[] = [])
+function _Subject(events: readonly HistoryRecordedEvent[] = [], now = _NOW)
 {
 	const active = _Active();
 	const history = {
 		appendAtomic: vi.fn().mockResolvedValue([]),
-		readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-runtime-computer-1-execution-1", revision: events.length === 0 ? null : BigInt(events.length - 1) }),
+		readHead: vi.fn().mockImplementation(function _ReadHead(streamName: string) { return Promise.resolve({ streamName, revision: _HeadRevision(streamName, events) }); }),
 		readStream: vi.fn().mockImplementation(function _ReadStream() { return _Events(events); }),
 	};
 	const computers = { loadActiveExecutionForServer: vi.fn().mockResolvedValue(active) };
-	return { authority: new ConversationComputerRuntimeCommandAuthority({ history, computers, clock: { now: function _Now() { return _NOW; } } }), history, computers };
+	return { authority: new ConversationComputerRuntimeCommandAuthority({ history, computers, clock: { now: function _Now() { return now; } } }), history, computers };
+}
+
+/** Returns a current revision only for the execution command stream represented by these fixtures. */
+function _HeadRevision(streamName: string, events: readonly HistoryRecordedEvent[]): bigint | null
+{
+	if (streamName !== "conversation-computer-runtime-computer-1-execution-1" || events.length === 0)
+		return null;
+	return BigInt(events.length - 1);
 }
 
 /** Builds the trusted server-selected input that may issue one target start command. */
@@ -129,6 +137,24 @@ describe("ConversationComputerRuntimeCommandAuthority", function _CommandAuthori
 		expect(subject.history.appendAtomic).not.toHaveBeenCalled();
 	});
 
+	it("issues only the first absent retained input when the current execution queue is idle", async function _IssuesNextInput()
+	{
+		const subject = _Subject();
+
+		await expect(subject.authority.issueNextStartTurn({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", candidates: [_Issue(), _Issue({ inputEntryId: _SECOND_COMMAND_ID, inputPayloadRef: "payload://b9d6434b-a3a9-4478-a78f-cf08a479c7f1" })] })).resolves.toEqual({ command: expect.objectContaining({ commandId: _COMMAND_ID, sequence: 1 }) });
+
+		expect(subject.history.appendAtomic).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not prequeue retained inputs while the oldest command remains pending", async function _DoesNotPrequeue()
+	{
+		const subject = _Subject([_Issued(0n)]);
+
+		await expect(subject.authority.issueNextStartTurn({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", candidates: [_Issue(), _Issue({ inputEntryId: _SECOND_COMMAND_ID, inputPayloadRef: "payload://b9d6434b-a3a9-4478-a78f-cf08a479c7f1" })] })).resolves.toEqual({ command: null });
+
+		expect(subject.history.appendAtomic).not.toHaveBeenCalled();
+	});
+
 	it("returns only the oldest incomplete command and never accepts a runtime cursor", async function _PollsOldestCommand()
 	{
 		const subject = _Subject([_Issued(0n), _Issued(1n, _Command(2, _SECOND_COMMAND_ID))]);
@@ -137,12 +163,30 @@ describe("ConversationComputerRuntimeCommandAuthority", function _CommandAuthori
 		expect(subject.computers.loadActiveExecutionForServer).toHaveBeenCalledTimes(2);
 	});
 
+	it("does not strand a pending command behind an arbitrary command timeout while its lease remains active", async function _PollsLeaseValidCommand()
+	{
+		const subject = _Subject([_Issued(0n)], new Date("2026-09-01T00:21:00.000Z"));
+
+		await expect(subject.authority.poll({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1" })).resolves.toEqual({ command: _Command() });
+	});
+
 	it("refuses a completion that attempts to skip the oldest pending command", async function _RefusesSkippedCompletion()
 	{
 		const subject = _Subject([_Issued(0n), _Issued(1n, _Command(2, _SECOND_COMMAND_ID))]);
 
 		await expect(subject.authority.complete({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", report: { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: _SECOND_COMMAND_ID, computerId: "computer-1", executionId: "execution-1", leaseGeneration: 2, state: ConversationComputerRuntimeTerminalStates.Completed } })).rejects.toThrow("oldest pending command");
 		expect(subject.history.appendAtomic).not.toHaveBeenCalled();
+	});
+
+	it("records a terminal no-output completion under the active execution and command heads", async function _RecordsCompletion()
+	{
+		const subject = _Subject([_Issued(0n)]);
+
+		await subject.authority.complete({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", report: { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: _COMMAND_ID, computerId: "computer-1", executionId: "execution-1", leaseGeneration: 2, state: ConversationComputerRuntimeTerminalStates.Completed } });
+
+		const append = subject.history.appendAtomic.mock.calls[0][0];
+		expect(append.expectedHeads).toEqual([{ streamName: "computer-computer-1", revision: 4n }, { streamName: "conversation-computer-runtime-computer-1-execution-1", revision: 0n }]);
+		expect(append.appends).toHaveLength(1);
 	});
 
 	it("fails closed when corrupted command history completes a later command before its head", async function _RejectsSkippedPersistedCompletion()

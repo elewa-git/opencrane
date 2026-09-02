@@ -30,6 +30,12 @@ function _Executions()
 	return { start: vi.fn().mockResolvedValue({ outcome: ConversationComputerExecutionStartOutcomes.Started, execution: { id: "execution-1" } }) };
 }
 
+/** Builds a target input dispatcher that records backlog dispatches after execution starts. */
+function _Inputs()
+{
+	return { dispatch: vi.fn().mockResolvedValue({ dispatchedInputCount: 0 }) };
+}
+
 describe("ConversationComputer sandbox reconciliation composition", function _ReconciliationCompositionSuite()
 {
 	afterEach(function _RestoreTimers()
@@ -45,12 +51,14 @@ describe("ConversationComputer sandbox reconciliation composition", function _Re
 		const subscribe = vi.fn().mockResolvedValue(subscription);
 		const authority = { reconcile: vi.fn().mockResolvedValue("warmed") };
 		const executions = _Executions();
-		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe } as unknown as HistoryStore, authority as never, executions as never, "testv5");
+		const inputs = _Inputs();
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe } as unknown as HistoryStore, authority as never, executions as never, inputs as never, "testv5");
 
 		expect(subscribe).toHaveBeenCalledWith({ streamName: "computer-activations-testv5", fromRevision: 0n });
 		await vi.advanceTimersByTimeAsync(1_000);
 		expect(authority.reconcile).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", generation: 2 });
 		expect(executions.start).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", generation: 2 });
+		expect(inputs.dispatch).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1" });
 
 		await worker.stop();
 		expect(subscription.close).toHaveBeenCalledOnce();
@@ -69,10 +77,32 @@ describe("ConversationComputer sandbox reconciliation composition", function _Re
 		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
 		const authority = { reconcile: vi.fn().mockResolvedValue(ConversationComputerSandboxReconciliationOutcomes.ExecutionPending) };
 		const executions = _Executions();
-		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, executions as never, "testv5");
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, executions as never, _Inputs() as never, "testv5");
 
 		await vi.advanceTimersByTimeAsync(1_000);
 		expect(executions.start).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", generation: 2 });
+
+		await worker.stop();
+	});
+
+	it("retains a warm activation locator as a restart-safe input scheduler cursor", async function _RetainsWarmScheduler()
+	{
+		vi.useFakeTimers();
+		let resolveStream: () => void;
+		const streamClosed = new Promise<void>(function _CreateStreamClose(resolve) { resolveStream = resolve; });
+		const events = (async function* _Events()
+		{
+			yield { id: "activation-scheduler", streamName: "computer-activations-testv5", type: "opencrane.computer.activation-requested.v1", data: { siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", generation: 2 }, metadata: {}, revision: 2n, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
+			await streamClosed;
+		})();
+		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
+		const inputs = _Inputs();
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, { reconcile: vi.fn().mockResolvedValue(ConversationComputerSandboxReconciliationOutcomes.ExecutionPending) } as never, _Executions() as never, inputs as never, "testv5");
+
+		await vi.advanceTimersByTimeAsync(1_000);
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(inputs.dispatch).toHaveBeenCalledWith({ siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1" });
+		expect(inputs.dispatch).toHaveBeenCalledTimes(2);
 
 		await worker.stop();
 	});
@@ -90,7 +120,7 @@ describe("ConversationComputer sandbox reconciliation composition", function _Re
 		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
 		const authority = { reconcile: vi.fn().mockResolvedValueOnce(ConversationComputerSandboxReconciliationOutcomes.Warmed).mockResolvedValueOnce(ConversationComputerSandboxReconciliationOutcomes.ExecutionPending) };
 		const executions = { start: vi.fn().mockRejectedValueOnce(new Error("temporary history error")).mockResolvedValueOnce({ outcome: ConversationComputerExecutionStartOutcomes.Started, execution: { id: "execution-1" } }) };
-		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, executions as never, "testv5");
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, executions as never, _Inputs() as never, "testv5");
 
 		await vi.advanceTimersByTimeAsync(1_000);
 		await vi.advanceTimersByTimeAsync(1_000);
@@ -112,7 +142,7 @@ describe("ConversationComputer sandbox reconciliation composition", function _Re
 		})();
 		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
 		const authority = { reconcile: vi.fn().mockImplementation(async function _Reconcile() { await new Promise<void>(function _Wait(resolve) { resolvePass = resolve; }); return "pending"; }) };
-		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, _Executions() as never, "testv5");
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, _Executions() as never, _Inputs() as never, "testv5");
 
 		await vi.advanceTimersByTimeAsync(1_000);
 		const stopping = worker.stop();
@@ -139,7 +169,7 @@ describe("ConversationComputer sandbox reconciliation composition", function _Re
 		const subscription = { events, close: vi.fn(async function _Close() { resolveStream(); }) };
 		const authority = { reconcile: vi.fn(async function _Reconcile(command: { readonly computerId: string }) { return command.computerId === "computer-9" ? ConversationComputerSandboxReconciliationOutcomes.Warmed : ConversationComputerSandboxReconciliationOutcomes.Pending; }) };
 		const executions = _Executions();
-		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, executions as never, "testv5");
+		const worker = await _StartConversationComputerSandboxReconciliationWorker({ subscribe: vi.fn().mockResolvedValue(subscription) } as unknown as HistoryStore, authority as never, executions as never, _Inputs() as never, "testv5");
 
 		await vi.advanceTimersByTimeAsync(1_000);
 		expect(authority.reconcile).not.toHaveBeenCalledWith(expect.objectContaining({ computerId: "computer-9" }));

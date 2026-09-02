@@ -4,10 +4,8 @@ import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRun
 import { HistoryExpectedRevisions, type HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
 import type { ActiveConversationComputerExecution } from "./conversation-computer-history.types";
-import type { ConversationComputerRuntimeCommandAuthorityDependencies, ConversationComputerRuntimeCommandCompleteCommand, ConversationComputerRuntimeCommandCurrentCommand, ConversationComputerRuntimeCommandIssueResult, ConversationComputerRuntimeCommandPollResult, ConversationComputerRuntimeCommandPollCommand, ConversationComputerRuntimeOutputClaim, ConversationComputerRuntimeOutputClaimCommand, ConversationComputerRuntimeStartTurnIssueCommand } from "./conversation-computer-runtime-command-authority.types";
+import type { ConversationComputerRuntimeCommandAuthorityDependencies, ConversationComputerRuntimeCommandCompleteCommand, ConversationComputerRuntimeCommandCurrentCommand, ConversationComputerRuntimeCommandIssueResult, ConversationComputerRuntimeCommandNextIssueResult, ConversationComputerRuntimeCommandPollResult, ConversationComputerRuntimeCommandPollCommand, ConversationComputerRuntimeNextStartTurnIssueCommand, ConversationComputerRuntimeOutputClaim, ConversationComputerRuntimeOutputClaimCommand, ConversationComputerRuntimeStartTurnIssueCommand } from "./conversation-computer-runtime-command-authority.types";
 
-/** Limits a command delivery to a short server-owned interval after its durable issue. */
-const _COMMAND_TTL_MILLISECONDS = 300_000;
 /** Names the immutable stream event that records a server-issued target runtime command. */
 const _COMMAND_ISSUED_EVENT_TYPE = "opencrane.conversation-computer-runtime-command-issued.v1";
 /** Names the immutable stream event that records a terminal result for one target command. */
@@ -90,11 +88,59 @@ export class ConversationComputerRuntimeCommandAuthority
 	}
 
 	/**
+	 * Issues the first unissued retained input only after the current execution has no pending command.
+	 *
+	 * A durable scheduler may replay its activation locator without extending the queue: pending work
+	 * wins over newer input, while terminal commands are skipped and the next absent transcript entry
+	 * inherits the checked active lease deadline only when the runtime can poll it.
+	 *
+	 * @param command - Supplies trusted execution coordinates and validated transcript-order candidates.
+	 * @returns One newly issued command, or null when the queue is busy or no retained input remains.
+	 * @throws {Error} Rejects malformed candidates, inactive executions, and unresolved append races.
+	 */
+	public async issueNextStartTurn(command: ConversationComputerRuntimeNextStartTurnIssueCommand): Promise<ConversationComputerRuntimeCommandNextIssueResult>
+	{
+		_ValidateNextStartTurnIssue(command);
+		const active = await this._LoadActive(command);
+		const state = await this._ReadState(active);
+		if (_NextPendingCommand(state) !== undefined)
+			return { command: null };
+		const candidate = command.candidates.find(value => !state.commands.some(issued => issued.commandId === value.inputEntryId));
+		if (candidate === undefined)
+			return { command: null };
+		const queued = _StartTurn({ ...command, ...candidate }, active, state.commands.length + 1, _Now(this.dependencies.clock.now()));
+		try
+		{
+			await this.dependencies.history.appendAtomic({
+				expectedHeads: [
+					{ streamName: active.streamName, revision: active.revision },
+					{ streamName: state.streamName, revision: state.revision },
+				],
+				appends: [{
+					streamName: state.streamName,
+					expectedRevision: state.revision,
+					events: [{ id: queued.commandId, type: _COMMAND_ISSUED_EVENT_TYPE, data: { command: queued }, metadata: _Metadata(queued) }],
+				}],
+			});
+			return { command: queued };
+		}
+		catch (error: unknown)
+		{
+			const reloaded = await this._ReadState(await this._LoadActive(command));
+			if (_NextPendingCommand(reloaded) !== undefined)
+				return { command: null };
+			if (reloaded.commands.some(issued => issued.commandId === candidate.inputEntryId))
+				return { command: null };
+			throw error;
+		}
+	}
+
+	/**
 	 * Returns the oldest uncompleted command for one currently active execution.
 	 *
 	 * @param command - Supplies trusted current computer coordinates; it carries no cursor or sequence.
 	 * @returns The oldest command still awaiting a terminal report, or null when the queue is empty.
-	 * @throws {Error} Rejects an expired head command rather than letting a later command bypass it.
+	 * @throws {Error} Rejects a command only when its checked current execution no longer permits delivery.
 	 */
 	public async poll(command: ConversationComputerRuntimeCommandPollCommand): Promise<ConversationComputerRuntimeCommandPollResult>
 	{
@@ -107,8 +153,6 @@ export class ConversationComputerRuntimeCommandAuthority
 		const next = _NextPendingCommand(state);
 		if (next === undefined)
 			return { command: null };
-		if (Date.parse(next.expiresAt) <= _Now(this.dependencies.clock.now()).getTime())
-			throw new Error("Conversation computer runtime command expired before runtime delivery");
 		return { command: next };
 	}
 
@@ -316,7 +360,7 @@ function _StartTurn(command: ConversationComputerRuntimeStartTurnIssueCommand, a
 		executionId: active.execution.id,
 		leaseGeneration: active.lease.generation,
 		issuedAt: now.toISOString(),
-		expiresAt: new Date(now.getTime() + _COMMAND_TTL_MILLISECONDS).toISOString(),
+		expiresAt: active.lease.expiresAt,
 		kind: ConversationComputerRuntimeCommandKinds.StartTurn,
 		payload: {
 			inputEntryId: command.inputEntryId,
@@ -434,6 +478,20 @@ function _ValidateStartTurnIssue(command: ConversationComputerRuntimeStartTurnIs
 		throw new Error("Conversation computer runtime command issue has an invalid input payload digest");
 }
 
+/** Validates replay candidates before one idle queue-advance may select the first absent input. */
+function _ValidateNextStartTurnIssue(command: ConversationComputerRuntimeNextStartTurnIssueCommand): void
+{
+	_ValidateCurrent(command);
+	const identifiers = new Set<string>();
+	for (const candidate of command.candidates)
+	{
+		_ValidateStartTurnIssue({ ...command, ...candidate });
+		if (identifiers.has(candidate.inputEntryId))
+			throw new Error("Conversation computer runtime command next issue has duplicate input candidates");
+		identifiers.add(candidate.inputEntryId);
+	}
+}
+
 /** Validates the non-normalized server-owned coordinates that select one active computer execution. */
 function _ValidateCurrent(command: ConversationComputerRuntimeCommandCurrentCommand): void
 {
@@ -441,7 +499,7 @@ function _ValidateCurrent(command: ConversationComputerRuntimeCommandCurrentComm
 		throw new Error("Conversation computer runtime command requires server-owned current coordinates");
 }
 
-/** Returns a finite server time before it is used for a durable command expiry. */
+/** Returns a finite server time before it becomes a durable command issuance timestamp. */
 function _Now(value: Date): Date
 {
 	if (!Number.isFinite(value.getTime()))
