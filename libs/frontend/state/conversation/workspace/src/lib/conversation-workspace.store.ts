@@ -440,8 +440,11 @@ export class ConversationWorkspaceStore
 		const mode = this._creationMode();
 		const directory = this._directory();
 		if (directory === null) return null;
-		if (mode === ConversationModes.AgentSession && directory.personalAgent !== null) return { mode, personalAgentRef: directory.personalAgent.personalAgentRef };
-		if (mode === ConversationModes.Direct || mode === ConversationModes.Group) return { mode, participantRefs: [...this._selectedParticipantRefs()] };
+		const requestId = globalThis.crypto.randomUUID();
+		if (mode === ConversationModes.AgentSession && directory.personalAgent !== null)
+			return { requestId, mode, personalAgentRef: directory.personalAgent.personalAgentRef };
+		if (mode === ConversationModes.Direct || mode === ConversationModes.Group)
+			return { requestId, mode, participantRefs: [...this._selectedParticipantRefs()] };
 		return null;
 	}
 

@@ -236,9 +236,9 @@ export interface ConversationRun
 
 /** Immutable command for a new conversation. */
 export type CreateConversationCommand =
-	| { readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string }
-	| { readonly mode: ConversationModes.Direct; readonly participantRefs: readonly string[] }
-	| { readonly mode: ConversationModes.Group; readonly participantRefs: readonly string[] };
+	| { readonly requestId: string; readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string }
+	| { readonly requestId: string; readonly mode: ConversationModes.Direct; readonly participantRefs: readonly string[] }
+	| { readonly requestId: string; readonly mode: ConversationModes.Group; readonly participantRefs: readonly string[] };
 
 /** One participant-admitted block frozen inside a retry-stable message command. */
 export interface SubmitConversationMessageBlock

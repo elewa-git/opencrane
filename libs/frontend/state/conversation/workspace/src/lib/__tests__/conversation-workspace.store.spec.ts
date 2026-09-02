@@ -213,7 +213,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		store.toggleParticipant("other-ref");
 		expect(store.canCreate()).toBe(true);
 		expect(await store.create()).toEqual({ conversationId: "created-1" });
-		expect(gateway.created).toEqual([{ mode: ConversationModes.Direct, participantRefs: ["other-ref"] }]);
+		expect(gateway.created).toEqual([expect.objectContaining({ mode: ConversationModes.Direct, participantRefs: ["other-ref"], requestId: expect.any(String) })]);
 		expect(store.selected()?.id).toBe("conversation-1");
 	});
 

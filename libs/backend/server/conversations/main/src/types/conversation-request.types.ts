@@ -12,8 +12,8 @@ import type { AgentThreadTarget } from "@opencrane/backend/conversations/agent-t
  * cannot drift apart.
  */
 export type CreateConversationRequest =
-	| { readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string; readonly participantRefs?: never }
-	| { readonly mode: ConversationModes.Direct | ConversationModes.Group; readonly participantRefs: readonly string[]; readonly personalAgentRef?: never };
+	| { readonly requestId: string; readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string; readonly participantRefs?: never }
+	| { readonly requestId: string; readonly mode: ConversationModes.Direct | ConversationModes.Group; readonly participantRefs: readonly string[]; readonly personalAgentRef?: never };
 
 /**
  * One message a user is trying to post, after the router's size and shape checks passed.
