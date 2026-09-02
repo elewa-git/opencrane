@@ -13,6 +13,7 @@ import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config";
 import { _CreateConversationComputerActivationProfileResolver, _StartConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition";
+import { _CreateHistoryAnchoredConversationCreationAuthority } from "./app/conversation-history-creation-composition";
 import type { OpenCraneConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition.types";
 import { _StartConversationComputerSandboxReconciliationWorker } from "./app/conversation-computer-sandbox-reconciliation-composition";
 import type { OpenCraneConversationComputerSandboxReconciliationWorker } from "./app/conversation-computer-sandbox-reconciliation-composition.types";
@@ -60,6 +61,7 @@ async function _Main(): Promise<void>
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
 	const runCancellation = _CreateRunCancellationAuthority(prisma);
+	const conversationCreation = _CreateHistoryAnchoredConversationCreationAuthority(prisma, historyStore.historyStore);
 
 	// 4. Compose the class-specific MCP authority before the generic external-action worker.
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
@@ -91,10 +93,10 @@ async function _Main(): Promise<void>
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, managedRunAdmission, personalRunAdmission, runCancellation, executionSubjects.retryInputCompiler, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects);
+	const publicApp = _CreatePublicApp(prisma, managedRunAdmission, personalRunAdmission, runCancellation, executionSubjects.retryInputCompiler, conversationCreation, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution, historyStore.historyStore);
-	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, executionSubjects.retryInputCompiler, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
+	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, executionSubjects.retryInputCompiler, _CreateConversationAttachmentAdmission, conversationCreation, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 	const conversationComputerActivation: OpenCraneConversationComputerActivationWorker | null = conversationComputerActivationAuthority === null
 		? null
 		: await _StartConversationComputerActivationWorker(historyStore.historyStore, conversationComputerActivationAuthority, config.runtime.siloId);

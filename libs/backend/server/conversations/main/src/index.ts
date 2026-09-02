@@ -44,6 +44,14 @@ export { PrismaConversationAgentBindingUnitOfWork } from "./db/prisma-conversati
 export { ConversationAgentBindingResolver } from "./conversation-agent-binding-authority";
 export type { ConversationAgentBinding, ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCommand, ConversationAgentBindingResult, ConversationAgentIdentitySelectionCommand, ConversationAgentIdentitySelector, ConversationManagedAgentPrincipalValidator } from "./conversation-agent-binding.types";
 export { ConversationAgentBindingDenialReasons } from "./conversation-agent-binding.types";
+export { HistoryAnchoredConversationCreationService } from "./conversation-creation-authority";
+export type { ConversationCreationAuthority, ConversationCreationAuthorityDependencies, ConversationCreationAuthorityResult, ConversationCreationClock, HistoryAnchoredConversationCreationAuthorityFactory } from "./conversation-creation-authority.types";
+export { PrismaConversationCreationCompilerUnitOfWork } from "./db/prisma-conversation-creation-compiler-unit-of-work";
+export { PrismaConversationCreationProjectionUnitOfWork } from "./db/prisma-conversation-creation-projection-unit-of-work";
+export { PrismaConversationCreationReservationUnitOfWork } from "./db/prisma-conversation-creation-reservation-unit-of-work";
+export { ConversationCreationAnchorVerifier } from "./conversation-creation-anchor-verifier";
+export { ConversationHistoryAuthority } from "./conversation-history-authority";
+export { HistoryAnchoredConversationCreationAuthority } from "./history-anchored-conversation-creation-authority";
 export { ConversationComputerSandboxReconciliationAuthority } from "./conversation-computer-sandbox-reconciliation-authority";
 export { ConversationComputerSandboxReconciliationOutcomes } from "./conversation-computer-sandbox-reconciliation-authority.types";
 export type { ConversationComputerSandboxReconciliationAuthorityDependencies, ConversationComputerSandboxReconciliationOutcome } from "./conversation-computer-sandbox-reconciliation-authority.types";
