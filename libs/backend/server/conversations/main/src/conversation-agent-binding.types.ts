@@ -33,7 +33,7 @@ export interface ConversationAgentBindingCommand
 /** Holds service facts before their Principal, profile, and AgentIdentity checks complete. */
 export interface ConversationAgentBindingCandidate
 {
-	/** Supplies the trusted service name for an initial deterministic AgentIdentity snapshot. */
+	/** Carries the service name read with the snapshot so identity provisioning can seed its deterministic history. */
 	readonly agentServiceName: string;
 	/** Identifies the active service in the command silo. */
 	readonly agentServiceId: string;
@@ -66,18 +66,20 @@ export interface ConversationAgentIdentitySelectionCommand
 	readonly agentServiceId: string;
 	/** Identifies the exact principal the identity must represent. */
 	readonly principalId: string;
-	/** Supplies the checked service name for a first deterministic identity-history append. */
+	/** Carries the database-selected service name when provisioning the first AgentIdentity history event. */
 	readonly agentServiceName: string;
 }
 
 /**
- * Selects an existing AgentIdentity from its owning authority.
+ * Returns or provisions the deterministic AgentIdentity from its owning authority.
  *
- * `null` denies the binding; this checkpoint has no AgentService-to-AgentIdentity producer and no
- * fallback identity creation.
+ * The selector receives the database-verified service facts after SQL verification has closed, so
+ * it can create the first identity-history event without a browser-chosen identity. `null` denies
+ * the binding.
  */
 export interface ConversationAgentIdentitySelector
 {
+	/** Returns the existing or newly provisioned identity, or `null` when the binding must deny. */
 	ensure(command: ConversationAgentIdentitySelectionCommand): Promise<{ readonly agentIdentityId: string } | null>;
 }
 
@@ -121,21 +123,34 @@ export type ConversationAgentBindingResult
 /**
  * Resolves the service, revision, Principal, profile, and AgentIdentity that pre-creation needs.
  *
- * It denies when any owned boundary cannot supply its coordinate; it never creates an identity or
- * falls back to the older personal-service lookup.
+ * It verifies the service, revision, and Principal before profile selection and AgentIdentity
+ * provisioning run outside the serializable SQL transaction. It denies when an owned boundary
+ * cannot supply its coordinate and never falls back to the older personal-service lookup.
  */
 export interface ConversationAgentBindingAuthority
 {
+	/** Returns complete creation coordinates, or the denial that prevents the creation flow from continuing. */
 	bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>;
 }
 
-/** Returns a verified managed service snapshot without selecting an external profile or identity. */
+/**
+ * Verifies the database-backed managed-service facts before the outer authority calls external ports.
+ *
+ * A verified outcome lets the caller select a profile and provision an AgentIdentity after SQL has
+ * closed. A denied outcome tells the caller to stop without calling either port.
+ */
 export interface ConversationAgentBindingVerifier
 {
+	/** Returns a verified snapshot, or the denial that prevents profile and identity resolution. */
 	verify(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingVerificationResult>;
 }
 
-/** Carries only the SQL-backed facts a later external resolution phase may consume. */
+/**
+ * Describes the result of checking a service snapshot.
+ *
+ * `verified` carries managed-service facts that later profile and identity resolution may consume.
+ * `denied` preserves the reason without exposing a partial binding.
+ */
 export type ConversationAgentBindingVerificationResult
 	= { readonly outcome: "verified"; readonly value: ConversationAgentBindingCandidate & { readonly agentServiceKind: "managed"; readonly principalId: string; readonly principal: { readonly issuer: string; readonly provenance: "internal" | "external"; readonly subject: string } } }
 	| { readonly outcome: "denied"; readonly reason: ConversationAgentBindingDenialReasons };

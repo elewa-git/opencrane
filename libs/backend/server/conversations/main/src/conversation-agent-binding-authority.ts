@@ -1,25 +1,25 @@
 import { ConversationAgentBindingDenialReasons, type ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, type ConversationAgentBindingAuthorityDependencies, type ConversationAgentBindingCandidate, type ConversationAgentBindingCommand, type ConversationAgentBindingRepository, type ConversationAgentBindingResult, type ConversationAgentBindingVerificationResult, type ConversationAgentBindingVerifier, type ConversationManagedAgentPrincipalValidator } from "./conversation-agent-binding.types";
 
 /**
- * Resolves the complete managed-agent binding required before conversation history is created.
+ * Verifies the managed-service snapshot required before external binding work begins.
  *
- * The resolver accepts a service candidate only after the AgentService Principal validator, release
- * profile selector, and identity selector each return their owned coordinate. A missing coordinate
- * becomes a denial, which prevents a later creation flow from persisting a partial agent binding.
- * @implements ConversationAgentBindingAuthority
+ * The resolver rejects an absent, personal, or invalid-principal candidate before profile selection
+ * or identity provisioning sees it. It returns only checked service facts, so the outer binding
+ * authority can resolve those separately owned coordinates after the SQL transaction has closed.
+ * @implements ConversationAgentBindingVerifier
  */
 export class ConversationAgentBindingVerificationResolver
 {
-	/** Holds the transaction-scoped reader and the AgentService-owned Principal validator. */
+	/** Holds the candidate reader and the AgentService-owned Principal validator. */
 	public constructor(private readonly repository: ConversationAgentBindingRepository, private readonly managedPrincipalValidator: ConversationManagedAgentPrincipalValidator) {}
 
 	/**
-	 * Returns a complete managed binding or the first reason this checkpoint must deny it.
+	 * Returns a verified managed snapshot or the first reason this checkpoint must deny it.
 	 *
-	 * An empty command denies before any lookup; a personal candidate denies before profile or identity
-	 * selection. The remaining checks run in ownership order so no selector sees a Principal that the
-	 * AgentService boundary rejected.
-	 * @returns `bound` with all creation coordinates, or `denied` without a partial binding.
+	 * An empty command denies before any lookup. A personal candidate denies before the profile or
+	 * identity authority can receive its Principal. The remaining checks run in ownership order so no
+	 * external authority sees a Principal that the AgentService boundary rejected.
+	 * @returns `verified` with checked service coordinates, or `denied` without partial facts.
 	 */
 	public async verify(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingVerificationResult>
 	{
@@ -38,13 +38,25 @@ export class ConversationAgentBindingVerificationResolver
 	}
 }
 
-/** Resolves external profile and identity coordinates only after SQL verification has completed. */
+/**
+ * Completes a verified service snapshot with its profile and AgentIdentity after SQL has closed.
+ *
+ * Keeping these separately owned ports outside the serializable unit of work prevents their history
+ * work from extending that PostgreSQL transaction. A verifier denial returns unchanged; missing
+ * profile or identity coordinates deny the binding.
+ * @implements ConversationAgentBindingAuthority
+ */
 export class ConversationAgentBindingResolver implements ConversationAgentBindingAuthorityPort
 {
 	/** Holds the serializable verifier plus external profile and identity authorities. */
 	public constructor(private readonly verifier: ConversationAgentBindingVerifier, private readonly dependencies: ConversationAgentBindingAuthorityDependencies) {}
 
-	/** Returns a complete binding after the verifier has closed its SQL transaction. */
+	/**
+	 * Returns a complete binding after the verifier has closed its SQL transaction.
+	 *
+	 * The method preserves a verifier denial without calling profile or identity ports. It denies when
+	 * either later port cannot provide its coordinate.
+	 */
 	public async bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>
 	{
 		const verification = await this.verifier.verify(command);

@@ -44,13 +44,27 @@ describe("ConversationAgentBindingResolver", function _Suite()
 		await expect(verifier.verify({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.PersonalDelegationUnavailable });
 	});
 
-	it("closes the serializable SQL transaction before the outer resolver is invoked", async function _ClosesTransaction()
+	it("resolves external profile and identity after the serializable SQL transaction closes", async function _ResolvesAfterTransaction()
 	{
 		const phases: string[] = [];
 		const transaction = { agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", name: "Research", kind: "Managed", activeRevisionId: "revision-1", activeRevision: { id: "revision-1" }, principalId: "managed-principal:service-1", principal: { issuer: "urn:opencrane:managed-agent", provenance: "Internal", subject: "service-1" } }) } };
 		const $transaction = vi.fn(async function _Transaction(work, options) { expect(options).toEqual({ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }); phases.push("opened"); const result = await work(transaction); phases.push("closed"); return result; });
-		const verified = await new PrismaConversationAgentBindingUnitOfWork({ $transaction } as never, _Validator()).verify({ siloId: "silo-1", agentServiceId: "service-1" });
-		expect(phases).toEqual(["opened", "closed"]);
-		expect(verified).toMatchObject({ outcome: "verified" });
+		const dependencies = _Dependencies();
+		const profiles = dependencies.profiles.select as ReturnType<typeof vi.fn>;
+		const identities = dependencies.identities.ensure as ReturnType<typeof vi.fn>;
+		profiles.mockImplementation(async function _SelectProfile()
+		{
+			phases.push("profile");
+			return { profileRevisionId: "profile-1" };
+		});
+		identities.mockImplementation(async function _EnsureIdentity()
+		{
+			phases.push("identity");
+			return { agentIdentityId: "identity-1" };
+		});
+		const verifier = new PrismaConversationAgentBindingUnitOfWork({ $transaction } as never, _Validator());
+		const resolver = new ConversationAgentBindingResolver(verifier, dependencies);
+		await expect(resolver.bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toMatchObject({ outcome: "bound" });
+		expect(phases).toEqual(["opened", "closed", "profile", "identity"]);
 	});
 });
