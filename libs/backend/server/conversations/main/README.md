@@ -198,6 +198,12 @@ transport for workloads; it is not a browser fallback.
   append and `idempotent` for an exact response-lost retry. A later command worker may issue work
   from that entry only after the computer has an active execution; cold-start inputs therefore do
   not need an AgentRun.
+- `PrismaConversationComputerParticipantInputAuthorizerUnitOfWork` is the transaction-bound adapter
+  that checks current participant-input authority. It requires active organisation membership, continuing
+  participant access to an open Agent session, and the matching projected creation reservation
+  before it records `Conversation/Use`. The audit arguments retain the UUID input id and a text
+  digest, never plaintext; it returns only the creation-bound computer and server-derived human
+  display coordinates.
 - `ConversationComputerParticipantInputDispatchAuthority` replays those retained start entries when
   Sandbox reconciliation has admitted an execution and on each later bounded reconciliation pass.
   Each entry is narrowed to its text payload and passed in transcript order to the command authority,

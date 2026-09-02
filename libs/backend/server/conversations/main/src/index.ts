@@ -33,6 +33,7 @@ export { __CreateAgentThreadParentDeliveryRouter } from "./agent-thread-parent-d
 export { BoundConversationWriter } from "./bound-conversation-writer";
 export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
 export { PrismaConversationPrivatePayloadStoreUnitOfWork } from "./db/prisma-conversation-private-payload-store-unit-of-work";
+export { PrismaConversationComputerParticipantInputAuthorizerUnitOfWork } from "./db/prisma-conversation-computer-participant-input-authorizer-unit-of-work";
 export { ConversationHistoryReader } from "./conversation-history-reader";
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked } from "./conversation-computer-activation.types";
