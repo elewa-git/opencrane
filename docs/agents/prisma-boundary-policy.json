@@ -694,6 +694,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-participant-input-authorizer.ts",
+				"adapter": "PrismaConversationComputerParticipantInputAuthorizationAuthority",
+				"contract": "ConversationComputerParticipantInputAuthorizer",
+				"contractImportPath": "../conversation-computers/conversation-computer-participant-input-admission.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationProductAuthorizationRepository",
+						"importPath": "./conversation-product-authorization"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-projection-repository.ts",
 				"adapter": "PrismaConversationCreationProjectionRepository",
 				"contract": "ConversationCreationProjectionRepository",
