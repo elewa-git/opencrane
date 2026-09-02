@@ -25,7 +25,7 @@ export function __ValidateConversationCreationReservation(command: ReserveConver
 		throw new Error("Agent conversation reservation requires one participant, server agent coordinates, and a frozen binding");
 	if (command.mode !== ConversationModes.AgentSession && (command.agent !== null || command.agentBinding !== null))
 		throw new Error("Direct and group conversation reservation must not carry agent coordinates or a binding");
-	if (command.agent !== null && (!_Identifier(command.agent.agentServiceId) || !_Identifier(command.agent.agentRevisionId) || !_Uuid(command.agent.computerId) || !_Uuid(command.agent.computerHistoryEventId) || !_Uuid(command.agent.computerClaimEventId) || !_Uuid(command.agent.computerActivationEventId) || Number.isNaN(Date.parse(command.agent.computerLeaseClaimedAt)) || Number.isNaN(Date.parse(command.agent.computerLeaseExpiresAt)) || Date.parse(command.agent.computerLeaseExpiresAt) <= Date.parse(command.agent.computerLeaseClaimedAt)))
+	if (command.agent !== null && (!_Identifier(command.agent.agentServiceId) || !_Identifier(command.agent.agentRevisionId) || !_ComputerIdentifier(command.agent.computerId) || !_Uuid(command.agent.computerHistoryEventId) || !_Uuid(command.agent.computerClaimEventId) || !_Uuid(command.agent.computerActivationEventId) || Number.isNaN(Date.parse(command.agent.computerLeaseClaimedAt)) || Number.isNaN(Date.parse(command.agent.computerLeaseExpiresAt)) || Date.parse(command.agent.computerLeaseExpiresAt) <= Date.parse(command.agent.computerLeaseClaimedAt)))
 		throw new Error("Agent conversation reservation requires complete server agent coordinates");
 	if (command.agentBinding !== null && (!_Identifier(command.agentBinding.agentIdentityId) || !_Identifier(command.agentBinding.profileRevisionId)))
 		throw new Error("Agent conversation reservation requires a complete frozen binding");
@@ -41,6 +41,12 @@ export function __ConversationCreationReservationAuthorizationArguments(command:
 function _Identifier(value: string): boolean
 {
 	return value.trim().length > 0 && value === value.trim();
+}
+
+/** Recognizes the bounded DNS-label computer coordinate shared with Agent Sandbox claim naming. */
+function _ComputerIdentifier(value: string): boolean
+{
+	return value.length <= 63 && /^computer-[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(value);
 }
 
 /** Recognizes the UUID form accepted for server-generated history and retry identifiers. */

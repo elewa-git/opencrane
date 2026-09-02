@@ -1,4 +1,5 @@
 import type { ConversationAgentBindingAuthority } from "./conversation-agent-binding.types";
+import type { ConversationComputerCreationActivationAuthority } from "./conversation-computer-creation-activation-authority.types";
 import type { ConversationCreationCompiler } from "./conversation-creation-compiler.types";
 import type { HistoryAnchoredConversationCreationAuthority } from "./history-anchored-conversation-creation-authority";
 import type { ConversationWriteDenial } from "./types/conversation-authority-result.types";
@@ -40,6 +41,8 @@ export interface ConversationCreationAuthorityDependencies
 	readonly agentBindings: ConversationAgentBindingAuthority;
 	/** Creates the caller-bound reservation, history, confirmation, and projection authority. */
 	readonly history: HistoryAnchoredConversationCreationAuthorityFactory;
+	/** Establishes the frozen initial computer generation after an Agent conversation anchor exists. */
+	readonly computers: ConversationComputerCreationActivationAuthority;
 	/** Supplies server time for the immutable creation anchor. */
 	readonly clock: ConversationCreationClock;
 }

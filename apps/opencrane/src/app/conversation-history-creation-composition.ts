@@ -2,27 +2,30 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ManagedAgentIdentityHistoryProvisioner, ProxiedAgentIdentityHistoryProvisioner, AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER, __ManagedAgentServicePrincipal } from "@opencrane/backend/server/agents/agent-services";
-import { ConversationAgentBindingResolver, ConversationComputerAgentServiceKinds, ConversationCreationAnchorVerifier, ConversationHistoryAuthority, ConversationHistoryReader, HistoryAnchoredConversationCreationAuthority, HistoryAnchoredConversationCreationService, PrismaConversationAgentBindingUnitOfWork, PrismaConversationCreationCompilerUnitOfWork, PrismaConversationCreationProjectionUnitOfWork, PrismaConversationCreationReservationUnitOfWork, type ConversationAgentIdentitySelector, type ConversationComputerProfileSelector, type ConversationCreationAuthority, type ConversationManagedAgentPrincipalValidator } from "@opencrane/backend/server/conversations";
+import { ConversationAgentBindingResolver, ConversationComputerAgentServiceKinds, ConversationComputerCreationActivationAuthority, ConversationComputerHistory, ConversationCreationAnchorVerifier, ConversationHistoryAuthority, ConversationHistoryReader, HistoryAnchoredConversationCreationAuthority, HistoryAnchoredConversationCreationService, PrismaConversationAgentBindingUnitOfWork, PrismaConversationCreationCompilerUnitOfWork, PrismaConversationCreationProjectionUnitOfWork, PrismaConversationCreationReservationUnitOfWork, type ConversationAgentIdentitySelector, type ConversationComputerProfileSelector, type ConversationCreationAuthority, type ConversationManagedAgentPrincipalValidator } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
+import { _CreateConversationComputerAgentServiceProfileSelector } from "./conversation-computer-activation-composition";
+import type { ConversationComputerActivationConfig } from "./config.types";
 
 /**
  * Builds the creation authority shared by the authenticated HTTP router and socket transport.
  *
  * Each request supplies its own {@link ConversationCaller}, so the factory below can bind every
  * reservation lookup to that caller before it reaches immutable history. Agent-session creation
- * currently has no selected computer profile and therefore denies at the binding boundary; direct
- * and group creation do not select a profile.
+ * Agent sessions select profiles only from the mounted release configuration, then atomically
+ * establish their initial computer and activation work after the conversation anchor exists.
  *
  * Called by: {@link _Main} in index.ts.
  * @param prisma - Opens the short reservation and projection transactions.
  * @param historyStore - Owns immutable conversation anchors and AgentIdentity streams.
- * @param siloId - Passed by app startup; this composition does not yet consume it.
+ * @param activationConfig - Supplies the mounted release-owned computer profiles, when enabled.
+ * @param siloId - Restricts profile selections and computer activation streams to this deployment.
  * @returns The request-time authority mounted by both conversation transports.
  */
-export function _CreateHistoryAnchoredConversationCreationAuthority(prisma: PrismaClient, historyStore: HistoryStore): ConversationCreationAuthority
+export function _CreateHistoryAnchoredConversationCreationAuthority(prisma: PrismaClient, historyStore: HistoryStore, activationConfig: ConversationComputerActivationConfig | null, siloId: string): ConversationCreationAuthority
 {
-	const profiles = _UnavailableProfiles();
+	const profiles = activationConfig === null ? _UnavailableProfiles() : _CreateConversationComputerAgentServiceProfileSelector(activationConfig, siloId);
 	const identities = _CreateAgentIdentitySelector(historyStore);
 	const verifier = new PrismaConversationAgentBindingUnitOfWork(prisma, _ManagedPrincipalValidator);
 	const bindings = new ConversationAgentBindingResolver(verifier, { profiles, identities });
@@ -36,7 +39,9 @@ export function _CreateHistoryAnchoredConversationCreationAuthority(prisma: Pris
 		const projection = new PrismaConversationCreationProjectionUnitOfWork(prisma, projectionReader);
 		return new HistoryAnchoredConversationCreationAuthority(reservations, anchors, verifier, projection);
 	} };
-	return new HistoryAnchoredConversationCreationService({ compiler, agentBindings: bindings, history, clock: { now: function _Now() { return new Date(); } } });
+	const computerHistory = new ConversationComputerHistory(historyStore);
+	const computers = new ConversationComputerCreationActivationAuthority({ history: computerHistory, clock: { now: function _Now() { return new Date(); } } });
+	return new HistoryAnchoredConversationCreationService({ compiler, agentBindings: bindings, history, computers, clock: { now: function _Now() { return new Date(); } } });
 }
 
 /**

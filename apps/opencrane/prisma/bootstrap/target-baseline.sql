@@ -4101,12 +4101,13 @@ ALTER TABLE "conversation_creation_reservations" ADD CONSTRAINT "conversation_cr
     "authorization_policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$' AND
     "effective_authorization_digest" ~ '^sha256:[0-9a-f]{64}$' AND
     (("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND
-      "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL AND "computer_id" IS NULL AND "computer_history_event_id" IS NULL) OR
+      "agent_identity_id" IS NULL AND "profile_revision_id" IS NULL AND "computer_id" IS NULL AND "computer_history_event_id" IS NULL AND
+      "computer_claim_event_id" IS NULL AND "computer_activation_event_id" IS NULL AND "computer_lease_claimed_at" IS NULL AND "computer_lease_expires_at" IS NULL) OR
      ("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> '' AND
       "agent_revision_id" IS NOT NULL AND btrim("agent_revision_id") <> '' AND
 	  "agent_identity_id" IS NOT NULL AND btrim("agent_identity_id") <> '' AND
 	  "profile_revision_id" IS NOT NULL AND btrim("profile_revision_id") <> '' AND
-      "computer_id" IS NOT NULL AND "computer_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
+      "computer_id" IS NOT NULL AND "computer_id" ~ '^computer-[a-z0-9]([-a-z0-9]*[a-z0-9])?$' AND char_length("computer_id") <= 63 AND
       "computer_history_event_id" IS NOT NULL AND "computer_history_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
       "computer_claim_event_id" IS NOT NULL AND "computer_claim_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
       "computer_activation_event_id" IS NOT NULL AND "computer_activation_event_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND
