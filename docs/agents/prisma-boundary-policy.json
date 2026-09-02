@@ -682,6 +682,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-reservation-repository.ts",
+				"adapter": "PrismaConversationCreationReservationRepository",
+				"contract": "ConversationCreationReservationRepository",
+				"contractImportPath": "../conversation-creation-reservation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationProductAuthorizationRepository",
+						"importPath": "./conversation-product-authorization"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-mutation-repository.ts",
 				"adapter": "PrismaConversationMutationRepository",
 				"contract": "ConversationMutationRepository",

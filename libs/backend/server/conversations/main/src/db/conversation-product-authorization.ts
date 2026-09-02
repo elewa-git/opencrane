@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -31,8 +31,14 @@ export class PrismaConversationProductAuthorizationRepository implements Convers
 	/** Records an exact conversation or collection mutation/effect before its protected write. */
 	async admit(caller: ConversationCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<boolean>
 	{
+		return (await this.admitEvidence(caller, resource, action, argumentsValue)) !== null;
+	}
+
+	/** Records an allowed mutation and returns the same-transaction decision evidence it produced. */
+	async admitEvidence(caller: ConversationCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<ProductAuthorizationAdmissionEvidence | null>
+	{
 		const result = await this.authority.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource, action, argumentsDigest: ___DigestCanonicalJson(argumentsValue), nowEpochMs: Date.now() });
-		return result.outcome === AuthorizationDecisionOutcomes.Allow;
+		return result.outcome === AuthorizationDecisionOutcomes.Allow ? result.evidence : null;
 	}
 
 	/** Filters exact conversation ids through one transaction-bound catalogue decision. */
