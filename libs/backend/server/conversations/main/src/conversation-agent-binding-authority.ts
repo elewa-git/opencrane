@@ -23,13 +23,13 @@ export class ConversationAgentBindingVerificationResolver
 	 */
 	public async verify(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingVerificationResult>
 	{
-		if (!_Present(command.siloId) || !_Present(command.agentServiceId))
+		if (!_Present(command.siloId) || !_Present(command.agentServiceId) || !_Present(command.callerPrincipalId) || !_Present(command.callerSubjectId))
 			return _VerificationDenied(ConversationAgentBindingDenialReasons.InvalidCommand);
 		const candidate = await this.repository.load(command);
 		if (candidate === null)
 			return _VerificationDenied(ConversationAgentBindingDenialReasons.ServiceUnavailable);
 		if (candidate.agentServiceKind === "personal")
-			return _VerificationDenied(ConversationAgentBindingDenialReasons.PersonalDelegationUnavailable);
+			return { outcome: "verified", value: { ...candidate, agentServiceKind: "personal", principalId: command.callerPrincipalId, delegationPolicyId: `agent-revision:${candidate.agentRevisionId}` } };
 		const principalId = candidate.principalId;
 		if (principalId === null || candidate.principal === null
 			|| !this.managedPrincipalValidator.validate({ agentServiceId: candidate.agentServiceId, principalId, ...candidate.principal }))
@@ -69,7 +69,7 @@ export class ConversationAgentBindingResolver implements ConversationAgentBindin
 		const identity = await this.dependencies.identities.ensure({ siloId: command.siloId, agentServiceId: candidate.agentServiceId, principalId: candidate.principalId, agentServiceName: candidate.agentServiceName });
 		if (identity === null || !_Present(identity.agentIdentityId))
 			return _Denied(ConversationAgentBindingDenialReasons.IdentityUnavailable);
-		return { outcome: "bound", value: { agentServiceId: candidate.agentServiceId, agentRevisionId: candidate.agentRevisionId, agentServiceKind: "managed", principalId: candidate.principalId, agentIdentityId: identity.agentIdentityId, profileRevisionId: profile.profileRevisionId } };
+		return { outcome: "bound", value: { agentServiceId: candidate.agentServiceId, agentRevisionId: candidate.agentRevisionId, agentServiceKind: candidate.agentServiceKind, principalId: candidate.principalId, agentIdentityId: identity.agentIdentityId, profileRevisionId: profile.profileRevisionId } };
 	}
 }
 

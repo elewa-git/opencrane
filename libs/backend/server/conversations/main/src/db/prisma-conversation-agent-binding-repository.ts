@@ -40,12 +40,18 @@ export class PrismaConversationAgentBindingRepository implements ConversationAge
 				kind: true,
 				activeRevisionId: true,
 				principalId: true,
-				activeRevision: { select: { id: true } },
+				activeRevision: { select: { id: true, personaRevisionId: true } },
 				principal: { select: { issuer: true, provenance: true, subject: true } },
 			},
 		});
 		if (service === null || service.activeRevision === null || service.activeRevisionId === null || service.activeRevision.id !== service.activeRevisionId)
 			return null;
+		if (service.kind === AgentServiceKind.Personal)
+		{
+			const profile = await this.transaction.personaProfile.findUnique({ where: { siloId_userId: { siloId: command.siloId, userId: command.callerSubjectId } }, select: { activeRevisionId: true } });
+			if (profile?.activeRevisionId === null || profile?.activeRevisionId === undefined || service.activeRevision.personaRevisionId !== profile.activeRevisionId)
+				return null;
+		}
 		return {
 			agentServiceName: service.name,
 			agentServiceId: service.id,
