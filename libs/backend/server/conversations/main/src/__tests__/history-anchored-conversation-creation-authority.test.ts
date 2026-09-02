@@ -13,6 +13,8 @@ import { ConversationCreationAnchorConfirmationOutcomes, type ConversationCreati
 const _REQUEST_ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 /** Supplies the stable server-generated conversation UUID used by immutable history. */
 const _CONVERSATION_ID = "31c1f1dc-0011-4f13-9c2f-d3841ffd6651";
+/** Supplies the DNS-label computer identity required by the Agent Sandbox claim contract. */
+const _COMPUTER_ID = `computer-${_CONVERSATION_ID}`;
 /** Supplies the revision-zero event UUID reserved before the history append. */
 const _EVENT_ID = "31c1f1dc-0012-4f13-9c2f-d3841ffd6651";
 
@@ -131,7 +133,7 @@ describe("HistoryAnchoredConversationCreationAuthority", function _Suite()
 	it("recovers an Agent anchor with its originally frozen binding after the progress transaction fails", async function _RecoversAgentAnchor()
 	{
 		const frozenBinding = { agentIdentityId: "identity-1", profileRevisionId: "profile-1" };
-		const agentReservation = _Reservation({ mode: ConversationModes.AgentSession, participants: [_Command().participants[0]], agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", computerId: _CONVERSATION_ID, computerHistoryEventId: _EVENT_ID, computerClaimEventId: "31c1f1dc-0013-4f13-9c2f-d3841ffd6651", computerActivationEventId: "31c1f1dc-0014-4f13-9c2f-d3841ffd6651", computerLeaseClaimedAt: "2026-09-02T00:00:00.000Z", computerLeaseExpiresAt: "2026-09-02T00:20:00.000Z" }, agentBinding: frozenBinding });
+		const agentReservation = _Reservation({ mode: ConversationModes.AgentSession, participants: [_Command().participants[0]], agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", computerId: _COMPUTER_ID, computerHistoryEventId: _EVENT_ID, computerClaimEventId: "31c1f1dc-0013-4f13-9c2f-d3841ffd6651", computerActivationEventId: "31c1f1dc-0014-4f13-9c2f-d3841ffd6651", computerLeaseClaimedAt: "2026-09-02T00:00:00.000Z", computerLeaseExpiresAt: "2026-09-02T00:20:00.000Z" }, agentBinding: frozenBinding });
 		const ports = _Ports(agentReservation);
 		let markAttempts = 0;
 		ports.reservations.markHistoryAnchored = vi.fn(async function _FailThenAdvance()

@@ -56,12 +56,16 @@ conversation-authority replacement can delete the relational writer in the same 
 `ConversationComputerHistory` owns the separate deterministic `computer-{id}` KurrentDB stream for the logical
 computer itself. `ComputerProvisioned@0` is the only stream-creation event and records a cold,
 zero-generation computer with no lease, execution, or checkpoint; later complete computer and lease
-snapshots may append only after that anchor. It checks their stream revision on every append, and replays
-them against the current head before returning state. A later pre-admission composition can ask it only for the exact silo,
-conversation, AgentIdentity and profile it already selected; it receives an active lease only when
-the matching computer is currently warm. A missing, retired, cooling, released, lost, malformed, or
-cross-coordinate snapshot fails closed. This history authority does not create a sandbox claim,
-activate a sandbox, use PostgreSQL, or receive a direct KurrentDB client.
+snapshots may append only after that anchor. During an Agent-session creation retry, the frozen
+reservation atomically commits that cold record, its first `ClaimPending` lease, and one matching
+event in the silo activation stream. The worker then uses that durable event to request the Agent
+Sandbox claim; it is never allowed to infer a computer or alter the frozen generation. A later
+pre-admission composition can ask history only for the exact silo, conversation, AgentIdentity and
+profile it already selected; it receives an active lease only when the matching computer is currently
+warm. A missing, retired, cooling, released, lost, malformed, or cross-coordinate snapshot fails
+closed. OpenCrane owns the computer lifecycle and execution records; Agent Sandbox realizes the
+checked claim and does not choose a computer, lease generation, or loop execution. History does not
+create a Sandbox claim, activate a Sandbox, use PostgreSQL, or receive a direct KurrentDB client.
 
 `ConversationComputerExecutionAuthority` is the next boundary after a sandbox claim becomes ready.
 The server's Sandbox reconciliation worker starts the loop only by appending one server-generated execution to the computer's warm active
@@ -168,6 +172,10 @@ transport for workloads; it is not a browser fallback.
   writes Agent Sandbox status, or accepts a status from a foreign claim.
 - `ConversationComputerHistory` provisions each deterministic `computer-{id}` stream with a cold
   `ComputerProvisioned@0` anchor, then persists and reloads later full computer and lease snapshots.
+  `ConversationComputerCreationActivationAuthority` uses its atomic append to establish the frozen
+  initial `ClaimPending` generation and its matching silo activation event after an Agent conversation
+  anchor has been confirmed; response-lost retries prove that exact revision-one state rather than
+  creating another computer or claim deadline.
   `loadActiveExecution` returns only an open execution whose
   identity and lease generation match the checked current head, so a later command authority can
   fence its participant append to the active loop attempt.

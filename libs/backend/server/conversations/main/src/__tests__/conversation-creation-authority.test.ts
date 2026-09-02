@@ -15,7 +15,8 @@ function _Authority(overrides: { readonly compiled?: { readonly participantUserI
 	const resume = vi.fn().mockResolvedValue(overrides.recovered ?? null);
 	const compile = vi.fn().mockResolvedValue(overrides.compiled ?? { participantUserIds: ["user-1", "user-2"], agentServiceId: null });
 	const bind = vi.fn().mockResolvedValue(overrides.binding ?? { outcome: "bound", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" } });
-	return { subject: new HistoryAnchoredConversationCreationService({ compiler: { compile }, agentBindings: { bind }, history: { create: vi.fn().mockReturnValue({ create, resume }) }, clock: { now: function _Now() { return new Date("2026-09-02T00:00:00.000Z"); } } }), create, resume, compile, bind };
+	const ensure = vi.fn().mockResolvedValue(undefined);
+	return { subject: new HistoryAnchoredConversationCreationService({ compiler: { compile }, agentBindings: { bind }, history: { create: vi.fn().mockReturnValue({ create, resume }) }, computers: { ensure }, clock: { now: function _Now() { return new Date("2026-09-02T00:00:00.000Z"); } } }), create, resume, compile, bind, ensure };
 }
 
 describe("HistoryAnchoredConversationCreationService", function _Suite()
@@ -32,6 +33,13 @@ describe("HistoryAnchoredConversationCreationService", function _Suite()
 		const authority = _Authority({ compiled: { participantUserIds: ["user-1"], agentServiceId: "service-1" }, binding: { outcome: "denied", reason: "service_unavailable" } });
 		await expect(authority.subject.create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000002", mode: ConversationModes.AgentSession, personalAgentRef: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationWriteDenialReasons.AgentServiceUnavailable });
 		expect(authority.create).not.toHaveBeenCalled();
+	});
+
+	it("establishes an Agent computer from the frozen reservation after its conversation anchor", async function _CreatesAgentComputer()
+	{
+		const authority = _Authority({ compiled: { participantUserIds: ["user-1"], agentServiceId: "service-1" }, historyResult: { outcome: "projection_needed", reservation: { conversationId: "conversation-1", mode: ConversationModes.AgentSession } } as never });
+		await authority.subject.create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000005", mode: ConversationModes.AgentSession, personalAgentRef: "service-1" });
+		expect(authority.ensure).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "conversation-1" }));
 	});
 
 	it("returns the existing idempotency-conflict denial without pretending the anchor was created", async function _ReportsConflict()

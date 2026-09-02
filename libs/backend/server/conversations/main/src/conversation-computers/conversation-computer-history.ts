@@ -1,7 +1,7 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerBootstrapCommand, ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ActiveConversationComputerServerCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerProvisionCommand, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+import type { ActiveConversationComputerBootstrapCommand, ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ActiveConversationComputerServerCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerProvisionAndActivationCommand, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
 import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerActivationCurrentCommand, _ValidateConversationComputerBootstrapCommand, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidatedConversationComputerProvisionedEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
@@ -19,27 +19,41 @@ const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{
 export class ConversationComputerHistory
 {
 	/** Connects this authority to the narrow checked KurrentDB port. */
-	public constructor(private readonly historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">) {}
+	public constructor(private readonly historyStore: Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">) {}
 
 	/**
-	 * Creates a cold `ComputerProvisioned` event at revision zero for one computer stream.
+	 * Atomically stores the cold computer, its initial claimed lease, and the matching activation event.
 	 *
-	 * Activation and runtime readers derive their identity and profile from this record. Accepting a
-	 * lease, execution, workspace checkpoint, or later timestamp here would let a stream begin in a
-	 * state that never passed its earlier lifecycle transitions.
+	 * The computer stream begins cold at revision zero, then enters `ClaimPending` at revision one.
+	 * The silo activation stream commits in the same transaction, so a successful pending computer
+	 * cannot be left without the work item that begins its Agent Sandbox realization.
 	 *
-	 * @param command - Supplies the idempotency UUID and cold computer record for the new stream.
-	 * @returns The checked KurrentDB receipt for the revision-zero provision event.
-	 * @throws {Error} Rejects a malformed event UUID or a computer that is not freshly cold.
+	 * Called by: {@link ConversationComputerCreationActivationAuthority.ensure}.
+	 * @param command - Supplies frozen creation identifiers and the closed generation-one snapshots.
+	 * @returns Resolves after both streams append in the same KurrentDB operation.
+	 * @throws {Error} Rejects malformed event ids, an invalid initial transition, or a changed activation head.
 	 */
-	public async provision(command: ConversationComputerProvisionCommand)
+	public async provisionAndRequestActivation(command: ConversationComputerProvisionAndActivationCommand): Promise<void>
 	{
-		const snapshot = _ValidatedConversationComputerSnapshot({ computer: command.computer, lease: null });
-		if (!_UUID_PATTERN.test(command.eventId))
-			throw new Error("Conversation computer provision requires a UUID event identifier");
-		if (snapshot.computer.state !== ConversationComputerStates.Cold || snapshot.computer.leaseGeneration !== 0 || snapshot.computer.workspaceCheckpoint !== null || snapshot.computer.activeExecution !== null || snapshot.computer.updatedAt !== snapshot.computer.createdAt)
-			throw new Error("Conversation computer provision requires a cold zero-generation computer");
-		return this.historyStore.append({ streamName: _ConversationComputerStreamName(snapshot.computer.id), expectedRevision: HistoryExpectedRevisions.NoStream, events: [_Event(command.eventId, "opencrane.computer-provisioned.v1", snapshot)] });
+		const cold = _ValidatedConversationComputerSnapshot({ computer: command.computer, lease: null });
+		const pending = _ValidatedConversationComputerSnapshot({ computer: { ...command.computer, state: ConversationComputerStates.ClaimPending, leaseGeneration: 1, updatedAt: command.lease.claimedAt }, lease: command.lease });
+		if (!_UUID_PATTERN.test(command.provisionEventId) || !_UUID_PATTERN.test(command.claimEventId) || !_UUID_PATTERN.test(command.activationEventId))
+			throw new Error("Conversation computer creation requires UUID event identifiers");
+		if (cold.computer.state !== ConversationComputerStates.Cold || cold.computer.leaseGeneration !== 0 || cold.computer.workspaceCheckpoint !== null || cold.computer.activeExecution !== null || cold.computer.updatedAt !== cold.computer.createdAt)
+			throw new Error("Conversation computer creation requires a cold zero-generation computer");
+		if (pending.computer.id !== cold.computer.id || pending.computer.siloId !== cold.computer.siloId || pending.computer.conversationId !== cold.computer.conversationId || pending.computer.agentIdentityId !== cold.computer.agentIdentityId || pending.computer.profileRevisionId !== cold.computer.profileRevisionId || pending.computer.workspaceCheckpoint !== null || pending.computer.activeExecution !== null || pending.lease?.computerId !== cold.computer.id || pending.lease?.state !== ComputerLeaseStates.Claimed || pending.lease.generation !== 1)
+			throw new Error("Conversation computer creation requires the first claimed generation");
+		_ValidateSnapshotTransition(cold, pending);
+		const computerStreamName = _ConversationComputerStreamName(cold.computer.id);
+		const activationStreamName = _ConversationComputerActivationStreamName(cold.computer.siloId);
+		const activationHead = await this.historyStore.readHead(activationStreamName);
+		if (activationHead.streamName !== activationStreamName)
+			throw new Error("Conversation computer creation received a foreign activation stream head");
+		const activationRevision = activationHead.revision ?? HistoryExpectedRevisions.NoStream;
+		await this.historyStore.appendAtomic({
+			expectedHeads: [{ streamName: computerStreamName, revision: HistoryExpectedRevisions.NoStream }, { streamName: activationStreamName, revision: activationRevision }],
+			appends: [{ streamName: computerStreamName, expectedRevision: HistoryExpectedRevisions.NoStream, events: [_Event(command.provisionEventId, "opencrane.computer-provisioned.v1", cold), _Event(command.claimEventId, "opencrane.conversation-computer.v1", pending)] }, { streamName: activationStreamName, expectedRevision: activationRevision, events: [_ActivationEvent(command.activationEventId, pending)] }],
+		});
 	}
 
 	/**
@@ -361,5 +375,26 @@ function _Event(eventId: string, type: string, snapshot: ConversationComputerHis
 			executionLeaseGeneration: snapshot.computer.activeExecution?.leaseGeneration ?? null,
 			executionEndedAt: snapshot.computer.activeExecution?.endedAt ?? null,
 		},
+	};
+}
+
+/** Derives the silo-scoped stream that feeds durable computer activation work. */
+function _ConversationComputerActivationStreamName(siloId: string): string
+{
+	if (siloId.length === 0)
+		throw new Error("Conversation computer creation requires a server-provided silo identifier");
+	return `computer-activations-${siloId}`;
+}
+
+/** Builds the activation event from the claimed computer generation, never from caller input. */
+function _ActivationEvent(eventId: string, snapshot: ConversationComputerHistorySnapshot)
+{
+	if (snapshot.lease === null)
+		throw new Error("Conversation computer creation requires a claimed lease for activation");
+	return {
+		id: eventId,
+		type: "opencrane.computer.activation-requested.v1",
+		data: { siloId: snapshot.computer.siloId, computerId: snapshot.computer.id, conversationId: snapshot.computer.conversationId, generation: snapshot.lease.generation },
+		metadata: { siloId: snapshot.computer.siloId, computerId: snapshot.computer.id, conversationId: snapshot.computer.conversationId, leaseId: snapshot.lease.id, generation: snapshot.lease.generation },
 	};
 }

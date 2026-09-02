@@ -61,7 +61,7 @@ async function _Main(): Promise<void>
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
 	const runCancellation = _CreateRunCancellationAuthority(prisma);
-	const conversationCreation = _CreateHistoryAnchoredConversationCreationAuthority(prisma, historyStore.historyStore);
+	const conversationCreation = _CreateHistoryAnchoredConversationCreationAuthority(prisma, historyStore.historyStore, config.runtime.conversationComputerActivation, config.runtime.siloId);
 
 	// 4. Compose the class-specific MCP authority before the generic external-action worker.
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
