@@ -682,6 +682,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-compiler-repository.ts",
+				"adapter": "PrismaConversationCreationCompilerRepository",
+				"contract": "ConversationCreationCompilerRepository",
+				"contractImportPath": "../conversation-creation-compiler.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationProductAuthorizationRepository",
+						"importPath": "./conversation-product-authorization"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-projection-repository.ts",
 				"adapter": "PrismaConversationCreationProjectionRepository",
 				"contract": "ConversationCreationProjectionRepository",
@@ -1832,6 +1844,18 @@
 					{
 						"adapter": "PrismaAgentThreadParentDeliveryRepository",
 						"importPath": "./prisma-agent-thread-parent-delivery-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-compiler-unit-of-work.ts",
+				"adapter": "PrismaConversationCreationCompilerUnitOfWork",
+				"contract": "ConversationCreationCompiler",
+				"contractImportPath": "../conversation-creation-compiler.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationCreationCompilerRepository",
+						"importPath": "./prisma-conversation-creation-compiler-repository"
 					}
 				]
 			},
