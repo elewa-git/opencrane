@@ -66,7 +66,9 @@ export class ConversationAgentBindingResolver implements ConversationAgentBindin
 		const profile = await this.dependencies.profiles.select({ siloId: command.siloId, agentServiceKind: candidate.agentServiceKind });
 		if (profile === null)
 			return _Denied(ConversationAgentBindingDenialReasons.ProfileUnavailable);
-		const identity = await this.dependencies.identities.ensure({ siloId: command.siloId, agentServiceId: candidate.agentServiceId, principalId: candidate.principalId, agentServiceName: candidate.agentServiceName });
+		const identity = await this.dependencies.identities.ensure(candidate.agentServiceKind === "managed"
+			? { siloId: command.siloId, agentServiceId: candidate.agentServiceId, principalId: candidate.principalId, agentServiceName: candidate.agentServiceName, agentServiceKind: "managed" }
+			: { siloId: command.siloId, agentServiceId: candidate.agentServiceId, principalId: candidate.principalId, agentServiceName: candidate.agentServiceName, agentServiceKind: "personal", delegationPolicyId: candidate.delegationPolicyId });
 		if (identity === null || !_Present(identity.agentIdentityId))
 			return _Denied(ConversationAgentBindingDenialReasons.IdentityUnavailable);
 		return { outcome: "bound", value: { agentServiceId: candidate.agentServiceId, agentRevisionId: candidate.agentRevisionId, agentServiceKind: candidate.agentServiceKind, principalId: candidate.principalId, agentIdentityId: identity.agentIdentityId, profileRevisionId: profile.profileRevisionId } };

@@ -32,7 +32,7 @@ describe("ConversationAgentBindingResolver", function _Suite()
 		const dependencies = _Dependencies();
 		const verifier = { verify: vi.fn().mockResolvedValue({ outcome: "verified", value: _Candidate() }) };
 		await expect(new ConversationAgentBindingResolver(verifier, dependencies).bind(_Command())).resolves.toMatchObject({ outcome: "bound" });
-		expect(dependencies.identities.ensure).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", principalId: "managed-principal:service-1", agentServiceName: "Research" });
+		expect(dependencies.identities.ensure).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", principalId: "managed-principal:service-1", agentServiceName: "Research", agentServiceKind: "managed" });
 	});
 
 	it("does not invoke external selectors after a verifier denial", async function _Denies()
@@ -47,6 +47,14 @@ describe("ConversationAgentBindingResolver", function _Suite()
 	{
 		const verifier = new ConversationAgentBindingVerificationResolver({ load: vi.fn().mockResolvedValue(_Candidate({ agentServiceKind: "personal", principalId: null, principal: null })) }, _Validator());
 		await expect(verifier.verify(_Command())).resolves.toMatchObject({ outcome: "verified", value: { agentServiceKind: "personal", principalId: "principal-1", delegationPolicyId: "agent-revision:revision-1" } });
+	});
+
+	it("passes only verified personal identity coordinates to the proxied selector", async function _SelectsProxiedIdentity()
+	{
+		const dependencies = _Dependencies();
+		const verifier = { verify: vi.fn().mockResolvedValue({ outcome: "verified", value: { ..._Candidate({ agentServiceKind: "personal", principalId: "principal-1", principal: null }), delegationPolicyId: "agent-revision:revision-1" } }) };
+		await expect(new ConversationAgentBindingResolver(verifier, dependencies).bind(_Command())).resolves.toMatchObject({ outcome: "bound", value: { agentServiceKind: "personal", principalId: "principal-1" } });
+		expect(dependencies.identities.ensure).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", principalId: "principal-1", agentServiceName: "Research", agentServiceKind: "personal", delegationPolicyId: "agent-revision:revision-1" });
 	});
 
 	it("resolves external profile and identity after the serializable SQL transaction closes", async function _ResolvesAfterTransaction()

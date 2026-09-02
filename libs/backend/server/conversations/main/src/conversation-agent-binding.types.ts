@@ -62,8 +62,8 @@ export interface ConversationAgentBindingRepository
 }
 
 /** Carries checked service and Principal coordinates for an existing AgentIdentity lookup. */
-export interface ConversationAgentIdentitySelectionCommand
-{
+export type ConversationAgentIdentitySelectionCommand
+	= {
 	/** Identifies the silo where the identity stream must be owned. */
 	readonly siloId: string;
 	/** Identifies the already-validated service the identity must realize. */
@@ -72,7 +72,23 @@ export interface ConversationAgentIdentitySelectionCommand
 	readonly principalId: string;
 	/** Carries the database-selected service name when provisioning the first AgentIdentity history event. */
 	readonly agentServiceName: string;
+	/** Selects the managed identity provisioner. */
+	readonly agentServiceKind: "managed";
 }
+	| {
+		/** Identifies the silo where the identity stream must be owned. */
+		readonly siloId: string;
+		/** Identifies the personal AgentService that the caller verified. */
+		readonly agentServiceId: string;
+		/** Identifies the user Principal whose current authority the personal agent may proxy. */
+		readonly principalId: string;
+		/** Carries the personal-agent display name for the immutable identity snapshot. */
+		readonly agentServiceName: string;
+		/** Selects the proxied identity provisioner. */
+		readonly agentServiceKind: "personal";
+		/** Pins the active revision policy as the personal delegation ceiling. */
+		readonly delegationPolicyId: string;
+	};
 
 /**
  * Returns or provisions the deterministic AgentIdentity from its owning authority.
