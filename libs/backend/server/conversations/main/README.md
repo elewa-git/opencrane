@@ -63,8 +63,9 @@ Sandbox claim; it is never allowed to infer a computer or alter the frozen gener
 pre-admission composition can ask history only for the exact silo, conversation, AgentIdentity and
 profile it already selected; it receives an active lease only when the matching computer is currently
 warm. A missing, retired, cooling, released, lost, malformed, or cross-coordinate snapshot fails
-closed. History does not create a Sandbox claim, activate a Sandbox, use PostgreSQL, or receive a
-direct KurrentDB client.
+closed. OpenCrane owns the computer lifecycle and execution records; Agent Sandbox realizes the
+checked claim and does not choose a computer, lease generation, or loop execution. History does not
+create a Sandbox claim, activate a Sandbox, use PostgreSQL, or receive a direct KurrentDB client.
 
 `ConversationComputerExecutionAuthority` is the next boundary after a sandbox claim becomes ready.
 The server's Sandbox reconciliation worker starts the loop only by appending one server-generated execution to the computer's warm active

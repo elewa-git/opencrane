@@ -28,7 +28,9 @@ export class ConversationComputerHistory
 	 * The silo activation stream commits in the same transaction, so a successful pending computer
 	 * cannot be left without the work item that begins its Agent Sandbox realization.
 	 *
+	 * Called by: {@link ConversationComputerCreationActivationAuthority.ensure}.
 	 * @param command - Supplies frozen creation identifiers and the closed generation-one snapshots.
+	 * @returns Resolves after both streams append in the same KurrentDB operation.
 	 * @throws {Error} Rejects malformed event ids, an invalid initial transition, or a changed activation head.
 	 */
 	public async provisionAndRequestActivation(command: ConversationComputerProvisionAndActivationCommand): Promise<void>
@@ -384,7 +386,7 @@ function _ConversationComputerActivationStreamName(siloId: string): string
 	return `computer-activations-${siloId}`;
 }
 
-/** Builds the bounded queue event from the claimed computer generation, never from caller input. */
+/** Builds the activation event from the claimed computer generation, never from caller input. */
 function _ActivationEvent(eventId: string, snapshot: ConversationComputerHistorySnapshot)
 {
 	if (snapshot.lease === null)

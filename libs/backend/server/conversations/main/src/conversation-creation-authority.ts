@@ -14,7 +14,15 @@ import type { ConversationCreationAuthority, ConversationCreationAuthorityDepend
 /** Bounds the first Agent Sandbox claim while its durable activation consumer begins reconciliation. */
 const _INITIAL_COMPUTER_LEASE_MILLISECONDS = 20 * 60 * 1_000;
 
-/** Turns a parsed browser request into one immutable, history-authoritative conversation. */
+/**
+ * Turns a parsed browser request into one immutable, history-authoritative conversation.
+ *
+ * The service recovers a matching request id before it reads mutable access or Agent facts. Once
+ * an Agent conversation anchor is confirmed, it also establishes the frozen first computer
+ * generation and activation event. OpenCrane therefore owns the lifecycle record; the later
+ * activation worker alone asks the Agent Sandbox controller for the matching claim.
+ * @implements ConversationCreationAuthority
+ */
 export class HistoryAnchoredConversationCreationService implements ConversationCreationAuthority
 {
 	/** Holds the narrow server-owned authorities needed before an anchor can be written. */
@@ -53,7 +61,12 @@ export class HistoryAnchoredConversationCreationService implements ConversationC
 	}
 }
 
-/** Maps durable authority outcomes to the route's narrow create result. */
+/**
+ * Maps history results to the route result after Agent conversations establish their first computer.
+ *
+ * Recovering an accepted request must run the same activation check because an earlier response may
+ * have been lost after history appended but before the caller received a result.
+ */
 async function _Result(result: HistoryAnchoredConversationCreationResult, request: CreateConversationRequest, computers: import("./conversation-computer-creation-activation-authority.types").ConversationComputerCreationActivationAuthority): Promise<ConversationCreationAuthorityResult>
 {
 	if (result.outcome === HistoryAnchoredConversationCreationOutcomes.Denied)

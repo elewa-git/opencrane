@@ -5,7 +5,14 @@ import { ConversationModes } from "@opencrane/models/conversations";
 import type { ConversationComputerCreationActivationAuthority as ConversationComputerCreationActivationAuthorityPort, ConversationComputerCreationActivationAuthorityDependencies } from "./conversation-computer-creation-activation-authority.types";
 import type { ReservedConversationCreation } from "./conversation-creation-reservation.types";
 
-/** Materializes the frozen initial ConversationComputer generation after its conversation anchor exists. */
+/**
+ * Establishes the frozen initial ConversationComputer generation after its conversation anchor exists.
+ *
+ * The authority appends the cold computer, first claimed lease, and silo activation event as one
+ * history operation. It therefore owns lifecycle admission while the later activation worker owns
+ * the Agent Sandbox claim; neither a browser nor the Sandbox can select replacement coordinates.
+ * @implements ConversationComputerCreationActivationAuthority
+ */
 export class ConversationComputerCreationActivationAuthority implements ConversationComputerCreationActivationAuthorityPort
 {
 	/** Connects the creation boundary to the computer history authority. */
@@ -18,7 +25,9 @@ export class ConversationComputerCreationActivationAuthority implements Conversa
 	 * mutable-looking coordinate, allowing an idempotent recovery without selecting a new identity,
 	 * profile, computer, event, or lease deadline.
 	 *
+	 * Called by: {@link HistoryAnchoredConversationCreationService} through its creation dependency.
 	 * @param reservation - Supplies an admitted history-anchored or projected creation reservation.
+	 * @returns Resolves when the first computer generation is stored, recovered, or unnecessary.
 	 * @throws {Error} Rejects an incomplete Agent reservation or a conflicting computer history.
 	 */
 	public async ensure(reservation: ReservedConversationCreation): Promise<void>
@@ -74,7 +83,7 @@ export class ConversationComputerCreationActivationAuthority implements Conversa
 	}
 }
 
-/** Starts an uncommitted first lease again when its reserved deadline passed during an external outage. */
+/** Replaces an expired reserved lease window before the first history append can request an already-expired claim. */
 function _InitialLeaseTimes(agent: { readonly computerLeaseClaimedAt: string; readonly computerLeaseExpiresAt: string }, now: Date): { readonly claimedAt: string; readonly expiresAt: string }
 {
 	const reservedClaimedAt = Date.parse(agent.computerLeaseClaimedAt);
@@ -87,7 +96,7 @@ function _InitialLeaseTimes(agent: { readonly computerLeaseClaimedAt: string; re
 	return { claimedAt: now.toISOString(), expiresAt: new Date(now.getTime() + durationMilliseconds).toISOString() };
 }
 
-/** Proves a matching initial generation even when the activation worker has already advanced its state. */
+/** Proves the stored initial generation even when the activation worker has already advanced its state. */
 function _MatchesInitialGeneration(current: Awaited<ReturnType<ConversationComputerCreationActivationAuthorityDependencies["history"]["load"]>>, computer: { readonly id: string; readonly createdAt: string; readonly conversationId: string; readonly siloId: string; readonly agentIdentityId: string; readonly profileRevisionId: string }, lease: { readonly id: string; readonly sandboxClaimId: string }): boolean
 {
 	return current !== null
