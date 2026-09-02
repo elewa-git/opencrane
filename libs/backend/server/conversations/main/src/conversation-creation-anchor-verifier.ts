@@ -2,7 +2,7 @@ import { ___ConversationCreatedSchema } from "@opencrane/contracts";
 import type { HistoryRecordedEvent, HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ConfirmConversationCreationAnchorCommand, ConversationCreationAnchorConfirmation } from "./conversation-creation-anchor-verifier.types";
+import { ConversationCreationAnchorConfirmationOutcomes, type ConfirmConversationCreationAnchorCommand, type ConversationCreationAnchorConfirmation } from "./conversation-creation-anchor-verifier.types";
 
 /** Names the only revision-zero event that can prove a durable conversation creation reservation. */
 const _CONVERSATION_CREATED_EVENT_TYPE = "opencrane.conversation-created.v1";
@@ -34,9 +34,9 @@ export class ConversationCreationAnchorVerifier
 		for await (const event of this.historyStore.readStream({ streamName }))
 		{
 			_AssertAnchor(event, command, streamName);
-			return { outcome: "confirmed", revision: 0n };
+			return { outcome: ConversationCreationAnchorConfirmationOutcomes.Confirmed, revision: 0n };
 		}
-		return { outcome: "absent" };
+		return { outcome: ConversationCreationAnchorConfirmationOutcomes.Absent };
 	}
 }
 
