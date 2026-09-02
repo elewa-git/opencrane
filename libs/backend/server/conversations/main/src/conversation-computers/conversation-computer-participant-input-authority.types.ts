@@ -60,9 +60,20 @@ export interface ConversationComputerParticipantInputAuthorityDependencies
 	readonly clock: ConversationComputerParticipantInputClock;
 }
 
+/** Classifies whether the authority appended input or replayed its existing immutable entry. */
+export enum ConversationComputerParticipantInputOutcomes
+{
+	/** The authority appended this input entry under the checked conversation head. */
+	Accepted = "accepted",
+	/** A matching immutable input entry already represented this exact browser retry. */
+	Idempotent = "idempotent",
+}
+
 /** Returns the durable participant entry identifier for a new input or an exact retry. */
 export interface ConversationComputerParticipantInputResult
 {
+	/** States whether this call appended history or replayed an existing exact entry. */
+	readonly outcome: ConversationComputerParticipantInputOutcomes;
 	/** Identifies the immutable participant input entry that a command worker will later consume. */
 	readonly inputEntryId: string;
 }

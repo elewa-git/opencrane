@@ -2,7 +2,7 @@ import { ConversationEntryKinds, ConversationLifecycleModes, type MessageEntry }
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
 import type { CurrentConversationHistory } from "../conversation-history-reader.types";
-import type { ConversationComputerParticipantInputAuthorityDependencies, ConversationComputerParticipantInputCommand, ConversationComputerParticipantInputEntry, ConversationComputerParticipantInputResult } from "./conversation-computer-participant-input-authority.types";
+import { ConversationComputerParticipantInputOutcomes, type ConversationComputerParticipantInputAuthorityDependencies, type ConversationComputerParticipantInputCommand, type ConversationComputerParticipantInputEntry, type ConversationComputerParticipantInputResult } from "./conversation-computer-participant-input-authority.types";
 
 /** Recognizes UUID input identifiers used as both stream event and idempotency keys. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -56,7 +56,7 @@ export class ConversationComputerParticipantInputAuthority
 		if (existing !== null)
 		{
 			_AssertMatchingInput(existing, command, payload);
-			return { inputEntryId: existing.id };
+			return { outcome: ConversationComputerParticipantInputOutcomes.Idempotent, inputEntryId: existing.id };
 		}
 
 		// 3. Append the input under the checked head so a concurrent participant write must re-authorize.
@@ -81,7 +81,7 @@ export class ConversationComputerParticipantInputAuthority
 				}],
 			}],
 		});
-		return { inputEntryId: entry.id };
+		return { outcome: ConversationComputerParticipantInputOutcomes.Accepted, inputEntryId: entry.id };
 	}
 }
 
