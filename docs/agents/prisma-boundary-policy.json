@@ -706,6 +706,13 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-history-replay-authorization-repository.ts",
+				"adapter": "PrismaConversationHistoryReplayAuthorizationRepository",
+				"contract": "ConversationHistoryReplayAuthorizationRepository",
+				"contractImportPath": "../replay-reader.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-projection-repository.ts",
 				"adapter": "PrismaConversationCreationProjectionRepository",
 				"contract": "ConversationCreationProjectionRepository",
@@ -1872,6 +1879,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-history-replay-unit-of-work.ts",
+				"adapter": "PrismaConversationHistoryReplayUnitOfWork",
+				"contract": "ConversationReplayUnitOfWork",
+				"contractImportPath": "../replay-reader.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationHistoryReplayAuthorizationRepository",
+						"importPath": "./prisma-conversation-history-replay-authorization-repository"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-creation-compiler-unit-of-work.ts",
 				"adapter": "PrismaConversationCreationCompilerUnitOfWork",
 				"contract": "ConversationCreationCompiler",
@@ -2356,6 +2375,7 @@
 			"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 			"libs/backend/server/conversation-assets/main/src/prisma-conversation-asset.composition.ts",
 			"libs/backend/server/conversations/main/src/db/prisma-conversation-replay.composition.ts",
+			"libs/backend/server/conversations/main/src/db/prisma-conversation-history-replay.composition.ts",
 			"libs/backend/server/conversations/main/src/db/prisma-self-conversations.router.ts",
 			"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
 			"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
