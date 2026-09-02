@@ -326,7 +326,7 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		};
 		const prisma = _Prisma(transaction) as { readonly $transaction: ReturnType<typeof vi.fn> };
 
-		await expect(_Authority(prisma).create(_CALLER, { mode: ConversationModes.Direct, participantRefs: ["member-2"] })).resolves.toEqual(expect.objectContaining({ outcome: "created", conversation: expect.objectContaining({ id: "conversation-1", mode: ConversationModes.Direct, participantRefs: ["member-1", "member-2"] }) }));
+		await expect(_Authority(prisma).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000001", mode: ConversationModes.Direct, participantRefs: ["member-2"] })).resolves.toEqual(expect.objectContaining({ outcome: "created", conversation: expect.objectContaining({ id: "conversation-1", mode: ConversationModes.Direct, participantRefs: ["member-1", "member-2"] }) }));
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
 		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
 		expect(createConversation).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", mode: ConversationMode.Direct, agentServiceId: null }) });
@@ -346,7 +346,7 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 			conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue([]) },
 		};
 
-		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { mode: ConversationModes.AgentSession, personalAgentRef: "service-1" })).resolves.toMatchObject({ outcome: "created" });
+		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000002", mode: ConversationModes.AgentSession, personalAgentRef: "service-1" })).resolves.toMatchObject({ outcome: "created" });
 		expect(_channelProjection.reconcileConversation).toHaveBeenCalledWith(expect.any(String), "silo-1", expect.any(Date));
 	});
 
@@ -403,6 +403,6 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 			conversationParticipant: { create: vi.fn().mockResolvedValue({}), findFirst: vi.fn().mockResolvedValue(null) },
 		};
 
-		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { mode: ConversationModes.Direct, participantRefs: ["member-2"] })).rejects.toThrow("Written conversation projection unavailable");
+		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { requestId: "00000000-0000-4000-8000-000000000003", mode: ConversationModes.Direct, participantRefs: ["member-2"] })).rejects.toThrow("Written conversation projection unavailable");
 	});
 });

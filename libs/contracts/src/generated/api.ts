@@ -6020,14 +6020,20 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    requestId: string;
                     /** @enum {string} */
                     mode: "agent_session";
                     personalAgentRef: string;
                 } | {
+                    /** Format: uuid */
+                    requestId: string;
                     /** @enum {string} */
                     mode: "direct";
                     participantRefs: string[];
                 } | {
+                    /** Format: uuid */
+                    requestId: string;
                     /** @enum {string} */
                     mode: "group";
                     participantRefs: string[];

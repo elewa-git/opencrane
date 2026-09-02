@@ -46,13 +46,15 @@ const _ReferenceSchema = z.string().trim().min(1).max(128);
  * AgentService built from the caller's approved persona revision, so naming somebody else's Agent
  * here is refused there rather than here.
  */
-const _AgentSessionSchema = z.object({ mode: z.literal(ConversationModes.AgentSession), personalAgentRef: _ReferenceSchema }).strict();
+const _RequestIdSchema = z.string().uuid();
+
+const _AgentSessionSchema = z.object({ requestId: _RequestIdSchema, mode: z.literal(ConversationModes.AgentSession), personalAgentRef: _ReferenceSchema }).strict();
 
 /**
  * Direct creation names exactly one other person. The caller is added by the server and is not
  * listed, so a length of one means a two-person conversation.
  */
-const _DirectSchema = z.object({ mode: z.literal(ConversationModes.Direct), participantRefs: z.array(_ReferenceSchema).length(1) }).strict();
+const _DirectSchema = z.object({ requestId: _RequestIdSchema, mode: z.literal(ConversationModes.Direct), participantRefs: z.array(_ReferenceSchema).length(1) }).strict();
 
 /**
  * Group creation names one to ninety-nine other people, again excluding the caller, giving a
@@ -60,7 +62,7 @@ const _DirectSchema = z.object({ mode: z.literal(ConversationModes.Direct), part
  * by `_GroupCreationSchema` in `libs/models/conversations/main/src/conversation.validator.ts`, so
  * the HTTP boundary and the model agree on the cap.
  */
-const _GroupSchema = z.object({ mode: z.literal(ConversationModes.Group), participantRefs: z.array(_ReferenceSchema).min(1).max(99) }).strict();
+const _GroupSchema = z.object({ requestId: _RequestIdSchema, mode: z.literal(ConversationModes.Group), participantRefs: z.array(_ReferenceSchema).min(1).max(99) }).strict();
 
 /**
  * Checks a create-conversation body and decides which mode it is asking for.

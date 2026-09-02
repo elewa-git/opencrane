@@ -183,9 +183,9 @@ export const _SelfConversationsOpenapiPaths = {
 			summary: "Create one immutable-mode conversation",
 			tags: ["Conversations"],
 			requestBody: { required: true, content: { "application/json": { schema: { oneOf: [
-				{ type: "object", additionalProperties: false, required: ["mode", "personalAgentRef"], properties: { mode: { type: "string", enum: [ConversationModes.AgentSession] }, personalAgentRef: { type: "string" } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantRefs"], properties: { mode: { type: "string", enum: [ConversationModes.Direct] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantRefs"], properties: { mode: { type: "string", enum: [ConversationModes.Group] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
+				{ type: "object", additionalProperties: false, required: ["requestId", "mode", "personalAgentRef"], properties: { requestId: { type: "string", format: "uuid" }, mode: { type: "string", enum: [ConversationModes.AgentSession] }, personalAgentRef: { type: "string" } } },
+				{ type: "object", additionalProperties: false, required: ["requestId", "mode", "participantRefs"], properties: { requestId: { type: "string", format: "uuid" }, mode: { type: "string", enum: [ConversationModes.Direct] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
+				{ type: "object", additionalProperties: false, required: ["requestId", "mode", "participantRefs"], properties: { requestId: { type: "string", format: "uuid" }, mode: { type: "string", enum: [ConversationModes.Group] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
 			] } } } },
 			responses: { 201: { description: "Conversation created with its bounded canonical history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid immutable-mode request." }, 401: { description: "Authentication required." }, 404: { description: "A participant or agent service is unavailable." }, 503: { description: "Conversation authority unavailable." } },
 		},
