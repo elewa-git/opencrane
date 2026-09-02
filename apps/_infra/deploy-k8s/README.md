@@ -52,11 +52,11 @@ disables one of these services does not remove its image from qualification. The
 keeps using images imported directly into its nodes and proves them through the same blocking
 Deployment rollout gates.
 Cluster-wide controllers (ingress, CloudNativePG, cert-manager, and the Agent Sandbox controller)
-and serving DNS are external prerequisites a silo never installs.
-"External" here means outside the organisation release: a cluster operator may explicitly install
-the pinned development controller set with `platform/bootstrap-prerequisites.sh`—including the
-Agent Sandbox v1beta1 controller and CRDs—but `deploy.sh` never invokes that helper. Serving DNS
-remains Terraform- and DNS-provider-owned, and gVisor remains a verified cluster runtime capability.
+remain outside the organisation release. A silo operator may explicitly ask `deploy.sh` to run the
+pinned prerequisite bootstrap with `--bootstrap-prerequisites` and its checked cluster context,
+project, region, and ingress address. The bootstrap refuses foreign ownership and runs before any
+release mutation; normal silo deploys neither adopt nor alter shared controllers. Serving DNS remains
+Terraform- and DNS-provider-owned, and gVisor remains a verified cluster runtime capability.
 The app-owned chart helper runs `helm dependency update --skip-refresh`
 against the checked-out in-repo `file://` sources. The commit is the version authority; ignored
 `Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
