@@ -1,23 +1,27 @@
 import type { ConversationComputerAgentServiceKind, ConversationComputerProfileSelector } from "./conversation-computer-profile-selection.types";
 
-/** Lists the closed reasons a conversation creation flow cannot bind its requested agent. */
+/**
+ * Explains why the pre-creation authority did not return an AgentService binding.
+ *
+ * Each reason means the future history-anchored creation flow has no complete binding to persist.
+ */
 export enum ConversationAgentBindingDenialReasons
 {
-	/** The requested service is absent, foreign, inactive, or has no active published revision. */
+	/** The requested service is absent, belongs to another silo, is inactive, or lacks a published active revision. */
 	ServiceUnavailable = "service_unavailable",
-	/** A managed service's durable Principal does not match its deterministic identity contract. */
+	/** The stored Principal does not meet the managed service's issuer, subject, and identity contract. */
 	ManagedPrincipalUnavailable = "managed_principal_unavailable",
-	/** A personal service cannot act until an explicit owned-personal delegation policy is selected. */
+	/** A personal service has no selected delegation policy or proxied identity in this checkpoint. */
 	PersonalDelegationUnavailable = "personal_delegation_unavailable",
 	/** The local release does not admit a computer profile for the resolved service kind. */
 	ProfileUnavailable = "profile_unavailable",
-	/** The identity catalog cannot provide the stable identity that the computer stream must bind. */
+	/** The identity authority did not provide the stored AgentIdentity needed by the computer stream. */
 	IdentityUnavailable = "identity_unavailable",
-	/** The command did not carry server-owned nonempty coordinates. */
+	/** The caller supplied an empty silo or service coordinate, so no repository lookup ran. */
 	InvalidCommand = "invalid_command",
 }
 
-/** Carries the trusted service coordinate for an eventual ConversationCreated command. */
+/** Carries the silo and service that an already-authorized creation flow resolved. */
 export interface ConversationAgentBindingCommand
 {
 	/** Identifies the silo containing the active service and immutable revision. */
@@ -26,7 +30,7 @@ export interface ConversationAgentBindingCommand
 	readonly agentServiceId: string;
 }
 
-/** Represents one exact active service and revision loaded in the binding transaction. */
+/** Holds service facts before their Principal, profile, and AgentIdentity checks complete. */
 export interface ConversationAgentBindingCandidate
 {
 	/** Identifies the active service in the command silo. */
@@ -41,13 +45,17 @@ export interface ConversationAgentBindingCandidate
 	readonly principal: { readonly issuer: string; readonly provenance: "internal" | "external"; readonly subject: string } | null;
 }
 
-/** Loads an exact active service and published revision inside the caller-owned transaction. */
+/**
+ * Loads an active service and the published revision named by its active pointer.
+ *
+ * `null` denies creation rather than allowing a stale service fact to proceed.
+ */
 export interface ConversationAgentBindingRepository
 {
 	load(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingCandidate | null>;
 }
 
-/** Carries the immutable coordinates used to retrieve a server-owned AgentIdentity. */
+/** Carries checked service and Principal coordinates for an existing AgentIdentity lookup. */
 export interface ConversationAgentIdentitySelectionCommand
 {
 	/** Identifies the silo where the identity stream must be owned. */
@@ -58,19 +66,33 @@ export interface ConversationAgentIdentitySelectionCommand
 	readonly principalId: string;
 }
 
-/** Supplies a stable AgentIdentity id only from a trusted catalog or identity-provisioning authority. */
+/**
+ * Selects an existing AgentIdentity from its owning authority.
+ *
+ * `null` denies the binding; this checkpoint has no AgentService-to-AgentIdentity producer and no
+ * fallback identity creation.
+ */
 export interface ConversationAgentIdentitySelector
 {
 	select(command: ConversationAgentIdentitySelectionCommand): Promise<{ readonly agentIdentityId: string } | null>;
 }
 
-/** Verifies that service Principal facts satisfy the managed-Agent issuer and subject contract. */
+/**
+ * Checks the Principal facts that identify a managed AgentService.
+ *
+ * The AgentService boundary owns the rule, so a false result denies before profile or identity
+ * selection can use the service.
+ */
 export interface ConversationManagedAgentPrincipalValidator
 {
 	validate(command: { readonly agentServiceId: string; readonly principalId: string; readonly issuer: string; readonly provenance: "internal" | "external"; readonly subject: string }): boolean;
 }
 
-/** Represents the complete immutable agent binding later persisted with conversation and computer history anchors. */
+/**
+ * Represents every managed-agent coordinate that a later creation command must persist together.
+ *
+ * Personal services deny until their delegation policy can supply an identity.
+ */
 export interface ConversationAgentBinding
 {
 	/** Identifies the active service. */
@@ -87,18 +109,23 @@ export interface ConversationAgentBinding
 	readonly profileRevisionId: string;
 }
 
-/** Returns one complete binding or one closed denial that must not reveal a partial agent state. */
+/** Returns complete creation coordinates or a denial with no partial binding to persist. */
 export type ConversationAgentBindingResult
 	= { readonly outcome: "bound"; readonly value: ConversationAgentBinding }
 	| { readonly outcome: "denied"; readonly reason: ConversationAgentBindingDenialReasons };
 
-/** Resolves the agent facts an eventual history-anchored conversation creation command requires. */
+/**
+ * Resolves the service, revision, Principal, profile, and AgentIdentity that pre-creation needs.
+ *
+ * It denies when any owned boundary cannot supply its coordinate; it never creates an identity or
+ * falls back to the older personal-service lookup.
+ */
 export interface ConversationAgentBindingAuthority
 {
 	bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>;
 }
 
-/** Lists the dependencies that keep profile and identity selection out of browser- and database-controlled data. */
+/** Lists the separately owned policy ports that complete a repository candidate. */
 export interface ConversationAgentBindingAuthorityDependencies
 {
 	/** Selects one release-owned profile after the authority resolves the trusted service kind. */

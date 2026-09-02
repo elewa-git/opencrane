@@ -4,13 +4,27 @@ import { ConversationAgentBindingResolver } from "../conversation-agent-binding-
 import type { ConversationAgentBindingAuthority as ConversationAgentBindingAuthorityPort, ConversationAgentBindingAuthorityDependencies, ConversationAgentBindingCommand, ConversationAgentBindingResult } from "../conversation-agent-binding.types";
 import { PrismaConversationAgentBindingRepository } from "./prisma-conversation-agent-binding-repository";
 
-/** Opens the serializable snapshot that binds one active service, revision, and managed Principal. */
+/**
+ * Runs binding resolution in the serializable transaction that owns its service snapshot.
+ *
+ * A later creation composition can use this public authority port without constructing the
+ * repository against the root Prisma client. The transaction contains the service, revision, and
+ * Principal read; profile and identity selectors remain injected policy ports because this
+ * checkpoint does not own their data.
+ * @implements ConversationAgentBindingAuthority
+ */
 export class PrismaConversationAgentBindingUnitOfWork implements ConversationAgentBindingAuthorityPort
 {
-	/** Opens the authority transaction over the OpenCrane product database. */
+	/** Holds the product database client and the non-database authorities used by the resolver. */
 	public constructor(private readonly prisma: PrismaClient, private readonly dependencies: ConversationAgentBindingAuthorityDependencies) {}
 
-	/** Resolves the binding inside one serializable snapshot before later creation persists its history anchors. */
+/**
+ * Resolves a binding against one serializable database snapshot.
+ *
+ * The unit of work builds its repository inside the transaction so the service and active revision
+ * cannot be read separately. A returned denial leaves no creation history to persist.
+ * @returns A complete binding or the reason the later creation flow must not continue.
+ */
 	public async bind(command: ConversationAgentBindingCommand): Promise<ConversationAgentBindingResult>
 	{
 		const dependencies = this.dependencies;
