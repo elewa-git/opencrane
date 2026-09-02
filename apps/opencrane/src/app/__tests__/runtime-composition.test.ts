@@ -13,7 +13,6 @@ vi.mock("../../infra/artifacts/artifact-upload.factory", function _MockArtifactU
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
-		_CreateConversationAssetOutputAuthority: function _CreateConversationAssetOutputAuthority() { return { reserve: vi.fn(), publish: vi.fn() }; },
 		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
 	};
 });
@@ -72,15 +71,12 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
 
-		expect(composition.agentRunWorkflowController).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationWorker).toEqual(expect.any(Function));
 		expect(composition).not.toHaveProperty("skillAuthoringInput");
 		expect(composition).not.toHaveProperty("skillAuthoringCompletion");
 		expect(composition.artifactPreprocessController).toBeNull();
 		expect(composition).not.toHaveProperty("runtimeStream");
-		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));
-		expect(composition.agentThreadParentDeliveries).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();
 		expect(composition.artifactScanner).toBeNull();
 		expect(composition.channelTargetResolver).toBeNull();

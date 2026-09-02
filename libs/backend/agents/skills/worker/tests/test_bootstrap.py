@@ -35,7 +35,7 @@ class BootstrapTests(unittest.TestCase):
     def test_rejects_an_external_bootstrap_endpoint(self) -> None:
         """A worker profile must never redirect the acknowledgement to an arbitrary host."""
         with self.assertRaisesRegex(RuntimeError, "endpoint is invalid"):
-            _WORKER._authoring_acknowledgement_url("https://outside.example/api/internal/agent-runtime")
+            _WORKER._authoring_acknowledgement_url("https://outside.example/api/internal/skill-authoring")
 
     def test_acknowledges_the_task_owned_authoring_endpoint(self) -> None:
         """Keep the authoring protocol explicit at the workflow-owned endpoint."""
@@ -53,9 +53,9 @@ class BootstrapTests(unittest.TestCase):
                 captured["timeout"] = timeout
                 return _Response(200, {"acknowledged": True, "validationId": "validation-1"})
 
-            validation_id = _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", str(token), str(reference), _Open)
+            validation_id = _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/skill-authoring", str(token), str(reference), _Open)
 
-            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-authoring-validations:bootstrap")
+            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/skill-authoring/skill-authoring-validations:bootstrap")
             self.assertEqual(json.loads(captured["body"]), {"bootstrapReference": "skill-bootstrap-v1_" + "a" * 64})
             self.assertEqual(captured["authorization"], "Bearer projected-token")
             self.assertEqual(captured["timeout"], 10.0)
@@ -78,7 +78,7 @@ class BootstrapTests(unittest.TestCase):
                 return _Response(200, {"acknowledged": True, "validationId": "validation-1"})
 
             with mock.patch.object(_WORKER.time, "sleep") as sleep:
-                validation_id = _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", str(token), str(reference), _Open)
+                validation_id = _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/skill-authoring", str(token), str(reference), _Open)
 
             self.assertEqual(validation_id, "validation-1")
             self.assertEqual(authorizations, ["Bearer projected-token-1", "Bearer projected-token-2"])
@@ -92,4 +92,4 @@ class BootstrapTests(unittest.TestCase):
             token.write_text("projected-token", encoding="utf-8")
             reference.write_text("skill-bootstrap-v1_" + "a" * 64, encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "was rejected"):
-                _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", str(token), str(reference), lambda request, timeout: _Response(200, {"acknowledged": True, "padding": "x" * 4096}))
+                _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/skill-authoring", str(token), str(reference), lambda request, timeout: _Response(200, {"acknowledged": True, "padding": "x" * 4096}))

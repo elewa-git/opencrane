@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-_EXPECTED_BASE_PATH = "/api/internal/agent-runtime"
+_EXPECTED_BASE_PATH = "/api/internal/skill-authoring"
 _MAX_FILE_BYTES = 4096
 _MAX_RESPONSE_BYTES = 4096
 _AUTHORING_BOOTSTRAP_RETRY_SECONDS = 300

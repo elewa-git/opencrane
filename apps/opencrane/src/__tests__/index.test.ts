@@ -179,7 +179,7 @@ describe("Control Plane", () =>
 
       const accepted = await request(acceptedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
       const rejected = await request(rejectedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-      const retired = await request(acceptedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const retired = await request(acceptedApp).post("/api/internal/skill-authoring/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
 
       // A reviewed runtime SA reaches the real dispatch authority, which fails closed with a
       // contract reason (no live assignment for this Pod) rather than a stubbed placeholder string.
@@ -208,8 +208,8 @@ describe("Control Plane", () =>
 		const app = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
 		const warmAsset = await request(app).post("/api/internal/warm-runtime/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({});
 		const warmParent = await request(app).post("/api/internal/warm-runtime/agent-threads/parent-deliveries").set("authorization", "Bearer projected-token").send({});
-		const retiredAsset = await request(app).post("/api/internal/agent-runtime/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({});
-		const retiredParent = await request(app).post("/api/internal/agent-runtime/agent-threads/parent-deliveries").set("authorization", "Bearer projected-token").send({});
+		const retiredAsset = await request(app).post("/api/internal/skill-authoring/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({});
+		const retiredParent = await request(app).post("/api/internal/skill-authoring/agent-threads/parent-deliveries").set("authorization", "Bearer projected-token").send({});
 
 		expect(warmAsset.status).toBe(400);
 		expect(warmParent.status).toBe(400);

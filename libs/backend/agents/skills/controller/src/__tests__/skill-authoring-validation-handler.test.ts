@@ -15,7 +15,7 @@ function _Profile()
 		namespace: "opencrane-skill-authoring",
 		serviceAccountName: "skill-authoring-default",
 		capabilityTokenAudience: "opencrane-skill-authoring",
-		bootstrapUrl: "http://opencrane.opencrane.svc.cluster.local:8081/api/internal/agent-runtime",
+		bootstrapUrl: "http://opencrane.opencrane.svc.cluster.local:8081/api/internal/skill-authoring",
 		capabilityTokenPath: "/var/run/opencrane/tokens/capability.token",
 		bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference",
 		scratchSize: "128Mi",

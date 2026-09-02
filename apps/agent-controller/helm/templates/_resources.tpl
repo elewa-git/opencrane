@@ -1,36 +1,3 @@
-{{/*
-This helper derives the personal warm-pool namespace and rejects the server namespace before
-the chart renders its zero-RBAC identity and network policies.
-*/}}
-{{- define "opencrane.agentController.runtimeNamespace" -}}
-{{- $runtimeNamespace := default (printf "%s-runtime" (include "opencrane.fullname" .) | trunc 63 | trimSuffix "-") .Values.agentController.runtimeNamespace -}}
-{{- if or (gt (len $runtimeNamespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $runtimeNamespace)) -}}
-{{- fail "agentController.runtimeNamespace must be a valid DNS-label namespace of at most 63 characters" -}}
-{{- end -}}
-{{- if eq $runtimeNamespace .Release.Namespace -}}
-{{- fail "agentController.runtimeNamespace must differ from the server release namespace" -}}
-{{- end -}}
-{{- $runtimeNamespace -}}
-{{- end }}
-
-{{/*
-This helper derives the managed warm-pool namespace once for the controller, server, and policies.
-It rejects either release-owned namespace because sharing one would collapse their trust boundaries.
-*/}}
-{{- define "opencrane.agentController.managedRuntimeNamespace" -}}
-{{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
-{{- if or (gt (len $managedRuntimeNamespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $managedRuntimeNamespace)) (eq $managedRuntimeNamespace .Release.Namespace) (eq $managedRuntimeNamespace $runtimeNamespace) -}}
-{{- fail "agentController.warmRuntime.managedNamespace must be a valid namespace distinct from the server and personal runtime namespaces" -}}
-{{- end -}}
-{{- $managedRuntimeNamespace -}}
-{{- end }}
-
-{{/* Release-unique label value used by NetworkPolicy and admission scoping without trusting a name alone. */}}
-{{- define "opencrane.agentController.runtimeNamespaceLabelValue" -}}
-{{- printf "%s/%s/%s" .Release.Namespace .Release.Name (include "opencrane.agentController.runtimeNamespace" .) | sha256sum | trunc 32 -}}
-{{- end }}
-
 {{/* Cluster-scoped admission name remains unique when equal release names exist in different silos. */}}
 {{- define "opencrane.agentController.admissionName" -}}
 {{- $suffix := printf "%s/%s" .Release.Namespace .Release.Name | sha256sum | trunc 10 -}}
@@ -51,9 +18,6 @@ It rejects either release-owned namespace because sharing one would collapse the
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 agentController.image.digest" }}
 {{- end }}
-{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.runtimeProfile.image.digest) }}
-{{- fail "agentController.enabled=true requires an immutable sha256 agentController.runtimeProfile.image.digest" }}
-{{- end }}
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillAuthoringValidation.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 authoring worker image digest" }}
 {{- end }}
@@ -66,18 +30,8 @@ It rejects either release-owned namespace because sharing one would collapse the
 {{- fail "agentController.enabled=true requires clustertenantManager.database.existingSecret or url for durable workflow workers" }}
 {{- end }}
 {{- $controllerName := "agent-controller" -}}
-{{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
-{{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
-{{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . -}}
 {{- $openCraneInternalUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
-{{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/agent-runtime" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
-{{- $runtimeImage := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
-{{- $personalRuntimeProfileName := .Values.agentController.runtimeProfile.name -}}
-{{- $managedRuntimeProfileName := "managed-default" -}}
-{{- if or (gt (len $personalRuntimeProfileName) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $personalRuntimeProfileName)) (eq $personalRuntimeProfileName $managedRuntimeProfileName) -}}
-{{- fail "agentController.runtimeProfile.name must be a valid personal profile name distinct from reserved managed-default" -}}
-{{- end -}}
-{{- $runtimeNamespaces := list $runtimeNamespace $managedRuntimeNamespace -}}
+{{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/skill-authoring" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $authoringImage := printf "%s@%s" .Values.agentController.skillAuthoringValidation.image.repository .Values.agentController.skillAuthoringValidation.image.digest -}}
 {{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
 {{- $mcpExecutorNamespace := $mcpExecutorValues.namespace -}}
@@ -97,21 +51,6 @@ It rejects either release-owned namespace because sharing one would collapse the
 {{- $skillAdmissionName := printf "%s-skill-authoring" (include "opencrane.agentController.admissionName" .) -}}
 {{- $mcpAdmissionName := printf "%s-mcp-executor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
 {{- $artifactAdmissionName := printf "%s-artifact-preprocessor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
-{{- range $namespace := $runtimeNamespaces }}
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ $namespace }}
-  labels:
-    opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/enforce-version: latest
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/audit-version: latest
-    pod-security.kubernetes.io/warn: restricted
-    pod-security.kubernetes.io/warn-version: latest
----
-{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -122,26 +61,6 @@ metadata:
     app.kubernetes.io/component: agent-controller
 automountServiceAccountToken: false
 ---
-{{- range $namespace := $runtimeNamespaces }}
-# Keep each fixed warm pool inside its deployment, Pod, CPU, and memory budget.
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: {{ include "opencrane.fullname" $ }}-warm-runtime
-  namespace: {{ $namespace }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: warm-runtime
-spec:
-  hard:
-    pods: {{ $.Values.agentController.runtimeQuota.pods | quote }}
-    count/deployments.apps: {{ $.Values.agentController.runtimeQuota.deployments | quote }}
-    requests.cpu: {{ $.Values.agentController.runtimeQuota.requests.cpu | quote }}
-    requests.memory: {{ $.Values.agentController.runtimeQuota.requests.memory | quote }}
-    limits.cpu: {{ $.Values.agentController.runtimeQuota.limits.cpu | quote }}
-    limits.memory: {{ $.Values.agentController.runtimeQuota.limits.memory | quote }}
----
-{{- end }}
 {{- range $namespace := (list $authoringNamespace) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -516,11 +435,6 @@ spec:
               value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
             - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
               value: {{ .Values.agentController.pollIntervalMs | quote }}
-            {{- $warm := .Values.agentController.warmRuntime }}
-            {{- $personalWarmProfile := dict "namespace" $runtimeNamespace "deploymentName" (printf "%s-personal-warm" (include "opencrane.fullname" .)) "serviceAccountName" $warm.serviceAccountName "genericProfile" $warm.genericProfile "claimedProfile" $warm.personalProfile "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "bindingPort" $warm.bindingPort "genericIdleSeconds" $warm.genericIdleSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "resources" .Values.agentController.runtimeProfile.resources }}
-            {{- $managedWarmProfile := dict "namespace" $managedRuntimeNamespace "deploymentName" (printf "%s-managed-warm" (include "opencrane.fullname" .)) "serviceAccountName" $warm.serviceAccountName "genericProfile" $warm.genericProfile "claimedProfile" $warm.managedProfile "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "bindingPort" $warm.bindingPort "genericIdleSeconds" $warm.genericIdleSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "resources" .Values.agentController.runtimeProfile.resources }}
-            - name: AGENT_CONTROLLER_WARM_PROFILES_JSON
-              value: {{ dict .Values.agentController.runtimeProfile.name $personalWarmProfile $managedRuntimeProfileName $managedWarmProfile | toJson | quote }}
             - name: AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON
               value: {{ dict "image" $authoringImage "imagePullPolicy" .Values.agentController.skillAuthoringValidation.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillAuthoringValidation.scratchSize "activeDeadlineSeconds" .Values.agentController.skillAuthoringValidation.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillAuthoringValidation.resources | toJson | quote }}
             - name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON
@@ -600,30 +514,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    # Readiness can reach only a Pod whose release-owned pool has already entered its fixed claimed
-    # profile. The destination policy independently admits this controller on the binding port.
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $runtimeNamespace }}
-              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
-              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.personalProfile }}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace }}
-              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
-              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.managedProfile }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.agentController.warmRuntime.bindingPort }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -675,64 +565,6 @@ spec:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
----
-# Add claimed warm Pods to LiteLLM's app-owned ingress boundary. The base policy separately admits
-# its release-local server and Cognee callers; this rule owns only the runtime path.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "opencrane.fullname" . }}-warm-runtime-litellm
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-    app.kubernetes.io/component: litellm
-spec:
-  podSelector:
-    matchLabels:
-      {{- include "opencrane.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: litellm
-  policyTypes: ["Ingress"]
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $runtimeNamespace }}
-              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
-              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.personalProfile }}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace }}
-              opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
-              opencrane.ai/warm-runtime-profile: {{ .Values.agentController.warmRuntime.managedProfile }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.litellm.service.port }}
----
-{{- range $namespace := $runtimeNamespaces }}
-# Deny runtime traffic unless the Pod's generic or claimed profile admits a named path.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "opencrane.fullname" $ }}-warm-runtime-default-deny
-  namespace: {{ $namespace }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: warm-runtime
-spec:
-  podSelector: {}
-  policyTypes: ["Ingress", "Egress"]
-  ingress: []
-  egress: []
----
-{{- end }}
 # The MCP controller may create only the fixed two-container envelope. The uploaded image is the
 # sole dynamic field and must remain an immutable registry digest; it receives no projected token.
 apiVersion: admissionregistration.k8s.io/v1
@@ -1055,6 +887,5 @@ spec:
           operator: In
           values: ["skill-authoring"]
 ---
-{{ include "opencrane.agentController.warmRuntimeResources" . }}
 {{- end }}
 {{- end }}

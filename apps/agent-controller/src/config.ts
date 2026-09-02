@@ -1,7 +1,5 @@
 import { isAbsolute } from "node:path";
 
-import { __AssertWarmRuntimePoolProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
-import type { WarmRuntimePoolProfiles } from "@opencrane/backend/agents/runtime/controller";
 import { __ValidateMcpExecutorControllerProfile } from "@opencrane/backend/agents/runtime/mcp-executor/controller";
 import { __ValidateSkillAuthoringValidationProfile } from "@opencrane/backend/agents/skills/controller";
 import { __BuildArtifactPreprocessorJob, type ArtifactPreprocessorJobProfile } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
@@ -83,30 +81,6 @@ function _ArtifactProfile(environment: NodeJS.ProcessEnv): ArtifactPreprocessorJ
 	return ___ParseAndValidateJson(raw, "AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON", _ValidateArtifactProfile);
 }
 
-/** Validates the two fixed pools supplied by Helm. */
-function _ValidateWarmRuntimeProfiles(value: unknown): WarmRuntimePoolProfiles
-{
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-	{
-		throw new Error("warm runtime profiles must be an object");
-	}
-	const profiles = value as Record<string, unknown>;
-	const names = Object.keys(profiles);
-	if (names.length !== 2)
-	{
-		throw new Error("warm runtime requires exactly personal and managed pool profiles");
-	}
-	for (const [name, candidate] of Object.entries(profiles))
-	{
-		if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate))
-		{
-			throw new Error(`warm runtime profile '${name}' must be one object`);
-		}
-		__AssertWarmRuntimePoolProfile(candidate as Parameters<typeof __AssertWarmRuntimePoolProfile>[0]);
-	}
-	return structuredClone(profiles) as WarmRuntimePoolProfiles;
-}
-
 /** Read and fail-closed validate the complete agent-controller process configuration. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): AgentControllerProcessConfig
 {
@@ -117,8 +91,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 		throw new Error("OPENCRANE_CONTROLLER_TOKEN_PATH must be absolute");
 	}
 
-	// 2. Validate every immutable profile and its dedicated runtime namespace at startup.
-	const warmRuntimeProfiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_WARM_PROFILES_JSON"), "AGENT_CONTROLLER_WARM_PROFILES_JSON", _ValidateWarmRuntimeProfiles);
+	// 2. Validate every immutable governed-Job profile at startup.
 	const skillAuthoringProfile = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON"), "AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON", __ValidateSkillAuthoringValidationProfile);
 	const mcpExecutorProfile = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON"), "AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON", __ValidateMcpExecutorControllerProfile);
 	const artifactPreprocessorProfile = _ArtifactProfile(environment);
@@ -141,7 +114,6 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 		controllerTokenPath,
 		pollIntervalMilliseconds: _Integer(environment, "AGENT_CONTROLLER_POLL_INTERVAL_MS", 1_000, 100, 60_000),
 		requestTimeoutMilliseconds: _Integer(environment, "AGENT_CONTROLLER_REQUEST_TIMEOUT_MS", 10_000, 1_000, 60_000),
-		warmRuntimeProfiles,
 		skillAuthoringProfile,
 		mcpExecutorProfile,
 		artifactPreprocessorProfile,

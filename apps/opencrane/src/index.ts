@@ -10,7 +10,6 @@ import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config";
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
-import { _CreateExternalActionWorker } from "./app/external-action-composition";
 import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
@@ -54,10 +53,9 @@ async function _Main(): Promise<void>
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
 	const runCancellation = _CreateRunCancellationAuthority(prisma);
 
-	// 4. Compose the class-specific MCP authority before the generic external-action worker.
+	// 4. Compose the retained workload authorities.
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
-	const externalActions = _CreateExternalActionWorker(prisma, mcpRuntime.authority, _log);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
@@ -69,7 +67,7 @@ async function _Main(): Promise<void>
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, executionSubjects.retryInputCompiler, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

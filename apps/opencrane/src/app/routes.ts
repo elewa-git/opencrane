@@ -172,17 +172,16 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
 }
 
 /**
- * Register the workload-facing API from explicit controller, runtime, worker, and replay lists.
+ * Register the workload-facing API from explicit controller, authoring, worker, and replay lists.
  *
  * None of these routes sits behind the browser-session guard, because none of their callers is a
- * browser. Each one authorises the bearer token on the request itself: the controller, runtime, and
+ * browser. Each one authorises the bearer token on the request itself: the controller, authoring, and
  * worker routers put it through Kubernetes TokenReview and accept only a ServiceAccount from the
  * namespace their reviewer was built for, and `/api/internal/conversation-replay` instead spends a
  * single-use channel context token. Being on the internal listener is not the protection — a router
  * mounted here without its own check would be open to every workload in the cluster.
  *
- * Skill-authoring validation workers use the `/api/internal/agent-runtime` base path. Warm runtime
- * binding, command streaming, generated assets, and parent deliveries share `/api/internal/warm-runtime`.
+ * Skill-authoring validation workers use the `/api/internal/skill-authoring` base path.
  *
  * Called by: internal-app.ts, which builds the workload-facing Express listener.
  *
@@ -195,7 +194,6 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 {
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentRunWorkflowController },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillAuthoringValidationController },
 		{ method: "use", path: "/api/internal/agent-controller", handler: mcpRuntime.controller },
 		..._OptionalRoute("/api/internal/agent-controller", runtime.artifactPreprocessController),
@@ -204,19 +202,13 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/mcp-executor", handler: mcpRuntime.companion },
 	];
 	const internalRuntimeRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringValidationWorker },
-	];
-	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },
-		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeStream },
-		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.conversationAssetOutputs },
-		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.agentThreadParentDeliveries },
+		{ method: "use", path: "/api/internal/skill-authoring", handler: runtime.skillAuthoringValidationWorker },
 	];
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);
 	const internalChannelTargetRoutes = _OptionalRoute("/api/internal/channel-targets:resolve", runtime.channelTargetResolver);
 	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
-	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWarmRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
 }
 
 /** Return a one-entry route list for a router, or an empty list when the router is null. */

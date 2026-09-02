@@ -1,7 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -29,13 +28,11 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 		vi.useFakeTimers();
 		const startWorkers = vi.fn(async function _StartWorkers() { return { workerId: "worker", workerName: "opencrane-control-plane", drain: vi.fn(), stop: vi.fn() }; });
 		const close = vi.fn(async function _Close(): Promise<void> {});
-		const externalDrain = vi.fn(async function _DrainExternal(): Promise<void> {});
 		const recoverExpiredInvocation = vi.fn().mockResolvedValue(false);
 		const workers = await _StartBackgroundWorkers(
 			{} as PrismaClient,
 			{} as ManagedRunAdmissionPort,
 			{ schedulerEnabled: false, schedulerIntervalMilliseconds: 60_000 } as OpenCraneProcessConfig,
-			{ drain: externalDrain, runOnce: vi.fn().mockResolvedValue(false) } as unknown as ExternalActionWorker,
 			{ recoverExpiredInvocation } as never,
 			{ close, startWorkers } as IWorkflowWorkerRuntime,
 			{ reconcileNext: vi.fn().mockResolvedValue(false) } as never,
@@ -46,7 +43,6 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 		expect(recoverExpiredInvocation).toHaveBeenCalledOnce();
 		await workers.stop();
 		expect(close).toHaveBeenCalledOnce();
-		expect(externalDrain).toHaveBeenCalledOnce();
 		vi.useRealTimers();
 	});
 });

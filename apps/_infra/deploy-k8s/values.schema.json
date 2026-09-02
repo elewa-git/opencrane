@@ -219,12 +219,9 @@
     },
     "agentController": {
       "type": "object",
-      "required": ["enabled", "image", "claimLeaseSeconds", "assignmentTtlSeconds", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort", "runtimeQuota", "runtimeProfile", "warmRuntime"],
+      "required": ["enabled", "image", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort"],
       "properties": {
         "enabled": { "type": "boolean" },
-        "runtimeNamespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
-        "claimLeaseSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
-        "assignmentTtlSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
         "image": {
           "type": "object",
           "required": ["repository", "digest", "pullPolicy"],
@@ -245,86 +242,7 @@
           "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
           "uniqueItems": true
         },
-        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "runtimeQuota": {
-          "type": "object",
-          "required": ["pods", "deployments", "requests", "limits"],
-          "properties": {
-            "pods": { "type": "integer", "minimum": 1 },
-            "deployments": { "type": "integer", "minimum": 1 },
-            "requests": {
-              "type": "object",
-              "required": ["cpu", "memory"],
-              "properties": {
-                "cpu": { "type": "string", "minLength": 1 },
-                "memory": { "type": "string", "minLength": 1 }
-              }
-            },
-            "limits": {
-              "type": "object",
-              "required": ["cpu", "memory"],
-              "properties": {
-                "cpu": { "type": "string", "minLength": 1 },
-                "memory": { "type": "string", "minLength": 1 }
-              }
-            }
-          }
-        },
-        "runtimeProfile": {
-          "type": "object",
-          "required": ["name", "image", "scratchSize", "resources"],
-          "properties": {
-            "name": { "type": "string", "minLength": 1 },
-            "scratchSize": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" },
-            "image": {
-              "type": "object",
-              "required": ["repository", "digest", "pullPolicy"],
-              "properties": {
-                "repository": { "type": "string", "minLength": 1 },
-                "digest": { "type": "string" },
-                "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
-              }
-            },
-            "resources": {
-              "type": "object",
-              "required": ["requests", "limits"],
-              "properties": {
-                "requests": {
-                  "type": "object",
-                  "required": ["cpu", "memory"],
-                  "properties": {
-                    "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
-                    "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
-                  }
-                },
-                "limits": {
-                  "type": "object",
-                  "required": ["cpu", "memory"],
-                  "properties": {
-                    "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
-                    "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "warmRuntime": {
-          "type": "object",
-          "required": ["managedNamespace", "replicas", "serviceAccountName", "tokenAudience", "projectedTokenTtlSeconds", "bindingPort", "genericIdleSeconds", "genericProfile", "personalProfile", "managedProfile"],
-          "properties": {
-            "managedNamespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
-            "replicas": { "type": "integer", "minimum": 2, "maximum": 5 },
-            "serviceAccountName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
-            "tokenAudience": { "type": "string", "minLength": 1 },
-            "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 },
-            "bindingPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-            "genericIdleSeconds": { "type": "integer", "minimum": 1 },
-            "genericProfile": { "type": "string", "minLength": 1 },
-            "personalProfile": { "type": "string", "minLength": 1 },
-            "managedProfile": { "type": "string", "minLength": 1 }
-          }
-        }
+        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     },
     "crds": {

@@ -5,7 +5,7 @@ import type { McpRuntimeAuthority, McpTaskWorkflow } from "@opencrane/backend/se
 /** One process-owned OCI MCP authority and its three authenticated HTTP adapters. */
 export interface McpRuntimeComposition
 {
-	/** Durable class-specific execution authority shared with the external-action worker. */
+	/** Durable class-specific MCP execution authority shared by the app's controller and companion routes. */
 	readonly authority: McpRuntimeAuthority;
 	/** Browser administrator route that starts immutable-image discovery. */
 	readonly promotion: Router;

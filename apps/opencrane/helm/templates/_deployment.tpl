@@ -1,5 +1,4 @@
 {{- define "opencrane.server.deployment" -}}
-{{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}
@@ -191,11 +190,6 @@ spec:
             - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_TIMEOUT_SECONDS
               value: {{ $fleetMembership.billingGatewayTimeoutSeconds | quote }}
             {{- end }}
-            # The server binds each runtime identity class to its own Helm-owned restricted namespace.
-            - name: AGENT_RUNTIME_PERSONAL_NAMESPACE
-              value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
-            - name: AGENT_RUNTIME_MANAGED_NAMESPACE
-              value: {{ $managedRuntimeNamespace | quote }}
             # OCI-backed MCP calls use a separate Job class and Pod-bound companion identity.
             - name: SKILL_AUTHORING_NAMESPACE
               value: {{ $skillAuthoring.namespace | quote }}

@@ -1,6 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
 
-import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { McpRuntimeAuthority } from "@opencrane/backend/server/gateways/mcp";
 import type { ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
@@ -10,9 +9,6 @@ import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/wor
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
 import type { OpenCraneProcessConfig } from "./config.types";
 import { _log } from "./log";
-
-/** Delay between bounded durable external-action passes. */
-const _EXTERNAL_ACTION_INTERVAL_MILLISECONDS = 1_000;
 
 /** Delay between server-owned checks for a lost MCP invocation completion report. */
 const _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS = 1_000;
@@ -26,7 +22,7 @@ const _PROVIDER_EFFECT_INTERVAL_MILLISECONDS = 1_000;
  * The returned stop handle is the lifecycle boundary: every loop must be stopped before Prisma is
  * disconnected, and none may keep the Node process alive on its own.
  */
-export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor): Promise<OpenCraneBackgroundWorkers>
+export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor): Promise<OpenCraneBackgroundWorkers>
 {
 	// 1. Prepare optional schedule admission through the same capacity port used by run-now requests.
 	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);
@@ -49,9 +45,7 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAd
 		: null;
 	schedulerHandle?.unref();
 
-	// 4. Poll at most one durable action per pass; the worker itself prevents overlapping provider I/O.
-	const externalActionHandle = setInterval(function _externalAction() { void externalActions.runOnce().catch(function _onError(error: unknown) { _log.error({ err: error }, "external action worker pass failed"); }); }, _EXTERNAL_ACTION_INTERVAL_MILLISECONDS);
-	externalActionHandle.unref();
+	// 4. Reconcile each retained process-owned authority on its own bounded cadence.
 	const mcpRecoveryHandle = setInterval(function _recoverMcpInvocation() { void mcpRuntime.recoverExpiredInvocation().catch(function _onError(error: unknown) { _log.error({ err: error }, "MCP invocation recovery pass failed"); }); }, _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS);
 	mcpRecoveryHandle.unref();
 	const providerEffectHandle = setInterval(function _reconcileProviderEffect() { void providerEffects.reconcileNext().catch(function _onError(error: unknown) { _log.error({ err: error }, "provider effect reconciliation pass failed"); }); }, _PROVIDER_EFFECT_INTERVAL_MILLISECONDS);
@@ -62,10 +56,9 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAd
 		{
 			if (schedulerHandle !== null)
 				clearInterval(schedulerHandle);
-			clearInterval(externalActionHandle);
 			clearInterval(mcpRecoveryHandle);
 			clearInterval(providerEffectHandle);
-			await Promise.all([externalActions.drain(), workflowRuntime.close()]);
+			await workflowRuntime.close();
 		},
 	};
 }

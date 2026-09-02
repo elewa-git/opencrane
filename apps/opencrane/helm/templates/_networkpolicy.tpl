@@ -10,8 +10,6 @@
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
 #       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
-#       - Fixed warm-runtime Pod: outbound `/api/internal/agent-runtime/*` only; its projected
-#         ServiceAccount token is TokenReviewed inside the route, so this rule only opens the network path — it proves no identity.
 #       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
 #         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
 #         each request to the registered Pod. ArtifactStore remains unreachable from worker namespaces.
@@ -93,31 +91,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    # Warm runtime Pods own no public listener and can only initiate this connection. TokenReview
-    # fixes each personal or managed audience to its namespace and ServiceAccount in-process.
-    {{- if .Values.agentController.enabled }}
-    {{- $personalRuntimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
-    {{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . }}
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $personalRuntimeNamespace | quote }}
-              opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace | quote }}
-              opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
     # Governed skill Jobs have no general network access. Admission fixes their component,
     # ServiceAccount and projected-token audience; the route TokenReviews the registered Pod UID.
     - from:
@@ -142,7 +115,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    {{- end }}
     # Allow the fleet-manager to reach the PUBLIC /api/v1/* API for cross-silo operations.
     - from:
         - podSelector:

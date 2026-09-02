@@ -1,6 +1,5 @@
 {{/*
-This template renders LiteLLM's base boundary for its release-local callers and outbound paths.
-The agent-controller adds claimed warm runtimes separately because it owns their pool selectors.
+This template renders LiteLLM's boundary for release-local callers and outbound paths.
 The chart rejects Redis while no app-owned policy can select its workload.
 Called by apps/_infra/deploy-k8s/templates/app-rollups.yaml.
 */}}
@@ -27,7 +26,6 @@ spec:
   policyTypes: ["Ingress", "Egress"]
   ingress:
     # The release-local server and Cognee are the two long-lived model-routing callers.
-    # The agent-controller's additive policy admits claimed warm runtimes without widening this rule.
     - from:
         - namespaceSelector:
             matchLabels:

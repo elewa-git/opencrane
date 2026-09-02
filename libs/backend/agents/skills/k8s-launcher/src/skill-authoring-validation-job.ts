@@ -22,7 +22,7 @@ function _IsBootstrapUrl(value: string): boolean
 	{
 		const parsed = new URL(value);
 		const port = Number(parsed.port);
-		return parsed.protocol === "http:" && /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.svc\.cluster\.local$/.test(parsed.hostname) && Number.isSafeInteger(port) && port >= 1 && port <= 65_535 && parsed.pathname === "/api/internal/agent-runtime" && !parsed.username && !parsed.password && !parsed.search && !parsed.hash;
+		return parsed.protocol === "http:" && /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.svc\.cluster\.local$/.test(parsed.hostname) && Number.isSafeInteger(port) && port >= 1 && port <= 65_535 && parsed.pathname === "/api/internal/skill-authoring" && !parsed.username && !parsed.password && !parsed.search && !parsed.hash;
 	}
 	catch
 	{

@@ -13,16 +13,6 @@ rendered="$(helm template opencrane-silo "$CHART_DIR" --namespace pooler-ns \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler \
   --set-string networkPolicy.postgresPoolerServiceIp=10.96.42.17)"
-runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
-  "${MEMORY_GATEWAY_API_ARGS[@]}" \
-  --set agentController.enabled=true \
-  --set-string clustertenantManager.database.existingSecret=test-opencrane-db \
-  --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-  --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
-  --set-string agentController.skillAuthoringValidation.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
-  --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
-  --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
-  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')"
 lease_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set opencrane-mcp-executor.mcpExecutor.controllerClaimLeaseSeconds=47 \
@@ -76,32 +66,6 @@ server_policy="$(printf '%s\n' "$rendered" | awk '
     flush_document()
   }
 ')"
-runtime_server_policy="$(printf '%s\n' "$runtime_rendered" | awk '
-  function flush_document() {
-    if (is_policy && is_server_policy) {
-      printf "%s", document
-    }
-    document = ""
-    is_policy = 0
-    is_server_policy = 0
-  }
-  /^---$/ {
-    flush_document()
-    next
-  }
-  {
-    document = document $0 ORS
-  }
-  /^kind: NetworkPolicy$/ {
-    is_policy = 1
-  }
-  /^  name: opencrane-silo-opencrane-server$/ {
-    is_server_policy = 1
-  }
-  END {
-    flush_document()
-  }
-')"
 
 [[ -n "$server_policy" ]]
 if grep -Fq 'cnpg.io/poolerName:' <<<"$server_policy"; then
@@ -129,14 +93,8 @@ history_server_policy="$(printf '%s\n' "$history_rendered" | awk '
 ')"
 grep -Fq '              app.kubernetes.io/component: kurrentdb' <<<"$history_server_policy"
 grep -Fq '          port: 2113' <<<"$history_server_policy"
-grep -Fq '              opencrane.ai/runtime-release:' <<<"$runtime_server_policy"
-grep -Fq '              app.kubernetes.io/component: warm-runtime' <<<"$runtime_server_policy"
-grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-runtime"' <<<"$runtime_server_policy"
-grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
-grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-personal-warm' <<<"$runtime_server_policy"
-grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-managed-warm' <<<"$runtime_server_policy"
-if grep -Fq 'app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"; then
-  echo "opencrane-server policy retained the retired per-Job runtime selector" >&2
+if grep -Eq 'warm-runtime|agent-runtime' <<<"$server_policy"; then
+  echo "opencrane-server policy retained the retired runtime selector" >&2
   exit 1
 fi
 grep -A1 -F 'name: MCP_CONTROLLER_CLAIM_LEASE_SECONDS' <<<"$lease_rendered" | grep -F 'value: "47"' >/dev/null

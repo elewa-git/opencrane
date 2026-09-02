@@ -15,8 +15,6 @@ import type { Router } from "express";
  */
 export interface InternalRuntimeComposition
 {
-	/** Controller-only router that serves one durable AgentRun workflow task. */
-	readonly agentRunWorkflowController: Router;
 	/** Controller-only router for one admitted skill-authoring validation workflow. */
 	readonly skillAuthoringValidationController: Router;
 	/** Worker-only protocol for one task-bound Python skill validation Job. */
@@ -31,33 +29,13 @@ export interface InternalRuntimeComposition
 	readonly conversationReplay: Router | null;
 	/** Router that resolves a browser channel for a workload-authenticated caller, alongside the replay receiver. */
 	readonly channelTargetResolver: Router | null;
-	/** Warm runtime router that finds and binds a ready claim from reviewed Pod identity. */
-	readonly warmRuntimeBinding: Router;
-	/** Warm runtime stream using only the dedicated warm projected-token reviewer. */
-	readonly warmRuntimeStream: Router;
-	/** Warm-runtime-only broker for generated conversation-file output. */
-	readonly conversationAssetOutputs: Router;
-	/**
-	 * Runtime-only router that accepts one display-safe delivery from an Agent-thread child up to its
-	 * parent group message.
-	 *
-	 * A run inside a child conversation reports its result, question, or failure back to the parent
-	 * through this route, so the parent summary can change without the browser being trusted to say what
-	 * a run produced. It stays out of every browser router on purpose: only a workload whose Kubernetes
-	 * ServiceAccount token passes TokenReview may produce a delivery.
-	 * @see AgentThreadParentDeliveryUnitOfWork for the port behind it and its denial reasons.
-	 */
-	readonly agentThreadParentDeliveries: Router;
 }
 
 /** The subset of routers built by the controller-only composition step. */
 export type ControllerRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"agentRunWorkflowController" | "skillAuthoringValidationController"
+	"skillAuthoringValidationController"
 >;
-
-/** The subset of routers built by the runtime-protocol composition step. */
-export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "warmRuntimeBinding" | "warmRuntimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
 export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessController" | "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;

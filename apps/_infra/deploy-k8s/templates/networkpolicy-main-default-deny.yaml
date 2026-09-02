@@ -34,7 +34,7 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
     app.kubernetes.io/component: platform-default-deny
 spec:
-  # ArtifactStore, agent-controller, warm runtimes, LiteLLM, and the PostgreSQL pooler have
+  # ArtifactStore, agent-controller, LiteLLM, and the PostgreSQL pooler have
   # app-owned policies. Excluding them prevents this generic allow-list from widening their
   # stricter boundaries. CNPG identifies generated pooler pods with cnpg.io/poolerName rather
   # than preserving the Pooler CR's application labels.
@@ -42,14 +42,14 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: NotIn
-        values: [artifact-service, agent-controller, warm-runtime, cognee, litellm, memory-gateway]
+        values: [artifact-service, agent-controller, cognee, litellm, memory-gateway]
       - key: cnpg.io/poolerName
         operator: DoesNotExist
   policyTypes:
     - Ingress
     - Egress
   ingress:
-    # 1. Platform pod ↔ platform pod: the runtime planes call each other constantly
+    # 1. Platform pods call each other through their app-owned policies.
     #    (OpenCrane/channel-proxy -> target planes, Cognee -> LiteLLM, etc.);
     #    re-allow all of that under the default-deny rather than re-deriving every pairwise
     #    port (networkpolicy-planes.yaml already enforces the precise per-port allow-lists).

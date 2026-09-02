@@ -1,4 +1,3 @@
-import type { WarmRuntimePoolProfiles } from "@opencrane/backend/agents/runtime/controller";
 import type { McpExecutorJobProfile } from "@opencrane/backend/agents/runtime/mcp-executor/k8s-launcher";
 import type { SkillAuthoringValidationJobProfile } from "@opencrane/backend/agents/skills/controller";
 import type { ArtifactPreprocessorJobProfile } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
@@ -28,8 +27,6 @@ export interface AgentControllerProcessConfig
 	readonly pollIntervalMilliseconds: number;
 	/** Hard timeout independently applied to each OpenCrane or Kubernetes call. */
 	readonly requestTimeoutMilliseconds: number;
-	/** Fixed personal and managed warm pools keyed by their server-selected profile names. */
-	readonly warmRuntimeProfiles: WarmRuntimePoolProfiles;
 	/** Immutable profile for the task-owned skill-authoring Job. */
 	readonly skillAuthoringProfile: SkillAuthoringValidationJobProfile;
 	/** Immutable profile for OCI-backed MCP executor Jobs. */

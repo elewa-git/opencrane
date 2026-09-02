@@ -38,7 +38,7 @@ metadata:
     {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: cross-instance-isolation
 spec:
-  # ArtifactStore, agent-controller, warm runtimes, LiteLLM, and the PostgreSQL pooler have stricter
+  # ArtifactStore, agent-controller, LiteLLM, and the PostgreSQL pooler have stricter
   # app policies. Exclude them because this additive same-instance allowance would widen their
   # deliberately tiny ingress/egress rules. CNPG identifies generated pooler pods with
   # cnpg.io/poolerName.
@@ -46,7 +46,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: NotIn
-        values: [artifact-service, agent-controller, warm-runtime, cognee, litellm, memory-gateway]
+        values: [artifact-service, agent-controller, cognee, litellm, memory-gateway]
       - key: cnpg.io/poolerName
         operator: DoesNotExist
   policyTypes:
