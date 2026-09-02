@@ -41,6 +41,32 @@ export interface ConversationCreationReservationAgentCoordinates
 	readonly computerHistoryEventId: string;
 }
 
+/**
+ * Carries the Agent identity and profile revision recorded when an agent conversation reaches its
+ * history anchor. Direct and group conversations carry no binding, while an agent conversation
+ * must carry both values so a retry can compare the persisted pair without changing it.
+ */
+export interface ConversationCreationReservationAgentBinding
+{
+	/** Identifies the stable AgentIdentity that owns the conversation computer. */
+	readonly agentIdentityId: string;
+	/** Identifies the release-owned profile revision used to provision that computer. */
+	readonly profileRevisionId: string;
+}
+
+/**
+ * Requests the reservation transition after KurrentDB has confirmed its revision-zero creation
+ * anchor. Callers use `null` for direct and group conversations; agent conversations supply the
+ * resolved {@link ConversationCreationReservationAgentBinding} that is persisted with the anchor.
+ */
+export interface AnchorConversationCreationReservationCommand
+{
+	/** Identifies the durable command whose Kurrent creation anchor has been verified. */
+	readonly reservationId: string;
+	/** Supplies Agent-only identity/profile facts, or null for direct and group conversations. */
+	readonly agentBinding: ConversationCreationReservationAgentBinding | null;
+}
+
 /** Names the complete, resolved command that a transaction stores before any history I/O. */
 export interface ReserveConversationCreationCommand
 {
@@ -71,6 +97,8 @@ export interface ReservedConversationCreation extends ReserveConversationCreatio
 	readonly reservationId: string;
 	/** Identifies the same-transaction authorization decision that admitted the reservation. */
 	readonly authorizationEvidenceId: string;
+	/** Carries the persisted agent identity/profile pair after history anchoring, or null when no agent owns the conversation. */
+	readonly resolvedAgentBinding: ConversationCreationReservationAgentBinding | null;
 	/** States whether the command has been anchored and projected. */
 	readonly state: ConversationCreationReservationStates;
 }
@@ -107,4 +135,16 @@ export interface ConversationCreationReservationRepository
 	 * @returns The persisted command, a retry conflict, or an authorization denial.
 	 */
 	reserve(command: ReserveConversationCreationCommand): Promise<ReserveConversationCreationResult>;
+	/**
+	 * Advances one reservation only after its exact revision-zero anchor is present in KurrentDB.
+	 *
+	 * The repository accepts a direct/group null binding or the full Agent identity/profile pair and
+	 * returns the already-advanced command for an exact retry. It never accepts a partial binding.
+	 * @param command The reservation and, when applicable, the Agent identity/profile pair to persist.
+	 * @returns The anchored reservation, including the persisted binding. Matching anchored retries
+	 * return the stored reservation without another update.
+	 * @throws {Error} The reservation is unavailable, its binding does not match its conversation
+	 * mode or stored retry value, or an agent binding is incomplete.
+	 */
+	markHistoryAnchored(command: AnchorConversationCreationReservationCommand): Promise<ReservedConversationCreation>;
 }
