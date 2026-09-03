@@ -15,6 +15,7 @@ remaining grouped with the server code that composes them.
 | [`auth`](./auth/README.md) | OIDC login, sessions, and request-principal resolution. |
 | [`agent-runtime-stream`](./agent-runtime-stream/README.md) | Projected-token runtime HTTP/SSE framing. |
 | [`agent-runtime-continuation`](./agent-runtime-continuation/README.md) | Secret-backed encryption for durable model-loop checkpoints. |
+| [`conversation-payloads`](./conversation-payloads/README.md) | Dedicated keyring encryption for private ConversationComputer payloads. |
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
 | [`history-store`](./history-store/README.md) | KurrentDB-backed append-only stream history. |
 | [`http`](./http/README.md) | Express transport plumbing. |
@@ -31,6 +32,7 @@ remaining grouped with the server code that composes them.
                                   │
                   api ───────────┤
  workload identity ─► runtime stream ◄── runtime Pod
+ private conversation payloads ───────► ciphertext-only store
  external-action ports ───────────┘
 ```
 
