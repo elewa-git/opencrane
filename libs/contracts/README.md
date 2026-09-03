@@ -92,6 +92,11 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   checks remain context-specific boundaries outside these structural parsers. Both carry opaque
   payload and artifact coordinates, never plaintext bodies, storage credentials, or general
   event-store access.
+- `ConversationCreated`, its direct/group/agent mode, initial participant visibility, retry
+  identifier, authorization evidence, and optional AgentService/AgentIdentity/profile/computer
+  binding — the revision-zero record from which a conversation projection can be rebuilt. It is not
+  participant-visible content and never lets a browser choose an identity, profile, computer, or
+  HistoryStore stream.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
