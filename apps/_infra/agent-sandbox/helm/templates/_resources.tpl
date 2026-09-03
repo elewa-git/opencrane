@@ -155,14 +155,20 @@ spec:
         object.metadata.annotations['opencrane.ai/lease-reason'] in ['activation_requested', 'recovery_requested']
       message: an Agent Sandbox claim must identify one bounded computer lease and contain no caller-controlled metadata
     - expression: >-
-        object.spec.size() == 2 &&
+        object.spec.size() == 3 &&
         object.spec.warmPoolRef.size() == 1 &&
         object.spec.warmPoolRef.name in {{ $poolNames | toJson }} &&
         object.spec.warmPoolRef.name == {{ $profilePools | toJson }}[object.metadata.labels['opencrane.ai/profile']] &&
         object.spec.lifecycle.size() == 2 &&
         object.spec.lifecycle.shutdownPolicy == 'DeleteForeground' &&
-        has(object.spec.lifecycle.shutdownTime)
-      message: an Agent Sandbox claim may select only a release-owned pool and a foreground-deleted lease; it cannot inject environment variables, volumes, or pod metadata
+        has(object.spec.lifecycle.shutdownTime) &&
+        object.spec.additionalPodMetadata.size() == 1 &&
+        object.spec.additionalPodMetadata.labels.size() == 4 &&
+        object.spec.additionalPodMetadata.labels['app.kubernetes.io/name'] == {{ include "opencrane.name" . | toJson }} &&
+        object.spec.additionalPodMetadata.labels['app.kubernetes.io/instance'] == {{ .Release.Name | toJson }} &&
+        object.spec.additionalPodMetadata.labels['app.kubernetes.io/component'] == 'agent-sandbox' &&
+        object.spec.additionalPodMetadata.labels['opencrane.ai/computer-id'] == object.metadata.labels['opencrane.ai/computer-id']
+      message: an Agent Sandbox claim may select only a release-owned pool and a foreground-deleted lease; it may stamp only its release selectors and checked computer identity onto the Pod
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -225,6 +231,11 @@ spec:
               drop: ["ALL"]
           resources:
             {{- toYaml $profile.resources | nindent 12 }}
+          env:
+            - name: OPENCRANE_CONVERSATION_COMPUTER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['opencrane.ai/computer-id']
           volumeMounts:
             - name: conversation-computer-runtime-bootstrap
               mountPath: /var/run/opencrane/conversation-computer

@@ -75,6 +75,7 @@ export class ConversationComputerActivationClaimAuthority implements Conversatio
 			generation: command.generation,
 			profile: profile.sandboxProfile,
 			warmPoolName: profile.warmPoolName,
+			podLabels: profile.podLabels,
 			reason: AgentSandboxClaimReason.ActivationRequested,
 			shutdownTime: new Date(current.lease.expiresAt),
 		});

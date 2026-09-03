@@ -121,16 +121,27 @@ function _readConversationComputerActivationConfig(): ConversationComputerActiva
 		const serviceAccountName = typeof value.serviceAccountName === "string" ? value.serviceAccountName : "";
 		const sandboxProfile = typeof value.sandboxProfile === "string" ? value.sandboxProfile : "";
 		const warmPoolName = typeof value.warmPoolName === "string" ? value.warmPoolName : "";
-		if (!profileRevisionId || !_isDnsLabel(namespace) || !_isDnsLabel(serviceAccountName) || !_isDnsLabel(sandboxProfile) || !_isDnsLabel(warmPoolName))
-			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have one revision id and DNS-label namespace, serviceAccountName, sandboxProfile, and warmPoolName");
+		const podLabels = _ReadConversationComputerPodLabels(value.podLabels);
+		if (!profileRevisionId || !_isDnsLabel(namespace) || !_isDnsLabel(serviceAccountName) || !_isDnsLabel(sandboxProfile) || !_isDnsLabel(warmPoolName) || podLabels === null)
+			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have one revision id, DNS-label Sandbox coordinates, and release Pod labels");
 		if (profileRevisionIds.has(profileRevisionId) || sandboxProfiles.has(sandboxProfile) || warmPools.has(warmPoolName))
 			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have unique revision ids, sandbox profiles, and warm pools");
 		profileRevisionIds.add(profileRevisionId);
 		sandboxProfiles.add(sandboxProfile);
 		warmPools.add(warmPoolName);
-		profiles.push({ profileRevisionId, namespace, serviceAccountName, sandboxProfile, warmPoolName });
+		profiles.push({ profileRevisionId, namespace, serviceAccountName, sandboxProfile, warmPoolName, podLabels });
 	}
 	return { profiles };
+}
+
+/** Reads only the release labels that admission policy permits a SandboxClaim to stamp onto a Pod. */
+function _ReadConversationComputerPodLabels(value: unknown): { readonly applicationName: string; readonly releaseName: string } | null
+{
+	if (!_isRecord(value) || Object.keys(value).length !== 2)
+		return null;
+	const applicationName = typeof value.applicationName === "string" ? value.applicationName : "";
+	const releaseName = typeof value.releaseName === "string" ? value.releaseName : "";
+	return _isDnsLabel(applicationName) && _isDnsLabel(releaseName) ? { applicationName, releaseName } : null;
 }
 
 /** Checks a Kubernetes DNS label before deployment configuration reaches a CustomObject call. */

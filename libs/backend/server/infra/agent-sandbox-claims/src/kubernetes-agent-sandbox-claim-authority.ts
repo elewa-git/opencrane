@@ -99,6 +99,7 @@ function _BuildExpectedClaim(command: AgentSandboxClaimCommand): { readonly clai
 			spec: {
 				warmPoolRef: { name: command.warmPoolName },
 				lifecycle: { shutdownPolicy: "DeleteForeground", shutdownTime: command.shutdownTime.toISOString() },
+				additionalPodMetadata: { labels: _PodLabels(command) },
 			},
 		},
 	};
@@ -132,6 +133,8 @@ function _ValidateCommand(command: AgentSandboxClaimCommand): void
 		throw new Error("Agent Sandbox claim profile must be a DNS label");
 	if (!_IsDnsLabel(command.warmPoolName))
 		throw new Error("Agent Sandbox claim warmPoolName must be a DNS label");
+	if (!_IsDnsLabel(command.podLabels.applicationName) || !_IsDnsLabel(command.podLabels.releaseName))
+		throw new Error("Agent Sandbox claim Pod labels must be DNS labels");
 	// 4. Preserve the policy's closed reason vocabulary and valid foreground-delete deadline.
 	if (!Object.values(AgentSandboxClaimReason).includes(command.reason))
 		throw new Error("Agent Sandbox claim reason is unsupported");
@@ -162,11 +165,31 @@ function _MatchesExpectedClaim(value: unknown, expected: Record<string, unknown>
 		return false;
 	// 3. Compare every policy-controlled lease field before accepting a duplicate as idempotent.
 	return _MatchesRequiredRecord(metadata, expectedMetadata, ["name", "namespace"])
-		&& _HasExactKeys(spec, ["warmPoolRef", "lifecycle"])
+		&& _HasExactKeys(spec, ["warmPoolRef", "lifecycle", "additionalPodMetadata"])
 		&& _MatchesExactRecord(metadata.labels, expectedMetadata.labels, ["opencrane.ai/silo-id", "opencrane.ai/computer-id", "opencrane.ai/computer-generation", "opencrane.ai/profile"])
 		&& _MatchesExactRecord(metadata.annotations, expectedMetadata.annotations, ["opencrane.ai/lease-reason"])
 		&& _MatchesExactRecord(spec.warmPoolRef, expectedSpec.warmPoolRef, ["name"])
-		&& _MatchesExactRecord(spec.lifecycle, expectedSpec.lifecycle, ["shutdownPolicy", "shutdownTime"]);
+		&& _MatchesExactRecord(spec.lifecycle, expectedSpec.lifecycle, ["shutdownPolicy", "shutdownTime"])
+		&& _HasExactKeys(spec.additionalPodMetadata, ["labels"])
+		&& _HasExactKeys(expectedSpec.additionalPodMetadata, ["labels"])
+		&& _MatchesExactRecord(_NestedRecord(spec.additionalPodMetadata, "labels"), _NestedRecord(expectedSpec.additionalPodMetadata, "labels"), ["app.kubernetes.io/name", "app.kubernetes.io/instance", "app.kubernetes.io/component", "opencrane.ai/computer-id"]);
+}
+
+/** Builds the only Pod labels a claim may add after the release admitted its computer generation. */
+function _PodLabels(command: AgentSandboxClaimCommand): Record<string, string>
+{
+	return {
+		"app.kubernetes.io/name": command.podLabels.applicationName,
+		"app.kubernetes.io/instance": command.podLabels.releaseName,
+		"app.kubernetes.io/component": "agent-sandbox",
+		"opencrane.ai/computer-id": command.computerId,
+	};
+}
+
+/** Reads one declared nested record without treating an arbitrary object as Pod metadata. */
+function _NestedRecord(value: unknown, key: string): Record<string, unknown> | null
+{
+	return _IsRecord(value) && _IsRecord(value[key]) ? value[key] : null;
 }
 
 /** Checks that an untrusted Kubernetes record contains each named immutable field. */

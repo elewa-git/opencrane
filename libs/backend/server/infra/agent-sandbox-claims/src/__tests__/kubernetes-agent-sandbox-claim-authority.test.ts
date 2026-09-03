@@ -24,6 +24,7 @@ function _command(overrides: Partial<AgentSandboxClaimCommand> = {}): AgentSandb
 		generation: 2,
 		profile: "personal",
 		warmPoolName: "personal-pool",
+		podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" },
 		reason: AgentSandboxClaimReason.ActivationRequested,
 		shutdownTime: new Date("2026-09-01T06:00:00.000Z"),
 		...overrides,
@@ -62,10 +63,11 @@ function _claim(command: AgentSandboxClaimCommand, includeServerMetadata = false
 			annotations: { "opencrane.ai/lease-reason": command.reason },
 			...(includeServerMetadata ? { creationTimestamp: "2026-09-01T00:00:00.000Z" } : {}),
 		},
-		spec: {
-			warmPoolRef: { name: command.warmPoolName },
-			lifecycle: { shutdownPolicy: "DeleteForeground", shutdownTime: command.shutdownTime.toISOString() },
-		},
+			spec: {
+				warmPoolRef: { name: command.warmPoolName },
+				lifecycle: { shutdownPolicy: "DeleteForeground", shutdownTime: command.shutdownTime.toISOString() },
+				additionalPodMetadata: { labels: { "app.kubernetes.io/name": command.podLabels.applicationName, "app.kubernetes.io/instance": command.podLabels.releaseName, "app.kubernetes.io/component": "agent-sandbox", "opencrane.ai/computer-id": command.computerId } },
+			},
 	};
 }
 
@@ -112,6 +114,18 @@ describe("_KubernetesAgentSandboxClaimAuthority", function _ClaimAuthoritySuite(
 		const command = _command();
 		create.mockRejectedValue(Object.assign(new Error("already exists"), { response: { statusCode: 409 } }));
 		get.mockResolvedValue(_claim(_command({ profile: "managed" }), true));
+
+		await expect(new _KubernetesAgentSandboxClaimAuthority(api).ensure(command)).rejects.toThrow("conflicts with a different immutable lease");
+	});
+
+	it("rejects a 409 claim whose stamped Pod identity differs from the admitted computer", async function _RejectsDifferentPodIdentity()
+	{
+		const { api, create, get } = _api();
+		const command = _command();
+		create.mockRejectedValue(Object.assign(new Error("already exists"), { code: 409 }));
+		const existing = _claim(command, true);
+		((((existing["spec"] as Record<string, unknown>)["additionalPodMetadata"] as Record<string, unknown>)["labels"] as Record<string, unknown>)["opencrane.ai/computer-id"]) = "computer-99";
+		get.mockResolvedValue(existing);
 
 		await expect(new _KubernetesAgentSandboxClaimAuthority(api).ensure(command)).rejects.toThrow("conflicts with a different immutable lease");
 	});

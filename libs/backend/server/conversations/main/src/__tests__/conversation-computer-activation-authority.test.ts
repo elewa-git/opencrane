@@ -45,7 +45,7 @@ function _PendingCurrent(overrides: Partial<CurrentConversationComputer> = {}): 
 
 /** Builds the authority with controllable checked-history, profile, and Kubernetes results. */
 function _Authority(current: CurrentConversationComputer | null, overrides: {
-	readonly profile?: { readonly namespace: string; readonly sandboxProfile: string; readonly warmPoolName: string } | null;
+	readonly profile?: { readonly namespace: string; readonly sandboxProfile: string; readonly warmPoolName: string; readonly podLabels: { readonly applicationName: string; readonly releaseName: string } } | null;
 	readonly receipt?: { readonly namespace: string; readonly claimName: string; readonly disposition: "created" | "existing" };
 } = {})
 {
@@ -57,7 +57,7 @@ function _Authority(current: CurrentConversationComputer | null, overrides: {
 	};
 	const append = vi.fn().mockResolvedValue({});
 	const loadForActivation = vi.fn().mockResolvedValueOnce(current).mockResolvedValueOnce(current).mockResolvedValue(dispatched);
-	const resolve = vi.fn().mockResolvedValue(overrides.profile === undefined ? { namespace: "sandbox-system", sandboxProfile: "developer", warmPoolName: "developer-pool" } : overrides.profile);
+	const resolve = vi.fn().mockResolvedValue(overrides.profile === undefined ? { namespace: "sandbox-system", sandboxProfile: "developer", warmPoolName: "developer-pool", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } } : overrides.profile);
 	const ensure = vi.fn().mockResolvedValue(overrides.receipt ?? { namespace: "sandbox-system", claimName: "computer-1-g2", disposition: "created" });
 	const authority = new ConversationComputerActivationClaimAuthority({
 		history: { append, loadForActivation },

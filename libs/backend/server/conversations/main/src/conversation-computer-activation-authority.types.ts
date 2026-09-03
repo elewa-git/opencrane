@@ -51,6 +51,8 @@ export interface ConversationComputerActivationProfile
 	readonly sandboxProfile: string;
 	/** Names the release-owned zero-replica warm pool for the sandbox profile. */
 	readonly warmPoolName: string;
+	/** Carries the release selectors that the claim controller must stamp onto the resulting Pod. */
+	readonly podLabels: import("@opencrane/backend/server/infra/agent-sandbox-claims").AgentSandboxClaimPodLabels;
 }
 
 /**
