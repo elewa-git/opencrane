@@ -61,7 +61,7 @@ export enum ConversationComputerRuntimeStopReasons
  */
 export interface ConversationComputerRuntimeCommandCoordinates
 {
-	/** Names the protocol revision that both the server router and Sandbox adapter must validate. */
+	/** Names the protocol revision retained by the durable server command and echoed by the Sandbox work package. */
 	readonly protocolVersion: ConversationComputerRuntimeProtocolVersion;
 	/** Identifies the durable command so retries cannot select a second command effect. */
 	readonly commandId: string;
@@ -80,6 +80,14 @@ export interface ConversationComputerRuntimeCommandCoordinates
 }
 
 /**
+ * Names the opaque reference shape produced by the ConversationComputer private-payload store.
+ *
+ * The durable envelope carries no plaintext. Server validation resolves this shape to the generated
+ * UUID row before a lease-admitted command can redeem it.
+ */
+export type ConversationComputerRuntimePrivatePayloadReference = `payload://${string}-${string}-${string}-${string}-${string}`;
+
+/**
  * Delivers the server-selected input that begins a target loop turn.
  *
  * It carries an immutable entry and protected-payload coordinates rather than plaintext.
@@ -88,9 +96,9 @@ export interface ConversationComputerRuntimeStartTurnCommand
 {
 	/** Identifies the immutable conversation entry whose admission caused this turn. */
 	readonly inputEntryId: string;
-	/** References the protected input payload without putting plaintext on the durable command queue. */
-	readonly inputPayloadRef: string;
-	/** Binds the protected input payload that the runtime reads through its later narrow reader route. */
+	/** References the protected input payload UUID without putting plaintext on the durable command queue. */
+	readonly inputPayloadRef: ConversationComputerRuntimePrivatePayloadReference;
+	/** Binds the protected input payload that the server redeems only after active-lease admission. */
 	readonly inputPayloadDigest: `sha256:${string}`;
 }
 

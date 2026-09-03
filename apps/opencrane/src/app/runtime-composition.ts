@@ -280,6 +280,9 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const conversationComputerRuntimeCommandsAuthority = sandboxConfig === null
 		? null
 		: new ConversationComputerRuntimeCommandAuthority({ history: historyStore!, computers: conversationComputerHistory!, clock: conversationComputerRuntimeClock });
+	const conversationComputerRuntimePayloads = sandboxConfig === null
+		? null
+		: new PrismaConversationPrivatePayloadStoreUnitOfWork(prisma, new MountedConversationPayloadCipher(config.conversationPayloadKeyringPath!));
 	const conversationComputerRuntimeBootstrap = sandboxConfig === null
 		? null
 		: __CreateConversationComputerRuntimeBootstrapRouter({ history: conversationComputerHistory!, tokenReviewer: conversationComputerRuntimeTokenReviewer!, siloId: config.siloId, clock: conversationComputerRuntimeClock, logger: _log });
@@ -289,6 +292,7 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 			history: conversationComputerHistory!,
 			tokenReviewer: conversationComputerRuntimeTokenReviewer!,
 			authority: conversationComputerRuntimeCommandsAuthority!,
+			payloads: conversationComputerRuntimePayloads!,
 			siloId: config.siloId,
 			clock: conversationComputerRuntimeClock,
 			logger: _log,
@@ -304,7 +308,7 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 				identities: new AgentIdentityHistory(historyStore!),
 				conversations: new ConversationHistoryReader(historyStore!),
 				claims: conversationComputerRuntimeCommandsAuthority!,
-				payloads: new PrismaConversationPrivatePayloadStoreUnitOfWork(prisma, new MountedConversationPayloadCipher(config.conversationPayloadKeyringPath!)),
+				payloads: conversationComputerRuntimePayloads!,
 				clock: conversationComputerRuntimeClock,
 			}),
 			siloId: config.siloId,

@@ -12,9 +12,29 @@ export interface ConversationComputerRuntimeCommandAuthorityPort
 	complete(command: ConversationComputerRuntimeCommandPollCommand & { readonly report: ConversationComputerRuntimeTerminalReport }): Promise<void>;
 }
 
+/** Redeems one server-selected encrypted input body after command queue admission. */
+export interface ConversationComputerRuntimeCommandPayloadReader
+{
+	/** Returns plaintext only when the durable reference and its server-derived ownership coordinates match. */
+	readText(command: { readonly siloId: string; readonly conversationId: string; readonly idempotencyKey: string; readonly payloadRef: `payload://${string}`; readonly ciphertextDigest: `sha256:${string}` }): Promise<string>;
+}
+
+/** Gives the Sandbox the sole runnable command plus its server-redeemed input text. */
+export interface ConversationComputerRuntimeWorkPackage
+{
+	/** Carries the command fences that must accompany every output and terminal report. */
+	readonly command: Omit<ConversationComputerRuntimeCommandEnvelope, "payload">;
+	/** Names the participant entry that caused this turn. */
+	readonly inputEntryId: string;
+	/** Carries the protected plaintext after server-side payload redemption. */
+	readonly inputText: string;
+}
+
 /** Binds the internal runtime command route to identity, history, and durable command authority. */
 export interface ConversationComputerRuntimeCommandRouterDependencies extends ConversationComputerRuntimeAdmissionDependencies
 {
 	/** Selects and completes the execution-fenced command queue. */
 	readonly authority: ConversationComputerRuntimeCommandAuthorityPort;
+	/** Redeems the oldest admitted command's input without exposing a general payload reader. */
+	readonly payloads: ConversationComputerRuntimeCommandPayloadReader;
 }

@@ -13,7 +13,9 @@
         { "path": "certManager", "documentation": "website/operators/deployment-configuration.md" },
         { "path": "networkPolicy", "documentation": "website/operators/deployment-configuration.md" },
         { "path": "externalSecrets", "documentation": "website/operators/deployment-configuration.md" },
-        { "path": "observability", "documentation": "website/operators/deployment-configuration.md" }
+        { "path": "observability", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "historyStore", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "agentSandbox", "documentation": "website/operators/deployment-configuration.md" }
       ],
       "forwardedKeys": [
         { "path": "channelProxy", "owner": "apps/channel-proxy/helm" },

@@ -169,10 +169,11 @@ transport for workloads; it is not a browser fallback.
   fails closed. It commits or rolls back before the output authority appends to KurrentDB, so no
   PostgreSQL transaction spans external history I/O.
 - `__CreateConversationComputerRuntimeCommandRouter` gives a reviewed Sandbox Pod the narrow
-  `commands/next` and `commands/complete` transport. It derives the computer execution from history
-  again on every request and compares the Pod UID, namespace, and service account with the active
-  lease before it delegates to the command authority. It never accepts runtime output, a selected
-  conversation, or an AgentRun coordinate.
+  `commands/next` and `commands/complete` transport. After it derives the computer execution from
+  history and compares Pod UID, namespace, and service account with the active lease, `next` redeems
+  the one oldest command's encrypted input inside the server and returns a strict work package. The
+  Sandbox never receives an arbitrary payload reader or a private storage reference, and the route
+  never accepts runtime output, a selected conversation, or an AgentRun coordinate.
 - `__CreateConversationComputerRuntimeOutputRouter` accepts only a command id, computer id, and
   bounded text from a reviewed Sandbox Pod. It repeats active-lease admission, derives the silo,
   conversation, execution, lease generation, profile revision, and author path in the server, then

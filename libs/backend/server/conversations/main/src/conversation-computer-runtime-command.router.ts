@@ -1,8 +1,8 @@
-import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRuntimeTerminalStates, type ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRuntimeCommandKinds, ConversationComputerRuntimeTerminalStates, type ConversationComputerRuntimeCommandEnvelope, type ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
 import { Router, type Request, type Response } from "express";
 
 import { _AdmitConversationComputerRuntime, _ReviewConversationComputerRuntimeIdentity } from "./conversation-computer-runtime-admission";
-import type { ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
+import type { ConversationComputerRuntimeCommandRouterDependencies, ConversationComputerRuntimeWorkPackage } from "./conversation-computer-runtime-command.router.types";
 
 /** Recognizes the UUID runtime coordinates that the durable command authority accepts. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -41,7 +41,16 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 				response.status(204).end();
 				return;
 			}
-			response.status(200).json({ command: result.command });
+			// 5. Redeem only the selected oldest input, after the active lease has fenced the caller.
+			const work = await _WorkPackage(result.command, dependencies, active.computer.conversationId);
+			// 6. Recheck the command head and lease after decryption so a replaced Pod never receives plaintext.
+			const current = await dependencies.authority.poll({ siloId: dependencies.siloId, computerId: active.computer.id, conversationId: active.computer.conversationId });
+			if (!_IsSameCommand(current.command, result.command))
+				throw new Error("ConversationComputer runtime command changed during payload redemption");
+			const finalAdmission = await _AdmitConversationComputerRuntime(computerId, identity, response, dependencies);
+			if (finalAdmission === null)
+				return;
+			response.status(200).json({ work });
 		}
 		catch (err)
 		{
@@ -81,6 +90,31 @@ export function __CreateConversationComputerRuntimeCommandRouter(dependencies: C
 		}
 	});
 	return router;
+}
+
+/** Confirms that the oldest pending command did not change while its private input was redeemed. */
+function _IsSameCommand(current: ConversationComputerRuntimeCommandEnvelope | null, selected: ConversationComputerRuntimeCommandEnvelope): boolean
+{
+	return current !== null
+		&& current.commandId === selected.commandId
+		&& current.executionId === selected.executionId
+		&& current.leaseGeneration === selected.leaseGeneration;
+}
+
+/** Builds one runtime work package without returning the command's private storage reference. */
+async function _WorkPackage(command: ConversationComputerRuntimeCommandEnvelope, dependencies: ConversationComputerRuntimeCommandRouterDependencies, conversationId: string): Promise<ConversationComputerRuntimeWorkPackage>
+{
+	if (command.kind !== ConversationComputerRuntimeCommandKinds.StartTurn)
+		throw new Error("ConversationComputer runtime command kind is unsupported");
+	const inputText = await dependencies.payloads.readText({
+		siloId: dependencies.siloId,
+		conversationId,
+		idempotencyKey: command.payload.inputEntryId,
+		payloadRef: command.payload.inputPayloadRef,
+		ciphertextDigest: command.payload.inputPayloadDigest,
+	});
+	const { payload: _payload, ...commandFence } = command;
+	return { command: commandFence, inputEntryId: command.payload.inputEntryId, inputText };
 }
 
 /** Reads one strict query or body computer selector without extra execution coordinates. */

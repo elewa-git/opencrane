@@ -38,6 +38,13 @@ export class PrismaConversationPrivatePayloadRepository implements ConversationP
 		return record === null ? null : _Record(record);
 	}
 
+	/** Loads one payload record by the UUID carried in a protected command reference. */
+	async findById(id: string): Promise<ConversationPrivatePayloadRecord | null>
+	{
+		const record = await this.transaction.conversationPrivatePayload.findUnique({ where: { id } });
+		return record === null ? null : _Record(record);
+	}
+
 	/**
 	 * Inserts a candidate without replacing the row that already owns its key.
 	 *

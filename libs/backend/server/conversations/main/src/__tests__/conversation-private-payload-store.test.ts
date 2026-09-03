@@ -11,6 +11,8 @@ class _Cipher implements ConversationPayloadCipher
 	public sealCalls = 0;
 	/** Captures the exact ownership coordinates authenticated with the ciphertext. */
 	public associatedData: ConversationPayloadAssociatedData | null = null;
+	/** Captures the exact ownership coordinates used for a protected read. */
+	public openedAssociatedData: ConversationPayloadAssociatedData | null = null;
 
 	/** Seals deterministic test bytes after recording the caller's associated data. */
 	async seal(_plaintext: Uint8Array, associatedData: ConversationPayloadAssociatedData): Promise<SealedConversationPayload>
@@ -20,10 +22,11 @@ class _Cipher implements ConversationPayloadCipher
 		return { keyId: "key-1", ciphertext: Uint8Array.of(1, 2, 3), nonce: Uint8Array.of(4), authenticationTag: Uint8Array.of(5) };
 	}
 
-	/** Satisfies the cipher port; this store-only suite never reads ciphertext. */
-	async open(_sealed: SealedConversationPayload, _associatedData: ConversationPayloadAssociatedData): Promise<Uint8Array>
+	/** Returns the fixture body after recording the server-derived decryption coordinates. */
+	async open(_sealed: SealedConversationPayload, associatedData: ConversationPayloadAssociatedData): Promise<Uint8Array>
 	{
-		return new Uint8Array();
+		this.openedAssociatedData = associatedData;
+		return Buffer.from("Private agent reply", "utf8");
 	}
 }
 
@@ -37,6 +40,12 @@ class _Repository implements ConversationPrivatePayloadRepository
 	async find(command: Pick<ConversationPrivatePayloadStoreCommand, "siloId" | "conversationId" | "idempotencyKey">): Promise<ConversationPrivatePayloadRecord | null>
 	{
 		return this.records.get(_Key(command)) ?? null;
+	}
+
+	/** Finds the one record whose opaque reference would carry this generated UUID. */
+	async findById(id: string): Promise<ConversationPrivatePayloadRecord | null>
+	{
+		return Array.from(this.records.values()).find(record => record.id === id) ?? null;
 	}
 
 	/** Inserts only the first record for one exact durable owner key. */
@@ -87,5 +96,25 @@ describe("ConversationPrivatePayloadStore", function _ConversationPrivatePayload
 		await store.storeText(_Command());
 		await expect(store.storeText(_Command("Changed agent reply"))).rejects.toThrow("Conversation private payload idempotency key already owns different text");
 		expect(cipher.sealCalls).toBe(1);
+	});
+
+	it("redeems only a row whose opaque reference, owner key, and ciphertext digest all match", async function _RedeemsExactPayload()
+	{
+		const cipher = new _Cipher();
+		const store = new ConversationPrivatePayloadStore(new _Repository(), cipher);
+		const stored = await store.storeText(_Command());
+
+		await expect(store.readText({ siloId: "silo-1", conversationId: "conversation-1", idempotencyKey: "command-1", payloadRef: stored.payloadRef, ciphertextDigest: stored.ciphertextDigest })).resolves.toBe("Private agent reply");
+		expect(cipher.openedAssociatedData).toMatchObject({ siloId: "silo-1", conversationId: "conversation-1", idempotencyKey: "command-1" });
+	});
+
+	it("refuses a copied payload reference before decrypting its body", async function _RefusesCopiedPayload()
+	{
+		const cipher = new _Cipher();
+		const store = new ConversationPrivatePayloadStore(new _Repository(), cipher);
+		const stored = await store.storeText(_Command());
+
+		await expect(store.readText({ siloId: "silo-1", conversationId: "conversation-2", idempotencyKey: "command-1", payloadRef: stored.payloadRef, ciphertextDigest: stored.ciphertextDigest })).rejects.toThrow("Conversation private payload does not match its command");
+		expect(cipher.openedAssociatedData).toBeNull();
 	});
 });

@@ -2,10 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type { ConversationPayloadCipher } from "@opencrane/backend/server/infra/conversation-payloads";
 
-import type { ConversationPrivatePayloadRecord, ConversationPrivatePayloadRepository, ConversationPrivatePayloadStore as ConversationPrivatePayloadStorePort, ConversationPrivatePayloadStoreCommand, StoredConversationPrivatePayload } from "./conversation-private-payload-store.types";
+import type { ConversationPrivatePayloadReadCommand, ConversationPrivatePayloadRecord, ConversationPrivatePayloadRepository, ConversationPrivatePayloadStore as ConversationPrivatePayloadStorePort, ConversationPrivatePayloadStoreCommand, StoredConversationPrivatePayload } from "./conversation-private-payload-store.types";
 
 /** Limits a body before the store allocates ciphertext for it. */
 const _MaximumTextBytes = 64 * 1024;
+/** Recognizes the complete digest form that immutable command envelopes retain. */
+const _DigestPattern = /^sha256:[0-9a-f]{64}$/iu;
 
 /**
  * Stores ConversationComputer text under one authorization-owned idempotency key.
@@ -84,6 +86,35 @@ export class ConversationPrivatePayloadStore implements ConversationPrivatePaylo
 			throw new Error("Conversation private payload store lost its inserted record");
 		return _Stored(stored, plaintextDigest);
 	}
+
+	/**
+	 * Redeems one authenticated stored body for an already-admitted runtime command.
+	 *
+	 * It compares the stored row with every command coordinate before decrypting, then verifies the
+	 * plaintext digest because successful AES-GCM decryption alone does not prove the expected body.
+	 */
+	async readText(command: ConversationPrivatePayloadReadCommand): Promise<string>
+	{
+		_ValidateRead(command);
+		const payloadId = _PayloadId(command.payloadRef);
+		const stored = await this.repository.findById(payloadId);
+		if (stored === null)
+			throw new Error("Conversation private payload is unavailable");
+		if (stored.siloId !== command.siloId || stored.conversationId !== command.conversationId || stored.idempotencyKey !== command.idempotencyKey || stored.ciphertextDigest !== command.ciphertextDigest)
+			throw new Error("Conversation private payload does not match its command");
+		const plaintext = await this.cipher.open({ keyId: stored.keyId, ciphertext: stored.ciphertext, nonce: stored.nonce, authenticationTag: stored.authenticationTag }, {
+			formatVersion: "conversation-payload/v1",
+			siloId: command.siloId,
+			conversationId: command.conversationId,
+			idempotencyKey: command.idempotencyKey,
+			plaintextDigest: stored.plaintextDigest,
+		});
+		if (_Digest(plaintext) !== stored.plaintextDigest)
+			throw new Error("Conversation private payload plaintext digest is invalid");
+		const text = new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
+		_Validate({ siloId: command.siloId, conversationId: command.conversationId, idempotencyKey: command.idempotencyKey, text });
+		return text;
+	}
 }
 
 /** Creates the `sha256:` value stored as a plaintext or ciphertext digest. */
@@ -99,6 +130,23 @@ function _Validate(command: ConversationPrivatePayloadStoreCommand): void
 		throw new Error("Conversation private payload store requires non-blank ownership coordinates");
 	if (command.text.trim().length === 0 || Buffer.byteLength(command.text, "utf8") > _MaximumTextBytes)
 		throw new Error("Conversation private payload store requires bounded non-blank text");
+}
+
+/** Rejects a malformed durable reference before it can select a private-payload row. */
+function _ValidateRead(command: ConversationPrivatePayloadReadCommand): void
+{
+	if (!_Identifier(command.siloId) || !_Identifier(command.conversationId) || !_Identifier(command.idempotencyKey) || !_DigestPattern.test(command.ciphertextDigest))
+		throw new Error("Conversation private payload read requires valid ownership coordinates");
+	_PayloadId(command.payloadRef);
+}
+
+/** Parses only the opaque UUID reference generated when the payload row was first stored. */
+function _PayloadId(payloadRef: string): string
+{
+	const match = /^payload:\/\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/iu.exec(payloadRef);
+	if (match === null)
+		throw new Error("Conversation private payload reference is invalid");
+	return match[1];
 }
 
 /** Allows any non-blank identifier within the database guard's maximum length. */
