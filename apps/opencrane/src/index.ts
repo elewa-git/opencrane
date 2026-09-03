@@ -5,7 +5,7 @@ import "./app/instrument";
 import type { PrismaClient } from "@prisma/client";
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
 import { _CreateElicitationInterruptReader } from "@opencrane/backend/agents/execution/elicitation";
-import { ConversationComputerActivationClaimAuthority, ConversationComputerHistory, ConversationComputerSandboxReconciliationAuthority, _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
+import { ConversationComputerActivationClaimAuthority, ConversationComputerExecutionAuthority, ConversationComputerHistory, ConversationComputerSandboxReconciliationAuthority, _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import type { ConversationComputerActivationAuthority } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/server/conversation-assets";
 import { _KubernetesAgentSandboxClaimAuthority, _KubernetesAgentSandboxClaimObservationReader, _KubernetesAgentSandboxRuntimePodReader } from "@opencrane/backend/server/infra/agent-sandbox-claims";
@@ -68,6 +68,7 @@ async function _Main(): Promise<void>
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 	let conversationComputerActivationAuthority: ConversationComputerActivationAuthority | null = null;
 	let conversationComputerSandboxReconciliationAuthority: ConversationComputerSandboxReconciliationAuthority | null = null;
+	let conversationComputerExecutionAuthority: ConversationComputerExecutionAuthority | null = null;
 	if (config.runtime.conversationComputerActivation !== null)
 	{
 		const profiles = _CreateConversationComputerActivationProfileResolver(config.runtime.conversationComputerActivation, config.runtime.siloId);
@@ -84,6 +85,7 @@ async function _Main(): Promise<void>
 			runtimePods: new _KubernetesAgentSandboxRuntimePodReader(kubernetes.customApi, kubernetes.coreApi),
 			clock: { now: function _Now() { return new Date(); } },
 		});
+		conversationComputerExecutionAuthority = new ConversationComputerExecutionAuthority(new ConversationComputerHistory(historyStore.historyStore), { now: function _Now() { return new Date(); } });
 	}
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
@@ -97,11 +99,11 @@ async function _Main(): Promise<void>
 		? null
 		: await _StartConversationComputerActivationWorker(historyStore.historyStore, conversationComputerActivationAuthority, config.runtime.siloId);
 	let conversationComputerSandboxReconciliation: OpenCraneConversationComputerSandboxReconciliationWorker | null = null;
-	if (conversationComputerSandboxReconciliationAuthority !== null)
+	if (conversationComputerSandboxReconciliationAuthority !== null && conversationComputerExecutionAuthority !== null)
 	{
 		try
 		{
-			conversationComputerSandboxReconciliation = await _StartConversationComputerSandboxReconciliationWorker(historyStore.historyStore, conversationComputerSandboxReconciliationAuthority, config.runtime.siloId);
+			conversationComputerSandboxReconciliation = await _StartConversationComputerSandboxReconciliationWorker(historyStore.historyStore, conversationComputerSandboxReconciliationAuthority, conversationComputerExecutionAuthority, config.runtime.siloId);
 		}
 		catch (error)
 		{

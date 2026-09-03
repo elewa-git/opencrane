@@ -92,7 +92,8 @@ its resources to the lifecycle owner.
 - `src/app/conversation-computer-sandbox-reconciliation-composition.ts` replays the same durable
   activation history and keeps only outstanding computer generations in a bounded status-polling
   set. It rechecks history and reads each exact Agent Sandbox claim until the controller makes it
-  ready or its durable lease expires; it never lists, watches, or controls Pods.
+  ready or its durable lease expires. After it records the checked active Pod, the server appends
+  the sole fenced computer execution; it never lists, watches, or controls Pods.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns

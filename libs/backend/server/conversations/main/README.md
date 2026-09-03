@@ -63,7 +63,7 @@ cross-coordinate snapshot fails closed. This history authority does not create a
 activate a sandbox, use PostgreSQL, or receive a direct KurrentDB client.
 
 `ConversationComputerExecutionAuthority` is the next boundary after a sandbox claim becomes ready.
-It starts the loop only by appending one server-generated execution to the computer's warm active
+The server's Sandbox reconciliation worker starts the loop only by appending one server-generated execution to the computer's warm active
 lease. If a caller loses the response while another server process wins the append race, it reloads
 and returns that stored execution instead of starting another one. A sandbox never creates or picks
 this execution: it must remain unavailable whenever the computer is cold, cooling, expired, replaced,

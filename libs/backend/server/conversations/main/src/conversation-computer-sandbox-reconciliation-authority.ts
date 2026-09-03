@@ -35,6 +35,8 @@ export class ConversationComputerSandboxReconciliationAuthority
 		const current = await this._LoadCurrentComputer(command);
 		if (_IsCurrentPendingGeneration(current, command))
 			return this._ReconcilePendingDispatch(current, command);
+		if (_IsCurrentWarmGeneration(current, command, this.dependencies.clock.now()))
+			return ConversationComputerSandboxReconciliationOutcomes.ExecutionPending;
 		if (!_IsCurrentDispatchedGeneration(current, command))
 			return ConversationComputerSandboxReconciliationOutcomes.Ignored;
 		const profile = await this.dependencies.profiles.resolve({ siloId: command.siloId, profileRevisionId: current.computer.profileRevisionId });
@@ -126,4 +128,16 @@ function _IsCurrentPendingGeneration(current: CurrentConversationComputer | null
 		&& current.lease !== null
 		&& current.lease.state === ComputerLeaseStates.Claimed
 		&& current.lease.generation === command.generation;
+}
+
+/** Retains one exact warm lease until the separate server-owned execution admission has converged. */
+function _IsCurrentWarmGeneration(current: CurrentConversationComputer | null, command: ConversationComputerActivationCommand, now: Date): current is CurrentConversationComputer & { readonly lease: NonNullable<CurrentConversationComputer["lease"]> }
+{
+	return current !== null
+		&& current.computer.state === ConversationComputerStates.Warm
+		&& current.computer.leaseGeneration === command.generation
+		&& current.lease !== null
+		&& current.lease.state === ComputerLeaseStates.Active
+		&& current.lease.generation === command.generation
+		&& Date.parse(current.lease.expiresAt) > now.getTime();
 }
