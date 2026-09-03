@@ -61,6 +61,12 @@ function _Completed(revision: bigint, command = _Command()): HistoryRecordedEven
 	return { streamName: "conversation-computer-runtime-computer-1-execution-1", id: "4ce5f25a-b6d7-4a19-9cbe-636c159b5f90", type: "opencrane.conversation-computer-runtime-command-completed.v1", data: { report }, metadata: { computerId: report.computerId, executionId: report.executionId, leaseGeneration: report.leaseGeneration, commandId: report.commandId }, revision, recordedAt: _NOW };
 }
 
+/** Builds the command terminal success event that must share a transaction with an output message. */
+function _OutputRecorded(revision: bigint, command = _Command()): HistoryRecordedEvent
+{
+	return { streamName: "conversation-computer-runtime-computer-1-execution-1", id: "5bf0d6c2-5215-4cdb-a29f-e3735195b8f7", type: "opencrane.conversation-computer-runtime-command-output-recorded.v1", data: { commandId: command.commandId }, metadata: { computerId: command.computerId, executionId: command.executionId, leaseGeneration: command.leaseGeneration, commandId: command.commandId }, revision, recordedAt: _NOW };
+}
+
 /** Builds one finite HistoryStore event sequence for every queue replay. */
 async function *_Events(events: readonly HistoryRecordedEvent[]): AsyncIterable<HistoryRecordedEvent>
 {
@@ -89,6 +95,21 @@ function _Issue(overrides: Record<string, unknown> = {})
 
 describe("ConversationComputerRuntimeCommandAuthority", function _CommandAuthoritySuite()
 {
+	it("prepares an output claim against the command stream head so completion races conflict", async function _PreparesOutputClaim()
+	{
+		const subject = _Subject([_Issued(0n)]);
+		const claim = await subject.authority.prepareOutputClaim({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", commandId: _COMMAND_ID, executionId: "execution-1", leaseGeneration: 2 });
+		expect(claim.expectedHead).toEqual({ streamName: "conversation-computer-runtime-computer-1-execution-1", revision: 0n });
+		expect(claim.append.events[0]).toMatchObject({ type: "opencrane.conversation-computer-runtime-command-output-recorded.v1", data: { commandId: _COMMAND_ID } });
+	});
+
+	it("treats an atomically recorded output as terminal and advances polling to the next command", async function _RecordsTerminalOutput()
+	{
+		const subject = _Subject([_Issued(0n), _Issued(1n, _Command(2, _SECOND_COMMAND_ID)), _OutputRecorded(2n)]);
+
+		await expect(subject.authority.poll({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1" })).resolves.toEqual({ command: _Command(2, _SECOND_COMMAND_ID) });
+		await expect(subject.authority.complete({ siloId: "testv5", computerId: "computer-1", conversationId: "conversation-1", report: { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: _COMMAND_ID, computerId: "computer-1", executionId: "execution-1", leaseGeneration: 2, state: ConversationComputerRuntimeTerminalStates.Completed } })).rejects.toThrow("cannot replace an atomically recorded output");
+	});
 	it("issues one ordered command under both the checked computer and empty queue heads", async function _IssuesCommand()
 	{
 		const subject = _Subject();

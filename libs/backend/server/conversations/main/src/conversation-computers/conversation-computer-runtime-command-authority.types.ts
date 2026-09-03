@@ -1,5 +1,5 @@
 import type { ConversationComputerRuntimeCommandEnvelope, ConversationComputerRuntimeTerminalReport } from "@opencrane/contracts";
-import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import type { HistoryAppend, HistoryExpectedHead, HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationComputerHistory } from "./conversation-computer-history";
 
@@ -45,6 +45,37 @@ export interface ConversationComputerRuntimeStartTurnIssueCommand extends Conver
 
 /** Asks for the oldest uncompleted command on the exact current computer execution. */
 export type ConversationComputerRuntimeCommandPollCommand = ConversationComputerRuntimeCommandCurrentCommand;
+
+/**
+ * Selects the server-issued active command that may record one output message.
+ *
+ * The command, execution, and lease coordinates make this different from a general completion
+ * request: output must reserve the command-stream head that terminal completion also changes. A
+ * caller with a changed execution or lease receives no claim to append.
+ */
+export interface ConversationComputerRuntimeOutputClaimCommand extends ConversationComputerRuntimeCommandCurrentCommand
+{
+	/** Names the command whose output claim must conflict with terminal completion. */
+	readonly commandId: string;
+	/** Names the active execution echoed by the Sandbox command envelope. */
+	readonly executionId: string;
+	/** Fences the claim to the command's active lease generation. */
+	readonly leaseGeneration: number;
+}
+
+/**
+ * Carries the command-stream head condition and append for one output claim.
+ *
+ * Consumers append both values alongside the conversation message. Keeping the condition with its
+ * event ensures competing completion and output writes cannot both pass the command head check.
+ */
+export interface ConversationComputerRuntimeOutputClaim
+{
+	/** Preserves the command-stream head that completion must also change. */
+	readonly expectedHead: HistoryExpectedHead;
+	/** Records one output claim in the per-execution command stream. */
+	readonly append: HistoryAppend;
+}
 
 /** Records one bounded terminal result after the runtime has processed its oldest command. */
 export interface ConversationComputerRuntimeCommandCompleteCommand extends ConversationComputerRuntimeCommandCurrentCommand

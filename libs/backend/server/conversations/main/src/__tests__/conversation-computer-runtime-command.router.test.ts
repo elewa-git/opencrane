@@ -1,4 +1,4 @@
-import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRuntimeCommandKinds, ConversationComputerRuntimeTerminalStates } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRuntimeCommandKinds, ConversationComputerRuntimeTerminalStates, type ConversationComputerRuntimeCommandEnvelope } from "@opencrane/contracts";
 import express from "express";
 import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
@@ -11,7 +11,7 @@ const _IDENTITY = { namespace: "conversation-computers", serviceAccountName: "ag
 /** Supplies the active execution whose coordinates a runtime route must derive. */
 const _ACTIVE = { computer: { id: "computer-1", conversationId: "conversation-1" }, execution: { id: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651" }, lease: { generation: 2, runtimePod: _IDENTITY } } as never;
 /** Supplies one durable head command returned to the reviewed Sandbox. */
-const _COMMAND = { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", sequence: 1, computerId: "computer-1", executionId: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", leaseGeneration: 2, issuedAt: "2026-09-01T00:00:00.000Z", expiresAt: "2026-09-01T00:05:00.000Z", kind: ConversationComputerRuntimeCommandKinds.StartTurn, payload: { inputEntryId: "input-1", protectedInputRef: "conversation-inputs/input-1", protectedInputDigest: `sha256:${"a".repeat(64)}` } } as const;
+const _COMMAND = { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", sequence: 1, computerId: "computer-1", executionId: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", leaseGeneration: 2, issuedAt: "2026-09-01T00:00:00.000Z", expiresAt: "2026-09-01T00:05:00.000Z", kind: ConversationComputerRuntimeCommandKinds.StartTurn, payload: { inputEntryId: "input-1", inputPayloadRef: "payload://input-1", inputPayloadDigest: `sha256:${"a".repeat(64)}` } } as const satisfies ConversationComputerRuntimeCommandEnvelope;
 
 /** Builds one internal router with controlled identity, history, and queue ports. */
 function _App(overrides: Partial<ConversationComputerRuntimeCommandRouterDependencies> = {})

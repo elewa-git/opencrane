@@ -4,7 +4,7 @@ import { CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, ConversationComputerRun
 import { HistoryExpectedRevisions, type HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
 import type { ActiveConversationComputerExecution } from "./conversation-computer-history.types";
-import type { ConversationComputerRuntimeCommandAuthorityDependencies, ConversationComputerRuntimeCommandCompleteCommand, ConversationComputerRuntimeCommandCurrentCommand, ConversationComputerRuntimeCommandIssueResult, ConversationComputerRuntimeCommandPollResult, ConversationComputerRuntimeCommandPollCommand, ConversationComputerRuntimeStartTurnIssueCommand } from "./conversation-computer-runtime-command-authority.types";
+import type { ConversationComputerRuntimeCommandAuthorityDependencies, ConversationComputerRuntimeCommandCompleteCommand, ConversationComputerRuntimeCommandCurrentCommand, ConversationComputerRuntimeCommandIssueResult, ConversationComputerRuntimeCommandPollResult, ConversationComputerRuntimeCommandPollCommand, ConversationComputerRuntimeOutputClaim, ConversationComputerRuntimeOutputClaimCommand, ConversationComputerRuntimeStartTurnIssueCommand } from "./conversation-computer-runtime-command-authority.types";
 
 /** Limits a command delivery to a short server-owned interval after its durable issue. */
 const _COMMAND_TTL_MILLISECONDS = 300_000;
@@ -12,6 +12,7 @@ const _COMMAND_TTL_MILLISECONDS = 300_000;
 const _COMMAND_ISSUED_EVENT_TYPE = "opencrane.conversation-computer-runtime-command-issued.v1";
 /** Names the immutable stream event that records a terminal result for one target command. */
 const _COMMAND_COMPLETED_EVENT_TYPE = "opencrane.conversation-computer-runtime-command-completed.v1";
+const _COMMAND_OUTPUT_RECORDED_EVENT_TYPE = "opencrane.conversation-computer-runtime-command-output-recorded.v1";
 /** Recognizes UUID event identifiers used for command idempotency and completion records. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 /** Recognizes opaque protected payload references without accepting a path or network address. */
@@ -103,7 +104,7 @@ export class ConversationComputerRuntimeCommandAuthority
 		const rechecked = await this._LoadActive(command);
 		if (rechecked.streamName !== active.streamName || rechecked.revision !== active.revision || rechecked.execution.id !== active.execution.id || rechecked.lease.generation !== active.lease.generation)
 			throw new Error("Conversation computer runtime command poll changed while loading its active execution");
-		const next = state.commands.find(candidate => !state.completed.has(candidate.commandId));
+		const next = _NextPendingCommand(state);
 		if (next === undefined)
 			return { command: null };
 		if (Date.parse(next.expiresAt) <= _Now(this.dependencies.clock.now()).getTime())
@@ -123,10 +124,14 @@ export class ConversationComputerRuntimeCommandAuthority
 		const active = await this._LoadActive(command);
 		const state = await this._ReadState(active);
 		_AssertMatchingReport(command.report, active);
-		if (state.completed.has(command.report.commandId))
+		const lifecycle = state.lifecycleByCommand.get(command.report.commandId);
+		if (lifecycle === _CommandLifecycleStates.Completed)
 			return;
-		const next = state.commands.find(candidate => !state.completed.has(candidate.commandId));
-		if (next === undefined || next.commandId !== command.report.commandId)
+		if (lifecycle === _CommandLifecycleStates.OutputRecorded)
+			throw new Error("Conversation computer runtime command completion cannot replace an atomically recorded output");
+		const next = _NextPendingCommand(state);
+		const transition = _Transition(lifecycle, _CommandLifecycleEvents.Complete);
+		if (next === undefined || next.commandId !== command.report.commandId || transition !== _CommandLifecycleStates.Completed)
 			throw new Error("Conversation computer runtime command completion must acknowledge the oldest pending command");
 		await this.dependencies.history.appendAtomic({
 			expectedHeads: [
@@ -146,6 +151,32 @@ export class ConversationComputerRuntimeCommandAuthority
 		});
 	}
 
+	/**
+	 * Prepares the command-stream mutation that must accompany a runtime output message append.
+	 *
+	 * The returned head is the same head used by terminal completion. The output authority includes it
+	 * in its atomic append, so a completion race rejects one write before it can publish a response.
+	 *
+	 * @param command - Identifies the pending command and its checked execution and lease fence.
+	 * @returns The command-stream head condition and output-recorded event for the atomic append.
+	 * @throws {Error} Rejects a retired, completed, claimed, or non-head command.
+	 */
+	public async prepareOutputClaim(command: ConversationComputerRuntimeOutputClaimCommand): Promise<ConversationComputerRuntimeOutputClaim>
+	{
+		_ValidateCurrent(command);
+		if (!_Uuid(command.commandId) || !_Identifier(command.executionId) || !_PositiveInteger(command.leaseGeneration))
+			throw new Error("Conversation computer runtime output claim requires valid command coordinates");
+		const active = await this._LoadActive(command);
+		if (active.execution.id !== command.executionId || active.lease.generation !== command.leaseGeneration)
+			throw new Error("Conversation computer runtime output claim has foreign execution coordinates");
+		const state = await this._ReadState(active);
+		const next = _NextPendingCommand(state);
+		const transition = _Transition(state.lifecycleByCommand.get(command.commandId), _CommandLifecycleEvents.RecordOutput);
+		if (next === undefined || next.commandId !== command.commandId || transition !== _CommandLifecycleStates.OutputRecorded)
+			throw new Error("Conversation computer runtime output claim requires one pending unclaimed command");
+		return { expectedHead: { streamName: state.streamName, revision: state.revision }, append: { streamName: state.streamName, expectedRevision: state.revision, events: [{ id: randomUUID(), type: _COMMAND_OUTPUT_RECORDED_EVENT_TYPE, data: { commandId: command.commandId }, metadata: _Metadata({ ...command, protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, state: ConversationComputerRuntimeTerminalStates.Completed }) }] } };
+	}
+
 	/** Loads the current active execution while keeping identity and profile selection inside history. */
 	private async _LoadActive(command: ConversationComputerRuntimeCommandCurrentCommand): Promise<ActiveConversationComputerExecution>
 	{
@@ -157,7 +188,7 @@ export class ConversationComputerRuntimeCommandAuthority
 	{
 		const streamName = _StreamName(active);
 		const commands: ConversationComputerRuntimeCommandEnvelope[] = [];
-		const completed = new Set<string>();
+		const lifecycleByCommand = new Map<string, _CommandLifecycleStates>();
 		let expectedRevision = 0n;
 		for await (const event of this.dependencies.history.readStream({ streamName }))
 		{
@@ -169,14 +200,25 @@ export class ConversationComputerRuntimeCommandAuthority
 				if (queued.sequence !== commands.length + 1 || commands.some(candidate => candidate.commandId === queued.commandId))
 					throw new Error("Conversation computer runtime command history has an invalid command sequence");
 				commands.push(queued);
+				lifecycleByCommand.set(queued.commandId, _CommandLifecycleStates.Pending);
 			}
 			else if (event.type === _COMMAND_COMPLETED_EVENT_TYPE)
 			{
 				const report = _ReadCompletion(event, active);
-				const completedIndex = commands.findIndex(candidate => candidate.commandId === report.commandId);
-				if (completedIndex < 0 || completed.has(report.commandId) || commands.slice(0, completedIndex).some(candidate => !completed.has(candidate.commandId)))
+				const next = _NextPendingCommand({ commands, lifecycleByCommand });
+				const transition = _Transition(lifecycleByCommand.get(report.commandId), _CommandLifecycleEvents.Complete);
+				if (next === undefined || next.commandId !== report.commandId || transition === null)
 					throw new Error("Conversation computer runtime command history has an invalid completion");
-				completed.add(report.commandId);
+				lifecycleByCommand.set(report.commandId, transition);
+			}
+			else if (event.type === _COMMAND_OUTPUT_RECORDED_EVENT_TYPE)
+			{
+				const commandId = _ReadOutputClaim(event, active);
+				const next = _NextPendingCommand({ commands, lifecycleByCommand });
+				const transition = _Transition(lifecycleByCommand.get(commandId), _CommandLifecycleEvents.RecordOutput);
+				if (next === undefined || next.commandId !== commandId || transition === null)
+					throw new Error("Conversation computer runtime command history has an invalid output claim");
+				lifecycleByCommand.set(commandId, transition);
 			}
 			else
 				throw new Error("Conversation computer runtime command history has an unsupported event");
@@ -186,7 +228,7 @@ export class ConversationComputerRuntimeCommandAuthority
 		const revision = expectedRevision === 0n ? HistoryExpectedRevisions.NoStream : expectedRevision - 1n;
 		if (head.streamName !== streamName || head.revision !== (revision === HistoryExpectedRevisions.NoStream ? null : revision))
 			throw new Error("Conversation computer runtime command history changed while loading");
-		return { streamName, revision, commands, completed };
+		return { streamName, revision, commands, lifecycleByCommand };
 	}
 }
 
@@ -199,8 +241,62 @@ interface _CommandState
 	readonly revision: HistoryExpectedRevisions.NoStream | bigint;
 	/** Lists every server-issued command in immutable sequence order. */
 	readonly commands: readonly ConversationComputerRuntimeCommandEnvelope[];
-	/** Identifies the commands that already received one terminal runtime report. */
-	readonly completed: ReadonlySet<string>;
+	/** Names each issued command's one terminal lifecycle state. */
+	readonly lifecycleByCommand: ReadonlyMap<string, _CommandLifecycleStates>;
+}
+
+/**
+ * Records the command state reconstructed from its per-execution history stream.
+ *
+ * Replay, polling, completion, and output-claim admission branch on this in-memory state. `Pending`
+ * is the sole state that may transition; the two terminal states prevent a second terminal write.
+ */
+enum _CommandLifecycleStates
+{
+	/** Allows the command to be polled and to accept exactly one terminal transition. */
+	Pending = "pending",
+	/** Records a terminal runtime report that published no participant-visible output. */
+	Completed = "completed",
+	/** Records a successful output atomically with its participant-visible conversation message. */
+	OutputRecorded = "output_recorded",
+}
+
+/**
+ * Names the command-stream events that may leave {@link _CommandLifecycleStates.Pending}.
+ *
+ * Both events are terminal and therefore share the same transition table. Adding another terminal
+ * event requires an explicit table entry for replay and mutation admission to remain aligned.
+ */
+enum _CommandLifecycleEvents
+{
+	/** Applies the terminal report received from the authenticated runtime route. */
+	Complete = "complete",
+	/** Applies the output success transition held in the output authority's atomic append. */
+	RecordOutput = "record_output",
+}
+
+/** Defines the State × Event table shared by replay and mutation admission. */
+const _CommandLifecycleTransitions: Readonly<Record<_CommandLifecycleStates, Readonly<Partial<Record<_CommandLifecycleEvents, _CommandLifecycleStates>>>>> = {
+	[_CommandLifecycleStates.Pending]: {
+		[_CommandLifecycleEvents.Complete]: _CommandLifecycleStates.Completed,
+		[_CommandLifecycleEvents.RecordOutput]: _CommandLifecycleStates.OutputRecorded,
+	},
+	[_CommandLifecycleStates.Completed]: {},
+	[_CommandLifecycleStates.OutputRecorded]: {},
+};
+
+/** Returns the oldest pending command so every command operation uses the same durable ordering rule. */
+function _NextPendingCommand(state: Pick<_CommandState, "commands" | "lifecycleByCommand">): ConversationComputerRuntimeCommandEnvelope | undefined
+{
+	return state.commands.find(candidate => state.lifecycleByCommand.get(candidate.commandId) === _CommandLifecycleStates.Pending);
+}
+
+/** Applies one State × Event table cell, or returns null when the durable event is not permitted. */
+function _Transition(state: _CommandLifecycleStates | undefined, event: _CommandLifecycleEvents): _CommandLifecycleStates | null
+{
+	if (state === undefined)
+		return null;
+	return _CommandLifecycleTransitions[state][event] ?? null;
 }
 
 /** Builds the deterministic command stream for one server-created execution, never a reusable computer lifetime. */
@@ -255,6 +351,14 @@ function _ReadCompletion(event: HistoryRecordedEvent, active: ActiveConversation
 	if (!_Record(event.data) || !_ExactKeys(event.data, ["report"]) || !_TerminalReport(event.data.report) || !_MatchesMetadata(event.metadata, event.data.report) || !_MatchesActive(event.data.report, active) || !_UUID_PATTERN.test(event.id))
 		throw new Error("Conversation computer runtime command history has an invalid completion report");
 	return event.data.report;
+}
+
+/** Parses an output claim only when its command metadata remains bound to the active execution. */
+function _ReadOutputClaim(event: HistoryRecordedEvent, active: ActiveConversationComputerExecution): string
+{
+	if (!_Record(event.data) || !_ExactKeys(event.data, ["commandId"]) || !_Uuid(event.data.commandId) || !_MatchesMetadata(event.metadata, { protocolVersion: CONVERSATION_COMPUTER_RUNTIME_PROTOCOL_VERSION, commandId: event.data.commandId, computerId: active.computer.id, executionId: active.execution.id, leaseGeneration: active.lease.generation, state: ConversationComputerRuntimeTerminalStates.Completed }) || !_UUID_PATTERN.test(event.id))
+		throw new Error("Conversation computer runtime command history has an invalid output claim event");
+	return event.data.commandId;
 }
 
 /** Checks that one issued command remains fenced to the exact active computer execution. */
