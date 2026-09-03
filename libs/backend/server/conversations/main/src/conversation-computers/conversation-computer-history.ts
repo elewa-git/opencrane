@@ -1,7 +1,7 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerBootstrapCommand, ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+import type { ActiveConversationComputerBootstrapCommand, ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ActiveConversationComputerServerCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
 import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerActivationCurrentCommand, _ValidateConversationComputerBootstrapCommand, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
@@ -215,6 +215,32 @@ export class ConversationComputerHistory
 		if (snapshot.computer.siloId !== command.siloId || snapshot.computer.id !== command.computerId)
 			throw new Error("Conversation computer bootstrap received foreign runtime coordinates");
 		return this.loadActiveExecutionForRuntime({ siloId: command.siloId, computerId: command.computerId, conversationId: snapshot.computer.conversationId, profileRevisionId: snapshot.computer.profileRevisionId, nowEpochMilliseconds: command.nowEpochMilliseconds });
+	}
+
+	/**
+	 * Loads one active execution for a server-owned command without accepting its identity or profile.
+	 *
+	 * The durable command worker has already selected a conversation input. It may name that conversation
+	 * and computer, but history derives the remaining binding before it checks the active lease and execution.
+	 *
+	 * Called by: ConversationComputerRuntimeCommandAuthority.
+	 * @param command - Supplies trusted silo, computer, conversation, and current server time.
+	 * @returns The current active execution and its computer-stream revision fence.
+	 * @throws {Error} Rejects a missing, foreign, inactive, expired, or terminal execution.
+	 */
+	public async loadActiveExecutionForServer(command: ActiveConversationComputerServerCommand): Promise<ActiveConversationComputerExecution>
+	{
+		const current = await this.loadForActivation(command);
+		if (current === null)
+			throw new Error("Conversation computer history cannot select a command for a missing computer");
+		return this.loadActiveExecution({
+			siloId: command.siloId,
+			computerId: command.computerId,
+			conversationId: command.conversationId,
+			agentIdentityId: current.computer.agentIdentityId,
+			profileRevisionId: current.computer.profileRevisionId,
+			nowEpochMilliseconds: command.nowEpochMilliseconds,
+		});
 	}
 
 	/** Replays one fully specified trusted computer stream and verifies its current head. */
