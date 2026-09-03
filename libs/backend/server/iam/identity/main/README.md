@@ -77,6 +77,12 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   loader accepts only a ConversationComputer's silo and identity, then derives the active service,
   Principal, actor class, and every checked child/parent stream-head condition from the identity
   history. A later command append must preserve every returned condition atomically.
+- `ManagedAgentIdentityHistoryProvisioner` — ensures the deterministic revision-zero, active
+  `managed-agent-identity:<AgentService.id>` stream for already-verified managed service facts.
+  It writes only at `NoStream`, then reloads and verifies the exact active identity after creation
+  or an append race. It never queries AgentService persistence, accepts a browser identity id, or
+  creates a relational catalog; the caller supplies the service, silo, and dedicated Principal that
+  its own authority has already checked.
 
 The OIDC service keeps login group projection and standalone first-owner admission as internal
 steps. They are not package entry points because the login flow coordinates their verified inputs,
