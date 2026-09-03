@@ -7,6 +7,7 @@
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
+{{- $conversationPayloadKeyring := .Values.clustertenantManager.conversationPayloadKeyring -}}
 {{- $history := .Values.historyStore.kurrentdb -}}
 {{- $conversationComputerProfiles := printf "%s-conversation-computer-profiles" (include "opencrane.fullname" .) -}}
 {{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
@@ -59,6 +60,15 @@
 {{- if empty $continuationKeyring.secretKey -}}
 {{- fail "clustertenantManager.workflows.continuationKeyring.secretKey is required" -}}
 {{- end -}}
+{{- if and .Values.agentSandbox.enabled (empty $conversationPayloadKeyring.existingSecret) -}}
+{{- fail "clustertenantManager.conversationPayloadKeyring.existingSecret is required when agentSandbox.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.agentSandbox.enabled (empty $conversationPayloadKeyring.secretKey) -}}
+{{- fail "clustertenantManager.conversationPayloadKeyring.secretKey is required when agentSandbox.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.agentSandbox.enabled (empty $conversationPayloadKeyring.checksum) -}}
+{{- fail "clustertenantManager.conversationPayloadKeyring.checksum is required when agentSandbox.enabled=true" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -74,6 +84,10 @@ spec:
       app.kubernetes.io/component: opencrane-server
   template:
     metadata:
+      {{- if .Values.agentSandbox.enabled }}
+      annotations:
+        opencrane.ai/conversation-payload-keyring-checksum: {{ $conversationPayloadKeyring.checksum | quote }}
+      {{- end }}
       labels:
         {{- include "opencrane.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: opencrane-server
@@ -137,6 +151,8 @@ spec:
             {{- if .Values.agentSandbox.enabled }}
             - name: OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH
               value: /var/run/opencrane/conversation-computer/profiles.json
+            - name: OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH
+              value: /var/run/opencrane/conversation-payload/keyring.json
             {{- end }}
             - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE
               value: {{ .Values.clustertenantManager.workflows.databasePoolSize | quote }}
@@ -360,6 +376,9 @@ spec:
             - name: conversation-computer-profiles
               mountPath: /var/run/opencrane/conversation-computer
               readOnly: true
+            - name: conversation-payload-keyring
+              mountPath: /var/run/opencrane/conversation-payload
+              readOnly: true
             {{- end }}
             {{- if $ociRegistryAuthorization.existingSecret }}
             - name: oci-registry-authorization
@@ -389,6 +408,13 @@ spec:
           configMap:
             name: {{ $conversationComputerProfiles }}
             defaultMode: 0444
+        - name: conversation-payload-keyring
+          secret:
+            secretName: {{ $conversationPayloadKeyring.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $conversationPayloadKeyring.secretKey | quote }}
+                path: keyring.json
         {{- end }}
         - name: artifact-keys
           secret:

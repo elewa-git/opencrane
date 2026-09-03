@@ -11,6 +11,7 @@ VALUES=(
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
   --set agentSandbox.enabled=true
+  --set-string clustertenantManager.conversationPayloadKeyring.checksum=payload-keyring-checksum
   --set-string agentSandbox.namespace=opencrane-testv5
   --set-string agentSandbox.runtimeClassName=gvisor
   --set-string agentSandbox.serviceAccountName=agent-sandbox-runtime
@@ -102,9 +103,22 @@ grep -Fq 'OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH' <<<"$server_deplo
 grep -Fq '/var/run/opencrane/conversation-computer/profiles.json' <<<"$server_deployment"
 grep -Fq 'name: conversation-computer-profiles' <<<"$server_deployment"
 grep -Fq 'name: opencrane-testv5-conversation-computer-profiles' <<<"$server_deployment"
+grep -Fq 'name: OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH' <<<"$server_deployment"
+grep -Fq '/var/run/opencrane/conversation-payload/keyring.json' <<<"$server_deployment"
+grep -Fq 'name: conversation-payload-keyring' <<<"$server_deployment"
+grep -Fq 'mountPath: /var/run/opencrane/conversation-payload' <<<"$server_deployment"
+grep -Fq 'secretName: "opencrane-conversation-payload"' <<<"$server_deployment"
+grep -Fq 'opencrane.ai/conversation-payload-keyring-checksum: "payload-keyring-checksum"' <<<"$server_deployment"
+payload_keyring_volume="$(grep -A 8 '^        - name: conversation-payload-keyring' <<<"$server_deployment")"
+grep -Fq 'defaultMode: 0440' <<<"$payload_keyring_volume"
+grep -Fq 'path: keyring.json' <<<"$payload_keyring_volume"
 
-if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]:0:2}" --set agentSandbox.enabled=true "${VALUES[@]:4}" >/dev/null 2>&1; then
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]:0:2}" --set agentSandbox.enabled=true "${VALUES[@]:3}" >/dev/null 2>&1; then
   echo "Agent Sandbox rendered without a namespace" >&2
+  exit 1
+fi
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]:0:2}" --set agentSandbox.enabled=true "${VALUES[@]:4}" >/dev/null 2>&1; then
+  echo "Agent Sandbox rendered without a ConversationComputer payload-keyring checksum" >&2
   exit 1
 fi
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].image.digest=latest' >/dev/null 2>&1; then
@@ -127,6 +141,10 @@ fi
 disabled="$(helm template opencrane-testv5 "$CHART_DIR" --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' --show-only templates/app-rollups.yaml)"
 if grep -Eq 'kind: (ConfigMap|SandboxTemplate|SandboxWarmPool|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding)' <<<"$disabled"; then
   echo "Disabled Agent Sandbox rendered profile or admission resources" >&2
+  exit 1
+fi
+if grep -Eq 'conversation-payload-keyring|OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH' <<<"$disabled"; then
+  echo "Disabled Agent Sandbox rendered ConversationComputer payload key material" >&2
   exit 1
 fi
 

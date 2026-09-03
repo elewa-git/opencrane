@@ -134,6 +134,19 @@ function _readConversationComputerActivationConfig(): ConversationComputerActiva
 	return { profiles };
 }
 
+/**
+ * Reads the payload keyring path when ConversationComputer activation is configured.
+ *
+ * Activation accepts runtime output, so starting with profiles but no mounted keyring would defer a
+ * deployment error until after the server has admitted work. This fails configuration early instead.
+ */
+function _readConversationPayloadKeyringPath(activation: ConversationComputerActivationConfig | null): string | null
+{
+	if (activation === null)
+		return null;
+	return _readRequiredAbsolutePath("OPENCRANE_CONVERSATION_PAYLOAD_KEYRING_PATH");
+}
+
 /** Reads only the release labels that admission policy permits a SandboxClaim to stamp onto a Pod. */
 function _ReadConversationComputerPodLabels(value: unknown): { readonly applicationName: string; readonly releaseName: string } | null
 {
@@ -272,6 +285,7 @@ function _readWorkflowConfig(): OpenCraneWorkflowConfig
  */
 export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
+	const conversationComputerActivation = _readConversationComputerActivationConfig();
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
 		historyStore: _readHistoryStoreConfig(),
@@ -286,7 +300,8 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
 			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
 			channelTargets: _readChannelTargetConfig(),
-			conversationComputerActivation: _readConversationComputerActivationConfig(),
+			conversationComputerActivation,
+			conversationPayloadKeyringPath: _readConversationPayloadKeyringPath(conversationComputerActivation),
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
 			continuationKeyringPath: _readRequiredAbsolutePath("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH"),
