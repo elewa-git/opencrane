@@ -41,6 +41,23 @@ describe("BoundConversationWriter", function ()
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ streamName: "conversation-conversation-1", expectedRevision: 7n, events: [expect.objectContaining({ id: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", type: "opencrane.conversation-entry.v1", metadata: expect.objectContaining({ computerId: "computer-1", leaseGeneration: 4 }) })] }));
 	});
 
+	it("stamps the first computer entry at position one after the immutable creation anchor", async function _StampsFirstEntryAfterCreation()
+	{
+		const append = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", revision: 1n });
+		const writer = new BoundConversationWriter({ append }, { ..._BINDING, expectedRevision: 0n }, { now: function _Now(): Date { return new Date("2026-09-02T00:00:00.000Z"); } }, { assertMayAppend: vi.fn().mockResolvedValue(undefined) }, { assertMayUseVisibility: vi.fn().mockResolvedValue(undefined) }, { assertMayAppend: vi.fn().mockResolvedValue(undefined) });
+
+		await expect(writer.append({ sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", entry: { kind: "a2ui", surfaceId: "surface-1", a2uiSchemaVersion: "0.8", operation: "remove", payloadRef: null, payloadDigest: null, visibility: { audience: "conversation" }, causationId: "source-1", correlationId: "request-1" } })).resolves.toEqual(expect.objectContaining({ position: "1" }));
+	});
+
+	it("rejects an unanchored negative revision before it can append", async function _RejectsNegativeRevision()
+	{
+		const { append } = _Writer();
+		const unanchored = new BoundConversationWriter({ append }, { ..._BINDING, expectedRevision: -1n }, { now: function _Now(): Date { return new Date("2026-09-02T00:00:00.000Z"); } }, { assertMayAppend: vi.fn() }, { assertMayUseVisibility: vi.fn() }, { assertMayAppend: vi.fn() });
+
+		await expect(unanchored.append({ sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", entry: { kind: "a2ui", surfaceId: "surface-1", a2uiSchemaVersion: "0.8", operation: "remove", payloadRef: null, payloadDigest: null, visibility: { audience: "conversation" }, causationId: "source-1", correlationId: "request-1" } })).rejects.toThrow("creation-anchored");
+		expect(append).not.toHaveBeenCalled();
+	});
+
 	it("refuses reuse and oversized entries before a second append", async function ()
 	{
 		const { writer, append } = _Writer();

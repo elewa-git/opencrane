@@ -1,4 +1,5 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
+import { ConversationLifecycleModes } from "@opencrane/contracts";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 import { describe, expect, it, vi } from "vitest";
 
@@ -65,14 +66,15 @@ describe("ConversationHistoryAuthority", function ()
 		expect(append).not.toHaveBeenCalled();
 	});
 
-	it("maps the no-stream condition to the first immutable conversation position", async function ()
+	it("creates only a lifecycle anchor at no stream and refuses an entry before it", async function ()
 	{
 		const append = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", revision: 0n });
 		const authority = new ConversationHistoryAuthority({ append });
 
-		await authority.append(_Command({ expectedRevision: HistoryExpectedRevisions.NoStream, entry: { ..._Command().entry, position: "0" } }));
+		await authority.create({ siloId: "silo-1", eventId: _EVENT_ID, created: { schemaVersion: 1, conversationId: "conversation-1", mode: ConversationLifecycleModes.Agent, createdAt: "2026-09-02T00:00:00.000Z", provenance: { principalId: "principal-1", authorizationEvidenceId: "evidence-1" } } });
+		await expect(authority.append(_Command({ expectedRevision: HistoryExpectedRevisions.NoStream, entry: { ..._Command().entry, position: "0" } }))).rejects.toThrow("creation-anchored");
 
-		expect(append).toHaveBeenCalledWith(expect.objectContaining({ streamName: "conversation-conversation-1", expectedRevision: HistoryExpectedRevisions.NoStream }));
+		expect(append).toHaveBeenCalledWith(expect.objectContaining({ streamName: "conversation-conversation-1", expectedRevision: HistoryExpectedRevisions.NoStream, events: [expect.objectContaining({ type: "opencrane.conversation-created.v1" })] }));
 	});
 
 	it("returns only the exact conversation stream's expected-head conflict as a retryable result", async function ()

@@ -1,8 +1,8 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerBootstrapCommand, ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ActiveConversationComputerServerCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
-import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerActivationCurrentCommand, _ValidateConversationComputerBootstrapCommand, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
+import type { ActiveConversationComputerBootstrapCommand, ActiveConversationComputerExecution, ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ActiveConversationComputerRuntimeCommand, ActiveConversationComputerServerCommand, ConversationComputerActivationCurrentCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerProvisionCommand, ConversationComputerRuntimeCurrentCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
+import { _AssertConversationComputerRuntimeCoordinates, _ConversationComputerStreamName, _ValidateConversationComputerActivationCurrentCommand, _ValidateConversationComputerBootstrapCommand, _ValidateConversationComputerCurrentCommand, _ValidateConversationComputerRuntimeCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidatedConversationComputerProvisionedEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -22,6 +22,27 @@ export class ConversationComputerHistory
 	public constructor(private readonly historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">) {}
 
 	/**
+	 * Creates a cold `ComputerProvisioned` event at revision zero for one computer stream.
+	 *
+	 * Activation and runtime readers derive their identity and profile from this record. Accepting a
+	 * lease, execution, workspace checkpoint, or later timestamp here would let a stream begin in a
+	 * state that never passed its earlier lifecycle transitions.
+	 *
+	 * @param command - Supplies the idempotency UUID and cold computer record for the new stream.
+	 * @returns The checked KurrentDB receipt for the revision-zero provision event.
+	 * @throws {Error} Rejects a malformed event UUID or a computer that is not freshly cold.
+	 */
+	public async provision(command: ConversationComputerProvisionCommand)
+	{
+		const snapshot = _ValidatedConversationComputerSnapshot({ computer: command.computer, lease: null });
+		if (!_UUID_PATTERN.test(command.eventId))
+			throw new Error("Conversation computer provision requires a UUID event identifier");
+		if (snapshot.computer.state !== ConversationComputerStates.Cold || snapshot.computer.leaseGeneration !== 0 || snapshot.computer.workspaceCheckpoint !== null || snapshot.computer.activeExecution !== null || snapshot.computer.updatedAt !== snapshot.computer.createdAt)
+			throw new Error("Conversation computer provision requires a cold zero-generation computer");
+		return this.historyStore.append({ streamName: _ConversationComputerStreamName(snapshot.computer.id), expectedRevision: HistoryExpectedRevisions.NoStream, events: [_Event(command.eventId, "opencrane.computer-provisioned.v1", snapshot)] });
+	}
+
+	/**
 	 * Appends one complete computer-and-lease snapshot at the caller-observed stream revision.
 	 *
 	 * @param command - Supplies closed snapshots, a UUID event key, and the checked stream head.
@@ -31,24 +52,21 @@ export class ConversationComputerHistory
 	public async append(command: ConversationComputerAppendCommand)
 	{
 		const snapshot = _ValidatedConversationComputerSnapshot({ computer: command.computer, lease: command.lease });
-		if (!_ExpectedRevision(command.expectedRevision))
-			throw new Error("Conversation computer history append requires a nonnegative expected revision");
+		if (typeof command.expectedRevision !== "bigint" || command.expectedRevision < 0n)
+			throw new Error("Conversation computer history append requires a provisioned nonnegative expected revision");
 		if (!_UUID_PATTERN.test(command.eventId))
 			throw new Error("Conversation computer history append requires a UUID event identifier");
-		if (command.expectedRevision !== HistoryExpectedRevisions.NoStream)
-		{
-			const previous = await this.load({
-				siloId: snapshot.computer.siloId,
-				computerId: snapshot.computer.id,
-				conversationId: snapshot.computer.conversationId,
-				agentIdentityId: snapshot.computer.agentIdentityId,
-				profileRevisionId: snapshot.computer.profileRevisionId,
-			});
-			if (previous === null || previous.revision !== command.expectedRevision)
-				throw new Error("Conversation computer history append requires the current expected revision");
-			_ValidateSnapshotTransition(previous, snapshot);
-			command.assertCurrent?.(previous);
-		}
+		const previous = await this.load({
+			siloId: snapshot.computer.siloId,
+			computerId: snapshot.computer.id,
+			conversationId: snapshot.computer.conversationId,
+			agentIdentityId: snapshot.computer.agentIdentityId,
+			profileRevisionId: snapshot.computer.profileRevisionId,
+		});
+		if (previous === null || previous.revision !== command.expectedRevision)
+			throw new Error("Conversation computer history append requires the current expected revision");
+		_ValidateSnapshotTransition(previous, snapshot);
+		command.assertCurrent?.(previous);
 		const streamName = _ConversationComputerStreamName(snapshot.computer.id);
 		return this.historyStore.append({
 			streamName,
@@ -122,7 +140,7 @@ export class ConversationComputerHistory
 				throw new Error("Conversation computer history omitted a stream event before its reported head");
 			return null;
 		}
-		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
+		const snapshot = _ValidatedConversationComputerProvisionedEvent(first.value, streamName);
 		_AssertConversationComputerRuntimeCoordinates(snapshot, command);
 		return this._Load({ ...command, agentIdentityId: snapshot.computer.agentIdentityId });
 	}
@@ -157,7 +175,7 @@ export class ConversationComputerHistory
 				throw new Error("Conversation computer history omitted a stream event before its reported head");
 			return null;
 		}
-		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
+		const snapshot = _ValidatedConversationComputerProvisionedEvent(first.value, streamName);
 		if (snapshot.computer.siloId !== command.siloId || snapshot.computer.id !== command.computerId || snapshot.computer.conversationId !== command.conversationId)
 			throw new Error("Conversation computer activation load received foreign computer coordinates");
 		return this._Load({ ...command, agentIdentityId: snapshot.computer.agentIdentityId, profileRevisionId: snapshot.computer.profileRevisionId });
@@ -211,7 +229,7 @@ export class ConversationComputerHistory
 		}
 		if (first.done)
 			throw new Error("Conversation computer history cannot bootstrap an absent runtime");
-		const snapshot = _ValidatedConversationComputerSnapshot(first.value.data);
+		const snapshot = _ValidatedConversationComputerProvisionedEvent(first.value, streamName);
 		if (snapshot.computer.siloId !== command.siloId || snapshot.computer.id !== command.computerId)
 			throw new Error("Conversation computer bootstrap received foreign runtime coordinates");
 		return this.loadActiveExecutionForRuntime({ siloId: command.siloId, computerId: command.computerId, conversationId: snapshot.computer.conversationId, profileRevisionId: snapshot.computer.profileRevisionId, nowEpochMilliseconds: command.nowEpochMilliseconds });
@@ -319,8 +337,29 @@ export class ConversationComputerHistory
 	}
 }
 
-/** Checks the only expected revisions accepted by the HistoryStore append contract. */
-function _ExpectedRevision(value: ConversationComputerAppendCommand["expectedRevision"]): boolean
+/** Builds the exact server-stamped envelope shared by provision and lifecycle-snapshot appends. */
+function _Event(eventId: string, type: string, snapshot: ConversationComputerHistorySnapshot)
 {
-	return value === HistoryExpectedRevisions.NoStream || (typeof value === "bigint" && value >= 0n);
+	return {
+		id: eventId,
+		type,
+		data: { computer: snapshot.computer, lease: snapshot.lease },
+		metadata: {
+			siloId: snapshot.computer.siloId,
+			computerId: snapshot.computer.id,
+			conversationId: snapshot.computer.conversationId,
+			agentIdentityId: snapshot.computer.agentIdentityId,
+			profileRevisionId: snapshot.computer.profileRevisionId,
+			leaseId: snapshot.lease?.id ?? null,
+			leaseGeneration: snapshot.lease?.generation ?? null,
+			leaseState: snapshot.lease?.state ?? null,
+			runtimePodNamespace: snapshot.lease?.runtimePod?.namespace ?? null,
+			runtimePodServiceAccountName: snapshot.lease?.runtimePod?.serviceAccountName ?? null,
+			runtimePodUid: snapshot.lease?.runtimePod?.podUid ?? null,
+			executionId: snapshot.computer.activeExecution?.id ?? null,
+			executionLeaseId: snapshot.computer.activeExecution?.leaseId ?? null,
+			executionLeaseGeneration: snapshot.computer.activeExecution?.leaseGeneration ?? null,
+			executionEndedAt: snapshot.computer.activeExecution?.endedAt ?? null,
+		},
+	};
 }

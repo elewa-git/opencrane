@@ -39,6 +39,8 @@ export * from "./conversation-computer.types";
 export * from "./conversation-computer-runtime-protocol.types";
 export * from "./conversation-entry.types";
 export * from "./conversation-entry.validator";
+export * from "./conversation-lifecycle.types";
+export * from "./conversation-lifecycle.validator";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
 export * from "./agent-runtime-protocol.types";

@@ -14,16 +14,23 @@ export interface ConversationHistoryReadCommand
 	readonly siloId: string;
 	/** Names the sole conversation stream that may be read. */
 	readonly conversationId: string;
-	/** Starts at this inclusive KurrentDB revision, or at the immutable first entry when omitted. */
+	/** Selects the inclusive stream revision of participant entries to return after the lifecycle anchor validates. */
 	readonly fromRevision?: bigint;
 }
 
-/** Reports the derived stream coordinate and validated entries returned from it in stream order. */
+/**
+ * Reports the derived stream, the head observed during validation, and its participant entries.
+ *
+ * Revision zero is a lifecycle event rather than a participant entry, so `entries` can be empty
+ * even when `revision` is zero.
+ */
 export interface ConversationHistoryReadResult
 {
 	/** Names the only KurrentDB stream read for this command. */
 	readonly streamName: string;
-	/** Lists the participant-visible entries in their validated immutable stream order. */
+	/** Reports the final revision observed while the reader validated the complete lifecycle-anchored stream. */
+	readonly revision: bigint | null;
+	/** Lists the participant-visible entries in their validated immutable stream order; revision zero is never an entry. */
 	readonly entries: readonly ConversationEntry[];
 }
 
@@ -37,6 +44,6 @@ export interface ConversationHistoryReadResult
  */
 export interface CurrentConversationHistory extends ConversationHistoryReadResult
 {
-	/** Requires the KurrentDB revision that was current when the transcript was replayed. */
+	/** Reports the KurrentDB head that a later atomic append must compare before it writes. */
 	readonly expectedRevision: HistoryExpectedRevisions.NoStream | bigint;
 }

@@ -92,6 +92,21 @@ export interface ConversationComputerAppendCommand
 	readonly lease: ComputerLease | null;
 }
 
+/**
+ * Carries the cold revision-zero record that establishes a computer history stream.
+ *
+ * `ConversationComputerHistory.provision` accepts this before any lease or execution exists. Later
+ * lifecycle appends must name a nonnegative expected revision, so they cannot replace the provision
+ * record at `NoStream`.
+ */
+export interface ConversationComputerProvisionCommand
+{
+	/** Supplies the caller-chosen UUID that keeps a response-lost provision retry byte-stable. */
+	readonly eventId: string;
+	/** Carries the cold, zero-generation computer bound to its conversation, identity, and profile. */
+	readonly computer: ConversationComputer;
+}
+
 /** Carries the checked computer and lease state stored at one history revision. */
 export interface ConversationComputerHistorySnapshot
 {
