@@ -73,12 +73,13 @@ or already terminal.
 `PrismaConversationAgentBindingUnitOfWork` supplies the pre-creation binding an eventual
 history-anchored agent-session creation command needs. In one serializable snapshot it accepts only
 an active service in the selected silo whose exact active revision is published, asks the separately
-owned AgentService contract to verify a managed service's deterministic internal Principal, selects
-the release-owned computer profile, and asks a
-separate identity authority for the stable `AgentIdentity`. Any missing or malformed coordinate
-denies without returning a partial binding. Personal services are explicitly unavailable here until
-their owned delegation policy can provide a proxied identity; this boundary never invents an
-identity or falls back to the legacy personal-service lookup.
+owned AgentService contract to verify a managed service's deterministic internal Principal, then
+closes that transaction. The outer binding authority selects the release-owned computer profile and
+asks a separate identity authority for the stable `AgentIdentity` only from the verified snapshot.
+This keeps KurrentDB identity history outside the PostgreSQL transaction. Any missing or malformed
+coordinate denies without returning a partial binding. Personal services are explicitly unavailable
+here until their owned delegation policy can provide a proxied identity; this boundary never invents
+an identity or falls back to the legacy personal-service lookup.
 
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also

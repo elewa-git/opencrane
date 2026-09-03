@@ -1,84 +1,70 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { ConversationAgentBindingResolver } from "../conversation-agent-binding-authority";
-import { ConversationAgentBindingDenialReasons, type ConversationAgentBindingAuthorityDependencies, type ConversationAgentBindingCandidate } from "../conversation-agent-binding.types";
-import { PrismaConversationAgentBindingRepository } from "../db/prisma-conversation-agent-binding-repository";
+import { ConversationAgentBindingResolver, ConversationAgentBindingVerificationResolver } from "../conversation-agent-binding-authority";
+import { ConversationAgentBindingDenialReasons, type ConversationAgentBindingAuthorityDependencies, type ConversationAgentBindingCandidate, type ConversationManagedAgentPrincipalValidator } from "../conversation-agent-binding.types";
 import { PrismaConversationAgentBindingUnitOfWork } from "../db/prisma-conversation-agent-binding-unit-of-work";
 
-/** Builds one checked managed service candidate with its deterministic Principal contract. */
-function _ManagedCandidate(overrides: Partial<ConversationAgentBindingCandidate> = {}): ConversationAgentBindingCandidate
+function _Candidate(overrides: Partial<ConversationAgentBindingCandidate> = {}): ConversationAgentBindingCandidate
 {
-	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentServiceKind: "managed", principalId: "managed-principal:service-1", principal: { issuer: "urn:opencrane:managed-agent", provenance: "internal", subject: "service-1" }, ...overrides };
+	return { agentServiceName: "Research", agentServiceId: "service-1", agentRevisionId: "revision-1", agentServiceKind: "managed", principalId: "managed-principal:service-1", principal: { issuer: "urn:opencrane:managed-agent", provenance: "internal", subject: "service-1" }, ...overrides };
 }
 
-/** Builds the deployment and identity selection ports without introducing a database fallback. */
+function _Validator(): ConversationManagedAgentPrincipalValidator
+{
+	return { validate: vi.fn(command => command.principalId === `managed-principal:${command.agentServiceId}` && command.issuer === "urn:opencrane:managed-agent" && command.provenance === "internal" && command.subject === command.agentServiceId) };
+}
+
 function _Dependencies(): ConversationAgentBindingAuthorityDependencies
 {
-	return {
-		profiles: { select: vi.fn().mockResolvedValue({ profileRevisionId: "profile-1" }) },
-		managedPrincipalValidator: {
-			validate: vi.fn().mockImplementation(command => command.principalId === `managed-principal:${command.agentServiceId}` && command.issuer === "urn:opencrane:managed-agent" && command.provenance === "internal" && command.subject === command.agentServiceId),
-		},
-		identities: { select: vi.fn().mockResolvedValue({ agentIdentityId: "identity-1" }) },
-	};
+	return { profiles: { select: vi.fn().mockResolvedValue({ profileRevisionId: "profile-1" }) }, identities: { ensure: vi.fn().mockResolvedValue({ agentIdentityId: "identity-1" }) } };
 }
 
-describe("ConversationAgentBindingResolver", function _ConversationAgentBindingResolverSuite()
+describe("ConversationAgentBindingResolver", function _Suite()
 {
-	it("binds only one active managed service to its revision, principal, selected identity, and release profile", async function _BindsManagedService()
+	it("resolves external profile and identity only from a verified managed snapshot", async function _Resolves()
 	{
-		const load = vi.fn().mockResolvedValue(_ManagedCandidate());
 		const dependencies = _Dependencies();
-		const result = await new ConversationAgentBindingResolver({ load }, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" });
-
-		expect(result).toEqual({ outcome: "bound", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentServiceKind: "managed", principalId: "managed-principal:service-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" } });
-		expect(dependencies.profiles.select).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceKind: "managed" });
-		expect(dependencies.managedPrincipalValidator.validate).toHaveBeenCalledWith({ agentServiceId: "service-1", principalId: "managed-principal:service-1", issuer: "urn:opencrane:managed-agent", provenance: "internal", subject: "service-1" });
-		expect(dependencies.identities.select).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", principalId: "managed-principal:service-1" });
+		const verifier = { verify: vi.fn().mockResolvedValue({ outcome: "verified", value: _Candidate() }) };
+		await expect(new ConversationAgentBindingResolver(verifier, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toMatchObject({ outcome: "bound" });
+		expect(dependencies.identities.ensure).toHaveBeenCalledWith({ siloId: "silo-1", agentServiceId: "service-1", principalId: "managed-principal:service-1", agentServiceName: "Research" });
 	});
 
-	it("fails closed for a missing service, malformed managed Principal, missing release profile, and missing identity", async function _RejectsIncompleteCoordinates()
+	it("does not invoke external selectors after a verifier denial", async function _Denies()
 	{
 		const dependencies = _Dependencies();
-		await expect(new ConversationAgentBindingResolver({ load: vi.fn().mockResolvedValue(null) }, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.ServiceUnavailable });
-		await expect(new ConversationAgentBindingResolver({ load: vi.fn().mockResolvedValue(_ManagedCandidate({ principalId: "forged" })) }, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.ManagedPrincipalUnavailable });
-		(dependencies.profiles.select as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
-		await expect(new ConversationAgentBindingResolver({ load: vi.fn().mockResolvedValue(_ManagedCandidate()) }, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.ProfileUnavailable });
-		(dependencies.identities.select as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
-		await expect(new ConversationAgentBindingResolver({ load: vi.fn().mockResolvedValue(_ManagedCandidate()) }, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.IdentityUnavailable });
-	});
-
-	it("refuses a personal service until a real owned-personal delegation policy can create its proxied identity", async function _RejectsPersonalService()
-	{
-		const dependencies = _Dependencies();
-		const result = await new ConversationAgentBindingResolver({ load: vi.fn().mockResolvedValue(_ManagedCandidate({ agentServiceKind: "personal", principalId: null, principal: null })) }, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" });
-
-		expect(result).toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.PersonalDelegationUnavailable });
+		await expect(new ConversationAgentBindingResolver({ verify: vi.fn().mockResolvedValue({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.ServiceUnavailable }) }, dependencies).bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.ServiceUnavailable });
 		expect(dependencies.profiles.select).not.toHaveBeenCalled();
-		expect(dependencies.identities.select).not.toHaveBeenCalled();
-	});
-});
-
-describe("PrismaConversationAgentBindingRepository", function _PrismaConversationAgentBindingRepositorySuite()
-{
-	it("queries an active service only through its matching published active revision", async function _LoadsPublishedActiveRevision()
-	{
-		const findFirst = vi.fn().mockResolvedValue({ id: "service-1", kind: "Managed", activeRevisionId: "revision-1", activeRevision: { id: "revision-1" }, principalId: "managed-principal:service-1", principal: { issuer: "urn:opencrane:managed-agent", provenance: "Internal", subject: "service-1" } });
-		const result = await new PrismaConversationAgentBindingRepository({ agentService: { findFirst } } as never).load({ siloId: "silo-1", agentServiceId: "service-1" });
-
-		expect(result).toEqual(_ManagedCandidate());
-		expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "service-1", siloId: "silo-1", state: "Active", activeRevision: { is: { siloId: "silo-1", state: "Published" } } }) }));
+		expect(dependencies.identities.ensure).not.toHaveBeenCalled();
 	});
 
-	it("uses a serializable transaction for the final binding snapshot", async function _UsesSerializableTransaction()
+	it("verifies a personal service before external resolution", async function _Verifies()
 	{
-		const transaction = { agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", kind: "Managed", activeRevisionId: "revision-1", activeRevision: { id: "revision-1" }, principalId: "managed-principal:service-1", principal: { issuer: "urn:opencrane:managed-agent", provenance: "Internal", subject: "service-1" } }) } };
-		const $transaction = vi.fn(async function _Transaction(work, options)
+		const verifier = new ConversationAgentBindingVerificationResolver({ load: vi.fn().mockResolvedValue(_Candidate({ agentServiceKind: "personal", principalId: null, principal: null })) }, _Validator());
+		await expect(verifier.verify({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toEqual({ outcome: "denied", reason: ConversationAgentBindingDenialReasons.PersonalDelegationUnavailable });
+	});
+
+	it("resolves external profile and identity after the serializable SQL transaction closes", async function _ResolvesAfterTransaction()
+	{
+		const phases: string[] = [];
+		const transaction = { agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", name: "Research", kind: "Managed", activeRevisionId: "revision-1", activeRevision: { id: "revision-1" }, principalId: "managed-principal:service-1", principal: { issuer: "urn:opencrane:managed-agent", provenance: "Internal", subject: "service-1" } }) } };
+		const $transaction = vi.fn(async function _Transaction(work, options) { expect(options).toEqual({ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }); phases.push("opened"); const result = await work(transaction); phases.push("closed"); return result; });
+		const dependencies = _Dependencies();
+		const profiles = dependencies.profiles.select as ReturnType<typeof vi.fn>;
+		const identities = dependencies.identities.ensure as ReturnType<typeof vi.fn>;
+		profiles.mockImplementation(async function _SelectProfile()
 		{
-			expect(options).toEqual({ isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-			return work(transaction);
+			phases.push("profile");
+			return { profileRevisionId: "profile-1" };
 		});
-		await expect(new PrismaConversationAgentBindingUnitOfWork({ $transaction } as never, _Dependencies()).bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toMatchObject({ outcome: "bound" });
+		identities.mockImplementation(async function _EnsureIdentity()
+		{
+			phases.push("identity");
+			return { agentIdentityId: "identity-1" };
+		});
+		const verifier = new PrismaConversationAgentBindingUnitOfWork({ $transaction } as never, _Validator());
+		const resolver = new ConversationAgentBindingResolver(verifier, dependencies);
+		await expect(resolver.bind({ siloId: "silo-1", agentServiceId: "service-1" })).resolves.toMatchObject({ outcome: "bound" });
+		expect(phases).toEqual(["opened", "closed", "profile", "identity"]);
 	});
 });
