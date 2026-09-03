@@ -702,6 +702,13 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-agent-binding-repository.ts",
+				"adapter": "PrismaConversationAgentBindingRepository",
+				"contract": "ConversationAgentBindingRepository",
+				"contractImportPath": "../conversation-agent-binding.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 				"adapter": "PrismaUserOnboardingRepository",
 				"contract": "UserOnboardingRepository",
@@ -1813,6 +1820,18 @@
 					{
 						"adapter": "PrismaConversationQueryRepository",
 						"importPath": "./prisma-conversation-query-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-agent-binding-unit-of-work.ts",
+				"adapter": "PrismaConversationAgentBindingUnitOfWork",
+				"contract": "ConversationAgentBindingAuthority",
+				"contractImportPath": "../conversation-agent-binding.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationAgentBindingRepository",
+						"importPath": "./prisma-conversation-agent-binding-repository"
 					}
 				]
 			},

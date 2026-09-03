@@ -70,6 +70,16 @@ and returns that stored execution instead of starting another one. A sandbox nev
 this execution: it must remain unavailable whenever the computer is cold, cooling, expired, replaced,
 or already terminal.
 
+`PrismaConversationAgentBindingUnitOfWork` supplies the pre-creation binding an eventual
+history-anchored agent-session creation command needs. In one serializable snapshot it accepts only
+an active service in the selected silo whose exact active revision is published, asks the separately
+owned AgentService contract to verify a managed service's deterministic internal Principal, selects
+the release-owned computer profile, and asks a
+separate identity authority for the stable `AgentIdentity`. Any missing or malformed coordinate
+denies without returning a partial binding. Personal services are explicitly unavailable here until
+their owned delegation policy can provide a proxied identity; this boundary never invents an
+identity or falls back to the legacy personal-service lookup.
+
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also
 projects the caller's active personal Agent only when exactly one service matches their approved
@@ -147,6 +157,10 @@ transport for workloads; it is not a browser fallback.
   claim. The claim stamps the release selectors and checked computer identifier required by the
   runtime Pod, and the authority parks a profile, lease, or receipt mismatch before that mismatch can become a second
   computer realization; it does not authorize an agent.
+- `PrismaConversationAgentBindingUnitOfWork` exposes the transactional port an app composition
+  needs to bind an agent-session creation command to one active managed `AgentService`, its
+  published revision, deterministic Principal, release-owned profile, and identity selected by an
+  injected catalog. Its repository and policy implementation remain package-private.
 - `ConversationComputerSandboxReconciliationAuthority` replays an activation locator against
   current computer history and the exact immutable claim status. `Ready=True` becomes the active
   lease; an expired dispatch becomes `RecoveryRequired` with a lost lease. It never manages a Pod,
