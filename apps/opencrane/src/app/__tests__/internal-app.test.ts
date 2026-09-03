@@ -67,4 +67,12 @@ describe("internal workload app", function _Suite()
 
 		expect(response.status).toBe(413);
 	});
+
+	it("rejects oversized ConversationComputer bootstrap JSON before route dispatch", async function _RejectsLargeConversationComputerBootstrap()
+	{
+		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), [_Continue], _McpRuntime());
+		const response = await request(app).post("/api/internal/conversation-computer/runtime/bootstrap").set("content-type", "application/json").send({ computerId: "x".repeat(5 * 1_024) });
+
+		expect(response.status).toBe(413);
+	});
 });

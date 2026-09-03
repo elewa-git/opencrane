@@ -153,6 +153,10 @@ transport for workloads; it is not a browser fallback.
   deterministic KurrentDB stream. `loadActiveExecution` returns only an open execution whose
   identity and lease generation match the checked current head, so a later command authority can
   fence its participant append to the active loop attempt.
+- `__CreateConversationComputerRuntimeBootstrapRouter` admits one Sandbox bootstrap only after
+  TokenReview confirms its projected Pod identity and that identity matches the active lease stored
+  in `ConversationComputerHistory`. The Sandbox supplies only its computer id; the route derives the
+  conversation and execution from checked history and does not disclose inactive or foreign computers.
 - `ConversationComputerExecutionAuthority` appends the sole server-generated execution for a warm,
   active, unexpired computer lease. It returns the stored execution after a concurrent append race,
   but returns unavailable rather than allowing a sandbox to begin work on a cold, expired, replaced,

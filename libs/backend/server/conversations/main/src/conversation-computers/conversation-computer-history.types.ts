@@ -47,6 +47,22 @@ export interface ActiveConversationComputerRuntimeCommand extends ConversationCo
 	readonly nowEpochMilliseconds: number;
 }
 
+/**
+ * Carries the coordinates allowed across the Sandbox bootstrap boundary.
+ *
+ * History derives the conversation and profile from the selected computer, so a Sandbox cannot
+ * choose a different execution by adding those durable coordinates to its request.
+ */
+export interface ActiveConversationComputerBootstrapCommand
+{
+	/** Identifies the deployment silo fixed by server configuration. */
+	readonly siloId: string;
+	/** Identifies the durable computer whose remaining coordinates history must derive. */
+	readonly computerId: string;
+	/** Rejects a lease that expired before this bootstrap was admitted. */
+	readonly nowEpochMilliseconds: number;
+}
+
 /** Adds the server-owned clock required to decide whether one warm lease remains usable. */
 export interface ActiveConversationComputerLeaseCommand extends ConversationComputerCurrentCommand
 {

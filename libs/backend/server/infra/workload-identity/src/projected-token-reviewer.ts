@@ -5,6 +5,9 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity } from "./workload-identity.types";
 
+/** Matches the fixed projected-token audience that the Agent Sandbox chart renders for runtime bootstrap. */
+const _CONVERSATION_COMPUTER_RUNTIME_TOKEN_AUDIENCE = "opencrane-conversation-computer-runtime";
+
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
 function _IsNamespace(value: string): boolean
 {
@@ -195,6 +198,32 @@ export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi
 			if (!subject || !podUid || subject.serviceAccountName !== WARM_RUNTIME_SERVICE_ACCOUNT_NAME || (subject.namespace !== config.personalRuntimeNamespace && subject.namespace !== config.managedRuntimeNamespace))
 				return null;
 			return { subject: status?.user?.username ?? "", ...subject, podUid };
+		},
+	};
+}
+
+/**
+ * Builds the TokenReview adapter for a ConversationComputer Sandbox projected token.
+ *
+ * It fixes the runtime audience and namespace here, then returns the authenticated Pod UID and
+ * ServiceAccount name without selecting one. The bootstrap route compares both fields with the
+ * active lease because the lease records the ServiceAccount configured for the Sandbox runtime.
+ *
+ * Called by: apps/opencrane/src/app/runtime-composition.ts.
+ *
+ * @param authApi - Kubernetes client used to submit the projected token for review.
+ * @param namespace - Namespace where the Agent Sandbox controller creates runtime Pods.
+ * @returns The reviewed Pod identity, or `null` when Kubernetes denies the token, audience,
+ *          namespace, subject, or Pod UID.
+ */
+export function _CreateConversationComputerRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [_CONVERSATION_COMPUTER_RUNTIME_TOKEN_AUDIENCE]);
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _AnyServiceAccount(): boolean { return true; });
 		},
 	};
 }

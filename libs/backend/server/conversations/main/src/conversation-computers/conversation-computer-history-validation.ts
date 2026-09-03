@@ -38,6 +38,18 @@ export function _ValidateConversationComputerRuntimeCurrentCommand(command: Conv
 		throw new Error("Conversation computer runtime load requires server-provided computer coordinates");
 }
 
+/**
+ * Validates the small bootstrap command before history derives the bound conversation and profile.
+ *
+ * A Sandbox may name a computer but cannot add identity or profile coordinates. Rejecting malformed
+ * coordinates here prevents it from reaching a different deterministic stream by accident.
+ */
+export function _ValidateConversationComputerBootstrapCommand(command: { readonly siloId: string; readonly computerId: string; readonly nowEpochMilliseconds: number }): void
+{
+	if (!_Identifier(command.siloId) || !_Identifier(command.computerId) || !Number.isSafeInteger(command.nowEpochMilliseconds))
+		throw new Error("Conversation computer bootstrap requires valid server-owned runtime coordinates");
+}
+
 /** Validates activation coordinates without allowing an event to choose identity or profile. */
 export function _ValidateConversationComputerActivationCurrentCommand(command: ConversationComputerActivationCurrentCommand): void
 {

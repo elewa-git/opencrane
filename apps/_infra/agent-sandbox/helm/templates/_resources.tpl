@@ -10,6 +10,7 @@
 {{- if empty $sandbox.runtime -}}{{- fail "agentSandbox.runtime is required when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if ne $sandbox.runtime.protocolVersion "conversation-computer-runtime.v1" -}}{{- fail "agentSandbox.runtime.protocolVersion must be conversation-computer-runtime.v1" -}}{{- end -}}
 {{- if or (empty $sandbox.runtime.tokenAudience) (not (regexMatch "^[a-z0-9][a-z0-9.-]{0,127}$" $sandbox.runtime.tokenAudience)) -}}{{- fail "agentSandbox.runtime.tokenAudience must be a bounded Kubernetes audience" -}}{{- end -}}
+{{- if ne $sandbox.runtime.tokenAudience "opencrane-conversation-computer-runtime" -}}{{- fail "agentSandbox.runtime.tokenAudience must match the ConversationComputer runtime protocol" -}}{{- end -}}
 {{- if not (kindIs "slice" $sandbox.profiles) -}}{{- fail "agentSandbox.profiles must be an array" -}}{{- end -}}
 {{- if eq (len $sandbox.profiles) 0 -}}{{- fail "agentSandbox.profiles must contain at least one profile when Agent Sandbox is enabled" -}}{{- end -}}
 {{- $profileNames := list -}}

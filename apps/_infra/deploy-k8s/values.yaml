@@ -170,7 +170,7 @@ agentSandbox:
   runtime:
     # -- This version keeps the sandbox and future server route on one protocol contract.
     protocolVersion: conversation-computer-runtime.v1
-    # -- This audience lets the future ConversationComputer route reject another workload's token.
+    # -- This fixed audience binds Sandbox bootstrap tokens to the ConversationComputer route.
     tokenAudience: opencrane-conversation-computer-runtime
   # -- Each profile creates one SandboxTemplate and a zero-replica SandboxWarmPool.
   profiles: []

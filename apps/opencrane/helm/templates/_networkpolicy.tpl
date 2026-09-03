@@ -51,6 +51,21 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- if .Values.agentSandbox.enabled }}
+    # Sandboxes may reach the internal listener; the bootstrap route then TokenReviews the caller
+    # and binds its Pod identity to an active lease. NetworkPolicy cannot restrict an HTTP path.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.agentSandbox.namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: agent-sandbox
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- end }}
     {{- if .Values.artifactPreprocessor.enabled }}
     # The dedicated artifact preprocessor can reach only the brokered internal API.
     # TokenReview binds its projected token to the exact worker ServiceAccount and namespace.
@@ -325,5 +340,44 @@ spec:
     {{- end }}
 ---
 {{- end }}
+{{- end }}
+{{- if .Values.agentSandbox.enabled }}
+# Agent Sandbox owns Pod lifecycle; this release permits its egress destination for the internal
+# bootstrap listener. The route still applies TokenReview and active-lease checks per request.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrane.fullname" . }}-agent-sandbox-bootstrap
+  namespace: {{ .Values.agentSandbox.namespace | quote }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-sandbox
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opencrane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: agent-sandbox
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- if .Values.networkPolicy.allowDNS }}
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+---
 {{- end }}
 {{- end }}

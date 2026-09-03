@@ -31,6 +31,8 @@ export interface InternalRuntimeComposition
 	readonly conversationReplay: Router | null;
 	/** Router that resolves a browser channel for a workload-authenticated caller, alongside the replay receiver. */
 	readonly channelTargetResolver: Router | null;
+	/** Optional Sandbox-only route that admits a ConversationComputer execution bootstrap. */
+	readonly conversationComputerRuntimeBootstrap: Router | null;
 	/** Warm runtime router that finds and binds a ready claim from reviewed Pod identity. */
 	readonly warmRuntimeBinding: Router;
 	/** Warm runtime stream using only the dedicated warm projected-token reviewer. */

@@ -5,6 +5,7 @@ import express, { type Express, type RequestHandler } from "express";
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
@@ -30,13 +31,14 @@ const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventI
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream"> | null = null): Express
 {
 	const app = express();
 
 	// 1. Apply route-specific body ceilings before the generic parser consumes the request stream.
 	app.set("trust proxy", 1);
 	app.use("/api/internal/agent-runtime", express.json({ limit: 64 * 1_024, strict: true }));
+	app.use("/api/internal/conversation-computer/runtime", express.json({ limit: 4 * 1_024, strict: true }));
 	app.use("/api/internal/warm-runtime", express.json({ limit: 64 * 1_024, strict: true }));
 	app.use("/api/internal/mcp-executor", express.json({ limit: 4_456_448, strict: true }));
 	app.use("/api/internal/artifact-scanner", express.json({ limit: 16 * 1_024, strict: true }));
@@ -49,7 +51,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime, workflowExecution);
+	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime, workflowExecution, historyStore);
 	app.use(_ErrorHandler(_log));
 	return app;
 }
