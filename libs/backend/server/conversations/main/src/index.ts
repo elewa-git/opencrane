@@ -38,6 +38,8 @@ export { __RunConversationComputerActivationListener } from "./conversation-comp
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked } from "./conversation-computer-activation.types";
 export { ConversationComputerActivationClaimAuthority } from "./conversation-computer-activation-authority";
 export type { ConversationComputerActivationAuthorityDependencies, ConversationComputerActivationClock, ConversationComputerActivationProfile, ConversationComputerActivationProfileCommand, ConversationComputerActivationProfileResolver } from "./conversation-computer-activation-authority.types";
+export { ConversationComputerAgentServiceKinds } from "./conversation-computer-profile-selection.types";
+export type { ConversationComputerAgentServiceKind, ConversationComputerProfileSelectionCommand, ConversationComputerProfileSelector } from "./conversation-computer-profile-selection.types";
 export { ConversationComputerSandboxReconciliationAuthority } from "./conversation-computer-sandbox-reconciliation-authority";
 export { ConversationComputerSandboxReconciliationOutcomes } from "./conversation-computer-sandbox-reconciliation-authority.types";
 export type { ConversationComputerSandboxReconciliationAuthorityDependencies, ConversationComputerSandboxReconciliationOutcome } from "./conversation-computer-sandbox-reconciliation-authority.types";

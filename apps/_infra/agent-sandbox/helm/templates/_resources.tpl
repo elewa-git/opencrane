@@ -19,10 +19,17 @@
 {{- $seenProfiles := dict -}}
 {{- $seenPools := dict -}}
 {{- $seenProfileRevisions := dict -}}
+{{- $selectedAgentServiceKinds := dict -}}
 {{- range $profile := $sandbox.profiles -}}
 {{- if empty $profile.profileRevisionId -}}{{- fail "every Agent Sandbox profile requires profileRevisionId" -}}{{- end -}}
 {{- if hasKey $seenProfileRevisions $profile.profileRevisionId -}}{{- fail "Agent Sandbox profileRevisionIds must be unique" -}}{{- end -}}
 {{- $_ := set $seenProfileRevisions $profile.profileRevisionId true -}}
+{{- if or (not (kindIs "slice" $profile.agentServiceKinds)) (eq (len $profile.agentServiceKinds) 0) -}}{{- fail "every Agent Sandbox profile requires one or more agentServiceKinds" -}}{{- end -}}
+{{- range $kind := $profile.agentServiceKinds -}}
+{{- if and (ne $kind "personal") (ne $kind "managed") -}}{{- fail "Agent Sandbox profile agentServiceKinds may contain only personal or managed" -}}{{- end -}}
+{{- if hasKey $selectedAgentServiceKinds $kind -}}{{- fail "each Agent Sandbox agentServiceKind must select exactly one profile" -}}{{- end -}}
+{{- $_ := set $selectedAgentServiceKinds $kind true -}}
+{{- end -}}
 {{- if empty $profile.name -}}{{- fail "every Agent Sandbox profile requires a name" -}}{{- end -}}
 {{- if or (gt (len $profile.name) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.name)) -}}{{- fail "every Agent Sandbox profile name must be a DNS label" -}}{{- end -}}
 {{- if hasKey $seenProfiles $profile.name -}}{{- fail "Agent Sandbox profile names must be unique" -}}{{- end -}}

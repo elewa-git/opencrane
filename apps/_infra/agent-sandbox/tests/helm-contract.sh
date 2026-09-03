@@ -16,6 +16,8 @@ VALUES=(
   --set-string agentSandbox.runtimeClassName=gvisor
   --set-string agentSandbox.serviceAccountName=agent-sandbox-runtime
   --set-string 'agentSandbox.profiles[0].profileRevisionId=profile-revision-developer-v1'
+  --set-string 'agentSandbox.profiles[0].agentServiceKinds[0]=personal'
+  --set-string 'agentSandbox.profiles[0].agentServiceKinds[1]=managed'
   --set-string 'agentSandbox.profiles[0].name=developer'
   --set-string 'agentSandbox.profiles[0].poolName=developer-pool'
   --set-string 'agentSandbox.profiles[0].image.repository=registry.invalid/opencrane-agent-runtime'
@@ -90,6 +92,7 @@ grep -Fq 'envVarsInjectionPolicy: Disallowed' <<<"$template"
 grep -Fq 'validationActions: [Deny]' <<<"$binding"
 grep -Fq 'immutable: true' <<<"$profile_config"
 grep -Fq '\"profileRevisionId\":\"profile-revision-developer-v1\"' <<<"$profile_config"
+grep -Fq '\"agentServiceKinds\":[\"personal\",\"managed\"]' <<<"$profile_config"
 grep -Fq '\"namespace\":\"opencrane-testv5\"' <<<"$profile_config"
 grep -Fq '\"serviceAccountName\":\"agent-sandbox-runtime\"' <<<"$profile_config"
 grep -Fq '\"sandboxProfile\":\"developer\"' <<<"$profile_config"
@@ -127,6 +130,14 @@ if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agen
 fi
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].poolName=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' >/dev/null 2>&1; then
   echo "Agent Sandbox rendered with an overlong DNS label" >&2
+  exit 1
+fi
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].agentServiceKinds[2]=personal' >/dev/null 2>&1; then
+  echo "Agent Sandbox rendered with a duplicate agent service kind" >&2
+  exit 1
+fi
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].agentServiceKinds[2]=unknown' >/dev/null 2>&1; then
+  echo "Agent Sandbox rendered with an unknown agent service kind" >&2
   exit 1
 fi
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.runtime.protocolVersion=conversation-computer-runtime.v0' >/dev/null 2>&1; then

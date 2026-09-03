@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { _CreateConversationComputerActivationProfileResolver, _StartConversationComputerActivationWorker } from "../conversation-computer-activation-composition";
+import { _CreateConversationComputerActivationProfileResolver, _CreateConversationComputerAgentServiceProfileSelector, _StartConversationComputerActivationWorker } from "../conversation-computer-activation-composition";
 import type { ConversationComputerActivationConfig } from "../config.types";
 
 /** Holds the durable-listener seams because this test owns server composition rather than queue delivery. */
@@ -32,7 +32,7 @@ vi.mock("../log", function _Log()
 function _ActivationConfig(): ConversationComputerActivationConfig
 {
 	return {
-		profiles: [{ profileRevisionId: "profile-revision-developer-v1", namespace: "agent-sandbox", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-warm", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }],
+		profiles: [{ profileRevisionId: "profile-revision-developer-v1", agentServiceKinds: ["personal", "managed"], namespace: "agent-sandbox", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-warm", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } }],
 	};
 }
 
@@ -48,12 +48,16 @@ describe("ConversationComputer activation composition", function _ActivationComp
 		const subscribePersistent = vi.fn(async function _SubscribePersistent() { return _activation.subscription; });
 		const exit = vi.spyOn(process, "exit").mockImplementation(function _Exit() { return undefined as never; });
 		const profiles = _CreateConversationComputerActivationProfileResolver(_ActivationConfig(), "testv5");
+		const selection = _CreateConversationComputerAgentServiceProfileSelector(_ActivationConfig(), "testv5");
 		const worker = await _StartConversationComputerActivationWorker({ subscribePersistent } as unknown as HistoryStore, { activate: vi.fn() }, "testv5");
 
 		expect(subscribePersistent).toHaveBeenCalledWith({ streamName: "computer-activations-testv5", groupName: "opencrane-conversation-computer-activation" });
 		expect(await profiles.resolve({ siloId: "testv5", profileRevisionId: "profile-revision-developer-v1" })).toEqual({ namespace: "agent-sandbox", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-warm", podLabels: { applicationName: "opencrane", releaseName: "opencrane-testv5" } });
 		expect(await profiles.resolve({ siloId: "untrusted-silo", profileRevisionId: "profile-revision-developer-v1" })).toBeNull();
 		expect(await profiles.resolve({ siloId: "testv5", profileRevisionId: "unknown-profile" })).toBeNull();
+		expect(await selection.select({ siloId: "testv5", agentServiceKind: "personal" })).toEqual({ profileRevisionId: "profile-revision-developer-v1" });
+		expect(await selection.select({ siloId: "testv5", agentServiceKind: "managed" })).toEqual({ profileRevisionId: "profile-revision-developer-v1" });
+		expect(await selection.select({ siloId: "untrusted-silo", agentServiceKind: "personal" })).toBeNull();
 
 		await worker.stop();
 

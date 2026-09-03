@@ -1,5 +1,5 @@
 import { __RunConversationComputerActivationListener } from "@opencrane/backend/server/conversations";
-import type { ConversationComputerActivationAuthority, ConversationComputerActivationProfileResolver } from "@opencrane/backend/server/conversations";
+import type { ConversationComputerActivationAuthority, ConversationComputerActivationProfileResolver, ConversationComputerAgentServiceKind, ConversationComputerProfileSelector } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationComputerActivationConfig, ConversationComputerActivationProfileConfig } from "./config.types";
@@ -67,6 +67,22 @@ export function _CreateConversationComputerActivationProfileResolver(config: Con
 	return new _ReleaseConversationComputerActivationProfileResolver(config, siloId);
 }
 
+/**
+ * Builds the release-owned selector that maps a trusted AgentService kind to a computer profile revision.
+ *
+ * The configuration reader has already rejected duplicate kinds, so this composition keeps a request
+ * from choosing a profile or a foreign silo from using this release's map.
+ *
+ * Called by: `conversation-computer-activation-composition.test.ts`.
+ * @param config - Supplies the validated mounted release map.
+ * @param siloId - Restricts selections to this deployment.
+ * @returns A selector that returns a configured profile revision or `null`.
+ */
+export function _CreateConversationComputerAgentServiceProfileSelector(config: ConversationComputerActivationConfig, siloId: string): ConversationComputerProfileSelector
+{
+	return new _ReleaseConversationComputerAgentServiceProfileSelector(config, siloId);
+}
+
 /** Logs and terminates the process because a non-stopping durable activation consumer cannot remain dormant. */
 function _FailActivationListener(error: unknown): void
 {
@@ -98,5 +114,34 @@ class _ReleaseConversationComputerActivationProfileResolver
 		if (profile === undefined)
 			return null;
 		return { namespace: profile.namespace, serviceAccountName: profile.serviceAccountName, sandboxProfile: profile.sandboxProfile, warmPoolName: profile.warmPoolName, podLabels: profile.podLabels };
+	}
+}
+
+/** Maps validated release selections after the service authority has resolved a trusted kind. */
+class _ReleaseConversationComputerAgentServiceProfileSelector implements ConversationComputerProfileSelector
+{
+	/** Holds one immutable profile revision per service kind after startup validation has rejected duplicates. */
+	private readonly profileRevisionIds: ReadonlyMap<ConversationComputerAgentServiceKind, string>;
+	/** Restricts selections to the local deployment rather than accepting another silo's service kind. */
+	private readonly siloId: string;
+
+	/** Indexes the mounted release map before any creation authority can accept a request. */
+	public constructor(config: ConversationComputerActivationConfig, siloId: string)
+	{
+		const profileRevisionIds = new Map<ConversationComputerAgentServiceKind, string>();
+		for (const profile of config.profiles)
+			for (const kind of profile.agentServiceKinds)
+				profileRevisionIds.set(kind, profile.profileRevisionId);
+		this.profileRevisionIds = profileRevisionIds;
+		this.siloId = siloId;
+	}
+
+	/** Returns the configured revision for this deployment and kind, or `null` when it has none. */
+	public async select(command: { readonly siloId: string; readonly agentServiceKind: ConversationComputerAgentServiceKind }): Promise<{ readonly profileRevisionId: string } | null>
+	{
+		if (command.siloId !== this.siloId)
+			return null;
+		const profileRevisionId = this.profileRevisionIds.get(command.agentServiceKind);
+		return profileRevisionId === undefined ? null : { profileRevisionId };
 	}
 }

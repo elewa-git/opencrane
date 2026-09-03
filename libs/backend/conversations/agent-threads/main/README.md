@@ -30,7 +30,6 @@ runs remain a separate execution concept.
 
 ## Public surface
 
-- `__DecideAgentThreadTarget` checks one exact structured Agent target without doing I/O.
 - `AgentThreadOrigin` describes immutable breadcrumb and first-run coordinates.
 - `AgentThreadDeliveryKinds` and `AgentThreadParentDelivery` constrain upward communication.
 - `AgentThreadSummaryStates` and `AgentThreadSummary` define the bounded parent projection.

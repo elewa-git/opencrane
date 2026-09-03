@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, ConversationComputerActivationConfig, ConversationComputerActivationProfileConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import { ConversationComputerProfileAgentServiceKinds, type ChannelTargetRuntimeConfig, type ConversationComputerActivationConfig, type ConversationComputerActivationProfileConfig, type ConversationComputerProfileAgentServiceKind, type OpenCraneHistoryStoreConfig, type OpenCraneOrganizationMembershipConfig, type OpenCraneProcessConfig, type OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -109,6 +109,7 @@ function _readConversationComputerActivationConfig(): ConversationComputerActiva
 	if (!Array.isArray(parsed) || parsed.length === 0)
 		throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH must contain one or more profiles");
 	const profiles: ConversationComputerActivationProfileConfig[] = [];
+	const agentServiceKinds = new Set<ConversationComputerProfileAgentServiceKind>();
 	const profileRevisionIds = new Set<string>();
 	const sandboxProfiles = new Set<string>();
 	const warmPools = new Set<string>();
@@ -117,21 +118,37 @@ function _readConversationComputerActivationConfig(): ConversationComputerActiva
 		if (!_isRecord(value))
 			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must be objects");
 		const profileRevisionId = typeof value.profileRevisionId === "string" ? value.profileRevisionId : "";
+		const profileAgentServiceKinds = _ReadConversationComputerProfileAgentServiceKinds(value.agentServiceKinds);
 		const namespace = typeof value.namespace === "string" ? value.namespace : "";
 		const serviceAccountName = typeof value.serviceAccountName === "string" ? value.serviceAccountName : "";
 		const sandboxProfile = typeof value.sandboxProfile === "string" ? value.sandboxProfile : "";
 		const warmPoolName = typeof value.warmPoolName === "string" ? value.warmPoolName : "";
 		const podLabels = _ReadConversationComputerPodLabels(value.podLabels);
-		if (!profileRevisionId || !_isDnsLabel(namespace) || !_isDnsLabel(serviceAccountName) || !_isDnsLabel(sandboxProfile) || !_isDnsLabel(warmPoolName) || podLabels === null)
-			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have one revision id, DNS-label Sandbox coordinates, and release Pod labels");
+		if (!profileRevisionId || profileAgentServiceKinds === null || !_isDnsLabel(namespace) || !_isDnsLabel(serviceAccountName) || !_isDnsLabel(sandboxProfile) || !_isDnsLabel(warmPoolName) || podLabels === null)
+			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have one revision id, nonempty unique service kinds, DNS-label Sandbox coordinates, and release Pod labels");
 		if (profileRevisionIds.has(profileRevisionId) || sandboxProfiles.has(sandboxProfile) || warmPools.has(warmPoolName))
 			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have unique revision ids, sandbox profiles, and warm pools");
 		profileRevisionIds.add(profileRevisionId);
+		if (profileAgentServiceKinds.some(kind => agentServiceKinds.has(kind)))
+			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH must select each agent service kind through exactly one profile");
+		for (const kind of profileAgentServiceKinds) agentServiceKinds.add(kind);
 		sandboxProfiles.add(sandboxProfile);
 		warmPools.add(warmPoolName);
-		profiles.push({ profileRevisionId, namespace, serviceAccountName, sandboxProfile, warmPoolName, podLabels });
+		profiles.push({ profileRevisionId, agentServiceKinds: profileAgentServiceKinds, namespace, serviceAccountName, sandboxProfile, warmPoolName, podLabels });
 	}
 	return { profiles };
+}
+
+/** Parses one profile's fixed service-kind selection without admitting an unknown future kind. */
+function _ReadConversationComputerProfileAgentServiceKinds(value: unknown): readonly ConversationComputerProfileAgentServiceKind[] | null
+{
+	if (!Array.isArray(value) || value.length === 0)
+		return null;
+	const kinds = value.filter(function _KnownProfileServiceKind(kind): kind is ConversationComputerProfileAgentServiceKind
+	{
+		return kind === ConversationComputerProfileAgentServiceKinds.Managed || kind === ConversationComputerProfileAgentServiceKinds.Personal;
+	});
+	return kinds.length === value.length && new Set(kinds).size === kinds.length ? kinds : null;
 }
 
 /**
