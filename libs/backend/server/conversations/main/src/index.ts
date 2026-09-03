@@ -16,9 +16,11 @@
 export { _CreateConversationReplayRepository } from "./db/prisma-conversation-replay.composition";
 export { __CreateConversationReplayRouter } from "./conversation-replay.router";
 export { __CreateConversationComputerRuntimeBootstrapRouter } from "./conversation-computer-runtime-bootstrap.router";
-export type { ConversationComputerRuntimeBootstrapClock, ConversationComputerRuntimeBootstrapHistory, ConversationComputerRuntimeBootstrapResponse, ConversationComputerRuntimeBootstrapRouterDependencies, ConversationComputerRuntimeIdentity, ConversationComputerRuntimeIdentityReviewer } from "./conversation-computer-runtime-bootstrap.router.types";
+export type { ConversationComputerRuntimeBootstrapResponse } from "./conversation-computer-runtime-bootstrap.router.types";
 export { __CreateConversationComputerRuntimeCommandRouter } from "./conversation-computer-runtime-command.router";
-export type { ConversationComputerRuntimeCommandAuthorityPort, ConversationComputerRuntimeCommandHistory, ConversationComputerRuntimeCommandRouterClock, ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
+export type { ConversationComputerRuntimeCommandAuthorityPort, ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
+export { __CreateConversationComputerRuntimeOutputRouter } from "./conversation-computer-runtime-output.router";
+export type { ConversationComputerRuntimeOutputAuthorityPort, ConversationComputerRuntimeOutputRouterDependencies } from "./conversation-computer-runtime-output.router.types";
 export { __CreateSelfConversationSocketServer } from "./self-conversation-socket";
 export type { SelfConversationSocketAuthenticator, SelfConversationSocketDependencies, SelfConversationSocketServer } from "./self-conversation-socket.types";
 export type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types";
@@ -30,9 +32,8 @@ export { PrismaAgentThreadParentDeliveryUnitOfWork } from "./db/prisma-agent-thr
 export { __CreateAgentThreadParentDeliveryRouter } from "./agent-thread-parent-delivery.router";
 export { BoundConversationWriter } from "./bound-conversation-writer";
 export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
-export { ConversationPrivatePayloadStore } from "./conversation-private-payload-store";
-export type { ConversationPrivatePayloadRecord, ConversationPrivatePayloadRepository, ConversationPrivatePayloadStoreCommand, StoredConversationPrivatePayload } from "./conversation-private-payload-store.types";
-export { PrismaConversationPrivatePayloadRepository } from "./db/prisma-conversation-private-payload-repository";
+export { PrismaConversationPrivatePayloadStoreUnitOfWork } from "./db/prisma-conversation-private-payload-store-unit-of-work";
+export { ConversationHistoryReader } from "./conversation-history-reader";
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked } from "./conversation-computer-activation.types";
 export { ConversationComputerActivationClaimAuthority } from "./conversation-computer-activation-authority";

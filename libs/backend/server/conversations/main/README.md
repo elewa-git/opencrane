@@ -163,17 +163,25 @@ transport for workloads; it is not a browser fallback.
   reference; a Sandbox can only receive its oldest command and report that command's terminal state.
   An exact duplicate terminal report is an idempotent no-op; a stale, foreign, expired, skipped, or
   malformed report fails closed.
-- `ConversationPrivatePayloadStore` accepts text and coordinates from an authority that already
-  authorized the operation, encrypts the body under the dedicated ConversationComputer keyring, and
-  persists it against the `(silo, conversation, idempotency)` owner key. It returns only
-  `payload://…` and a ciphertext digest; a retry with the same text returns the original row, while
-  changed text fails closed. It does not authenticate a caller or append history, and remains
-  uncomposed until the ConversationComputer output authority can make its own history append.
+- `PrismaConversationPrivatePayloadStoreUnitOfWork` owns the short PostgreSQL transaction that
+  retains one encrypted output row through package-private storage. It returns only `payload://…`
+  and a ciphertext digest; a retry with the same text returns the original row, while changed text
+  fails closed. It commits or rolls back before the output authority appends to KurrentDB, so no
+  PostgreSQL transaction spans external history I/O.
 - `__CreateConversationComputerRuntimeCommandRouter` gives a reviewed Sandbox Pod the narrow
   `commands/next` and `commands/complete` transport. It derives the computer execution from history
   again on every request and compares the Pod UID, namespace, and service account with the active
   lease before it delegates to the command authority. It never accepts runtime output, a selected
   conversation, or an AgentRun coordinate.
+- `__CreateConversationComputerRuntimeOutputRouter` accepts only a command id, computer id, and
+  bounded text from a reviewed Sandbox Pod. It repeats active-lease admission, derives the silo,
+  conversation, execution, lease generation, profile revision, and author path in the server, then
+  calls `ConversationComputerRuntimeOutputAuthority`; it never accepts caller-selected history,
+  identity, payload, or execution fields.
+- `ConversationComputerRuntimeOutputAuthority` encrypts the admitted output first and atomically
+  records the terminal command claim with the participant-visible conversation entry. An exact
+  response-lost retry returns the original message receipt; a stale, foreign, changed, or completed
+  command fails closed.
 - `ConversationComputerExecutionAuthority` appends the sole server-generated execution for a warm,
   active, unexpired computer lease. It returns the stored execution after a concurrent append race,
   but returns unavailable rather than allowing a sandbox to begin work on a cold, expired, replaced,

@@ -9,10 +9,12 @@ import { PrismaRuntimePersonalMemoryEffectEligibilityAuthority } from "@opencran
 import { PrismaRuntimePersonaEffectEligibilityAuthority } from "@opencrane/backend/agents/personal/personas";
 import { PrismaRuntimeAgentEffectEligibilityAuthority } from "@opencrane/backend/server/agents/agent-services";
 import { PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/server/gateways/mcp";
+import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { PrismaRuntimeMembershipEligibilityAuthority, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { MountedRuntimeContinuationCipher } from "@opencrane/backend/server/infra/agent-runtime-continuation";
+import { MountedConversationPayloadCipher } from "@opencrane/backend/server/infra/conversation-payloads";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
-import { _CreateConversationReplayRepository, ConversationComputerHistory, ConversationComputerRuntimeCommandAuthority, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationComputerRuntimeBootstrapRouter, __CreateConversationComputerRuntimeCommandRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
+import { _CreateConversationReplayRepository, ConversationComputerHistory, ConversationComputerRuntimeCommandAuthority, ConversationComputerRuntimeOutputAuthority, ConversationHistoryReader, PrismaAgentThreadParentDeliveryUnitOfWork, PrismaConversationPrivatePayloadStoreUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationComputerRuntimeBootstrapRouter, __CreateConversationComputerRuntimeCommandRouter, __CreateConversationComputerRuntimeOutputRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaSkillAuthoringValidationControllerUnitOfWork, PrismaSkillAuthoringValidationWorkerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter, __CreateSkillAuthoringValidationWorkerRouter } from "@opencrane/backend/server/agents/skills";
@@ -269,20 +271,44 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const skillAuthoringValidationWorker = __CreateSkillAuthoringValidationWorkerRouter({ tokenReviewer: skillAuthoringValidationTokenReviewer, authority: new PrismaSkillAuthoringValidationWorkerUnitOfWork(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log });
 	const sandboxConfig = config.conversationComputerActivation;
 	if (sandboxConfig !== null && historyStore === null)
-		throw new Error("ConversationComputer runtime bootstrap requires HistoryStore composition");
+		throw new Error("ConversationComputer runtime requires HistoryStore composition");
+	if (sandboxConfig !== null && config.conversationPayloadKeyringPath === null)
+		throw new Error("ConversationComputer runtime requires the mounted payload keyring");
 	const conversationComputerHistory = sandboxConfig === null ? null : new ConversationComputerHistory(historyStore!);
 	const conversationComputerRuntimeTokenReviewer = sandboxConfig === null ? null : _CreateConversationComputerRuntimeTokenReviewer(authApi, sandboxConfig.profiles.map(profile => profile.namespace));
+	const conversationComputerRuntimeClock = { now: function _Now() { return new Date(); } };
+	const conversationComputerRuntimeCommandsAuthority = sandboxConfig === null
+		? null
+		: new ConversationComputerRuntimeCommandAuthority({ history: historyStore!, computers: conversationComputerHistory!, clock: conversationComputerRuntimeClock });
 	const conversationComputerRuntimeBootstrap = sandboxConfig === null
 		? null
-		: __CreateConversationComputerRuntimeBootstrapRouter({ history: conversationComputerHistory!, tokenReviewer: conversationComputerRuntimeTokenReviewer!, siloId: config.siloId, clock: { now: function _Now() { return new Date(); } }, logger: _log });
+		: __CreateConversationComputerRuntimeBootstrapRouter({ history: conversationComputerHistory!, tokenReviewer: conversationComputerRuntimeTokenReviewer!, siloId: config.siloId, clock: conversationComputerRuntimeClock, logger: _log });
 	const conversationComputerRuntimeCommands = sandboxConfig === null
 		? null
 		: __CreateConversationComputerRuntimeCommandRouter({
 			history: conversationComputerHistory!,
 			tokenReviewer: conversationComputerRuntimeTokenReviewer!,
-			authority: new ConversationComputerRuntimeCommandAuthority({ history: historyStore!, computers: conversationComputerHistory!, clock: { now: function _Now() { return new Date(); } } }),
+			authority: conversationComputerRuntimeCommandsAuthority!,
 			siloId: config.siloId,
-			clock: { now: function _Now() { return new Date(); } },
+			clock: conversationComputerRuntimeClock,
+			logger: _log,
+		});
+	const conversationComputerRuntimeOutput = sandboxConfig === null
+		? null
+		: __CreateConversationComputerRuntimeOutputRouter({
+			history: conversationComputerHistory!,
+			tokenReviewer: conversationComputerRuntimeTokenReviewer!,
+			authority: new ConversationComputerRuntimeOutputAuthority({
+				history: historyStore!,
+				computers: conversationComputerHistory!,
+				identities: new AgentIdentityHistory(historyStore!),
+				conversations: new ConversationHistoryReader(historyStore!),
+				claims: conversationComputerRuntimeCommandsAuthority!,
+				payloads: new PrismaConversationPrivatePayloadStoreUnitOfWork(prisma, new MountedConversationPayloadCipher(config.conversationPayloadKeyringPath!)),
+				clock: conversationComputerRuntimeClock,
+			}),
+			siloId: config.siloId,
+			clock: conversationComputerRuntimeClock,
 			logger: _log,
 		});
 	return {
@@ -292,5 +318,6 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace, controllerTokenReviewer, workflowExecution),
 		conversationComputerRuntimeBootstrap,
 		conversationComputerRuntimeCommands,
+		conversationComputerRuntimeOutput,
 	};
 }

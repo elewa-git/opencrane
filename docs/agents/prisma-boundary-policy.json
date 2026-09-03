@@ -2185,6 +2185,18 @@
 				"contract": "PrismaUnitOfWorkRunner",
 				"contractImportPath": "./prisma-unit-of-work.types",
 				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-private-payload-store-unit-of-work.ts",
+				"adapter": "PrismaConversationPrivatePayloadStoreUnitOfWork",
+				"contract": "ConversationPrivatePayloadStore",
+				"contractImportPath": "../conversation-private-payload-store.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationPrivatePayloadRepository",
+						"importPath": "./prisma-conversation-private-payload-repository"
+					}
+				]
 			}
 		],
 		"compositions": [
