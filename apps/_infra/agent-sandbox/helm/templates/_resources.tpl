@@ -7,6 +7,9 @@
 {{- if or (empty $sandbox.namespace) (gt (len $sandbox.namespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $sandbox.namespace)) -}}{{- fail "agentSandbox.namespace must be a DNS label when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if empty $sandbox.runtimeClassName -}}{{- fail "agentSandbox.runtimeClassName is required when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if empty $sandbox.serviceAccountName -}}{{- fail "agentSandbox.serviceAccountName is required when Agent Sandbox is enabled" -}}{{- end -}}
+{{- if empty $sandbox.runtime -}}{{- fail "agentSandbox.runtime is required when Agent Sandbox is enabled" -}}{{- end -}}
+{{- if ne $sandbox.runtime.protocolVersion "conversation-computer-runtime.v1" -}}{{- fail "agentSandbox.runtime.protocolVersion must be conversation-computer-runtime.v1" -}}{{- end -}}
+{{- if or (empty $sandbox.runtime.tokenAudience) (not (regexMatch "^[a-z0-9][a-z0-9.-]{0,127}$" $sandbox.runtime.tokenAudience)) -}}{{- fail "agentSandbox.runtime.tokenAudience must be a bounded Kubernetes audience" -}}{{- end -}}
 {{- if not (kindIs "slice" $sandbox.profiles) -}}{{- fail "agentSandbox.profiles must be an array" -}}{{- end -}}
 {{- if eq (len $sandbox.profiles) 0 -}}{{- fail "agentSandbox.profiles must contain at least one profile when Agent Sandbox is enabled" -}}{{- end -}}
 {{- $profileNames := list -}}
@@ -35,9 +38,11 @@
 {{- $poolNames = append $poolNames $profile.poolName -}}
 {{- end -}}
 {{- $fullname := include "opencrane.fullname" . -}}
+{{- $runtimeEndpoint := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/conversation-computer/runtime" $fullname .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $serverServiceAccount := printf "%s-opencrane-server" $fullname -}}
 {{- $serverUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $serverServiceAccount -}}
 {{- $admissionName := printf "%s-agent-sandbox-claims" $fullname | trunc 63 | trimSuffix "-" -}}
+{{- $runtimeBootstrapConfigMap := printf "%s-agent-sandbox-runtime-bootstrap" $fullname | trunc 63 | trimSuffix "-" -}}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -48,6 +53,20 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
     app.kubernetes.io/component: agent-sandbox
 automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $runtimeBootstrapConfigMap }}
+  namespace: {{ $sandbox.namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-sandbox
+immutable: true
+data:
+  endpoint: {{ $runtimeEndpoint | quote }}
+  protocol-version: {{ $sandbox.runtime.protocolVersion | quote }}
+  token-audience: {{ $sandbox.runtime.tokenAudience | quote }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -171,6 +190,7 @@ spec:
   podTemplate:
     metadata:
       labels:
+        {{- include "opencrane.selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: agent-sandbox
         opencrane.ai/agent-sandbox-profile: {{ $profile.name | quote }}
     spec:
@@ -198,6 +218,24 @@ spec:
               drop: ["ALL"]
           resources:
             {{- toYaml $profile.resources | nindent 12 }}
+          volumeMounts:
+            - name: conversation-computer-runtime-bootstrap
+              mountPath: /var/run/opencrane/conversation-computer
+              readOnly: true
+            - name: conversation-computer-runtime-token
+              mountPath: /var/run/secrets/opencrane/conversation-computer
+              readOnly: true
+      volumes:
+        - name: conversation-computer-runtime-bootstrap
+          configMap:
+            name: {{ $runtimeBootstrapConfigMap }}
+        - name: conversation-computer-runtime-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ $sandbox.runtime.tokenAudience | quote }}
+                  expirationSeconds: 600
+                  path: token
 ---
 apiVersion: extensions.agents.x-k8s.io/v1beta1
 kind: SandboxWarmPool
