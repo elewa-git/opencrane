@@ -66,6 +66,9 @@ export class ConversationComputerHistory
 					leaseId: snapshot.lease?.id ?? null,
 					leaseGeneration: snapshot.lease?.generation ?? null,
 					leaseState: snapshot.lease?.state ?? null,
+					runtimePodNamespace: snapshot.lease?.runtimePod?.namespace ?? null,
+					runtimePodServiceAccountName: snapshot.lease?.runtimePod?.serviceAccountName ?? null,
+					runtimePodUid: snapshot.lease?.runtimePod?.podUid ?? null,
 					executionId: snapshot.computer.activeExecution?.id ?? null,
 					executionLeaseId: snapshot.computer.activeExecution?.leaseId ?? null,
 					executionLeaseGeneration: snapshot.computer.activeExecution?.leaseGeneration ?? null,
@@ -172,7 +175,7 @@ export class ConversationComputerHistory
 	public async loadActiveExecutionForRuntime(command: ActiveConversationComputerRuntimeCommand): Promise<ActiveConversationComputerExecution>
 	{
 		const current = await this.loadForRuntime(command);
-		if (current === null || current.computer.state !== ConversationComputerStates.Warm || current.lease === null || current.lease.state !== ComputerLeaseStates.Active || !Number.isSafeInteger(command.nowEpochMilliseconds) || Date.parse(current.lease.expiresAt) <= command.nowEpochMilliseconds || current.computer.activeExecution === null || current.computer.activeExecution.endedAt !== null)
+		if (current === null || current.computer.state !== ConversationComputerStates.Warm || current.lease === null || current.lease.state !== ComputerLeaseStates.Active || current.lease.runtimePod === null || !Number.isSafeInteger(command.nowEpochMilliseconds) || Date.parse(current.lease.expiresAt) <= command.nowEpochMilliseconds || current.computer.activeExecution === null || current.computer.activeExecution.endedAt !== null)
 			throw new Error("Conversation computer history cannot use an inactive runtime execution");
 		return { ...current, lease: current.lease, execution: current.computer.activeExecution };
 	}

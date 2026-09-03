@@ -1,4 +1,4 @@
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer, type ConversationComputerExecution } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ComputerLeaseRuntimePod, type ConversationComputer, type ConversationComputerExecution } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationComputerActivationCurrentCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerRuntimeCurrentCommand } from "./conversation-computer-history.types";
@@ -57,7 +57,7 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 	if (!_UUID_PATTERN.test(event.id))
 		throw new Error("Conversation computer history received an event with an invalid identifier");
 	const snapshot = _ValidatedConversationComputerSnapshot(event.data);
-	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null) || event.metadata.executionId !== (snapshot.computer.activeExecution?.id ?? null) || event.metadata.executionLeaseId !== (snapshot.computer.activeExecution?.leaseId ?? null) || event.metadata.executionLeaseGeneration !== (snapshot.computer.activeExecution?.leaseGeneration ?? null) || event.metadata.executionEndedAt !== (snapshot.computer.activeExecution?.endedAt ?? null))
+	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null) || event.metadata.runtimePodNamespace !== (snapshot.lease?.runtimePod?.namespace ?? null) || event.metadata.runtimePodServiceAccountName !== (snapshot.lease?.runtimePod?.serviceAccountName ?? null) || event.metadata.runtimePodUid !== (snapshot.lease?.runtimePod?.podUid ?? null) || event.metadata.executionId !== (snapshot.computer.activeExecution?.id ?? null) || event.metadata.executionLeaseId !== (snapshot.computer.activeExecution?.leaseId ?? null) || event.metadata.executionLeaseGeneration !== (snapshot.computer.activeExecution?.leaseGeneration ?? null) || event.metadata.executionEndedAt !== (snapshot.computer.activeExecution?.endedAt ?? null))
 		throw new Error("Conversation computer history received an event that does not match its envelope");
 	if (snapshot.computer.siloId !== command.siloId)
 		throw new Error("Conversation computer history received a computer from a different silo");
@@ -121,15 +121,21 @@ function _ValidatedConversationComputerExecution(value: unknown): ConversationCo
 /** Parses the exact closed ComputerLease contract at a history boundary. */
 export function _ValidatedComputerLease(value: unknown): ComputerLease
 {
-	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "computerId", "generation", "sandboxClaimId", "sandboxId", "state", "claimedAt", "expiresAt", "releasedAt"]))
+	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "computerId", "generation", "sandboxClaimId", "sandboxId", "runtimePod", "state", "claimedAt", "expiresAt", "releasedAt"]))
 		throw new Error("Conversation computer history requires a valid lease snapshot");
-	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.computerId) || !_PositiveInteger(value.generation) || !_Identifier(value.sandboxClaimId) || (value.sandboxId !== null && !_Identifier(value.sandboxId)) || !_LeaseState(value.state) || !_IsoTimestamp(value.claimedAt) || !_IsoTimestamp(value.expiresAt) || (value.releasedAt !== null && !_IsoTimestamp(value.releasedAt)))
+	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.computerId) || !_PositiveInteger(value.generation) || !_Identifier(value.sandboxClaimId) || (value.sandboxId !== null && !_Identifier(value.sandboxId)) || (value.runtimePod !== null && !_ValidatedComputerLeaseRuntimePod(value.runtimePod)) || !_LeaseState(value.state) || !_IsoTimestamp(value.claimedAt) || !_IsoTimestamp(value.expiresAt) || (value.releasedAt !== null && !_IsoTimestamp(value.releasedAt)))
 		throw new Error("Conversation computer history requires valid lease coordinates");
 	if (Date.parse(value.expiresAt) <= Date.parse(value.claimedAt))
 		throw new Error("Conversation computer history requires a lease expiry after its claim");
 	if (value.releasedAt !== null && Date.parse(value.releasedAt) < Date.parse(value.claimedAt))
 		throw new Error("Conversation computer history requires a lease release after its claim");
 	return value as unknown as ComputerLease;
+}
+
+/** Validates the durable Pod identity that a later TokenReview must match exactly. */
+function _ValidatedComputerLeaseRuntimePod(value: unknown): value is ComputerLeaseRuntimePod
+{
+	return _Record(value) && _ExactKeys(value, ["namespace", "serviceAccountName", "podUid"]) && _DnsLabel(value.namespace) && _DnsLabel(value.serviceAccountName) && _Identifier(value.podUid);
 }
 
 /** Checks whether one snapshot has zero or one lease consistent with the computer's lifecycle. */
@@ -146,13 +152,13 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 		throw new Error("Conversation computer history requires the lease to match its computer generation");
 	if (lease.state === ComputerLeaseStates.Claimed)
 	{
-		if ((computer.state !== ConversationComputerStates.ClaimPending && computer.state !== ConversationComputerStates.ClaimDispatched) || lease.sandboxId !== null || lease.releasedAt !== null)
+		if ((computer.state !== ConversationComputerStates.ClaimPending && computer.state !== ConversationComputerStates.ClaimDispatched) || lease.sandboxId !== null || lease.runtimePod !== null || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires a pending claim without a sandbox");
 		return;
 	}
 	if (lease.state === ComputerLeaseStates.Active)
 	{
-		if ((computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling) || lease.sandboxId === null || lease.releasedAt !== null)
+		if ((computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling) || lease.sandboxId === null || lease.runtimePod === null || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires an active lease for a warm or cooling computer");
 		return;
 	}
@@ -240,10 +246,18 @@ function _ValidateSameLeaseTransition(previous: ComputerLease, current: Computer
 		throw new Error("Conversation computer history changed stable lease coordinates");
 	if (previous.sandboxId !== null && previous.sandboxId !== current.sandboxId)
 		throw new Error("Conversation computer history changed an assigned sandbox");
+	if (previous.runtimePod !== null && !_SameRuntimePod(previous.runtimePod, current.runtimePod))
+		throw new Error("Conversation computer history changed an active sandbox Pod identity");
 	if ((previous.state === ComputerLeaseStates.Released || previous.state === ComputerLeaseStates.Lost) && previous.state !== current.state)
 		throw new Error("Conversation computer history reactivated a terminal lease");
 	if (previous.state === ComputerLeaseStates.Active && current.state === ComputerLeaseStates.Claimed)
 		throw new Error("Conversation computer history moved an active lease back to claimed");
+}
+
+/** Compares an immutable verified Pod identity without permitting a same-name replacement. */
+function _SameRuntimePod(previous: ComputerLeaseRuntimePod, current: ComputerLeaseRuntimePod | null): boolean
+{
+	return current !== null && previous.namespace === current.namespace && previous.serviceAccountName === current.serviceAccountName && previous.podUid === current.podUid;
 }
 
 /** Validates the nested immutable workspace checkpoint when one is present. */
@@ -264,6 +278,12 @@ function _ExactKeys(value: Record<string, unknown>, keys: readonly string[]): bo
 function _Identifier(value: unknown): value is string
 {
 	return typeof value === "string" && value.trim().length > 0 && value === value.trim();
+}
+
+/** Checks one Kubernetes DNS label used by the release-owned namespace and ServiceAccount. */
+function _DnsLabel(value: unknown): value is string
+{
+	return typeof value === "string" && value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
 }
 
 /** Checks one nonnegative safe integer stored as the computer's durable generation. */

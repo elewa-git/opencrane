@@ -8,7 +8,7 @@ import { _CreateElicitationInterruptReader } from "@opencrane/backend/agents/exe
 import { ConversationComputerActivationClaimAuthority, ConversationComputerHistory, ConversationComputerSandboxReconciliationAuthority, _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import type { ConversationComputerActivationAuthority } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/server/conversation-assets";
-import { _KubernetesAgentSandboxClaimAuthority, _KubernetesAgentSandboxClaimObservationReader } from "@opencrane/backend/server/infra/agent-sandbox-claims";
+import { _KubernetesAgentSandboxClaimAuthority, _KubernetesAgentSandboxClaimObservationReader, _KubernetesAgentSandboxRuntimePodReader } from "@opencrane/backend/server/infra/agent-sandbox-claims";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config";
@@ -81,6 +81,7 @@ async function _Main(): Promise<void>
 			history: new ConversationComputerHistory(historyStore.historyStore),
 			profiles,
 			observations: new _KubernetesAgentSandboxClaimObservationReader(kubernetes.customApi),
+			runtimePods: new _KubernetesAgentSandboxRuntimePodReader(kubernetes.customApi, kubernetes.coreApi),
 			clock: { now: function _Now() { return new Date(); } },
 		});
 	}

@@ -114,11 +114,11 @@ describe("opencrane process config", function _ProcessConfigSuite()
 	it("reads only a unique release-owned ConversationComputer profile map", function _ReadConversationComputerProfiles()
 	{
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "developer-pool" },
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool" },
 		]));
 
 		expect(_ReadProcessConfig().runtime.conversationComputerActivation).toEqual({
-			profiles: [{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "developer-pool" }],
+			profiles: [{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool" }],
 		});
 	});
 
@@ -128,13 +128,13 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readEmptyProfileMap() { _ReadProcessConfig(); }).toThrow(/one or more profiles/);
 
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "developer-pool" },
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "analyst", warmPoolName: "analyst-pool" },
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "developer-pool" },
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "analyst", warmPoolName: "analyst-pool" },
 		]));
 		expect(function _readDuplicateProfileRevision() { _ReadProcessConfig(); }).toThrow(/unique revision ids/);
 
 		vi.stubEnv("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH", _createConversationComputerProfileConfig([
-			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", sandboxProfile: "developer", warmPoolName: "a".repeat(64) },
+			{ profileRevisionId: "profile-revision-developer-v1", namespace: "opencrane-testv5", serviceAccountName: "agent-sandbox-runtime", sandboxProfile: "developer", warmPoolName: "a".repeat(64) },
 		]));
 		expect(function _readLongWarmPoolName() { _ReadProcessConfig(); }).toThrow(/DNS-label/);
 	});

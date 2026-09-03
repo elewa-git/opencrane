@@ -28,7 +28,9 @@ internal endpoint, one protocol revision, and a 10-minute projected Kubernetes s
 for that runtime route. The claim policy permits only the OpenCrane server identity to create the fixed
 v1beta1 claim shape, and forbids claim environment variables, volume claims, additional Pod metadata
 and every spec update. A mistake therefore denies a computer activation instead of widening its Pod
-profile.
+profile. The server performs only claim-derived, name-bound reads of the assigned `Sandbox` and
+backing `Pod`, so it can persist the controller-owned Pod UID on the durable computer lease; its
+Role cannot list, watch, or mutate sandbox resources.
 
 ## Public surface
 

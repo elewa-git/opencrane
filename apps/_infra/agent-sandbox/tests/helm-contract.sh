@@ -61,8 +61,12 @@ grep -Fq 'name: opencrane-testv5-developer-template' <<<"$pool"
 grep -Fq 'apiGroups: ["extensions.agents.x-k8s.io"]' <<<"$role"
 grep -Fq 'resources: ["sandboxclaims"]' <<<"$role"
 grep -Fq 'verbs: ["create", "get"]' <<<"$role"
-if grep -Eq '"(delete|list|watch|patch|update)"' <<<"$role"; then
-  echo "Agent Sandbox server Role is broader than create/get" >&2
+grep -Fq 'apiGroups: ["agents.x-k8s.io"]' <<<"$role"
+grep -Fq 'resources: ["sandboxes"]' <<<"$role"
+grep -Fq 'apiGroups: [""]' <<<"$role"
+grep -Fq 'resources: ["pods"]' <<<"$role"
+if [[ "$(grep -Fc 'verbs: ["get"]' <<<"$role")" -ne 2 ]] || grep -Eq '"(delete|list|watch|patch|update)"' <<<"$role"; then
+  echo "Agent Sandbox server Role exceeds claim, Sandbox, and Pod read-only access" >&2
   exit 1
 fi
 grep -Fq 'apiVersions: ["v1beta1"]' <<<"$policy"
@@ -81,6 +85,7 @@ grep -Fq 'validationActions: [Deny]' <<<"$binding"
 grep -Fq 'immutable: true' <<<"$profile_config"
 grep -Fq '\"profileRevisionId\":\"profile-revision-developer-v1\"' <<<"$profile_config"
 grep -Fq '\"namespace\":\"opencrane-testv5\"' <<<"$profile_config"
+grep -Fq '\"serviceAccountName\":\"agent-sandbox-runtime\"' <<<"$profile_config"
 grep -Fq '\"sandboxProfile\":\"developer\"' <<<"$profile_config"
 grep -Fq '\"warmPoolName\":\"developer-pool\"' <<<"$profile_config"
 grep -Fq 'immutable: true' <<<"$runtime_bootstrap"

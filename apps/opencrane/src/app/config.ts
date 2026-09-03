@@ -118,16 +118,17 @@ function _readConversationComputerActivationConfig(): ConversationComputerActiva
 			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must be objects");
 		const profileRevisionId = typeof value.profileRevisionId === "string" ? value.profileRevisionId : "";
 		const namespace = typeof value.namespace === "string" ? value.namespace : "";
+		const serviceAccountName = typeof value.serviceAccountName === "string" ? value.serviceAccountName : "";
 		const sandboxProfile = typeof value.sandboxProfile === "string" ? value.sandboxProfile : "";
 		const warmPoolName = typeof value.warmPoolName === "string" ? value.warmPoolName : "";
-		if (!profileRevisionId || !_isDnsLabel(namespace) || !_isDnsLabel(sandboxProfile) || !_isDnsLabel(warmPoolName))
-			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have one revision id and DNS-label namespace, sandboxProfile, and warmPoolName");
+		if (!profileRevisionId || !_isDnsLabel(namespace) || !_isDnsLabel(serviceAccountName) || !_isDnsLabel(sandboxProfile) || !_isDnsLabel(warmPoolName))
+			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have one revision id and DNS-label namespace, serviceAccountName, sandboxProfile, and warmPoolName");
 		if (profileRevisionIds.has(profileRevisionId) || sandboxProfiles.has(sandboxProfile) || warmPools.has(warmPoolName))
 			throw new Error("OPENCRANE_CONVERSATION_COMPUTER_PROFILE_CONFIG_PATH profiles must have unique revision ids, sandbox profiles, and warm pools");
 		profileRevisionIds.add(profileRevisionId);
 		sandboxProfiles.add(sandboxProfile);
 		warmPools.add(warmPoolName);
-		profiles.push({ profileRevisionId, namespace, sandboxProfile, warmPoolName });
+		profiles.push({ profileRevisionId, namespace, serviceAccountName, sandboxProfile, warmPoolName });
 	}
 	return { profiles };
 }

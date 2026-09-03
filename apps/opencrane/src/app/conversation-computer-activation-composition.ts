@@ -90,13 +90,13 @@ class _ReleaseConversationComputerActivationProfileResolver
 	}
 
 	/** Returns the release-approved resources for a profile in this silo, or null when this release did not admit it. */
-	public async resolve(command: { readonly siloId: string; readonly profileRevisionId: string }): Promise<{ readonly namespace: string; readonly sandboxProfile: string; readonly warmPoolName: string } | null>
+	public async resolve(command: { readonly siloId: string; readonly profileRevisionId: string }): Promise<{ readonly namespace: string; readonly serviceAccountName: string; readonly sandboxProfile: string; readonly warmPoolName: string } | null>
 	{
 		if (command.siloId !== this.siloId)
 			return null;
 		const profile = this.profiles.get(command.profileRevisionId);
 		if (profile === undefined)
 			return null;
-		return { namespace: profile.namespace, sandboxProfile: profile.sandboxProfile, warmPoolName: profile.warmPoolName };
+		return { namespace: profile.namespace, serviceAccountName: profile.serviceAccountName, sandboxProfile: profile.sandboxProfile, warmPoolName: profile.warmPoolName };
 	}
 }

@@ -44,6 +44,7 @@ function _Lease(overrides: Partial<ComputerLease> = {}): ComputerLease
 		generation: 1,
 		sandboxClaimId: "claim-1",
 		sandboxId: "sandbox-1",
+		runtimePod: { namespace: "sandbox", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" },
 		state: ComputerLeaseStates.Active,
 		claimedAt: "2026-09-01T00:00:00.000Z",
 		expiresAt: "2026-09-01T00:20:00.000Z",
@@ -87,6 +88,9 @@ function _Event(revision: bigint, computer: ConversationComputer = _Computer(), 
 			leaseId: lease?.id ?? null,
 			leaseGeneration: lease?.generation ?? null,
 			leaseState: lease?.state ?? null,
+			runtimePodNamespace: lease?.runtimePod?.namespace ?? null,
+			runtimePodServiceAccountName: lease?.runtimePod?.serviceAccountName ?? null,
+			runtimePodUid: lease?.runtimePod?.podUid ?? null,
 			executionId: computer.activeExecution?.id ?? null,
 			executionLeaseId: computer.activeExecution?.leaseId ?? null,
 			executionLeaseGeneration: computer.activeExecution?.leaseGeneration ?? null,
@@ -139,7 +143,7 @@ describe("ConversationComputerHistory", function ()
 				id: _EVENT_ID,
 				type: "opencrane.conversation-computer.v1",
 				data: { computer: _Computer(), lease: _Lease() },
-				metadata: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", leaseId: "lease-1", leaseGeneration: 1, leaseState: ComputerLeaseStates.Active, executionId: "execution-1", executionLeaseId: "lease-1", executionLeaseGeneration: 1, executionEndedAt: null },
+				metadata: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", leaseId: "lease-1", leaseGeneration: 1, leaseState: ComputerLeaseStates.Active, runtimePodNamespace: "sandbox", runtimePodServiceAccountName: "agent-sandbox-runtime", runtimePodUid: "pod-uid-1", executionId: "execution-1", executionLeaseId: "lease-1", executionLeaseGeneration: 1, executionEndedAt: null },
 			}],
 		});
 		await expect(history.append(_AppendCommand({ expectedRevision: HistoryExpectedRevisions.NoStream }))).rejects.toThrow("stale expected revision");
@@ -176,10 +180,10 @@ describe("ConversationComputerHistory", function ()
 		const releasedComputer = _Computer({ state: ConversationComputerStates.Cold, activeExecution: _Execution({ endedAt: "2026-09-01T00:05:00.000Z" }), updatedAt: "2026-09-01T00:05:00.000Z" });
 		const releasedLease = _Lease({ state: ComputerLeaseStates.Released, releasedAt: "2026-09-01T00:05:00.000Z" });
 		const claimedComputer = _Computer({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 2, activeExecution: null, updatedAt: "2026-09-01T00:06:00.000Z" });
-		const claimedLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: null, state: ComputerLeaseStates.Claimed, expiresAt: "2026-09-01T00:26:00.000Z" });
+		const claimedLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Claimed, expiresAt: "2026-09-01T00:26:00.000Z" });
 		const dispatchedComputer = _Computer({ state: ConversationComputerStates.ClaimDispatched, leaseGeneration: 2, activeExecution: null, updatedAt: "2026-09-01T00:06:30.000Z" });
 		const replacementComputer = _Computer({ state: ConversationComputerStates.Warm, leaseGeneration: 2, activeExecution: _Execution({ id: "execution-2", leaseId: "lease-2", leaseGeneration: 2, startedAt: "2026-09-01T00:07:00.000Z" }), updatedAt: "2026-09-01T00:07:00.000Z" });
-		const replacementLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: "sandbox-2", expiresAt: "2026-09-01T00:26:00.000Z" });
+		const replacementLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: "sandbox-2", runtimePod: { namespace: "sandbox", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-2" }, expiresAt: "2026-09-01T00:26:00.000Z" });
 		const valid = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, releasedComputer, releasedLease), _Event(2n, claimedComputer, claimedLease), _Event(3n, dispatchedComputer, claimedLease), _Event(4n, replacementComputer, replacementLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 4n }) }));
 		const directReplacement = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, replacementComputer, replacementLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
 
@@ -190,9 +194,9 @@ describe("ConversationComputerHistory", function ()
 	it("refuses a terminal transition while one durable claim dispatch still owns the lease", async function _RejectsTerminalDispatchRace()
 	{
 		const dispatchedComputer = _Computer({ state: ConversationComputerStates.ClaimDispatched, activeExecution: null, updatedAt: "2026-09-01T00:01:00.000Z" });
-		const dispatchedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Claimed });
+		const dispatchedLease = _Lease({ sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Claimed });
 		const releasedComputer = _Computer({ state: ConversationComputerStates.Cold, activeExecution: null, updatedAt: "2026-09-01T00:02:00.000Z" });
-		const releasedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Released, releasedAt: "2026-09-01T00:02:00.000Z" });
+		const releasedLease = _Lease({ sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Released, releasedAt: "2026-09-01T00:02:00.000Z" });
 		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, dispatchedComputer, dispatchedLease), _Event(1n, releasedComputer, releasedLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
 
 		await expect(history.load(_CurrentCommand())).rejects.toThrow("requires claim dispatch to converge");
@@ -201,9 +205,9 @@ describe("ConversationComputerHistory", function ()
 	it("permits only expired-claim compensation from a durable dispatch fence", async function _AllowsLostDispatchCompensation()
 	{
 		const dispatchedComputer = _Computer({ state: ConversationComputerStates.ClaimDispatched, activeExecution: null, updatedAt: "2026-09-01T00:01:00.000Z" });
-		const dispatchedLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Claimed });
+		const dispatchedLease = _Lease({ sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Claimed });
 		const recoveredComputer = _Computer({ state: ConversationComputerStates.RecoveryRequired, activeExecution: null, updatedAt: "2026-09-01T00:02:00.000Z" });
-		const lostLease = _Lease({ sandboxId: null, state: ComputerLeaseStates.Lost, releasedAt: "2026-09-01T00:02:00.000Z" });
+		const lostLease = _Lease({ sandboxId: null, runtimePod: null, state: ComputerLeaseStates.Lost, releasedAt: "2026-09-01T00:02:00.000Z" });
 		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, dispatchedComputer, dispatchedLease), _Event(1n, recoveredComputer, lostLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
 
 		await expect(history.load(_CurrentCommand())).resolves.toEqual(expect.objectContaining({ computer: recoveredComputer, lease: lostLease }));
@@ -223,6 +227,17 @@ describe("ConversationComputerHistory", function ()
 
 		await expect(history.loadActiveExecution(_ActiveCommand())).resolves.toEqual(expect.objectContaining({ execution: _Execution() }));
 		await expect(terminal.loadActiveExecution(_ActiveCommand())).rejects.toThrow("missing or terminal execution");
+	});
+
+	it("requires Pod provenance for every active lease and never permits a same-name Pod replacement", async function _FencesActivePodIdentity()
+	{
+		const missingPod = _Lease({ runtimePod: null });
+		const replacement = _Lease({ runtimePod: { namespace: "sandbox", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-2" } });
+		const invalidActiveLease = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n, _Computer(), missingPod)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 0n }) }));
+		const replacedPod = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, _Computer(), replacement)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
+
+		await expect(invalidActiveLease.load(_CurrentCommand())).rejects.toThrow("active lease for a warm or cooling computer");
+		await expect(replacedPod.load(_CurrentCommand())).rejects.toThrow("changed an active sandbox Pod identity");
 	});
 
 	it("derives the runtime identity from the checked computer stream instead of accepting it from command input", async function ()

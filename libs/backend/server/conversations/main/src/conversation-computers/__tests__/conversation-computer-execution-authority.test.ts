@@ -24,6 +24,7 @@ function _Lease(overrides: Partial<ComputerLease> = {}): ComputerLease
 		generation: 1,
 		sandboxClaimId: "claim-1",
 		sandboxId: "sandbox-1",
+		runtimePod: { namespace: "sandbox", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-1" },
 		state: ComputerLeaseStates.Active,
 		claimedAt: "2026-09-01T00:00:00.000Z",
 		expiresAt: "2026-09-01T00:20:00.000Z",

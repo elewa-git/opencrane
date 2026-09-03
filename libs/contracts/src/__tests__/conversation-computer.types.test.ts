@@ -42,6 +42,7 @@ describe("conversation computer contracts", function ()
 			generation: computer.leaseGeneration,
 			sandboxClaimId: "claim-3",
 			sandboxId: "sandbox-3",
+			runtimePod: { namespace: "sandbox", serviceAccountName: "agent-sandbox-runtime", podUid: "pod-uid-3" },
 			state: ComputerLeaseStates.Active,
 			claimedAt: "2026-08-31T20:01:00.000Z",
 			expiresAt: "2026-08-31T20:06:00.000Z",
