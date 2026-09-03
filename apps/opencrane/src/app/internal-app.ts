@@ -31,7 +31,7 @@ const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventI
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream"> | null = null): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution, historyStore: Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream"> | null = null): Express
 {
 	const app = express();
 

@@ -33,6 +33,8 @@ export interface InternalRuntimeComposition
 	readonly channelTargetResolver: Router | null;
 	/** Optional Sandbox-only route that admits a ConversationComputer execution bootstrap. */
 	readonly conversationComputerRuntimeBootstrap: Router | null;
+	/** Optional Sandbox-only route that selects and completes ConversationComputer runtime commands. */
+	readonly conversationComputerRuntimeCommands: Router | null;
 	/** Warm runtime router that finds and binds a ready claim from reviewed Pod identity. */
 	readonly warmRuntimeBinding: Router;
 	/** Warm runtime stream using only the dedicated warm projected-token reviewer. */

@@ -17,6 +17,8 @@ export { _CreateConversationReplayRepository } from "./db/prisma-conversation-re
 export { __CreateConversationReplayRouter } from "./conversation-replay.router";
 export { __CreateConversationComputerRuntimeBootstrapRouter } from "./conversation-computer-runtime-bootstrap.router";
 export type { ConversationComputerRuntimeBootstrapClock, ConversationComputerRuntimeBootstrapHistory, ConversationComputerRuntimeBootstrapResponse, ConversationComputerRuntimeBootstrapRouterDependencies, ConversationComputerRuntimeIdentity, ConversationComputerRuntimeIdentityReviewer } from "./conversation-computer-runtime-bootstrap.router.types";
+export { __CreateConversationComputerRuntimeCommandRouter } from "./conversation-computer-runtime-command.router";
+export type { ConversationComputerRuntimeCommandAuthorityPort, ConversationComputerRuntimeCommandHistory, ConversationComputerRuntimeCommandRouterClock, ConversationComputerRuntimeCommandRouterDependencies } from "./conversation-computer-runtime-command.router.types";
 export { __CreateSelfConversationSocketServer } from "./self-conversation-socket";
 export type { SelfConversationSocketAuthenticator, SelfConversationSocketDependencies, SelfConversationSocketServer } from "./self-conversation-socket.types";
 export type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types";

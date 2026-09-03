@@ -158,6 +158,16 @@ transport for workloads; it is not a browser fallback.
   TokenReview confirms its projected Pod identity and that identity matches the active lease stored
   in `ConversationComputerHistory`. The Sandbox supplies only its computer id; the route derives the
   conversation and execution from checked history and does not disclose inactive or foreign computers.
+- `ConversationComputerRuntimeCommandAuthority` keeps one execution-fenced, first-in-first-out
+  command stream in KurrentDB. A server can issue a start-turn command from a protected input
+  reference; a Sandbox can only receive its oldest command and report that command's terminal state.
+  An exact duplicate terminal report is an idempotent no-op; a stale, foreign, expired, skipped, or
+  malformed report fails closed.
+- `__CreateConversationComputerRuntimeCommandRouter` gives a reviewed Sandbox Pod the narrow
+  `commands/next` and `commands/complete` transport. It derives the computer execution from history
+  again on every request and compares the Pod UID, namespace, and service account with the active
+  lease before it delegates to the command authority. It never accepts runtime output, a selected
+  conversation, or an AgentRun coordinate.
 - `ConversationComputerExecutionAuthority` appends the sole server-generated execution for a warm,
   active, unexpired computer lease. It returns the stored execution after a concurrent append race,
   but returns unavailable rather than allowing a sandbox to begin work on a cold, expired, replaced,
