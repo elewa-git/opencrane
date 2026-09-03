@@ -30,6 +30,9 @@ export { PrismaAgentThreadParentDeliveryUnitOfWork } from "./db/prisma-agent-thr
 export { __CreateAgentThreadParentDeliveryRouter } from "./agent-thread-parent-delivery.router";
 export { BoundConversationWriter } from "./bound-conversation-writer";
 export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
+export { ConversationPrivatePayloadStore } from "./conversation-private-payload-store";
+export type { ConversationPrivatePayloadRecord, ConversationPrivatePayloadRepository, ConversationPrivatePayloadStoreCommand, StoredConversationPrivatePayload } from "./conversation-private-payload-store.types";
+export { PrismaConversationPrivatePayloadRepository } from "./db/prisma-conversation-private-payload-repository";
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked } from "./conversation-computer-activation.types";
 export { ConversationComputerActivationClaimAuthority } from "./conversation-computer-activation-authority";
