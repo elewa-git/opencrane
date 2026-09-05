@@ -22,6 +22,7 @@ for contract in \
   control-plane-image-policy-contract.sh \
   agent-sandbox-contract.sh \
   cluster-tenant-crd-policy-contract.sh \
+  kurrentdb-bootstrap-secrets-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
   skill-authoring-contract.sh; do
