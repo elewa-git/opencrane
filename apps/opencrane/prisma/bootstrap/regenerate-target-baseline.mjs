@@ -129,18 +129,6 @@ if (authorityIndex < 0)
 	throw new Error("target baseline is missing the authority guard marker");
 }
 let authoritySql = _RemoveGeneratedObjects(current.slice(authorityIndex), normalizedGenerated);
-const retiredWorkloadProofFunctions = [
-	"enforce_current_workload_assignment_attempt",
-	"enforce_workload_bootstrap_consumption",
-	"enforce_run_proof_key_bootstrap",
-	"enforce_workload_assignment_update",
-	"enforce_run_proof_key_update",
-];
-for (const functionName of retiredWorkloadProofFunctions)
-{
-	const functionPattern = new RegExp(`CREATE FUNCTION "${functionName}"\\(\\) RETURNS trigger[\\s\\S]*?\\n\\$\\$;\\n?`, "u");
-	authoritySql = authoritySql.replace(functionPattern, "");
-}
 const approvalAuthority = `CREATE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     decision_time TIMESTAMP(3) := clock_timestamp();
@@ -229,8 +217,6 @@ BEGIN
 END;
 $$;`;
 authoritySql = authoritySql.replace(/CREATE FUNCTION "enforce_approval_request_update"\(\) RETURNS trigger[\s\S]*?\n\$\$;/u, function _ApprovalAuthority() { return approvalAuthority; });
-authoritySql = authoritySql.replace(/        IF OLD\."state" = 'cancelling' AND NEW\."state" = 'cancelled' THEN\n[\s\S]*?        END IF;\n        IF OLD\."started_at"/u, '        IF OLD."started_at"');
-authoritySql = authoritySql.replace(/^ALTER TABLE "(?:workload_assignments|workload_bootstraps|run_proof_keys)" ADD CONSTRAINT[\s\S]*?;\n?/gmu, "");
 authoritySql = authoritySql.replace(/ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK \([\s\S]*?\n    \);/u, function _ApprovalConstraint() { return `ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
         "attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
         btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND btrim("resource_kind") NOT IN ('', '*') AND
@@ -243,7 +229,6 @@ authoritySql = authoritySql.replace(/ALTER TABLE "approval_requests" ADD CONSTRA
         "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'
     );`; });
-authoritySql = authoritySql.replace(/^CREATE TRIGGER "(?:workload_assignments_current_attempt|workload_bootstraps_single_use|run_proof_keys_consumed_bootstrap|workload_assignments_immutable|run_proof_keys_immutable)"[^\n]*\n?/gmu, "");
 const header = "-- OpenCrane target database baseline.\n-- Applied once by CloudNativePG while creating an empty application database.";
 const nextBaseline = `${header}\n\n${normalizedGenerated}\n\n${mcpConstraints}\n\n${snapshotConstraints}\n\n${authoritySql}\n`;
 

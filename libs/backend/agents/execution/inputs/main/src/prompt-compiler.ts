@@ -46,9 +46,8 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
  * not in the snapshot. The digest is recomputed so the returned input stays self-consistent —
  * appending without resealing would leave a digest that no longer matches the payload.
  *
- * Called by: `_CreateProductionRunInputCompiler`
- * (execution/protocol/src/production-runtime-dispatch.ts), which appends the upgrade-session tool
- * after proving in the same transaction that the run belongs to a personal AgentService.
+ * Called by: production run-input composition, which appends the upgrade-session tool after proving
+ * in the same transaction that the run belongs to a personal AgentService.
  *
  * @param input - An already compiled run input. Not modified; a new object is returned.
  * @param tool - The first-party tool to add.

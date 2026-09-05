@@ -259,7 +259,7 @@ credentials, raw tool arguments and raw tool results are not projected into the 
 ## Source
 
 - [`Run input assembly`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/inputs/main/README.md)
-- [`Runtime protocol and external-action worker`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/protocol/README.md)
+- [`Conversation computer authority`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/conversations/main/README.md)
 - [`Personal memory selection`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md)
 - [`Memory gateway client`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/infra/memory-gateway-client/README.md)
 - [`Memory and run schema`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/memory.prisma)

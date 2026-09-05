@@ -26,7 +26,7 @@ also owns retries, ordered run events, cancellation, and final run state for man
  execute the admitted managed workload
    │
    ▼
- agent works → server saves events → workflow deletes the used Pod
+ agent works → server saves events → lifecycle settles the governed workload
 ```
 
 **In this flow:** [input assembler](../../inputs/main/README.md) · [workflow handler](../controller/README.md) · [runtime controller](../../../runtime/controller/README.md)
@@ -39,17 +39,17 @@ does not grant permission to use a run.
 - A duplicate admission returns the first saved input only when the caller and request match.
 - A retry keeps the same logical run and fixed input, but starts the next attempt.
 - Status, cancellation, and retry use the current exact `AgentRun` grant. Ownership, conversation
-  participation, lifecycle state, attempt fencing, and workload proof remain separate safety facts;
+  participation, lifecycle state, attempt fencing, and execution-subject proof remain separate safety facts;
   none of them grants product permission by itself.
-- Before a Pod receives a model key, the binding transaction rechecks the run principal's current
+- Before a computer receives a model key, the binding transaction rechecks the run principal's current
   exact `ModelDefinition/Use` grant and, when present, its exact `ProviderConnection/Use` grant.
 - The database saves one `RunModelCredentialMintAuthorization` before commit. A second serializable
   transaction spends that row once before LiteLLM is called, so a replay cannot mint another key.
-- Runtime events are accepted only for the current run, attempt, Pod, and command. Their sequence is
+- Runtime events are accepted only for the current run, attempt, computer lease, and command. Their sequence is
   global to the durable run, while terminality is scoped to the attempt that emitted the event.
 - A terminal child result is delivered once per child attempt. A suppression belongs to the current
   parent attempt, so retrying the parent can reconsider a result that its earlier stream could not accept.
-- Cancellation changes the database state first. The saved workflow then removes the exact used Pod
+- Cancellation changes the database state first. The saved workflow then releases the exact computer lease
   and completes any provider output handoff.
 - Cancellation becomes final only after that workflow cleanup has finished. Pending approvals and
   participant requests close without resuming the run.
@@ -69,8 +69,8 @@ does not grant permission to use a run.
 ## Boundary
 
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input
-assembler supplies the fixed run input. The controller package performs Kubernetes calls. The
-agent-runtime process runs the model loop.
+assembler supplies the fixed run input. The conversation-computer boundary runs the model loop
+through an Agent Sandbox lease.
 
 The package does not run uploaded OCI images. OCI-backed MCP and code-skill workloads use their own
 executor class and meet AgentRun through the shared workload-claim contract.

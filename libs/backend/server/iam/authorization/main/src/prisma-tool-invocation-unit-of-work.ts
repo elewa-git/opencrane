@@ -26,8 +26,7 @@ const _START_EVENT_FAILURE_CODE = "external_action_start_event_failed";
  * is deliberate: a state change nobody can see is worse than a retried transaction.
  *
  * Composed in: apps/opencrane/src/app/external-action-composition.ts.
- * Called by: libs/backend/agents/execution/protocol/src/external-action-worker.ts (through
- * `ExternalActionWorkerDependencies.invocations`).
+ * Called by: the external-action worker through its invocation dependency.
  */
 export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 {

@@ -44,9 +44,8 @@ files, and permitted access to organisation knowledge.
 
 Each organisation is one isolated boundary. Inside it, a control plane holds the durable record of
 everything — who the agents are, what they may do, and everything they have done. When an agent
-needs to act, OpenCrane spins up a short-lived, isolated agent runtime for that single task, hands it
-one frozen snapshot of its input, and removes it when the task finishes. The runtime streams its
-progress back to the control plane but holds no authority of its own, so an assistant survives
+needs to act, OpenCrane activates its isolated conversation computer with one frozen input snapshot.
+The computer records progress through the control plane but holds no authority of its own, so an assistant survives
 restarts, scaling, and a closed browser tab without ever becoming the source of truth.
 
 ```text
@@ -74,13 +73,13 @@ restarts, scaling, and a closed browser tab without ever becoming the source of 
 ║                task            │   │                         │  • Tools                        │  ║
 ║                                ▼   │                         │  • Memory & knowledge           │  ║
 ║           ┌─────────────────────────────────────────────┐    │  • Files & artifacts            │  ║
-║           │                Agent runtime                │uses│                                 │  ║
-║           │     isolated & short-lived · one task ·     │───▶│                                 │  ║
+║           │          Conversation computer             │uses│                                 │  ║
+║           │      isolated · lease-fenced · durable      │───▶│                                 │  ║
 ║           │           keeps no standing access          │    │                                 │  ║
 ║           └─────────────────────────────────────────────┘    └─────────────────────────────────┘  ║
 ║                                                                                                   ║
 ║  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Container substrate - pre-warmed, swappable containers. (Autoscaling in-progress)           │  ║
+║  │ Agent Sandbox substrate — computers cool, checkpoint, and restore across active sessions.   │  ║
 ║  └─────────────────────────────────────────────────────────────────────────────────────────────┘  ║
 ║                                                                                                   ║
 ║                                                                                                   ║
@@ -106,7 +105,7 @@ full reader-facing system view.
 
 An agent's reach is set once, centrally, by an organisation admin — never by the agent or the
 person using it. Each setting becomes part of the effective contract OpenCrane freezes into a task
-before its agent runtime starts, so changing a policy shapes future tasks and never rewrites one
+before its conversation computer starts work, so changing a policy shapes future tasks and never rewrites one
 already running.
 
 ```text
@@ -141,7 +140,7 @@ already running.
                                                  ▼
               ┌─────────────────────────────────────────────────────────────────────┐
               │ Effective contract for one task                                     │
-              │ the frozen snapshot each Agent runtime receives — no setting        │
+              │ the frozen snapshot each conversation computer receives — no setting│
               │ can change once the task has started                                │
               └─────────────────────────────────────────────────────────────────────┘
 ```

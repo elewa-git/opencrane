@@ -12,8 +12,7 @@ export interface ChildRunCompletionCommand
  * `parent_stream_terminal` suppression belongs to the current parent attempt, so a later parent
  * attempt may submit the same child again.
  *
- * Called by: `PrismaRuntimeTerminalChildDeliveryUnitOfWork`,
- * `PrismaAgentRunWarmRuntimeRepository`, and `PrismaAgentRunAuthorityRepository`.
+ * Called by: run lifecycle unit-of-work and authority repositories that settle terminal children.
  */
 export interface ChildRunCompletionRepository
 {

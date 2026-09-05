@@ -7,7 +7,7 @@ import type { ProductAuthorizationActions, ProductAuthorizationResourceLocator }
  * The runtime preparation path builds these coordinates from domain-owned resource locators. The
  * authorization authority admits each coordinate, and ToolInvocation persistence stores the full
  * ordered set so a worker cannot substitute a different resource or action before dispatch.
- * Called by: libs/backend/agents/execution/protocol/src/runtime-candidate-preparation.ts.
+ * Called by: tool candidate preparation before durable invocation admission.
  * @see ToolInvocationAuthorizationEvidence
  */
 export interface ToolInvocationAuthorizationCoordinate
@@ -25,8 +25,7 @@ export interface ToolInvocationAuthorizationCoordinate
  * capability evidence, resource decisions, and workload assignment to the invocation. The
  * repository stores it with the invocation before the provider worker can claim the effect;
  * missing or partial stored evidence makes row mapping fail.
- * Called by: libs/backend/agents/execution/protocol/src/runtime-candidate-preparation.ts and
- * ./prisma-tool-invocation-repository.ts.
+ * Called by: tool candidate preparation and ./prisma-tool-invocation-repository.ts.
  * @see ToolInvocationIntent
  */
 export interface ToolInvocationAuthorizationEvidence

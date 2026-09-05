@@ -7,9 +7,7 @@ import type { ChildRunCompletionCommand, ChildRunCompletionRepository, ChildRunC
  *
  * The child ledger and parent event stay in the caller's transaction so they cannot commit separately.
  *
- * Called by: `PrismaRuntimeTerminalChildDeliveryUnitOfWork.deliver`,
- * `PrismaAgentRunWarmRuntimeRepository._FinalizeCancelledRun`, and
- * `PrismaAgentRunAuthorityRepository._redeliverSuppressedChildren`.
+ * Called by: run lifecycle unit-of-work and authority repositories that settle terminal children.
  */
 export class PrismaChildRunCompletionRepository implements ChildRunCompletionRepository
 {
