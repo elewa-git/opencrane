@@ -11,7 +11,9 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
+from src.browser_surface import capture_preview, open_browser_page, start_browser
 from src.review_surface import ReviewSurfaceConfig, ReviewSurfaceServer, _git_diff, _run_command, _workspace_path
 
 
@@ -127,6 +129,51 @@ class ReviewSurfaceTest(unittest.TestCase):
         finally:
             preview.shutdown()
             preview.server_close()
+
+    def test_starts_chromium_with_loopback_only_cdp(self) -> None:
+        """Keep raw DevTools unreachable from the Sandbox Service and public proxy."""
+        with patch.dict(os.environ, {"OPENCRANE_WORKSPACE_PATH": str(self.workspace)}):
+            with patch("src.browser_surface.subprocess.Popen") as launch:
+                start_browser()
+        argv = launch.call_args.args[0]
+        self.assertIn("--remote-debugging-address=127.0.0.1", argv)
+        self.assertIn("--remote-debugging-port=9222", argv)
+        self.assertNotIn("--remote-debugging-address=0.0.0.0", argv)
+
+    def test_browser_page_accepts_only_allowlisted_local_preview(self) -> None:
+        """Prevent browser target creation from turning CDP into an arbitrary URL fetcher."""
+        response = unittest.mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"id":"target-1"}'
+        with patch("src.browser_surface.urllib.request.urlopen", return_value=response) as open_url:
+            body = open_browser_page(4173, "index.html", frozenset({4173}))
+        self.assertEqual(body, b'{"id":"target-1"}')
+        request = open_url.call_args.args[0]
+        self.assertTrue(request.full_url.startswith("http://127.0.0.1:9222/json/new?"))
+        self.assertIn("127.0.0.1%3A4173", request.full_url)
+        with self.assertRaisesRegex(ValueError, "not release-allowlisted"):
+            open_browser_page(443, "", frozenset({4173}))
+
+    def test_image_pins_chromium_without_exposing_cdp(self) -> None:
+        """Keep the qualified browser version fixed while raw DevTools stays inside the container."""
+        dockerfile = (Path(__file__).parents[1] / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("chromium=142.0.7444.59-r0", dockerfile)
+        self.assertNotIn("EXPOSE 9222", dockerfile)
+
+    def test_browser_screenshot_is_local_bounded_and_pinned_to_viewport(self) -> None:
+        """Render only an allowlisted localhost URL with the requested bounded viewport."""
+        def _Render(argv: list[str], **_kwargs: object):
+            screenshot_argument = next(value for value in argv if value.startswith("--screenshot="))
+            Path(screenshot_argument.removeprefix("--screenshot=")).write_bytes(b"png")
+            return unittest.mock.MagicMock(returncode=0)
+
+        with patch("src.browser_surface.subprocess.run", side_effect=_Render) as render:
+            body = capture_preview(4173, "page", 1280, 720, frozenset({4173}))
+        self.assertEqual(body, b"png")
+        argv = render.call_args.args[0]
+        self.assertIn("--window-size=1280,720", argv)
+        self.assertEqual(argv[-1], "http://127.0.0.1:4173/page")
+        with self.assertRaisesRegex(ValueError, "viewport"):
+            capture_preview(4173, "", 4096, 720, frozenset({4173}))
 
     def test_git_diff_uses_no_external_diff_and_selected_path(self) -> None:
         """Return only the selected path through Git's built-in diff implementation."""

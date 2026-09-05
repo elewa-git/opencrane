@@ -31,12 +31,15 @@ private port 8090 accepts the current generation's 96-bit lease id from its Down
 and exposes bounded argv-only commands,
 selected workspace files and diffs, plus GET-only proxying to five release-allowlisted localhost
 preview ports. NetworkPolicy admits that port only from this release's OpenCrane server.
+The same authenticated gateway exposes Chromium 142 CDP discovery, creates targets only for those
+localhost previews, and renders bounded preview screenshots. Raw CDP remains on Pod loopback port
+9222 and is neither a container port nor a public server route.
 
 ## Boundary
 
 This app does not implement the retired AgentRun HTTP/server-sent event protocol, warm reservations,
 or continuation checkpoints. It does not provide a public execution port, browser/Chrome DevTools
-Protocol, noVNC, CodeProject, Git service, isolated build, artifact publication or published
+WebSocket, noVNC, CodeProject, Git service, isolated build, artifact publication or published
 PreviewApp. The review listener is never directly exposed through public ingress and never turns a
 localhost preview into a separately published workload.
 

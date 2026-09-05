@@ -17,6 +17,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
+from src.browser_surface import browser_metadata, capture_preview, open_browser_page, start_browser
+
 _MAX_BODY_BYTES: Final = 64 * 1024
 _MAX_OUTPUT_BYTES: Final = 1024 * 1024
 _DEFAULT_COMMANDS: Final = ("git", "node", "npm", "npx", "python3")
@@ -191,6 +193,11 @@ class _ReviewHandler(BaseHTTPRequestHandler):
                 status, content_type, body = _preview(self.server.config, int(port_value), preview_path)
                 self._bytes(status, content_type, body)
                 return
+            if path in ("/v1/browser/version", "/v1/browser/targets"):
+                kind = "version" if path.endswith("version") else "list"
+                content_type, body = browser_metadata(kind)
+                self._bytes(200, content_type, body)
+                return
             self._json(404, {"error": "not_found"})
         except (OSError, ValueError) as error:
             self._json(400, {"error": str(error)})
@@ -201,6 +208,12 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._json(401, {"error": "unauthorized"})
             return
         if self.path != "/v1/commands":
+            if self.path == "/v1/browser/pages":
+                self._open_browser_page()
+                return
+            if self.path == "/v1/browser/screenshots":
+                self._capture_browser_preview()
+                return
             self._json(404, {"error": "not_found"})
             return
         try:
@@ -212,6 +225,35 @@ class _ReviewHandler(BaseHTTPRequestHandler):
                 raise ValueError("command body must be an object")
             self._json(200, _run_command(self.server.config, payload))
         except (json.JSONDecodeError, OSError, ValueError) as error:
+            self._json(400, {"error": str(error)})
+
+    def _open_browser_page(self) -> None:
+        """Open one localhost-only browser target selected from the release preview ports."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > _MAX_BODY_BYTES:
+                raise ValueError("browser body exceeds the request limit")
+            payload = json.loads(self.rfile.read(length))
+            if not isinstance(payload, dict) or set(payload) != {"path", "port"} or not isinstance(payload["path"], str) or not isinstance(payload["port"], int):
+                raise ValueError("browser body requires only an integer port and string path")
+            body = open_browser_page(payload["port"], payload["path"], self.server.config.preview_ports)
+            self._bytes(201, "application/json", body)
+        except (json.JSONDecodeError, OSError, ValueError, urllib.error.URLError) as error:
+            self._json(400, {"error": str(error)})
+
+    def _capture_browser_preview(self) -> None:
+        """Render one localhost-only preview through pinned Chromium and return bounded PNG bytes."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > _MAX_BODY_BYTES:
+                raise ValueError("browser body exceeds the request limit")
+            payload = json.loads(self.rfile.read(length))
+            expected = {"height", "path", "port", "width"}
+            if not isinstance(payload, dict) or set(payload) != expected or not isinstance(payload["path"], str) or not all(isinstance(payload[name], int) for name in ("height", "port", "width")):
+                raise ValueError("browser screenshot requires only port, path, width and height")
+            body = capture_preview(payload["port"], payload["path"], payload["width"], payload["height"], self.server.config.preview_ports)
+            self._bytes(200, "image/png", body)
+        except (json.JSONDecodeError, OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
             self._json(400, {"error": str(error)})
 
     def log_message(self, _format: str, *args: object) -> None:
@@ -258,6 +300,7 @@ def start_review_surface() -> ReviewSurfaceServer:
     """Start the lease-local review gateway in a daemon thread and return its server."""
     import threading
 
+    start_browser()
     server = ReviewSurfaceServer(_configuration())
     worker = threading.Thread(target=server.serve_forever, name="conversation-review", daemon=True)
     worker.start()

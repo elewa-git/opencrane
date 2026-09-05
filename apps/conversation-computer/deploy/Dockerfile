@@ -1,6 +1,6 @@
 FROM python:3.13.7-alpine3.22
 
-RUN apk add --no-cache git nodejs npm \
+RUN apk add --no-cache chromium=142.0.7444.59-r0 git nodejs npm \
     && mkdir -p /workspace \
     && chown 65532:65532 /workspace
 

@@ -16,6 +16,10 @@ export function _CreateConversationComputerReviewRouter(options: ConversationCom
 	const router = Router();
 	router.get("/:conversationId/review/files", function _Files(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/files?path=${encodeURIComponent(_Query(request, "path"))}`); });
 	router.get("/:conversationId/review/diff", function _Diff(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/diff?path=${encodeURIComponent(_Query(request, "path"))}`); });
+	router.get("/:conversationId/review/browser/version", function _BrowserVersion(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", "/v1/browser/version"); });
+	router.get("/:conversationId/review/browser/targets", function _BrowserTargets(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", "/v1/browser/targets"); });
+	router.post("/:conversationId/review/browser/pages", function _BrowserPage(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", "/v1/browser/pages", request.body); });
+	router.post("/:conversationId/review/browser/screenshots", function _BrowserScreenshot(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", "/v1/browser/screenshots", request.body); });
 	router.get("/:conversationId/review/previews/:port/*path", function _Preview(request, response)
 	{
 		const port = Number(_Parameter(request, "port"));
@@ -53,11 +57,11 @@ async function _Proxy(request: Request, response: Response, options: Conversatio
 			response.status(404).json({ error: "conversation_computer_unavailable" });
 			return;
 		}
-		if (!_DNS_LABEL.test(lease.sandboxId) || !_DNS_LABEL.test(options.sandboxNamespace))
+		if (!_DNS_LABEL.test(lease.sandboxId) || !_DNS_LABEL.test(options.sandboxNamespace) || !_ServiceFqdn(lease.serviceFQDN, options.sandboxNamespace))
 			throw new Error("active sandbox route is invalid");
 
 		// 3. Derive the only upstream host and credential from the admitted lease, then cap its response.
-		const target = `http://${lease.sandboxId}.${options.sandboxNamespace}.svc.cluster.local:${_REVIEW_PORT}${path}`;
+		const target = `http://${lease.serviceFQDN}:${_REVIEW_PORT}${path}`;
 		const headers: Record<string, string> = { authorization: `Bearer ${lease.leaseId}` };
 		let requestBody: string | undefined;
 		if (method === "POST")
@@ -78,6 +82,12 @@ async function _Proxy(request: Request, response: Response, options: Conversatio
 	{
 		response.status(503).json({ error: "conversation_computer_review_unavailable" });
 	}
+}
+
+/** Require the controller-reported Service to stay inside the configured sandbox namespace. */
+function _ServiceFqdn(value: string, namespace: string): boolean
+{
+	return value.length <= 253 && value.endsWith(`.${namespace}.svc.cluster.local`) && value.split(".").every(label => _DNS_LABEL.test(label));
 }
 
 /** Read a streamed sandbox response while cancelling as soon as it crosses the public ceiling. */

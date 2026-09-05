@@ -10,7 +10,7 @@ describe("conversation computer review router", function _Suite()
 	const resolveReview = vi.fn();
 	const fetchReview = vi.fn();
 	const principal = { externalSubject: "subject-1", principalId: "principal-1", siloId: "silo-1" };
-	const active = { leaseId: "lease-secret", sandboxId: "sandbox-one" };
+	const active = { leaseId: "lease-secret", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.computer-ns.svc.cluster.local" };
 
 	beforeEach(function _Reset()
 	{
@@ -40,6 +40,21 @@ describe("conversation computer review router", function _Suite()
 	{
 		const response = await request(_App()).get("/api/v1/me/conversations/conversation-1/review/previews/9000/index.html");
 		expect(response.status).toBe(400);
+		expect(fetchReview).not.toHaveBeenCalled();
+	});
+
+	it("proxies only the fixed browser discovery path", async function _BrowserRoute()
+	{
+		const response = await request(_App()).get("/api/v1/me/conversations/conversation-1/review/browser/version");
+		expect(response.status).toBe(200);
+		expect(fetchReview).toHaveBeenCalledWith("http://sandbox-one.computer-ns.svc.cluster.local:8090/v1/browser/version", expect.objectContaining({ method: "GET" }));
+	});
+
+	it("rejects a controller Service outside the configured sandbox namespace", async function _RejectsForeignService()
+	{
+		resolveReview.mockResolvedValue({ leaseId: "lease-secret", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.foreign.svc.cluster.local" });
+		const response = await request(_App()).get("/api/v1/me/conversations/conversation-1/review/files?path=README.md");
+		expect(response.status).toBe(503);
 		expect(fetchReview).not.toHaveBeenCalled();
 	});
 

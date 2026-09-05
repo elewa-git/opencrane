@@ -17,6 +17,8 @@ export class _ConversationComputerReviewAuthority implements ConversationCompute
 		const current = await this.history.loadActiveLease({ siloId: caller.siloId, conversationId, computerId: coordinates.computerId, agentIdentityId: coordinates.agentIdentityId, profileRevisionId: coordinates.profileRevisionId, nowEpochMilliseconds: Date.now() });
 		if (current.lease.sandboxId === null)
 			return null;
-		return { leaseId: current.lease.id, sandboxId: current.lease.sandboxId };
+		if (current.lease.serviceFQDN === null)
+			return null;
+		return { leaseId: current.lease.id, sandboxId: current.lease.sandboxId, serviceFQDN: current.lease.serviceFQDN };
 	}
 }

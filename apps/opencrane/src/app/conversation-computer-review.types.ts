@@ -32,6 +32,8 @@ export interface ConversationComputerReviewRoute
 	readonly leaseId: string;
 	/** Controller-owned Sandbox name used only after DNS-label validation. */
 	readonly sandboxId: string;
+	/** Controller-reported Service DNS name persisted with the current active lease. */
+	readonly serviceFQDN: string;
 }
 
 /** Authorizes participant access and resolves the current generation-fenced sandbox. */
