@@ -60,6 +60,7 @@ model Conversation {
   elicitationRequests           ElicitationRequest[]
   activeContext                 ConversationContextRevision?    @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
   assets                        ConversationAsset[]
+  activeComputerLease           ConversationComputerActiveLease?
   service                       AgentService?                   @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
@@ -68,6 +69,28 @@ model Conversation {
   @@index([siloId, mode, lifecycle, activitySequence])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
+}
+
+/// Rebuildable projection of the one active Agent Sandbox lease for a conversation computer.
+///
+/// Row existence means active. Immutable computer history remains authoritative and can rebuild or
+/// delete this projection after crashes; callers must not interpret an expired row as authority.
+model ConversationComputerActiveLease {
+  computerId       String       @id @map("computer_id")
+  siloId           String       @map("silo_id")
+  conversationId   String       @unique @map("conversation_id")
+  agentIdentityId  String       @map("agent_identity_id")
+  leaseId          String       @unique @map("lease_id")
+  leaseGeneration  Int          @map("lease_generation")
+  expiresAt        DateTime     @map("expires_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  conversation     Conversation @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([conversationId, siloId])
+  @@unique([computerId, leaseGeneration])
+  @@index([siloId, agentIdentityId])
+  @@index([expiresAt])
+  @@map("conversation_computer_active_leases")
 }
 
 /// Stores encrypted participant-visible payload bytes outside immutable KurrentDB history.

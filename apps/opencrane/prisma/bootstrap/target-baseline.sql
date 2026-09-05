@@ -753,6 +753,20 @@ CREATE TABLE "conversations" (
 );
 
 -- CreateTable
+CREATE TABLE "conversation_computer_active_leases" (
+    "computer_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "lease_id" TEXT NOT NULL,
+    "lease_generation" INTEGER NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "conversation_computer_active_leases_pkey" PRIMARY KEY ("computer_id")
+);
+
+-- CreateTable
 CREATE TABLE "conversation_private_payloads" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -2319,6 +2333,29 @@ CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "
 CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_conversation_id_key" ON "conversation_computer_active_leases"("conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_lease_id_key" ON "conversation_computer_active_leases"("lease_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_computer_active_leases_silo_id_agent_identity__idx" ON "conversation_computer_active_leases"("silo_id", "agent_identity_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_computer_active_leases_expires_at_idx" ON "conversation_computer_active_leases"("expires_at");
+
+ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_exact_check" CHECK (
+  btrim("computer_id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> '' AND
+  btrim("agent_identity_id") <> '' AND btrim("lease_id") <> '' AND "lease_generation" > 0
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_conversation_id_silo_id_key" ON "conversation_computer_active_leases"("conversation_id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_computer_id_lease_gener_key" ON "conversation_computer_active_leases"("computer_id", "lease_generation");
+
+-- CreateIndex
 CREATE INDEX "conversation_private_payloads_silo_id_conversation_id_idx" ON "conversation_private_payloads"("silo_id", "conversation_id");
 
 -- CreateIndex
@@ -3077,6 +3114,9 @@ ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_conversation_id_silo_i_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;

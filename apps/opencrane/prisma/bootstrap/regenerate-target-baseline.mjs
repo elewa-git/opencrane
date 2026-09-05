@@ -71,6 +71,12 @@ normalizedGenerated = _ReplaceExactlyOnce(
 	'CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx" ON "conversation_run_events"("run_id", "attempt", "message_id");\n\nCREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id") WHERE "type" = \'message.started\';',
 	"conversation message event index",
 );
+normalizedGenerated = _ReplaceExactlyOnce(
+	normalizedGenerated,
+	'CREATE INDEX "conversation_computer_active_leases_expires_at_idx" ON "conversation_computer_active_leases"("expires_at");',
+	'CREATE INDEX "conversation_computer_active_leases_expires_at_idx" ON "conversation_computer_active_leases"("expires_at");\n\nALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_exact_check" CHECK (\n  btrim("computer_id") <> \'\' AND btrim("silo_id") <> \'\' AND btrim("conversation_id") <> \'\' AND\n  btrim("agent_identity_id") <> \'\' AND btrim("lease_id") <> \'\' AND "lease_generation" > 0\n);',
+	"active conversation computer lease constraint",
+);
 
 function _Between(source, start, end, label)
 {
