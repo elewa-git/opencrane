@@ -10,13 +10,10 @@
 The [personal-agent platform architecture](docs/design/personal-agent-platform-architecture.md) is
 the target:
 
-1. **Product:** OpenCrane owns mode-bound Conversation, Message, canonical timeline, Run, RunEvent,
+1. **Product:** OpenCrane owns mode-bound Conversation, immutable KurrentDB history, private payloads,
    approvals, transcript, compaction, retries, budgets, identity, memory, artifacts, and tool policy.
-   AgentRun is a conditional child of `agent_session`, never the backing record for direct or ordinary
-   group messages ([ADR 0012](docs/adr/0012-conversation-modes-and-agent-thread-authority.md)). The runtime is a replaceable
-workload behind a **language-neutral** `AgentRuntimeProtocol v2` ([ADR 0010](docs/adr/0010-language-neutral-agent-runtime.md));
-   `pydantic-ai-slim` (Python) is the first qualification candidate for the bounded model/tool loop,
-   adopted only after it passes the live-LiteLLM conformance gate. Language is not a product contract.
+   Direct and ordinary group messages do not activate compute. An `agent_session` uses one logical
+   ConversationComputer whose generation-fenced lease is realised by an Agent Sandbox claim.
 2. **Delivery:** refactor the repository directly to the target state. Delete OpenClaw and every
    obsolete schema, protocol, app, bridge, token path, database assumption, configuration switch,
    test, deployment unit, and document as its replacement becomes ready. Do not preserve, transform,
@@ -89,7 +86,7 @@ projection. Build the authorization facade,
 central product grants, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
 Cognee integration, OCI-backed MCP execution, default-deny network profiles, workload identities, and deterministic creation
 of fresh application stores and credentials. Every durable store uses an expandable mounted volume;
-agent-runtime storage is mounted scratch and never the long-term home for user data.
+conversation-computer storage is mounted scratch and never the long-term home for user data.
 
 Delete replaced legacy schemas, Tenant/AccessPolicy authority, OpenClaw imports, static agent-token
 paths, broad secret broadcasts, obsolete topology switches, and unowned deployables in the same
@@ -365,7 +362,7 @@ still incomplete. Tool/OAuth success is not backed by the real exchange, and the
 route-level browser end-to-end suite. The production Angular build, focused feature tests, and
 Storybook regression catalogue are green, but they do not qualify the remaining product journeys.
 
-#### Track F1 — conversation workspace, modes, and Agent threads
+#### Track F1 — conversation workspace, immutable history, and computers
 
 Build the first post-onboarding workspace as one durable **Conversation** product with three
 immutable modes. The user-facing navigation calls the aggregate a **Chat**; `agent_session`,
@@ -373,24 +370,10 @@ immutable modes. The user-facing navigation calls the aggregate a **Chat**; `age
 
 The accepted product contract is:
 
-- `agent_session` routes every user, agent, tool, asset, elicitation, and A2UI interaction through
-  run authority. It admits one foreground run at a time; elicitation and steering continue that run,
-  while later questions create serial follow-up runs.
+- `agent_session` appends participant input to immutable KurrentDB history and may enqueue one
+  generation-bound ConversationComputer activation.
 - `direct` and ordinary `group` messages are durable conversation messages and never create fake
   `AgentRun` records.
-- an authorized `@agent` message in a group creates one linked child Conversation in
-  `agent_session` mode and its first run. The UI calls this an **Agent thread**, not a subagent.
-- the child freezes the approved persona of the participant who wrote the `@agent` message. It never
-  attaches that participant's personal memory automatically; memory use requires an explicit ask
-  that warns approved memory-derived content will be visible to the active parent participants.
-  Child visibility mirrors those active parent participants.
-- an Agent thread can communicate status, questions, approvals, safe results, failures, and durable
-  asset references to its immediate parent through typed, append-only, idempotent delivery. Runtime
-  subagents and recursive governed child runs remain the separate authority in
-  [#320](https://github.com/elewa-git/opencrane/issues/320).
-- the parent shows a compact Slack-style thread summary. Opening it replaces the main transcript
-  with a stable, deep-linkable child route and breadcrumbs; returning restores the exact parent
-  message and scroll position. There is no separate window and no side-panel-only child experience.
 - completed onboarding becomes a closed/read-only conversation in normal history. Completion never
   reopens; archive remains a separate user-applied visibility state.
 - attached and agent-created assets have distinct provenance. A created asset becomes durable only
@@ -411,8 +394,8 @@ The accepted product contract is:
   **Needs recovery** card and cancel control mount with the workspace in #351; #319 must not claim
   that an unmounted reducer or Storybook fixture is already user-visible.
 - one recoverable elicitation contract renders approvals, single choice, multiple choice, and bounded
-  free text, including explicit personal-memory permission. Consequential A2UI actions use that
-  authority; rendered UI never grants permission.
+  free text, including explicit personal-memory permission. Rendered review content never grants
+  permission.
 
 The accepted paper/origami workspace language remains the visual source. The repository-owned
 [canonical design context target](./docs/ui-design/README.md) contains the current workspace, A2UI,
@@ -431,12 +414,11 @@ component-manager validated the supplement against the live catalogue and return
 | F1.1 — model and design contract | Freeze mode vocabulary, strategy ownership, lifecycle, parent/child coordinates, terminology, route hierarchy, finite visual states, and the no-secret disclosure contract | [#600](https://github.com/elewa-git/opencrane/issues/600), [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | User stories, architecture decision, component/state map, and committed desktop/compact wireframes agree before schema or routed-page work starts |
 | F1.2 — conversation authority and ordinary messaging | Add immutable modes, mode strategies, conditional agent binding, participant/join authority, canonical mixed timeline, list/create/open APIs, and idempotent direct/group message admission | [#600](https://github.com/elewa-git/opencrane/issues/600) | Agent-session input cannot bypass runs; ordinary direct/group messages cannot create runs; foreign, closed, wrong-mode, and replay attempts fail closed |
 | F1.3 — onboarding handoff — **IN PROGRESS** | Retain the completed bootstrap exchange as the selected closed/read-only workspace conversation, atomically materialise the first personal Agent revision, repair earlier completed users, and expose Start a new chat without rewriting onboarding evidence | [#602](https://github.com/elewa-git/opencrane/issues/602), [#351](https://github.com/elewa-git/opencrane/issues/351) | Completion, personal-Agent readiness, refresh, direct navigation, attempted write, and incomplete-user API/route denial pass end to end |
-| F1.4 — canonical live delivery — **IN PROGRESS** | Extend finite replay into authorized snapshot-to-live conversation delivery across ordinary messages and run events; pin AG-UI, reconnect/interrupt semantics, terminal projection, and the versioned A2UI envelope | [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | No gaps or duplicates; opaque cursors recover open elicitation; failure/cancellation stay truthful; raw authority/runtime payloads remain server-side |
-| F1.5 — group Agent threads and parent communication | Admit `@agent`, create the child agent session, stream its serial runs, project the parent summary, deliver safe results upward, and navigate through stable breadcrumbs | [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | One mention creates one child and first run; parent/child keep independent history and unread state; access loss, deep links, back/scroll restoration, and immediate-parent-only delivery pass |
+| F1.4 — immutable history delivery — **IN PROGRESS** | Read authorised KurrentDB entries after an exclusive cursor and resolve separately encrypted participant payloads | [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | No gaps or duplicates; authority is rechecked on every page; raw computer payloads remain server-side |
 | F1.6 — conversation assets — **IN PROGRESS** | Add governed upload/attach/preview/download, finalized agent-output receipts, inline asset cards, and the Files index | [#603](https://github.com/elewa-git/opencrane/issues/603), [#351](https://github.com/elewa-git/opencrane/issues/351) | Upload, scan/process, failure/retry, inaccessible/expired, ready, and durable-created-output journeys pass without exposing storage internals |
-| F1.7 — tools, elicitation, approvals, and A2UI — **CORE COMPLETE; MOUNT IN #351** | Render honest tool/retry state with sanitized disclosure; unify approval, single-choice, multiple-choice, and free-text requests; route A2UI actions through authenticated command authority | [#604](https://github.com/elewa-git/opencrane/issues/604), [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | #604's authority, API, generated client, reusable components, recovery store, Activity projection, and visual states pass; #351 mounts them in the production workspace and completes route-level accessibility qualification |
-| F1.8 — workspace composition | Mount the authenticated Chats rail, mode-aware transcript/composer, closed states, participant controls, Agent-thread summaries/routes, Files, and Activity through thin pages, a feature store, pure mappers, and approved components | [#351](https://github.com/elewa-git/opencrane/issues/351), [#600](https://github.com/elewa-git/opencrane/issues/600), [#601](https://github.com/elewa-git/opencrane/issues/601) | Production has no mock gateway or alternate renderer; desktop/compact layouts, empty/unavailable/no-agent states, long/hostile content, and mode-specific commands pass Storybook and route-level Playwright |
-| F1.9 — delivery and qualification — **IN PROGRESS** | Publish the SPA by an immutable OCI digest with the server/contracts it consumes, reject a stale or unavailable rollout, and qualify login → onboarding → workspace, direct/group chat, Agent thread, live reconnect, assets, elicitation, A2UI, cancellation, and retry | [#351](https://github.com/elewa-git/opencrane/issues/351), [#162](https://github.com/elewa-git/opencrane/issues/162) | Reviewed version/migration evidence is complete; live desired/observed digest and replica evidence match; the named journeys pass against target APIs with no mock or legacy transport |
+| F1.7 — tools, elicitation, approvals, and review — **IN PROGRESS** | Render honest tool/retry state with sanitized disclosure and unify approval and bounded input requests | [#604](https://github.com/elewa-git/opencrane/issues/604), [#351](https://github.com/elewa-git/opencrane/issues/351) | Every consequential action passes authenticated command authority; rendered review content grants nothing |
+| F1.8 — workspace composition | Mount the authenticated Chats rail, mode-aware history/composer, computer status, Files, and Activity through thin pages and approved components | [#351](https://github.com/elewa-git/opencrane/issues/351), [#600](https://github.com/elewa-git/opencrane/issues/600) | Production has no mock gateway or alternate renderer; desktop/compact layouts and mode-specific commands pass |
+| F1.9 — delivery and qualification — **IN PROGRESS** | Publish one immutable SPA/server candidate and qualify login → onboarding → workspace, direct/group chat, agent chat, computer activation, assets, elicitation, cancellation, and retry | [#351](https://github.com/elewa-git/opencrane/issues/351), [#162](https://github.com/elewa-git/opencrane/issues/162) | Fresh-install evidence and desired/observed digests match; named journeys pass against target APIs with no legacy transport |
 
 ##### Track F1 execution and PR order
 
@@ -554,7 +536,7 @@ runbooks, generated clients, and CI forbidden-reference checks.
 Exit: a fresh checkout builds and deploys only the target product. Operators have one supported path
 to create, share, schedule, observe, revoke, and delete agents and assets.
 
-## 0.11.0 conversation computers, sandbox queue, previews, and internal code
+## 0.11.0 conversation history, computers, and sandbox queue
 
 0.10.0 is the last baseline before this replacement. Version 0.11.0 supports clean installations
 only: do not build a 0.10-to-0.11 migration, compatibility route, dual-write path, or legacy shim.
@@ -604,15 +586,14 @@ Each slice introduces its target owner and deletes the authority or runtime path
    after twenty minutes without interrupting an active attempt.
 6. **Warm capacity.** Qualify the cold path first, then add `SandboxWarmPool` capacity and measured
    latency targets. Delete the current Deployment and label-flip reservation design.
-7. **Preview apps.** Deliver temporary in-computer previews first, then immutable published
-   PreviewApp revisions under [#660](https://github.com/elewa-git/opencrane/issues/660).
-8. **Durable source.** Deliver the internal Git-backed CodeService in
-   [#765](https://github.com/elewa-git/opencrane/issues/765): exact repository grants, branches,
-   diffs and review, isolated builds from admitted commits, ArtifactRevisions, and PreviewApp
-   publication. External Git synchronization remains a later CodeService-boundary feature.
-9. **Cutover and deletion.** Remove `AgentRun`-owned warm workflows, `WarmRuntimeReservation`, label
+7. **Cutover and deletion.** Remove `AgentRun`-owned warm workflows, `WarmRuntimeReservation`, label
    activation, run-owned Pod cleanup, old Prisma lifecycle authority, and obsolete Helm, RBAC,
    configuration, tests, and documentation. No run-owned computer workflow survives.
+
+CodeProject, the Git-backed CodeService, isolated build paths, ArtifactRevision publication, and
+published PreviewApps are the next phase after 0.11.0. Temporary localhost previews may be exposed
+through the bounded computer review surface, but 0.11.0 does not introduce a durable source or
+application-publication authority.
 
 ### Qualification
 
@@ -636,7 +617,7 @@ review journey. A clean installation must contain only the target path.
 | [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
 | [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
 | [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
-| [#319](https://github.com/elewa-git/opencrane/issues/319) | Finish authorized snapshot-to-live AG-UI, interrupts, truthful terminal projection, and the versioned A2UI boundary in F1 |
+| [#319](https://github.com/elewa-git/opencrane/issues/319) | Finish authorised immutable history, interrupts, truthful terminal entries, and the computer review boundary in F1 |
 | [#320](https://github.com/elewa-git/opencrane/issues/320) | Keep governed runtime child runs separate from F1 child Conversations; project them only after the explicit #319 decision |
 | [#351](https://github.com/elewa-git/opencrane/issues/351) | Deliver and qualify the authenticated conversation workspace through Track F1 |
 | [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |

@@ -32,9 +32,6 @@
       "path": "../../libs/frontend/state/conversation/render"
     },
     {
-      "path": "../../libs/frontend/elements/a2ui"
-    },
-    {
       "path": "../../libs/frontend/features/onboarding"
     },
     {
