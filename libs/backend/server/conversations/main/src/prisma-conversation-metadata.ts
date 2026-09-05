@@ -4,7 +4,7 @@ import { ConversationLifecycles, ConversationModes } from "@opencrane/models/con
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { PrismaConversationProductAuthorizationRepository } from "./db/conversation-product-authorization";
 import type { ConversationCaller } from "./types/conversation-caller.types";
-import type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, InitialConversationComputerResolver } from "./conversation-metadata.types";
+import type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, ConversationReviewCoordinates, InitialConversationComputerResolver } from "./conversation-metadata.types";
 
 /** Projection-only PostgreSQL authority; participant entries never pass through this class. */
 export class PrismaConversationMetadataUnitOfWork
@@ -106,6 +106,23 @@ export class PrismaConversationMetadataUnitOfWork
       return _Detail(transaction, caller, conversationId);
     });
   }
+
+	/** Releases exact computer history coordinates only for a current participant with central Read authority. */
+	public reviewCoordinates(caller: ConversationCaller, conversationId: string): Promise<ConversationReviewCoordinates | null>
+	{
+		return this._read(async function _ReviewCoordinates(transaction)
+		{
+			if (!await _Active(transaction, caller))
+				return null;
+			const row = await transaction.conversation.findFirst({ where: { id: conversationId, siloId: caller.siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, select: { computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true } });
+			if (row === null || row.computerId === null || row.computerAgentIdentityId === null || row.computerProfileRevisionId === null)
+				return null;
+			const authorization = new PrismaConversationProductAuthorizationRepository(transaction);
+			if (!await authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Read))
+				return null;
+			return { computerId: row.computerId, agentIdentityId: row.computerAgentIdentityId, profileRevisionId: row.computerProfileRevisionId };
+		});
+	}
   /** Creates direct/group projections atomically and leaves agent-session creation fail-closed. */
   public async create(
     caller: ConversationCaller,

@@ -548,6 +548,13 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-activation-repository.ts",
+				"adapter": "PrismaConversationComputerActivationProjectionRepository",
+				"contract": "ConversationComputerActivationProjectionRepository",
+				"contractImportPath": "../conversation-computer-activation.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 				"adapter": "PrismaUserOnboardingRepository",
 				"contract": "UserOnboardingRepository",
@@ -1741,6 +1748,7 @@
 		"compositions": [
 			"apps/opencrane/src/app/conversation-history-composition.ts",
 			"libs/backend/server/conversations/main/src/agent-session-creation.ts",
+			"libs/backend/server/conversations/main/src/agent-session-projection.ts",
 			"libs/backend/server/conversations/main/src/prisma-conversation-metadata.ts",
 			"libs/backend/server/gateways/providers/main/src/provider-byok-composition.ts",
 			"libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
@@ -1802,9 +1810,9 @@
 	],
 	"exemptions": [
 		{
-			"path": "libs/backend/server/conversations/main/src/agent-session-creation.ts",
-			"owner": "conversations-agent-session-creation",
-			"reason": "The 0.11 Kurrent-first creation coordinator keeps its serializable projection recheck together until persistence ports are extracted after the baseline ships.",
+			"path": "libs/backend/server/conversations/main/src/agent-session-projection.ts",
+			"owner": "conversations-agent-session-projection",
+			"reason": "The 0.11 projection owner intentionally keeps its current authorization and projection delegates transaction-bound while explicit repository ports are extracted.",
 			"operations": [
 				"delegate",
 				"transaction"
