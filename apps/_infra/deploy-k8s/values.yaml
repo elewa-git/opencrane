@@ -160,6 +160,8 @@ historyStore:
 # The chart creates profiles and claim admission only; it never installs the controller or CRDs.
 agentSandbox:
   enabled: false
+  # -- Maximum lifetime of one server-issued conversation-computer lease.
+  leaseTtlSeconds: 3600
   # -- Target namespace where the external controller manages Sandbox Claims and their Pods.
   namespace: ""
   # -- Existing RuntimeClass used by every fixed profile, for example `gvisor`.
@@ -362,7 +364,6 @@ agentController:
   # -- Database/server-owned fencing windows. The controller receives their resulting expiries but
   # cannot propose or extend them in its claim/commit requests.
   claimLeaseSeconds: 30
-  assignmentTtlSeconds: 3600
   projectedTokenTtlSeconds: 600
   kubernetesTokenTtlSeconds: 600
   # -- Exact Kubernetes Service IP CIDRs admitted by the controller's app-owned NetworkPolicy.
@@ -447,6 +448,11 @@ clustertenantManager:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
+  # -- Purpose-specific AES-GCM keyring for participant conversation payloads. The app-owned deploy
+  # script creates this namespace-local Secret once; rotations retain old keys for reads.
+  conversationPrivatePayloadKeyring:
+    existingSecret: opencrane-conversation-private-payload
+    secretKey: keyring.json
   # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
   # These apply per silo and AgentService; keep the active limit below the server's five-connection
   # Prisma budget so a hot service cannot starve unrelated control-plane work.
@@ -459,11 +465,6 @@ clustertenantManager:
     databasePoolSize: 2
     workerConcurrency: 2
     pollIntervalMilliseconds: 100
-    # -- Continuations hold the exact paused model state. The deploy script creates this
-    # rotating encryption keyring once and retains it across upgrades.
-    continuationKeyring:
-      existingSecret: opencrane-runtime-continuation
-      secretKey: keyring.json
     mcpEraProbeTimeoutMilliseconds: 5000
     mcpEraProbeMaximumResponseBytes: 65536
     # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.

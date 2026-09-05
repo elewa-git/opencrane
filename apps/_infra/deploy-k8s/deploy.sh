@@ -31,7 +31,7 @@
 #       --kurrentdb-service-credential-secret opencrane-kurrentdb-history-service \
 #       --kurrentdb-bootstrap-image-repository registry.example/opencrane-kurrentdb-bootstrap \
 #       --kurrentdb-bootstrap-image-digest sha256:REVIEWED_KURRENTDB_BOOTSTRAP_IMAGE_DIGEST \
-#       --agent-sandbox-image-repository registry.example/opencrane-agent-runtime \
+#       --agent-sandbox-image-repository ghcr.io/elewa-git/opencrane-conversation-computer \
 #       --agent-sandbox-image-digest sha256:REVIEWED_AGENT_SANDBOX_IMAGE_DIGEST \
 #       [--namespace opencrane-acme] \
 #       [ANY k8s-deploy.sh flag]
@@ -78,7 +78,7 @@ KURRENTDB_BOOTSTRAP_MEMORY_LIMIT="${OPENCRANE_KURRENTDB_BOOTSTRAP_MEMORY_LIMIT:-
 KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS="${OPENCRANE_KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS:-}"
 KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT="${OPENCRANE_KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT:-}"
 KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS="${OPENCRANE_KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS:-}"
-AGENT_SANDBOX_IMAGE_REPOSITORY="${OPENCRANE_AGENT_SANDBOX_IMAGE_REPOSITORY:-}"
+AGENT_SANDBOX_IMAGE_REPOSITORY="${OPENCRANE_AGENT_SANDBOX_IMAGE_REPOSITORY:-ghcr.io/elewa-git/opencrane-conversation-computer}"
 AGENT_SANDBOX_IMAGE_DIGEST="${OPENCRANE_AGENT_SANDBOX_IMAGE_DIGEST:-}"
 AGENT_SANDBOX_IMAGE_PULL_POLICY="${OPENCRANE_AGENT_SANDBOX_IMAGE_PULL_POLICY:-}"
 PASSTHROUGH=()
@@ -160,7 +160,6 @@ if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
   [[ "$KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS" =~ ^[1-9][0-9]*$ ]] || { err "testv5 requires --kurrentdb-bootstrap-active-deadline-seconds."; exit 1; }
   [[ "$KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT" =~ ^[0-9]+$ ]] || { err "testv5 requires --kurrentdb-bootstrap-backoff-limit."; exit 1; }
   [[ "$KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || { err "testv5 requires --kurrentdb-bootstrap-timeout-seconds."; exit 1; }
-  [[ -n "$AGENT_SANDBOX_IMAGE_REPOSITORY" ]] || { err "testv5 requires --agent-sandbox-image-repository."; exit 1; }
   [[ "$AGENT_SANDBOX_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "testv5 requires --agent-sandbox-image-digest with an immutable sha256 digest."; exit 1; }
   [[ "$AGENT_SANDBOX_IMAGE_PULL_POLICY" =~ ^(Always|IfNotPresent|Never)$ ]] || { err "testv5 requires --agent-sandbox-image-pull-policy (Always, IfNotPresent, or Never)."; exit 1; }
   for crd in sandboxes.agents.x-k8s.io sandboxclaims.extensions.agents.x-k8s.io sandboxtemplates.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io; do

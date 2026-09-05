@@ -184,12 +184,6 @@
       "@opencrane/backend/server/infra/auth": [
         "./libs/backend/server/infra/auth/src/index.ts"
       ],
-      "@opencrane/backend/server/infra/agent-runtime-stream": [
-        "./libs/backend/server/infra/agent-runtime-stream/src/index.ts"
-      ],
-      "@opencrane/backend/server/infra/agent-runtime-continuation": [
-        "./libs/backend/server/infra/agent-runtime-continuation/src/index.ts"
-      ],
       "@opencrane/backend/server/infra/workload-identity": [
         "./libs/backend/server/infra/workload-identity/src/index.ts"
       ],
@@ -304,9 +298,6 @@
       "@opencrane/features/conversation-workspace": [
         "./libs/frontend/features/conversation-workspace/src/index.ts"
       ],
-      "@opencrane/features/agent-threads": [
-        "./libs/frontend/features/agent-threads/src/index.ts"
-      ],
       "@opencrane/features/onboarding": [
         "./libs/frontend/features/onboarding/src/index.ts"
       ],
@@ -348,9 +339,6 @@
       ],
       "@opencrane/state/conversation/elicitation": [
         "./libs/frontend/state/conversation/elicitation/src/index.ts"
-      ],
-      "@opencrane/state/conversation/agent-threads": [
-        "./libs/frontend/state/conversation/agent-threads/src/index.ts"
       ],
       "@opencrane/state/conversation/workspace": [
         "./libs/frontend/state/conversation/workspace/src/index.ts"
@@ -395,9 +383,6 @@
       "path": "./libs/frontend/features/conversation-elicitation"
     },
     {
-      "path": "./libs/frontend/features/agent-threads"
-    },
-    {
       "path": "./libs/frontend/features/notifications"
     },
     {
@@ -435,9 +420,6 @@
     },
     {
       "path": "./libs/frontend/state/conversation/elicitation"
-    },
-    {
-      "path": "./libs/frontend/state/conversation/agent-threads"
     },
     {
       "path": "./libs/frontend/state/conversation/workspace"

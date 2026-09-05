@@ -35,6 +35,21 @@ export interface ChannelTargetRuntimeConfig
 	readonly trustedHost: string;
 }
 
+/** Release-owned Agent Sandbox profile used for every 0.11 conversation computer. */
+export interface AgentSandboxReleaseProfileConfig
+{
+	/** Immutable image digest that identifies the admitted profile revision. */
+	readonly profileRevisionId: string;
+	/** Profile name fixed by the release. */
+	readonly profileName: string;
+	/** Warm pool selected by server-created claims. */
+	readonly warmPoolName: string;
+	/** Namespace where the external Agent Sandbox controller accepts claims. */
+	readonly namespace: string;
+	/** Maximum lifetime of one fenced computer lease. */
+	readonly leaseTtlMilliseconds: number;
+}
+
 /** Settings read once at startup, used to compose workload identity, workflow-controller, and worker routes. */
 export interface InternalRuntimeConfig
 {
@@ -52,14 +67,6 @@ export interface InternalRuntimeConfig
 	readonly artifactPreprocessorNamespace: string | undefined;
 	/** Complete resolver and replay configuration, or null when the channel boundary is disabled. */
 	readonly channelTargets: ChannelTargetRuntimeConfig | null;
-	/** Maximum age of a runtime command before it is refused. */
-	readonly commandTtlMilliseconds: number;
-	/** Delay before recovering an unacknowledged runtime command. */
-	readonly commandRecoveryMilliseconds: number;
-	/** Absolute path of the Secret-mounted rotating continuation encryption keyring. */
-	readonly continuationKeyringPath: string;
-	/** Namespace containing the managed-agent warm Pod pool. */
-	readonly managedRuntimeNamespace: string | undefined;
 	/** Lease held by one Pod-bound companion command claim. */
 	readonly mcpCompanionClaimLeaseMilliseconds: number;
 	/** Lease held by one controller claim or release delivery. */
@@ -72,16 +79,12 @@ export interface InternalRuntimeConfig
 	readonly memoryGatewayTokenPath: string;
 	/** Release-local private memory-gateway origin; the client validates its exact shape. */
 	readonly memoryGatewayUrl: string;
-	/** Namespace containing the personal-agent warm Pod pool. */
-	readonly personalRuntimeNamespace: string | undefined;
 	/** Namespace reserved for skill-authoring validation Jobs. */
 	readonly skillAuthoringNamespace: string;
 	/** Namespace containing the OpenCrane server and agent controller. */
 	readonly serverNamespace: string;
 	/** Silo that owns every OCI MCP runtime row served by this process. */
 	readonly siloId: string;
-	/** Lifetime of one durable runtime assignment. */
-	readonly assignmentTtlMilliseconds: number;
 }
 
 /** Settings for durable control-plane tasks and the remote MCP protocol check. */
@@ -116,6 +119,8 @@ export interface OpenCraneProcessConfig
 {
 	/** Namespace in which OIDC authentication resources are resolved. */
 	readonly authWatchNamespace: string;
+	/** Absolute path of the Secret-mounted conversation private-payload encryption keyring. */
+	readonly conversationPrivatePayloadKeyringPath: string;
 	/** TLS-only KurrentDB history connection settings frozen for this process. */
 	readonly historyStore: OpenCraneHistoryStoreConfig;
 	/** Port exposed only to platform workloads. */

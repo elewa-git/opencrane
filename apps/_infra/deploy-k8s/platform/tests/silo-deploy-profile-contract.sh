@@ -277,7 +277,7 @@ testv5_required_args=(
   --kurrentdb-bootstrap-active-deadline-seconds 330
   --kurrentdb-bootstrap-backoff-limit 0
   --kurrentdb-bootstrap-timeout-seconds 300
-  --agent-sandbox-image-repository registry.invalid/opencrane-agent-runtime
+  --agent-sandbox-image-repository registry.invalid/opencrane-conversation-computer
   --agent-sandbox-image-digest sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
   --agent-sandbox-image-pull-policy IfNotPresent)
 PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY=absent-key \

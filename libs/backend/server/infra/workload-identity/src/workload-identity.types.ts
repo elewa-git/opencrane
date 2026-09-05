@@ -61,9 +61,8 @@ export interface RuntimeWorkloadIdentity
  * Kept this narrow on purpose — the transport gets an identity or nothing, and never sees
  * the TokenReview response, so it cannot start interpreting Kubernetes results itself.
  *
- * Implemented by: `_CreateWarmRuntimeTokenReviewer` in projected-token-reviewer.ts.
- * Called by: `_RegisterInternalAgentRuntimeStream` in
- * libs/backend/server/infra/agent-runtime-stream, on both of its routes.
+ * Implemented by the isolated workload reviewers in projected-token-reviewer.ts.
+ * Called by private workload routes after Kubernetes authenticates a bound Pod token.
  *
  * @see https://kubernetes.io/docs/reference/access-authn-authz/authentication/ — TokenReview
  *      and the audience-bound ServiceAccount tokens being checked.
@@ -84,36 +83,6 @@ export interface RuntimeTokenReviewer
 }
 
 /** Deployment-owned namespaces for mutually exclusive personal and managed runtime identities. */
-export interface RuntimeTokenReviewerConfig
-{
-	/** Namespace containing only personal `agent-runtime-*` workload identities. */
-	readonly personalRuntimeNamespace: string;
-	/** Namespace containing only managed `managed-agent-runtime-*` workload identities. */
-	readonly managedRuntimeNamespace: string;
-}
-
-/** Validated namespaces that keep the server, personal runtime, and managed runtime identities apart. */
-export interface RuntimeIdentityNamespaces extends RuntimeTokenReviewerConfig
-{
-	/** Namespace containing the trusted OpenCrane server workload. */
-	readonly serverNamespace: string;
-}
-
-/**
- * The raw namespace values read from deployment configuration, before checking. The two
- * runtime namespaces are optional here only because configuration may omit them;
- * {@link _ValidateRuntimeIdentityNamespaces} then throws rather than defaulting, which is
- * why the checked type {@link RuntimeIdentityNamespaces} has them required.
- */
-export interface RuntimeIdentityNamespaceInput
-{
-	/** Namespace containing the trusted OpenCrane server workload. */
-	readonly serverNamespace: string;
-	/** Optional personal runtime namespace read from deployment configuration. */
-	readonly personalRuntimeNamespace?: string;
-	/** Optional managed runtime namespace read from deployment configuration. */
-	readonly managedRuntimeNamespace?: string;
-}
 
 /** Minimal reviewer seam for one deployment-fixed ServiceAccount. */
 export interface FixedServiceAccountTokenReviewer

@@ -41,19 +41,13 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorEnabled: false,
 		artifactPreprocessorMaximumOutputBytes: 1_024,
 		artifactPreprocessorNamespace: undefined,
-		assignmentTtlMilliseconds: 60_000,
 		channelTargets: null,
-		commandRecoveryMilliseconds: 15_000,
-		commandTtlMilliseconds: 60_000,
-		continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
-		managedRuntimeNamespace: "managed-runtime",
 		mcpCompanionClaimLeaseMilliseconds: 30_000,
 		mcpControllerClaimLeaseMilliseconds: 30_000,
 		mcpExecutorNamespace: "mcp-executors",
 		memoryGatewayTimeoutMilliseconds: 30_000,
 		memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
-		personalRuntimeNamespace: "personal-runtime",
 		serverNamespace: "opencrane-server",
 		skillAuthoringNamespace: "skill-authoring",
 		siloId: "silo-1",
@@ -133,10 +127,4 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
-	it("refuses runtime planes that collapse into one identity namespace", function _rejectsCollapsedRuntimePlanes()
-	{
-		const config = { ..._RuntimeConfig(), managedRuntimeNamespace: "personal-runtime" };
-
-		expect(function _composeCollapsedRuntimePlanes() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from/);
-	});
 });

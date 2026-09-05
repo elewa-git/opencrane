@@ -13,12 +13,12 @@ root version in the same slice. Documentation-only changes do not advance an app
 | App | Responsibility |
 | --- | --- |
 | [`apps/opencrane`](../../apps/opencrane/README.md) | Authenticated REST API, durable product authority, process composition, Prisma, and the server Helm unit. |
+| [`apps/conversation-computer`](../../apps/conversation-computer/README.md) | Generation-fenced process image for an Agent Sandbox conversation computer. |
 | [`apps/opencrane-ui`](../../apps/opencrane-ui/README.md) | Angular web client for organisation and employee surfaces. |
 | [`apps/channel-proxy`](../../apps/channel-proxy/README.md) | Inbound channel authentication and routing boundary. |
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
-| [`apps/agent-controller`](../../apps/agent-controller/README.md) | Warm AgentRun pool owner and sole Kubernetes mutator for governed one-shot Jobs. |
+| [`apps/agent-controller`](../../apps/agent-controller/README.md) | Sole Kubernetes mutator for governed one-shot Jobs. |
 | [`apps/mcp-executor`](../../apps/mcp-executor/README.md) | One-shot token-holding companion for OCI-backed MCP Jobs. |
-| [`apps/agent-runtime`](../../apps/agent-runtime/README.md) | Outbound-only process claimed once from a personal or managed warm pool. |
 | [`apps/artifact-service`](../../apps/artifact-service/README.md) | Governed artifact byte promotion and receipt service. |
 | [`apps/artifact-preprocessor`](../../apps/artifact-preprocessor/README.md) | Broker-only document extraction worker. |
 | [`apps/artifact-scanner`](../../apps/artifact-scanner/README.md) | Broker-only malware scanner for quarantined revisions. |
@@ -49,7 +49,6 @@ app's source.
 | [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
-| [`libs/backend/server/infra/agent-runtime-continuation`](../../libs/backend/server/infra/agent-runtime-continuation/README.md) | Secret-backed encryption for durable AgentRun continuation checkpoints. |
 | [`libs/backend/server/infra/history-store`](../../libs/backend/server/infra/history-store/README.md) | KurrentDB stream reads, checked appends, and subscriptions for event-history owners. |
 | [`apps/_infra/kurrentdb`](../../apps/_infra/kurrentdb/README.md) | Private KurrentDB HistoryStore deployment with persistent TLS-only storage. |
 | [`apps/_infra/agent-sandbox`](../../apps/_infra/agent-sandbox/README.md) | Release-scoped Agent Sandbox templates, zero-replica warm pools, and claim admission boundaries. |
@@ -101,11 +100,9 @@ Recoverable conversation input follows the same ownership direction:
 - [`features/conversation-activity`](../../libs/frontend/features/conversation-activity/README.md) owns safe failure disclosure and canonical deep-link intents; and
 - [`state/conversation/elicitation`](../../libs/frontend/state/conversation/elicitation/README.md) owns the generated-client gateway, command state, reconciliation, and derived Activity rows.
 
-Group-chat Agent threads add one route-ready composition without moving authority into the browser:
-
-- [`elements/conversation`](../../libs/frontend/elements/conversation/README.md) owns shared message, composer, and status presentations;
-- [`features/agent-threads`](../../libs/frontend/features/agent-threads/README.md) owns the routed child coordinator, browser-history restoration, and workspace composition from existing asset, elicitation, Activity, and A2UI features; and
-- [`state/conversation/agent-threads`](../../libs/frontend/state/conversation/agent-threads/README.md) owns the transport-neutral child-reader port, independent route/run/recovery state, and fail-closed access purge.
+[`elements/conversation`](../../libs/frontend/elements/conversation/README.md) owns shared message,
+composer, and status presentations. The 0.11 workspace renders immutable conversation history
+directly; the retired relational Agent-thread projection has no separate child route.
 
 The normal conversation workspace keeps transport, state, and presentation separate:
 

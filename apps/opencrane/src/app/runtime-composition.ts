@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaSkillAuthoringValidationControllerUnitOfWork, PrismaSkillAuthoringValidationWorkerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter, __CreateSkillAuthoringValidationWorkerRouter } from "@opencrane/backend/server/agents/skills";
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _ValidateIsolatedWorkloadNamespace } from "@opencrane/backend/server/infra/workload-identity";
 import { PrismaConversationAssetScanRepository } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -35,17 +35,17 @@ const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventI
  *
  * @param prisma - The main product database client.
  * @param config - Frozen leases and assignment limits.
- * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
+ * @param serverNamespace - Namespace containing the trusted server identity.
  * @param tokenReviewer - Reviewer fixed to the sole agent-controller ServiceAccount.
  * @returns Controller routers with no runtime or worker routes.
  */
-function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>): ControllerRuntimeComposition
+function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, serverNamespace: string, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>): ControllerRuntimeComposition
 {
-	const authoringNamespace = _ValidateIsolatedWorkloadNamespace(config.skillAuthoringNamespace, namespaces.serverNamespace);
+	const authoringNamespace = _ValidateIsolatedWorkloadNamespace(config.skillAuthoringNamespace, serverNamespace);
 	return {
 		skillAuthoringValidationController: __CreateSkillAuthoringValidationControllerRouter({
 			tokenReviewer,
-			namespace: namespaces.serverNamespace,
+			namespace: serverNamespace,
 			authoringNamespace,
 			authority: new PrismaSkillAuthoringValidationControllerUnitOfWork(prisma),
 			logger: _log,
@@ -131,19 +131,16 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  */
 export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
 {
-	// 1. Validate all identity planes before constructing a router, so malformed coordinates fail
-	// startup rather than leaving a partially mounted internal API.
-	const namespaces = _ValidateRuntimeIdentityNamespaces(config);
-
-	// 2. Create reviewers once and pass each only to its matching caller plane; neighbouring routes
+	// 1. Create reviewers once and pass each only to its matching caller plane; neighbouring routes
 	// cannot silently reinterpret a controller, validation worker, or runtime identity.
-	const controllerTokenReviewer = _CreateAgentControllerTokenReviewer(authApi, namespaces.serverNamespace);
+	const serverNamespace = config.serverNamespace;
+	const controllerTokenReviewer = _CreateAgentControllerTokenReviewer(authApi, serverNamespace);
 	const skillAuthoringValidationTokenReviewer = _CreateSkillAuthoringValidationTokenReviewer(authApi, config.skillAuthoringNamespace);
-	// 3. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
+	// 2. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
 	const skillAuthoringValidationWorker = __CreateSkillAuthoringValidationWorkerRouter({ tokenReviewer: skillAuthoringValidationTokenReviewer, authority: new PrismaSkillAuthoringValidationWorkerUnitOfWork(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log });
 	return {
-		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer),
+		..._CreateControllerRuntimeComposition(prisma, config, serverNamespace, controllerTokenReviewer),
 		skillAuthoringValidationWorker,
-		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace, controllerTokenReviewer, workflowExecution),
+		..._CreateOptionalRuntimeComposition(prisma, authApi, config, serverNamespace, controllerTokenReviewer, workflowExecution),
 	};
 }

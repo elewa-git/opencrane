@@ -11,7 +11,6 @@ export { __CanAppendConversationTimelineEntry, __DecideConversationCommand, __Ha
 export type { AgentSessionConversation, AllowedConversationCommandDecision, CloseConversationCommand, Conversation, ConversationBase, ConversationCommand, ConversationCommandContext, ConversationCommandDecision, ConversationCreationRequest, ConversationId, ConversationMessageTimelineEntry, ConversationMembershipTimelineEntry, ConversationParentDeliveryTimelineEntry, ConversationParticipant, ConversationReplayCursor, ConversationRunEventTimelineEntry, ConversationSystemTimelineEntry, ConversationTimelineEntry, ConversationTimelineEntryBase, DeniedConversationCommandDecision, DirectConversation, GroupConversation, Message, MessageId, SubmitMessageConversationCommand, AnswerElicitationConversationCommand, SteerRunConversationCommand } from "@opencrane/models/conversations";
 export * from "@opencrane/models/conversation-assets";
 export * from "./conversation-elicitation.types";
-export * from "./conversation-elicitation.validator";
 export type * from "@opencrane/models/artifacts";
 export * from "./artifact-preprocessor.types";
 export * from "./artifact-preprocess-bootstrap-reference";
@@ -40,7 +39,6 @@ export * from "./conversation-entry.types";
 export * from "./conversation-entry.validator";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
-export * from "./agent-runtime-protocol.types";
 export type * from "./runtime-assignment.types";
 export type * from "./tenant-models.types";
 export * from "./third-party-source.types";

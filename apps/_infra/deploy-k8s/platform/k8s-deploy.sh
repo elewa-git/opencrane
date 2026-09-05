@@ -107,7 +107,6 @@ source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/provider-key-secrets.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/postgres-release.sh"
-source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
@@ -156,7 +155,7 @@ BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
 INVITATION_SIGNING_SECRET="${OPENCRANE_INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
-RUNTIME_CONTINUATION_KEYRING_SECRET="${OPENCRANE_RUNTIME_CONTINUATION_KEYRING_SECRET:-opencrane-runtime-continuation}"
+CONVERSATION_PRIVATE_PAYLOAD_SECRET="${OPENCRANE_CONVERSATION_PRIVATE_PAYLOAD_SECRET:-opencrane-conversation-private-payload}"
 MEMBERSHIP_MODE="${OPENCRANE_MEMBERSHIP_MODE:-standalone}"
 [[ "$MEMBERSHIP_MODE" == "standalone" || "$MEMBERSHIP_MODE" == "fleet" ]] || { echo "OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet." >&2; exit 2; }
 VALUES_FILE=""
@@ -614,7 +613,14 @@ _copy_cnpg_uri_secret() {
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
-ensure_runtime_continuation_keyring_secret "$NAMESPACE" "$RUNTIME_CONTINUATION_KEYRING_SECRET"
+if ! kubectl get secret "$CONVERSATION_PRIVATE_PAYLOAD_SECRET" -n "$NAMESPACE" >/dev/null 2>&1; then
+  conversation_payload_directory="$(mktemp -d)"
+  conversation_payload_key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+  printf '{"currentKeyId":"key-1","keys":{"key-1":"%s"}}\n' "$conversation_payload_key" > "$conversation_payload_directory/keyring.json"
+  kubectl create secret generic "$CONVERSATION_PRIVATE_PAYLOAD_SECRET" -n "$NAMESPACE" --from-file="keyring.json=$conversation_payload_directory/keyring.json"
+  rm -f "$conversation_payload_directory/keyring.json"
+  rmdir "$conversation_payload_directory"
+fi
 install_postgres_release true
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
@@ -876,7 +882,6 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # and it only forces fields the chart actually applies (foreign managers of OTHER fields
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
 build_membership_helm_args
-build_runtime_continuation_keyring_helm_args
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --server-side=true
   --force-conflicts
@@ -894,9 +899,9 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
+  --set-string "clustertenantManager.conversationPrivatePayloadKeyring.existingSecret=$CONVERSATION_PRIVATE_PAYLOAD_SECRET"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMBERSHIP_HELM_ARGS[@]}"
-  "${RUNTIME_CONTINUATION_KEYRING_HELM_ARGS[@]}"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}"
   "${AGENT_CONTROLLER_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")

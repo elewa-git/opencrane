@@ -15,12 +15,12 @@ testing on its own, it belongs in a library, not here.
 | [`opencrane`](./opencrane/README.md) | The organisation control plane and authenticated REST API. |
 | [`opencrane-ui`](./opencrane-ui/README.md) | The org-admin single-page app. |
 | [`channel-proxy`](./channel-proxy/README.md) | The inbound-channel edge trust boundary. |
+| [`conversation-computer`](./conversation-computer/README.md) | The generation-fenced process image used by Agent Sandbox. |
 | [`memory-gateway`](./memory-gateway/README.md) | The private authenticated boundary in front of Cognee. |
 | [`artifact-service`](./artifact-service/README.md) | The artifact promote-and-receipt service. |
 | [`artifact-preprocessor`](./artifact-preprocessor/README.md) | Outbound-only PDF-to-text worker behind the OpenCrane artifact broker. |
 | [`artifact-scanner`](./artifact-scanner/README.md) | Outbound-only malware scanner for quarantined conversation files. |
-| [`agent-runtime`](./agent-runtime/README.md) | Outbound-only process claimed once from a fixed personal or managed warm pool. |
-| [`agent-controller`](./agent-controller/README.md) | Warm-pool owner and sole Kubernetes mutator for governed Jobs. |
+| [`agent-controller`](./agent-controller/README.md) | Sole Kubernetes mutator for governed one-shot Jobs. |
 | [`mcp-executor`](./mcp-executor/README.md) | One-shot OpenCrane companion for OCI-backed MCP server Jobs. |
 | [`skill-authoring`](./skill-authoring/README.md) | Chart-only isolated candidate-skill Job plane with no standing worker. |
 | [`postgres`](./postgres/README.md) | The durable PostgreSQL deployable. |
@@ -33,7 +33,8 @@ service map.
    opencrane (control plane) ──serves──► opencrane-ui (SPA)
         │                                  channel-proxy (edge)
         ├── memory-gateway · artifact-service · artifact-preprocessor · artifact-scanner
-        ├── agent-controller · agent-runtime · mcp-executor
+        ├── conversation-computer (Agent Sandbox process image)
+        ├── agent-controller · mcp-executor
         ├── skill-authoring
         └── postgres (durable DB)
    apps/_infra/ ── vendored infra + release composer

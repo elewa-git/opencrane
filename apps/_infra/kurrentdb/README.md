@@ -25,8 +25,10 @@ already admitted.
 
 The first bootstrap run creates exactly one unprivileged `opencrane-history` user and records one
 default access control list (ACL): that user and administrators can read/write user streams, while
-only administrators can delete streams or read/write metadata. A retry reads back that event and
-fails if it differs; it never resets a user, changes a password, or widens an existing ACL.
+only administrators can delete streams or read/write metadata. The bootstrap administrator also
+creates the silo-scoped `conversation-computer-activation` persistent subscription. A retry observes
+the existing group; it never gives the service identity administrator rights, resets a user, changes
+a password, or widens an existing ACL.
 
 ## Public surface
 

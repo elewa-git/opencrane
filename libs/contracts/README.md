@@ -105,14 +105,6 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `MemoryFactProvenanceSourceKinds` and `ExecutionSubject` — stable memory-source vocabulary and the
   evidence-bound agent identity, principal, membership, capability, run, computer-lease, requester,
   and admission coordinates shared by run snapshots and service gates.
-- `AGENT_RUNTIME_PROTOCOL_VERSION`, the protocol-v2 continuation contract, personal and managed runtime audience constants and validators,
-  `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and `RuntimeCandidate` — the private workload
-  protocol for an agent process that opens its own authenticated stream. The opening frame binds the
-  runtime instance to the Pod UID independently verified from its Kubernetes credential. Personal
-  and managed runtimes use distinct projected-token audiences and ServiceAccount grammars, so one
-  workload class cannot borrow the other's transport identity.
-- `RuntimeCommandKinds` and `RuntimeCandidateKinds` — documented string-backed discriminants that
-  keep workload command and candidate control flow exhaustive while preserving protocol bytes.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database

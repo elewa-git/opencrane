@@ -13,7 +13,6 @@ remaining grouped with the server code that composes them.
 | [`api`](./api/README.md) | Kubernetes API constants and error normalisation. |
 | [`auth`](./auth/README.md) | OIDC login, sessions, and request-principal resolution. |
 | [`agent-runtime-stream`](./agent-runtime-stream/README.md) | Projected-token runtime HTTP/SSE framing. |
-| [`agent-runtime-continuation`](./agent-runtime-continuation/README.md) | Secret-backed encryption for durable model-loop checkpoints. |
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
 | [`history-store`](./history-store/README.md) | KurrentDB-backed append-only stream history. |
 | [`http`](./http/README.md) | Express transport plumbing. |

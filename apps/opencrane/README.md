@@ -28,15 +28,12 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
                   │ runs · policy · audit │
                   └───────────┬───────────┘
                               ▼
-                     agent-controller
-                              │
-                              ▼
-                    claimed warm runtime Pod
+                   KurrentDB HistoryStore
 ```
 
 **In this flow:** [opencrane-ui](../opencrane-ui/README.md) ·
 [channel-proxy](../channel-proxy/README.md) · [agent-controller](../agent-controller/README.md) ·
-[agent-runtime](../agent-runtime/README.md) ·
+[conversation-computer](../conversation-computer/README.md) ·
 [backend capabilities](../../libs/backend/README.md)
 
 Startup proceeds in five visible stages:
@@ -181,9 +178,9 @@ membership, grants, provider configuration, spend, and audit evidence. An `agent
 conversation conditionally owns serial `AgentRun -> ordered RunEvent` streams; direct and group
 messages create no run.
 
-Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. Runtime
-Pods hold only a working model-loop copy. The server encrypts durable continuations in PostgreSQL,
-so a replacement Pod can resume a governed pause without trusting local disk.
+Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. KurrentDB
+holds canonical conversation and computer lifecycle evidence; Agent Sandbox realizes only the
+currently admitted computer generation.
 
 ## Runtime & config
 
@@ -199,15 +196,12 @@ are:
 | `OPENCRANE_HISTORY_STORE_*` | TLS-only KurrentDB endpoint plus read-only CA, username, and password mounts used for checked event history | required |
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
-| `AGENT_RUNTIME_CONTINUATION_KEYRING_PATH` | Read-only mounted keyring used to encrypt and decrypt durable runtime continuations | required |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
-| `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal warm runtime Pod boundary | required |
-| `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed warm runtime Pod boundary | required |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
 | `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |

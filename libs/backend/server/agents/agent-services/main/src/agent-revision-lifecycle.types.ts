@@ -9,7 +9,7 @@ export interface CreateManagedAgentServiceCommand
   readonly siloId: SiloId;
   /** Human-readable service name. */
   readonly name: string;
-  /** Runtime profile name the agent controller turns into a Kubernetes Job (image, limits, identity). Must be `MANAGED_AGENT_RUNTIME_PROFILE_NAME` — the only profile the controller can resolve. */
+  /** Immutable computer profile name resolved by the conversation-computer authority before activation. */
   readonly workloadProfile: string;
   /** Author of the first revision. */
   readonly authoredBy: string;

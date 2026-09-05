@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { AgentSandboxReleaseProfileConfig, ChannelTargetRuntimeConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -183,6 +183,21 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
 }
 
+/** Read the sole image-bound conversation-computer profile admitted by this release. */
+export function _ReadAgentSandboxReleaseProfileConfig(): AgentSandboxReleaseProfileConfig
+{
+	const profileRevisionId = _readRequired("OPENCRANE_COMPUTER_PROFILE_REVISION_ID");
+	if (!/^sha256:[a-f0-9]{64}$/u.test(profileRevisionId))
+		throw new Error("OPENCRANE_COMPUTER_PROFILE_REVISION_ID must be an immutable sha256 image digest");
+	return {
+		profileRevisionId,
+		profileName: _readRequired("OPENCRANE_COMPUTER_PROFILE_NAME"),
+		warmPoolName: _readRequired("OPENCRANE_COMPUTER_WARM_POOL_NAME"),
+		namespace: _readRequired("OPENCRANE_COMPUTER_NAMESPACE"),
+		leaseTtlMilliseconds: _readBoundedSeconds("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", 3_600, 60, 86_400),
+	};
+}
+
 /** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
 function _readWorkflowConfig(): OpenCraneWorkflowConfig
 {
@@ -214,6 +229,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
+		conversationPrivatePayloadKeyringPath: _readRequiredAbsolutePath("CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH"),
 		historyStore: _readHistoryStoreConfig(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		publicPort: Number(process.env.PORT ?? "8080"),
@@ -224,19 +240,13 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorEnabled: process.env.ARTIFACT_PREPROCESSOR_ENABLED === "true",
 			artifactPreprocessorMaximumOutputBytes: _readArtifactPreprocessorBodyLimit(),
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
-			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
 			channelTargets: _readChannelTargetConfig(),
-			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
-			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
-			continuationKeyringPath: _readRequiredAbsolutePath("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH"),
-				managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
 				mcpCompanionClaimLeaseMilliseconds: _readBoundedSeconds("MCP_COMPANION_CLAIM_LEASE_SECONDS", 150, 1, 300),
 				mcpControllerClaimLeaseMilliseconds: _readBoundedSeconds("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
 				mcpExecutorNamespace: process.env.MCP_EXECUTOR_NAMESPACE?.trim(),
 			memoryGatewayTimeoutMilliseconds: _readBoundedSeconds("MEMORY_GATEWAY_TIMEOUT_SECONDS", 30, 1, 300),
 			memoryGatewayTokenPath: _readRequiredAbsolutePath("MEMORY_GATEWAY_TOKEN_PATH"),
 			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
-			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
 			skillAuthoringNamespace: _readRequired("SKILL_AUTHORING_NAMESPACE"),
 				serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
 				siloId: _readRequired("OPENCRANE_SILO_ID"),

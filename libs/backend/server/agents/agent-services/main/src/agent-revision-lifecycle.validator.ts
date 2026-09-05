@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
 import { AgentServiceStates, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentRevisionContent } from "@opencrane/models/agents";
 
 import { AgentServiceLifecycleActions, type ChangeAgentServiceStateCommand, type CreateManagedAgentServiceCommand, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
@@ -48,7 +47,7 @@ const _CreateManagedAgentServiceCommandSchema = z.object({
 	principalId: _NonBlankStringSchema,
 	siloId: _NonBlankStringSchema,
 	name: _NonBlankStringSchema,
-	workloadProfile: z.literal(MANAGED_AGENT_RUNTIME_PROFILE_NAME),
+	workloadProfile: _NonBlankStringSchema,
 	authoredBy: _NonBlankStringSchema,
 	changeMessage: _NonBlankStringSchema,
 	content: _AgentRevisionContentSchema,

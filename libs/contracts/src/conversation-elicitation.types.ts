@@ -204,20 +204,3 @@ export interface SafeToolTechnicalDetails
 	/** Provider-free retry attempt limit. */
 	readonly retryLimit: number;
 }
-
-/** Runtime-proposed request body; the server supplies respondent and authority coordinates. */
-export interface RuntimeElicitationProposal
-{
-	/** Caller-stable key scoped to the exact run attempt. */
-	readonly requestKey: string;
-	/** Server-interpreted purpose strategy. */
-	readonly purpose: ElicitationPurposes;
-	/** Typed participant-facing body. */
-	readonly body: ElicitationBody;
-	/** Digest of the purpose-specific protected payload. */
-	readonly purposePayloadDigest: string;
-	/** Optional protected payload interpreted only by the purpose strategy. */
-	readonly purposePayload?: JsonValue;
-	/** Requested response window in seconds, bounded by the server. */
-	readonly expiresInSeconds: number;
-}

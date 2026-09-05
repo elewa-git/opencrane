@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ReadOrganizationMembershipConfig, _ReadProcessConfig } from "../config";
+import { _ReadAgentSandboxReleaseProfileConfig, _ReadOrganizationMembershipConfig, _ReadProcessConfig } from "../config";
 
 const _temporaryDirectories: string[] = [];
 
@@ -23,9 +23,9 @@ describe("opencrane process config", function _ProcessConfigSuite()
 	beforeEach(function _stubRequiredMemoryGatewayEnvironment()
 	{
 		vi.stubEnv("DATABASE_URL", "postgresql://opencrane:test@localhost:5432/opencrane");
+		vi.stubEnv("CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH", "/var/run/opencrane/conversation-payload/keyring.json");
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
-		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
 		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "opencrane-kurrentdb.default.svc:2113");
 		vi.stubEnv("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH", "/var/run/opencrane/history-store/ca.crt");
 		vi.stubEnv("OPENCRANE_HISTORY_STORE_USERNAME_PATH", "/var/run/opencrane/history-store/username");
@@ -48,8 +48,6 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("PORT", "9080");
 		vi.stubEnv("INTERNAL_PORT", "9081");
 		vi.stubEnv("WATCH_NAMESPACE", "workspace-seeds");
-		vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "personal-runs");
-		vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "managed-runs");
 		vi.stubEnv("ARTIFACT_SCANNER_ENABLED", "true");
 		vi.stubEnv("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", "240");
 		vi.stubEnv("ARTIFACT_SCANNER_NAMESPACE", "artifact-scanner");
@@ -58,8 +56,9 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_SCHEDULER_ENABLED", "true");
 		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "2500");
 
-		expect(_ReadProcessConfig()).toMatchObject({
-			authWatchNamespace: "workspace-seeds",
+			expect(_ReadProcessConfig()).toMatchObject({
+				authWatchNamespace: "workspace-seeds",
+				conversationPrivatePayloadKeyringPath: "/var/run/opencrane/conversation-payload/keyring.json",
 			historyStore: {
 				caCertificatePath: "/var/run/opencrane/history-store/ca.crt",
 				endpoint: "opencrane-kurrentdb.default.svc:2113",
@@ -72,15 +71,12 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				artifactScannerEnabled: true,
 				artifactScannerClaimLeaseMilliseconds: 240_000,
 				artifactScannerNamespace: "artifact-scanner",
-				managedRuntimeNamespace: "managed-runs",
-				continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
 				mcpCompanionClaimLeaseMilliseconds: 25_000,
 				mcpControllerClaimLeaseMilliseconds: 20_000,
 				mcpExecutorNamespace: "mcp-executors",
 				memoryGatewayTimeoutMilliseconds: 30_000,
 				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 				memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
-				personalRuntimeNamespace: "personal-runs",
 				skillAuthoringNamespace: "skill-authoring",
 				siloId: "silo-test",
 			},
@@ -99,6 +95,16 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				workerConcurrency: 2,
 			},
 		});
+	});
+
+	it("reads the release-owned conversation-computer profile", function _ReadComputerProfile()
+	{
+		vi.stubEnv("OPENCRANE_COMPUTER_PROFILE_REVISION_ID", `sha256:${"a".repeat(64)}`);
+		vi.stubEnv("OPENCRANE_COMPUTER_PROFILE_NAME", "developer");
+		vi.stubEnv("OPENCRANE_COMPUTER_WARM_POOL_NAME", "developer-pool");
+		vi.stubEnv("OPENCRANE_COMPUTER_NAMESPACE", "opencrane-testv5");
+		vi.stubEnv("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", "1800");
+		expect(_ReadAgentSandboxReleaseProfileConfig()).toEqual({ profileRevisionId: `sha256:${"a".repeat(64)}`, profileName: "developer", warmPoolName: "developer-pool", namespace: "opencrane-testv5", leaseTtlMilliseconds: 1_800_000 });
 	});
 
 	it("rejects missing or excessive durable workflow settings", function _RejectInvalidWorkflowConfig()

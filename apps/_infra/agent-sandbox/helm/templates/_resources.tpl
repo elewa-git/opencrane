@@ -8,7 +8,7 @@
 {{- if empty $sandbox.runtimeClassName -}}{{- fail "agentSandbox.runtimeClassName is required when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if empty $sandbox.serviceAccountName -}}{{- fail "agentSandbox.serviceAccountName is required when Agent Sandbox is enabled" -}}{{- end -}}
 {{- if not (kindIs "slice" $sandbox.profiles) -}}{{- fail "agentSandbox.profiles must be an array" -}}{{- end -}}
-{{- if eq (len $sandbox.profiles) 0 -}}{{- fail "agentSandbox.profiles must contain at least one profile when Agent Sandbox is enabled" -}}{{- end -}}
+{{- if ne (len $sandbox.profiles) 1 -}}{{- fail "agentSandbox.profiles must contain exactly one 0.11 profile when Agent Sandbox is enabled" -}}{{- end -}}
 {{- $profileNames := list -}}
 {{- $poolNames := list -}}
 {{- $profilePools := dict -}}
@@ -111,13 +111,15 @@ spec:
         (!has(object.metadata.generateName) || object.metadata.generateName == '') &&
         (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
         (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
-        object.metadata.labels.size() == 4 &&
+        object.metadata.labels.size() == 5 &&
         object.metadata.labels.all(k, k in [
           'opencrane.ai/silo-id', 'opencrane.ai/computer-id',
-          'opencrane.ai/computer-generation', 'opencrane.ai/profile']) &&
+          'opencrane.ai/computer-generation', 'opencrane.ai/computer-lease-id',
+          'opencrane.ai/profile']) &&
         object.metadata.labels['opencrane.ai/silo-id'].matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
         object.metadata.labels['opencrane.ai/computer-id'].matches('^computer-[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
         object.metadata.labels['opencrane.ai/computer-generation'].matches('^[1-9][0-9]*$') &&
+        object.metadata.labels['opencrane.ai/computer-lease-id'].matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
         object.metadata.name == object.metadata.labels['opencrane.ai/computer-id'] + '-g' + object.metadata.labels['opencrane.ai/computer-generation'] &&
         object.metadata.labels['opencrane.ai/profile'] in {{ $profileNames | toJson }} &&
         object.metadata.annotations.size() == 1 &&
@@ -125,14 +127,23 @@ spec:
         object.metadata.annotations['opencrane.ai/lease-reason'] in ['activation_requested', 'recovery_requested']
       message: an Agent Sandbox claim must identify one bounded computer lease and contain no caller-controlled metadata
     - expression: >-
-        object.spec.size() == 2 &&
+        object.spec.size() == 3 &&
         object.spec.warmPoolRef.size() == 1 &&
         object.spec.warmPoolRef.name in {{ $poolNames | toJson }} &&
         object.spec.warmPoolRef.name == {{ $profilePools | toJson }}[object.metadata.labels['opencrane.ai/profile']] &&
         object.spec.lifecycle.size() == 2 &&
         object.spec.lifecycle.shutdownPolicy == 'DeleteForeground' &&
-        has(object.spec.lifecycle.shutdownTime)
-      message: an Agent Sandbox claim may select only a release-owned pool and a foreground-deleted lease; it cannot inject environment variables, volumes, or pod metadata
+        has(object.spec.lifecycle.shutdownTime) &&
+        object.spec.additionalPodMetadata.size() == 2 &&
+        object.spec.additionalPodMetadata.labels.size() == 3 &&
+        object.spec.additionalPodMetadata.labels.all(k, k in [
+          'opencrane.ai/computer-id', 'opencrane.ai/computer-generation',
+          'opencrane.ai/computer-lease-id']) &&
+        object.spec.additionalPodMetadata.labels['opencrane.ai/computer-id'] == object.metadata.labels['opencrane.ai/computer-id'] &&
+        object.spec.additionalPodMetadata.labels['opencrane.ai/computer-generation'] == object.metadata.labels['opencrane.ai/computer-generation'] &&
+        object.spec.additionalPodMetadata.labels['opencrane.ai/computer-lease-id'] == object.metadata.labels['opencrane.ai/computer-lease-id'] &&
+        object.spec.additionalPodMetadata.annotations.size() == 0
+      message: an Agent Sandbox claim may select only a release-owned pool, a foreground-deleted lease, and the admitted computer labels copied to its Pod
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -184,7 +195,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: agent-runtime
+        - name: conversation-computer
           image: "{{ $profile.image.repository }}@{{ $profile.image.digest }}"
           imagePullPolicy: {{ $profile.image.pullPolicy }}
           securityContext:
@@ -192,6 +203,33 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          env:
+            - name: OPENCRANE_COMPUTER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['opencrane.ai/computer-id']
+            - name: OPENCRANE_COMPUTER_GENERATION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['opencrane.ai/computer-generation']
+            - name: OPENCRANE_COMPUTER_LEASE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['opencrane.ai/computer-lease-id']
+            - name: OPENCRANE_HISTORY_STORE_ENDPOINT
+              value: {{ printf "%s-kurrentdb.%s.svc:%v" (include "opencrane.fullname" $) $.Release.Namespace $.Values.historyStore.kurrentdb.service.port | quote }}
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
           resources:
             {{- toYaml $profile.resources | nindent 12 }}
 ---

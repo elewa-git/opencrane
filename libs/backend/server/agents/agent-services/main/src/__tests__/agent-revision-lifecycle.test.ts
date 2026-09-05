@@ -150,10 +150,10 @@ describe("managed agent revision lifecycle", function _suite()
 		expect(withPersona).toEqual({ outcome: "denied", reason: "invalid_command" });
 	});
 
-	it("rejects a workload profile the deployed controller cannot resolve", async function _unknownProfile()
+	it("rejects a blank workload profile before release-profile resolution", async function _BlankProfile()
 	{
 		const repository = new _Repository();
-		const created = await __CreateManagedAgentService(repository, { principalId: "admin-1", siloId: _SILO, name: "Reporter", workloadProfile: "reports-v2", authoredBy: "admin-1", changeMessage: "initial", content: _content() }, _NOW);
+		const created = await __CreateManagedAgentService(repository, { principalId: "admin-1", siloId: _SILO, name: "Reporter", workloadProfile: " ", authoredBy: "admin-1", changeMessage: "initial", content: _content() }, _NOW);
 		expect(created).toEqual({ outcome: "denied", reason: "invalid_command" });
 		expect(repository.services.size).toBe(0);
 	});

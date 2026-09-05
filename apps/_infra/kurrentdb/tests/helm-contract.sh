@@ -55,6 +55,15 @@ grep -Fq 'eventType": "opencrane-history-default-acl"' <<<"$rendered"
 grep -Fq '"$userStreamAcl"' <<<"$rendered"
 grep -Fq '"$d": "$admins"' <<<"$rendered"
 grep -Fq 'jq -e' <<<"$rendered"
+grep -Fq 'activation_stream="computer-activations-opencrane-testv5"' <<<"$rendered"
+grep -Fq 'activation_group="conversation-computer-activation"' <<<"$rendered"
+grep -Fq 'subscription_url="$endpoint/subscriptions/$activation_stream/$activation_group"' <<<"$rendered"
+grep -Fq -- '--user "admin:$admin_password" --request PUT' <<<"$rendered"
+grep -Fq 'maxSubscriberCount: 1' <<<"$rendered"
+if grep -F -- '--user "$history_username:$history_password" --request PUT' <<<"$rendered"; then
+  echo "HistoryStore service credentials gained persistent-subscription administration" >&2
+  exit 1
+fi
 grep -Fq 'app.kubernetes.io/component: opencrane-server' <<<"$rendered"
 grep -Fq 'app.kubernetes.io/component: kurrentdb-bootstrap' <<<"$rendered"
 grep -Fq 'egress: []' <<<"$rendered"

@@ -15,6 +15,7 @@
 {{- $fullName := include "opencrane.fullname" . -}}
 {{- $serviceName := printf "%s-kurrentdb" $fullName -}}
 {{- $bootstrapName := printf "%s-kurrentdb-bootstrap" $fullName -}}
+{{- $siloId := .Values.clustertenantManager.firstUser.clusterTenant | default .Release.Name -}}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -155,6 +156,47 @@ data:
       exit 1
     fi
     rm -f "$existing_settings"
+
+    # The administrator creates the durable activation queue once. The service identity can consume
+    # the group afterwards through the ordinary stream ACL but never receives administrator rights.
+    activation_stream="computer-activations-{{ $siloId }}"
+    activation_group="conversation-computer-activation"
+    subscription_url="$endpoint/subscriptions/$activation_stream/$activation_group"
+    subscription_body="$(mktemp)"
+    subscription_status="$(curl --silent --show-error --output "$subscription_body" --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" "$subscription_url")"
+    case "$subscription_status" in
+      200)
+        ;;
+      404)
+        jq -n '{
+          resolveLinktos: false,
+          startFrom: 0,
+          messageTimeoutMilliseconds: 30000,
+          extraStatistics: false,
+          maxRetryCount: 10,
+          liveBufferSize: 500,
+          bufferSize: 500,
+          readBatchSize: 20,
+          checkPointAfterMilliseconds: 1000,
+          minCheckPointCount: 10,
+          maxCheckPointCount: 1000,
+          maxSubscriberCount: 1,
+          namedConsumerStrategy: "RoundRobin"
+        }' > "$subscription_body"
+        create_subscription_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" --request PUT --header 'Content-Type: application/json' --data-binary "@$subscription_body" "$subscription_url")"
+        if [ "$create_subscription_status" != "201" ] && [ "$create_subscription_status" != "200" ]; then
+          rm -f "$subscription_body"
+          echo "KurrentDB refused creation of the conversation-computer activation subscription (HTTP $create_subscription_status)." >&2
+          exit 1
+        fi
+        ;;
+      *)
+        rm -f "$subscription_body"
+        echo "KurrentDB did not return an expected activation-subscription status (HTTP $subscription_status)." >&2
+        exit 1
+        ;;
+    esac
+    rm -f "$subscription_body"
 
     service_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "$history_username:$history_password" "$endpoint/streams/opencrane-history-bootstrap-probe")"
     if [ "$service_status" != "200" ] && [ "$service_status" != "404" ]; then

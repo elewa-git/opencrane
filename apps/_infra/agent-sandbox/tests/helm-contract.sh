@@ -16,7 +16,7 @@ VALUES=(
   --set-string agentSandbox.serviceAccountName=agent-sandbox-runtime
   --set-string 'agentSandbox.profiles[0].name=developer'
   --set-string 'agentSandbox.profiles[0].poolName=developer-pool'
-  --set-string 'agentSandbox.profiles[0].image.repository=registry.invalid/opencrane-agent-runtime'
+  --set-string 'agentSandbox.profiles[0].image.repository=registry.invalid/opencrane-conversation-computer'
   --set-string 'agentSandbox.profiles[0].image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   --set-string 'agentSandbox.profiles[0].image.pullPolicy=IfNotPresent'
   --set-string 'agentSandbox.profiles[0].resources.requests.cpu=100m'
@@ -30,10 +30,19 @@ pool="$(awk 'BEGIN { RS="---" } /kind: SandboxWarmPool/ && /name: developer-pool
 role="$(awk 'BEGIN { RS="---" } /kind: Role/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
 policy="$(awk 'BEGIN { RS="---" } /kind: ValidatingAdmissionPolicy/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
 binding="$(awk 'BEGIN { RS="---" } /kind: ValidatingAdmissionPolicyBinding/ && /name: opencrane-testv5-agent-sandbox-claims/ { print }' <<<"$rendered")"
+server="$(awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-testv5-opencrane-server/ { print }' <<<"$rendered")"
 
-[[ -n "$template" && -n "$pool" && -n "$role" && -n "$policy" && -n "$binding" ]]
+[[ -n "$template" && -n "$pool" && -n "$role" && -n "$policy" && -n "$binding" && -n "$server" ]]
 grep -Fq 'apiVersion: extensions.agents.x-k8s.io/v1beta1' <<<"$template"
-grep -Fq 'image: "registry.invalid/opencrane-agent-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' <<<"$template"
+grep -Fq 'image: "registry.invalid/opencrane-conversation-computer@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' <<<"$template"
+grep -Fq '        - name: conversation-computer' <<<"$template"
+grep -Fq '            - name: OPENCRANE_COMPUTER_ID' <<<"$template"
+grep -Fq "fieldPath: metadata.labels['opencrane.ai/computer-id']" <<<"$template"
+grep -Fq '            - name: OPENCRANE_COMPUTER_GENERATION' <<<"$template"
+grep -Fq '            - name: OPENCRANE_COMPUTER_LEASE_ID' <<<"$template"
+grep -Fq '            - name: OPENCRANE_HISTORY_STORE_ENDPOINT' <<<"$template"
+grep -Fq '              path: /readyz' <<<"$template"
+grep -Fq '              path: /healthz' <<<"$template"
 grep -Fq 'runtimeClassName: gvisor' <<<"$template"
 grep -Fq 'serviceAccountName: agent-sandbox-runtime' <<<"$template"
 grep -Fq 'automountServiceAccountToken: false' <<<"$template"
@@ -57,14 +66,26 @@ grep -Fq 'resources: ["sandboxclaims"]' <<<"$policy"
 grep -Fq 'excludeResourceRules:' <<<"$policy"
 grep -Fq 'resources: ["sandboxclaims/status"]' <<<"$policy"
 grep -Fq "request.operation == 'CREATE'" <<<"$policy"
-grep -Fq "object.metadata.labels.size() == 4" <<<"$policy"
+grep -Fq "object.metadata.labels.size() == 5" <<<"$policy"
+grep -Fq "'opencrane.ai/computer-lease-id'" <<<"$policy"
 grep -Fq "object.metadata.annotations.size() == 1" <<<"$policy"
 grep -Fq "['activation_requested', 'recovery_requested']" <<<"$policy"
-grep -Fq 'object.spec.size() == 2' <<<"$policy"
+grep -Fq 'object.spec.size() == 3' <<<"$policy"
+grep -Fq 'object.spec.additionalPodMetadata.labels.size() == 3' <<<"$policy"
+grep -Fq "object.spec.additionalPodMetadata.labels['opencrane.ai/computer-id'] == object.metadata.labels['opencrane.ai/computer-id']" <<<"$policy"
+grep -Fq "object.spec.additionalPodMetadata.labels['opencrane.ai/computer-generation'] == object.metadata.labels['opencrane.ai/computer-generation']" <<<"$policy"
+grep -Fq "object.spec.additionalPodMetadata.labels['opencrane.ai/computer-lease-id'] == object.metadata.labels['opencrane.ai/computer-lease-id']" <<<"$policy"
+grep -Fq 'object.spec.additionalPodMetadata.annotations.size() == 0' <<<"$policy"
 grep -Fq 'object.spec.warmPoolRef.name in ["developer-pool"]' <<<"$policy"
 grep -Fq "object.spec.warmPoolRef.name == {\"developer\":\"developer-pool\"}[object.metadata.labels['opencrane.ai/profile']]" <<<"$policy"
 grep -Fq 'envVarsInjectionPolicy: Disallowed' <<<"$template"
 grep -Fq 'validationActions: [Deny]' <<<"$binding"
+grep -Fq '            - name: OPENCRANE_COMPUTER_PROFILE_REVISION_ID' <<<"$server"
+grep -Fq '              value: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' <<<"$server"
+grep -Fq '            - name: OPENCRANE_COMPUTER_PROFILE_NAME' <<<"$server"
+grep -Fq '            - name: OPENCRANE_COMPUTER_WARM_POOL_NAME' <<<"$server"
+grep -Fq '            - name: OPENCRANE_COMPUTER_NAMESPACE' <<<"$server"
+grep -Fq '            - name: OPENCRANE_COMPUTER_LEASE_TTL_SECONDS' <<<"$server"
 
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]:0:2}" --set agentSandbox.enabled=true "${VALUES[@]:4}" >/dev/null 2>&1; then
   echo "Agent Sandbox rendered without a namespace" >&2

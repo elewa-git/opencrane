@@ -70,8 +70,6 @@
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-artifact-scanner",
         "Deployment/opencrane-agent-controller",
-        "Deployment/opencrane-personal-warm",
-        "Deployment/opencrane-managed-warm",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm"
       ]
@@ -218,24 +216,6 @@
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentController.resources\"" }
     },
     {
-      "id": "agent-runtime",
-      "podClass": "Deployment/agent-runtime-personal-warm",
-      "renderedPodClass": "Deployment/opencrane-personal-warm",
-      "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
-      "owner": "apps/agent-runtime",
-      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_warm-runtime.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
-      "composition": { "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "include \"opencrane.agentController.warmRuntimeResources\"" }
-    },
-    {
-      "id": "managed-agent-runtime",
-      "podClass": "Deployment/agent-runtime-managed-warm",
-      "renderedPodClass": "Deployment/opencrane-managed-warm",
-      "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
-      "owner": "apps/agent-runtime",
-      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_warm-runtime.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
-      "composition": { "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "include \"opencrane.agentController.warmRuntimeResources\"" }
-    },
-    {
       "id": "mcp-executor",
       "podClass": "Job/mcp-executor-invocation",
       "image": "registry-imported OCI digest plus the pinned OpenCrane MCP companion",
@@ -288,8 +268,8 @@
     {
       "id": "agent-sandbox",
       "podClass": "Pod/AgentSandbox-profile",
-      "image": "profile-configured immutable OCI digest",
-      "owner": "apps/_infra/agent-sandbox",
+      "image": "ghcr.io/elewa-git/opencrane-conversation-computer@sha256:<release-digest>",
+      "owner": "apps/conversation-computer",
       "source": { "type": "file", "path": "apps/_infra/agent-sandbox/helm/templates/_resources.tpl", "anchor": "kind: SandboxTemplate" },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentSandbox.resources\"" }
     },

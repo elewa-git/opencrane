@@ -22,10 +22,14 @@ install that controller or create Pods itself.
 **In this flow:** [deploy-k8s](../deploy-k8s/README.md) composes the resources; the external Agent
 Sandbox controller reconciles the custom resources into Pods.
 
-The template fixes the image digest, RuntimeClass, service account, resources, security context and
-Pod metadata. The claim policy permits only the OpenCrane server identity to create the fixed v1beta1
-claim shape, and forbids claim environment variables, volume claims, additional Pod metadata and every
-spec update. A mistake therefore denies a computer activation instead of widening its Pod profile.
+The template fixes the conversation-computer image digest, RuntimeClass, service account, resources,
+security context and static Pod metadata. It admits one exact copy of the server-issued computer id,
+lease id and generation into `additionalPodMetadata`, then projects those Pod labels and fixes the
+KurrentDB endpoint before the process starts. The claim policy permits
+only the OpenCrane server identity to create the fixed v1beta1
+claim shape, forbids claim environment variables and volume claims, limits dynamic Pod metadata to
+those three values, and denies every spec update. A mistake therefore denies a computer activation
+instead of widening its Pod profile.
 
 ## Public surface
 
