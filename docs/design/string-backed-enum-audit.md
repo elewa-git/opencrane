@@ -76,12 +76,11 @@ personal/managed `AgentServiceKind` product distinction.
 These public model contracts drive transition tables and backend lifecycle control flow. Generated
 Prisma enums remain adapter-side and map explicitly to model enums.
 
-### Runtime protocol kinds
+### Conversation computer protocol kinds
 
-- Owner: `libs/contracts/src/agent-runtime-protocol.types.ts`
-- Authority consumers: runtime protocol and Prisma runtime dispatch authorities
-- Proposed enums: `RuntimeCommandKind`, `RuntimeCandidateKind`, and
-  `RuntimeCancellationReason`; reuse model-owned `RunEventType` for event dispatch
+- Owner: `libs/contracts/src/conversation-computer.types.ts`
+- Authority consumers: conversation computer history, activation, lifecycle, and private turn authorities
+- Stable enums: `ConversationComputerStates` and `ComputerLeaseStates`
 
 These are authenticated workload-protocol discriminants. Validators and dispatch branches must use
 the same vocabulary.

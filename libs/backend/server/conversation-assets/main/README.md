@@ -12,7 +12,7 @@ readiness inside ordinary-chat and agent-session message transactions.
 
 ```text
  file selection -> upload reservation -> quarantine + scan -> ready -> message attachment
- agent runtime -> output ticket -> quarantine + scan -> ready agent output
+ conversation computer -> output ticket -> quarantine + scan -> ready agent output
  active participant -> ready asset -> private byte broker -> preview or download
 ```
 

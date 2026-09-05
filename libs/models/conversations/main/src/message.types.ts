@@ -10,7 +10,7 @@ export enum MessageRoles
 {
 	/** Participant-authored input with a separately bound user identifier. */
 	User = "user",
-	/** Agent-runtime output with a separately bound run identifier. */
+	/** Conversation-computer output with a separately bound run identifier. */
 	Assistant = "assistant",
 	/** Governed tool result projected into the conversation. */
 	Tool = "tool",

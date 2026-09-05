@@ -5,7 +5,7 @@
 ## What it owns
 
 This package is part of the **shared execution flow** used by both personal and managed agents.
-Before an agent runtime executes a run, the platform freezes *everything* that run is allowed to see
+Before a conversation computer executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
 **`RunInputSnapshot`**: which messages, which persona, which memory query coordinates, which tools and budgets,
 and which evidence-bound execution subject. This package owns the **assembly** of that snapshot: it gathers each

@@ -45,8 +45,8 @@ verified identity provenance; it carries only immutable coordinates and canonica
 provider credentials or mutable source objects. Its `mcpTools` list records immutable MCP tool
 revision identifiers plus each saved name, description, exact input JSON Schema, and canonical
 schema digest. Registry and provider credentials remain entirely behind server-owned execution
-boundaries and never enter the snapshot or agent runtime. The compiled model
-route also freezes the model registry's generated-output allowlist; the runtime
+boundaries and never enter the snapshot or conversation computer. The compiled model
+route also freezes the model registry's generated-output allowlist; the executor
 cannot infer image-generation authority from a prompt or provider response. Identity is
 explicitly tagged: a user run
 pins a human's signed fleet membership, while a managed run pins the derived service principal, its

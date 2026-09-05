@@ -27,7 +27,7 @@ It also holds per-tenant model allowlists and the maths for evaluating candidate
  └────────────────────────────────────┘
         │  the model id for this request  (+ routing defaults API)
         ▼
- agent runtime calls LiteLLM with the resolved model
+ conversation computer calls LiteLLM with the resolved model
 ```
 
 **In this flow:** [providers](../../providers/main/README.md) *(registers keys + models)* · LiteLLM [(vendored app)](../../../../../../apps/_infra/litellm/README.md)
