@@ -20,7 +20,7 @@ import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/serve
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
 import { _CreateConversationHistoryComposition } from "./conversation-history-composition";
-import { ConversationComputerHistory, PrismaConversationMetadataUnitOfWork } from "@opencrane/backend/server/conversations";
+import { _ConversationComputerReviewAuthority, _CreateConversationComputerReviewRouter, ConversationComputerHistory, PrismaConversationMetadataUnitOfWork } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
@@ -36,8 +36,6 @@ import { _CreateUserOnboardingComposition } from "./user-onboarding-composition"
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
-import { _CreateConversationComputerReviewRouter } from "./conversation-computer-review.router";
-import { _ConversationComputerReviewAuthority } from "./conversation-computer-review-authority";
 
 /**
  * Register the authenticated product API from functional route lists.

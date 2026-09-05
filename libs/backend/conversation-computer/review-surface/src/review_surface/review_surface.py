@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
-from src.browser_surface import browser_metadata, capture_preview, open_browser_page, start_browser
+from review_surface.browser_surface import browser_metadata, capture_preview, open_browser_page, start_browser
 
 _MAX_BODY_BYTES: Final = 64 * 1024
 _MAX_OUTPUT_BYTES: Final = 1024 * 1024

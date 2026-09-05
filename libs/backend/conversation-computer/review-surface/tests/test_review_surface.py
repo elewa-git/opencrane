@@ -13,8 +13,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from src.browser_surface import capture_preview, open_browser_page, start_browser
-from src.review_surface import ReviewSurfaceConfig, ReviewSurfaceServer, _git_diff, _run_command, _workspace_path
+from review_surface.browser_surface import capture_preview, open_browser_page, start_browser
+from review_surface.review_surface import ReviewSurfaceConfig, ReviewSurfaceServer, _git_diff, _run_command, _workspace_path
 
 
 class _PreviewHandler(BaseHTTPRequestHandler):
@@ -133,7 +133,7 @@ class ReviewSurfaceTest(unittest.TestCase):
     def test_starts_chromium_with_loopback_only_cdp(self) -> None:
         """Keep raw DevTools unreachable from the Sandbox Service and public proxy."""
         with patch.dict(os.environ, {"OPENCRANE_WORKSPACE_PATH": str(self.workspace)}):
-            with patch("src.browser_surface.subprocess.Popen") as launch:
+            with patch("review_surface.browser_surface.subprocess.Popen") as launch:
                 start_browser()
         argv = launch.call_args.args[0]
         self.assertIn("--remote-debugging-address=127.0.0.1", argv)
@@ -144,7 +144,7 @@ class ReviewSurfaceTest(unittest.TestCase):
         """Prevent browser target creation from turning CDP into an arbitrary URL fetcher."""
         response = unittest.mock.MagicMock()
         response.__enter__.return_value.read.return_value = b'{"id":"target-1"}'
-        with patch("src.browser_surface.urllib.request.urlopen", return_value=response) as open_url:
+        with patch("review_surface.browser_surface.urllib.request.urlopen", return_value=response) as open_url:
             body = open_browser_page(4173, "index.html", frozenset({4173}))
         self.assertEqual(body, b'{"id":"target-1"}')
         request = open_url.call_args.args[0]
@@ -155,7 +155,7 @@ class ReviewSurfaceTest(unittest.TestCase):
 
     def test_image_pins_chromium_without_exposing_cdp(self) -> None:
         """Keep the qualified browser version fixed while raw DevTools stays inside the container."""
-        dockerfile = (Path(__file__).parents[1] / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+        dockerfile = (Path(__file__).parents[5] / "apps" / "conversation-computer" / "deploy" / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn("chromium=142.0.7444.59-r0", dockerfile)
         self.assertNotIn("EXPOSE 9222", dockerfile)
 
@@ -166,7 +166,7 @@ class ReviewSurfaceTest(unittest.TestCase):
             Path(screenshot_argument.removeprefix("--screenshot=")).write_bytes(b"png")
             return unittest.mock.MagicMock(returncode=0)
 
-        with patch("src.browser_surface.subprocess.run", side_effect=_Render) as render:
+        with patch("review_surface.browser_surface.subprocess.run", side_effect=_Render) as render:
             body = capture_preview(4173, "page", 1280, 720, frozenset({4173}))
         self.assertEqual(body, b"png")
         argv = render.call_args.args[0]

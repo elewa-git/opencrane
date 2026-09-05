@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
-from src.review_surface import start_review_surface
+from review_surface.review_surface import start_review_surface
 
 _HEALTH_PATH: Final = "/healthz"
 _READINESS_PATH: Final = "/readyz"

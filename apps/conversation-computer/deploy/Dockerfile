@@ -6,6 +6,7 @@ RUN apk add --no-cache chromium=142.0.7444.59-r0 git nodejs npm \
 
 WORKDIR /opt/opencrane
 COPY apps/conversation-computer/src ./src
+COPY libs/backend/conversation-computer/review-surface/src/review_surface ./review_surface
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

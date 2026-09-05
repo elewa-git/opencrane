@@ -1,0 +1,12 @@
+{
+  "name": "backend-conversation-computer-review-surface",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/conversation-computer/review-surface/src",
+  "tags": ["type:lib", "layer:backend", "scope:conversation-computer"],
+  "targets": {
+    "build": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m py_compile src/review_surface/*.py", "cwd": "libs/backend/conversation-computer/review-surface" } },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m py_compile src/review_surface/*.py", "cwd": "libs/backend/conversation-computer/review-surface" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "PYTHONPATH=src python3 -B -m unittest discover -s tests", "cwd": "libs/backend/conversation-computer/review-surface" } }
+  }
+}

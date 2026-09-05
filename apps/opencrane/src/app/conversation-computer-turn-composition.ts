@@ -5,7 +5,7 @@ import type { FrozenConversationComputerTurn } from "@opencrane/backend/server/c
 import { _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
 import { AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { _CreateConversationComputerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
+import { _CreateConversationComputerTokenReviewer, type RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { AgentSandboxReleaseProfileConfig } from "./config.types";
 import { _ReadConversationPrivatePayloadKeyring } from "./conversation-history-composition";
@@ -18,7 +18,7 @@ export function _CreateConversationComputerTurnComposition(prisma: PrismaClient,
 	const candidates = new ActiveConversationComputerTurnCandidateResolver(unitOfWork, new ConversationComputerHistory(history), new AgentSandboxPodBindingAdapter(coreApi, customApi), unitOfWork);
 	const credentials = new PrismaConversationComputerCredentialUnitOfWork(prisma, cipher, { issue: _IssueAttemptLiteLlmKey, revoke: _RevokeAttemptLiteLlmKey }, profile.namespace);
 	const turnStore = new KurrentConversationComputerTurnStore(history);
-	const writers = { create: function _CreateWriter(turn: FrozenConversationComputerTurn, workload: import("@opencrane/backend/server/infra/workload-identity").RuntimeWorkloadIdentity)
+	const writers = { create: function _CreateWriter(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity)
 	{
 		return new BoundConversationWriter(history, turn.binding, { now: function _Now() { return new Date(); } }, { assertMayAppend: async function _RequirePendingTurn()
 		{

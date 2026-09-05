@@ -42,3 +42,6 @@ export type { ConversationCallerResolver, ConversationMessageAdmissionResult, Co
 export { PrismaConversationMetadataUnitOfWork } from "./prisma-conversation-metadata";
 export { _CreateConversationMetadataRouter } from "./conversation-metadata.router";
 export type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, ConversationReviewCoordinates } from "./conversation-metadata.types";
+export { _ConversationComputerReviewAuthority } from "./review/conversation-computer-review-authority";
+export { _CreateConversationComputerReviewRouter } from "./review/conversation-computer-review.router";
+export type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewPrincipalResolver, ConversationComputerReviewRoute, ConversationComputerReviewRouterOptions } from "./review/conversation-computer-review.types";

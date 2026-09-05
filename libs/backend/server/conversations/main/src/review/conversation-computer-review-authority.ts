@@ -1,4 +1,5 @@
-import { ConversationComputerHistory, type ConversationMetadataAuthority } from "@opencrane/backend/server/conversations";
+import { ConversationComputerHistory } from "../conversation-computers";
+import type { ConversationMetadataAuthority } from "../conversation-metadata.types";
 
 import type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewRoute } from "./conversation-computer-review.types";
 
