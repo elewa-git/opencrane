@@ -3,7 +3,12 @@ import type { ConversationComputer, ConversationEntry } from "@opencrane/contrac
 import type { ConversationPrivatePayloadCipher } from "./conversation-private-payload.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 
-/** Stable outcomes returned by participant message admission. */
+/**
+ * Reports whether participant message admission created history or recognized the same command.
+ *
+ * The HTTP boundary returns both outcomes as success. `Idempotent` means the existing immutable
+ * position is the result of this retry; it does not authorize a new activation or append.
+ */
 export enum ConversationMessageAdmissionOutcomes
 {
 	/** A new encrypted payload and immutable history entry were accepted. */
@@ -12,7 +17,13 @@ export enum ConversationMessageAdmissionOutcomes
 	Idempotent = "idempotent",
 }
 
-/** Closed participant-selected activation intent for one text message. */
+/**
+ * Selects the agent-work transition committed with one participant text message.
+ *
+ * The server validates these closed wire values before admission. `Start` requests work after the
+ * message commits, while `Interrupt` first requests that current work stop; neither value grants
+ * permission without the participant and computer checks in the authority.
+ */
 export enum ConversationMessageActivations
 {
 	/** Records a message without requesting agent work. */

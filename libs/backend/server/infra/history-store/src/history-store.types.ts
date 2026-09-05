@@ -1,4 +1,10 @@
-/** Selects the current stream condition that an append must prove before it can commit. */
+/**
+ * Selects the closed stream condition that a HistoryStore append may require.
+ *
+ * `NoStream` distinguishes creation from an append to an observed revision. Callers must not turn an
+ * unknown value into a revision because the expected head is the fence that prevents stale writers
+ * from extending a stream.
+ */
 export enum HistoryExpectedRevisions
 {
 	/** Requires a stream that has not yet received an event. */
@@ -113,7 +119,16 @@ export interface HistoryPersistentRecordedEvent extends HistoryRecordedEvent
 	readonly retryCount: number;
 }
 
-/** Gives callers a narrow history port without PostgreSQL or global-ledger fallback. */
+/**
+ * Stores ordered conversation and computer evidence without deciding product authorization.
+ *
+ * Authorities validate access and event coordinates before calling this port. Implementations must
+ * preserve expected-revision conflicts and at-least-once subscription outcomes so callers can retry
+ * idempotently instead of treating KurrentDB delivery as exactly once.
+ *
+ * Called by: conversation history, agent-session creation, conversation-computer lifecycle, and
+ * conversation-computer turn authorities composed by the OpenCrane server.
+ */
 export interface HistoryStore
 {
 	/** Reads events in one stream from the requested revision. */
