@@ -4,7 +4,7 @@ description: >
   Weekly read-only exposure sweep of the review-plane attack surface: the identity-aware
   gateway routes and every path that could leak raw CDP (browser control), VNC/noVNC
   (desktop), PTY (shell), interpreter, or preview ports out of a conversation computer or
-  warm runtime. Checks Helm charts, NetworkPolicies, route/token code, and (when a
+  Agent Sandbox. Checks Helm charts, NetworkPolicies, route/token code, and (when a
   read-only kubectl context is available) the live cluster. Reports findings
   severity-first with exact file/line or resource evidence. Never modifies code or the
   cluster; the caller files issues for findings.
@@ -18,9 +18,8 @@ pod reach an agent computer's browser control (CDP), desktop stream (VNC/noVNC),
 (PTY/websockify), interpreter (Jupyter), or app preview without passing the identity-aware
 gateway's per-surface authorization.
 
-The #759 gateway and ConversationComputer may not be fully built yet. Sweep whatever
-exists today (warm runtime, MCP executor, previews, sockets) with the same rules, and
-widen automatically as gateway/computer code lands — search by pattern, never by a fixed
+Sweep the conversation computer, Agent Sandbox, MCP executor, previews, and sockets with the same
+rules, and widen automatically as gateway/computer code lands — search by pattern, never by a fixed
 file list.
 
 ## Sensitive port and protocol list

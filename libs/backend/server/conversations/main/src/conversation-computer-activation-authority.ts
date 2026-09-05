@@ -32,21 +32,23 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		let current = await this.computers.load(coordinates);
 		if (current === null || current.computer.state === ConversationComputerStates.Retired)
 			return "denied";
-		if (current.computer.state === ConversationComputerStates.Warm && current.lease?.state === ComputerLeaseStates.Active)
+		const now = new Date();
+		const lease = current.lease;
+		const currentActiveLease = _IsCurrentActiveLease(current.computer.leaseGeneration, lease, command.generation, now);
+		if (current.computer.state === ConversationComputerStates.Warm && currentActiveLease)
 		{
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, current.lease));
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, lease));
 			return "idempotent";
 		}
-		if (current.computer.state === ConversationComputerStates.Cooling && current.lease?.state === ComputerLeaseStates.Active && current.computer.leaseGeneration === command.generation)
+		if (current.computer.state === ConversationComputerStates.Cooling && currentActiveLease)
 		{
-			const reactivatedAt = new Date().toISOString();
-			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${current.lease.id}:${command.generation}:${current.revision}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease: current.lease });
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, current.lease));
+			const reactivatedAt = now.toISOString();
+			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${lease.id}:${command.generation}:${current.revision}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease });
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, lease));
 			return "activated";
 		}
 
 		// 2. Persist the generation reservation before creating an external claim, so a retry has one owner.
-		const now = new Date();
 		const expiresAt = new Date(now.getTime() + this.profile.leaseTtlMilliseconds).toISOString();
 		const initialClaim = current.computer.state === ConversationComputerStates.Cold && current.lease === null && current.computer.leaseGeneration === command.generation;
 		const recoveryClaim = (current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.Cooling) && current.lease?.state === ComputerLeaseStates.Released && current.computer.leaseGeneration + 1 === command.generation;
@@ -70,6 +72,12 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, activeLease));
 		return "activated";
 	}
+}
+
+/** Accept only the requested, unexpired active generation for replay or reactivation. */
+function _IsCurrentActiveLease(currentGeneration: number, lease: ComputerLease | null, requestedGeneration: number, now: Date): lease is ComputerLease
+{
+	return currentGeneration === requestedGeneration && lease?.state === ComputerLeaseStates.Active && lease.generation === requestedGeneration && Date.parse(lease.expiresAt) > now.getTime();
 }
 
 /** Convert canonical active history into the exact rebuildable transaction fence. */

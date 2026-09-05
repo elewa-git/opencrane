@@ -48,6 +48,28 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		append.mockRestore();
 	});
 
+	it("denies expired active lease redelivery without republishing it", async function _RejectsExpiredRedelivery()
+	{
+		const { authority, projections } = _Authority();
+		const lease = { schemaVersion: 1 as const, id: "lease-1", computerId: "computer-one", generation: 1, sandboxClaimId: "computer-one-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5-computers.svc.cluster.local", state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T00:00:01.000Z", expiresAt: "2026-09-05T00:01:01.000Z", releasedAt: null };
+		const computer = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", state: ConversationComputerStates.Warm, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z" };
+		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 2n, computer, lease });
+		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("denied");
+		expect(projections.publishActiveLease).not.toHaveBeenCalled();
+		load.mockRestore();
+	});
+
+	it("denies wrong-generation active lease redelivery", async function _RejectsWrongGenerationRedelivery()
+	{
+		const { authority, projections } = _Authority();
+		const lease = { schemaVersion: 1 as const, id: "lease-1", computerId: "computer-one", generation: 1, sandboxClaimId: "computer-one-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5-computers.svc.cluster.local", state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T00:00:01.000Z", expiresAt: "2099-09-05T00:01:01.000Z", releasedAt: null };
+		const computer = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", state: ConversationComputerStates.Warm, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z" };
+		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 2n, computer, lease });
+		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 2 })).resolves.toBe("denied");
+		expect(projections.publishActiveLease).not.toHaveBeenCalled();
+		load.mockRestore();
+	});
+
 	it("uses a new event identity for every cooling cycle on the same lease", async function _ReactivatesRepeatedly()
 	{
 		const { authority } = _Authority();

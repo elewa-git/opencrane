@@ -221,9 +221,8 @@ export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: R
  * match the command, the transaction is rolled back and the prepared rows never commit — the caller
  * still gets the refusal as an ordinary `denied` result rather than an exception.
  *
- * Called by: `_admitAgentThreadMessage` in
- * server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts, passed through
- * `admitFirstAgentThreadRun` and `__AssembleRunInputSnapshot`. Ordering and rollback are pinned by
+ * Called by: admission authorities that pass preparation through `__AssembleRunInputSnapshot`.
+ * Ordering and rollback are pinned by
  * `prisma-run-admission-repository.test.ts` ("prepares child authority before compilation", "rolls
  * back prepared child authority when snapshot compilation denies", "does not replay preparation for
  * an existing exact run").

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import { inlineConditionalDensity } from "../inline-conditional-check.mjs";
@@ -24,4 +25,11 @@ test("ignores optional chaining, nullish coalescing, strings, and comments", fun
 {
 	const source = "const value = object?.field ?? \"why? really?\"; // ? ?\n";
 	assert.deepEqual(inlineConditionalDensity("questions.ts", source), []);
+});
+
+test("ignores a path deleted after the style manifest was collected", function _IgnoresDeletedPath()
+{
+	const result = spawnSync(process.execPath, [new URL("../inline-conditional-check.mjs", import.meta.url).pathname, "/tmp/opencrane-deleted-style-input.ts"], { encoding: "utf8" });
+	assert.equal(result.status, 0);
+	assert.equal(result.stderr, "");
 });

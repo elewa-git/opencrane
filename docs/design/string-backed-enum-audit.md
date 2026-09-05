@@ -56,8 +56,7 @@ signed fleet membership proves active silo admission without carrying product sc
 
 ### Runtime execution identity kind
 
-- Duplicates: `libs/contracts/src/runtime-assignment.types.ts`,
-  `libs/contracts/src/run-input-snapshot.types.ts`, and
+- Owner: `libs/contracts/src/run-input-snapshot.types.ts` and
   `libs/backend/agents/execution/runs/main/src/run-admission.types.ts`
 - Authority consumers: execution input assembly, run admission, and runtime dispatch
 - Proposed enum: `RuntimeExecutionIdentityKind` in `@opencrane/contracts`

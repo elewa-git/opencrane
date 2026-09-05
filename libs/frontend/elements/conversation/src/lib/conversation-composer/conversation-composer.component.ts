@@ -19,8 +19,7 @@ import { ConversationComposerStates } from "../conversation.types";
  * the page footer instead, which is exactly why the composer cannot see the attachments and needs
  * {@link allowEmptySubmission} to be told they exist.
  *
- * Called by: {@link ConversationWorkspacePageComponent} template (workspace message box) and
- * {@link AgentThreadPageComponent} template (Agent-thread follow-up box).
+ * Called by: {@link ConversationWorkspacePageComponent} template.
  * @see ConversationComposerStates for the three states a parent may put it in.
  */
 @Component({ selector: "wo-conversation-composer", standalone: true, imports: [ButtonModule, TextareaModule], templateUrl: "./conversation-composer.component.html", styleUrl: "./conversation-composer.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

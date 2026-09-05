@@ -122,7 +122,7 @@ back to the runtime. Later results and steering requests remain independently co
 concurrent input cannot supersede an active executor loop. The runtime absorbs queued steering only
 at safe pre-model boundaries. At a tool or participant wait, the runtime sends its bounded model
 messages and pending result links to the server. The server encrypts that continuation and saves it
-in the database. A replacement warm runtime receives the exact saved state through a fenced resume
+in the database. A replacement executor receives the exact saved state through a fenced resume
 command; a Pod lost during an active model call instead moves the run to `RecoveryRequired` because
 replaying that call could duplicate cost or output. The MCP and sandbox execution ports remain fail-closed in
 the production composition root. The authenticated memory transport IS composed: the server mounts

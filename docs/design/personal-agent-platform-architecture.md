@@ -42,7 +42,6 @@ Conversation (immutable mode)
         └── AgentRun
               ├── RunInputSnapshot
               ├── ordered RunEvent
-              └── RuntimeAssignment
                     └── fenced attempt commands and candidates
 ```
 

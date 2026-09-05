@@ -85,7 +85,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   event-store access.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
-  model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
+  model-routing types, memory-gateway constants, `ThirdPartySource*`,
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision

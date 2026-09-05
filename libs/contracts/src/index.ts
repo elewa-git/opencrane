@@ -35,6 +35,5 @@ export * from "./conversation-entry.types";
 export * from "./conversation-entry.validator";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
-export type * from "./runtime-assignment.types";
 export type * from "./tenant-models.types";
 export * from "./third-party-source.types";

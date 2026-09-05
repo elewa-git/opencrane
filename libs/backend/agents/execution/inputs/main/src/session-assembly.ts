@@ -25,9 +25,7 @@ const _SNAPSHOT_VERSION = 1;
  * Called by: `__CreateManagedRunAdmissionPort` (execution/admission/main/src/managed-run-admission.composition.ts)
  * and `__CreatePersonalRunAdmissionPort` (execution/admission/main/src/personal-run-admission.composition.ts).
  * Both wrap this call in a capacity gate first, so do not call it straight from a route. The personal
- * port reaches it twice: once for an ordinary agent-session message, and once through
- * `admitFirstAgentThreadRun` for the first run of a child Agent thread, which is the only caller that
- * passes `prepare`.
+ * Each admission port supplies the authorities for its conversation and execution boundary.
  *
  * @param command - Run ids and trigger. The caller chooses `runId` and
  * `requestIdempotencyKey` before calling. Sending the same key again returns the first run, so a

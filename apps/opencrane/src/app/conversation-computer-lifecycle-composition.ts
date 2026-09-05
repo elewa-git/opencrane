@@ -25,7 +25,6 @@ export function _CreateConversationComputerLifecycleComposition(prisma: PrismaCl
 	const fence = new ConversationComputerCheckpointFenceAdapter({ projections, history, pods, profile });
 	const checkpoints = new ConversationComputerCheckpointAuthority(sandbox, projections, _CreateArtifactUploadGateway(prisma, workflow), _CreatePublishedArtifactReader(prisma), fence, _CHECKPOINT_POLICY);
 	const attempts = {
-		hasActiveAttempt: function _HasActiveAttempt(computerId: string, leaseId: string) { return projections.hasActiveAttempt(computerId, leaseId); },
 		clearActiveLease: function _ClearActiveLease(command: Parameters<typeof projections.clearActiveLease>[0]) { return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction) { const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction); return repository.clearActiveLease(command); }, { isolationLevel: "Serializable", operation: "conversation computer active lease clear" }); },
 	};
 	const authority = new ConversationComputerLifecycleAuthority(history, checkpoints, attempts, new AgentSandboxClaimAdapter(customApi), profile.namespace, _POLICY);
