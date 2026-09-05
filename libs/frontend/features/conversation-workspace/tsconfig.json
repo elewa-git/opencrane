@@ -4,7 +4,6 @@
   "include": ["src/**/*.ts"],
   "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
   "references": [
-    { "path": "../../elements/a2ui" },
     { "path": "../../elements/conversation" },
     { "path": "../../elements/ui" },
 	{ "path": "../../../models/conversations/main" },
