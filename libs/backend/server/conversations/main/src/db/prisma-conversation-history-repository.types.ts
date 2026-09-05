@@ -1,5 +1,3 @@
-import type { ConversationMode } from "@prisma/client";
-
 import type { ConversationPrivatePayloadCoordinates, EncryptedConversationPrivatePayload } from "../conversation-private-payload.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 
@@ -15,7 +13,7 @@ export interface AuthorizedConversationProjection
 	/** KurrentDB profile coordinate, or null outside an agent session. */
 	readonly computerProfileRevisionId: string | null;
 	/** Immutable conversation mode used to validate computer and activation shape. */
-	readonly mode: ConversationMode;
+	readonly mode: "AgentSession" | "Direct" | "Group";
 }
 
 /** Encrypted row shape returned without ever materializing plaintext in Prisma data. */

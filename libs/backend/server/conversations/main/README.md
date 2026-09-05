@@ -123,7 +123,7 @@ empty successful page.
   only one matching warm computer with one active, generation-fenced lease.
 - `_CreateSelfConversationHistoryRouter` exposes exclusive-cursor KurrentDB reads and encrypted
   participant message admission without a relational transcript fallback.
-- `PrismaSelfConversationHistory` joins current PostgreSQL authorization and encrypted private
+- `PrismaSelfConversationHistoryUnitOfWork` joins current PostgreSQL authorization and encrypted private
   payload persistence to checked KurrentDB operations.
 
 ## Boundary

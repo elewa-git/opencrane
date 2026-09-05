@@ -20,7 +20,7 @@ const _A2UI_ENTRY_KIND = "a2ui";
 const _TEXT_BLOCK_KIND = "text";
 
 /** Participant authority joining PostgreSQL policy and encrypted payloads to KurrentDB history. */
-export class PrismaSelfConversationHistory implements SelfConversationHistoryAuthority
+export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversationHistoryAuthority
 {
 	/** KurrentDB append boundary that accepts only complete server-stamped entries. */
 	private readonly historyAuthority: ConversationHistoryAuthority;
@@ -28,9 +28,9 @@ export class PrismaSelfConversationHistory implements SelfConversationHistoryAut
 	private readonly historyReader: ConversationHistoryReader;
 
 	/** Connects the authority to its transaction owner, HistoryStore, payload cipher, and computer reader. */
-	public constructor(private readonly prisma: PrismaClient, private readonly historyStore: Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">, private readonly dependencies: PrismaSelfConversationHistoryDependencies)
+	public constructor(private readonly prisma: PrismaClient, private readonly historyStore: Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">, private readonly dependencies: PrismaSelfConversationHistoryDependencies, historyAuthority: ConversationHistoryAuthority)
 	{
-		this.historyAuthority = new ConversationHistoryAuthority(historyStore);
+		this.historyAuthority = historyAuthority;
 		this.historyReader = new ConversationHistoryReader(historyStore);
 	}
 

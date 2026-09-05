@@ -10,12 +10,15 @@ import type { AuthorizedConversationProjection, ConversationHistoryRepository, S
 /** Persists only encrypted private payload bytes behind current participant authorization. */
 export class PrismaConversationHistoryRepository implements ConversationHistoryRepository
 {
+	/** Transaction-scoped Prisma delegates used by every repository operation. */
+	private readonly transaction: Prisma.TransactionClient;
 	/** Central product authorization constructed over the same transaction client. */
 	private readonly authorization: PrismaConversationProductAuthorizationRepository;
 
 	/** Connects all participant and encrypted-payload checks to one transaction. */
-	public constructor(private readonly transaction: Prisma.TransactionClient)
+	public constructor(transaction: Prisma.TransactionClient)
 	{
+		this.transaction = transaction;
 		this.authorization = new PrismaConversationProductAuthorizationRepository(transaction);
 	}
 

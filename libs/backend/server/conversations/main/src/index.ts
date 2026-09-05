@@ -45,7 +45,8 @@ export type { ActiveConversationComputerLease, ConversationComputerAppendCommand
 export { AesGcmConversationPrivatePayloadCipher } from "./conversation-private-payload-cipher";
 export type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadKeyringDocument } from "./conversation-private-payload.types";
 export { _SelfConversationHistoryOpenapiPaths } from "./openapi";
-export { PrismaSelfConversationHistory } from "./prisma-self-conversation-history";
+export { PrismaSelfConversationHistoryUnitOfWork } from "./prisma-self-conversation-history";
+export { ConversationHistoryAuthority } from "./conversation-history-authority";
 export { _CreateSelfConversationHistoryRouter } from "./self-conversation-history.router";
 export { ConversationMessageActivations, ConversationMessageAdmissionOutcomes } from "./self-conversation-history.types";
 export type { ConversationCallerResolver, ConversationMessageAdmissionResult, ConversationMessageCommand, SelfConversationHistoryAuthority, SelfConversationHistoryResult } from "./self-conversation-history.types";

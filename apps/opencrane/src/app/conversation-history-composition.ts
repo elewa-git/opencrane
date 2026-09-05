@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import type { PrismaClient } from "@prisma/client";
-import { AesGcmConversationPrivatePayloadCipher, ConversationComputerHistory, PrismaAgentSessionCreationUnitOfWork, PrismaConversationMetadataUnitOfWork, PrismaSelfConversationHistory, _CreateConversationMetadataRouter, _CreateSelfConversationHistoryRouter, type ConversationPrivatePayloadKeyringDocument } from "@opencrane/backend/server/conversations";
+import { AesGcmConversationPrivatePayloadCipher, ConversationComputerHistory, ConversationHistoryAuthority, PrismaAgentSessionCreationUnitOfWork, PrismaConversationMetadataUnitOfWork, PrismaSelfConversationHistoryUnitOfWork, _CreateConversationMetadataRouter, _CreateSelfConversationHistoryRouter, type ConversationPrivatePayloadKeyringDocument } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { AgentSandboxReleaseProfileConfig } from "./config.types";
@@ -16,10 +16,10 @@ export function _CreateConversationHistoryComposition(
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(
     _ReadConversationPrivatePayloadKeyring(keyringPath),
   );
-  const authority = new PrismaSelfConversationHistory(prisma, historyStore, {
+  const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma, historyStore, {
     cipher,
     computerReader: new ConversationComputerHistory(historyStore),
-  });
+  }, new ConversationHistoryAuthority(historyStore));
   const resolveCaller = function _ResolveCaller(
     request: import("express").Request,
   ) {

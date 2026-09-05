@@ -9,9 +9,12 @@ import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot, U
 /** Reject snapshots that cannot prove a personal conversation before any database access. */
 export function _RequirePersonalUpgradeSessionSnapshot(snapshot: RunInputSnapshot): asserts snapshot is PersonalUpgradeSessionSnapshot
 {
-	if (snapshot.personaRevisionId === null) throw _invalidUpgradeSession();
-	if (snapshot.conversationId === null) throw _invalidUpgradeSession();
-	if (!_IsPersonalUpgradeSessionSubjectBound(snapshot)) throw _invalidUpgradeSession();
+	if (snapshot.personaRevisionId === null)
+		throw _invalidUpgradeSession();
+	if (snapshot.conversationId === null)
+		throw _invalidUpgradeSession();
+	if (!_IsPersonalUpgradeSessionSubjectBound(snapshot))
+		throw _invalidUpgradeSession();
 }
 
 /** Reject runtime arguments outside the model-adjacent personal configuration-patch schema. */

@@ -65,12 +65,15 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	{
 		// 3. Load the run and its frozen revision first; every later source needs them.
 		const run = await authorities.runAuthority.load(command, transaction);
-		if (run.outcome === "denied") return run;
+		if (run.outcome === "denied")
+			return run;
 
 		// 4. Verify one AgentIdentity-and-Principal subject before loading any identity-scoped input.
 		const executionSubject = await authorities.executionSubject.load(command, run.value, transaction);
-		if (executionSubject.outcome === "denied") return executionSubject;
-		if (!_IsExecutionSubjectBound(command, run.value, executionSubject.value)) return { outcome: "denied", reason: "identity_unavailable" } as const;
+		if (executionSubject.outcome === "denied")
+			return executionSubject;
+		if (!_IsExecutionSubjectBound(command, run.value, executionSubject.value))
+			return { outcome: "denied", reason: "identity_unavailable" } as const;
 
 		// 5. The admitted revision's explicit policy determines whether an approved persona is required.
 		const persona = await authorities.approvedPersona.load(command, run.value, executionSubject.value, transaction);

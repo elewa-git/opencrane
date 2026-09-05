@@ -13,6 +13,10 @@ The response also carries the current logical `ConversationComputer` projection.
 no WebSocket, receives no sandbox credential, and does not submit messages; participant messages use
 the workspace adapter's authenticated HTTP command.
 
+## Public surface
+
+- `OpenCraneConversationEventStream` implements the browser history port with the generated client.
+
 ## Boundary
 
 The server session derives participant and silo identity. Malformed history is rejected before it
