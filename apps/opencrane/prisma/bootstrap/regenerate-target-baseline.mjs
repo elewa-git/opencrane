@@ -169,6 +169,18 @@ BEGIN
         OR COALESCE(current_run."execution_subject"->'computerScope'->>'leaseGeneration', '') !~ '^[1-9][0-9]*$' THEN
         RAISE EXCEPTION 'ApprovalRequest requires the current waiting run and its exact computer-lease invocation';
     END IF;
+    PERFORM 1 FROM "conversation_computer_active_leases"
+    WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
+      AND "silo_id" = current_run."silo_id"
+      AND "conversation_id" = current_run."conversation_id"
+      AND "agent_identity_id" = current_run."agent_identity_id"
+      AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
+      AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
+      AND "expires_at" > decision_time
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+    END IF;
     IF TG_OP = 'INSERT' THEN
         IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
             RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
