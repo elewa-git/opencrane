@@ -13,6 +13,36 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+### Added
+
+- **People can use agent-session conversations whose complete history survives server and executor
+  restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
+  while the web workspace reads and posts through the same typed conversation API.
+
+- **People can inspect and control an active conversation computer from the conversation workspace.**
+  Authorized participants can review files and diffs, run allowlisted commands, use a private
+  Chromium session, inspect pages and screenshots, and view bounded localhost previews without
+  exposing raw sandbox control ports.
+
+- **Conversation computers can cool to zero and recover their workspace on demand.** OpenCrane
+  checkpoints an idle workspace before releasing its Agent Sandbox claim, restores the checkpoint
+  into a new generation, and fences activation, model credentials, approvals, output, and review
+  access to the exact current lease.
+
+### Changed
+
+- **Operators deploy conversation execution through Agent Sandbox instead of prestarted warm-runtime
+  pools.** The 0.11 composition uses release-pinned sandbox profiles, generation-bound claims, and
+  durable activation delivery; KurrentDB owns canonical computer history while PostgreSQL retains
+  only rebuildable transaction projections.
+
+### Removed
+
+- **Operators no longer maintain the run-owned warm-runtime lifecycle or its workload-proof
+  database authority.** The replaced runtime application, reservation and assignment records,
+  proof keys, compatibility routes, socket fallback, and migration scaffolding are absent from the
+  fresh-install-only 0.11 baseline.
+
 ### Security
 
 - **Operators cannot begin a `testv5` installation with an insecure or ambiguous history and sandbox
