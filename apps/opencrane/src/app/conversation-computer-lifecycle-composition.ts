@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { ConversationComputerCheckpointAuthority, ConversationComputerCheckpointFenceAdapter, ConversationComputerHistory, ConversationComputerLifecycleAuthority, ConversationComputerLifecycleDueEnumerator, ConversationComputerLifecycleScheduler, ConversationComputerLifecycleWorker, HttpConversationComputerCheckpointSandbox, PrismaConversationComputerLifecycleProjectionRepository, _CreateConversationComputerCheckpointRouter } from "@opencrane/backend/server/conversations";
 import { AgentSandboxClaimAdapter, AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _CreateConversationComputerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { AgentSandboxReleaseProfileConfig } from "./config.types";
@@ -23,7 +24,11 @@ export function _CreateConversationComputerLifecycleComposition(prisma: PrismaCl
 	const sandbox = new HttpConversationComputerCheckpointSandbox();
 	const fence = new ConversationComputerCheckpointFenceAdapter({ projections, history, pods, profile });
 	const checkpoints = new ConversationComputerCheckpointAuthority(sandbox, projections, _CreateArtifactUploadGateway(prisma, workflow), _CreatePublishedArtifactReader(prisma), fence, _CHECKPOINT_POLICY);
-	const authority = new ConversationComputerLifecycleAuthority(history, checkpoints, projections, new AgentSandboxClaimAdapter(customApi), profile.namespace, _POLICY);
+	const attempts = {
+		hasActiveAttempt: function _HasActiveAttempt(computerId: string, leaseId: string) { return projections.hasActiveAttempt(computerId, leaseId); },
+		clearActiveLease: function _ClearActiveLease(command: Parameters<typeof projections.clearActiveLease>[0]) { return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction) { const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction); return repository.clearActiveLease(command); }, { isolationLevel: "Serializable", operation: "conversation computer active lease clear" }); },
+	};
+	const authority = new ConversationComputerLifecycleAuthority(history, checkpoints, attempts, new AgentSandboxClaimAdapter(customApi), profile.namespace, _POLICY);
 	const enumerator = new ConversationComputerLifecycleDueEnumerator(projections, history, siloId, _POLICY.staleAfterMilliseconds, _POLICY.retireAfterMilliseconds);
 	const scheduler = new ConversationComputerLifecycleScheduler(enumerator, authority, 50);
 	return { router: _CreateConversationComputerCheckpointRouter({ authority: checkpoints, siloId, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName) }), worker: new ConversationComputerLifecycleWorker(scheduler, _log) };

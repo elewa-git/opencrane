@@ -1,4 +1,4 @@
-import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
 
 import type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerClaimReleaser, ConversationComputerIdlePolicy, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome } from "./conversation-computer-lifecycle.types";
 import { ConversationComputerHistory } from "./conversation-computers";
@@ -22,6 +22,8 @@ export class ConversationComputerLifecycleAuthority
 			return "terminal";
 		if (current.lease !== null && current.computer.state === ConversationComputerStates.Cooling && current.lease.state === ComputerLeaseStates.Released)
 		{
+			if (!await this.attempts.clearActiveLease(_LeaseProjectionCommand(current.computer, current.lease)))
+				throw new Error("Conversation computer active lease projection changed before release completion");
 			await this.claims.release({ namespace: this.namespace, claimId: current.lease.sandboxClaimId, computerId: current.computer.id, leaseId: current.lease.id, generation: current.lease.generation });
 			await this.computers.append({ expectedRevision: current.revision, eventId: _CompletionEventId(command.eventId), computer: { ...current.computer, state: ConversationComputerStates.Cold, updatedAt: command.now.toISOString() }, lease: current.lease });
 			return "retired_to_checkpoint";
@@ -42,6 +44,8 @@ export class ConversationComputerLifecycleAuthority
 			return "active_attempt";
 		const checkpoint = await this.checkpoints.capture(current.computer, current.lease);
 		const releasedAt = command.now.toISOString();
+		if (!await this.attempts.clearActiveLease(_LeaseProjectionCommand(current.computer, current.lease)))
+			throw new Error("Conversation computer active lease projection changed before release");
 		await this.computers.append({ expectedRevision: current.revision, eventId: command.eventId, computer: { ...current.computer, workspaceCheckpoint: checkpoint }, lease: { ...current.lease, state: ComputerLeaseStates.Released, releasedAt } });
 		const released = await this.computers.load(command);
 		if (released === null || released.lease?.state !== ComputerLeaseStates.Released)
@@ -50,6 +54,12 @@ export class ConversationComputerLifecycleAuthority
 		await this.computers.append({ expectedRevision: released.revision, eventId: _CompletionEventId(command.eventId), computer: { ...released.computer, state: ConversationComputerStates.Cold, updatedAt: releasedAt }, lease: released.lease });
 		return "retired_to_checkpoint";
 	}
+}
+
+/** Bind a projection clear to every canonical computer and lease coordinate. */
+function _LeaseProjectionCommand(computer: ConversationComputer, lease: ComputerLease): Parameters<ConversationComputerAttemptActivity["clearActiveLease"]>[0]
+{
+	return { siloId: computer.siloId, conversationId: computer.conversationId, computerId: computer.id, agentIdentityId: computer.agentIdentityId, leaseId: lease.id, leaseGeneration: lease.generation };
 }
 
 /** Derive a distinct deterministic completion event after the release intent is durable. */

@@ -33,11 +33,15 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		if (current === null || current.computer.state === ConversationComputerStates.Retired)
 			return "denied";
 		if (current.computer.state === ConversationComputerStates.Warm && current.lease?.state === ComputerLeaseStates.Active)
+		{
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, current.lease));
 			return "idempotent";
+		}
 		if (current.computer.state === ConversationComputerStates.Cooling && current.lease?.state === ComputerLeaseStates.Active && current.computer.leaseGeneration === command.generation)
 		{
 			const reactivatedAt = new Date().toISOString();
 			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${current.lease.id}:${command.generation}:${current.revision}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease: current.lease });
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, current.lease));
 			return "activated";
 		}
 
@@ -63,8 +67,15 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		// 4. Fence the assigned sandbox into history before the queue acknowledges activation.
 		const activeLease: ComputerLease = { ...current.lease, sandboxClaimId: claim.claimId, sandboxId: claim.sandboxId, serviceFQDN: claim.serviceFQDN, state: ComputerLeaseStates.Active };
 		await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-lease-active", activeLease.id), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: new Date().toISOString() }, lease: activeLease });
+		await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, activeLease));
 		return "activated";
 	}
+}
+
+/** Convert canonical active history into the exact rebuildable transaction fence. */
+function _ActiveProjection(siloId: string, conversationId: string, agentIdentityId: string, lease: ComputerLease)
+{
+	return { siloId, conversationId, computerId: lease.computerId, agentIdentityId, leaseId: lease.id, leaseGeneration: lease.generation, expiresAt: lease.expiresAt };
 }
 
 /** Build a deterministic DNS-label lease so redelivery cannot reserve a second realization. */

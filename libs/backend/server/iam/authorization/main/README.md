@@ -69,7 +69,9 @@ the ordinary exact boundary-matching rules.
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
 - `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
   `PrismaToolInvocationUnitOfWork`, and their lifecycle contracts own durable human approval and
-  provider-effect recovery for tool calls.
+  provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
+  invocation carry the same immutable execution subject, including the active conversation-computer
+  lease id and generation; released or replaced leases fail closed.
 - `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
   tool work inside the runs domain's cancellation transaction.
 

@@ -15,10 +15,21 @@ export interface ConversationComputerCheckpointStore
 	capture(computer: ConversationComputer, lease: ComputerLease): Promise<ComputerWorkspaceCheckpoint>;
 }
 
-/** Reports whether an admitted attempt is still using the current lease. */
+/**
+ * Prevents lifecycle cleanup while an admitted attempt or pending approval still uses the current lease.
+ *
+ * `clearActiveLease` returns false when the row belongs to another generation or when a pending approval
+ * acquired the same transaction fence. The lifecycle authority must stop cleanup on false so it cannot
+ * release a sandbox while that approval can still become executable.
+ *
+ * Called by: {@link ConversationComputerLifecycleAuthority}.
+ */
 export interface ConversationComputerAttemptActivity
 {
+	/** Reports whether an admitted attempt is still using this lease. */
 	hasActiveAttempt(computerId: string, leaseId: string): Promise<boolean>;
+	/** Clears this active-lease projection before history or cluster cleanup releases it. */
+	clearActiveLease(command: { readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly agentIdentityId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<boolean>;
 }
 
 /** Releases only an exact, already-authorized Agent Sandbox claim. */

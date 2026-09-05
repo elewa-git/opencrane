@@ -121,6 +121,9 @@ empty successful page.
 - `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
   deterministic KurrentDB stream. Its checked current-head result lets future pre-admission code use
   only one matching warm computer with one active, generation-fenced lease.
+- `ConversationComputerActiveLease` is the rebuildable PostgreSQL transaction fence for effect and
+  approval admission. Activation publishes it only after KurrentDB records the Active lease;
+  lifecycle cleanup clears the exact row before recording release or deleting the SandboxClaim.
 - `_CreateSelfConversationHistoryRouter` exposes exclusive-cursor KurrentDB reads and encrypted
   participant message admission without a relational transcript fallback.
 - `PrismaSelfConversationHistoryUnitOfWork` joins current PostgreSQL authorization and encrypted private

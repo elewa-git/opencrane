@@ -1,4 +1,4 @@
-import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationState, WorkloadAssignmentState } from "@prisma/client";
+import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../prisma-managed-authorization-grant-repository", function _MockManagedGrants()
@@ -8,6 +8,18 @@ vi.mock("../prisma-managed-authorization-grant-repository", function _MockManage
 
 import { __OpenDeferredToolApproval } from "../prisma-deferred-tool-approval-opener";
 import { __DigestCanonicalJson } from "../canonical-json-digest";
+
+/** Current immutable execution subject for the live conversation-computer lease. */
+const EXECUTION_SUBJECT = {
+	schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1",
+	identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-evidence", verifiedAt: "2026-07-28T23:00:00.000Z" },
+	membership: { principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-07-29T00:01:30.000Z" },
+	capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-evidence", decidedAt: "2026-07-28T23:00:00.000Z" },
+	runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" },
+	computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-2", leaseGeneration: 2 },
+	requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-28T23:00:00.000Z" },
+	admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-evidence", admittedAt: "2026-07-28T23:00:00.000Z" },
+} as const;
 
 /** Structured logger double used to verify ambiguous-recovery evidence. */
 function _Logger()
@@ -28,21 +40,19 @@ function _Command()
 function _Invocation()
 {
 	const argumentsValue = { calendarId: "primary" };
-	return { id: "invocation-1", siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "subject-1", runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "integration:calendar:read", toolInvocationId: "invoke-1", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), effectiveArguments: argumentsValue, effectiveArgumentsDigest: __DigestCanonicalJson(argumentsValue), requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: true, recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-07-29T00:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-07-29T00:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, recoveryRequiredAt: null, result: null, failureCode: null, revision: 1, createdAt: new Date("2026-07-29T00:00:00.000Z"), updatedAt: new Date("2026-07-29T00:00:00.000Z"), completedAt: null };
+	return { id: "invocation-1", siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1", authorizationActorKind: ToolInvocationAuthorizationActorKind.Workload, authorizationExecutionSubject: EXECUTION_SUBJECT, authorizationCoordinates: [], authorizationDecisionDigests: [`sha256:${"e".repeat(64)}`], authorizationAssignmentDigest: `sha256:${"f".repeat(64)}`, authorizationEvidenceDigest: `sha256:${"0".repeat(64)}`, subjectId: "subject-1", runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "integration:calendar:read", toolInvocationId: "invoke-1", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), effectiveArguments: argumentsValue, effectiveArgumentsDigest: __DigestCanonicalJson(argumentsValue), requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: true, recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-07-29T00:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-07-29T00:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, recoveryRequiredAt: null, result: null, failureCode: null, revision: 1, createdAt: new Date("2026-07-29T00:00:00.000Z"), updatedAt: new Date("2026-07-29T00:00:00.000Z"), completedAt: null };
 }
 
 /** Build a live workload transaction that can create one linked approval. */
 function _LiveTransaction()
 {
 	return {
-		workloadAssignment: { findUnique: vi.fn(async function _assignment() { return { agentRevisionId: "revision-1", agentServiceId: "service-1", siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", audience: "audience-1", serviceAccountName: "runtime-1", namespace: "runtime", workloadKind: "Job", workloadUid: "job-1", podUid: "pod-original", bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-29T00:02:00.000Z") }; }) },
-		warmRuntimeReservation: { findUnique: vi.fn(async function _reservation() { return { generation: 2, podUid: "pod-2" }; }) },
-		runProofKey: { findUnique: vi.fn(async function _proof() { return { id: "proof-1", podUid: "pod-2", keyThumbprint: "thumbprint-1", expiresAt: new Date("2026-07-29T00:01:30.000Z"), revokedAt: null }; }) },
-		agentRun: { findUnique: vi.fn(async function _run() { return { id: "run-1", conversationId: "conversation-1", attempt: 1, state: AgentRunState.Running }; }), updateMany: vi.fn(async function _pause() { return { count: 1 }; }) },
+		agentRun: { findUnique: vi.fn(async function _run() { return { id: "run-1", siloId: "silo-1", conversationId: "conversation-1", attempt: 1, state: AgentRunState.Running, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: EXECUTION_SUBJECT }; }), updateMany: vi.fn(async function _pause() { return { count: 1 }; }) },
+		conversationComputerActiveLease: { updateMany: vi.fn(async function _touch() { return { count: 1 }; }), findUnique: vi.fn(async function _lease() { return { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1", leaseId: "lease-2", leaseGeneration: 2, expiresAt: new Date("2026-07-29T00:01:00.000Z") }; }) },
 		elicitationRequest: { create: vi.fn(async function _createElicitation() { return { id: "interrupt-1" }; }) },
 		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }), findFirst: vi.fn(async function _existing() { return null; }), count: vi.fn(async function _pending() { return 0; }) },
 		principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
-			toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
+		toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
 		toolResultDelivery: { create: vi.fn(async function _delivery() { return { id: "delivery-1" }; }) },
 	};
 }
@@ -77,7 +87,7 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 	it("terminalises the invocation when no live workload can own the approval", async function _terminalisesUnavailable()
 	{
 		const transaction = _LiveTransaction();
-		transaction.workloadAssignment.findUnique.mockResolvedValueOnce(null as never);
+		transaction.agentRun.findUnique.mockResolvedValueOnce(null as never);
 		transaction.toolInvocation.updateMany.mockResolvedValueOnce({ count: 1 } as never);
 		const prisma = { $transaction: vi.fn(async function _transaction(callback) { return callback(transaction); }), approvalRequest: { findFirst: vi.fn() }, toolInvocation: { updateMany: vi.fn() } };
 

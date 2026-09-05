@@ -18,6 +18,7 @@ export { DeferredToolDecisionKinds, DeferredToolDecisionOutcomes } from "./defer
 export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types";
 export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types";
 export type { DeferredToolApprovalLifecycleInput } from "./deferred-tool-approval-lifecycle.types";
+export { DeferToolRequestOutcomes } from "./deferred-tool-approval-open.types";
 export type { DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types";
 export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-opener";
 export { __AdmitPreparingToolInvocationInTransaction } from "./tool-invocation-transaction";

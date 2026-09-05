@@ -18,7 +18,7 @@ export { PrismaAgentSessionCreationUnitOfWork } from "./agent-session-creation";
 export type { AgentSessionReleaseProfile, InitialConversationComputerResolver } from "./agent-session-creation.types";
 export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
-export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked, ConversationComputerActivationProjection, ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
+export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked, ConversationComputerActivationProjection, ConversationComputerActivationProjectionRepository, ConversationComputerActiveLeaseProjectionCommand } from "./conversation-computer-activation.types";
 export { ConversationComputerActivationAuthorityAdapter } from "./conversation-computer-activation-authority";
 export { ConversationComputerLifecycleAuthority } from "./conversation-computer-lifecycle";
 export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerClaimReleaser, ConversationComputerIdlePolicy, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome } from "./conversation-computer-lifecycle.types";

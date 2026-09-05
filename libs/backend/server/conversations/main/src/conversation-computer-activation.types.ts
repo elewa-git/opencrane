@@ -59,11 +59,45 @@ export interface ConversationComputerActivationProjection
 	readonly profileRevisionId: string;
 }
 
-/** Narrow PostgreSQL lookup used before computer history can be addressed. */
+/**
+ * Resolves the relational coordinates needed to address computer history and publishes its active lease.
+ *
+ * Activation publishes only after Kurrent accepts the Active event. The implementation must reject a
+ * different row already stored for the same computer, because replacing it would let an earlier activation
+ * authorize work against a later realization.
+ *
+ * Called by: {@link ConversationComputerActivationAuthority}.
+ */
 export interface ConversationComputerActivationProjectionRepository
 {
-	/** Resolve exact coordinates or null for a foreign/non-agent conversation. */
+	/** Resolves coordinates or returns null for a foreign or non-agent conversation. */
 	resolve(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationProjection | null>;
+	/** Publishes the active lease after Kurrent has accepted the Active event. */
+	publishActiveLease(command: ConversationComputerActiveLeaseProjectionCommand): Promise<void>;
+}
+
+/**
+ * Carries the active lease coordinates copied into PostgreSQL after activation succeeds.
+ *
+ * Deferred approval transactions compare every field with the immutable execution subject. A missing,
+ * expired, or replaced row therefore prevents a tool action from being approved for a released sandbox.
+ */
+export interface ConversationComputerActiveLeaseProjectionCommand
+{
+	/** Identifies the owning silo. */
+	readonly siloId: string;
+	/** Identifies the owning conversation. */
+	readonly conversationId: string;
+	/** Identifies the logical conversation computer. */
+	readonly computerId: string;
+	/** Identifies the agent whose execution subject may use the lease. */
+	readonly agentIdentityId: string;
+	/** Identifies the exact active lease. */
+	readonly leaseId: string;
+	/** Fences every earlier realization. */
+	readonly leaseGeneration: number;
+	/** Ends approval and effect admission for this realization. */
+	readonly expiresAt: string;
 }
 
 /** Release-owned realization policy supplied to activation authority. */

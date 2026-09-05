@@ -1,4 +1,4 @@
-import { ArtifactKind, ArtifactState, ConversationLifecycle, ConversationMode, type Prisma } from "@prisma/client";
+import { ApprovalRequestState, ArtifactKind, ArtifactState, ConversationLifecycle, ConversationMode, type Prisma } from "@prisma/client";
 
 import type { ConversationComputerCheckpointCatalogue } from "../conversation-computer-checkpoint.types";
 import type { ConversationComputerCurrentCommand } from "../conversation-computers";
@@ -42,5 +42,24 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 			return false;
 		const attempt = await this.prisma.conversationComputerAttemptCredential.findFirst({ where: { conversationId: conversation.id, siloId: conversation.siloId, state: "ready", expiresAt: { gt: new Date() } }, select: { bootstrapId: true } });
 		return attempt !== null;
+	}
+
+	/** Remove only the exact active lease so a replacement generation cannot be cleared by stale work. */
+	public async clearActiveLease(command: { readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly agentIdentityId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<boolean>
+	{
+		const touched = await this.prisma.conversationComputerActiveLease.updateMany({ where: command, data: { updatedAt: new Date() } });
+		if (touched.count === 0)
+		{
+			const current = await this.prisma.conversationComputerActiveLease.findUnique({ where: { computerId: command.computerId }, select: { computerId: true } });
+			return current === null;
+		}
+		const pending = await this.prisma.approvalRequest.count({ where: { state: ApprovalRequestState.Pending, run: { conversationId: command.conversationId } } });
+		if (pending > 0)
+			return false;
+		const deleted = await this.prisma.conversationComputerActiveLease.deleteMany({ where: command });
+		if (deleted.count === 1)
+			return true;
+		const current = await this.prisma.conversationComputerActiveLease.findUnique({ where: { computerId: command.computerId }, select: { computerId: true } });
+		return current === null;
 	}
 }
