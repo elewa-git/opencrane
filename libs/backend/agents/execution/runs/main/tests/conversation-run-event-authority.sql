@@ -20,7 +20,9 @@ $$;
 INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
 VALUES ('run-event-model', 'silo-run-event', 'global', 'run-event-model', 'litellm-run-event-model', 'run-event-model', clock_timestamp());
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
-VALUES ('run-event-service-principal', 'silo-run-event', 'urn:opencrane:agent-service', 'run-event-service', 'internal', clock_timestamp());
+VALUES
+    ('user-run-event', 'silo-run-event', 'https://identity.example.test', 'user-run-event', 'external', clock_timestamp()),
+    ('run-event-service-principal', 'silo-run-event', 'urn:opencrane:agent-service', 'run-event-service', 'internal', clock_timestamp());
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
 VALUES ('run-event-service', 'silo-run-event', 'managed', 'Run event test', 'managed-agent', 'run-event-service-principal', clock_timestamp());
 INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
@@ -33,13 +35,13 @@ INSERT INTO "conversations" ("id", "silo_id", "mode", "updated_at")
 VALUES ('direct-conversation', 'silo-run-event', 'direct', clock_timestamp());
 SELECT pg_temp.expect_failure(
     'an agent run cannot bind a direct conversation',
-    $statement$INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest") VALUES ('direct-conversation-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'direct-conversation', 'interactive', 'direct-conversation-request', 'direct-conversation-run', 'sha256:' || repeat('b', 64), 'sha256:' || repeat('e', 64))$statement$,
+    $statement$INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest") VALUES ('direct-conversation-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'direct-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'direct-conversation-request', 'direct-conversation-run', 'sha256:' || repeat('e', 64))$statement$,
     'AgentRun requires the exact agent-session Conversation authority'
 );
-INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest")
-VALUES ('run-event-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'run-event-conversation', 'interactive', 'run-event-request', 'run-event-run', 'sha256:' || repeat('b', 64), 'sha256:' || repeat('c', 64));
-INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
-VALUES ('run-event-input', 'run-event-run', 1, 'silo-run-event', 'run-event-service', 'run-event-revision', 'sha256:' || repeat('b', 64), 'run-event-conversation', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1', 'sha256:' || repeat('c', 64));
+INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest")
+VALUES ('run-event-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'run-event-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'run-event-request', 'run-event-run', 'sha256:' || repeat('c', 64));
+INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
+VALUES ('run-event-input', 'run-event-run', 1, 1, 'silo-run-event', 'run-event-service', 'run-event-revision', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'run-event-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64));
 SET CONSTRAINTS ALL IMMEDIATE;
 SET CONSTRAINTS ALL DEFERRED;
 

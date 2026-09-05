@@ -26,7 +26,7 @@ fi
 
 run_psql < "$SCRIPT_DIR/authorization-active-grant-uniqueness.sql"
 run_psql < "$TEST_FILE"
-run_psql < "$SCRIPT_DIR/run-input-snapshot-admission.sql"
+run_psql < "$SCRIPT_DIR/../../../../libs/backend/agents/execution/runs/main/tests/run-input-snapshot-admission.sql"
 run_psql < "$SCRIPT_DIR/skill-authoring-validation-authority.sql"
 
 RACE_DIR="$(mktemp -d)"
@@ -82,6 +82,7 @@ INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", 
   ('phase-d-cancel-proof-model', 'silo-race-cancel-proof', 'global', 'phase-d-cancel-proof-model', 'litellm-phase-d-cancel-proof-model', 'phase-d-cancel-proof-model', clock_timestamp());
 
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES
+  ('user-race', 'silo-race', 'https://identity.example.test', 'user-race', 'external', clock_timestamp()),
   ('svc-race-assignment-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-assignment', 'internal', clock_timestamp()),
   ('svc-race-assignment-first-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-assignment-first', 'internal', clock_timestamp()),
   ('svc-race-activation-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-activation', 'internal', clock_timestamp()),
@@ -393,10 +394,10 @@ wait_for_holder_sleeping 'phase-d-run-rollover'
 SET application_name = 'phase-d-run-after-rollover';
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-  "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+  "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
   'run-race-superseded', 'silo-race', 'svc-race-run-rollover', 'rev-race-run-rollover-1', 'conversation-race-superseded', 'interactive',
-  'request-race-superseded', 'run-race-superseded', 'sha256:' || repeat('9', 64),
+  'identity-race', 'user-race', '{"runScope":{"attempt":1}}', 'request-race-superseded', 'run-race-superseded',
   'sha256:' || repeat('a', 64)
 );
 SQL
@@ -448,20 +449,20 @@ SET application_name = 'phase-d-run-first';
 BEGIN;
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-  "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+  "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
   'run-race-before-retirement', 'silo-race', 'svc-race-run-first', 'rev-race-run-first', 'conversation-race-before-retirement', 'interactive',
-  'request-race-before-retirement', 'run-race-before-retirement', 'sha256:' || repeat('c', 64),
+  'identity-race', 'user-race', '{"runScope":{"attempt":1}}', 'request-race-before-retirement', 'run-race-before-retirement',
   'sha256:' || repeat('d', 64)
 );
 INSERT INTO "run_input_snapshots" (
-  "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-  "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-  "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+  "id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+  "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "memory_facts", "model_route",
+  "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest"
 ) VALUES (
-  'run-race-before-retirement-input', 'run-race-before-retirement', 1, 'silo-race', 'svc-race-run-first', 'rev-race-run-first',
-  'sha256:' || repeat('c', 64), 'conversation-race-before-retirement', '[]', '{}', '{}', '[]', '{}', '{}',
-  'sha256:' || repeat('e', 64), 'prompt-v1', 'sha256:' || repeat('d', 64)
+  'run-race-before-retirement-input', 'run-race-before-retirement', 1, 1, 'silo-race', 'svc-race-run-first', 'rev-race-run-first',
+  'identity-race', 'user-race', '{"runScope":{"attempt":1}}', 'conversation-race-before-retirement', '[]', '{}', '[]', '{}', '{}',
+  'prompt-v1', 'sha256:' || repeat('d', 64)
 );
 SELECT pg_sleep(3);
 COMMIT;
@@ -629,21 +630,22 @@ INSERT INTO "conversations" (
 );
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-  "request_idempotency_key", "root_run_id", "parent_run_id", "attempt", "state",
-  "effective_contract_digest", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
+  "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id",
+  "parent_run_id", "attempt", "state", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
 ) VALUES
   (
     'phase-d-child-attempt-parent', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
     'phase-d-attempt-proof-revision',
-    'phase-d-child-attempt-conversation', 'interactive', 'phase-d-child-attempt-parent-request',
-    'phase-d-child-attempt-parent', NULL, 1, 'running', 'sha256:' || repeat('1', 64),
+    'phase-d-child-attempt-conversation', 'interactive', 'phase-d-attempt-proof-identity',
+    'phase-d-attempt-proof-principal', '{"runScope":{"attempt":1}}', 'phase-d-child-attempt-parent-request',
+    'phase-d-child-attempt-parent', NULL, 1, 'running',
     'sha256:' || repeat('2', 64), clock_timestamp(), NULL, NULL
   ),
   (
     'phase-d-child-attempt-child', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
-    'phase-d-attempt-proof-revision', NULL, 'managed_invocation',
-    'phase-d-child-attempt-child-request', 'phase-d-child-attempt-parent',
-    'phase-d-child-attempt-parent', 1, 'failed', 'sha256:' || repeat('3', 64),
+    'phase-d-attempt-proof-revision', NULL, 'managed_invocation', 'phase-d-attempt-proof-identity',
+    'phase-d-attempt-proof-principal', '{"runScope":{"attempt":1}}', 'phase-d-child-attempt-child-request',
+    'phase-d-child-attempt-parent', 'phase-d-child-attempt-parent', 1, 'failed',
     'sha256:' || repeat('4', 64), clock_timestamp(), clock_timestamp(), 'runtime_failure'
   );
 INSERT INTO "child_run_reservations" (
@@ -672,6 +674,7 @@ BEGIN;
 SET LOCAL session_replication_role = replica;
 UPDATE "agent_runs"
 SET "attempt" = 2, "state" = 'completed', "accepted_at" = "accepted_at" + interval '1 second',
+    "execution_subject" = '{"runScope":{"attempt":2}}', "input_snapshot_digest" = 'sha256:' || repeat('9', 64),
     "started_at" = clock_timestamp(), "finished_at" = clock_timestamp(), "terminal_reason" = 'success'
 WHERE "id" = 'phase-d-child-attempt-child';
 SET LOCAL session_replication_role = origin;
@@ -733,21 +736,22 @@ INSERT INTO "conversations" (
 );
 INSERT INTO "agent_runs" (
   "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-  "request_idempotency_key", "root_run_id", "parent_run_id", "attempt", "state",
-  "effective_contract_digest", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
+  "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id",
+  "parent_run_id", "attempt", "state", "input_snapshot_digest", "started_at", "finished_at", "terminal_reason"
 ) VALUES
   (
     'phase-d-parent-attempt-parent', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
     'phase-d-attempt-proof-revision',
-    'phase-d-parent-attempt-conversation', 'interactive', 'phase-d-parent-attempt-parent-request',
-    'phase-d-parent-attempt-parent', NULL, 1, 'failed', 'sha256:' || repeat('5', 64),
+    'phase-d-parent-attempt-conversation', 'interactive', 'phase-d-attempt-proof-identity',
+    'phase-d-attempt-proof-principal', '{"runScope":{"attempt":1}}', 'phase-d-parent-attempt-parent-request',
+    'phase-d-parent-attempt-parent', NULL, 1, 'failed',
     'sha256:' || repeat('6', 64), clock_timestamp(), clock_timestamp(), 'runtime_failure'
   ),
   (
     'phase-d-parent-attempt-child', 'phase-d-attempt-proof-silo', 'phase-d-attempt-proof-service',
-    'phase-d-attempt-proof-revision', NULL, 'managed_invocation',
-    'phase-d-parent-attempt-child-request', 'phase-d-parent-attempt-parent',
-    'phase-d-parent-attempt-parent', 1, 'completed', 'sha256:' || repeat('7', 64),
+    'phase-d-attempt-proof-revision', NULL, 'managed_invocation', 'phase-d-attempt-proof-identity',
+    'phase-d-attempt-proof-principal', '{"runScope":{"attempt":1}}', 'phase-d-parent-attempt-child-request',
+    'phase-d-parent-attempt-parent', 'phase-d-parent-attempt-parent', 1, 'completed',
     'sha256:' || repeat('8', 64), clock_timestamp(), clock_timestamp(), 'success'
   );
 INSERT INTO "child_run_reservations" (
@@ -777,6 +781,7 @@ BEGIN;
 SET LOCAL session_replication_role = replica;
 UPDATE "agent_runs"
 SET "attempt" = 2, "state" = 'running', "accepted_at" = "accepted_at" + interval '1 second',
+    "execution_subject" = '{"runScope":{"attempt":2}}', "input_snapshot_digest" = 'sha256:' || repeat('a', 64),
     "started_at" = clock_timestamp(), "finished_at" = NULL, "terminal_reason" = NULL
 WHERE "id" = 'phase-d-parent-attempt-parent';
 SET LOCAL session_replication_role = origin;
@@ -836,6 +841,7 @@ BEGIN;
 SET LOCAL session_replication_role = replica;
 UPDATE "agent_runs"
 SET "attempt" = 2, "state" = 'running', "accepted_at" = "accepted_at" + interval '1 second',
+    "execution_subject" = '{"runScope":{"attempt":2}}', "input_snapshot_digest" = 'sha256:' || repeat('b', 64),
     "started_at" = clock_timestamp(), "finished_at" = NULL, "terminal_reason" = NULL
 WHERE "id" = 'phase-d-child-attempt-parent';
 SET LOCAL session_replication_role = origin;

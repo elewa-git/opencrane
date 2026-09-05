@@ -108,6 +108,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key"',
 	'NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind" OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id" OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"',
 	'CREATE FUNCTION "enforce_personal_memory_permission_authority"()',
+	'WHERE "run_id" = NEW."run_id"\n      AND "attempt" = NEW."attempt"\n      AND "input_digest" = NEW."input_snapshot_digest"',
 	'CREATE TRIGGER "personal_memory_permission_receipts_authority"',
 	'ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_exact_check"',
 	'"tool_invocation_revision" INTEGER NOT NULL',

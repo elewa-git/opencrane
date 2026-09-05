@@ -22,10 +22,9 @@ const _SNAPSHOT_VERSION = 1;
  * whole admission with that reason. Nothing is persisted unless every source loads; a
  * duplicate `requestIdempotencyKey` returns the previously admitted snapshot untouched.
  *
- * Called by: `__CreateManagedRunAdmissionPort` (execution/admission/main/src/managed-run-admission.composition.ts)
- * and `__CreatePersonalRunAdmissionPort` (execution/admission/main/src/personal-run-admission.composition.ts).
- * Both wrap this call in a capacity gate first, so do not call it straight from a route. The personal
- * Each admission port supplies the authorities for its conversation and execution boundary.
+ * Exported for an admission owner to call after it has acquired capacity. The package currently
+ * has no production caller; tests exercise this contract directly. A caller must supply the
+ * authorities for its conversation and execution boundary.
  *
  * @param command - Run ids and trigger. The caller chooses `runId` and
  * `requestIdempotencyKey` before calling. Sending the same key again returns the first run, so a

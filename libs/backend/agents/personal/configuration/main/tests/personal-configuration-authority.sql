@@ -4,6 +4,8 @@ INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", 
 VALUES
 ('personal-configuration-model', 'silo-1', 'global', 'personal-configuration-model', 'litellm-personal-configuration-model', 'personal-configuration-model', clock_timestamp()),
 ('careful-model', 'silo-1', 'global', 'careful', 'litellm-careful-model', 'careful-model', clock_timestamp());
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
+VALUES ('user-1', 'silo-1', 'https://identity.example.test', 'user-1', 'external', clock_timestamp());
 
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE actual_message TEXT;
@@ -78,7 +80,8 @@ UPDATE "agent_revisions" SET "state"='published', "published_at"=clock_timestamp
 UPDATE "agent_services" SET "state"='active', "active_revision_id"='agent-1' WHERE "id"='service-1';
 INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at") VALUES ('conversation-1', 'silo-1', 'service-1', 'agent_session', clock_timestamp());
 INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position") VALUES ('conversation-1', 'user-1', 1, 0);
-INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "delegated_user_id", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest") VALUES ('run-1', 'silo-1', 'service-1', 'agent-1', 'conversation-1', 'interactive', 'user-1', 'request-1', 'run-1', 'sha256:' || repeat('b',64), 'sha256:' || repeat('c',64));
+INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest") VALUES ('run-1', 'silo-1', 'service-1', 'agent-1', 'conversation-1', 'interactive', 'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-1', 'run-1', 'sha256:' || repeat('c',64));
+INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "persona_revision_id", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest") VALUES ('run-1-input', 'run-1', 1, 1, 'silo-1', 'service-1', 'agent-1', 'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'persona-1', 'conversation-1', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c',64));
 
 INSERT INTO "personal_configuration_changes" ("id", "silo_id", "user_id", "persona_profile_id", "agent_service_id", "source_conversation_id", "source_run_id", "requested_patch", "requested_patch_digest", "expected_persona_revision_id", "expected_agent_revision_id") VALUES ('change-1', 'silo-1', 'user-1', 'profile-1', 'service-1', 'conversation-1', 'run-1', '{"kind":"model_alias","modelAlias":"careful"}', 'sha256:' || repeat('d',64), 'persona-1', 'agent-1');
 SELECT pg_temp.expect_failure('proposal evidence is immutable', $statement$UPDATE "personal_configuration_changes" SET "requested_patch"='{"kind":"model_alias","modelAlias":"unsafe"}' WHERE "id"='change-1'$statement$, 'proposal evidence is immutable');

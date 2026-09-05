@@ -124,9 +124,6 @@
       "@opencrane/backend/agents/execution/elicitation": [
         "./libs/backend/agents/execution/elicitation/main/src/index.ts"
       ],
-      "@opencrane/backend/agents/execution/admission": [
-        "./libs/backend/agents/execution/admission/main/src/index.ts"
-      ],
       "@opencrane/backend/server/agents/skills": [
         "./libs/backend/server/agents/skills/main/src/index.ts"
       ],

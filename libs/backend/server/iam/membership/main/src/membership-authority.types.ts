@@ -151,8 +151,8 @@ export interface FleetMembershipSignatureVerifier
  * and then passed down, so no request can pick its own issuer or widen its own staleness limit.
  *
  * Called by: apps/opencrane/src/index.ts and apps/opencrane/src/app/channel-target-composition.ts
- * build it; libs/backend/agents/execution/admission, libs/backend/agents/execution/inputs, and
- * libs/backend/server/agents/agent-services consume it.
+ * build it; {@link SignedFleetMembershipAssertionVerifier} and
+ * `PrismaRuntimeMembershipEligibilitySource` consume it.
  */
 export interface FleetMembershipEvidenceConfig
 {

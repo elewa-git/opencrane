@@ -25,7 +25,6 @@ agent principles rather than becoming personal-only by proximity.
 | [`personal/memory`](./personal/memory/README.md) | Personal specialization: verified dataset and preference-fact selection. |
 | [`personal/personas`](./personal/personas/README.md) | Personal specialization: persona approval process. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
-| [`execution/admission`](./execution/admission/main/README.md) | Shared: trusted personal and managed entrypoints into immutable run admission. |
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
 | [`runtime`](./runtime/README.md) | Shared: class-specific governed worker Job controllers. |
 | [`runtime/workloads/contract`](./runtime/workloads/contract/README.md) | Shared claim lease and binding fields for class-specific workloads. |

@@ -49,8 +49,9 @@ export class PrismaSkillRevisionEligibilityRepository implements SkillRevisionEl
  * allowed (grants can narrow the set); naming one the revision never assigned, or naming one twice,
  * is not.
  *
- * Constructed by: `__CreateManagedRunAdmissionPort` and `__CreatePersonalRunAdmissionPort`
- * (execution/admission/main/src).
+ * Called by: `__CreatePrismaSessionAssemblyAuthorities` in
+ * `prisma-session-assembly-authorities.ts` installs this source; its transaction-scoped factory
+ * creates the repository used for each admission.
  *
  * @implements SkillRevisionEligibilitySource
  */

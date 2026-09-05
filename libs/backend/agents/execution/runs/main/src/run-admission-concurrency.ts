@@ -10,9 +10,9 @@ import type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } fro
  * matters: refusing here means an overloaded service never reaches Postgres, so it cannot exhaust
  * the connection pool for every other silo.
  *
- * One instance is shared per server process. Called by: `personal-run-admission.ts` and
- * `managed-run-admission.ts` in `execution/admission`, through the `RunAdmissionCapacityGate`
- * type; the app constructs it once and passes it to both.
+ * A production admission owner must share one instance per server process through the
+ * `RunAdmissionCapacityGate` type. The package currently has no production constructor; tests
+ * exercise the queue and refusal contract directly.
  */
 export class RunAdmissionConcurrencyGate
 {

@@ -3338,7 +3338,7 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_pare
 ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_attempt_input_digest_fkey" FOREIGN KEY ("run_id", "attempt", "input_digest") REFERENCES "agent_runs"("id", "attempt", "input_snapshot_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3413,18 +3413,12 @@ ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result
 );
 
 -- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when conversation_id is NULL.
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_digest_fkey"
-    FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
-    FOREIGN KEY ("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
+    FOREIGN KEY ("id", "attempt", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id")
+    REFERENCES "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id")
     ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_check" CHECK (
     ("conversation_id" IS NULL OR btrim("conversation_id") <> '')
-    AND btrim("capability_set_digest") <> ''
-    AND "capability_set_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND jsonb_typeof("memory_facts") = 'array'
 	AND jsonb_typeof("mcp_tools") = 'array'
 );
@@ -4200,23 +4194,29 @@ BEGIN
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
         OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
         OR NEW."trigger" IS DISTINCT FROM OLD."trigger"
-        OR NEW."delegated_user_id" IS DISTINCT FROM OLD."delegated_user_id"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
         OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key"
         OR NEW."root_run_id" IS DISTINCT FROM OLD."root_run_id"
-        OR NEW."parent_run_id" IS DISTINCT FROM OLD."parent_run_id"
-        OR NEW."effective_contract_digest" IS DISTINCT FROM OLD."effective_contract_digest"
-        OR NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest" THEN
+        OR NEW."parent_run_id" IS DISTINCT FROM OLD."parent_run_id" THEN
         RAISE EXCEPTION 'AgentRun identity and accepted inputs are immutable';
     END IF;
     IF NEW."attempt" <> OLD."attempt" THEN
         IF NEW."attempt" <> OLD."attempt" + 1 OR OLD."state" NOT IN ('failed', 'cancelled')
             OR NEW."state" <> 'accepted' OR NEW."accepted_at" <= OLD."accepted_at"
+            OR NEW."input_snapshot_digest" IS NOT DISTINCT FROM OLD."input_snapshot_digest"
+            OR NEW."execution_subject" IS NOT DISTINCT FROM OLD."execution_subject"
+            OR (NEW."execution_subject"->'runScope'->>'attempt')::integer IS DISTINCT FROM NEW."attempt"
             OR NEW."started_at" IS NOT NULL OR NEW."finished_at" IS NOT NULL
             OR NEW."terminal_reason" IS NOT NULL OR NEW."cost_amount" IS NOT NULL
             OR NEW."cost_currency" IS NOT NULL THEN
             RAISE EXCEPTION 'invalid AgentRun attempt transition';
         END IF;
     ELSE
+        IF NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest"
+            OR NEW."execution_subject" IS DISTINCT FROM OLD."execution_subject" THEN
+            RAISE EXCEPTION 'AgentRun accepted inputs change only with a new attempt';
+        END IF;
         IF NEW."accepted_at" IS DISTINCT FROM OLD."accepted_at" THEN
             RAISE EXCEPTION 'accepted_at changes only with a new accepted attempt';
         END IF;
@@ -4709,7 +4709,7 @@ BEGIN
             RAISE EXCEPTION 'a new RuntimeSteeringRequest must begin pending without consumption evidence';
         END IF;
 
-        SELECT "attempt", "silo_id", "delegated_user_id", "state"
+        SELECT "attempt", "silo_id", "principal_id", "state"
         INTO run_attempt, run_silo_id, run_subject_id, run_state
         FROM "agent_runs"
         WHERE "id" = NEW."run_id"
@@ -5623,7 +5623,7 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "conversation_id" = NEW."source_conversation_id" AND "user_id" = NEW."user_id" AND "access_ended_position" IS NULL) THEN
             RAISE EXCEPTION 'PersonalConfigurationChange source conversation requires the initiating participant with current access';
         END IF;
-        SELECT "silo_id", "conversation_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_conversation, run_service, run_user
+        SELECT "silo_id", "conversation_id", "agent_service_id", "principal_id" INTO run_silo, run_conversation, run_service, run_user
           FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
         SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
           FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
@@ -6559,9 +6559,7 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_attempt_check" CHECK ("attem
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND
         btrim("agent_revision_id") <> '' AND btrim("request_idempotency_key") <> '' AND
-        btrim("root_run_id") <> '' AND btrim("effective_contract_digest") <> '' AND
-        btrim("input_snapshot_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        btrim("root_run_id") <> '' AND btrim("input_snapshot_digest") <> '' AND
         "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_check" CHECK (
@@ -6581,8 +6579,8 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" > 0);
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND
-        btrim("effective_contract_digest") <> '' AND btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_digest" ~ '^sha256:[0-9a-f]{64}$'
+        btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
+        "input_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_positive_limits" CHECK (
     "depth" > 0
@@ -7132,7 +7130,11 @@ BEGIN
     END IF;
     SELECT * INTO request_row FROM "elicitation_requests" WHERE "id" = NEW."request_id" FOR UPDATE;
     SELECT * INTO invocation_row FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id" FOR UPDATE;
-    SELECT * INTO snapshot_row FROM "run_input_snapshots" WHERE "run_id" = NEW."run_id";
+    SELECT * INTO snapshot_row
+    FROM "run_input_snapshots"
+    WHERE "run_id" = NEW."run_id"
+      AND "attempt" = NEW."attempt"
+      AND "input_digest" = NEW."input_snapshot_digest";
     SELECT EXISTS (
         SELECT 1 FROM "elicitation_response_attempts"
         WHERE "request_id" = NEW."request_id"
@@ -7281,12 +7283,15 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "run_input_snapshots" snapshot
         WHERE snapshot."run_id" = NEW."id"
+          AND snapshot."attempt" = NEW."attempt"
           AND snapshot."input_digest" = NEW."input_snapshot_digest"
           AND snapshot."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND snapshot."silo_id" = NEW."silo_id"
           AND snapshot."agent_service_id" = NEW."agent_service_id"
           AND snapshot."agent_revision_id" = NEW."agent_revision_id"
-          AND snapshot."effective_contract_digest" = NEW."effective_contract_digest"
+          AND snapshot."agent_identity_id" = NEW."agent_identity_id"
+          AND snapshot."principal_id" = NEW."principal_id"
+          AND snapshot."execution_subject" IS NOT DISTINCT FROM NEW."execution_subject"
     ) THEN
         RAISE EXCEPTION 'AgentRun requires its exact immutable RunInputSnapshot' USING ERRCODE = '23503';
     END IF;
@@ -7295,7 +7300,7 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete
-AFTER INSERT OR UPDATE OF "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "attempt", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id"
 ON "agent_runs" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_agent_run_input_snapshot_completeness();
 
@@ -7306,12 +7311,15 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "agent_runs" run
         WHERE run."id" = NEW."run_id"
+          AND run."attempt" = NEW."attempt"
           AND run."input_snapshot_digest" = NEW."input_digest"
           AND run."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND run."silo_id" = NEW."silo_id"
           AND run."agent_service_id" = NEW."agent_service_id"
           AND run."agent_revision_id" = NEW."agent_revision_id"
-          AND run."effective_contract_digest" = NEW."effective_contract_digest"
+          AND run."agent_identity_id" = NEW."agent_identity_id"
+          AND run."principal_id" = NEW."principal_id"
+          AND run."execution_subject" IS NOT DISTINCT FROM NEW."execution_subject"
     ) THEN
         RAISE EXCEPTION 'RunInputSnapshot must bind the exact AgentRun conversation and authority' USING ERRCODE = '23503';
     END IF;
@@ -7320,7 +7328,7 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
-AFTER INSERT OR UPDATE OF "run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id"
 ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
 

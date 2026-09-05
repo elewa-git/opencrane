@@ -132,9 +132,9 @@ empty successful page.
 ## Boundary
 
 The self API receives only server-derived session and host identity. It never accepts silo,
-membership, user, agent authority, or run identifiers as browser-selected trust facts. It creates a
-run only by calling the internal execution-admission port for an eligible agent-session message; it
-does not assemble inputs, dispatch workloads, or execute agents. The channel replay route separately
+membership, user, agent authority, or run identifiers as browser-selected trust facts. It does not
+currently call execution inputs or execution runs, so an agent-session message does not create a run.
+It also does not dispatch workloads or execute agents. The channel replay route separately
 requires a consumed one-use context and the exact controller-selected route identifier.
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
@@ -157,8 +157,8 @@ import an app, frontend state, or deployment package.
 Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
 `ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
 transactions and projects create, archive, and close results from the same authorised write
-snapshot. Message admission separately uses serialisable ordinary-message writes and binds agent
-messages to execution admission's final transaction. The replay adapter is read-only and joins
+snapshot. Message admission currently persists ordinary messages without binding agent messages to
+a run-input transaction. The replay adapter is read-only and joins
 timeline references to canonical messages and `RunEvent`; neither path
 reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
 in the caller's host-selected silo; participant rows alone never preserve authority after revocation.
@@ -170,6 +170,6 @@ access require current `Use`.
 ## See also
 
 - Parent index: [server](../../README.md)
-- Related authority: [execution admission](../../../agents/execution/admission/main/README.md) ·
-  [channel-targets](../../agents/channel-targets/main/README.md)
+- Related authorities: [execution inputs](../../../agents/execution/inputs/main/README.md) ·
+  [execution runs](../../../agents/execution/runs/main/README.md) · [channel-targets](../../agents/channel-targets/main/README.md)
 - Browser consumer: [conversation workspace](../../../../frontend/features/conversation-workspace/README.md)

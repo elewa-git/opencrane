@@ -111,8 +111,7 @@ export type ManagedRunTrigger = "managed_invocation" | "schedule";
  * These values report an outcome; they do not themselves authorise anything. The admission checks in
  * {@link __AdmitManagedRunNow} and the run-input assembler decide that.
  *
- * Called by: `libs/backend/agents/execution/admission/main/src/managed-run-admission.ts` produces
- * them; `libs/backend/server/agents/scheduling/main/src/schedule-tick.ts` and the run-now handler in
+ * Returned through {@link ManagedRunAdmissionPort}; `libs/backend/server/agents/scheduling/main/src/schedule-tick.ts` and the run-now handler in
  * `agent-revision.router.ts` branch on them.
  * @see {@link ManagedRunAdmissionResult} for the payload attached to each outcome.
  */
@@ -370,8 +369,6 @@ export type ManagedRunAdmissionResult =
  * and stops. Nothing here creates a Kubernetes Job or executes agent logic — a separate dispatcher
  * picks the row up later.
  *
- * Implemented by: `_CreateManagedRunAdmissionPortWithGate` and `__CreateManagedRunAdmissionPort` in
- * libs/backend/agents/execution/admission/main/src/managed-run-admission{,.composition}.ts.
  * Called by: {@link __AdmitManagedRunNow} in `agent-revision-lifecycle.ts` (the HTTP run-now path),
  * and `__RunScheduleTick` in libs/backend/server/agents/scheduling/main/src/schedule-tick.ts (the
  * cron path).

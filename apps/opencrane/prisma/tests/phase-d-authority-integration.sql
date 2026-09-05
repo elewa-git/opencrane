@@ -43,6 +43,23 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION pg_temp.seed_run_snapshot(run_identifier TEXT, snapshot_identifier TEXT, snapshot_attempt INTEGER, snapshot_digest TEXT, snapshot_subject JSONB)
+RETURNS VOID
+LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO "run_input_snapshots" (
+        "id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+        "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools",
+        "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest"
+    )
+    SELECT snapshot_identifier, "id", snapshot_attempt, 1, "silo_id", "agent_service_id", "agent_revision_id",
+        "agent_identity_id", "principal_id", snapshot_subject, "conversation_id", '{}', '[]', '{}', '{}',
+        'prompt-v1', snapshot_digest
+    FROM "agent_runs"
+    WHERE "id" = run_identifier;
+END;
+$$;
+
 INSERT INTO "agent_services" (
     "id", "silo_id", "kind", "name",
     "state", "workload_profile", "principal_id", "created_at", "updated_at"
@@ -129,10 +146,10 @@ SELECT pg_temp.expect_failure(
     $statement$
         INSERT INTO "agent_runs" (
             "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-            "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+            "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
         ) VALUES (
             'run-wrong-silo', 'silo-other', 'svc-main', 'rev-published', NULL, 'interactive',
-            'request-wrong-silo', 'run-wrong-silo', 'sha256:' || repeat('e', 64), 'sha256:' || repeat('f', 64)
+            'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-wrong-silo', 'run-wrong-silo', 'sha256:' || repeat('f', 64)
         )
     $statement$,
     'requires the exact silo and active revision'
@@ -153,12 +170,10 @@ SELECT pg_temp.expect_failure(
     $statement$
         INSERT INTO "agent_runs" (
             "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-            "request_idempotency_key", "root_run_id", "effective_contract_digest",
-            "input_snapshot_digest"
+            "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
         ) VALUES (
             'run-unpublished', 'silo-1', 'svc-main', 'rev-draft', NULL, 'interactive',
-            'request-unpublished', 'run-unpublished', 'sha256:' || repeat('c', 64),
-            'sha256:' || repeat('d', 64)
+            'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-unpublished', 'run-unpublished', 'sha256:' || repeat('d', 64)
         )
     $statement$,
     'requires the exact silo and active revision of an Active AgentService'
@@ -169,12 +184,12 @@ SELECT pg_temp.expect_failure(
     $statement$
         INSERT INTO "agent_runs" (
             "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-            "request_idempotency_key", "root_run_id", "attempt", "state",
-            "effective_contract_digest", "input_snapshot_digest", "finished_at", "terminal_reason"
+            "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "attempt", "state",
+            "input_snapshot_digest", "finished_at", "terminal_reason"
         ) VALUES (
             'run-terminal-insert', 'silo-1', 'svc-main', 'rev-published', NULL, 'interactive',
-            'request-terminal-insert', 'run-terminal-insert', 1, 'completed',
-            'sha256:' || repeat('c', 64), 'sha256:' || repeat('d', 64), clock_timestamp(), 'success'
+            'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-terminal-insert', 'run-terminal-insert', 1, 'completed',
+            'sha256:' || repeat('d', 64), clock_timestamp(), 'success'
         )
     $statement$,
     'must begin as accepted attempt 1'
@@ -244,13 +259,12 @@ INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updat
 VALUES ('conversation-retry-retirement', 'silo-1', 'svc-run-retirement', 'agent_session', clock_timestamp());
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest",
-    "input_snapshot_digest"
+    "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
     'run-retry-retirement', 'silo-1', 'svc-run-retirement', 'rev-run-retirement', 'conversation-retry-retirement', 'interactive',
-    'request-retry-retirement', 'run-retry-retirement', 'sha256:' || repeat('1', 64),
-    'sha256:' || repeat('2', 64)
+    'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-retry-retirement', 'run-retry-retirement', 'sha256:' || repeat('2', 64)
 );
+SELECT pg_temp.seed_run_snapshot('run-retry-retirement', 'run-retry-retirement-input-1', 1, 'sha256:' || repeat('2', 64), '{"runScope":{"attempt":1}}');
 UPDATE "agent_runs"
 SET "state" = 'failed', "finished_at" = clock_timestamp(), "terminal_reason" = 'runtime_failure'
 WHERE "id" = 'run-retry-retirement';
@@ -263,12 +277,10 @@ SELECT pg_temp.expect_failure(
     $statement$
         INSERT INTO "agent_runs" (
             "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-            "request_idempotency_key", "root_run_id", "effective_contract_digest",
-            "input_snapshot_digest"
+            "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
         ) VALUES (
             'run-after-retirement', 'silo-1', 'svc-run-retirement', 'rev-run-retirement', NULL, 'interactive',
-            'request-after-retirement', 'run-after-retirement', 'sha256:' || repeat('3', 64),
-            'sha256:' || repeat('4', 64)
+            'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-after-retirement', 'run-after-retirement', 'sha256:' || repeat('4', 64)
         )
     $statement$,
     'requires the exact silo and active revision of an Active AgentService'
@@ -279,6 +291,7 @@ SELECT pg_temp.expect_failure(
     $statement$
         UPDATE "agent_runs"
         SET "attempt" = 2, "state" = 'accepted', "accepted_at" = "accepted_at" + interval '1 second',
+            "execution_subject" = '{"runScope":{"attempt":2}}', "input_snapshot_digest" = 'sha256:' || repeat('3', 64),
             "started_at" = NULL, "finished_at" = NULL, "terminal_reason" = NULL,
             "cost_amount" = NULL, "cost_currency" = NULL
         WHERE "id" = 'run-retry-retirement'
@@ -308,13 +321,12 @@ INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updat
 VALUES ('conversation-retry-rollover', 'silo-1', 'svc-run-rollover', 'agent_session', clock_timestamp());
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest",
-    "input_snapshot_digest"
+    "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
     'run-retry-rollover', 'silo-1', 'svc-run-rollover', 'rev-run-rollover-1', 'conversation-retry-rollover', 'interactive',
-    'request-retry-rollover', 'run-retry-rollover', 'sha256:' || repeat('5', 64),
-    'sha256:' || repeat('6', 64)
+    'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-retry-rollover', 'run-retry-rollover', 'sha256:' || repeat('6', 64)
 );
+SELECT pg_temp.seed_run_snapshot('run-retry-rollover', 'run-retry-rollover-input-1', 1, 'sha256:' || repeat('6', 64), '{"runScope":{"attempt":1}}');
 UPDATE "agent_runs"
 SET "state" = 'failed', "finished_at" = clock_timestamp(), "terminal_reason" = 'runtime_failure'
 WHERE "id" = 'run-retry-rollover';
@@ -327,12 +339,10 @@ SELECT pg_temp.expect_failure(
     $statement$
         INSERT INTO "agent_runs" (
             "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-            "request_idempotency_key", "root_run_id", "effective_contract_digest",
-            "input_snapshot_digest"
+            "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
         ) VALUES (
             'run-superseded-revision', 'silo-1', 'svc-run-rollover', 'rev-run-rollover-1', NULL, 'interactive',
-            'request-superseded-revision', 'run-superseded-revision', 'sha256:' || repeat('7', 64),
-            'sha256:' || repeat('8', 64)
+            'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-superseded-revision', 'run-superseded-revision', 'sha256:' || repeat('8', 64)
         )
     $statement$,
     'requires the exact silo and active revision of an Active AgentService'
@@ -343,6 +353,7 @@ SELECT pg_temp.expect_failure(
     $statement$
         UPDATE "agent_runs"
         SET "attempt" = 2, "state" = 'accepted', "accepted_at" = "accepted_at" + interval '1 second',
+            "execution_subject" = '{"runScope":{"attempt":2}}', "input_snapshot_digest" = 'sha256:' || repeat('7', 64),
             "started_at" = NULL, "finished_at" = NULL, "terminal_reason" = NULL,
             "cost_amount" = NULL, "cost_currency" = NULL
         WHERE "id" = 'run-retry-rollover'
@@ -354,13 +365,12 @@ INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updat
 VALUES ('conversation-run-state', 'silo-1', 'svc-main', 'agent_session', clock_timestamp());
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest",
-    "input_snapshot_digest"
+    "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
     'run-state', 'silo-1', 'svc-main', 'rev-published', 'conversation-run-state', 'interactive',
-    'request-state', 'run-state', 'sha256:' || repeat('1', 64),
-    'sha256:' || repeat('a', 64)
+    'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-state', 'run-state', 'sha256:' || repeat('a', 64)
 );
+SELECT pg_temp.seed_run_snapshot('run-state', 'run-state-input-1', 1, 'sha256:' || repeat('a', 64), '{"runScope":{"attempt":1}}');
 
 UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'run-state';
 UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" = 'run-state';
@@ -392,8 +402,10 @@ SELECT pg_temp.expect_failure(
     'terminal AgentRun attempt coordinates are immutable'
 );
 
+SELECT pg_temp.seed_run_snapshot('run-state', 'run-state-input-2', 2, 'sha256:' || repeat('b', 64), '{"runScope":{"attempt":2}}');
 UPDATE "agent_runs"
 SET "attempt" = 2, "state" = 'accepted', "accepted_at" = "accepted_at" + interval '1 second',
+    "execution_subject" = '{"runScope":{"attempt":2}}', "input_snapshot_digest" = 'sha256:' || repeat('b', 64),
     "started_at" = NULL, "finished_at" = NULL, "terminal_reason" = NULL,
     "cost_amount" = NULL, "cost_currency" = NULL
 WHERE "id" = 'run-state';
@@ -464,6 +476,7 @@ SELECT pg_temp.expect_failure(
     $statement$
         UPDATE "agent_runs"
         SET "attempt" = 3, "state" = 'accepted', "accepted_at" = "accepted_at" + interval '1 second',
+            "execution_subject" = '{"runScope":{"attempt":3}}', "input_snapshot_digest" = 'sha256:' || repeat('d', 64),
             "started_at" = NULL, "finished_at" = NULL, "terminal_reason" = NULL
         WHERE "id" = 'run-state'
     $statement$,
@@ -472,18 +485,22 @@ SELECT pg_temp.expect_failure(
 
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+    "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES
     ('run-cancel-accepted', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-     'request-cancel-accepted', 'run-cancel-accepted', 'sha256:' || repeat('1', 64), 'sha256:' || repeat('1', 64)),
+     'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-cancel-accepted', 'run-cancel-accepted', 'sha256:' || repeat('1', 64)),
     ('run-cancel-queued', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-     'request-cancel-queued', 'run-cancel-queued', 'sha256:' || repeat('2', 64), 'sha256:' || repeat('c2', 32)),
+     'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-cancel-queued', 'run-cancel-queued', 'sha256:' || repeat('c2', 32)),
     ('run-cancel-assigned', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-     'request-cancel-assigned', 'run-cancel-assigned', 'sha256:' || repeat('3', 64), 'sha256:' || repeat('3', 64)),
+     'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-cancel-assigned', 'run-cancel-assigned', 'sha256:' || repeat('3', 64)),
     ('run-cancel-running', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-     'request-cancel-running', 'run-cancel-running', 'sha256:' || repeat('4', 64), 'sha256:' || repeat('4', 64)),
+     'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-cancel-running', 'run-cancel-running', 'sha256:' || repeat('4', 64)),
     ('run-cancel-waiting', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-     'request-cancel-waiting', 'run-cancel-waiting', 'sha256:' || repeat('5', 64), 'sha256:' || repeat('5', 64));
+     'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-cancel-waiting', 'run-cancel-waiting', 'sha256:' || repeat('5', 64));
+
+SELECT pg_temp.seed_run_snapshot("id", "id" || '-input-1', 1, "input_snapshot_digest", "execution_subject")
+FROM "agent_runs"
+WHERE "id" IN ('run-cancel-accepted', 'run-cancel-queued', 'run-cancel-assigned', 'run-cancel-running', 'run-cancel-waiting');
 
 UPDATE "agent_runs" SET "state" = 'queued'
 WHERE "id" IN ('run-cancel-queued', 'run-cancel-assigned', 'run-cancel-running', 'run-cancel-waiting');
@@ -551,11 +568,12 @@ INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updat
 VALUES ('conversation-cancel-event', 'silo-1', 'svc-main', 'agent_session', clock_timestamp());
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+    "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest"
 ) VALUES (
     'run-cancel-event', 'silo-1', 'svc-main', 'rev-published', 'conversation-cancel-event', 'interactive',
-    'request-cancel-event', 'run-cancel-event', 'sha256:' || repeat('6', 64), 'sha256:' || repeat('c6', 32)
+    'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-cancel-event', 'run-cancel-event', 'sha256:' || repeat('c6', 32)
 );
+SELECT pg_temp.seed_run_snapshot('run-cancel-event', 'run-cancel-event-input-1', 1, 'sha256:' || repeat('c6', 32), '{"runScope":{"attempt":1}}');
 UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-event';
 
 SELECT pg_temp.expect_failure(
@@ -767,13 +785,13 @@ INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "
     ('conversation-retry-rollover', 'run-retry-rollover', 1, 1, 'run.failed', '{}', clock_timestamp());
 
 INSERT INTO "run_input_snapshots" (
-    "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-    "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-    "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+    "id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+    "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "memory_facts", "model_route",
+    "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest"
 )
 SELECT
-    'snapshot-' || "id", "id", 1, "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest",
-    "conversation_id", '[]', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
+    'snapshot-' || "id", "id", "attempt", 1, "silo_id", "agent_service_id", "agent_revision_id",
+    "agent_identity_id", "principal_id", "execution_subject", "conversation_id", '[]', '{}', '[]', '{}', '{}', 'prompt-v1', "input_snapshot_digest"
 FROM "agent_runs"
 WHERE "id" IN (
 	'run-retry-retirement', 'run-retry-rollover', 'run-state',

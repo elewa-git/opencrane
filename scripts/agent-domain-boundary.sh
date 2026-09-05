@@ -13,7 +13,6 @@ const domains = [
   { kind: "personal", directory: "libs/backend/agents/personal/configuration/main", project: "backend-agents-personal-configuration", alias: "@opencrane/backend/agents/personal/configuration", scope: "scope:personal-configuration" },
   { kind: "personal", directory: "libs/backend/agents/personal/personas/main", project: "backend-agents-personal-personas", alias: "@opencrane/backend/agents/personal/personas", scope: "scope:personal-personas" },
   { kind: "personal", directory: "libs/backend/agents/personal/memory/main", project: "backend-agents-personal-memory", alias: "@opencrane/backend/agents/personal/memory", scope: "scope:personal-memory" },
-  { kind: "shared execution", directory: "libs/backend/agents/execution/admission/main", project: "backend-agents-execution-admission", alias: "@opencrane/backend/agents/execution/admission", scope: "scope:execution-admission" },
   { kind: "shared execution", directory: "libs/backend/agents/execution/inputs/main", project: "backend-agents-execution-inputs", alias: "@opencrane/backend/agents/execution/inputs", scope: "scope:execution-inputs" },
   { kind: "shared execution", directory: "libs/backend/agents/execution/runs/main", project: "backend-agents-execution-runs", alias: "@opencrane/backend/agents/execution/runs", scope: "scope:execution-runs" },
   { kind: "operator", directory: "libs/backend/server/iam/membership/main", project: "backend-server-membership", alias: "@opencrane/backend/server/iam/membership", scope: "scope:membership" },

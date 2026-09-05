@@ -64,7 +64,7 @@ model AgentRun {
   revision                          AgentRevision                         @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  inputSnapshot                     RunInputSnapshot?
+  inputSnapshots                    RunInputSnapshot[]
   modelCredentialMintAuthorizations RunModelCredentialMintAuthorization[]
   approvalRequests                  ApprovalRequest[]
   elicitationRequests               ElicitationRequest[]
@@ -153,7 +153,7 @@ model RunInputSnapshot {
   promptCompilerVersion   String    @map("prompt_compiler_version")
   digest                  String    @unique @map("input_digest")
   compiledAt              DateTime  @default(now()) @map("created_at")
-  run                     AgentRun? @relation(fields: [runId, attempt, digest], references: [id, attempt, inputSnapshotDigest], onDelete: Restrict)
+  run                     AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
 
   @@unique([runId, attempt, digest])
   @@unique([runId, attempt, digest, conversationId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId], map: "run_input_snapshot_run_identity_key")

@@ -138,7 +138,7 @@ remains ready to serve unaffected data. The `:8081` Service is restricted by Kub
 that grant workload authority additionally review the caller's projected Kubernetes identity and
 bind it to durable assignment evidence.
 
-### Why run admission stays in this process
+### Run admission boundary
 
 Run admission is not an agent proxy and does not execute an agent session. Managed admission
 synchronously combines three existing product authorities:
@@ -147,15 +147,14 @@ synchronously combines three existing product authorities:
 2. assemble one immutable input snapshot from the active revision and effective grants; and
 3. persist the run and admission outcome in the canonical transaction.
 
-Personal admission uses the same immutable snapshot transaction after deriving the caller's subject,
-silo, participant-bound `Conversation`, and personal AgentService from trusted server authorities. Its
-only browser-controlled values are its `conversationId` and retry key. One process-local capacity gate
-protects the database pool and is shared by personal and managed paths, including run-now requests
-and the scheduler. The reusable composition lives in
-[`execution/admission`](../../libs/backend/agents/execution/admission/main/README.md); this app only
-constructs and injects the port.
+The reusable authorities live in
+[`execution/runs`](../../libs/backend/agents/execution/runs/main/README.md) and
+[`execution/inputs`](../../libs/backend/agents/execution/inputs/main/README.md). The current app does
+not compose either authority into its personal-conversation, run-now, or scheduler paths, so this
+checkout cannot admit a production run. The capacity gate likewise has tests but no production
+constructor.
 
-Moving admission into another deployable now would add a network and availability boundary without
+When the app composes admission, moving it into another deployable would add a network and availability boundary without
 giving it independent data, credentials, lifecycle, or scaling. A future agent-session gateway
 would become justified only when workload streams need their own rollout/scaling lifecycle,
 identity, queue or persistence boundary, and a versioned authenticated contract back to the product
