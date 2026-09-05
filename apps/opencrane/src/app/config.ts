@@ -187,14 +187,19 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 export function _ReadAgentSandboxReleaseProfileConfig(): AgentSandboxReleaseProfileConfig
 {
 	const profileRevisionId = _readRequired("OPENCRANE_COMPUTER_PROFILE_REVISION_ID");
+	const maximumTurnCostUsdMicros = Number(_readRequired("OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS"));
 	if (!/^sha256:[a-f0-9]{64}$/u.test(profileRevisionId))
 		throw new Error("OPENCRANE_COMPUTER_PROFILE_REVISION_ID must be an immutable sha256 image digest");
+	if (!Number.isSafeInteger(maximumTurnCostUsdMicros) || maximumTurnCostUsdMicros < 1)
+		throw new Error("OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS must be a positive integer");
 	return {
 		profileRevisionId,
 		profileName: _readRequired("OPENCRANE_COMPUTER_PROFILE_NAME"),
 		warmPoolName: _readRequired("OPENCRANE_COMPUTER_WARM_POOL_NAME"),
 		namespace: _readRequired("OPENCRANE_COMPUTER_NAMESPACE"),
+		serviceAccountName: _readRequired("OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME"),
 		leaseTtlMilliseconds: _readBoundedSeconds("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", 3_600, 60, 86_400),
+		maximumTurnCostUsdMicros,
 	};
 }
 

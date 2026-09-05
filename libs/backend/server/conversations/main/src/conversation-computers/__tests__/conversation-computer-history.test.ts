@@ -37,6 +37,7 @@ function _Lease(overrides: Partial<ComputerLease> = {}): ComputerLease
 		generation: 1,
 		sandboxClaimId: "claim-1",
 		sandboxId: "sandbox-1",
+		serviceFQDN: "sandbox-1.testv5.svc.cluster.local",
 		state: ComputerLeaseStates.Active,
 		claimedAt: "2026-09-01T00:00:00.000Z",
 		expiresAt: "2026-09-01T00:20:00.000Z",
@@ -156,9 +157,9 @@ describe("ConversationComputerHistory", function ()
 		const releasedComputer = _Computer({ state: ConversationComputerStates.Cold, updatedAt: "2026-09-01T00:05:00.000Z" });
 		const releasedLease = _Lease({ state: ComputerLeaseStates.Released, releasedAt: "2026-09-01T00:05:00.000Z" });
 		const claimedComputer = _Computer({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 2, updatedAt: "2026-09-01T00:06:00.000Z" });
-		const claimedLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: null, state: ComputerLeaseStates.Claimed, expiresAt: "2026-09-01T00:26:00.000Z" });
+		const claimedLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: null, serviceFQDN: null, state: ComputerLeaseStates.Claimed, expiresAt: "2026-09-01T00:26:00.000Z" });
 		const replacementComputer = _Computer({ state: ConversationComputerStates.Warm, leaseGeneration: 2, updatedAt: "2026-09-01T00:07:00.000Z" });
-		const replacementLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: "sandbox-2", expiresAt: "2026-09-01T00:26:00.000Z" });
+		const replacementLease = _Lease({ id: "lease-2", generation: 2, sandboxClaimId: "claim-2", sandboxId: "sandbox-2", serviceFQDN: "sandbox-2.testv5.svc.cluster.local", expiresAt: "2026-09-01T00:26:00.000Z" });
 		const valid = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, releasedComputer, releasedLease), _Event(2n, claimedComputer, claimedLease), _Event(3n, replacementComputer, replacementLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 3n }) }));
 		const directReplacement = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, replacementComputer, replacementLease)])), readHead: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 1n }) }));
 

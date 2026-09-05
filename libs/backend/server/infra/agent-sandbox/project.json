@@ -1,0 +1,15 @@
+{
+  "name": "backend-server-infra-agent-sandbox",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/backend/server/infra/agent-sandbox/src",
+  "projectType": "library",
+  "tags": [
+    "type:lib",
+    "layer:infra",
+    "scope:server-infra"
+  ],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/infra/agent-sandbox" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/infra/agent-sandbox" } }
+  }
+}

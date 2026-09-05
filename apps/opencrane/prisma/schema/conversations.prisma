@@ -109,12 +109,15 @@ model ConversationComputerAttemptCredential {
   modelAlias       String   @map("model_alias")
   siloId           String   @map("silo_id")
   conversationId   String   @map("conversation_id")
-  keyId            String   @map("key_id")
-  nonce             Bytes
-  authTag           Bytes   @map("auth_tag")
-  ciphertext        Bytes
-  ciphertextDigest  String   @map("ciphertext_digest")
-  credentialDigest String   @map("credential_digest")
+  state             String   @default("pending")
+  claimFence        String   @map("claim_fence")
+  claimExpiresAt    DateTime @map("claim_expires_at")
+  keyId             String?  @map("key_id")
+  nonce             Bytes?
+  authTag            Bytes?  @map("auth_tag")
+  ciphertext         Bytes?
+  ciphertextDigest   String? @map("ciphertext_digest")
+  credentialDigest  String? @map("credential_digest")
   expiresAt         DateTime @map("expires_at")
   createdAt         DateTime @default(now()) @map("created_at")
 

@@ -103,8 +103,10 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_COMPUTER_PROFILE_NAME", "developer");
 		vi.stubEnv("OPENCRANE_COMPUTER_WARM_POOL_NAME", "developer-pool");
 		vi.stubEnv("OPENCRANE_COMPUTER_NAMESPACE", "opencrane-testv5");
+		vi.stubEnv("OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME", "opencrane-conversation-computer");
+		vi.stubEnv("OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS", "100000");
 		vi.stubEnv("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", "1800");
-		expect(_ReadAgentSandboxReleaseProfileConfig()).toEqual({ profileRevisionId: `sha256:${"a".repeat(64)}`, profileName: "developer", warmPoolName: "developer-pool", namespace: "opencrane-testv5", leaseTtlMilliseconds: 1_800_000 });
+		expect(_ReadAgentSandboxReleaseProfileConfig()).toEqual({ profileRevisionId: `sha256:${"a".repeat(64)}`, profileName: "developer", warmPoolName: "developer-pool", namespace: "opencrane-testv5", serviceAccountName: "opencrane-conversation-computer", leaseTtlMilliseconds: 1_800_000, maximumTurnCostUsdMicros: 100_000 });
 	});
 
 	it("rejects missing or excessive durable workflow settings", function _RejectInvalidWorkflowConfig()

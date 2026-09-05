@@ -46,7 +46,7 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   provider keys and must never be rotated, or those keys become unreadable.
 - `litellm.image.*`, `.podAnnotations`, `.service.port` — image, restart, and port controls.
 - The app-owned policy admits only same-release OpenCrane and Cognee on the service port. The agent
-  controller adds exact claimed warm-runtime peers separately. Egress is limited to PostgreSQL,
+  Agent Sandbox profiles add exact conversation-computer peers separately. Egress is limited to PostgreSQL,
   DNS when enabled, and TLS provider APIs; coarse platform policies exclude LiteLLM so they cannot
   widen this boundary.
 - `litellm.redis.enabled=true` is rejected while this network boundary is active. Redis needs a

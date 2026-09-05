@@ -41,6 +41,7 @@ describe("conversation computer contracts", function ()
 			generation: computer.leaseGeneration,
 			sandboxClaimId: "claim-3",
 			sandboxId: "sandbox-3",
+			serviceFQDN: "sandbox-3.testv5.svc.cluster.local",
 			state: ComputerLeaseStates.Active,
 			claimedAt: "2026-08-31T20:01:00.000Z",
 			expiresAt: "2026-08-31T20:06:00.000Z",

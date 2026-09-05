@@ -23,6 +23,13 @@ export { ConversationComputerActivationAuthorityAdapter } from "./conversation-c
 export { PrismaConversationComputerActivationProjectionRepository } from "./db/prisma-conversation-computer-activation-repository";
 export { _CreateConversationComputerTurnRouter } from "./conversation-computer-turn.router";
 export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerModelCredential, ConversationComputerOutputCommand, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";
+export { ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityService } from "./conversation-computer-turn-authority";
+export { ActiveConversationComputerTurnCandidateResolver } from "./conversation-computer-turn-candidate-resolver";
+export { KurrentConversationComputerTurnStore } from "./conversation-computer-turn-store";
+export { PrismaConversationComputerTurnUnitOfWork } from "./db/prisma-conversation-computer-turn-unit-of-work";
+export { PrismaConversationComputerCredentialUnitOfWork } from "./db/prisma-conversation-computer-credential-issuer";
+export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssuer, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPodBindingVerifier, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+export type { ConversationComputerRawCredentialAuthority } from "./conversation-computer-turn.types";
 export { ConversationComputerHistory } from "./conversation-computers";
 export type { ActiveConversationComputerLease, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, CurrentConversationComputer } from "./conversation-computers";
 export { AesGcmConversationPrivatePayloadCipher } from "./conversation-private-payload-cipher";

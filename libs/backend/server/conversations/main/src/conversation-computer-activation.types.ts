@@ -49,3 +49,34 @@ export interface ConversationComputerActivationAuthority
 	/** Activates the exact durable computer generation or returns its terminal queue outcome. */
 	activate(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationOutcome>;
 }
+
+/** Immutable projection coordinates needed to locate one computer aggregate. */
+export interface ConversationComputerActivationProjection
+{
+	/** Identifies the represented agent identity. */
+	readonly agentIdentityId: string;
+	/** Identifies the release-admitted computer profile. */
+	readonly profileRevisionId: string;
+}
+
+/** Narrow PostgreSQL lookup used before computer history can be addressed. */
+export interface ConversationComputerActivationProjectionRepository
+{
+	/** Resolve exact coordinates or null for a foreign/non-agent conversation. */
+	resolve(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationProjection | null>;
+}
+
+/** Release-owned realization policy supplied to activation authority. */
+export interface ConversationComputerActivationProfile
+{
+	/** Immutable image/profile revision admitted by the release. */
+	readonly profileRevisionId: string;
+	/** Profile name selected by the SandboxClaim. */
+	readonly profileName: string;
+	/** Warm pool fixed for this profile. */
+	readonly warmPoolName: string;
+	/** Isolated Agent Sandbox namespace. */
+	readonly namespace: string;
+	/** Maximum lifetime of one computer lease. */
+	readonly leaseTtlMilliseconds: number;
+}

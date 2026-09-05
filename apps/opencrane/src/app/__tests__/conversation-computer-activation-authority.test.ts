@@ -1,0 +1,34 @@
+import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { ConversationComputerActivationAuthorityAdapter, ConversationComputerHistory } from "@opencrane/backend/server/conversations";
+import { describe, expect, it, vi } from "vitest";
+
+
+/** Build one release-fixed activation authority with controlled external ports. */
+function _Authority()
+{
+	const projections = { resolve: vi.fn().mockResolvedValue({ agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }) };
+	const claims = { claim: vi.fn().mockResolvedValue({ claimId: "computer-one-g1", outcome: "existing", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5-computers.svc.cluster.local" }) };
+	const profile = { profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", profileName: "developer", warmPoolName: "developer-pool", namespace: "testv5-computers", serviceAccountName: "opencrane-conversation-computer", leaseTtlMilliseconds: 60_000, maximumTurnCostUsdMicros: 100_000 };
+	const authority = new ConversationComputerActivationAuthorityAdapter(projections, {} as never, claims as never, profile);
+	return { authority, claims };
+}
+
+describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
+{
+	it("reserves a cold generation and activates only the assigned sandbox", async function _Activates()
+	{
+		const { authority, claims } = _Authority();
+		const computer = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", state: ConversationComputerStates.Cold, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z" };
+		const claimedLease = { schemaVersion: 1 as const, id: "lease-1", computerId: computer.id, generation: 1, sandboxClaimId: "computer-one-g1", sandboxId: null, serviceFQDN: null, state: ComputerLeaseStates.Claimed, claimedAt: "2026-09-05T00:00:01.000Z", expiresAt: "2099-09-05T00:01:01.000Z", releasedAt: null };
+		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 0n, computer, lease: null }).mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 1n, computer: { ...computer, state: ConversationComputerStates.ClaimPending }, lease: claimedLease });
+		const append = vi.spyOn(ConversationComputerHistory.prototype, "append").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 1n });
+
+		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("activated");
+
+		expect(load).toHaveBeenCalledTimes(2);
+		expect(append).toHaveBeenCalledTimes(2);
+		expect(claims.claim).toHaveBeenCalledWith(expect.objectContaining({ computerId: "computer-one", generation: 1 }));
+		load.mockRestore();
+		append.mockRestore();
+	});
+});

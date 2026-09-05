@@ -162,6 +162,8 @@ agentSandbox:
   enabled: false
   # -- Maximum lifetime of one server-issued conversation-computer lease.
   leaseTtlSeconds: 3600
+  # -- Hard aggregate LiteLLM spend ceiling for one conversation-computer turn.
+  maximumTurnCostUsdMicros: 100000
   # -- Target namespace where the external controller manages Sandbox Claims and their Pods.
   namespace: ""
   # -- Existing RuntimeClass used by every fixed profile, for example `gvisor`.

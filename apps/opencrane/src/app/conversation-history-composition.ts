@@ -14,7 +14,7 @@ export function _CreateConversationHistoryComposition(
   releaseProfile: AgentSandboxReleaseProfileConfig,
 ) {
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(
-    _ReadKeyring(keyringPath),
+    _ReadConversationPrivatePayloadKeyring(keyringPath),
   );
   const authority = new PrismaSelfConversationHistory(prisma, historyStore, {
     cipher,
@@ -51,7 +51,7 @@ export function _CreateConversationHistoryComposition(
 }
 
 /** Reads and structurally narrows one Secret-mounted JSON keyring before the cipher validates its keys. */
-function _ReadKeyring(path: string): ConversationPrivatePayloadKeyringDocument
+export function _ReadConversationPrivatePayloadKeyring(path: string): ConversationPrivatePayloadKeyringDocument
 {
   let value: unknown;
   try {

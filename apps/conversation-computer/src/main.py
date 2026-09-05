@@ -1,14 +1,28 @@
-"""Expose the bounded process boundary for one leased conversation computer."""
+"""Run generation-fenced conversation computer turns through the private server API."""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Final
+from pathlib import Path
+from typing import Any, Final
+
+from src.review_surface import start_review_surface
 
 _HEALTH_PATH: Final = "/healthz"
 _READINESS_PATH: Final = "/readyz"
+_DEFAULT_TOKEN_PATH: Final = "/var/run/secrets/opencrane/token"
+_MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
+_LOGGER = logging.getLogger("opencrane.conversation-computer")
+_LAST_FAILURE_TYPE: str | None = None
 
 
 def _required(name: str) -> str:
@@ -20,17 +34,106 @@ def _required(name: str) -> str:
 
 
 def _configuration() -> dict[str, str]:
-    """Freeze the history and generation coordinates supplied by the sandbox template."""
+    """Freeze the private gateway and generation coordinates supplied by the sandbox template."""
     return {
         "computerId": _required("OPENCRANE_COMPUTER_ID"),
         "generation": _required("OPENCRANE_COMPUTER_GENERATION"),
-        "historyEndpoint": _required("OPENCRANE_HISTORY_STORE_ENDPOINT"),
+        "internalEndpoint": _required("OPENCRANE_INTERNAL_ENDPOINT").rstrip("/"),
         "leaseId": _required("OPENCRANE_COMPUTER_LEASE_ID"),
+        "tokenPath": os.environ.get("OPENCRANE_PROJECTED_TOKEN_PATH", _DEFAULT_TOKEN_PATH),
     }
 
 
+def _read_token(path: str) -> str:
+    """Read the rotating audience-bound token immediately before each server exchange."""
+    token = Path(path).read_text(encoding="utf-8").strip()
+    if not token:
+        raise RuntimeError("projected workload token is empty")
+    return token
+
+
+def _json_request(url: str, token: str, payload: dict[str, Any] | None = None, empty_outcome: str | None = None) -> dict[str, Any]:
+    """Perform one bounded authenticated JSON exchange with the private control-plane listener."""
+    body = None if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    request = urllib.request.Request(url, data=body, method="GET" if body is None else "POST")
+    request.add_header("Authorization", f"Bearer {token}")
+    request.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        raw = response.read(_MAX_RESPONSE_BYTES + 1)
+    if len(raw) > _MAX_RESPONSE_BYTES:
+        raise RuntimeError("private API response exceeds the computer byte limit")
+    if not raw and empty_outcome is not None:
+        return {"outcome": empty_outcome}
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise RuntimeError("private API response must be an object")
+    return value
+
+
+def _bootstrap(config: dict[str, str]) -> dict[str, Any]:
+    """Exchange the Pod-bound token and immutable lease coordinates for one admitted turn."""
+    token = _read_token(config["tokenPath"])
+    query = urllib.parse.urlencode({"computerId": config["computerId"], "generation": config["generation"], "leaseId": config["leaseId"]})
+    return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/bootstrap?{query}", token, empty_outcome="idle")
+
+
+def _model_text(response: dict[str, Any]) -> str:
+    """Extract only the first assistant text returned by the admitted OpenAI-compatible route."""
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("model response has no choice")
+    first = choices[0]
+    message = first.get("message") if isinstance(first, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("model response has no assistant text")
+    return content
+
+
+def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> None:
+    """Call the admitted model route and return untrusted assistant text for server-side storage."""
+    compiled = bootstrap.get("compiledInput")
+    credential = bootstrap.get("modelCredential")
+    if not isinstance(compiled, dict) or not isinstance(credential, dict):
+        raise RuntimeError("bootstrap omitted compiled input or model credential")
+    endpoint = credential.get("endpoint")
+    key = credential.get("key")
+    model = credential.get("model")
+    messages = compiled.get("messages")
+    if not isinstance(endpoint, str) or not isinstance(key, str) or not isinstance(model, str) or not isinstance(messages, list):
+        raise RuntimeError("bootstrap contains an invalid model route")
+    model_response = _json_request(f"{endpoint.rstrip('/')}/v1/chat/completions", key, {"model": model, "messages": messages})
+    text = _model_text(model_response)
+    token = _read_token(config["tokenPath"])
+    bootstrap_id = bootstrap.get("bootstrapId")
+    if not isinstance(bootstrap_id, str) or not bootstrap_id:
+        raise RuntimeError("bootstrap omitted its idempotency coordinate")
+    source_command_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"opencrane:conversation-output:{bootstrap_id}"))
+    output = {"bootstrapId": bootstrap_id, "sourceCommandId": source_command_id, "text": text}
+    _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/output", token, output)
+
+
+def _turn_loop() -> None:
+    """Poll for the single pending activation and finish it without exposing a command listener."""
+    global _LAST_FAILURE_TYPE
+    config = _configuration()
+    retry_delay_seconds = 2
+    while True:
+        try:
+            bootstrap = _bootstrap(config)
+            if bootstrap.get("outcome") == "ready":
+                _execute_turn(config, bootstrap)
+            _LAST_FAILURE_TYPE = None
+            retry_delay_seconds = 2
+        except (OSError, RuntimeError, ValueError, urllib.error.URLError, json.JSONDecodeError) as error:
+            _LAST_FAILURE_TYPE = type(error).__name__
+            _LOGGER.warning("conversation computer turn retry", extra={"errorType": _LAST_FAILURE_TYPE, "retryDelaySeconds": retry_delay_seconds})
+            retry_delay_seconds = min(retry_delay_seconds * 2, 30)
+        time.sleep(retry_delay_seconds)
+
+
 class _HealthHandler(BaseHTTPRequestHandler):
-    """Serve process health without exposing a command or execution protocol."""
+    """Serve process health without exposing an execution protocol."""
 
     server_version = "OpenCraneConversationComputer/0.11"
 
@@ -40,6 +143,9 @@ class _HealthHandler(BaseHTTPRequestHandler):
             self._reply(200, {"status": "alive"})
             return
         if self.path == _READINESS_PATH:
+            if _LAST_FAILURE_TYPE is not None:
+                self._reply(503, {"status": "degraded", "reason": _LAST_FAILURE_TYPE})
+                return
             try:
                 config = _configuration()
             except RuntimeError as error:
@@ -50,7 +156,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
         self._reply(404, {"status": "not_found"})
 
     def log_message(self, _format: str, *args: object) -> None:
-        """Suppress the standard access log until the computer observability adapter owns it."""
+        """Suppress standard access logs because health requests contain no useful turn evidence."""
 
     def _reply(self, status: int, payload: dict[str, str]) -> None:
         """Write one bounded JSON health response."""
@@ -63,7 +169,10 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    """Start the health boundary on the fixed sandbox service port."""
+    """Start the private turn worker beside the fixed health listener."""
+    start_review_surface()
+    worker = threading.Thread(target=_turn_loop, name="conversation-turn", daemon=True)
+    worker.start()
     port = int(os.environ.get("OPENCRANE_COMPUTER_HEALTH_PORT", "8080"))
     server = ThreadingHTTPServer(("0.0.0.0", port), _HealthHandler)
     server.serve_forever()

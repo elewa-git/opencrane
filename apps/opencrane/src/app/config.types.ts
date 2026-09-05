@@ -46,8 +46,12 @@ export interface AgentSandboxReleaseProfileConfig
 	readonly warmPoolName: string;
 	/** Namespace where the external Agent Sandbox controller accepts claims. */
 	readonly namespace: string;
+	/** ServiceAccount fixed on every conversation-computer Pod. */
+	readonly serviceAccountName: string;
 	/** Maximum lifetime of one fenced computer lease. */
 	readonly leaseTtlMilliseconds: number;
+	/** Hard per-turn LiteLLM spend ceiling in micro-US-dollars. */
+	readonly maximumTurnCostUsdMicros: number;
 }
 
 /** Settings read once at startup, used to compose workload identity, workflow-controller, and worker routes. */

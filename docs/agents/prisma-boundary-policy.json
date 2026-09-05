@@ -555,6 +555,25 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-turn-unit-of-work.ts",
+				"adapter": "PrismaConversationComputerTurnRepository",
+				"contract": "ConversationComputerPendingTurnCompiler",
+				"contractImportPath": "../conversation-computer-turn.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationProductAuthorizationRepository",
+						"importPath": "./conversation-product-authorization"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-credential-issuer.ts",
+				"adapter": "PrismaConversationComputerCredentialRepository",
+				"contract": "ConversationComputerCredentialIssuer",
+				"contractImportPath": "../conversation-computer-turn.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 				"adapter": "PrismaUserOnboardingRepository",
 				"contract": "UserOnboardingRepository",
@@ -767,20 +786,6 @@
 				"constructs": []
 			},
 			{
-				"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-event-reporter.ts",
-				"adapter": "PrismaRuntimeEventAppendRepository",
-				"contract": "RuntimeEventAppendRepository",
-				"contractImportPath": "./runtime-event-reporter.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
-				"adapter": "PrismaRuntimeTerminalPendingToolRepository",
-				"contract": "RuntimeTerminalPendingToolRepository",
-				"contractImportPath": "./runtime-terminal-reporter.types",
-				"constructs": []
-			},
-			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-self-run-status-repository.ts",
 				"adapter": "PrismaSelfRunStatusRepository",
 				"contract": "SelfRunStatusRepository",
@@ -976,6 +981,30 @@
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-turn-unit-of-work.ts",
+				"adapter": "PrismaConversationComputerTurnUnitOfWork",
+				"contract": "ConversationComputerPendingTurnCompiler",
+				"contractImportPath": "../conversation-computer-turn.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerTurnRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-credential-issuer.ts",
+				"adapter": "PrismaConversationComputerCredentialUnitOfWork",
+				"contract": "ConversationComputerCredentialIssuer",
+				"contractImportPath": "../conversation-computer-turn.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerCredentialRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
 			{
 				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-publication.ts",
 				"adapter": "PrismaAgentServicePublicationUnitOfWork",
@@ -1583,42 +1612,6 @@
 				]
 			},
 			{
-				"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-event-reporter.ts",
-				"adapter": "PrismaRuntimeEventAppendUnitOfWork",
-				"contract": "RuntimeEventAppendUnitOfWork",
-				"contractImportPath": "./runtime-event-reporter.types",
-				"constructs": [
-					{
-						"adapter": "PrismaRuntimeEventAppendRepository",
-						"importPath": "<same-file>"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
-				"adapter": "PrismaRuntimeTerminalPendingToolUnitOfWork",
-				"contract": "RuntimeTerminalPendingToolUnitOfWork",
-				"contractImportPath": "./runtime-terminal-reporter.types",
-				"constructs": [
-					{
-						"adapter": "PrismaRuntimeTerminalPendingToolRepository",
-						"importPath": "<same-file>"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
-				"adapter": "PrismaRuntimeTerminalChildDeliveryUnitOfWork",
-				"contract": "ChildRunCompletionRepository",
-				"contractImportPath": "./child-run-completion.types",
-				"constructs": [
-					{
-						"adapter": "PrismaChildRunCompletionRepository",
-						"importPath": "./prisma-child-run-completion-repository"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-self-run-status-repository.ts",
 				"adapter": "PrismaSelfRunStatusUnitOfWork",
 				"contract": "SelfRunStatusRepository",
@@ -1747,6 +1740,8 @@
 		],
 		"compositions": [
 			"apps/opencrane/src/app/conversation-computer-activation-composition.ts",
+			"apps/opencrane/src/app/conversation-computer-turn-composition.ts",
+			"apps/opencrane/src/app/internal-app.ts",
 			"apps/opencrane/src/app/conversation-history-composition.ts",
 			"libs/backend/server/conversations/main/src/agent-session-creation.ts",
 			"libs/backend/server/conversations/main/src/agent-session-projection.ts",
@@ -1855,15 +1850,6 @@
 			],
 			"reason": "bootstrap chat start must create the child conversation before the parent pin inside one atomic write; extract a dedicated onboarding UnitOfWork with the next onboarding persistence boundary change.",
 			"expiresOn": "2026-12-31"
-		},
-			{
-				"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
-				"owner": "execution-runs",
-				"operations": [
-					"delegate"
-				],
-				"reason": "Terminal reporting owns one caller-opened transaction across the attempt fence, pending-tool check, terminal transition, timeline event, and child delivery; extract its dedicated repository only when replacing the remaining run lifecycle owner.",
-				"expiresOn": "2026-12-31"
-			}
+		}
 	]
 }

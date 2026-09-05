@@ -200,6 +200,8 @@ export interface ComputerLease
 	readonly sandboxClaimId: string;
 	/** Identifies the upstream sandbox after assignment. */
 	readonly sandboxId: string | null;
+	/** Carries the controller-reported in-cluster Service DNS name after assignment. */
+	readonly serviceFQDN: string | null;
 	/** States whether this realization may process work. */
 	readonly state: ComputerLeaseStates;
 	/** Records when this lease was claimed. */
@@ -209,3 +211,5 @@ export interface ComputerLease
 	/** Records when this lease became terminal. */
 	readonly releasedAt: string | null;
 }
+/** Audience fixed on every projected conversation-computer ServiceAccount token. */
+export const CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE = "opencrane-conversation-computer";

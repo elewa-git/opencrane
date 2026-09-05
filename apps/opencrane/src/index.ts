@@ -8,6 +8,7 @@ import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./app
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
 import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
 import { _StartConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition";
+import { _CreateConversationComputerTurnComposition } from "./app/conversation-computer-turn-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
@@ -52,7 +53,8 @@ async function _Main(): Promise<void>
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution);
+	const conversationComputerTurn = _CreateConversationComputerTurnComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath);
+	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution, conversationComputerTurn);
 	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, channelTargetRoutes, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerActivations);
 }

@@ -137,8 +137,12 @@ spec:
               value: {{ $computerProfile.poolName | quote }}
             - name: OPENCRANE_COMPUTER_NAMESPACE
               value: {{ .Values.agentSandbox.namespace | quote }}
+            - name: OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME
+              value: {{ .Values.agentSandbox.serviceAccountName | quote }}
             - name: OPENCRANE_COMPUTER_LEASE_TTL_SECONDS
               value: {{ .Values.agentSandbox.leaseTtlSeconds | quote }}
+            - name: OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS
+              value: {{ .Values.agentSandbox.maximumTurnCostUsdMicros | quote }}
             {{- end }}
             - name: CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH
               value: /var/run/opencrane/conversation-payload/keyring.json

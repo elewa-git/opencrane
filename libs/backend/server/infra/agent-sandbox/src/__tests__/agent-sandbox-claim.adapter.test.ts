@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentSandboxClaimAdapter, type AgentSandboxClaimCommand } from "../agent-sandbox-claim.adapter";
+import { AgentSandboxClaimAdapter } from "../agent-sandbox-claim.adapter";
+import type { AgentSandboxClaimCommand } from "../agent-sandbox-claim.types";
 
 function _Command(overrides: Partial<AgentSandboxClaimCommand> = {}): AgentSandboxClaimCommand
 {
@@ -15,7 +16,7 @@ describe("AgentSandboxClaimAdapter", function _AgentSandboxClaimAdapterSuite()
 		const createNamespacedCustomObject = vi.fn().mockResolvedValue({});
 		const result = await new AgentSandboxClaimAdapter({ getNamespacedCustomObject, createNamespacedCustomObject } as never).claim(_Command());
 
-		expect(result).toEqual({ claimId: "computer-1-g2", outcome: "created", sandboxId: null });
+		expect(result).toEqual({ claimId: "computer-1-g2", outcome: "created", sandboxId: null, serviceFQDN: null });
 		expect(createNamespacedCustomObject).toHaveBeenCalledWith(expect.objectContaining({
 			group: "extensions.agents.x-k8s.io", version: "v1beta1", namespace: "silo-1-computers", plural: "sandboxclaims",
 			body: expect.objectContaining({
@@ -39,10 +40,10 @@ describe("AgentSandboxClaimAdapter", function _AgentSandboxClaimAdapterSuite()
 				lifecycle: { shutdownPolicy: "DeleteForeground", shutdownTime: command.expiresAt },
 				additionalPodMetadata: { labels: { "opencrane.ai/computer-id": command.computerId, "opencrane.ai/computer-generation": "2", "opencrane.ai/computer-lease-id": command.leaseId }, annotations: {} },
 			},
-			status: { sandbox: { name: "sandbox-2" } },
+			status: { sandbox: { name: "sandbox-2", serviceFQDN: "sandbox-2.silo-1-computers.svc.cluster.local" } },
 		});
 		const result = await new AgentSandboxClaimAdapter({ getNamespacedCustomObject, createNamespacedCustomObject: vi.fn() } as never).claim(command);
-		expect(result).toEqual({ claimId: "computer-1-g2", outcome: "existing", sandboxId: "sandbox-2" });
+		expect(result).toEqual({ claimId: "computer-1-g2", outcome: "existing", sandboxId: "sandbox-2", serviceFQDN: "sandbox-2.silo-1-computers.svc.cluster.local" });
 	});
 
 	it("fails closed when the deterministic name contains another claim", async function _RejectConflict()

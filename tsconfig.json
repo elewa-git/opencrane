@@ -356,6 +356,9 @@
       ],
       "@opencrane/state/organization/members/adapter": [
         "./libs/frontend/state/organization/members/adapter/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/agent-sandbox": [
+        "./libs/backend/server/infra/agent-sandbox/src/index.ts"
       ]
     }
   },

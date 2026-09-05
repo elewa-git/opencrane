@@ -1,31 +1,10 @@
 import type * as k8s from "@kubernetes/client-node";
+import type { AgentSandboxClaimCommand, AgentSandboxClaimResult } from "./agent-sandbox-claim.types";
 
 const _GROUP = "extensions.agents.x-k8s.io";
 const _VERSION = "v1beta1";
 const _PLURAL = "sandboxclaims";
 const _DNS_LABEL = /^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/;
-
-/** Supplies the release-owned values needed to realize one fenced computer generation. */
-export interface AgentSandboxClaimCommand
-{
-	readonly siloId: string;
-	readonly computerId: string;
-	readonly leaseId: string;
-	readonly generation: number;
-	readonly namespace: string;
-	readonly profileName: string;
-	readonly warmPoolName: string;
-	readonly expiresAt: string;
-	readonly reason: "activation_requested" | "recovery_requested";
-}
-
-/** Reports the converged claim identity without treating controller readiness as claim creation. */
-export interface AgentSandboxClaimResult
-{
-	readonly claimId: string;
-	readonly outcome: "created" | "existing";
-	readonly sandboxId: string | null;
-}
 
 interface SandboxClaimResource
 {
@@ -35,7 +14,7 @@ interface SandboxClaimResource
 		readonly lifecycle?: { readonly shutdownPolicy?: string; readonly shutdownTime?: string };
 		readonly additionalPodMetadata?: { readonly labels?: Readonly<Record<string, string>>; readonly annotations?: Readonly<Record<string, string>> };
 	};
-	readonly status?: { readonly sandbox?: { readonly name?: string } };
+	readonly status?: { readonly sandbox?: { readonly name?: string; readonly serviceFQDN?: string } };
 }
 
 /**
@@ -44,6 +23,8 @@ interface SandboxClaimResource
  * The adapter deliberately accepts already-authorized, release-resolved values. It neither chooses
  * a profile nor interprets Kubernetes status as product authority. A retry observes the exact same
  * resource, while any conflicting resource under the deterministic name fails closed.
+ *
+ * @see https://pkg.go.dev/sigs.k8s.io/agent-sandbox@v1.0.0/extensions/api/v1beta1 for SandboxClaim serviceFQDN ownership.
  */
 export class AgentSandboxClaimAdapter
 {
@@ -62,7 +43,7 @@ export class AgentSandboxClaimAdapter
 		try
 		{
 			await this.api.createNamespacedCustomObject({ group: _GROUP, version: _VERSION, namespace: command.namespace, plural: _PLURAL, body: desired });
-			return { claimId, outcome: "created", sandboxId: null };
+			return { claimId, outcome: "created", sandboxId: null, serviceFQDN: null };
 		}
 		catch (error)
 		{
@@ -135,7 +116,24 @@ function _ExistingResult(existing: SandboxClaimResource, desired: SandboxClaimRe
 		|| existing.metadata?.namespace !== desired.metadata?.namespace)
 		throw new Error("Agent Sandbox deterministic claim conflicts with the admitted computer generation");
 	const sandboxId = existing.status?.sandbox?.name;
-	return { claimId, outcome: "existing", sandboxId: typeof sandboxId === "string" && sandboxId.length > 0 ? sandboxId : null };
+	const serviceFQDN = existing.status?.sandbox?.serviceFQDN;
+	return { claimId, outcome: "existing", sandboxId: _OptionalIdentifier(sandboxId), serviceFQDN: _OptionalServiceFqdn(serviceFQDN) };
+}
+
+function _OptionalIdentifier(value: unknown): string | null
+{
+	return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function _OptionalServiceFqdn(value: unknown): string | null
+{
+	return typeof value === "string" && _ServiceFqdn(value) ? value : null;
+}
+
+/** Accept only a controller-reported cluster-local DNS name, never a URL or caller-selected host. */
+function _ServiceFqdn(value: string): boolean
+{
+	return value.length <= 253 && value.endsWith(".svc.cluster.local") && value.split(".").every(label => _DNS_LABEL.test(label));
 }
 
 function _SameStringRecord(left: Readonly<Record<string, string>> | undefined, right: Readonly<Record<string, string>> | undefined): boolean

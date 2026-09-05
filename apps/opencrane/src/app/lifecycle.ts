@@ -11,6 +11,7 @@ import type { ProviderEffectCommandExecutor } from "@opencrane/backend/server/ga
 
 import { _StartBackgroundWorkers } from "./background-workers";
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
+import type { ConversationComputerActivationWorker } from "./conversation-computer-activation-composition.types";
 import type { OpenCraneProcessConfig } from "./config.types";
 import type { OpenCraneHistoryStoreComposition } from "./history-store-composition.types";
 import type { OpenCraneHttpServers } from "./lifecycle.types";
@@ -71,7 +72,7 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor, historyStore: OpenCraneHistoryStoreComposition): Promise<void>
+export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor, historyStore: OpenCraneHistoryStoreComposition, conversationComputerActivations: ConversationComputerActivationWorker = { stop: async function _NoActivationWorker(): Promise<void> {} }): Promise<void>
 {
 	// 1. Start workers only after application composition has registered every durable task.
 	let backgroundWorkers: OpenCraneBackgroundWorkers;
@@ -85,7 +86,7 @@ export async function _StartProcessLifecycle(publicApp: Express, internalApp: Ex
 		hardExit.unref();
 		await _runCleanupStage("startup_dependencies", async function _CloseStartupDependencies()
 		{
-			await _settleCleanup([channelTargetRoutes.stop(), historyStore.close(), workflowRuntime.close(), prisma.$disconnect()]);
+			await _settleCleanup([channelTargetRoutes.stop(), conversationComputerActivations.stop(), historyStore.close(), workflowRuntime.close(), prisma.$disconnect()]);
 		});
 		await _runCleanupStage("startup_telemetry", ___ShutdownTelemetry);
 		clearTimeout(hardExit);
@@ -113,7 +114,7 @@ export async function _StartProcessLifecycle(publicApp: Express, internalApp: Ex
 				Promise.resolve().then(_BeginProcessShutdown),
 			]);
 		});
-		clean = await _runCleanupStage("drain_workers", async function _DrainWorkers() { await _settleCleanup([backgroundWorkers.stop(), channelTargetRoutes.stop()]); }) && clean;
+		clean = await _runCleanupStage("drain_workers", async function _DrainWorkers() { await _settleCleanup([backgroundWorkers.stop(), channelTargetRoutes.stop(), conversationComputerActivations.stop()]); }) && clean;
 		clean = await _runCleanupStage("close_listeners", async function _CloseListeners() { await _settleCleanup([_closeServer(servers.public), _closeServer(servers.internal)]); }) && clean;
 		clean = await _runCleanupStage("disconnect_history_store", historyStore.close) && clean;
 		clean = await _runCleanupStage("disconnect_database", async function _DisconnectDatabase() { await prisma.$disconnect(); }) && clean;

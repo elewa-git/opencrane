@@ -86,9 +86,9 @@ export function _ValidatedConversationComputer(value: unknown): ConversationComp
 /** Parses the exact closed ComputerLease contract at a history boundary. */
 export function _ValidatedComputerLease(value: unknown): ComputerLease
 {
-	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "computerId", "generation", "sandboxClaimId", "sandboxId", "state", "claimedAt", "expiresAt", "releasedAt"]))
+	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "computerId", "generation", "sandboxClaimId", "sandboxId", "serviceFQDN", "state", "claimedAt", "expiresAt", "releasedAt"]))
 		throw new Error("Conversation computer history requires a valid lease snapshot");
-	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.computerId) || !_PositiveInteger(value.generation) || !_Identifier(value.sandboxClaimId) || (value.sandboxId !== null && !_Identifier(value.sandboxId)) || !_LeaseState(value.state) || !_IsoTimestamp(value.claimedAt) || !_IsoTimestamp(value.expiresAt) || (value.releasedAt !== null && !_IsoTimestamp(value.releasedAt)))
+	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.computerId) || !_PositiveInteger(value.generation) || !_Identifier(value.sandboxClaimId) || (value.sandboxId !== null && !_Identifier(value.sandboxId)) || (value.serviceFQDN !== null && !_ServiceFqdn(value.serviceFQDN)) || !_LeaseState(value.state) || !_IsoTimestamp(value.claimedAt) || !_IsoTimestamp(value.expiresAt) || (value.releasedAt !== null && !_IsoTimestamp(value.releasedAt)))
 		throw new Error("Conversation computer history requires valid lease coordinates");
 	if (Date.parse(value.expiresAt) <= Date.parse(value.claimedAt))
 		throw new Error("Conversation computer history requires a lease expiry after its claim");
@@ -110,13 +110,13 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 		throw new Error("Conversation computer history requires the lease to match its computer generation");
 	if (lease.state === ComputerLeaseStates.Claimed)
 	{
-		if (computer.state !== ConversationComputerStates.ClaimPending || lease.sandboxId !== null || lease.releasedAt !== null)
+		if (computer.state !== ConversationComputerStates.ClaimPending || lease.sandboxId !== null || lease.serviceFQDN !== null || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires a pending claim without a sandbox");
 		return;
 	}
 	if (lease.state === ComputerLeaseStates.Active)
 	{
-		if ((computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling) || lease.sandboxId === null || lease.releasedAt !== null)
+		if ((computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling) || lease.sandboxId === null || lease.serviceFQDN === null || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires an active lease for a warm or cooling computer");
 		return;
 	}
@@ -159,10 +159,17 @@ function _ValidateSameLeaseTransition(previous: ComputerLease, current: Computer
 		throw new Error("Conversation computer history changed stable lease coordinates");
 	if (previous.sandboxId !== null && previous.sandboxId !== current.sandboxId)
 		throw new Error("Conversation computer history changed an assigned sandbox");
+	if (previous.serviceFQDN !== null && previous.serviceFQDN !== current.serviceFQDN)
+		throw new Error("Conversation computer history changed an assigned sandbox Service");
 	if ((previous.state === ComputerLeaseStates.Released || previous.state === ComputerLeaseStates.Lost) && previous.state !== current.state)
 		throw new Error("Conversation computer history reactivated a terminal lease");
 	if (previous.state === ComputerLeaseStates.Active && current.state === ComputerLeaseStates.Claimed)
 		throw new Error("Conversation computer history moved an active lease back to claimed");
+}
+
+function _ServiceFqdn(value: unknown): value is string
+{
+	return typeof value === "string" && value.length <= 253 && value.endsWith(".svc.cluster.local") && value.split(".").every(_Identifier);
 }
 
 /** Validates the nested immutable workspace checkpoint when one is present. */

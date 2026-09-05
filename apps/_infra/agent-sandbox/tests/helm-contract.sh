@@ -96,6 +96,8 @@ grep -Fq '              value: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 grep -Fq '            - name: OPENCRANE_COMPUTER_PROFILE_NAME' <<<"$server"
 grep -Fq '            - name: OPENCRANE_COMPUTER_WARM_POOL_NAME' <<<"$server"
 grep -Fq '            - name: OPENCRANE_COMPUTER_NAMESPACE' <<<"$server"
+grep -Fq '            - name: OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME' <<<"$server"
+grep -Fq '              value: "agent-sandbox-runtime"' <<<"$server"
 grep -Fq '            - name: OPENCRANE_COMPUTER_LEASE_TTL_SECONDS' <<<"$server"
 
 if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]:0:2}" --set agentSandbox.enabled=true "${VALUES[@]:4}" >/dev/null 2>&1; then
