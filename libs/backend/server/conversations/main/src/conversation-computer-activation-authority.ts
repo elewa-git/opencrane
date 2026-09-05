@@ -30,18 +30,26 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 			return { action: "park", reason: "conversation computer profile is not admitted by this release" };
 		const coordinates = { siloId: command.siloId, computerId: command.computerId, conversationId: command.conversationId, agentIdentityId: projection.agentIdentityId, profileRevisionId: projection.profileRevisionId };
 		let current = await this.computers.load(coordinates);
-		if (current === null || current.computer.state === ConversationComputerStates.Retired || current.computer.leaseGeneration !== command.generation)
+		if (current === null || current.computer.state === ConversationComputerStates.Retired)
 			return "denied";
 		if (current.computer.state === ConversationComputerStates.Warm && current.lease?.state === ComputerLeaseStates.Active)
 			return "idempotent";
+		if (current.computer.state === ConversationComputerStates.Cooling && current.lease?.state === ComputerLeaseStates.Active && current.computer.leaseGeneration === command.generation)
+		{
+			const reactivatedAt = new Date().toISOString();
+			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${current.lease.id}:${command.generation}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease: current.lease });
+			return "activated";
+		}
 
 		// 2. Persist the generation reservation before creating an external claim, so a retry has one owner.
 		const now = new Date();
 		const expiresAt = new Date(now.getTime() + this.profile.leaseTtlMilliseconds).toISOString();
-		if (current.computer.state === ConversationComputerStates.Cold && current.lease === null)
+		const initialClaim = current.computer.state === ConversationComputerStates.Cold && current.lease === null && current.computer.leaseGeneration === command.generation;
+		const recoveryClaim = current.computer.state === ConversationComputerStates.Cold && current.lease?.state === ComputerLeaseStates.Released && current.computer.leaseGeneration + 1 === command.generation;
+		if (initialClaim || recoveryClaim)
 		{
 			const lease = _ClaimedLease(command.computerId, command.generation, now.toISOString(), expiresAt);
-			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-claim-pending", lease.id), computer: { ...current.computer, state: ConversationComputerStates.ClaimPending, updatedAt: now.toISOString() }, lease });
+			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-claim-pending", lease.id), computer: { ...current.computer, state: ConversationComputerStates.ClaimPending, leaseGeneration: command.generation, updatedAt: now.toISOString() }, lease });
 			current = await this.computers.load(coordinates);
 		}
 		if (current === null || current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)

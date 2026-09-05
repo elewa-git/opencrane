@@ -28,6 +28,7 @@ export { _CreateConversationComputerCheckpointRouter } from "./conversation-comp
 export type { ConversationComputerCheckpointRestorer, ConversationComputerCheckpointRouterOptions } from "./conversation-computer-checkpoint.router.types";
 export { ConversationComputerLifecycleScheduler, _LifecycleEventId } from "./conversation-computer-lifecycle-scheduler";
 export type { ConversationComputerLifecycleCandidate, ConversationComputerLifecycleEnumerator, ConversationComputerLifecycleReconciler } from "./conversation-computer-lifecycle-scheduler.types";
+export { ConversationComputerCheckpointFenceAdapter, ConversationComputerLifecycleDueEnumerator, ConversationComputerLifecycleWorker, HttpConversationComputerCheckpointSandbox } from "./conversation-computer-lifecycle-runtime";
 export { PrismaConversationComputerActivationProjectionRepository } from "./db/prisma-conversation-computer-activation-repository";
 export { PrismaConversationComputerLifecycleProjectionRepository } from "./db/prisma-conversation-computer-lifecycle-projection-repository";
 export { _CreateConversationComputerTurnRouter } from "./conversation-computer-turn.router";

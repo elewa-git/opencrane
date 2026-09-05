@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { ConversationMode, Prisma, type PrismaClient } from "@prisma/client";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import type { ConversationEntry, MessageEntry } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
 
 import { ConversationHistoryAuthority } from "./conversation-history-authority";
 import { ConversationHistoryAppendOutcomes } from "./conversation-history-authority.types";
@@ -109,11 +109,12 @@ export class PrismaSelfConversationHistory implements SelfConversationHistoryAut
 		const current = await this.dependencies.computerReader.load({ siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId!, profileRevisionId: projection.computerProfileRevisionId! });
 		if (current === null || current.computer.leaseGeneration < 1)
 			throw new Error("Conversation computer activation requires a current checked computer generation");
+		const generation = current.computer.state === ConversationComputerStates.Cold && current.lease?.state === ComputerLeaseStates.Released ? current.computer.leaseGeneration + 1 : current.computer.leaseGeneration;
 		const queueStreamName = `computer-activations-${caller.siloId}`;
 		const queueHead = await this.historyStore.readHead(queueStreamName);
 		if (queueHead.streamName !== queueStreamName)
 			throw new Error("Conversation computer activation queue returned a foreign stream head");
-		return this.historyAuthority.appendWithActivation({ siloId: caller.siloId, conversationId, expectedRevision, entry, activation: { computerId: current.computer.id, generation: current.computer.leaseGeneration, eventId: _ActivationEventId(command.idempotencyKey), queueExpectedRevision: queueHead.revision ?? HistoryExpectedRevisions.NoStream } });
+		return this.historyAuthority.appendWithActivation({ siloId: caller.siloId, conversationId, expectedRevision, entry, activation: { computerId: current.computer.id, generation, eventId: _ActivationEventId(command.idempotencyKey), queueExpectedRevision: queueHead.revision ?? HistoryExpectedRevisions.NoStream } });
 	}
 
 	/** Loads an agent conversation's current checked computer or returns null outside agent mode. */

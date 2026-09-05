@@ -20,6 +20,12 @@ export class ConversationComputerLifecycleAuthority
 		const current = await this.computers.load(command);
 		if (current === null || current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.RecoveryRequired || current.computer.state === ConversationComputerStates.Retired)
 			return "terminal";
+		if (current.lease !== null && current.computer.state === ConversationComputerStates.Cooling && current.lease.state === ComputerLeaseStates.Released)
+		{
+			await this.claims.release({ namespace: this.namespace, claimId: current.lease.sandboxClaimId, computerId: current.computer.id, leaseId: current.lease.id, generation: current.lease.generation });
+			await this.computers.append({ expectedRevision: current.revision, eventId: _CompletionEventId(command.eventId), computer: { ...current.computer, state: ConversationComputerStates.Cold, updatedAt: command.now.toISOString() }, lease: current.lease });
+			return "retired_to_checkpoint";
+		}
 		if (current.lease === null || current.lease.state !== ComputerLeaseStates.Active)
 			return "current";
 		const idleMilliseconds = command.now.getTime() - Date.parse(current.computer.updatedAt);
@@ -35,9 +41,22 @@ export class ConversationComputerLifecycleAuthority
 		if (await this.attempts.hasActiveAttempt(current.computer.id, current.lease.id))
 			return "active_attempt";
 		const checkpoint = await this.checkpoints.capture(current.computer, current.lease);
-		await this.claims.release({ namespace: this.namespace, claimId: current.lease.sandboxClaimId, computerId: current.computer.id, leaseId: current.lease.id, generation: current.lease.generation });
 		const releasedAt = command.now.toISOString();
-		await this.computers.append({ expectedRevision: current.revision, eventId: command.eventId, computer: { ...current.computer, state: ConversationComputerStates.Cold, workspaceCheckpoint: checkpoint, updatedAt: releasedAt }, lease: { ...current.lease, state: ComputerLeaseStates.Released, releasedAt } });
+		await this.computers.append({ expectedRevision: current.revision, eventId: command.eventId, computer: { ...current.computer, workspaceCheckpoint: checkpoint }, lease: { ...current.lease, state: ComputerLeaseStates.Released, releasedAt } });
+		const released = await this.computers.load(command);
+		if (released === null || released.lease?.state !== ComputerLeaseStates.Released)
+			throw new Error("Conversation computer checkpoint release history is unavailable");
+		await this.claims.release({ namespace: this.namespace, claimId: released.lease.sandboxClaimId, computerId: released.computer.id, leaseId: released.lease.id, generation: released.lease.generation });
+		await this.computers.append({ expectedRevision: released.revision, eventId: _CompletionEventId(command.eventId), computer: { ...released.computer, state: ConversationComputerStates.Cold, updatedAt: releasedAt }, lease: released.lease });
 		return "retired_to_checkpoint";
 	}
+}
+
+/** Derive a distinct deterministic completion event after the release intent is durable. */
+function _CompletionEventId(eventId: string): string
+{
+	const chars = eventId.replaceAll("-", "").split("");
+	chars[31] = chars[31] === "0" ? "1" : "0";
+	const hex = chars.join("");
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

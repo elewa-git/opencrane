@@ -7,10 +7,11 @@ const _NOW = new Date("2026-09-05T12:20:00.000Z");
 const _COMPUTER: ConversationComputer = { schemaVersion: 1, id: "computer-1", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", state: ConversationComputerStates.Warm, leaseGeneration: 2, workspaceCheckpoint: null, createdAt: "2026-09-05T12:00:00.000Z", updatedAt: "2026-09-05T12:00:00.000Z" };
 const _LEASE: ComputerLease = { schemaVersion: 1, id: "lease-2", computerId: "computer-1", generation: 2, sandboxClaimId: "computer-1-g2", sandboxId: "sandbox-2", serviceFQDN: "sandbox-2.silo-1.svc.cluster.local", state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T12:00:00.000Z", expiresAt: "2026-09-05T13:00:00.000Z", releasedAt: null };
 
-function _Harness(computer: ConversationComputer = _COMPUTER, activeAttempt = false)
+function _Harness(computer: ConversationComputer = _COMPUTER, activeAttempt = false, lease: ComputerLease = _LEASE)
 {
 	const append = vi.fn().mockResolvedValue({});
-	const history = { load: vi.fn().mockResolvedValue({ revision: 2n, streamName: "computer-computer-1", computer, lease: _LEASE }), append };
+	const releasedLease = { ..._LEASE, state: ComputerLeaseStates.Released, releasedAt: _NOW.toISOString() };
+	const history = { load: vi.fn().mockResolvedValueOnce({ revision: 2n, streamName: "computer-computer-1", computer, lease }).mockResolvedValue({ revision: 3n, streamName: "computer-computer-1", computer: { ...computer, workspaceCheckpoint: { artifactRevisionId: "revision-checkpoint-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() } }, lease: releasedLease }), append };
 	const checkpoint = { artifactRevisionId: "revision-checkpoint-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() };
 	const checkpoints = { capture: vi.fn().mockResolvedValue(checkpoint) };
 	const attempts = { hasActiveAttempt: vi.fn().mockResolvedValue(activeAttempt) };
@@ -48,7 +49,20 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 		expect(checkpoints.capture).toHaveBeenCalledWith(expect.objectContaining({ id: "computer-1" }), _LEASE);
 		expect(claims.release).toHaveBeenCalledWith({ namespace: "silo-1-computers", claimId: "computer-1-g2", computerId: "computer-1", leaseId: "lease-2", generation: 2 });
 		expect(checkpoints.capture.mock.invocationCallOrder[0]).toBeLessThan(claims.release.mock.invocationCallOrder[0]!);
-		expect(append).toHaveBeenCalledWith(expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.Cold, workspaceCheckpoint: checkpoint }), lease: expect.objectContaining({ state: ComputerLeaseStates.Released, releasedAt: _NOW.toISOString() }) }));
-		expect(claims.release.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
+		expect(append).toHaveBeenNthCalledWith(1, expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.Cooling, workspaceCheckpoint: checkpoint }), lease: expect.objectContaining({ state: ComputerLeaseStates.Released, releasedAt: _NOW.toISOString() }) }));
+		expect(append).toHaveBeenNthCalledWith(2, expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.Cold, workspaceCheckpoint: checkpoint }), lease: expect.objectContaining({ state: ComputerLeaseStates.Released }) }));
+		expect(append.mock.invocationCallOrder[0]).toBeLessThan(claims.release.mock.invocationCallOrder[0]!);
+		expect(claims.release.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[1]!);
+	});
+
+	it("finishes claim deletion after a durable released event without recapturing", async function _ResumeRelease()
+	{
+		const releasedLease = { ..._LEASE, state: ComputerLeaseStates.Released, releasedAt: _NOW.toISOString() };
+		const computer = { ..._COMPUTER, state: ConversationComputerStates.Cooling, workspaceCheckpoint: { artifactRevisionId: "revision-checkpoint-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() } };
+		const { authority, append, checkpoints, claims } = _Harness(computer, false, releasedLease);
+		await expect(authority.reconcile(_COMMAND)).resolves.toBe("retired_to_checkpoint");
+		expect(checkpoints.capture).not.toHaveBeenCalled();
+		expect(claims.release).toHaveBeenCalledOnce();
+		expect(append).toHaveBeenCalledWith(expect.objectContaining({ eventId: expect.not.stringMatching(_COMMAND.eventId), computer: expect.objectContaining({ state: ConversationComputerStates.Cold }), lease: releasedLease }));
 	});
 });

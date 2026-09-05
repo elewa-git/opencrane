@@ -63,7 +63,7 @@ export type ConversationCallerResolver = (request: import("express").Request) =>
 export interface ConversationComputerReader
 {
 	/** Loads an exact computer projection coordinate tuple or returns null for a missing stream. */
-	load(command: { readonly siloId: string; readonly computerId: string; readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string }): Promise<{ readonly computer: ConversationComputer } | null>;
+	load(command: { readonly siloId: string; readonly computerId: string; readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string }): Promise<{ readonly computer: ConversationComputer; readonly lease: import("@opencrane/contracts").ComputerLease | null } | null>;
 }
 
 /** Dependencies owned by the participant conversation HTTP adapter. */

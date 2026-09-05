@@ -19,6 +19,7 @@
 	{ "path": "apps/opencrane/src/app/conversation-history-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
 	{ "path": "apps/opencrane/src/app/conversation-computer-activation-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/conversation-computer-activation-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+	{ "path": "apps/opencrane/src/app/conversation-computer-lifecycle-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/conversation-computer-turn-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
 	{ "path": "apps/opencrane/src/app/history-store-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/history-store-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
