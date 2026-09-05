@@ -22,6 +22,12 @@ export type { ConversationComputerActivationAuthority, ConversationComputerActiv
 export { ConversationComputerActivationAuthorityAdapter } from "./conversation-computer-activation-authority";
 export { ConversationComputerLifecycleAuthority } from "./conversation-computer-lifecycle";
 export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerClaimReleaser, ConversationComputerIdlePolicy, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome } from "./conversation-computer-lifecycle.types";
+export { ConversationComputerCheckpointAuthority, _CheckpointArtifactId, _CheckpointRevisionId } from "./conversation-computer-checkpoint";
+export type { ConversationComputerCheckpointCapture, ConversationComputerCheckpointCatalogue, ConversationComputerCheckpointFence, ConversationComputerCheckpointPolicy, ConversationComputerCheckpointReader, ConversationComputerCheckpointRestoreCommand, ConversationComputerCheckpointRestoreResult, ConversationComputerCheckpointSandbox, ConversationComputerCheckpointUploader } from "./conversation-computer-checkpoint.types";
+export { _CreateConversationComputerCheckpointRouter } from "./conversation-computer-checkpoint.router";
+export type { ConversationComputerCheckpointRestorer, ConversationComputerCheckpointRouterOptions } from "./conversation-computer-checkpoint.router.types";
+export { ConversationComputerLifecycleScheduler, _LifecycleEventId } from "./conversation-computer-lifecycle-scheduler";
+export type { ConversationComputerLifecycleCandidate, ConversationComputerLifecycleEnumerator, ConversationComputerLifecycleReconciler } from "./conversation-computer-lifecycle-scheduler.types";
 export { PrismaConversationComputerActivationProjectionRepository } from "./db/prisma-conversation-computer-activation-repository";
 export { _CreateConversationComputerTurnRouter } from "./conversation-computer-turn.router";
 export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerModelCredential, ConversationComputerOutputCommand, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";

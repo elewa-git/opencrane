@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import hmac
+import io
 import json
 import os
 import selectors
+import shutil
 import signal
 import subprocess
+import tarfile
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -21,6 +25,7 @@ from review_surface.browser_surface import browser_metadata, capture_preview, op
 
 _MAX_BODY_BYTES: Final = 64 * 1024
 _MAX_OUTPUT_BYTES: Final = 1024 * 1024
+_MAX_CHECKPOINT_BYTES: Final = 64 * 1024 * 1024
 _DEFAULT_COMMANDS: Final = ("git", "node", "npm", "npx", "python3")
 
 
@@ -155,6 +160,51 @@ def _preview(config: ReviewSurfaceConfig, port: int, path: str) -> tuple[int, st
     return status, content_type, body
 
 
+def _capture_checkpoint(config: ReviewSurfaceConfig) -> bytes:
+    """Archive the workspace without following links or exceeding the fixed checkpoint ceiling."""
+    with tempfile.SpooledTemporaryFile(max_size=_MAX_CHECKPOINT_BYTES) as output:
+        with tarfile.open(fileobj=output, mode="w:gz", dereference=False) as archive:
+            for path in sorted(config.workspace.rglob("*")):
+                relative = path.relative_to(config.workspace)
+                if path.is_symlink():
+                    continue
+                archive.add(path, arcname=relative.as_posix(), recursive=False)
+                if output.tell() > _MAX_CHECKPOINT_BYTES:
+                    raise ValueError("workspace checkpoint exceeds the byte limit")
+        if output.tell() > _MAX_CHECKPOINT_BYTES:
+            raise ValueError("workspace checkpoint exceeds the byte limit")
+        output.seek(0)
+        return output.read()
+
+
+def _restore_checkpoint(config: ReviewSurfaceConfig, body: bytes) -> None:
+    """Replace workspace contents from one confined tar archive after validating every member."""
+    if not body or len(body) > _MAX_CHECKPOINT_BYTES:
+        raise ValueError("workspace checkpoint exceeds the byte limit")
+    with tempfile.TemporaryDirectory(dir=config.workspace.parent) as staging_value:
+        staging = Path(staging_value).resolve()
+        with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as archive:
+            members = archive.getmembers()
+            total = 0
+            for member in members:
+                target = (staging / member.name).resolve()
+                if target != staging and staging not in target.parents:
+                    raise ValueError("workspace checkpoint contains an escaping path")
+                if member.issym() or member.islnk() or not (member.isfile() or member.isdir()):
+                    raise ValueError("workspace checkpoint contains an unsupported entry")
+                total += member.size
+                if total > _MAX_CHECKPOINT_BYTES:
+                    raise ValueError("workspace checkpoint expands beyond the byte limit")
+            archive.extractall(staging, members=members, filter="data")
+        for existing in config.workspace.iterdir():
+            if existing.is_dir() and not existing.is_symlink():
+                shutil.rmtree(existing)
+            else:
+                existing.unlink()
+        for restored in staging.iterdir():
+            restored.replace(config.workspace / restored.name)
+
+
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Refuse redirects so a preview cannot pivot the gateway to another destination."""
 
@@ -185,6 +235,9 @@ class _ReviewHandler(BaseHTTPRequestHandler):
                 selected = parameters.get("path", [""])[0]
                 self._json(200, _git_diff(self.server.config, selected))
                 return
+            if path == "/v1/checkpoints/capture":
+                self._bytes(200, "application/vnd.opencrane.workspace-tar+gzip", _capture_checkpoint(self.server.config))
+                return
             if path.startswith("/v1/previews/"):
                 remainder = path.removeprefix("/v1/previews/")
                 port_value, preview_separator, preview_path = remainder.partition("/")
@@ -203,9 +256,12 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._json(400, {"error": str(error)})
 
     def do_POST(self) -> None:
-        """Run one argv-only release-allowlisted command."""
+        """Run a command, browser operation, or bounded workspace restoration."""
         if not self._authenticated():
             self._json(401, {"error": "unauthorized"})
+            return
+        if self.path == "/v1/checkpoints/restore":
+            self._restore_checkpoint()
             return
         if self.path != "/v1/commands":
             if self.path == "/v1/browser/pages":
@@ -225,6 +281,20 @@ class _ReviewHandler(BaseHTTPRequestHandler):
                 raise ValueError("command body must be an object")
             self._json(200, _run_command(self.server.config, payload))
         except (json.JSONDecodeError, OSError, ValueError) as error:
+            self._json(400, {"error": str(error)})
+
+    def _restore_checkpoint(self) -> None:
+        """Accept one exact-length checkpoint archive under the current lease bearer."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > _MAX_CHECKPOINT_BYTES:
+                raise ValueError("workspace checkpoint exceeds the byte limit")
+            body = self.rfile.read(length)
+            if len(body) != length:
+                raise ValueError("workspace checkpoint length does not match its request")
+            _restore_checkpoint(self.server.config, body)
+            self._json(200, {"outcome": "restored"})
+        except (OSError, tarfile.TarError, ValueError) as error:
             self._json(400, {"error": str(error)})
 
     def _open_browser_page(self) -> None:

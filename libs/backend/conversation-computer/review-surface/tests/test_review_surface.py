@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from review_surface.browser_surface import capture_preview, open_browser_page, start_browser
-from review_surface.review_surface import ReviewSurfaceConfig, ReviewSurfaceServer, _git_diff, _run_command, _workspace_path
+from review_surface.review_surface import ReviewSurfaceConfig, ReviewSurfaceServer, _capture_checkpoint, _git_diff, _restore_checkpoint, _run_command, _workspace_path
 
 
 class _PreviewHandler(BaseHTTPRequestHandler):
@@ -190,6 +190,32 @@ class ReviewSurfaceTest(unittest.TestCase):
         result = _git_diff(subprocess_config, "selected.txt")
         self.assertIn("selected.txt", result["output"])
         self.assertNotIn("other.txt", result["output"])
+
+    def test_captures_and_restores_a_bounded_workspace(self) -> None:
+        """Round-trip regular workspace content without admitting links into durable state."""
+        (self.workspace / "nested").mkdir()
+        (self.workspace / "nested" / "note.txt").write_text("durable", encoding="utf-8")
+        (self.workspace / "ignored-link").symlink_to(self.workspace / "nested" / "note.txt")
+        checkpoint = _capture_checkpoint(self.config)
+        (self.workspace / "nested" / "note.txt").write_text("changed", encoding="utf-8")
+        _restore_checkpoint(self.config, checkpoint)
+        self.assertEqual((self.workspace / "nested" / "note.txt").read_text(encoding="utf-8"), "durable")
+        self.assertFalse((self.workspace / "ignored-link").exists())
+
+    def test_checkpoint_routes_require_the_current_lease_bearer(self) -> None:
+        """Fence capture and restoration with the same rotating lease credential as review calls."""
+        (self.workspace / "note.txt").write_text("before", encoding="utf-8")
+        with urllib.request.urlopen(self._request("/v1/checkpoints/capture"), timeout=2) as response:
+            checkpoint = response.read()
+        (self.workspace / "note.txt").write_text("after", encoding="utf-8")
+        request = urllib.request.Request(f"{self.base_url}/v1/checkpoints/restore", data=checkpoint, method="POST", headers={"Authorization": "Bearer lease-secret", "Content-Type": "application/vnd.opencrane.workspace-tar+gzip"})
+        with urllib.request.urlopen(request, timeout=2) as response:
+            self.assertEqual(json.loads(response.read()), {"outcome": "restored"})
+        self.assertEqual((self.workspace / "note.txt").read_text(encoding="utf-8"), "before")
+        request.headers["Authorization"] = "Bearer wrong"
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            urllib.request.urlopen(request, timeout=2)
+        self.assertEqual(context.exception.code, 401)
 
 
 if __name__ == "__main__":
