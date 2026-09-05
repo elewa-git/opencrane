@@ -108,7 +108,7 @@ export class PrismaConversationMetadataUnitOfWork
   }
 
 	/** Releases exact computer history coordinates only for a current participant with central Read authority. */
-	public reviewCoordinates(caller: ConversationCaller, conversationId: string): Promise<ConversationReviewCoordinates | null>
+	public reviewCoordinates(caller: ConversationCaller, conversationId: string, action: ProductAuthorizationActions = ProductAuthorizationActions.Read): Promise<ConversationReviewCoordinates | null>
 	{
 		return this._read(async function _ReviewCoordinates(transaction)
 		{
@@ -118,7 +118,7 @@ export class PrismaConversationMetadataUnitOfWork
 			if (row === null || row.computerId === null || row.computerAgentIdentityId === null || row.computerProfileRevisionId === null)
 				return null;
 			const authorization = new PrismaConversationProductAuthorizationRepository(transaction);
-			if (!await authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Read))
+			if (!await authorization.canAccess(caller, conversationId, action))
 				return null;
 			return { computerId: row.computerId, agentIdentityId: row.computerAgentIdentityId, profileRevisionId: row.computerProfileRevisionId };
 		});

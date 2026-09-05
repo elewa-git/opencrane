@@ -11,12 +11,13 @@
  *
  * @see ../README.md for what this package owns and what it deliberately does not.
  */
-export { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./lib/conversation-workspace.gateway";
+export { CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./lib/conversation-workspace.gateway";
 export { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./lib/conversation-workspace-gateway.errors";
 export { ConversationWorkspaceStore } from "./lib/conversation-workspace.store";
+export { ConversationComputerReviewStore } from "./lib/conversation-computer-review.store";
 export { ConversationOnboardingHistoryStore } from "./lib/conversation-onboarding-history.store";
 export { _ParseConversationDetail, _ParseConversationSummary, _ParseConversationWorkspaceDirectory } from "./lib/conversation-workspace.validator";
 export { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates } from "./lib/conversation-workspace.types";
 export { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 export { ConversationEventStreamStatuses } from "@opencrane/state/conversation/stream";
-export type { ConversationCreationDirectory, ConversationDirectoryParticipant, ConversationOnboardingHistory, ConversationOnboardingHistoryEntry, ConversationOnboardingHistoryProjection, ConversationPersonalAgent, ConversationSummary, ConversationWorkspaceDetail, ConversationWorkspaceGateway, ConversationWorkspaceNavigationIntent, CreateConversationCommand, SubmitConversationMessageCommand } from "./lib/conversation-workspace.types";
+export type { ConversationComputerBrowserTarget, ConversationComputerCommandResult, ConversationComputerReviewGateway, ConversationCreationDirectory, ConversationDirectoryParticipant, ConversationOnboardingHistory, ConversationOnboardingHistoryEntry, ConversationOnboardingHistoryProjection, ConversationPersonalAgent, ConversationSummary, ConversationWorkspaceDetail, ConversationWorkspaceGateway, ConversationWorkspaceNavigationIntent, CreateConversationCommand, SubmitConversationMessageCommand } from "./lib/conversation-workspace.types";

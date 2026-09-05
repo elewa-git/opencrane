@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 
 import { _CreateConversationComputerReviewRouter } from "../conversation-computer-review.router";
 
@@ -34,6 +35,14 @@ describe("conversation computer review router", function _Suite()
 		expect(response.status).toBe(200);
 		expect(response.text).toBe("selected");
 		expect(fetchReview).toHaveBeenCalledWith("http://sandbox-one.computer-ns.svc.cluster.local:8090/v1/files?path=src%2Fmain.ts", expect.objectContaining({ headers: { authorization: "Bearer lease-secret" }, method: "GET", redirect: "manual" }));
+		expect(resolveReview).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1" }), "conversation-1", ProductAuthorizationActions.Read);
+	});
+
+	it("requires Use authority for a mutating computer command", async function _RequiresUse()
+	{
+		const response = await request(_App()).post("/api/v1/me/conversations/conversation-1/review/commands").send({ argv: ["git", "status"] });
+		expect(response.status).toBe(200);
+		expect(resolveReview).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1" }), "conversation-1", ProductAuthorizationActions.Use);
 	});
 
 	it("rejects a caller-selected preview port before any upstream exchange", async function _RejectsPort()
@@ -41,6 +50,17 @@ describe("conversation computer review router", function _Suite()
 		const response = await request(_App()).get("/api/v1/me/conversations/conversation-1/review/previews/9000/index.html");
 		expect(response.status).toBe(400);
 		expect(fetchReview).not.toHaveBeenCalled();
+	});
+
+	it("requires Use and makes hostile localhost HTML inert", async function _MakesPreviewInert()
+	{
+		fetchReview.mockResolvedValue(new Response("<script>fetch('/api/v1/me')</script>", { status: 200, headers: { "content-type": "text/html" } }));
+		const response = await request(_App()).get("/api/v1/me/conversations/conversation-1/review/previews/5173/index.html");
+		expect(response.status).toBe(200);
+		expect(response.headers["content-type"]).toContain("text/plain");
+		expect(response.headers["x-content-type-options"]).toBe("nosniff");
+		expect(response.headers["content-security-policy"]).toContain("default-src 'none'");
+		expect(resolveReview).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1" }), "conversation-1", ProductAuthorizationActions.Use);
 	});
 
 	it("proxies only the fixed browser discovery path", async function _BrowserRoute()

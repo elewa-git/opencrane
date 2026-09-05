@@ -1,7 +1,7 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
+import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
@@ -129,6 +129,76 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		catch { throw _InvalidResponse(); }
 	}
 
+	/** @inheritdoc */
+	public async readComputerFile(conversationId: string, path: string): Promise<string>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/files", { params: { path: { conversationId }, query: { path } }, parseAs: "text" });
+		if (result.error !== undefined || typeof result.data !== "string")
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
+	/** @inheritdoc */
+	public async readComputerDiff(conversationId: string, path: string): Promise<ConversationComputerCommandResult>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/diff", { params: { path: { conversationId }, query: { path } } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
+	/** @inheritdoc */
+	public async runComputerCommand(conversationId: string, argv: readonly string[], cwd: string): Promise<ConversationComputerCommandResult>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/commands", { params: { path: { conversationId } }, body: { argv: [...argv], cwd } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
+	/** @inheritdoc */
+	public async listComputerBrowserTargets(conversationId: string): Promise<readonly ConversationComputerBrowserTarget[]>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/browser/targets", { params: { path: { conversationId } } });
+		if (result.error !== undefined || !Array.isArray(result.data))
+			throw _Failure(result.response?.status);
+		return result.data.flatMap(_BrowserTarget);
+	}
+
+	/** @inheritdoc */
+	public async openComputerBrowserPage(conversationId: string, port: number, path: string): Promise<void>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/browser/pages", { params: { path: { conversationId } }, body: { port, path } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+	}
+
+	/** @inheritdoc */
+	public async captureComputerScreenshot(conversationId: string, port: number, path: string, width: number, height: number): Promise<Blob>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/browser/screenshots", { params: { path: { conversationId } }, body: { port, path, width, height }, parseAs: "blob" });
+		if (result.error !== undefined || !(result.data instanceof Blob))
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
+	/** @inheritdoc */
+	public async readComputerPreview(conversationId: string, port: number, path: string): Promise<string>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/previews/{port}/{path}", { params: { path: { conversationId, port, path } }, parseAs: "text" });
+		if (result.error !== undefined || typeof result.data !== "string")
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
+}
+
+/** Keep only display-safe fields from one untrusted Chromium target. */
+function _BrowserTarget(value: Record<string, unknown>): ConversationComputerBrowserTarget[]
+{
+	if (typeof value["id"] !== "string" || typeof value["title"] !== "string" || typeof value["url"] !== "string")
+		return [];
+	return [{ id: value["id"], title: value["title"], url: value["url"] }];
 }
 
 /**

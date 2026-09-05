@@ -1,6 +1,6 @@
 import type { Provider } from "@angular/core";
 
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
 import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace/adapter";
 import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from "@opencrane/state/conversation/assets";
@@ -27,6 +27,7 @@ import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from 
  *
  * @returns Providers to spread into the root `ApplicationConfig`.
  * @see CONVERSATION_WORKSPACE_GATEWAY
+ * @see CONVERSATION_COMPUTER_REVIEW_GATEWAY
  * @see CONVERSATION_WORKSPACE_EVENT_STREAM
  * @see CONVERSATION_ASSETS_GATEWAY
  */
@@ -34,7 +35,9 @@ export function provideConversationWorkspaceComposition(): Provider[]
 {
 	return [
 		OpenCraneConversationEventStream,
-		{ provide: CONVERSATION_WORKSPACE_GATEWAY, useClass: OpenCraneConversationWorkspaceGateway },
+		OpenCraneConversationWorkspaceGateway,
+		{ provide: CONVERSATION_WORKSPACE_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
+		{ provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 		// The poller remains shared by direct, group, and Agent-session conversations so every mode
 		// resumes immutable history from the same server-owned position contract.
 		{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useExisting: OpenCraneConversationEventStream },

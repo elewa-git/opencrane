@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, input, output, signal, untracked } from "@angular/core";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import type { ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
-import { ConversationOnboardingHistoryStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { ConversationSessionRailItemKinds, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
 import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
@@ -23,7 +23,7 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationOnboardingHistoryStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {
 	/** Optional app-owned route selection adopted after the workspace list loads. */

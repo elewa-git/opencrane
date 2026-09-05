@@ -1,6 +1,14 @@
 import type { Request } from "express";
+import type { ProductAuthorizationActions } from "@opencrane/models/authorization";
 
-/** Dependencies required to authorize and reach one active conversation computer review plane. */
+/**
+ * Supplies the server-owned authorities needed to proxy human-review requests.
+ *
+ * Production callers provide the sandbox namespace from the release profile. Tests may replace
+ * `fetch`, but no public route may supply either the namespace or the upstream transport target.
+ *
+ * @see _CreateConversationComputerReviewRouter
+ */
 export interface ConversationComputerReviewRouterOptions
 {
 	/** Resolves one currently authorized active sandbox route from projection and canonical history. */
@@ -11,10 +19,20 @@ export interface ConversationComputerReviewRouterOptions
 	readonly fetch?: typeof fetch;
 }
 
-/** Resolves the authenticated public request without accepting caller identity from its payload. */
+/**
+ * Resolves review identity from the authenticated Express request, or returns `null` when no trusted
+ * principal is available. The router never accepts these identity fields from route or body data.
+ *
+ * Called by: `_CreateConversationComputerReviewRouter` before conversation admission.
+ */
 export type ConversationComputerReviewPrincipalResolver = (request: Request) => { readonly externalSubject: string; readonly principalId: string; readonly siloId: string } | null;
 
-/** Current authenticated participant coordinates used by review-route admission. */
+/**
+ * Carries authenticated participant coordinates into conversation review admission.
+ *
+ * The public router constructs this value from its principal resolver. None of these fields are
+ * returned to the browser or used to choose the sandbox route directly.
+ */
 export interface ConversationComputerReviewCaller
 {
 	/** Stable local principal checked by central product authorization. */
@@ -25,7 +43,12 @@ export interface ConversationComputerReviewCaller
 	readonly siloId: string;
 }
 
-/** Fixed upstream coordinates derived from one current active lease. */
+/**
+ * Carries the private upstream coordinates resolved from the active computer lease.
+ *
+ * These values stay in the server proxy. The router validates the Service DNS name against its
+ * configured namespace and sends the lease id as the sandbox gateway credential.
+ */
 export interface ConversationComputerReviewRoute
 {
 	/** High-entropy current lease identifier used as the private gateway credential. */
@@ -36,9 +59,21 @@ export interface ConversationComputerReviewRoute
 	readonly serviceFQDN: string;
 }
 
-/** Authorizes participant access and resolves the current generation-fenced sandbox. */
+/**
+ * Authorizes participant access and resolves the active, generation-fenced computer route.
+ *
+ * Implementations must apply the requested `Read` or `Use` action before loading lease coordinates.
+ * They return `null` for failed admission or for an active lease without a routable sandbox, allowing
+ * the HTTP layer to disclose neither which check failed nor any private coordinate.
+ *
+ * Called by: `_CreateConversationComputerReviewRouter` for every human-review request.
+ */
 export interface ConversationComputerReviewAuthority
 {
-	/** Return the current review route, or null when the conversation is not available to this caller. */
-	resolve(caller: ConversationComputerReviewCaller, conversationId: string): Promise<ConversationComputerReviewRoute | null>;
+	/**
+	 * Resolves the server-only route after applying the requested product action.
+	 *
+	 * @returns The active lease route, or `null` when authorization or computer availability fails.
+	 */
+	resolve(caller: ConversationComputerReviewCaller, conversationId: string, action: ProductAuthorizationActions): Promise<ConversationComputerReviewRoute | null>;
 }

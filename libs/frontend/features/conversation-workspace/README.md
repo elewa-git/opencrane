@@ -58,6 +58,9 @@ the draft and accepted live projection. It never treats a display role as identi
 secrets. A2UI returned by an Agent remains unavailable in this phase because its actions have no
 server-owned capability or audit path.
 
+Agent sessions with an active computer compose a bounded review pane for files, diffs, allowlisted
+commands, private browser pages and screenshots, and allowlisted localhost previews.
+
 ## Dependency direction
 
 The package carries `scope:conversation-workspace` and `frontend-role:feature-shell`. It may compose

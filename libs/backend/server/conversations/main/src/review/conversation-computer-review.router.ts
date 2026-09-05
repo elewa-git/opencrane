@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import type { ConversationComputerReviewPrincipalResolver, ConversationComputerReviewRouterOptions } from "./conversation-computer-review.types";
 
 /** Largest response accepted from a sandbox review gateway. */
@@ -10,16 +11,30 @@ const _PREVIEW_PORTS = new Set([3000, 4173, 4200, 5173, 8000]);
 /** DNS label accepted from the controller-owned Sandbox status. */
 const _DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 
-/** Mount authenticated, generation-fenced review operations for one active conversation computer. */
+/**
+ * Mounts the authenticated human-review API for an active conversation computer.
+ *
+ * File, diff, and browser discovery routes request `Read`; commands, page creation, screenshots, and
+ * localhost responses request `Use`. Every route resolves its upstream host and lease credential on
+ * the server, so public request fields cannot select a sandbox or its Service address.
+ *
+ * Called by: `_CreateRoutes` in `apps/opencrane/src/app/routes.ts` when computer history and the Agent
+ * Sandbox release profile are configured.
+ *
+ * @param options - Supplies admission, the allowed sandbox namespace, and an optional test transport.
+ * @param resolvePrincipal - Resolves identity from the authenticated Express request.
+ * @returns An Express router whose responses are size-limited and never cached.
+ * @see ConversationComputerReviewAuthority.resolve
+ */
 export function _CreateConversationComputerReviewRouter(options: ConversationComputerReviewRouterOptions, resolvePrincipal: ConversationComputerReviewPrincipalResolver): Router
 {
 	const router = Router();
-	router.get("/:conversationId/review/files", function _Files(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/files?path=${encodeURIComponent(_Query(request, "path"))}`); });
-	router.get("/:conversationId/review/diff", function _Diff(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/diff?path=${encodeURIComponent(_Query(request, "path"))}`); });
-	router.get("/:conversationId/review/browser/version", function _BrowserVersion(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", "/v1/browser/version"); });
-	router.get("/:conversationId/review/browser/targets", function _BrowserTargets(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", "/v1/browser/targets"); });
-	router.post("/:conversationId/review/browser/pages", function _BrowserPage(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", "/v1/browser/pages", request.body); });
-	router.post("/:conversationId/review/browser/screenshots", function _BrowserScreenshot(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", "/v1/browser/screenshots", request.body); });
+	router.get("/:conversationId/review/files", function _Files(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", ProductAuthorizationActions.Read, `/v1/files?path=${encodeURIComponent(_Query(request, "path"))}`); });
+	router.get("/:conversationId/review/diff", function _Diff(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", ProductAuthorizationActions.Read, `/v1/diff?path=${encodeURIComponent(_Query(request, "path"))}`); });
+	router.get("/:conversationId/review/browser/version", function _BrowserVersion(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", ProductAuthorizationActions.Read, "/v1/browser/version"); });
+	router.get("/:conversationId/review/browser/targets", function _BrowserTargets(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", ProductAuthorizationActions.Read, "/v1/browser/targets"); });
+	router.post("/:conversationId/review/browser/pages", function _BrowserPage(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", ProductAuthorizationActions.Use, "/v1/browser/pages", request.body); });
+	router.post("/:conversationId/review/browser/screenshots", function _BrowserScreenshot(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", ProductAuthorizationActions.Use, "/v1/browser/screenshots", request.body); });
 	router.get("/:conversationId/review/previews/:port/*path", function _Preview(request, response)
 	{
 		const port = Number(_Parameter(request, "port"));
@@ -29,14 +44,14 @@ export function _CreateConversationComputerReviewRouter(options: ConversationCom
 			return;
 		}
 		const path = _PathParameter(request, "path");
-		void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/previews/${port}/${path}`);
+		void _Proxy(request, response, options, resolvePrincipal, "GET", ProductAuthorizationActions.Use, `/v1/previews/${port}/${path}`, undefined, true);
 	});
-	router.post("/:conversationId/review/commands", function _Commands(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", "/v1/commands", request.body); });
+	router.post("/:conversationId/review/commands", function _Commands(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", ProductAuthorizationActions.Use, "/v1/commands", request.body); });
 	return router;
 }
 
 /** Authorize one exact active lease, derive its Service route, and forward only the selected operation. */
-async function _Proxy(request: Request, response: Response, options: ConversationComputerReviewRouterOptions, resolvePrincipal: ConversationComputerReviewPrincipalResolver, method: "GET" | "POST", path: string, body?: unknown): Promise<void>
+async function _Proxy(request: Request, response: Response, options: ConversationComputerReviewRouterOptions, resolvePrincipal: ConversationComputerReviewPrincipalResolver, method: "GET" | "POST", action: ProductAuthorizationActions, path: string, body?: unknown, forceInertText = false): Promise<void>
 {
 	try
 	{
@@ -51,7 +66,7 @@ async function _Proxy(request: Request, response: Response, options: Conversatio
 		// 2. Reuse conversation metadata admission, then read only server-owned computer coordinates.
 		const conversationId = _Parameter(request, "conversationId");
 		const caller = { principalId: principal.principalId, subjectId: principal.externalSubject, siloId: principal.siloId };
-		const lease = await options.authority.resolve(caller, conversationId);
+		const lease = await options.authority.resolve(caller, conversationId, action);
 		if (lease === null)
 		{
 			response.status(404).json({ error: "conversation_computer_unavailable" });
@@ -76,7 +91,8 @@ async function _Proxy(request: Request, response: Response, options: Conversatio
 		}
 		const upstream = await (options.fetch ?? fetch)(target, { method, headers, body: requestBody, redirect: "manual", signal: AbortSignal.timeout(35_000) });
 		const bytes = await _ReadBoundedResponse(upstream);
-		response.status(upstream.status).set("cache-control", "no-store").set("content-type", upstream.headers.get("content-type") ?? "application/octet-stream").send(Buffer.from(bytes));
+		const contentType = forceInertText ? "text/plain; charset=utf-8" : upstream.headers.get("content-type") ?? "application/octet-stream";
+		response.status(upstream.status).set("cache-control", "no-store").set("content-security-policy", "default-src 'none'; frame-ancestors 'none'").set("x-content-type-options", "nosniff").set("content-type", contentType).send(Buffer.from(bytes));
 	}
 	catch
 	{

@@ -2,7 +2,7 @@ import { InjectionToken } from "@angular/core";
 
 import type { ConversationEventStream } from "@opencrane/state/conversation/stream";
 
-import type { ConversationWorkspaceGateway } from "./conversation-workspace.types";
+import type { ConversationComputerReviewGateway, ConversationWorkspaceGateway } from "./conversation-workspace.types";
 
 /**
  * Port for every conversation read and command the workspace makes for the signed-in participant.
@@ -45,6 +45,18 @@ import type { ConversationWorkspaceGateway } from "./conversation-workspace.type
  * @see ConversationWorkspaceGatewayError for the failure categories a caller branches on.
  */
 export const CONVERSATION_WORKSPACE_GATEWAY = new InjectionToken<ConversationWorkspaceGateway>("CONVERSATION_WORKSPACE_GATEWAY");
+/**
+ * Binds active-computer review operations to an authenticated API adapter.
+ *
+ * The store supplies a conversation id, never sandbox coordinates. The server resolves the active
+ * lease and applies `Read` or `Use`, keeping its Service address and lease credential out of browser
+ * state.
+ *
+ * Called by: `ConversationComputerReviewStore`. Bound by `provideConversationWorkspaceComposition`.
+ *
+ * @see ConversationComputerReviewGateway
+ */
+export const CONVERSATION_COMPUTER_REVIEW_GATEWAY = new InjectionToken<ConversationComputerReviewGateway>("CONVERSATION_COMPUTER_REVIEW_GATEWAY");
 
 /**
  * Port that reads the live event stream for whichever conversation is selected.

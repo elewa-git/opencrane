@@ -160,6 +160,10 @@ timeline references to canonical messages and `RunEvent`; neither path
 reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
 in the caller's host-selected silo; participant rows alone never preserve authority after revocation.
 
+The computer-review router keeps sandbox routes and lease credentials server-side: file, diff, and
+browser discovery require current `Read`, while commands, page creation, screenshots, and preview
+access require current `Use`.
+
 ## See also
 
 - Parent index: [server](../../README.md)

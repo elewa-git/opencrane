@@ -4,7 +4,7 @@ import { ConversationComputerStates } from "@opencrane/contracts";
 import { ConversationComposerStates, ConversationStatusTones, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
-import { ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { ConversationComputerReviewStore, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
 import type { ConversationOnboardingContinuationPresentation, ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
@@ -25,12 +25,18 @@ export class ConversationWorkspacePresenter
 	protected readonly store = inject(ConversationWorkspaceStore);
 	/** Existing asset state scoped to the selected conversation. */
 	protected readonly assetsStore = inject(ConversationAssetsStore);
+	/** Component-scoped active-computer review state. */
+	protected readonly reviewStore = inject(ConversationComputerReviewStore);
 	/** Whether immutable-mode creation is visible. */
 	protected readonly creating = signal(false);
 	/** Stable route state vocabulary used by the template switch. */
 	protected readonly routeStates = ConversationWorkspaceRouteStates;
 	/** Stable conversation lifecycle used by template permissions. */
 	protected readonly lifecycles = ConversationLifecycles;
+	/** Stable immutable modes used by capability-aware presentation. */
+	protected readonly modes = ConversationModes;
+	/** Stable lifecycle required before active review controls are shown. */
+	protected readonly computerStates = ConversationComputerStates;
 	/** Stable create command lifecycle used by the dialog. */
 	protected readonly creationStates = ConversationCreationStates;
 	/** Privacy-safe list rows. */
@@ -68,6 +74,8 @@ export class ConversationWorkspacePresenter
 	protected readonly connectionStatus = computed(this._ConnectionStatus.bind(this));
 	/** Current logical computer status rendered without exposing its lease or sandbox coordinates. */
 	protected readonly computerStatus = computed(this._ComputerStatus.bind(this));
+	/** Whether the selected conversation currently has a reviewable warm computer. */
+	protected readonly computerReviewVisible = computed(this._ComputerReviewVisible.bind(this));
 	/** Load once when this route-ready component is constructed. */
 	private readonly _loadEffect = effect(this._Load.bind(this));
 	/** Open existing asset and elicitation state whenever stream coordinates change. */
@@ -106,6 +114,7 @@ export class ConversationWorkspacePresenter
 		{
 			this._composedConversationId = null;
 			this.assetsStore.clear();
+			this.reviewStore.select(null);
 			return;
 		}
 		if (this._composedConversationId !== selected.id)
@@ -114,6 +123,10 @@ export class ConversationWorkspacePresenter
 			this._composedConversationId = selected.id;
 		}
 		this.assetsStore.open(selected.id);
+		const computer = this.store.live().computer;
+		const reviewConversationId = selected.mode === ConversationModes.AgentSession && computer?.state === ConversationComputerStates.Warm ? selected.id : null;
+		const generationKey = computer === null ? null : `${computer.id}:${computer.leaseGeneration}`;
+		this.reviewStore.select(reviewConversationId, generationKey);
 	}
 
 	/** Map safe rail rows. */
@@ -241,6 +254,12 @@ export class ConversationWorkspacePresenter
 		if (state === undefined)
 			return null;
 		return { label: _ComputerLabel(state), detail: "Your conversation history remains available while the computer changes state.", tone: state === ConversationComputerStates.RecoveryRequired ? ConversationStatusTones.Danger : ConversationStatusTones.Neutral };
+	}
+
+	/** Admit the review visual only for a warm Agent-session computer. */
+	private _ComputerReviewVisible(): boolean
+	{
+		return this.store.selected()?.mode === ConversationModes.AgentSession && this.store.live().computer?.state === ConversationComputerStates.Warm;
 	}
 }
 

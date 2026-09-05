@@ -40,6 +40,8 @@ The package also owns the Zod response validators used by its transport adapter.
 - `ConversationOnboardingHistoryStore` keeps the optional transcript read and selection independent from
   ordinary snapshot, stream, draft, and run state.
 - `ConversationRunStore` owns run status and exact-attempt run commands.
+- `ConversationComputerReviewStore` owns file, diff, command, browser, screenshot, and localhost
+  preview requests, purges output on selection changes, and rejects late results.
 - `ConversationOnboardingHistoryStatuses` distinguishes a completed transcript, unfinished onboarding,
   migrated accounts without recorded history, and a temporary read failure without blocking normal chats.
 - Exported enums and view models are transport-neutral and contain no login subjects, emails, roles, or

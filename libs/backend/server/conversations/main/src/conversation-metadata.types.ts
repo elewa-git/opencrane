@@ -1,4 +1,5 @@
 import type { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import type { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 export type { InitialConversationComputerResolver } from "./agent-session-creation.types";
 
@@ -17,4 +18,4 @@ export interface ConversationReviewCoordinates
 	readonly profileRevisionId: string;
 }
 /** Metadata authority exposed to the authenticated browser router. */
-export interface ConversationMetadataAuthority { directory(caller: ConversationCaller): Promise<unknown>; list(caller: ConversationCaller, includeArchived: boolean): Promise<readonly ConversationMetadataSummary[]>; open(caller: ConversationCaller, conversationId: string): Promise<ConversationMetadataDetail | null>; reviewCoordinates(caller: ConversationCaller, conversationId: string): Promise<ConversationReviewCoordinates | null>; create(caller: ConversationCaller, request: unknown): Promise<ConversationMetadataDetail | null>; archive(caller: ConversationCaller, conversationId: string, archived: boolean): Promise<ConversationMetadataDetail | null>; close(caller: ConversationCaller, conversationId: string): Promise<ConversationMetadataDetail | null>; }
+export interface ConversationMetadataAuthority { directory(caller: ConversationCaller): Promise<unknown>; list(caller: ConversationCaller, includeArchived: boolean): Promise<readonly ConversationMetadataSummary[]>; open(caller: ConversationCaller, conversationId: string): Promise<ConversationMetadataDetail | null>; reviewCoordinates(caller: ConversationCaller, conversationId: string, action?: ProductAuthorizationActions): Promise<ConversationReviewCoordinates | null>; create(caller: ConversationCaller, request: unknown): Promise<ConversationMetadataDetail | null>; archive(caller: ConversationCaller, conversationId: string, archived: boolean): Promise<ConversationMetadataDetail | null>; close(caller: ConversationCaller, conversationId: string): Promise<ConversationMetadataDetail | null>; }

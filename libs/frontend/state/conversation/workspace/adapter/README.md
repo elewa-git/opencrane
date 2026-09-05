@@ -36,6 +36,8 @@ or memory identity from UI code. It sends opaque conversation, participant, Agen
 coordinates only to the exact generated endpoint that accepts them. It does not read response bodies when
 building errors and does not own the socket or live projection; the injected conversation event-stream
 port owns participant message delivery and streaming.
+The same generated-client adapter implements the narrow computer-review port without releasing sandbox
+network coordinates or lease credentials to the browser.
 Completed migrated accounts with no bootstrap conversation produce `NotRecorded`, never an empty success
 transcript. The adapter requests archived conversation rows so the feature can keep them in a separate list.
 

@@ -193,6 +193,30 @@ export interface ConversationWorkspaceNavigationIntent
 	readonly conversationId: string | null;
 }
 
+/** Bounded command result returned by the active conversation computer. */
+export interface ConversationComputerCommandResult
+{
+	/** Process exit code, or null when a review limit stopped the process. */
+	readonly exitCode: number | null;
+	/** Stable sandbox process outcome. */
+	readonly outcome: "completed" | "timed_out" | "output_limited";
+	/** Combined bounded stdout and stderr. */
+	readonly output: string;
+	/** Whether the review surface clipped output at its release ceiling. */
+	readonly truncated: boolean;
+}
+
+/** Current private Chromium target shown without exposing its debugger endpoint. */
+export interface ConversationComputerBrowserTarget
+{
+	/** Chromium target identifier used only for display selection. */
+	readonly id: string;
+	/** Browser-supplied page title. */
+	readonly title: string;
+	/** Localhost URL opened inside the computer. */
+	readonly url: string;
+}
+
 /** Participant-scoped conversation reads and commands. */
 export interface ConversationWorkspaceGateway
 {
@@ -212,4 +236,33 @@ export interface ConversationWorkspaceGateway
 	archive(conversationId: string, archived: boolean): Promise<ConversationWorkspaceDetail>;
 	/** Permanently close a conversation after server authority checks. */
 	close(conversationId: string): Promise<ConversationWorkspaceDetail>;
+}
+
+/**
+ * Defines the browser's authenticated API boundary for reviewing an active conversation computer.
+ *
+ * Callers identify a conversation and public operation inputs; they never receive or submit sandbox
+ * ids, Service addresses, or lease credentials. Implementations must use the generated API client so
+ * the server can apply `Read` to file, diff, and target discovery and `Use` to commands, browser
+ * changes, screenshots, and localhost responses. Preview responses remain text for inert rendering.
+ *
+ * Called by: `ConversationComputerReviewStore`. Implemented by
+ * `OpenCraneConversationWorkspaceGateway`.
+ */
+export interface ConversationComputerReviewGateway
+{
+	/** Read one workspace file from the active computer. */
+	readComputerFile(conversationId: string, path: string): Promise<string>;
+	/** Read a git diff for one workspace path. */
+	readComputerDiff(conversationId: string, path: string): Promise<ConversationComputerCommandResult>;
+	/** Run one release-allowlisted argv command. */
+	runComputerCommand(conversationId: string, argv: readonly string[], cwd: string): Promise<ConversationComputerCommandResult>;
+	/** List private Chromium targets without releasing debugger coordinates. */
+	listComputerBrowserTargets(conversationId: string): Promise<readonly ConversationComputerBrowserTarget[]>;
+	/** Open one allowlisted localhost page in the private browser. */
+	openComputerBrowserPage(conversationId: string, port: number, path: string): Promise<void>;
+	/** Capture one PNG from an allowlisted localhost page. */
+	captureComputerScreenshot(conversationId: string, port: number, path: string, width: number, height: number): Promise<Blob>;
+	/** Read one allowlisted localhost preview response. */
+	readComputerPreview(conversationId: string, port: number, path: string): Promise<string>;
 }
