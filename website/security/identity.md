@@ -3,11 +3,6 @@
 OpenCrane uses **OIDC sessions for people** and **audience-bound projected identities for
 workloads**. Neither is interchangeable with run authority.
 
-::: info
-🔶 `ExecutionSubject` is the 0.11.0 target contract. The server does not expose target run
-admission until its AgentIdentity and conversation-computer history adapter is composed.
-:::
-
 ## Human identity
 
 People sign in through the configured OIDC provider. The server derives their subject and
@@ -27,7 +22,7 @@ direct grants or derive execution authority from the requester. See
 ## Workload identity
 
 ```text
-admitted run attempt
+active conversation-computer lease
        │
        ▼
 exact claimed Pod + ServiceAccount + namespace
@@ -36,12 +31,13 @@ exact claimed Pod + ServiceAccount + namespace
 Kubernetes TokenReview
        │  one-use bootstrap
        ▼
-proof key bound to Pod UID + run + attempt
+computer id + lease generation + Pod UID rechecked
 ```
 
-The runtime initiates the connection. OpenCrane checks the exact projected-token audience and
-Kubernetes subject, then compares the reviewed workload with the durable assignment. A valid
-token from another workload does not inherit the assignment.
+The conversation computer initiates bootstrap and output calls. OpenCrane checks the exact
+projected-token audience and Kubernetes subject, resolves the claim to the Pod, then compares the
+computer id, lease id, generation, AgentIdentity and current membership with durable authority. A
+valid token from another workload does not inherit the lease.
 
 ## Credential classes
 
@@ -49,9 +45,8 @@ token from another workload does not inherit the assignment.
 |---|---|---|
 | OIDC session cookie | Browser | Public UI and API calls |
 | Controller projected token | Agent controller | Claim and report authorised workload assignments |
-| Runtime projected token | One claimed runtime Pod | Bootstrap and open its outbound stream |
-| Runtime proof key | One run attempt | Bind candidates to the reserved Pod |
-| Attempt-scoped model key | One run attempt | Reach the allowed model alias within its budget |
+| Computer projected token | One claimed conversation-computer Pod | Bootstrap one frozen turn and submit its output |
+| Attempt-scoped model key | One computer turn | Reach the allowed model alias within its budget |
 
 Provider master keys, tool credentials and durable artifact credentials never enter the runtime.
 

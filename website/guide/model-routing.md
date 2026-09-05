@@ -10,7 +10,7 @@ model and one spending limit.
 
 Use the authenticated `/api/v1/models` surface to list and manage model definitions.
 Definitions refer to provider credentials held by OpenCrane; raw provider keys do not enter
-claimed runtime Pods.
+conversation-computer Pods.
 
 ## Configure providers after deployment
 

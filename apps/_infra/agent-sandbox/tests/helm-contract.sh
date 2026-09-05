@@ -16,6 +16,7 @@ VALUES=(
   --set-string agentSandbox.serviceAccountName=agent-sandbox-runtime
   --set-string 'agentSandbox.profiles[0].name=developer'
   --set-string 'agentSandbox.profiles[0].poolName=developer-pool'
+  --set 'agentSandbox.profiles[0].warmReplicas=1'
   --set-string 'agentSandbox.profiles[0].image.repository=registry.invalid/opencrane-conversation-computer'
   --set-string 'agentSandbox.profiles[0].image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   --set-string 'agentSandbox.profiles[0].image.pullPolicy=IfNotPresent'
@@ -62,14 +63,14 @@ grep -Fq 'readOnlyRootFilesystem: true' <<<"$template"
 grep -Fq 'drop: ["ALL"]' <<<"$template"
 grep -Fq 'envVarsInjectionPolicy: Disallowed' <<<"$template"
 grep -Fq 'volumeClaimTemplatesPolicy: Disallowed' <<<"$template"
-grep -Fq 'replicas: 0' <<<"$pool"
+grep -Fq 'replicas: 1' <<<"$pool"
 grep -Fq 'sandboxTemplateRef:' <<<"$pool"
 grep -Fq 'name: opencrane-testv5-developer-template' <<<"$pool"
 grep -Fq 'apiGroups: ["extensions.agents.x-k8s.io"]' <<<"$role"
 grep -Fq 'resources: ["sandboxclaims"]' <<<"$role"
-grep -Fq 'verbs: ["create", "get"]' <<<"$role"
+grep -Fq 'verbs: ["create", "get", "delete"]' <<<"$role"
 if grep -Eq '"(list|watch|patch|update)"' <<<"$role"; then
-  echo "Agent Sandbox server Role is broader than create/get" >&2
+  echo "Agent Sandbox server Role is broader than deterministic claim lifecycle" >&2
   exit 1
 fi
 grep -Fq 'apiVersions: ["v1beta1"]' <<<"$policy"

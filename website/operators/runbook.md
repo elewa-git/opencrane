@@ -1,7 +1,7 @@
 # Runbook
 
-Use this runbook to diagnose the **OpenCrane server, agent controller and claimed warm
-runtime Pods** without bypassing their authority boundaries.
+Use this runbook to diagnose the **OpenCrane server, KurrentDB history and Agent Sandbox
+conversation computers** without bypassing their authority boundaries.
 
 > See also: [Hosting and deployment](/operators/hosting) (release shape),
 > [Networking and isolation](/operators/networking) (allowed paths), and
@@ -12,72 +12,73 @@ runtime Pods** without bypassing their authority boundaries.
 ```bash
 helm status <release> -n <server-namespace>
 kubectl get pods,jobs -n <server-namespace>
-kubectl get pods,jobs -n <personal-runtime-namespace>
-kubectl get pods,jobs -n <managed-runtime-namespace>
+kubectl get sandboxclaims,sandboxes,sandboxtemplates,sandboxwarmpools -n <server-namespace>
 ```
 
-Then inspect OpenCrane and controller logs:
+Then inspect OpenCrane and the external Agent Sandbox controller logs:
 
 ```bash
 kubectl logs -n <server-namespace> deployment/<release>-opencrane --tail 100
-kubectl logs -n <server-namespace> deployment/<release>-agent-controller --tail 100
+kubectl logs -n agent-sandbox-system deployment/agent-sandbox-controller --tail 100
 ```
 
-Correlate by run id and attempt. Do not use a Pod name as the product incident key.
+Correlate by conversation id, computer id and lease generation. Do not use a Pod name as the
+product incident key.
 
 ## Health checklist
 
 | Check | Healthy signal | Failure meaning |
 |---|---|---|
 | OpenCrane liveness | `/healthz` succeeds | process or database dependency unavailable |
-| Controller polling | claims continue without repeated refusal | internal API, TokenReview or Kubernetes API path failed |
-| Run state | progresses through accepted, queued, assigned and running | durable admission or dispatch is stalled |
-| Warm Pod reservation | exact Pod UID recorded for the attempt | controller reservation did not commit |
-| Profile activation | reserved Pod reports the fixed claimed profile and readiness | controller activation or readiness check failed |
-| One-use binding | runtime Pod binds its proof key after readiness | runtime identity or private binding failed |
-| Runtime stream | outbound bootstrap and stream accepted | token, proof or network boundary rejected |
+| KurrentDB | authenticated TLS connection and persistent subscription stay healthy | conversation history or activation consumption is unavailable |
+| Computer history | cold computer advances to claim-pending with one lease generation | activation command or checked claim creation stalled |
+| Agent Sandbox claim | claim resolves to the release-owned template and exact Pod | external controller, CRD or admission policy failed |
+| Computer readiness | `/readyz` succeeds on the claimed Pod | required lease coordinates or process health failed |
+| Bootstrap | Pod-bound request returns one frozen pending turn | token, lease, membership or model admission failed |
+| Output | assistant entry appears at the next KurrentDB stream revision | output fence, payload custody or history append failed |
 
-## Run stuck before assignment
+## Computer stuck before activation
 
-1. Inspect the run state, its bound AgentRun workflow task, and the task's saved Absurd events.
-2. Check the controller can reach OpenCrane's internal API.
-3. Check its projected token audience and ServiceAccount.
-4. Check the selected runtime profile names the expected namespace.
-5. Check admission policy and quota events in that runtime namespace.
+1. Inspect the conversation stream and `conversation-computer-{id}` history in KurrentDB.
+2. Check the OpenCrane activation subscription is connected.
+3. Check the resolved profile revision, computer generation and lease have matching coordinates.
+4. Check the OpenCrane server can create and get `SandboxClaim` resources in the silo namespace.
+5. Check admission-policy, RuntimeClass and quota events in that namespace.
 
-Do not activate, bind or replace a warm Pod manually. A Pod without the durable reservation cannot
-activate, and a Pod without the later one-use binding cannot receive execution material.
+Do not create, edit or replace a claim manually. A Pod without the recorded lease cannot bootstrap,
+and a changed claim is denied by admission policy.
 
-## Warm Pod cannot activate
+## Claim cannot activate
 
 ```bash
-kubectl describe pod -n <runtime-namespace> <pod-name>
-kubectl get events -n <runtime-namespace> --sort-by=.lastTimestamp
+kubectl describe sandboxclaim -n <server-namespace> <claim-name>
+kubectl describe pod -n <server-namespace> <pod-name>
+kubectl get events -n <server-namespace> --sort-by=.lastTimestamp
 ```
 
-Confirm that OpenCrane reserved the exact Pod UID and that the Pod belongs to the expected warm-pool
-Deployment. The controller may activate only that reserved Pod for the recorded run and attempt,
-then it must record matching readiness evidence. After that, the runtime Pod initiates its one-use
-binding with OpenCrane; the controller does not bind on its behalf.
+Confirm that the claim selects the release-owned zero-replica pool and carries only the recorded
+computer id, lease id and generation. Confirm the resulting Pod uses the digest-pinned template,
+expected ServiceAccount and `gvisor` RuntimeClass. The external controller realises the claim; it
+does not grant conversation or model authority.
 
 ## Runtime cannot connect
 
 Check, in order:
 
-1. DNS from the runtime namespace to the same-silo OpenCrane Service.
+1. DNS from the conversation-computer Pod to the same-silo OpenCrane Service.
 2. NetworkPolicy egress to the internal API port.
 3. projected-token file presence and audience;
-4. bootstrap expiry and one-use status;
-5. recorded reservation and Pod UID;
-6. proof-key binding.
+4. current lease expiry and generation;
+5. recorded claim and Pod UID;
+6. pending conversation entry and current membership.
 
 All failures should leave the runtime unable to execute work.
 
 ## Cancellation
 
-Cancellation is complete only when the durable run is terminal and any claimed Pod cleanup
-has been confirmed. If the runtime is unreachable, OpenCrane may fence the attempt and lease
-cleanup to the authorised controller path.
+Conversation-computer cleanup is complete only when the lease is no longer current and Agent
+Sandbox has foreground-deleted its resources. AgentRun cancellation remains a separate durable
+run-worker lifecycle; do not infer it from a conversation claim.
 
 ::: warning
 Never delete arbitrary Pods by label during cancellation. Cleanup authority identifies one
@@ -87,8 +88,9 @@ exact namespace, resource name and immutable Kubernetes UID.
 ## Rolling restart
 
 Restart trusted long-lived deployments with the app-owned deploy script or a normal release
-upgrade. Warm runtime Pods are one-use: a Pod is deleted after an attempt and the Deployment
-replenishes the pool. Do not preserve local scratch between attempts.
+upgrade. A conversation computer has ephemeral `/workspace` scratch; its durable recovery input is
+the KurrentDB history plus a separately verified ArtifactStore checkpoint when one exists.
 
-Source: [`libs/backend/agents/execution/runs/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/runs/main/README.md)
-and [`apps/opencrane/src/index.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/index.ts).
+Source: [`apps/conversation-computer`](https://github.com/elewa-git/opencrane/blob/main/apps/conversation-computer/README.md),
+[`apps/_infra/agent-sandbox`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/agent-sandbox/README.md),
+and [`libs/backend/server/conversations`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/conversations/main/README.md).

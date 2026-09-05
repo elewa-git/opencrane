@@ -13,8 +13,7 @@ Agent services, runs, grants, models and memory are always evaluated inside that
 ClusterTenant: acme
 └── silo
     ├── trusted server namespace
-    ├── personal warm runtime namespace
-    ├── managed warm runtime namespace
+    ├── conversation-computer namespace
     └── organisation-scoped data and policy
 ```
 
@@ -26,7 +25,7 @@ agent revision are frozen into run evidence when OpenCrane admits work.
 
 - A request without a resolvable organisation is denied.
 - A caller cannot supply a different silo or subject and have it trusted.
-- Runtime namespaces must be distinct from the trusted server namespace.
+- A conversation-computer claim must use this release's profile, namespace and service account.
 - A workload from another namespace, ServiceAccount, Pod or attempt cannot bootstrap.
 - Stale or unverifiable membership evidence cannot authorise a run.
 
@@ -35,9 +34,9 @@ It is not an execution resource and does not create user workloads.
 
 ## Operator check
 
-Confirm that the release, public host and runtime profiles all resolve to the same organisation.
-Then verify that the personal and managed runtime namespaces are separate from the server
-namespace and from each other.
+Confirm that the release, public host and Agent Sandbox profile all resolve to the same organisation.
+Then verify that claim admission accepts only this release's server identity and copies only the
+recorded computer id, lease id and generation to the Pod.
 
 Source: [`libs/backend/server/tenancy/cluster-tenants/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/tenancy/cluster-tenants/main/README.md)
 and [`apps/opencrane/src/app/routes.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/app/routes.ts).

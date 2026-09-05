@@ -156,17 +156,17 @@ dataset, and a conflicting correction must fail closed.
 
 ## Outbound and return boundaries
 
-The runtime has an outbound stream to OpenCrane, not direct access to people, external integration
-providers, child agents or durable storage. The separately fenced model-provider call is shown as
-its own boundary. Each outgoing path reaches a different server authority, and only an accepted,
-saved result may return to the same active attempt.
+The conversation computer uses bounded bootstrap and output calls to OpenCrane, not direct access to
+people, external integration providers, child agents or durable storage. The separately fenced
+model-provider call is shown as its own boundary. Each outgoing path reaches a different server
+authority, and only an accepted, saved result may return to the same active attempt.
 
 ```text
                                 model provider
                                   ▲       │
         attempt-scoped LiteLLM request    │ model output
                                   │       ▼
-                              claimed runtime Pod
+                           conversation-computer Pod
                                         │
       ┌──────────────┬──────────────────┼─────────────────┬────────────────┐
       │              │                  │                 │                │

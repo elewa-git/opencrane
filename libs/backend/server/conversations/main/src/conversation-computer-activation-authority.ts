@@ -48,7 +48,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 			return "denied";
 
 		// 3. Converge the deterministic claim and retain delivery until its controller assigns a sandbox.
-		const claim = await this.claims.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: current.lease.id, generation: command.generation, namespace: this.profile.namespace, profileName: this.profile.profileName, warmPoolName: this.profile.warmPoolName, expiresAt: current.lease.expiresAt, reason: "activation_requested" });
+		const claim = await this.claims.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: current.lease.id, generation: command.generation, namespace: this.profile.namespace, profileName: this.profile.profileName, warmPoolName: this.profile.warmPoolName, expiresAt: current.lease.expiresAt, reason: current.computer.workspaceCheckpoint === null ? "activation_requested" : "recovery_requested" });
 		if (claim.sandboxId === null || claim.serviceFQDN === null)
 			throw new Error("Agent Sandbox has not assigned the conversation computer yet");
 

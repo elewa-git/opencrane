@@ -20,3 +20,13 @@ export interface AgentSandboxClaimResult
 	readonly sandboxId: string | null;
 	readonly serviceFQDN: string | null;
 }
+
+/** Supplies the exact deterministic claim coordinates that may be released. */
+export interface AgentSandboxClaimReleaseCommand
+{
+	readonly namespace: string;
+	readonly claimId: string;
+	readonly computerId: string;
+	readonly leaseId: string;
+	readonly generation: number;
+}

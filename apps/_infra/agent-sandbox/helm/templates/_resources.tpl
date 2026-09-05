@@ -20,6 +20,7 @@
 {{- if hasKey $seenProfiles $profile.name -}}{{- fail "Agent Sandbox profile names must be unique" -}}{{- end -}}
 {{- $_ := set $seenProfiles $profile.name true -}}
 {{- if empty $profile.poolName -}}{{- fail "every Agent Sandbox profile requires a poolName" -}}{{- end -}}
+{{- if or (not (kindIs "int64" $profile.warmReplicas)) (lt $profile.warmReplicas 0) (gt $profile.warmReplicas 10) -}}{{- fail "every Agent Sandbox profile requires warmReplicas between zero and ten" -}}{{- end -}}
 {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.poolName) -}}{{- fail "every Agent Sandbox poolName must be a DNS label" -}}{{- end -}}
 {{- if hasKey $seenPools $profile.poolName -}}{{- fail "Agent Sandbox pool names must be unique" -}}{{- end -}}
 {{- $_ := set $seenPools $profile.poolName true -}}
@@ -110,7 +111,7 @@ metadata:
 rules:
   - apiGroups: ["extensions.agents.x-k8s.io"]
     resources: ["sandboxclaims"]
-    verbs: ["create", "get"]
+    verbs: ["create", "get", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -324,7 +325,7 @@ metadata:
     app.kubernetes.io/component: agent-sandbox
     opencrane.ai/agent-sandbox-profile: {{ $profile.name | quote }}
 spec:
-  replicas: 0
+  replicas: {{ int $profile.warmReplicas }}
   sandboxTemplateRef:
     name: {{ printf "%s-%s-template" $fullname $profile.name | trunc 63 | trimSuffix "-" }}
   updateStrategy:

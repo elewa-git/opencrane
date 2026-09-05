@@ -1,5 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
-import type { AgentSandboxClaimCommand, AgentSandboxClaimResult } from "./agent-sandbox-claim.types";
+import type { AgentSandboxClaimCommand, AgentSandboxClaimReleaseCommand, AgentSandboxClaimResult } from "./agent-sandbox-claim.types";
 
 const _GROUP = "extensions.agents.x-k8s.io";
 const _VERSION = "v1beta1";
@@ -28,7 +28,7 @@ interface SandboxClaimResource
  */
 export class AgentSandboxClaimAdapter
 {
-	public constructor(private readonly api: Pick<k8s.CustomObjectsApi, "createNamespacedCustomObject" | "getNamespacedCustomObject">) {}
+	public constructor(private readonly api: Pick<k8s.CustomObjectsApi, "createNamespacedCustomObject" | "deleteNamespacedCustomObject" | "getNamespacedCustomObject">) {}
 
 	/** Converges the exact claim and rejects malformed input or a conflicting existing resource. */
 	public async claim(command: AgentSandboxClaimCommand): Promise<AgentSandboxClaimResult>
@@ -56,6 +56,28 @@ export class AgentSandboxClaimAdapter
 		}
 	}
 
+	/** Deletes only the claim whose immutable labels still prove the terminal lease coordinates. */
+	public async release(command: AgentSandboxClaimReleaseCommand): Promise<"released" | "absent">
+	{
+		_ValidateReleaseCommand(command);
+		const existing = await this._read(command.namespace, command.claimId);
+		if (existing === null)
+			return "absent";
+		const labels = existing.metadata?.labels;
+		if (existing.metadata?.name !== command.claimId || existing.metadata?.namespace !== command.namespace || labels?.["opencrane.ai/computer-id"] !== command.computerId || labels?.["opencrane.ai/computer-generation"] !== String(command.generation) || labels?.["opencrane.ai/computer-lease-id"] !== command.leaseId)
+			throw new Error("Agent Sandbox claim release does not match the terminal computer lease");
+		try
+		{
+			await this.api.deleteNamespacedCustomObject({ group: _GROUP, version: _VERSION, namespace: command.namespace, plural: _PLURAL, name: command.claimId, body: { propagationPolicy: "Foreground" } });
+		}
+		catch (error)
+		{
+			if (_StatusCode(error) !== 404)
+				throw error;
+		}
+		return "released";
+	}
+
 	private async _read(namespace: string, name: string): Promise<SandboxClaimResource | null>
 	{
 		try
@@ -69,6 +91,16 @@ export class AgentSandboxClaimAdapter
 			throw error;
 		}
 	}
+}
+
+/** Rejects broad or stale deletion coordinates before reading Kubernetes. */
+function _ValidateReleaseCommand(command: AgentSandboxClaimReleaseCommand): void
+{
+	for (const value of [command.namespace, command.claimId, command.computerId, command.leaseId])
+		if (!_DNS_LABEL.test(value) || value.length > 63)
+			throw new Error("Agent Sandbox claim release coordinates must be Kubernetes DNS labels");
+	if (!command.computerId.startsWith("computer-") || command.claimId !== `${command.computerId}-g${command.generation}` || !Number.isSafeInteger(command.generation) || command.generation < 1)
+		throw new Error("Agent Sandbox claim release requires its deterministic computer generation");
 }
 
 function _DesiredClaim(command: AgentSandboxClaimCommand, claimId: string): SandboxClaimResource & { readonly apiVersion: string; readonly kind: "SandboxClaim" }

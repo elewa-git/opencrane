@@ -65,9 +65,9 @@ The model-routing service mints an attempt-scoped LiteLLM virtual key. The key c
 - an expiry aligned with the workload assignment; and
 - no upstream provider secret.
 
-After the database binds the exact claimed Pod and its one-use proof key, OpenCrane returns that
-attempt key to the runtime. The runtime keeps it only in process memory and never receives the
-LiteLLM master key.
+After OpenCrane rechecks the exact computer lease generation, AgentIdentity, membership and claimed
+Pod UID, it returns the attempt key in the frozen turn bootstrap. The computer keeps it only in
+process memory and never receives the LiteLLM master key.
 
 ## When a spending limit is reached
 

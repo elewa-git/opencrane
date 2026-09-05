@@ -29,8 +29,8 @@ CiliumNetworkPolicy, when the exact API and controller exist
   └── optional Cilium-specific identity, FQDN and L7 controls
 ```
 
-OpenCrane renders standard policy for the warm-runtime profiles because they need only namespace,
-Pod-label and port selection. A managed Cilium-based dataplane may enforce that floor without
+OpenCrane renders standard policy for the conversation-computer profile because it needs only
+namespace, Pod-label and port selection. A managed Cilium-based dataplane may enforce that floor without
 serving Cilium's namespaced custom policy kind. GKE Dataplane V2 is one such platform.
 
 ::: warning
@@ -46,14 +46,14 @@ Installing a CRD without the controller creates no network boundary.
 | Kubernetes `NetworkPolicy` | Namespace and port deny-by-default floor |
 | Projected ServiceAccount token | Receiver-verified workload authentication |
 | Cilium policy, where qualified | Optional identity-aware FQDN/L7 restrictions |
-| OpenCrane proof | Exact run, attempt, Job, Pod and revision authority |
+| OpenCrane proof | Exact computer, lease generation, Pod UID and AgentIdentity authority |
 
 The layers complement each other. A valid workload token does not authorise a run, and a valid
 runtime assignment does not widen network policy.
 
 ## Egress
 
-Runtime namespaces should reach only cluster DNS, same-silo OpenCrane, the release-local model
+Conversation-computer Pods should reach only cluster DNS, same-silo OpenCrane, the release-local model
 proxy and explicitly required managed services. Use Cilium FQDN rules when external HTTPS must
 be narrowed beyond the portable TCP-port floor.
 

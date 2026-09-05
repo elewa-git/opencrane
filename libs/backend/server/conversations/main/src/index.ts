@@ -20,6 +20,8 @@ export type { BoundConversationWriterAppend, BoundConversationWriterBinding, Bou
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked, ConversationComputerActivationProjection, ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
 export { ConversationComputerActivationAuthorityAdapter } from "./conversation-computer-activation-authority";
+export { ConversationComputerLifecycleAuthority } from "./conversation-computer-lifecycle";
+export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerClaimReleaser, ConversationComputerIdlePolicy, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome } from "./conversation-computer-lifecycle.types";
 export { PrismaConversationComputerActivationProjectionRepository } from "./db/prisma-conversation-computer-activation-repository";
 export { _CreateConversationComputerTurnRouter } from "./conversation-computer-turn.router";
 export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerModelCredential, ConversationComputerOutputCommand, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";

@@ -1,8 +1,8 @@
 # Hosting and deployment
 
 OpenCrane installs as one **organisation silo** on a conformant Kubernetes cluster. The
-umbrella chart composes the trusted services, separate warm runtime pools and restricted worker
-namespaces.
+umbrella chart composes the trusted services, KurrentDB conversation history, an Agent Sandbox
+computer profile and restricted worker namespaces.
 
 > See also: [Deployment configuration](/operators/deployment-configuration) (public Helm inputs),
 > [Organisation boundary](/operators/organisation-boundary) (what one silo serves),
@@ -19,20 +19,20 @@ Kubernetes cluster
     │   ├── OpenCrane server and UI
     │   ├── agent controller
     │   └── supporting services
-    ├── personal runtime namespace
-    │   └── fixed warm Deployment; one claimed Pod per admitted attempt
-    ├── managed runtime namespace
-    │   └── fixed warm Deployment; one claimed Pod per managed attempt
+    ├── KurrentDB
+    │   └── ordered conversation and computer history
+    ├── Agent Sandbox profile
+    │   └── one claimed conversation-computer Pod per active lease
     └── restricted worker namespaces
         ├── skill authoring
         ├── MCP executor
         └── artifact preprocessor
 ```
 
-Each runtime namespace has one Helm-owned warm Deployment. Its generic Pods have no attempt data or
-authority. After OpenCrane durably admits a run, the controller claims one exact Pod UID, activates
-the fixed personal or managed network profile, and deletes that Pod when the attempt ends. The
-Deployment creates the replacement spare.
+The release renders one immutable `SandboxTemplate` and one zero-replica `SandboxWarmPool`. After a
+conversation entry requests activation, OpenCrane records the computer generation and lease in
+KurrentDB and creates one checked `SandboxClaim`. The external Agent Sandbox controller realises the
+Pod and Service; OpenCrane does not run a second Pod lifecycle controller.
 
 ## Prerequisites
 
@@ -41,7 +41,10 @@ Deployment creates the replacement spare.
 - A CNI that enforces `NetworkPolicy`.
 - Ingress, DNS and certificate controllers when exposing a public host.
 - PostgreSQL credentials supplied through Kubernetes Secrets.
-- Immutable image digests for the controller and runtime.
+- KurrentDB TLS and least-privilege service credentials.
+- Agent Sandbox v1beta1 CRDs and controller with extensions enabled.
+- An approved `gvisor` RuntimeClass.
+- Immutable image digests for KurrentDB, its bootstrap image and the conversation computer.
 
 ## Minimal operator handoff
 
@@ -83,8 +86,9 @@ The public host must already resolve to the ingress address. The entrypoint uses
 HTTP-01 and needs `--acme-email`; it fails before applying a self-signed certificate.
 
 ::: warning
-Do not deploy the personal and managed runtimes into the trusted server namespace. The server
-validates that all three namespaces are distinct and refuses to start on a collapsed boundary.
+Do not bypass `deploy.sh` by creating claims or Pods manually. The testv5 preflight verifies the
+Agent Sandbox APIs, controller, RuntimeClass, immutable images and KurrentDB Secrets before Helm
+changes the silo.
 :::
 
 ## What the release owns
@@ -92,10 +96,11 @@ validates that all three namespaces are distinct and refuses to start on a colla
 | Surface | Ownership |
 |---|---|
 | Trusted applications | App-owned chart templates composed by the umbrella |
-| Runtime Jobs | Created and conditionally released by `agent-controller` |
-| Runtime namespace floor | Pod Security Standards, quota, default-deny policy and admission policy |
-| Run authority | PostgreSQL-backed OpenCrane server |
+| Conversation computers | Reconciled from checked claims by the external Agent Sandbox controller |
+| Computer profile floor | gVisor, restricted security context, bounded scratch, default-deny policy and admission policy |
+| Conversation history | KurrentDB-backed OpenCrane server |
+| Product authorization | PostgreSQL-backed OpenCrane server |
 | Cluster-wide controllers | External prerequisites, not installed as silo business workloads |
 
 Source: [`apps/_infra/deploy-k8s`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/README.md)
-and [`apps/agent-controller`](https://github.com/elewa-git/opencrane/blob/main/apps/agent-controller/README.md).
+and [`apps/_infra/agent-sandbox`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/agent-sandbox/README.md).

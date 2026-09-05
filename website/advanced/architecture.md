@@ -1,62 +1,57 @@
 # Architecture
 
 OpenCrane is a **durable authority with replaceable execution**. The system is organised
-around organisation silos, immutable agent revisions and governed run attempts.
+around organisation silos, immutable conversation history and governed execution.
 
 ## Control and execution
 
 ```text
-                    ┌──────────────────────────────────┐
-                    │ OpenCrane control plane          │
-                    │ identity · policy · runs · audit │
-                    └───────────────┬──────────────────┘
+                    ┌─────────────────────────────────────┐
+                    │ OpenCrane control plane                │
+                    │ identity · policy · history · audit    │
+                    └─────────────────┬──────────────────┘
                                     │ authorised desired state
-                    ┌───────────────▼──────────────────┐
-                    │ agent controller                 │
-                    │ exact Kubernetes projection      │
-                    └───────────────┬──────────────────┘
-                                    │ claim one warm Pod per attempt
-                    ┌───────────────▼──────────────────┐
-                    │ agent runtime                    │
-                    │ bounded loop, no durable state   │
-                    └───────────────┬──────────────────┘
+                    ┌─────────────────▼──────────────────┐
+                    │ KurrentDB + computer authority      │
+                    │ stream + generation-fenced lease    │
+                    └─────────────────┬──────────────────┘
+                                    │ one checked SandboxClaim
+                    ┌─────────────────▼──────────────────┐
+                    │ conversation computer               │
+                    │ leased Pod, no durable authority    │
+                    └─────────────────┬──────────────────┘
                                     │ candidates
                     ┌───────────────▼──────────────────┐
                     │ governed external-action custody │
                     └──────────────────────────────────┘
 ```
 
-The server admits a run and freezes its accepted inputs before a warm Pod receives attempt authority
-or execution material. The controller can project only the assigned workload shape. The runtime can emit candidates,
-but it cannot approve or execute external actions by itself.
+The server appends participant-visible history before it activates a computer. It records one
+generation-bound lease and creates a checked Agent Sandbox claim; the external controller may only
+realise the release-owned Pod profile. The computer receives one frozen pending turn and may propose
+an output, but it cannot append history, choose another identity or approve external actions itself.
 
-## Durable run model
+## Durable conversation model
 
 ```text
-Conversation (`agent_session`; optional run parent)
-└── AgentRun
-    ├── immutable AgentRevision
-    ├── one RunInputSnapshot
-    ├── attempt 1..n
-    ├── ordered RunEvent records
-    ├── workload and proof evidence
-    ├── ApprovalRequest and ToolInvocation records
-    └── terminal outcome and cost
+KurrentDB conversation stream
+├── immutable participant-visible entries
+├── private-payload references and ciphertext digests
+├── membership conditions and safe logs
+└── logical ConversationComputer
+    ├── resolved AgentIdentity
+    ├── admitted profile revision
+    └── zero or one generation-fenced live lease
 ```
 
-Retries advance the attempt counter on the same logical run. Child runs are separate
-`AgentRun` records with a durable parent reservation and bounded inherited budget.
-
-::: info
-🔶 The AgentIdentity and `ExecutionSubject` descriptions below are the 0.11.0 target model. The
-application composition remains unavailable until Kurrent-backed identity and computer evidence is
-connected to run admission.
-:::
+PostgreSQL retains rebuildable conversation projections and remains authoritative for current
+memberships, grants and deny rules. Separate AgentRun workers still own scheduled, triggered and
+child-run execution; their lifecycle is not the conversation-computer Pod lifecycle.
 
 ## Personal and managed are separate authorities, not a flag
 
 The architecture treats *personal* and *managed* as two distinct admission and identity paths that
-happen to share the same runtime and execution machinery, not as one code path with a boolean on
+happen to share execution governance, not as one code path with a boolean on
 it:
 
 - **Personal admission** resolves the conversation's AgentIdentity and current Principal, then
@@ -66,17 +61,16 @@ it:
   effective grants — it never resolves a human caller as execution authority.
 
 A personal run always carries an approved `PersonaRevision`; a managed run never does — its
-published revision is already its complete instruction set. Both share one run-admission capacity
-gate, one execution/runtime substrate, and one audit trail, so "what ran and under what authority"
+published revision is already its complete instruction set. Both share authorization and audit
+conventions, so "what ran and under what authority"
 is answered the same way regardless of which path admitted it.
 
 ## Isolation
 
-One `ClusterTenant` represents one customer organisation. Its trusted server and runtime
-namespaces are distinct. There is no Kubernetes user resource and no standing per-user runtime.
-Personal and managed work are both bound through the admitted run's `ExecutionSubject`, including
-the current AgentIdentity, Principal, computer lease, and signed membership evidence — neither can borrow the
-other's authority.
+One `ClusterTenant` represents one customer organisation. There is no Kubernetes user resource and
+no standing per-user runtime. A conversation computer is bound to its conversation, AgentIdentity,
+profile revision, lease and generation. AgentRun workers keep their separate admitted execution
+subjects; neither path can borrow the other's authority.
 
 ## Shared services
 

@@ -15,8 +15,8 @@ For base domain `opencrane.example.com` and organisation `acme`, use a host such
 acme.opencrane.example.com
 ```
 
-The host identifies the `ClusterTenant` silo. It does not route to an individual runtime:
-claimed runtime Pods have no public DNS name, Service or Ingress.
+The host identifies the `ClusterTenant` silo. It does not route to an individual computer. Agent
+Sandbox creates a cluster-private Service for a claimed computer, but no public DNS name or Ingress.
 
 ## Required records
 

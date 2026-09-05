@@ -51,4 +51,24 @@ describe("AgentSandboxClaimAdapter", function _AgentSandboxClaimAdapterSuite()
 		const getNamespacedCustomObject = vi.fn().mockResolvedValue({ metadata: { name: "computer-1-g2", namespace: "silo-1-computers", labels: {}, annotations: {} }, spec: {} });
 		await expect(new AgentSandboxClaimAdapter({ getNamespacedCustomObject, createNamespacedCustomObject: vi.fn() } as never).claim(_Command())).rejects.toThrow(/conflicts/);
 	});
+
+	it("releases only the deterministic claim whose labels still match the lease", async function _ReleaseClaim()
+	{
+		const getNamespacedCustomObject = vi.fn().mockResolvedValue({ metadata: { name: "computer-1-g2", namespace: "silo-1-computers", labels: { "opencrane.ai/computer-id": "computer-1", "opencrane.ai/computer-generation": "2", "opencrane.ai/computer-lease-id": "lease-2" } } });
+		const deleteNamespacedCustomObject = vi.fn().mockResolvedValue({});
+		const adapter = new AgentSandboxClaimAdapter({ getNamespacedCustomObject, createNamespacedCustomObject: vi.fn(), deleteNamespacedCustomObject } as never);
+
+		await expect(adapter.release({ namespace: "silo-1-computers", claimId: "computer-1-g2", computerId: "computer-1", leaseId: "lease-2", generation: 2 })).resolves.toBe("released");
+		expect(deleteNamespacedCustomObject).toHaveBeenCalledWith(expect.objectContaining({ name: "computer-1-g2", body: { propagationPolicy: "Foreground" } }));
+	});
+
+	it("refuses to release a claim after its lease labels diverge", async function _RejectRelease()
+	{
+		const getNamespacedCustomObject = vi.fn().mockResolvedValue({ metadata: { name: "computer-1-g2", namespace: "silo-1-computers", labels: { "opencrane.ai/computer-id": "computer-1", "opencrane.ai/computer-generation": "2", "opencrane.ai/computer-lease-id": "foreign-lease" } } });
+		const deleteNamespacedCustomObject = vi.fn();
+		const adapter = new AgentSandboxClaimAdapter({ getNamespacedCustomObject, createNamespacedCustomObject: vi.fn(), deleteNamespacedCustomObject } as never);
+
+		await expect(adapter.release({ namespace: "silo-1-computers", claimId: "computer-1-g2", computerId: "computer-1", leaseId: "lease-2", generation: 2 })).rejects.toThrow(/does not match/);
+		expect(deleteNamespacedCustomObject).not.toHaveBeenCalled();
+	});
 });
