@@ -19,10 +19,10 @@ identity for the next transport or backend authority.
  └───────────────┬────────────────┘
                  │ reviewed namespace · ServiceAccount · Pod UID
                  ▼
- runtime stream / controller / worker router
+ computer / controller / worker router
 ```
 
-**In this flow:** [agent-runtime-stream](../agent-runtime-stream/README.md) ·
+**In this flow:** [conversations](../../conversations/main/README.md) ·
 [execution runs](../../../agents/execution/runs/main/README.md)
 
 It owns the fixed agent-controller, OCI MCP executor, artifact-preprocessor, artifact-scanner,
@@ -70,4 +70,4 @@ reads no environment variables and opens no listener.
 ## See also
 
 - Parent index: [infra](../README.md)
-- Siblings: [agent-runtime-stream](../agent-runtime-stream/README.md) · [auth](../auth/README.md) · [api](../api/README.md)
+- Siblings: [agent-sandbox](../agent-sandbox/README.md) · [auth](../auth/README.md) · [api](../api/README.md)

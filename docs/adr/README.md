@@ -16,7 +16,7 @@ ground a published page, but it is not itself published.
 | [0011](0011-single-run-input-and-artifact-read-authorities.md) | Single run-input and artifact-read authorities | Accepted |
 | [0012](0012-conversation-modes-and-agent-thread-authority.md) | Conversation modes and Agent-thread authority | Accepted |
 | [0013](0013-workflow-control-plane.md) | Workflow control-plane operations | Accepted |
-| [0014](0014-claimed-warm-runtime-pool.md) | Claimed warm runtime pool | Accepted |
+| [0014](0014-claimed-warm-runtime-pool.md) | Claimed warm runtime pool | Superseded by 0016 |
 | [0015](0015-central-durable-authorization-authority.md) | Central durable authorization authority | Accepted |
 | [0016](0016-conversation-history-and-computers.md) | Conversation history and computers | Accepted |
 

@@ -81,9 +81,9 @@ cached caller input, workload state, or a permissive default.
 
 ## Runtime boundary
 
-[`apps/agent-runtime`](../../apps/agent-runtime) implements the current bounded model/tool loop with
-the exact-pinned Pydantic AI package. It opens an authenticated outbound stream and accepts fenced
-`start_attempt`, `resume_attempt`, and `cancel_attempt` commands.
+[`apps/conversation-computer`](../../apps/conversation-computer) implements the bounded model/tool
+loop inside the computer claimed for an Agent conversation. The server admits work against the
+conversation's active lease generation and canonical history.
 
 The runtime:
 
@@ -94,17 +94,16 @@ The runtime:
 - executes no external action directly; and
 - keeps framework types, identifiers, and checkpoints behind the language-neutral protocol.
 
-The controller claims one ready Pod from the fixed personal or managed warm pool. The database claim
-binds that Pod to one run attempt, and the controller activates only that exact Pod. A claimed Pod is
-discarded after use, while its Deployment restores the generic spare. Network policy limits every
-warm Pod to the required control-plane and model-proxy paths.
+The server creates one Agent Sandbox claim for an admitted conversation computer. Cooling persists a
+checkpoint before releasing that claim; a later message either reactivates the same lease or claims
+the next fenced generation from the durable checkpoint. Network policy limits the computer to its
+required control-plane and model-proxy paths.
 
 Source implementations:
 
-- [`apps/agent-controller`](../../apps/agent-controller)
-- [`apps/agent-runtime`](../../apps/agent-runtime)
-- [`libs/backend/agents/execution/protocol`](../../libs/backend/agents/execution/protocol)
-- [`libs/backend/server/infra/agent-runtime-stream`](../../libs/backend/server/infra/agent-runtime-stream)
+- [`apps/conversation-computer`](../../apps/conversation-computer)
+- [`libs/backend/server/conversations/main`](../../libs/backend/server/conversations/main)
+- [`libs/backend/server/infra/agent-sandbox`](../../libs/backend/server/infra/agent-sandbox)
 
 ## External actions and artifacts
 

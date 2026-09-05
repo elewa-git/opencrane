@@ -1,6 +1,6 @@
 # ADR 0014 — Claimed warm runtime pool
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0016](0016-conversation-history-and-computers.md)
 - **Date:** 2026-08-25
 - **Task:** [#592](https://github.com/elewa-git/opencrane/issues/592) ·
   [#695](https://github.com/elewa-git/opencrane/issues/695)

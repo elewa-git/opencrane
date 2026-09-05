@@ -10,8 +10,8 @@ export interface RequestRunCancellationCommand
 /**
  * Describes whether cancellation is still waiting for its durable workflow to remove physical work.
  *
- * A fresh accepted request returns Cancelling while the workflow owns exact warm-runtime deletion
- * and finalization. A retry returns Idempotent with the saved cancelling or cancelled state. These
+ * A fresh accepted request returns Cancelling while the workflow owns managed-workload cleanup and
+ * finalization. A retry returns Idempotent with the saved cancelling or cancelled state. These
  * values are in-memory API outcomes, separate from the persisted Prisma AgentRunState enum even
  * when their strings match.
  *
