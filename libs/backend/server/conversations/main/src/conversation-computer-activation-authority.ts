@@ -37,7 +37,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		if (current.computer.state === ConversationComputerStates.Cooling && current.lease?.state === ComputerLeaseStates.Active && current.computer.leaseGeneration === command.generation)
 		{
 			const reactivatedAt = new Date().toISOString();
-			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${current.lease.id}:${command.generation}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease: current.lease });
+			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${current.lease.id}:${command.generation}:${current.revision}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease: current.lease });
 			return "activated";
 		}
 
@@ -45,7 +45,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		const now = new Date();
 		const expiresAt = new Date(now.getTime() + this.profile.leaseTtlMilliseconds).toISOString();
 		const initialClaim = current.computer.state === ConversationComputerStates.Cold && current.lease === null && current.computer.leaseGeneration === command.generation;
-		const recoveryClaim = current.computer.state === ConversationComputerStates.Cold && current.lease?.state === ComputerLeaseStates.Released && current.computer.leaseGeneration + 1 === command.generation;
+		const recoveryClaim = (current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.Cooling) && current.lease?.state === ComputerLeaseStates.Released && current.computer.leaseGeneration + 1 === command.generation;
 		if (initialClaim || recoveryClaim)
 		{
 			const lease = _ClaimedLease(command.computerId, command.generation, now.toISOString(), expiresAt);

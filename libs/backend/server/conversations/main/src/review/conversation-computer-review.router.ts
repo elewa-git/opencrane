@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { ConversationComputerReviewPrincipalResolver, ConversationComputerReviewRouterOptions } from "./conversation-computer-review.types";
 
 /** Largest response accepted from a sandbox review gateway. */
@@ -21,7 +22,7 @@ const _DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
  * Called by: `_CreateRoutes` in `apps/opencrane/src/app/routes.ts` when computer history and the Agent
  * Sandbox release profile are configured.
  *
- * @param options - Supplies admission, the allowed sandbox namespace, and an optional test transport.
+ * @param options - Supplies admission, the allowed sandbox namespace, structured failure logging, and an optional test transport.
  * @param resolvePrincipal - Resolves identity from the authenticated Express request.
  * @returns An Express router whose responses are size-limited and never cached.
  * @see ConversationComputerReviewAuthority.resolve
@@ -89,13 +90,14 @@ async function _Proxy(request: Request, response: Response, options: Conversatio
 				return;
 			}
 		}
-		const upstream = await (options.fetch ?? fetch)(target, { method, headers, body: requestBody, redirect: "manual", signal: AbortSignal.timeout(35_000) });
+		const upstream = await ___DoWithTrace("conversation.computer_review.proxy", { conversationId, reviewAction: action, reviewMethod: method }, function _FetchReview() { return (options.fetch ?? fetch)(target, { method, headers, body: requestBody, redirect: "manual", signal: AbortSignal.timeout(35_000) }); });
 		const bytes = await _ReadBoundedResponse(upstream);
 		const contentType = forceInertText ? "text/plain; charset=utf-8" : upstream.headers.get("content-type") ?? "application/octet-stream";
 		response.status(upstream.status).set("cache-control", "no-store").set("content-security-policy", "default-src 'none'; frame-ancestors 'none'").set("x-content-type-options", "nosniff").set("content-type", contentType).send(Buffer.from(bytes));
 	}
-	catch
+	catch (err)
 	{
+		options.logger.warn({ err, conversationId: _Parameter(request, "conversationId"), reviewAction: action, reviewMethod: method }, "Conversation computer review request failed");
 		response.status(503).json({ error: "conversation_computer_review_unavailable" });
 	}
 }

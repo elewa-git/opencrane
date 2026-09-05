@@ -1,11 +1,14 @@
 import type { Request } from "express";
 import type { ProductAuthorizationActions } from "@opencrane/models/authorization";
+import type { Logger } from "@opencrane/backend/observability";
 
 /**
  * Supplies the server-owned authorities needed to proxy human-review requests.
  *
- * Production callers provide the sandbox namespace from the release profile. Tests may replace
- * `fetch`, but no public route may supply either the namespace or the upstream transport target.
+ * Production callers provide the sandbox namespace from the release profile and a structured logger.
+ * Tests may replace `fetch`, but no public route may supply either the namespace or the upstream
+ * transport target. Failure logs omit request bodies and private lease coordinates so diagnostics do
+ * not disclose the credential used by the sandbox gateway.
  *
  * @see _CreateConversationComputerReviewRouter
  */
@@ -17,6 +20,8 @@ export interface ConversationComputerReviewRouterOptions
 	readonly sandboxNamespace: string;
 	/** Performs the fixed upstream exchange; tests replace it without opening a socket. */
 	readonly fetch?: typeof fetch;
+	/** Records proxy failures without copying request bodies or private lease coordinates into logs. */
+	readonly logger: Pick<Logger, "warn">;
 }
 
 /**

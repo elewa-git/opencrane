@@ -1,6 +1,12 @@
 import { MessageRoles } from "@opencrane/models/conversations";
+import { z } from "zod";
 import { ___ParsePersonaFirstChatSnapshot, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatTranscriptEntry } from "@opencrane/models/user-onboarding";
-import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHistoryEntry, type ConversationOnboardingHistoryProjection } from "@opencrane/state/conversation/workspace";
+import { ConversationOnboardingHistoryStatuses, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationOnboardingHistoryEntry, type ConversationOnboardingHistoryProjection } from "@opencrane/state/conversation/workspace";
+
+/** Checks command and diff bodies before data from the review gateway can enter workspace state. */
+const _ComputerCommandResultSchema = z.object({ exitCode: z.number().int().nullable(), outcome: z.enum(["completed", "timed_out", "output_limited"]), output: z.string(), truncated: z.boolean() }).strict();
+/** Checks Chromium discovery bodies before the adapter copies their display fields into workspace state. */
+const _ComputerBrowserTargetSchema = z.object({ id: z.string().min(1), title: z.string(), url: z.string().url() }).passthrough();
 
 /**
  * Turns signed-in HTTP responses into the shapes the workspace state package declares.
@@ -58,6 +64,52 @@ export function _ConversationOnboardingHistory(value: unknown): ConversationOnbo
 		throw new Error("Completed onboarding history is missing required evidence.");
 	// 5. Copy across only the fields the history panel draws, keeping the server's transcript order.
 	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: snapshot.conversationId, personaDisplayName: snapshot.persona.displayName, startedAt: snapshot.startedAt, completedAt: snapshot.completedAt, transcript: snapshot.transcript.map(_ConversationOnboardingHistoryEntry) } };
+}
+
+/**
+ * Validates a command or diff body before workspace state adopts it.
+ *
+ * Called by: {@link OpenCraneConversationWorkspaceGateway.readComputerDiff} and
+ * {@link OpenCraneConversationWorkspaceGateway.runComputerCommand} at the HTTP trust boundary.
+ *
+ * @param value - The decoded response body returned by the review API.
+ * @returns A command result whose outcome and field types match the workspace contract.
+ * @throws ZodError when the response has missing, additional, or wrongly typed fields.
+ */
+export function _ConversationComputerCommandResult(value: unknown): ConversationComputerCommandResult
+{
+	return _ComputerCommandResultSchema.parse(value);
+}
+
+/**
+ * Validates the complete browser-target list and copies the fields the review UI renders.
+ *
+ * Rejecting the complete list prevents a malformed target from disappearing while the UI presents
+ * the remaining response as trustworthy, as asserted by the adapter's malformed-target test.
+ *
+ * Called by: {@link OpenCraneConversationWorkspaceGateway.listComputerBrowserTargets}.
+ *
+ * @param value - The decoded Chromium target-discovery response.
+ * @returns Browser targets containing id, title, and URL fields for workspace state.
+ * @throws ZodError when the response is not an array or any target is malformed.
+ */
+export function _ConversationComputerBrowserTargets(value: unknown): readonly ConversationComputerBrowserTarget[]
+{
+	return z.array(_ComputerBrowserTargetSchema).parse(value).map(function _Target(target) { return { id: target.id, title: target.title, url: target.url }; });
+}
+
+/**
+ * Validates a page-creation body while leaving its debugger coordinates inside the adapter.
+ *
+ * Called by: {@link OpenCraneConversationWorkspaceGateway.openComputerBrowserPage}, which needs only
+ * confirmation that Chromium returned a valid target and therefore discards the parsed value.
+ *
+ * @param value - The decoded page-creation response returned by the review API.
+ * @throws ZodError when Chromium did not return a valid browser target.
+ */
+export function _ConversationComputerBrowserPage(value: unknown): void
+{
+	_ComputerBrowserTargetSchema.parse(value);
 }
 
 /**

@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { ConversationMode, Prisma, type PrismaClient } from "@prisma/client";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { ComputerLeaseStates, ConversationComputerStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
+import { ComputerLeaseStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
 
 import { ConversationHistoryAuthority } from "./conversation-history-authority";
 import { ConversationHistoryAppendOutcomes } from "./conversation-history-authority.types";
@@ -14,6 +14,10 @@ import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, t
 
 /** Limits checked-append retries without silently dropping a contending participant message. */
 const _APPEND_ATTEMPTS = 4;
+const _CONVERSATION_AUDIENCE = "conversation";
+const _MESSAGE_ENTRY_KIND = "message";
+const _A2UI_ENTRY_KIND = "a2ui";
+const _TEXT_BLOCK_KIND = "text";
 
 /** Participant authority joining PostgreSQL policy and encrypted payloads to KurrentDB history. */
 export class PrismaSelfConversationHistory implements SelfConversationHistoryAuthority
@@ -109,7 +113,7 @@ export class PrismaSelfConversationHistory implements SelfConversationHistoryAut
 		const current = await this.dependencies.computerReader.load({ siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId!, profileRevisionId: projection.computerProfileRevisionId! });
 		if (current === null || current.computer.leaseGeneration < 1)
 			throw new Error("Conversation computer activation requires a current checked computer generation");
-		const generation = current.computer.state === ConversationComputerStates.Cold && current.lease?.state === ComputerLeaseStates.Released ? current.computer.leaseGeneration + 1 : current.computer.leaseGeneration;
+		const generation = current.lease?.state === ComputerLeaseStates.Released ? current.computer.leaseGeneration + 1 : current.computer.leaseGeneration;
 		const queueStreamName = `computer-activations-${caller.siloId}`;
 		const queueHead = await this.historyStore.readHead(queueStreamName);
 		if (queueHead.streamName !== queueStreamName)
@@ -160,7 +164,7 @@ function _MessageEntry(caller: ConversationCaller, conversationId: string, comma
 /** Returns whether an entry's immutable visibility includes this participant. */
 function _MaySee(entry: ConversationEntry, subjectId: string): boolean
 {
-	return entry.visibility.audience === "conversation" || entry.visibility.participantIds.includes(subjectId);
+	return entry.visibility.audience === _CONVERSATION_AUDIENCE || entry.visibility.participantIds.includes(subjectId);
 }
 
 /** Collects private text and A2UI payload references without altering the immutable entries. */
@@ -168,9 +172,9 @@ function _PayloadRefs(entries: readonly ConversationEntry[]): readonly string[]
 {
 	const references = entries.flatMap(function _EntryReferences(entry)
 	{
-		if (entry.kind === "message")
-			return entry.blocks.flatMap(block => block.kind === "text" ? [block.payloadRef] : []);
-		if (entry.kind === "a2ui" && entry.payloadRef !== null)
+		if (entry.kind === _MESSAGE_ENTRY_KIND)
+			return entry.blocks.flatMap(block => block.kind === _TEXT_BLOCK_KIND ? [block.payloadRef] : []);
+		if (entry.kind === _A2UI_ENTRY_KIND && entry.payloadRef !== null)
 			return [entry.payloadRef];
 		return [];
 	});

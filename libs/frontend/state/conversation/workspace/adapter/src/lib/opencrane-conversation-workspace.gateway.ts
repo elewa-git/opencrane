@@ -3,7 +3,7 @@ import { Injectable, inject } from "@angular/core";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
+import { _ConversationComputerBrowserPage, _ConversationComputerBrowserTargets, _ConversationComputerCommandResult, _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
 /**
  * Talks to the signed-in Control Plane API on behalf of the conversation workspace.
@@ -144,7 +144,8 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/diff", { params: { path: { conversationId }, query: { path } } });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
-		return result.data;
+		try { return _ConversationComputerCommandResult(result.data); }
+		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
@@ -153,16 +154,18 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/commands", { params: { path: { conversationId } }, body: { argv: [...argv], cwd } });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
-		return result.data;
+		try { return _ConversationComputerCommandResult(result.data); }
+		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
 	public async listComputerBrowserTargets(conversationId: string): Promise<readonly ConversationComputerBrowserTarget[]>
 	{
 		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/browser/targets", { params: { path: { conversationId } } });
-		if (result.error !== undefined || !Array.isArray(result.data))
+		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
-		return result.data.flatMap(_BrowserTarget);
+		try { return _ConversationComputerBrowserTargets(result.data); }
+		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
@@ -171,13 +174,15 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/browser/pages", { params: { path: { conversationId } }, body: { port, path } });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
+		try { _ConversationComputerBrowserPage(result.data); }
+		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
 	public async captureComputerScreenshot(conversationId: string, port: number, path: string, width: number, height: number): Promise<Blob>
 	{
 		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/browser/screenshots", { params: { path: { conversationId } }, body: { port, path, width, height }, parseAs: "blob" });
-		if (result.error !== undefined || !(result.data instanceof Blob))
+		if (result.error !== undefined || !(result.data instanceof Blob) || result.data.type !== "image/png" || result.data.size === 0)
 			throw _Failure(result.response?.status);
 		return result.data;
 	}
@@ -191,14 +196,6 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		return result.data;
 	}
 
-}
-
-/** Keep only display-safe fields from one untrusted Chromium target. */
-function _BrowserTarget(value: Record<string, unknown>): ConversationComputerBrowserTarget[]
-{
-	if (typeof value["id"] !== "string" || typeof value["title"] !== "string" || typeof value["url"] !== "string")
-		return [];
-	return [{ id: value["id"], title: value["title"], url: value["url"] }];
 }
 
 /**
