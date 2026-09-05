@@ -149,7 +149,7 @@ test("only classifies explicit non-deployment paths as safe current-silo inputs"
 	assert.equal(selectDevelopSmokeInputsChanged(["apps/_infra/deploy-k8s/values.yaml"]), true);
 	assert.equal(selectDevelopSmokeInputsChanged(["apps/opencrane/helm/templates/_deployment.tpl"]), true);
 	assert.equal(selectDevelopSmokeInputsChanged(["apps/opencrane/deploy/Dockerfile"]), true);
-	assert.equal(selectDevelopSmokeInputsChanged(["apps/agent-runtime/src/runtime.py"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["apps/conversation-computer/src/runtime.py"]), true);
 	assert.equal(selectDevelopSmokeInputsChanged(["package-lock.json"]), true);
 	assert.equal(selectDevelopSmokeInputsChanged(["scripts/affected-deployables.core.mjs"]), true);
 	assert.equal(selectDevelopSmokeInputsChanged(["unclassified/new-input.xyz"]), true);

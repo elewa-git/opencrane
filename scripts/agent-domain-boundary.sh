@@ -16,7 +16,6 @@ const domains = [
   { kind: "shared execution", directory: "libs/backend/agents/execution/admission/main", project: "backend-agents-execution-admission", alias: "@opencrane/backend/agents/execution/admission", scope: "scope:execution-admission" },
   { kind: "shared execution", directory: "libs/backend/agents/execution/inputs/main", project: "backend-agents-execution-inputs", alias: "@opencrane/backend/agents/execution/inputs", scope: "scope:execution-inputs" },
   { kind: "shared execution", directory: "libs/backend/agents/execution/runs/main", project: "backend-agents-execution-runs", alias: "@opencrane/backend/agents/execution/runs", scope: "scope:execution-runs" },
-  { kind: "shared execution", directory: "libs/backend/agents/execution/protocol", project: "backend-agents-execution-protocol", alias: "@opencrane/backend/agents/execution/protocol", scope: "scope:execution-protocol" },
   { kind: "operator", directory: "libs/backend/server/iam/membership/main", project: "backend-server-membership", alias: "@opencrane/backend/server/iam/membership", scope: "scope:membership" },
   { kind: "operator", directory: "libs/backend/server/iam/authorization/main", project: "backend-server-authorization", alias: "@opencrane/backend/server/iam/authorization", scope: "scope:authorization" },
   { kind: "operator", directory: "libs/backend/server/agents/agent-services/main", project: "backend-server-agent-services", alias: "@opencrane/backend/server/agents/agent-services", scope: "scope:agent-services" },

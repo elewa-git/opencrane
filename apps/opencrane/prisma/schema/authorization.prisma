@@ -137,16 +137,8 @@ model ApprovalRequest {
   agentRevisionId          String                     @map("agent_revision_id")
   agentServiceId           String                     @map("agent_service_id")
   siloId                   String                     @map("silo_id")
-  proofKeyId               String                     @map("proof_key_id")
-  proofKeyThumbprint       String                     @map("proof_key_thumbprint")
   agentIdentityId          String                     @map("agent_identity_id")
   principalId              String                     @map("principal_id")
-  workloadAudience         String                     @map("workload_audience")
-  serviceAccountName       String                     @map("service_account_name")
-  namespace                String
-  workloadKind             WorkloadKind               @map("workload_kind")
-  workloadUid              String                     @map("workload_uid")
-  podUid                   String                     @map("pod_uid")
   resourceKind             String                     @map("resource_kind")
   resourceId               String                     @map("resource_id")
   action                   String
@@ -171,8 +163,6 @@ model ApprovalRequest {
   run                      AgentRun                   @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
   toolInvocation           ToolInvocation             @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
   elicitationRequest       ElicitationRequest         @relation(fields: [elicitationRequestId], references: [id], onDelete: Restrict)
-  proofKey                 RunProofKey                @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
-  assignment               WorkloadAssignment         @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
 
   @@unique([runId, attempt, actionDigest])
   @@index([state, expiresAt])

@@ -16,8 +16,6 @@ libs/backend/
   agents/                     agent specializations and shared execution authority
     personal/<domain>/main    personal persona, memory, and conversation domains
     execution/<domain>/main   input assembly and run-attempt domains
-    execution/protocol        language-neutral command/candidate authority
-    runtime/k8s-launcher      agent-controller Job projection
   server/<group>/<domain>/main OpenCrane server capability
     project.json              Nx project metadata and targets
     src/index.ts              public barrel
@@ -47,8 +45,8 @@ capabilities merely because the OpenCrane app currently composes some of their p
   `@opencrane/backend/server/<group>/<domain>`, never an internal source path.
 - Server-runtime imports use `@opencrane/backend/server/infra/<runtime>`; server-side logging and tracing
   imports use `@opencrane/backend/observability`.
-- Agent runtime imports use `@opencrane/backend/agents/execution/protocol` for authority and
-  `@opencrane/backend/agents/runtime/k8s-launcher` for the controller projection.
+- Conversation-computer execution uses the server conversation authority and the external Agent
+  Sandbox boundary; governed background Jobs use their workload-specific controller libraries.
 - Conversation transports use the server conversation authority, which reads immutable KurrentDB
   entries and resolves separately encrypted participant payloads.
 - Database models remain in the OpenCrane app's per-domain Prisma schema files; see

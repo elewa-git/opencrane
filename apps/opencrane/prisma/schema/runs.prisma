@@ -26,12 +26,6 @@ enum AgentRunTerminalReason {
   InvalidInput    @map("invalid_input")
 }
 
-enum WorkloadAssignmentState {
-  PendingPod @map("pending_pod")
-  Registered @map("registered")
-  Revoked    @map("revoked")
-}
-
 enum WorkloadKind {
   Job        @map("job")
   Deployment @map("deployment")
@@ -71,8 +65,6 @@ model AgentRun {
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   inputSnapshot                     RunInputSnapshot?
-  workloadAssignments               WorkloadAssignment[]
-  proofKeys                         RunProofKey[]
   modelCredentialMintAuthorizations RunModelCredentialMintAuthorization[]
   approvalRequests                  ApprovalRequest[]
   elicitationRequests               ElicitationRequest[]
@@ -168,105 +160,6 @@ model RunInputSnapshot {
   @@index([runId, attempt])
   @@index([agentServiceId, agentRevisionId])
   @@map("run_input_snapshots")
-}
-
-model WorkloadAssignment {
-  runId                    String                          @map("run_id")
-  attempt                  Int
-  agentServiceId           String                          @map("agent_service_id")
-  agentRevisionId          String                          @map("agent_revision_id")
-  siloId                   String                          @map("silo_id")
-  agentIdentityId          String                          @map("agent_identity_id")
-  principalId              String                          @map("principal_id")
-  executionSubject         Json                            @map("execution_subject")
-  audience                 String
-  serviceAccountName       String                          @map("service_account_name")
-  namespace                String
-  workloadKind             WorkloadKind                    @map("workload_kind")
-  workloadUid              String                          @map("workload_uid")
-  workloadProfile          String                          @map("workload_profile")
-  podUid                   String?                         @map("pod_uid")
-  bindingGeneration        Int                             @default(1) @map("binding_generation")
-  state                    WorkloadAssignmentState         @default(PendingPod)
-  expiresAt                DateTime                        @map("expires_at")
-  createdAt                DateTime                        @default(now()) @map("created_at")
-  registeredAt             DateTime?                       @map("registered_at")
-  revokedAt                DateTime?                       @map("revoked_at")
-  run                      AgentRun                        @relation(fields: [runId, siloId, agentServiceId, agentRevisionId], references: [id, siloId, agentServiceId, agentRevisionId], onDelete: Restrict)
-  bootstraps               WorkloadBootstrap[]
-  proofKeys                RunProofKey[]
-  approvalRequests         ApprovalRequest[]
-
-  @@id([runId, attempt])
-  @@unique([runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], map: "workload_assignment_bootstrap_identity_key")
-  @@unique([runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, serviceAccountName, namespace, workloadKind, workloadUid], map: "workload_assignment_action_identity_key")
-  @@unique([runId, attempt, workloadKind, workloadUid], map: "workload_assignments_run_attempt_workload_key")
-  @@unique([runId, attempt, workloadKind, workloadUid, podUid], map: "workload_assignments_run_attempt_workload_pod_key")
-  @@unique([namespace, workloadKind, workloadUid])
-  @@unique([namespace, podUid])
-  @@index([siloId, agentIdentityId, principalId])
-  @@index([state, expiresAt])
-  @@map("workload_assignments")
-}
-
-model WorkloadBootstrap {
-  id                 String                 @id @default(cuid())
-  runId              String                 @map("run_id")
-  attempt            Int
-  generation         Int                    @default(1)
-  agentServiceId     String                 @map("agent_service_id")
-  agentRevisionId    String                 @map("agent_revision_id")
-  siloId             String                 @map("silo_id")
-  agentIdentityId    String                 @map("agent_identity_id")
-  principalId        String                 @map("principal_id")
-  executionSubject   Json                   @map("execution_subject")
-  audience           String
-  serviceAccountName String                 @map("service_account_name")
-  namespace          String
-  workloadKind       WorkloadKind           @map("workload_kind")
-  workloadUid        String                 @map("workload_uid")
-  claimDigest        String                 @unique @map("claim_digest")
-  expiresAt          DateTime               @map("expires_at")
-  consumedAt         DateTime?              @map("consumed_at")
-  consumedByPodUid   String?                @map("consumed_by_pod_uid")
-  revokedAt          DateTime?              @map("revoked_at")
-  receiptId          String?                @unique @map("receipt_id")
-  createdAt          DateTime               @default(now()) @map("created_at")
-  assignment         WorkloadAssignment     @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
-  proofKey           RunProofKey?
-
-  @@unique([runId, attempt, generation])
-  @@index([expiresAt])
-  @@map("workload_bootstraps")
-}
-
-model RunProofKey {
-  id               String             @id @default(cuid())
-  bootstrapId      String             @unique @map("bootstrap_id")
-  runId            String             @map("run_id")
-  attempt          Int
-  generation       Int                @default(1)
-  workloadKind     WorkloadKind       @map("workload_kind")
-  workloadUid      String             @map("workload_uid")
-  podUid           String             @map("pod_uid")
-  publicKeyJwk     Json               @map("public_key_jwk")
-  keyThumbprint    String             @unique @map("key_thumbprint")
-  expiresAt        DateTime           @map("expires_at")
-  revokedAt        DateTime?          @map("revoked_at")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  run              AgentRun           @relation(fields: [runId], references: [id], onDelete: Restrict, map: "run_proof_keys_run_fkey")
-  assignment       WorkloadAssignment @relation(fields: [runId, attempt, workloadKind, workloadUid], references: [runId, attempt, workloadKind, workloadUid], onDelete: Restrict, map: "run_proof_keys_assignment_fkey")
-  bootstrap        WorkloadBootstrap  @relation(fields: [bootstrapId], references: [id], onDelete: Restrict)
-  approvalRequests ApprovalRequest[]
-
-  @@unique([runId, attempt, generation])
-  @@unique([runId, attempt, workloadKind, workloadUid, podUid])
-  @@unique([id, runId, attempt])
-  @@unique([id, runId, attempt, keyThumbprint], map: "run_proof_key_bound_thumbprint_key")
-  @@unique([id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], map: "run_proof_key_bound_pod_key")
-  @@index([podUid])
-  @@index([expiresAt])
-  @@map("run_proof_keys")
 }
 
 /// One durable, single-consumption authorization for the post-commit LiteLLM key mint.

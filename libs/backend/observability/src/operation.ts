@@ -34,7 +34,7 @@ export function ___GetActiveSpan()
  * still shows a failure, but the fixed status message keeps a remote response body, a credential,
  * or a provider stack trace out of telemetry. A no-op when no span is active.
  *
- * Called by: `libs/backend/agents/execution/protocol/src/production-external-action-adapter.ts`.
+ * Called by: external-I/O adapters that need one named traced operation.
  * @see {@link ___DoWithTrace}
  */
 export function ___MarkActiveSpanFailed(): void

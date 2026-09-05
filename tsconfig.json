@@ -127,9 +127,6 @@
       "@opencrane/backend/agents/execution/admission": [
         "./libs/backend/agents/execution/admission/main/src/index.ts"
       ],
-      "@opencrane/backend/agents/execution/protocol": [
-        "./libs/backend/agents/execution/protocol/src/index.ts"
-      ],
       "@opencrane/backend/server/agents/skills": [
         "./libs/backend/server/agents/skills/main/src/index.ts"
       ],
@@ -183,9 +180,6 @@
       ],
       "@opencrane/backend/server/infra/history-store": [
         "./libs/backend/server/infra/history-store/src/index.ts"
-      ],
-      "@opencrane/backend/agents/runtime/k8s-launcher": [
-        "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
       ],
       "@opencrane/backend/agents/runtime/workloads/contract": [
         "./libs/backend/agents/runtime/workloads/contract/src/index.ts"

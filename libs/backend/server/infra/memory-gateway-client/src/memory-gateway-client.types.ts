@@ -22,7 +22,7 @@ export interface MemoryFact
  * admitted for. `maxResults` is a hard ceiling: the adapter passes it to the gateway as `top_k` and
  * truncates again on the way back.
  *
- * Called by: libs/backend/agents/execution/protocol/src/prisma-run-input-compiler.ts,
+ * Called by: run-input compilation and personal-memory authorities,
  * memory-external-action-executor.ts, and gateway-memory-fact-selector.ts, all through
  * {@link MemoryGatewayClient.query}.
  */
@@ -242,7 +242,7 @@ export interface ScopedMemoryInjectionCommand
  * Two implementations: the HTTP client in http-cognee-memory-gateway-client.ts, and
  * `__UnavailableMemoryGatewayClient`, which refuses everything when no gateway is configured.
  *
- * Called by: libs/backend/agents/execution/protocol/src/prisma-run-input-compiler.ts,
+ * Called by: run-input compilation and personal-memory authorities,
  * gateway-memory-fact-selector.ts, memory-external-action-executor.ts, and
  * external-action-executor.types.ts; composed in
  * apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts.

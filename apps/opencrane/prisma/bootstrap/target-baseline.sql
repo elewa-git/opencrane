@@ -230,9 +230,6 @@ CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running'
 CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'user_cancelled', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
 
 -- CreateEnum
-CREATE TYPE "WorkloadAssignmentState" AS ENUM ('pending_pod', 'registered', 'revoked');
-
--- CreateEnum
 CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
 
 -- CreateEnum
@@ -585,16 +582,8 @@ CREATE TABLE "approval_requests" (
     "agent_revision_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "proof_key_id" TEXT NOT NULL,
-    "proof_key_thumbprint" TEXT NOT NULL,
     "agent_identity_id" TEXT NOT NULL,
     "principal_id" TEXT NOT NULL,
-    "workload_audience" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "pod_uid" TEXT NOT NULL,
     "resource_kind" TEXT NOT NULL,
     "resource_id" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -1796,80 +1785,6 @@ CREATE TABLE "run_input_snapshots" (
 );
 
 -- CreateTable
-CREATE TABLE "workload_assignments" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "agent_revision_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "agent_identity_id" TEXT NOT NULL,
-    "principal_id" TEXT NOT NULL,
-    "execution_subject" JSONB NOT NULL,
-    "audience" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "workload_profile" TEXT NOT NULL,
-    "pod_uid" TEXT,
-    "binding_generation" INTEGER NOT NULL DEFAULT 1,
-    "state" "WorkloadAssignmentState" NOT NULL DEFAULT 'pending_pod',
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "registered_at" TIMESTAMP(3),
-    "revoked_at" TIMESTAMP(3),
-
-    CONSTRAINT "workload_assignments_pkey" PRIMARY KEY ("run_id","attempt")
-);
-
--- CreateTable
-CREATE TABLE "workload_bootstraps" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL DEFAULT 1,
-    "agent_service_id" TEXT NOT NULL,
-    "agent_revision_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "agent_identity_id" TEXT NOT NULL,
-    "principal_id" TEXT NOT NULL,
-    "execution_subject" JSONB NOT NULL,
-    "audience" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "claim_digest" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "consumed_at" TIMESTAMP(3),
-    "consumed_by_pod_uid" TEXT,
-    "revoked_at" TIMESTAMP(3),
-    "receipt_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "workload_bootstraps_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "run_proof_keys" (
-    "id" TEXT NOT NULL,
-    "bootstrap_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL DEFAULT 1,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "pod_uid" TEXT NOT NULL,
-    "public_key_jwk" JSONB NOT NULL,
-    "key_thumbprint" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "revoked_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "run_proof_keys_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "run_model_credential_mint_authorizations" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
@@ -2912,69 +2827,6 @@ CREATE UNIQUE INDEX "run_input_snapshots_run_id_attempt_input_digest_key" ON "ru
 CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
-CREATE INDEX "workload_assignments_silo_id_agent_identity_id_principal_id_idx" ON "workload_assignments"("silo_id", "agent_identity_id", "principal_id");
-
--- CreateIndex
-CREATE INDEX "workload_assignments_state_expires_at_idx" ON "workload_assignments"("state", "expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignment_bootstrap_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignment_action_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "service_account_name", "namespace", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_run_attempt_workload_key" ON "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_run_attempt_workload_pod_key" ON "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_namespace_workload_kind_workload_uid_key" ON "workload_assignments"("namespace", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_namespace_pod_uid_key" ON "workload_assignments"("namespace", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_claim_digest_key" ON "workload_bootstraps"("claim_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_receipt_id_key" ON "workload_bootstraps"("receipt_id");
-
--- CreateIndex
-CREATE INDEX "workload_bootstraps_expires_at_idx" ON "workload_bootstraps"("expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_run_id_attempt_generation_key" ON "workload_bootstraps"("run_id", "attempt", "generation");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_bootstrap_id_key" ON "run_proof_keys"("bootstrap_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_key_thumbprint_key" ON "run_proof_keys"("key_thumbprint");
-
--- CreateIndex
-CREATE INDEX "run_proof_keys_pod_uid_idx" ON "run_proof_keys"("pod_uid");
-
--- CreateIndex
-CREATE INDEX "run_proof_keys_expires_at_idx" ON "run_proof_keys"("expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_generation_key" ON "run_proof_keys"("run_id", "attempt", "generation");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_workload_kind_workload_uid_po_key" ON "run_proof_keys"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_id_run_id_attempt_key" ON "run_proof_keys"("id", "run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_key_bound_thumbprint_key" ON "run_proof_keys"("id", "run_id", "attempt", "key_thumbprint");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_key_bound_pod_key" ON "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid");
-
--- CreateIndex
 CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_key_alias_key" ON "run_model_credential_mint_authorizations"("key_alias");
 
 -- CreateIndex
@@ -3192,12 +3044,6 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocatio
 
 -- AddForeignKey
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_proof_key_id_run_id_attempt_workload_kin_fkey" FOREIGN KEY ("proof_key_id", "run_id", "attempt", "workload_kind", "workload_uid", "proof_key_thumbprint", "pod_uid") REFERENCES "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_attempt_agent_service_id_agent_re_fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "workload_audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3453,21 +3299,6 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_chil
 
 -- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_attempt_input_digest_fkey" FOREIGN KEY ("run_id", "attempt", "input_digest") REFERENCES "agent_runs"("id", "attempt", "input_snapshot_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_silo_id_agent_service_id_agent_fkey" FOREIGN KEY ("run_id", "silo_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_run_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_assignment_fkey" FOREIGN KEY ("run_id", "attempt", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" FOREIGN KEY ("bootstrap_id") REFERENCES "workload_bootstraps"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -4230,20 +4061,6 @@ BEGIN
     RAISE EXCEPTION 'AgentRevision assignments are immutable';
 END;
 $$;
-CREATE FUNCTION "enforce_current_workload_assignment_attempt"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_state "AgentRunState";
-BEGIN
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'queued'::"AgentRunState" THEN
-        RAISE EXCEPTION 'workload assignment must target the current Queued attempt';
-    END IF;
-    RETURN NEW;
-END;
-$$;
 CREATE FUNCTION "reject_run_input_snapshot_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'RunInputSnapshot rows are immutable';
@@ -4376,22 +4193,6 @@ BEGIN
         ) THEN
             RAISE EXCEPTION 'invalid AgentRun state transition';
         END IF;
-        IF OLD."state" = 'cancelling' AND NEW."state" = 'cancelled' THEN
-            PERFORM 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            IF EXISTS (
-                SELECT 1 FROM "workload_assignments"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
-                  AND "state" IN ('pending_pod'::"WorkloadAssignmentState", 'registered'::"WorkloadAssignmentState")
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires no current PendingPod or Registered WorkloadAssignment';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "revoked_at" IS NULL
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires every RunProofKey revoked';
-            END IF;
-        END IF;
         IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
             RAISE EXCEPTION 'AgentRun started_at is immutable once recorded';
         END IF;
@@ -4401,204 +4202,6 @@ BEGIN
         IF NEW."state" = 'running' AND NEW."started_at" IS NULL THEN
             RAISE EXCEPTION 'a running AgentRun requires started_at';
         END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_workload_bootstrap_consumption"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    assignment_pod_uid TEXT;
-    assignment_state "WorkloadAssignmentState";
-    run_state "AgentRunState";
-    transition_time TIMESTAMP(3) := clock_timestamp();
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL
-            OR NEW."receipt_id" IS NOT NULL OR NEW."revoked_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap must begin unconsumed and unrevoked';
-        END IF;
-        SELECT "state" INTO run_state
-        FROM "agent_runs"
-        WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-        FOR UPDATE;
-        IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap requires the current Assigned attempt';
-        END IF;
-        SELECT "state" INTO assignment_state
-        FROM "workload_assignments"
-        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "agent_service_id" = NEW."agent_service_id"
-          AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
-          AND "audience" = NEW."audience"
-          AND "service_account_name" = NEW."service_account_name"
-          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
-          AND "workload_uid" = NEW."workload_uid"
-        FOR UPDATE;
-        IF assignment_state IS DISTINCT FROM 'pending_pod'::"WorkloadAssignmentState" THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap requires its PendingPod assignment';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadBootstrap rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."generation" IS DISTINCT FROM OLD."generation"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."audience" IS DISTINCT FROM OLD."audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
-        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."claim_digest" IS DISTINCT FROM OLD."claim_digest"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap identity is immutable';
-    END IF;
-    IF OLD."revoked_at" IS NOT NULL THEN
-        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
-            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
-            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
-            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
-        END IF;
-        IF NEW."revoked_at" IS DISTINCT FROM OLD."revoked_at" THEN
-            RAISE EXCEPTION 'WorkloadBootstrap revocation is irreversible';
-        END IF;
-        RAISE EXCEPTION 'WorkloadBootstrap is already revoked';
-    END IF;
-    IF NEW."revoked_at" IS NOT NULL THEN
-        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
-            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
-            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
-            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
-        END IF;
-        IF NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
-            OR (OLD."consumed_at" IS NOT NULL AND NEW."revoked_at" < OLD."consumed_at") THEN
-            RAISE EXCEPTION 'WorkloadBootstrap revocation time must be current';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL
-        OR NEW."consumed_by_pod_uid" IS NULL OR NEW."receipt_id" IS NULL THEN
-        RAISE EXCEPTION 'WorkloadBootstrap may be consumed exactly once';
-    END IF;
-    IF NEW."consumed_at" < OLD."created_at" OR NEW."consumed_at" > transition_time
-        OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap must be consumed at a current time before expiry';
-    END IF;
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap consumption requires the current Assigned attempt';
-    END IF;
-    SELECT "state", "pod_uid" INTO assignment_state, assignment_pod_uid
-    FROM "workload_assignments"
-    WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-        OR assignment_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN
-        RAISE EXCEPTION 'bootstrap consumer Pod is not the registered assignment Pod';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_proof_key_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_state "AgentRunState";
-BEGIN
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-        RAISE EXCEPTION 'RunProofKey requires the current Assigned attempt';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM "workload_bootstraps" WHERE "id" = NEW."bootstrap_id"
-        AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-        AND "consumed_at" IS NOT NULL AND "consumed_by_pod_uid" = NEW."pod_uid"
-    ) THEN
-        RAISE EXCEPTION 'RunProofKey requires the consumed bootstrap for the exact run, attempt, and Pod';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_workload_assignment_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    transition_time TIMESTAMP(3) := clock_timestamp();
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending_pod'
-            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL
-            OR NOT ((NEW."workload_kind" = 'job' AND NEW."pod_uid" IS NULL)
-                OR (NEW."workload_kind" = 'deployment' AND NEW."pod_uid" IS NOT NULL
-                    AND btrim(NEW."pod_uid") <> '' AND NEW."pod_uid" = NEW."workload_uid")) THEN
-            RAISE EXCEPTION 'a new WorkloadAssignment must begin pending_pod';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadAssignment rows cannot be deleted'; END IF;
-    IF NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."audience" IS DISTINCT FROM OLD."audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
-        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."workload_profile" IS DISTINCT FROM OLD."workload_profile"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'WorkloadAssignment identity is immutable';
-    END IF;
-    IF OLD."state" = 'revoked' OR NEW."state" = OLD."state"
-        OR (OLD."state" = 'registered' AND NEW."state" <> 'revoked')
-        OR (OLD."state" = 'pending_pod' AND NEW."state" NOT IN ('registered', 'revoked')) THEN
-        RAISE EXCEPTION 'invalid WorkloadAssignment state transition';
-    END IF;
-    IF OLD."state" = 'pending_pod' AND NEW."state" = 'registered' AND (
-        NEW."pod_uid" IS NULL OR NEW."registered_at" IS NULL OR NEW."revoked_at" IS NOT NULL
-        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
-        OR NEW."registered_at" < OLD."created_at" OR NEW."registered_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'registration must bind the current Pod and registration time';
-    END IF;
-    IF OLD."state" = 'pending_pod' AND NEW."state" = 'revoked' AND (
-        NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
-        OR (OLD."workload_kind" = 'job' AND NEW."pod_uid" IS NOT NULL)
-        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
-        OR NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'an unregistered WorkloadAssignment must revoke without Pod registration';
-    END IF;
-    IF OLD."state" = 'registered' AND (
-        NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
-        OR NEW."registered_at" IS DISTINCT FROM OLD."registered_at"
-        OR NEW."revoked_at" IS NULL OR NEW."revoked_at" < OLD."registered_at"
-        OR NEW."revoked_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'registered WorkloadAssignment Pod UID is immutable';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_proof_key_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'RunProofKey rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."bootstrap_id" IS DISTINCT FROM OLD."bootstrap_id"
-        OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
-        OR NEW."public_key_jwk" IS DISTINCT FROM OLD."public_key_jwk"
-        OR NEW."key_thumbprint" IS DISTINCT FROM OLD."key_thumbprint"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'RunProofKey binding is immutable';
-    END IF;
-    IF OLD."revoked_at" IS NOT NULL OR NEW."revoked_at" IS NULL THEN
-        RAISE EXCEPTION 'RunProofKey may be revoked exactly once';
     END IF;
     RETURN NEW;
 END;
@@ -4637,44 +4240,37 @@ $$;
 CREATE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     decision_time TIMESTAMP(3) := clock_timestamp();
-    current_attempt INTEGER;
-    current_run_state "AgentRunState";
-    assignment_state "WorkloadAssignmentState";
-    assignment_expires_at TIMESTAMP(3);
-    proof_expires_at TIMESTAMP(3);
-    proof_revoked_at TIMESTAMP(3);
+    current_run "agent_runs"%ROWTYPE;
+    current_invocation "tool_invocations"%ROWTYPE;
+    bound_request "approval_requests"%ROWTYPE;
 BEGIN
+    bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
+    SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
+    IF current_run."attempt" IS DISTINCT FROM bound_request."attempt"
+        OR current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+        OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
+        OR current_invocation."run_id" IS DISTINCT FROM bound_request."run_id"
+        OR current_invocation."attempt" IS DISTINCT FROM bound_request."attempt"
+        OR current_invocation."agent_service_id" IS DISTINCT FROM bound_request."agent_service_id"
+        OR current_invocation."agent_revision_id" IS DISTINCT FROM bound_request."agent_revision_id"
+        OR current_invocation."silo_id" IS DISTINCT FROM bound_request."silo_id"
+        OR current_invocation."agent_identity_id" IS DISTINCT FROM bound_request."agent_identity_id"
+        OR current_invocation."principal_id" IS DISTINCT FROM bound_request."principal_id"
+        OR current_invocation."authorization_execution_subject" IS NULL
+        OR current_invocation."authorization_execution_subject" IS DISTINCT FROM current_run."execution_subject"
+        OR current_run."execution_subject"->'runScope'->>'runId' IS DISTINCT FROM bound_request."run_id"
+        OR current_run."execution_subject"->'runScope'->>'attempt' IS DISTINCT FROM bound_request."attempt"::TEXT
+        OR COALESCE(btrim(current_run."execution_subject"->'computerScope'->>'leaseId'), '') = ''
+        OR COALESCE(current_run."execution_subject"->'computerScope'->>'leaseGeneration', '') !~ '^[1-9][0-9]*$' THEN
+        RAISE EXCEPTION 'ApprovalRequest requires the current waiting run and its exact computer-lease invocation';
+    END IF;
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL
-            OR NEW."decided_by" IS NOT NULL THEN
+        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
             RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
         END IF;
         IF NEW."created_at" > decision_time OR NEW."expires_at" <= decision_time THEN
             RAISE EXCEPTION 'a new ApprovalRequest must have a current, future expiry';
-        END IF;
-        SELECT "attempt", "state" INTO current_attempt, current_run_state
-        FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
-        FROM "workload_assignments"
-        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "agent_service_id" = NEW."agent_service_id" AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
-          AND "audience" = NEW."workload_audience" AND "service_account_name" = NEW."service_account_name"
-          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
-          AND "workload_uid" = NEW."workload_uid" AND "pod_uid" = NEW."pod_uid"
-        FOR UPDATE;
-        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
-        FROM "run_proof_keys"
-        WHERE "id" = NEW."proof_key_id" AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "workload_kind" = NEW."workload_kind" AND "workload_uid" = NEW."workload_uid"
-          AND "key_thumbprint" = NEW."proof_key_thumbprint" AND "pod_uid" = NEW."pod_uid"
-        FOR UPDATE;
-        IF current_attempt IS DISTINCT FROM NEW."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
-            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
-            OR proof_expires_at <= decision_time THEN
-            RAISE EXCEPTION 'ApprovalRequest requires current WaitingForInput run, assignment, and proof authority';
         END IF;
         RETURN NEW;
     END IF;
@@ -4682,24 +4278,20 @@ BEGIN
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
         OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."proof_key_id" IS DISTINCT FROM OLD."proof_key_id" OR NEW."proof_key_thumbprint" IS DISTINCT FROM OLD."proof_key_thumbprint"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."workload_audience" IS DISTINCT FROM OLD."workload_audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
-        OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id" OR NEW."action" IS DISTINCT FROM OLD."action"
-        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest"
-        OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+        OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
+        OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+        OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest" OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
         OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
-		OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
-		OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
-		OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
-		OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
-		OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
-		OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
-		OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
+        OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
+        OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+        OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+        OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+        OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+        OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+        OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
         OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
+        RAISE EXCEPTION 'ApprovalRequest identity and action bindings are immutable';
     END IF;
     IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
         RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
@@ -4708,37 +4300,12 @@ BEGIN
         IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
             RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
         END IF;
+        NEW."decided_by" := NULL;
     ELSE
         NEW."decided_at" := decision_time;
     END IF;
-    IF NEW."state" IN ('approved', 'denied') THEN
-        SELECT "attempt", "state" INTO current_attempt, current_run_state
-        FROM "agent_runs" WHERE "id" = OLD."run_id" FOR UPDATE;
-        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
-        FROM "workload_assignments"
-        WHERE "run_id" = OLD."run_id" AND "attempt" = OLD."attempt"
-          AND "agent_service_id" = OLD."agent_service_id" AND "agent_revision_id" = OLD."agent_revision_id"
-          AND "silo_id" = OLD."silo_id" AND "subject_id" = OLD."subject_id"
-          AND "audience" = OLD."workload_audience" AND "service_account_name" = OLD."service_account_name"
-          AND "namespace" = OLD."namespace" AND "workload_kind" = OLD."workload_kind"
-          AND "workload_uid" = OLD."workload_uid" AND "pod_uid" = OLD."pod_uid"
-        FOR UPDATE;
-        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
-        FROM "run_proof_keys" WHERE "id" = OLD."proof_key_id" FOR UPDATE;
-        IF current_attempt IS DISTINCT FROM OLD."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
-            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
-            OR proof_expires_at <= decision_time THEN
-            RAISE EXCEPTION 'ApprovalRequest decision authority is no longer current';
-        END IF;
-    END IF;
-    IF NEW."state" = 'cancelled' THEN
-        NEW."decided_by" := NULL;
-    ELSIF NEW."state" = 'expired' THEN
-        IF decision_time < OLD."expires_at" THEN
-            RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
-        END IF;
+    IF NEW."state" = 'expired' AND decision_time < OLD."expires_at" THEN
+        RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
     ELSIF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
         RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
     END IF;
@@ -6970,29 +6537,6 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_posi
     AND "max_tokens" > 0
     AND "max_cost_usd_micros" > 0
 );
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
-        btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
-        btrim("subject_id") <> '' AND "audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime') AND btrim("service_account_name") <> '' AND
-        btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND btrim("workload_profile") <> ''
-    );
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_state_check" CHECK (
-        ("state" = 'pending_pod' AND "registered_at" IS NULL AND "revoked_at" IS NULL AND
-            (("workload_kind" = 'job' AND "pod_uid" IS NULL) OR
-             ("workload_kind" = 'deployment' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "pod_uid" = "workload_uid"))) OR
-        ("state" = 'registered' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "registered_at" IS NOT NULL AND "revoked_at" IS NULL) OR
-        ("state" = 'revoked' AND "revoked_at" IS NOT NULL)
-    );
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_claim_digest_check" CHECK ("claim_digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_audience_check" CHECK ("audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime'));
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_consumption_check" CHECK (
-        ("consumed_at" IS NULL AND "consumed_by_pod_uid" IS NULL AND "receipt_id" IS NULL) OR
-        ("consumed_at" IS NOT NULL AND "consumed_by_pod_uid" IS NOT NULL AND btrim("consumed_by_pod_uid") <> '' AND "receipt_id" IS NOT NULL AND btrim("receipt_id") <> '')
-    );
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_nonempty_check" CHECK (btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND "key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$');
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_expiry_check" CHECK ("expires_at" > "created_at");
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK (
 		btrim("silo_id") <> '' AND
 		(("subject_kind" = 'group' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR
@@ -7010,19 +6554,15 @@ ALTER TABLE "capability_catalog_revisions" ADD CONSTRAINT "capability_catalog_re
     );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
         "attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
-        "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND btrim("subject_id") <> '' AND
-		btrim("workload_audience") <> '' AND btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND
-		btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND
-		btrim("resource_kind") NOT IN ('', '*') AND
+        btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND btrim("resource_kind") NOT IN ('', '*') AND
         btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
         "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-		"expires_at" > "created_at" AND
-		btrim("elicitation_request_id") <> '' AND btrim("tool_invocation_row_id") <> '' AND
-		"reviewed_tool_arguments" IS NOT NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
-		"reviewed_tool_schema" IS NOT NULL AND jsonb_typeof("reviewed_tool_schema") = 'object' AND
-		"reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-		"safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'
+        "expires_at" > "created_at" AND btrim("elicitation_request_id") <> '' AND btrim("tool_invocation_row_id") <> '' AND
+        "reviewed_tool_arguments" IS NOT NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
+        "reviewed_tool_schema" IS NOT NULL AND jsonb_typeof("reviewed_tool_schema") = 'object' AND
+        "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'
     );
 ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_exact_check" CHECK (
         btrim("id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
@@ -7432,7 +6972,6 @@ CREATE TRIGGER "agent_revision_mcp_tool_assignments_immutable"
 CREATE TRIGGER "agent_revision_boundary_attachments_immutable"
 	BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_boundary_attachments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
-CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
 CREATE TRIGGER "run_input_snapshots_immutable" BEFORE UPDATE OR DELETE ON "run_input_snapshots" FOR EACH ROW EXECUTE FUNCTION "reject_run_input_snapshot_mutation"();
 CREATE TRIGGER "child_run_reservations_authority" BEFORE INSERT ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_reservation"();
 CREATE TRIGGER "child_run_reservations_immutable" BEFORE UPDATE OR DELETE ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "reject_child_run_reservation_mutation"();
@@ -7445,10 +6984,6 @@ CREATE TRIGGER "agent_runs_current_authority"
     BEFORE INSERT OR UPDATE OF "attempt" ON "agent_runs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_current_agent_run_authority"();
 CREATE TRIGGER "agent_runs_authority_update" BEFORE UPDATE ON "agent_runs" FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_authority_update"();
-CREATE TRIGGER "workload_bootstraps_single_use" BEFORE INSERT OR UPDATE OR DELETE ON "workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_bootstrap_consumption"();
-CREATE TRIGGER "run_proof_keys_consumed_bootstrap" BEFORE INSERT ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_bootstrap"();
-CREATE TRIGGER "workload_assignments_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_assignment_update"();
-CREATE TRIGGER "run_proof_keys_immutable" BEFORE UPDATE OR DELETE ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_update"();
 CREATE TRIGGER "runtime_steering_requests_closed_lifecycle"
     BEFORE INSERT OR UPDATE OR DELETE ON "runtime_steering_requests"
     FOR EACH ROW EXECUTE FUNCTION "enforce_runtime_steering_request_lifecycle"();

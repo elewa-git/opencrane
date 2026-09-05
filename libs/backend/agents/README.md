@@ -27,7 +27,6 @@ agent principles rather than becoming personal-only by proximity.
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
 | [`execution/admission`](./execution/admission/main/README.md) | Shared: trusted personal and managed entrypoints into immutable run admission. |
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
-| [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
 | [`runtime`](./runtime/README.md) | Shared: class-specific governed worker Job controllers. |
 | [`runtime/workloads/contract`](./runtime/workloads/contract/README.md) | Shared claim lease and binding fields for class-specific workloads. |
 | [`runtime/workloads/k8s-controller`](./runtime/workloads/k8s-controller/README.md) | Exact Job adoption, release, and Pod checks shared by workload classes. |
