@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationComputerCredentialUnitOfWork } from "../db/prisma-conversation-computer-credential-issuer";
 
-const _INPUT = { bootstrapId: "bootstrap-1", keyAlias: "attempt-1", modelAlias: "model-1", siloId: "silo-1", conversationId: "conversation-1", expirySeconds: 300, maxBudgetUsd: 0.1 };
+const _INPUT = { bootstrapId: "bootstrap-1", keyAlias: "attempt-1", modelAlias: "model-1", siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1, expirySeconds: 300, maxBudgetUsd: 0.1 };
 
 function _Cipher()
 {
@@ -15,7 +15,8 @@ function _Cipher()
 
 function _UnitOfWork(repository: object, raw: { readonly issue: ReturnType<typeof vi.fn>; readonly revoke: ReturnType<typeof vi.fn> })
 {
-	const prisma = { $transaction: vi.fn(async (operation: (transaction: object) => Promise<unknown>) => await operation(repository)) };
+	const transaction = { conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, ...repository };
+	const prisma = { $transaction: vi.fn(async (operation: (transaction: object) => Promise<unknown>) => await operation(transaction)) };
 	return new PrismaConversationComputerCredentialUnitOfWork(prisma as never, _Cipher() as never, raw as never, "silo-1");
 }
 
@@ -49,6 +50,14 @@ describe("PrismaConversationComputerCredentialUnitOfWork", function _PrismaConve
 		const raw = { issue: vi.fn().mockResolvedValue({ key: "secret" }), revoke: vi.fn().mockResolvedValue(undefined) };
 		await expect(_UnitOfWork(repository, raw).issueOrRotate(_INPUT)).rejects.toThrow("lost custody");
 		expect(raw.revoke).toHaveBeenCalledWith({ keyAlias: "attempt-1", key: "secret" });
+	});
+
+	it("rejects admission after lifecycle cleared the exact active lease", async function _RejectsReleasedLease()
+	{
+		const repository = { conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) }, conversationComputerAttemptCredential: { findUnique: vi.fn() } };
+		const raw = { issue: vi.fn(), revoke: vi.fn() };
+		await expect(_UnitOfWork(repository, raw).issueOrRotate(_INPUT)).rejects.toThrow("current active lease");
+		expect(raw.issue).not.toHaveBeenCalled();
 	});
 
 	it("makes concurrent credential revocation idempotent", async function _ConcurrentRevoke()

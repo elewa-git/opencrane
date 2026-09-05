@@ -122,7 +122,7 @@ export interface ConversationComputerTurnStore
 export interface ConversationComputerCredentialIssuer
 {
 	/** Atomically return the current credential or revoke it before installing a replacement. */
-	issueOrRotate(input: { readonly bootstrapId: string; readonly siloId: string; readonly conversationId: string; readonly keyAlias: string; readonly modelAlias: string; readonly maxBudgetUsd: number; readonly expirySeconds: number }): Promise<{ readonly key: string; readonly credentialDigest: string }>;
+	issueOrRotate(input: { readonly bootstrapId: string; readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly leaseId: string; readonly leaseGeneration: number; readonly keyAlias: string; readonly modelAlias: string; readonly maxBudgetUsd: number; readonly expirySeconds: number }): Promise<{ readonly key: string; readonly credentialDigest: string }>;
 	/** Revoke and forget the attempt credential after terminal output. */
 	revoke(bootstrapId: string): Promise<void>;
 }

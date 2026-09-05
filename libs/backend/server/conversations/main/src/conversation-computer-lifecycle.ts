@@ -40,12 +40,10 @@ export class ConversationComputerLifecycleAuthority
 		}
 		if (idleMilliseconds < this.policy.retireAfterMilliseconds)
 			return "cooling";
-		if (await this.attempts.hasActiveAttempt(current.computer.id, current.lease.id))
-			return "active_attempt";
 		const checkpoint = await this.checkpoints.capture(current.computer, current.lease);
 		const releasedAt = command.now.toISOString();
 		if (!await this.attempts.clearActiveLease(_LeaseProjectionCommand(current.computer, current.lease)))
-			throw new Error("Conversation computer active lease projection changed before release");
+			return "active_attempt";
 		await this.computers.append({ expectedRevision: current.revision, eventId: command.eventId, computer: { ...current.computer, workspaceCheckpoint: checkpoint }, lease: { ...current.lease, state: ComputerLeaseStates.Released, releasedAt } });
 		const released = await this.computers.load(command);
 		if (released === null || released.lease?.state !== ComputerLeaseStates.Released)

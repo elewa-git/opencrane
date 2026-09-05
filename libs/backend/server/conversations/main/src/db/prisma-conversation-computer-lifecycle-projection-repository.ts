@@ -34,17 +34,7 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 		return { siloId, computerId, conversationId: row.id, agentIdentityId: row.computerAgentIdentityId, profileRevisionId: row.computerProfileRevisionId };
 	}
 
-	/** Conservatively defer release while the computer conversation owns an unexpired ready attempt key. */
-	public async hasActiveAttempt(computerId: string, _leaseId: string): Promise<boolean>
-	{
-		const conversation = await this.prisma.conversation.findFirst({ where: { computerId }, select: { id: true, siloId: true } });
-		if (conversation === null)
-			return false;
-		const attempt = await this.prisma.conversationComputerAttemptCredential.findFirst({ where: { conversationId: conversation.id, siloId: conversation.siloId, state: "ready", expiresAt: { gt: new Date() } }, select: { bootstrapId: true } });
-		return attempt !== null;
-	}
-
-	/** Remove only the exact active lease so a replacement generation cannot be cleared by stale work. */
+	/** Remove only an idle exact lease while holding the same row fence used by attempt admission. */
 	public async clearActiveLease(command: { readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly agentIdentityId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<boolean>
 	{
 		const touched = await this.prisma.conversationComputerActiveLease.updateMany({ where: command, data: { updatedAt: new Date() } });
@@ -55,6 +45,9 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 		}
 		const pending = await this.prisma.approvalRequest.count({ where: { state: ApprovalRequestState.Pending, run: { conversationId: command.conversationId } } });
 		if (pending > 0)
+			return false;
+		const attempts = await this.prisma.conversationComputerAttemptCredential.count({ where: { conversationId: command.conversationId, siloId: command.siloId, state: "ready", expiresAt: { gt: new Date() } } });
+		if (attempts > 0)
 			return false;
 		const deleted = await this.prisma.conversationComputerActiveLease.deleteMany({ where: command });
 		if (deleted.count === 1)

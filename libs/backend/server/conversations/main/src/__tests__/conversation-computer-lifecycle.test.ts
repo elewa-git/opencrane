@@ -14,7 +14,7 @@ function _Harness(computer: ConversationComputer = _COMPUTER, activeAttempt = fa
 	const history = { load: vi.fn().mockResolvedValueOnce({ revision: 2n, streamName: "computer-computer-1", computer, lease }).mockResolvedValue({ revision: 3n, streamName: "computer-computer-1", computer: { ...computer, workspaceCheckpoint: { artifactRevisionId: "revision-checkpoint-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() } }, lease: releasedLease }), append };
 	const checkpoint = { artifactRevisionId: "revision-checkpoint-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() };
 	const checkpoints = { capture: vi.fn().mockResolvedValue(checkpoint) };
-	const attempts = { hasActiveAttempt: vi.fn().mockResolvedValue(activeAttempt), clearActiveLease: vi.fn().mockResolvedValue(true) };
+	const attempts = { clearActiveLease: vi.fn().mockResolvedValue(!activeAttempt) };
 	const claims = { release: vi.fn().mockResolvedValue("released") };
 	const authority = new ConversationComputerLifecycleAuthority(history as never, checkpoints, attempts, claims, "silo-1-computers", { staleAfterMilliseconds: 300_000, retireAfterMilliseconds: 1_200_000 });
 	return { authority, append, checkpoints, attempts, claims, checkpoint };
@@ -33,12 +33,12 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 		expect(checkpoints.capture).not.toHaveBeenCalled();
 	});
 
-	it("keeps cooling without checkpointing while an attempt remains active", async function _ActiveAttempt()
+	it("keeps cooling after capture when an attempt wins the release fence", async function _ActiveAttempt()
 	{
 		const { authority, append, checkpoints, claims } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling }, true);
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("active_attempt");
 		expect(append).not.toHaveBeenCalled();
-		expect(checkpoints.capture).not.toHaveBeenCalled();
+		expect(checkpoints.capture).toHaveBeenCalledOnce();
 		expect(claims.release).not.toHaveBeenCalled();
 	});
 
@@ -72,7 +72,7 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 	{
 		const { authority, append, attempts, claims } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling });
 		attempts.clearActiveLease.mockResolvedValue(false);
-		await expect(authority.reconcile(_COMMAND)).rejects.toThrow("projection changed");
+		await expect(authority.reconcile(_COMMAND)).resolves.toBe("active_attempt");
 		expect(append).not.toHaveBeenCalled();
 		expect(claims.release).not.toHaveBeenCalled();
 	});

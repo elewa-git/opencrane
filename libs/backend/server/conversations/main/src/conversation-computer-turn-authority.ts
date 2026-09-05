@@ -21,7 +21,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		if (turn.outputSourceCommandId !== null)
 			return null;
 		const keyAlias = `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`;
-		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, siloId: turn.siloId, conversationId: turn.binding.conversationId, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd: turn.maximumBudgetUsd, expirySeconds: turn.credentialLifetimeSeconds });
+		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, leaseId: turn.leaseId, leaseGeneration: turn.generation, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd: turn.maximumBudgetUsd, expirySeconds: turn.credentialLifetimeSeconds });
 		return { bootstrapId: turn.bootstrapId, compiledInput: turn.compiledInput, modelCredential: { endpoint: this.dependencies.endpoint, key: credential.key, model: turn.modelAlias }, outcome: "ready" };
 	}
 

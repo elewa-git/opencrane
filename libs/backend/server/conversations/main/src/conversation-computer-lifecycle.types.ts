@@ -26,9 +26,7 @@ export interface ConversationComputerCheckpointStore
  */
 export interface ConversationComputerAttemptActivity
 {
-	/** Reports whether an admitted attempt is still using this lease. */
-	hasActiveAttempt(computerId: string, leaseId: string): Promise<boolean>;
-	/** Clears this active-lease projection before history or cluster cleanup releases it. */
+	/** Clears this active-lease projection only while no admitted attempt or approval uses it. */
 	clearActiveLease(command: { readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly agentIdentityId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<boolean>;
 }
 

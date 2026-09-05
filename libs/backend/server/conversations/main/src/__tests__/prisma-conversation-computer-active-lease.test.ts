@@ -33,6 +33,15 @@ describe("PrismaConversationComputerActivationProjectionRepository", function _S
 		const { repository } = _Repository(persisted);
 		await expect(repository.publishActiveLease(_LEASE)).rejects.toThrow("conflicts with current authority");
 	});
+
+	it("rebuilds an expired canonical lease after delayed activation redelivery", async function _RebuildsExpiredLease()
+	{
+		const expired = { ..._LEASE, expiresAt: "2026-09-05T11:00:00.000Z" };
+		const persisted = { ...expired, expiresAt: new Date(expired.expiresAt) };
+		const { repository, upsert } = _Repository(persisted);
+		await expect(repository.publishActiveLease(expired)).resolves.toBeUndefined();
+		expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ expiresAt: new Date(expired.expiresAt) }) }));
+	});
 });
 
 describe("PrismaConversationComputerLifecycleProjectionRepository", function _LifecycleSuite()
@@ -42,7 +51,7 @@ describe("PrismaConversationComputerLifecycleProjectionRepository", function _Li
 		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
 		const count = vi.fn().mockResolvedValue(1);
 		const deleteMany = vi.fn();
-		const transaction = { conversationComputerActiveLease: { updateMany, deleteMany }, approvalRequest: { count } } as unknown as Prisma.TransactionClient;
+		const transaction = { conversationComputerActiveLease: { updateMany, deleteMany }, approvalRequest: { count }, conversationComputerAttemptCredential: { count: vi.fn().mockResolvedValue(0) } } as unknown as Prisma.TransactionClient;
 		const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
 		await expect(repository.clearActiveLease({ ..._LEASE, leaseGeneration: 2 })).resolves.toBe(false);
 		expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(count.mock.invocationCallOrder[0]!);
@@ -54,10 +63,22 @@ describe("PrismaConversationComputerLifecycleProjectionRepository", function _Li
 		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
 		const count = vi.fn().mockResolvedValue(0);
 		const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
-		const transaction = { conversationComputerActiveLease: { updateMany, deleteMany }, approvalRequest: { count } } as unknown as Prisma.TransactionClient;
+		const attemptCount = vi.fn().mockResolvedValue(0);
+		const transaction = { conversationComputerActiveLease: { updateMany, deleteMany }, approvalRequest: { count }, conversationComputerAttemptCredential: { count: attemptCount } } as unknown as Prisma.TransactionClient;
 		const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
 		await expect(repository.clearActiveLease({ ..._LEASE, leaseGeneration: 2 })).resolves.toBe(true);
 		expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(count.mock.invocationCallOrder[0]!);
 		expect(count.mock.invocationCallOrder[0]).toBeLessThan(deleteMany.mock.invocationCallOrder[0]!);
+		expect(attemptCount.mock.invocationCallOrder[0]).toBeLessThan(deleteMany.mock.invocationCallOrder[0]!);
+	});
+
+	it("keeps the fenced lease when credential admission won the transaction ordering", async function _KeepsAdmittedAttemptLease()
+	{
+		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+		const deleteMany = vi.fn();
+		const transaction = { conversationComputerActiveLease: { updateMany, deleteMany }, approvalRequest: { count: vi.fn().mockResolvedValue(0) }, conversationComputerAttemptCredential: { count: vi.fn().mockResolvedValue(1) } } as unknown as Prisma.TransactionClient;
+		const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
+		await expect(repository.clearActiveLease({ ..._LEASE, leaseGeneration: 2 })).resolves.toBe(false);
+		expect(deleteMany).not.toHaveBeenCalled();
 	});
 });

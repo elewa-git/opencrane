@@ -14,6 +14,9 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	{
 		if (input.siloId !== this.siloId)
 			throw new Error("Conversation computer credential crossed its configured silo");
+		const lease = await this.prisma.conversationComputerActiveLease.updateMany({ where: { siloId: input.siloId, conversationId: input.conversationId, computerId: input.computerId, leaseId: input.leaseId, leaseGeneration: input.leaseGeneration, expiresAt: { gt: new Date() } }, data: { updatedAt: new Date() } });
+		if (lease.count !== 1)
+			throw new Error("Conversation computer credential requires the current active lease");
 		let existing = await this.prisma.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId: input.bootstrapId } });
 		if (existing !== null && (existing.siloId !== input.siloId || existing.conversationId !== input.conversationId || existing.keyAlias !== input.keyAlias || existing.modelAlias !== input.modelAlias))
 			throw new Error("Conversation computer credential retry changed its frozen coordinates");
