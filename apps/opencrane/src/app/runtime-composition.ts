@@ -1,13 +1,10 @@
 import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
-import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
-import { _CreateConversationReplayRepository, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
-import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaSkillAuthoringValidationControllerUnitOfWork, PrismaSkillAuthoringValidationWorkerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter, __CreateSkillAuthoringValidationWorkerRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
-import { PrismaConversationAssetOutputRepository, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
+import { PrismaConversationAssetScanRepository } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory";
@@ -15,7 +12,6 @@ import { _CreateArtifactScanSourceBroker } from "../infra/artifacts/artifact-sca
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory";
 import { _CreateChannelTargetResolver } from "./channel-target-composition";
 import type { InternalRuntimeConfig } from "./config.types";
-import { _ProcessShutdownSignal } from "./process-shutdown";
 import { _log } from "./log";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition } from "./runtime-composition.types";
 
@@ -91,17 +87,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		channelTargetResolver: config.channelTargets === null
 			? null
 			: _CreateChannelTargetResolver(prisma, authApi, config.channelTargets, serverNamespace),
-		conversationReplay: config.channelTargets === null
-			? null
-			: __CreateConversationReplayRouter({
-				contexts: new PrismaChannelTargetAuthorityUnitOfWork(prisma),
-				repository: _CreateConversationReplayRepository(prisma),
-				clock: CONVERSATION_PROJECTION_CLOCK,
-				limits: CONVERSATION_PROJECTION_LIMITS,
-				shutdownSignal: _ProcessShutdownSignal,
-				expectedReceiverId: config.channelTargets.receiverId,
-				nowEpochMs: function _nowEpochMs() { return Date.now(); },
-			}),
+		conversationReplay: null,
 		artifactPreprocessor: artifactPreprocessorNamespace === null
 			? null
 			: __CreateArtifactPreprocessorRouter({
@@ -115,7 +101,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		artifactScanner: artifactScannerNamespace === null
 			? null
 			: __CreateArtifactScannerRouter({
-				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }, workflowExecution),
+				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetScanRepository(transaction); }, workflowExecution),
 				tokenReviewer: _CreateArtifactScannerTokenReviewer(authApi, artifactScannerNamespace),
 				sourceBroker: _CreateArtifactScanSourceBroker(),
 				expectedNamespace: artifactScannerNamespace,

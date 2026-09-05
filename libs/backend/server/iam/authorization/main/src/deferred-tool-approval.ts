@@ -1,6 +1,6 @@
 import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, OrgMemberStatus, Prisma, WorkloadAssignmentState } from "@prisma/client";
 
-import { ElicitationBodyKinds, type ElicitationApprovalBody } from "@opencrane/contracts";
+import { ElicitationBodyKinds, ___ExecutionSubjectSchema, type ElicitationApprovalBody } from "@opencrane/contracts";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -73,9 +73,9 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 {
 	// 1. Bind the approval to the exact live workload and proof key executing the attempt.
 	const assignment = await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: command.runId, attempt: command.attempt } } });
-	const reservation = assignment === null ? null : await transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt_generation: { runId: command.runId, attempt: command.attempt, generation: assignment.bindingGeneration } } });
 	const proofKey = assignment === null ? null : await transaction.runProofKey.findUnique({ where: { runId_attempt_generation: { runId: command.runId, attempt: command.attempt, generation: assignment.bindingGeneration } } });
-	if (assignment === null || reservation === null || proofKey === null || assignment.state !== WorkloadAssignmentState.Registered || assignment.expiresAt.getTime() <= command.now.getTime() || proofKey.podUid !== reservation.podUid || proofKey.revokedAt !== null || proofKey.expiresAt.getTime() <= command.now.getTime())
+	const executionSubject = assignment === null || assignment.executionSubject === undefined ? null : ___ExecutionSubjectSchema.safeParse(assignment.executionSubject);
+	if (assignment === null || proofKey === null || (executionSubject !== null && (!executionSubject.success || executionSubject.data.computerScope.leaseGeneration !== assignment.bindingGeneration)) || assignment.state !== WorkloadAssignmentState.Registered || assignment.expiresAt.getTime() <= command.now.getTime() || proofKey.revokedAt !== null || proofKey.expiresAt.getTime() <= command.now.getTime())
 		return { outcome: "unavailable" };
 	const assignedPrincipal = await _ResolveAssignedPrincipal(transaction, assignment.siloId, assignment.principalId);
 	if (assignedPrincipal === null)
@@ -165,7 +165,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 				namespace: assignment.namespace,
 				workloadKind: assignment.workloadKind,
 				workloadUid: assignment.workloadUid,
-				podUid: reservation.podUid,
+				podUid: proofKey.podUid,
 				resourceKind: "tool",
 				resourceId: command.toolRevisionId,
 				action: "invoke",

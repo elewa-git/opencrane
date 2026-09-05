@@ -1,9 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
-import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { McpRuntimeAuthority } from "@opencrane/backend/server/gateways/mcp";
 import type { ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
-import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencrane/backend/server/agents/scheduling";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
@@ -22,12 +20,9 @@ const _PROVIDER_EFFECT_INTERVAL_MILLISECONDS = 1_000;
  * The returned stop handle is the lifecycle boundary: every loop must be stopped before Prisma is
  * disconnected, and none may keep the Node process alive on its own.
  */
-export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor): Promise<OpenCraneBackgroundWorkers>
+export async function _StartBackgroundWorkers(_prisma: PrismaClient, _config: OpenCraneProcessConfig, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor): Promise<OpenCraneBackgroundWorkers>
 {
-	// 1. Prepare optional schedule admission through the same capacity port used by run-now requests.
-	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);
-
-	// 2. Start the durable worker after application composition has registered every task handler.
+	// 1. Start the durable worker after application composition has registered every task handler.
 	try
 	{
 		await workflowRuntime.startWorkers({ workerName: "opencrane-control-plane" });
@@ -39,13 +34,7 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAd
 		throw error;
 	}
 
-	// 3. Start process-owned intervals only after the durable worker is ready.
-	const schedulerHandle = config.schedulerEnabled
-		? setInterval(function _tick() { void scheduleTicker.runOnce(new Date()).catch(function _onError(error: unknown) { _log.error({ err: error }, "managed-agent schedule tick failed"); }); }, config.schedulerIntervalMilliseconds)
-		: null;
-	schedulerHandle?.unref();
-
-	// 4. Reconcile each retained process-owned authority on its own bounded cadence.
+	// 2. Reconcile each retained process-owned authority on its own bounded cadence.
 	const mcpRecoveryHandle = setInterval(function _recoverMcpInvocation() { void mcpRuntime.recoverExpiredInvocation().catch(function _onError(error: unknown) { _log.error({ err: error }, "MCP invocation recovery pass failed"); }); }, _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS);
 	mcpRecoveryHandle.unref();
 	const providerEffectHandle = setInterval(function _reconcileProviderEffect() { void providerEffects.reconcileNext().catch(function _onError(error: unknown) { _log.error({ err: error }, "provider effect reconciliation pass failed"); }); }, _PROVIDER_EFFECT_INTERVAL_MILLISECONDS);
@@ -54,8 +43,6 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAd
 	return {
 		async stop(): Promise<void>
 		{
-			if (schedulerHandle !== null)
-				clearInterval(schedulerHandle);
 			clearInterval(mcpRecoveryHandle);
 			clearInterval(providerEffectHandle);
 			await workflowRuntime.close();

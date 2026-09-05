@@ -14,7 +14,6 @@ vi.mock("../../infra/artifacts/artifact-upload.factory", function _MockArtifactU
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
-		_CreateConversationAssetOutputAuthority: function _CreateConversationAssetOutputAuthority() { return { reserve: vi.fn(), publish: vi.fn() }; },
 		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
 	};
 });

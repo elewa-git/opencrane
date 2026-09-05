@@ -37,15 +37,6 @@ enum WorkloadKind {
   Deployment @map("deployment")
 }
 
-enum WarmRuntimeReservationState {
-  Reserved          @map("reserved")
-  ProfileActivating @map("profile_activating")
-  Ready             @map("ready")
-  Claimed           @map("claimed")
-  DeleteRequested   @map("delete_requested")
-  Deleted           @map("deleted")
-}
-
 /// Immutable outcome of attempting to append one terminal child's result to its parent stream.
 enum ChildRunCompletionDeliveryOutcome {
   Delivered            @map("delivered")
@@ -86,17 +77,12 @@ model AgentRun {
   approvalRequests                  ApprovalRequest[]
   elicitationRequests               ElicitationRequest[]
   toolInvocations                   ToolInvocation[]
-  workflowTasks                     AgentRunWorkflowTask[]
-  steeringRequests                  RuntimeSteeringRequest[]
   spawnedChildReservations          ChildRunReservation[]                 @relation("ChildRunReservationParent")
   childReservation                  ChildRunReservation?                  @relation("ChildRunReservationChild")
   childCompletionDeliveries         ChildRunCompletionDelivery[]          @relation("ChildRunCompletionDeliveryChild")
   receivedChildCompletions          ChildRunCompletionDelivery[]          @relation("ChildRunCompletionDeliveryParent")
   agentThreadOrigin                 ConversationAgentThread?
   agentThreadDeliveries             AgentThreadParentDelivery[]
-  conversationAssets                ConversationAsset[]
-  conversationAssetTickets          ConversationAssetOutputTicket[]
-  warmRuntimeReservations           WarmRuntimeReservation[]
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -112,69 +98,6 @@ model AgentRun {
   @@index([conversationId, acceptedAt])
   @@index([rootRunId])
   @@map("agent_runs")
-}
-
-/// One-use reservation of a Helm-owned generic warm Pod for one admitted AgentRun attempt.
-///
-/// The row is the database authority for the Pod binding. Kubernetes labels project the selected
-/// profile but never grant run authority. A used Pod reaches `Deleted`; it never becomes generic.
-model WarmRuntimeReservation {
-  runId               String                      @map("run_id")
-  attempt             Int
-  generation          Int                         @default(1)
-  siloId              String                      @map("silo_id")
-  namespace           String
-  deploymentName      String                      @map("deployment_name")
-  deploymentUid       String                      @map("deployment_uid")
-  podName             String                      @map("pod_name")
-  podUid              String                      @map("pod_uid")
-  podResourceVersion  String                      @map("pod_resource_version")
-  genericProfile      String                      @map("generic_profile")
-  claimedProfile      String                      @map("claimed_profile")
-  serviceAccountName  String                      @map("service_account_name")
-  state               WarmRuntimeReservationState @default(Reserved)
-  proofKeyThumbprint  String?                     @map("proof_key_thumbprint")
-  reservedAt          DateTime                    @default(now()) @map("reserved_at")
-  profileActivatedAt  DateTime?                   @map("profile_activated_at")
-  readinessObservedAt DateTime?                   @map("readiness_observed_at")
-  boundAt             DateTime?                   @map("bound_at")
-  idleDeadline        DateTime                    @map("idle_deadline")
-  deleteRequestedAt   DateTime?                   @map("delete_requested_at")
-  deletedAt           DateTime?                   @map("deleted_at")
-  run                 AgentRun                    @relation(fields: [runId, attempt], references: [id, attempt], onDelete: Restrict, map: "warm_runtime_reservations_run_fkey")
-  assignment          WorkloadAssignment          @relation(fields: [runId, attempt], references: [runId, attempt], onDelete: Restrict, map: "warm_runtime_reservations_assignment_fkey")
-  bootstrap           WorkloadBootstrap?
-
-  @@id([runId, attempt, generation])
-  @@unique([namespace, podUid])
-  @@unique([namespace, deploymentUid, podName])
-  @@index([state, idleDeadline])
-  @@map("warm_runtime_reservations")
-}
-
-/// One controller workflow task for one AgentRun attempt.
-///
-/// The relation uses only `runId`: AgentRun advances its current attempt after a retry, while this
-/// row keeps the earlier attempt and its task receipt available for replay and cleanup.
-model AgentRunWorkflowTask {
-  runId                String    @map("run_id")
-  attempt              Int
-  siloId               String    @map("silo_id")
-  taskKey              String    @map("task_key")
-  taskName             String    @map("task_name")
-  taskId               String?   @unique @map("task_id")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  receiptBoundAt       DateTime? @map("receipt_bound_at")
-  assignmentExpiresAt  DateTime? @map("assignment_expires_at")
-  releaseClaimedAt     DateTime? @map("release_claimed_at")
-  releaseExpiresAt     DateTime? @map("release_expires_at")
-  releaseDeliveryCount Int       @default(0) @map("release_delivery_count")
-  attemptKeyDigest     String?   @map("attempt_key_digest")
-  run                  AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
-
-  @@id([runId, attempt])
-  @@unique([siloId, taskKey])
-  @@map("agent_run_workflow_tasks")
 }
 
 /// Append-only proof that a terminal child was delivered to its direct parent's stream or deliberately suppressed.
@@ -274,9 +197,7 @@ model WorkloadAssignment {
   run                      AgentRun                        @relation(fields: [runId, siloId, agentServiceId, agentRevisionId], references: [id, siloId, agentServiceId, agentRevisionId], onDelete: Restrict)
   bootstraps               WorkloadBootstrap[]
   proofKeys                RunProofKey[]
-  warmRuntimeReservations  WarmRuntimeReservation[]
   approvalRequests         ApprovalRequest[]
-  conversationAssetTickets ConversationAssetOutputTicket[]
 
   @@id([runId, attempt])
   @@unique([runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], map: "workload_assignment_bootstrap_identity_key")
@@ -314,7 +235,6 @@ model WorkloadBootstrap {
   receiptId          String?                @unique @map("receipt_id")
   createdAt          DateTime               @default(now()) @map("created_at")
   assignment         WorkloadAssignment     @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, agentIdentityId, principalId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
-  reservation        WarmRuntimeReservation @relation(fields: [runId, attempt, generation], references: [runId, attempt, generation], onDelete: Restrict)
   proofKey           RunProofKey?
 
   @@unique([runId, attempt, generation])

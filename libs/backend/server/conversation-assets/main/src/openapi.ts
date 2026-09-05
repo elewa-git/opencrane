@@ -9,7 +9,7 @@ const _ConversationAssetSchema = {
 		id: { type: "string" },
 		conversationId: { type: "string" },
 		messageId: { type: ["string", "null"] },
-		provenance: { type: "string", enum: [ConversationAssetProvenance.ParticipantUpload, ConversationAssetProvenance.AgentOutput] },
+		provenance: { type: "string", enum: [ConversationAssetProvenance.ParticipantUpload] },
 		state: { type: "string", enum: [ConversationAssetLifecycle.Uploading, ConversationAssetLifecycle.Processing, ConversationAssetLifecycle.Ready, ConversationAssetLifecycle.Failed, ConversationAssetLifecycle.Removed] },
 		displayName: { type: "string" },
 		mediaType: { type: "string" },

@@ -2,9 +2,6 @@ import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import express, { type Express } from "express";
 
-import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
-import type { RetryRunInputCompiler, RunCancellationRepository, SelfRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit-writer";
 import { ___AuthRouter, ___CreateOidcAuthService, PrismaAuthenticatedPrincipalAdmissionUnitOfWork, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___RequestContext } from "@opencrane/backend/observability";
@@ -54,7 +51,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, retryInputCompiler: RetryRunInputCompiler, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor): Express
+export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor): Express
 {
 	const app = express();
 
@@ -81,7 +78,7 @@ export function _CreatePublicApp(prisma: PrismaClient, runAdmission: ManagedRunA
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, runAdmission, personalRunAdmission, runCancellation, retryInputCompiler, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects);
+	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

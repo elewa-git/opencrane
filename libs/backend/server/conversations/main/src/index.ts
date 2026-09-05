@@ -13,17 +13,6 @@
  * `CONVERSATION_LIVE_REPLAY_CLOCK`, `CONVERSATION_LIVE_REPLAY_LIMITS`), and
  * libs/backend/server/api-spec (the conversation OpenAPI fragment).
  */
-export { _CreateConversationReplayRepository } from "./db/prisma-conversation-replay.composition";
-export { __CreateConversationReplayRouter } from "./conversation-replay.router";
-export { __CreateSelfConversationSocketServer } from "./self-conversation-socket";
-export type { SelfConversationSocketAuthenticator, SelfConversationSocketDependencies, SelfConversationSocketServer } from "./self-conversation-socket.types";
-export type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types";
-export { _CreateSelfConversationsRouter } from "./db/prisma-self-conversations.router";
-export { _CreatePrismaSelfConversationSocketServer } from "./db/prisma-self-conversations.router";
-export { _SelfConversationsOpenapiPaths } from "./openapi";
-export type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryRouterDependencies, AgentThreadParentDeliveryUnitOfWork, AgentThreadRuntimeIdentity, AgentThreadRuntimeIdentityReviewer, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types";
-export { PrismaAgentThreadParentDeliveryUnitOfWork } from "./db/prisma-agent-thread-parent-delivery-unit-of-work";
-export { __CreateAgentThreadParentDeliveryRouter } from "./agent-thread-parent-delivery.router";
 export { BoundConversationWriter } from "./bound-conversation-writer";
 export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";

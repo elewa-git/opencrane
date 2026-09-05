@@ -63,7 +63,6 @@ model Conversation {
   elicitationRequests           ElicitationRequest[]
   activeContext                 ConversationContextRevision?    @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
   assets                        ConversationAsset[]
-  assetOutputTickets            ConversationAssetOutputTicket[]
   originAgentThread             ConversationAgentThread?        @relation("AgentThreadChild")
   childAgentThreads             ConversationAgentThread[]       @relation("AgentThreadParent")
   rootedAgentThreads            ConversationAgentThread[]       @relation("AgentThreadRoot")
@@ -131,8 +130,6 @@ model ConversationRunEvent {
   occurredAt         DateTime                        @default(now()) @map("occurred_at")
   conversation       Conversation                    @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   timelineEntry      ConversationTimelineEntry?
-  assets             ConversationAsset[]
-  assetOutputTickets ConversationAssetOutputTicket[]
 
   @@id([runId, sequence])
   @@unique([conversationId, runId, sequence])

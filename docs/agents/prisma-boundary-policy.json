@@ -464,28 +464,11 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-attachment-admission.ts",
-				"adapter": "PrismaConversationAttachmentAdmissionRepository",
-				"contract": "ConversationAttachmentAdmissionPort",
-				"contractImportPath": "@opencrane/backend/server/conversations",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationAssetProductAuthorizationRepository",
-						"importPath": "./conversation-asset-product-authorization"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-output-repository.ts",
-				"adapter": "PrismaConversationAssetOutputRepository",
-				"contract": "ConversationAssetOutputRepository",
-				"contractImportPath": "./conversation-asset-output.types",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationAssetProductAuthorizationRepository",
-						"importPath": "./conversation-asset-product-authorization"
-					}
-				]
+				"path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-scan-repository.ts",
+				"adapter": "PrismaConversationAssetScanRepository",
+				"contract": "ConversationAssetScanLifecycleRepository",
+				"contractImportPath": "@opencrane/backend/server/agents/artifacts",
+				"constructs": []
 			},
 			{
 				"path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-preprocess-workflow-admission.ts",
@@ -549,32 +532,6 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-replay-repository.ts",
-				"adapter": "PrismaConversationReplayRepository",
-				"contract": "ConversationReplayRepository",
-				"contractImportPath": "../replay-reader.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-agent-thread-parent-delivery-repository.ts",
-				"adapter": "PrismaAgentThreadParentDeliveryRepository",
-				"contract": "AgentThreadParentDeliveryRepository",
-				"contractImportPath": "./prisma-agent-thread-parent-delivery-repository.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-query-repository.ts",
-				"adapter": "PrismaConversationQueryRepository",
-				"contract": "ConversationQueryRepository",
-				"contractImportPath": "./prisma-conversation-query-repository.types",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationProductAuthorizationRepository",
-						"importPath": "./conversation-product-authorization"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/server/conversations/main/src/db/conversation-product-authorization.ts",
 				"adapter": "PrismaConversationProductAuthorizationRepository",
 				"contract": "ConversationProductAuthorizationRepository",
@@ -587,26 +544,6 @@
 					{
 						"adapter": "PrismaManagedAuthorizationGrantRepository",
 						"importPath": "@opencrane/backend/server/iam/authorization"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-mutation-repository.ts",
-				"adapter": "PrismaConversationMutationRepository",
-				"contract": "ConversationMutationRepository",
-				"contractImportPath": "./prisma-conversation-mutation-repository.types",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationQueryRepository",
-						"importPath": "./prisma-conversation-query-repository"
-					},
-					{
-						"adapter": "PrismaConversationProductAuthorizationRepository",
-						"importPath": "./conversation-product-authorization"
-					},
-					{
-						"adapter": "PrismaChannelTargetParticipantGrantProjectionRepository",
-						"importPath": "@opencrane/backend/server/agents/channel-targets"
 					}
 				]
 			},
@@ -1459,18 +1396,6 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-output-unit-of-work.ts",
-				"adapter": "PrismaConversationAssetOutputUnitOfWork",
-				"contract": "ConversationAssetOutputAuthority",
-				"contractImportPath": "./conversation-asset-output.types",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationAssetOutputRepository",
-						"importPath": "./prisma-conversation-asset-output-repository"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-publication-unit-of-work.ts",
 				"adapter": "PrismaArtifactPublicationUnitOfWork",
 				"contract": "ArtifactPublicationUnitOfWork",
@@ -1539,62 +1464,6 @@
 					{
 						"adapter": "PrismaPersonaOnboardingStatusRepository",
 						"importPath": "./prisma-persona-onboarding-status-repository"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-message-admission-unit-of-work.ts",
-				"adapter": "PrismaConversationMessageAdmissionUnitOfWork",
-				"contract": "ConversationMessageAdmissionUnitOfWork",
-				"contractImportPath": "../conversation-message-admission.types",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationMutationRepository",
-						"importPath": "./prisma-conversation-mutation-repository"
-					},
-					{
-						"adapter": "PrismaConversationQueryRepository",
-						"importPath": "./prisma-conversation-query-repository"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-replay-unit-of-work.ts",
-				"adapter": "PrismaConversationReplayUnitOfWork",
-				"contract": "ConversationReplayUnitOfWork",
-				"contractImportPath": "../replay-reader.types",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationReplayRepository",
-						"importPath": "./prisma-conversation-replay-repository"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-agent-thread-parent-delivery-unit-of-work.ts",
-				"adapter": "PrismaAgentThreadParentDeliveryUnitOfWork",
-				"contract": "AgentThreadParentDeliveryUnitOfWork",
-				"contractImportPath": "../agent-thread-parent-delivery.types",
-				"constructs": [
-					{
-						"adapter": "PrismaAgentThreadParentDeliveryRepository",
-						"importPath": "./prisma-agent-thread-parent-delivery-repository"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-unit-of-work.ts",
-				"adapter": "PrismaConversationUnitOfWork",
-				"contract": "ConversationUnitOfWork",
-				"contractImportPath": "../types/conversation-unit-of-work.types",
-				"constructs": [
-					{
-						"adapter": "PrismaConversationMutationRepository",
-						"importPath": "./prisma-conversation-mutation-repository"
-					},
-					{
-						"adapter": "PrismaConversationQueryRepository",
-						"importPath": "./prisma-conversation-query-repository"
 					}
 				]
 			},
@@ -1886,7 +1755,6 @@
 			"apps/opencrane/src/app/channel-target-composition.ts",
 			"apps/opencrane/src/app/lifecycle.ts",
 			"apps/opencrane/src/app/background-workers.ts",
-			"apps/opencrane/src/app/run-cancellation-composition.ts",
 			"apps/opencrane/src/app/organization-members-composition.ts",
 			"apps/opencrane/src/app/user-onboarding-composition.ts",
 			"apps/opencrane/src/app/persona-approval-composition.ts",
@@ -1899,9 +1767,6 @@
 			"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
 			"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
 			"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
-			"libs/backend/server/conversation-assets/main/src/prisma-conversation-asset.composition.ts",
-			"libs/backend/server/conversations/main/src/db/prisma-conversation-replay.composition.ts",
-			"libs/backend/server/conversations/main/src/db/prisma-self-conversations.router.ts",
 			"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
 			"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
 			"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",

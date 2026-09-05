@@ -4,7 +4,7 @@ import express, { Router, type Express } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import { AGENT_RUNTIME_PROTOCOL_VERSION, PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, RuntimeCandidateKinds, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeCandidate } from "@opencrane/contracts";
+import { PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
@@ -28,7 +28,6 @@ vi.mock("../infra/artifacts/artifact-upload.factory", function _MockArtifactUplo
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
-		_CreateConversationAssetOutputAuthority: function _CreateConversationAssetOutputAuthority() { return { reserve: vi.fn(), publish: vi.fn() }; },
 		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
 	};
 });
@@ -67,58 +66,6 @@ function _buildAuthApp(): Express
   });
 
   return app;
-}
-
-/** Build the internal runtime candidate route around one mocked TokenReview identity. */
-async function _BuildRuntimeCandidateApp(username: string, audiences: string[] = [WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE]): Promise<Express>
-{
-  const { _RegisterInternalRoutes } = await import("../app/routes");
-  // The real Prisma dispatch authority runs inside a transaction and loads the live assignment for
-  // the reviewed Pod. Returning no assignment lets an authenticated runtime reach the authority and
-  // receive its real fail-closed candidate denial instead of a hardcoded stub reason.
-  const prisma = {
-    $transaction: vi.fn(async function _transaction(run: (tx: unknown) => Promise<unknown>)
-    {
-      return run({
-        $queryRaw: vi.fn().mockResolvedValue([]),
-        warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(null) },
-        workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
-      });
-    }),
-  } as unknown as PrismaClient;
-  const authApi = {
-    createTokenReview: vi.fn().mockResolvedValue({
-      status: {
-        authenticated: true,
-        audiences,
-        user: {
-          username,
-          extra: { "authentication.kubernetes.io/pod-uid": ["11111111-1111-4111-8111-111111111111"] },
-        },
-      },
-    }),
-  } as unknown as AuthenticationV1Api;
-  const app = express();
-  app.use(express.json());
-  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution());
-  return app;
-}
-
-/** Create a syntactically valid runtime event candidate for identity-bound route tests. */
-function _RuntimeCandidate(): RuntimeCandidate
-{
-  return {
-    protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
-    runtimeInstanceId: "runtime-1",
-    commandId: "command-1",
-    candidateId: "candidate-1",
-    runId: "run-1",
-    attempt: 1,
-    fence: 1,
-    kind: RuntimeCandidateKinds.Event,
-    eventType: "run.started",
-    payload: {},
-  };
 }
 
 describe("Control Plane", () =>
@@ -170,71 +117,6 @@ describe("Control Plane", () =>
         ready: true,
       }));
       expect(Object.keys(res.body.services).sort()).toEqual(["api", "channels", "database", "files", "memory", "models"]);
-    });
-
-    it("accepts only the fixed warm-runtime ServiceAccount in the personal runtime namespace", async function _RuntimeServiceAccountIdentity()
-    {
-      const acceptedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
-      const rejectedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
-
-      const accepted = await request(acceptedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-      const rejected = await request(rejectedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-      const retired = await request(acceptedApp).post("/api/internal/skill-authoring/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-
-      // A reviewed runtime SA reaches the real dispatch authority, which fails closed with a
-      // contract reason (no live assignment for this Pod) rather than a stubbed placeholder string.
-      expect(accepted.status).toBe(409);
-      expect(accepted.body).toEqual({ accepted: false, reason: "unknown_workload" });
-      // A subject outside the bounded runtime namespace never reaches the authority.
-      expect(rejected.status).toBe(401);
-	  expect(retired.status).toBe(404);
-    });
-
-    it("accepts the same warm-runtime identity in the managed runtime namespace", async function _ManagedRuntimeServiceAccountIdentity()
-    {
-      const acceptedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-managed-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
-      const crossedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
-
-      const accepted = await request(acceptedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-      const crossed = await request(crossedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-
-      expect(accepted.status).toBe(409);
-      expect(accepted.body).toEqual({ accepted: false, reason: "unknown_workload" });
-      expect(crossed.status).toBe(401);
-    });
-
-	it("moves generated assets and parent deliveries to the warm-runtime boundary", async function _WarmRuntimeOutputRoutes()
-	{
-		const app = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
-		const warmAsset = await request(app).post("/api/internal/warm-runtime/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({});
-		const warmParent = await request(app).post("/api/internal/warm-runtime/agent-threads/parent-deliveries").set("authorization", "Bearer projected-token").send({});
-		const retiredAsset = await request(app).post("/api/internal/skill-authoring/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({});
-		const retiredParent = await request(app).post("/api/internal/skill-authoring/agent-threads/parent-deliveries").set("authorization", "Bearer projected-token").send({});
-
-		expect(warmAsset.status).toBe(400);
-		expect(warmParent.status).toBe(400);
-		expect(retiredAsset.status).toBe(404);
-		expect(retiredParent.status).toBe(404);
-	});
-
-    it("requires one explicit runtime namespace separate from the server", async function _RuntimeNamespaceSeparation()
-    {
-      const { _RegisterInternalRoutes } = await import("../app/routes");
-      const app = express();
-      vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
-		expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution()); }).toThrow(/different from POD_NAMESPACE/);
-
-      vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
-		expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution()); }).toThrow(/different from POD_NAMESPACE/);
-    });
-
-    it("rejects a reviewed token when Kubernetes omits the runtime audience", async function _RuntimeAudienceMismatch()
-    {
-      const app = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`, ["opencrane"]);
-
-      const response = await request(app).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-
-      expect(response.status).toBe(401);
     });
 
 		it("mounts the production channel resolver when the complete receiver contract is configured", async function _MountsChannelResolver()

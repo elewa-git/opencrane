@@ -80,7 +80,7 @@ CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('workload');
 CREATE TYPE "ChannelInvocationAction" AS ENUM ('events.read');
 
 -- CreateEnum
-CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
+CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload');
 
 -- CreateEnum
 CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'removed');
@@ -239,19 +239,7 @@ CREATE TYPE "WorkloadAssignmentState" AS ENUM ('pending_pod', 'registered', 'rev
 CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
 
 -- CreateEnum
-CREATE TYPE "WarmRuntimeReservationState" AS ENUM ('reserved', 'profile_activating', 'ready', 'claimed', 'delete_requested', 'deleted');
-
--- CreateEnum
 CREATE TYPE "ChildRunCompletionDeliveryOutcome" AS ENUM ('delivered', 'no_parent_stream', 'parent_stream_terminal');
-
--- CreateEnum
-CREATE TYPE "RuntimeCommandKind" AS ENUM ('start_attempt', 'resume_attempt', 'cancel_attempt');
-
--- CreateEnum
-CREATE TYPE "RuntimeSteeringDisposition" AS ENUM ('absorbed', 'deferred');
-
--- CreateEnum
-CREATE TYPE "RuntimeSteeringRequestState" AS ENUM ('pending', 'consumed');
 
 -- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
@@ -741,14 +729,9 @@ CREATE TABLE "conversation_assets" (
     "silo_id" TEXT NOT NULL,
     "conversation_id" TEXT NOT NULL,
     "message_id" TEXT,
-    "run_id" TEXT,
-    "run_attempt" INTEGER,
-    "run_event_sequence" INTEGER,
-    "run_message_id" TEXT,
     "artifact_id" TEXT,
     "revision_id" TEXT,
     "upload_lease_id" TEXT,
-    "output_ticket_id" TEXT,
     "idempotency_key" TEXT NOT NULL,
     "provenance" "ConversationAssetProvenance" NOT NULL,
     "state" "ConversationAssetState" NOT NULL,
@@ -762,25 +745,6 @@ CREATE TABLE "conversation_assets" (
     "removed_at" TIMESTAMP(3),
 
     CONSTRAINT "conversation_assets_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "conversation_asset_output_tickets" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "run_attempt" INTEGER NOT NULL,
-    "run_event_sequence" INTEGER NOT NULL,
-    "output_message_id" TEXT NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "finalized_content_address" TEXT,
-    "finalized_receipt_digest" TEXT,
-    "finalized_at" TIMESTAMP(3),
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_asset_output_tickets_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1773,53 +1737,6 @@ CREATE TABLE "agent_runs" (
 );
 
 -- CreateTable
-CREATE TABLE "warm_runtime_reservations" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL DEFAULT 1,
-    "silo_id" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "deployment_name" TEXT NOT NULL,
-    "deployment_uid" TEXT NOT NULL,
-    "pod_name" TEXT NOT NULL,
-    "pod_uid" TEXT NOT NULL,
-    "pod_resource_version" TEXT NOT NULL,
-    "generic_profile" TEXT NOT NULL,
-    "claimed_profile" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "state" "WarmRuntimeReservationState" NOT NULL DEFAULT 'reserved',
-    "proof_key_thumbprint" TEXT,
-    "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "profile_activated_at" TIMESTAMP(3),
-    "readiness_observed_at" TIMESTAMP(3),
-    "bound_at" TIMESTAMP(3),
-    "idle_deadline" TIMESTAMP(3) NOT NULL,
-    "delete_requested_at" TIMESTAMP(3),
-    "deleted_at" TIMESTAMP(3),
-
-    CONSTRAINT "warm_runtime_reservations_pkey" PRIMARY KEY ("run_id","attempt","generation")
-);
-
--- CreateTable
-CREATE TABLE "agent_run_workflow_tasks" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "task_key" TEXT NOT NULL,
-    "task_name" TEXT NOT NULL,
-    "task_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "receipt_bound_at" TIMESTAMP(3),
-    "assignment_expires_at" TIMESTAMP(3),
-    "release_claimed_at" TIMESTAMP(3),
-    "release_expires_at" TIMESTAMP(3),
-    "release_delivery_count" INTEGER NOT NULL DEFAULT 0,
-    "attempt_key_digest" TEXT,
-
-    CONSTRAINT "agent_run_workflow_tasks_pkey" PRIMARY KEY ("run_id","attempt")
-);
-
--- CreateTable
 CREATE TABLE "child_run_completion_deliveries" (
     "child_run_id" TEXT NOT NULL,
     "child_attempt" INTEGER NOT NULL,
@@ -1965,94 +1882,6 @@ CREATE TABLE "run_model_credential_mint_authorizations" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "run_model_credential_mint_authorizations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "runtime_command_streams" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "fence" INTEGER NOT NULL DEFAULT 1,
-    "input_generation" INTEGER NOT NULL DEFAULT 0,
-    "runtime_instance_id" TEXT,
-    "next_command_sequence" INTEGER NOT NULL DEFAULT 1,
-    "accepted_candidate_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "dispatch_blocked_reason" TEXT,
-    "dispatch_blocked_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id","attempt")
-);
-
--- CreateTable
-CREATE TABLE "runtime_continuation_checkpoints" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "input_generation" INTEGER NOT NULL,
-    "format_version" TEXT NOT NULL,
-    "revision" INTEGER NOT NULL,
-    "digest" TEXT NOT NULL,
-    "applied_command_sequence" INTEGER NOT NULL,
-    "source_runtime_instance_id" TEXT NOT NULL,
-    "source_command_id" TEXT NOT NULL,
-    "source_fence" INTEGER NOT NULL,
-    "key_id" TEXT NOT NULL,
-    "ciphertext" BYTEA NOT NULL,
-    "nonce" BYTEA NOT NULL,
-    "authentication_tag" BYTEA NOT NULL,
-    "plaintext_bytes" INTEGER NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "runtime_continuation_checkpoints_pkey" PRIMARY KEY ("run_id","attempt","input_generation")
-);
-
--- CreateTable
-CREATE TABLE "runtime_steering_boundaries" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "boundary_id" TEXT NOT NULL,
-    "from_input_generation" INTEGER NOT NULL,
-    "to_input_generation" INTEGER NOT NULL,
-    "disposition" "RuntimeSteeringDisposition" NOT NULL,
-    "steering_digest" TEXT,
-    "claimed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "acked_at" TIMESTAMP(3),
-
-    CONSTRAINT "runtime_steering_boundaries_pkey" PRIMARY KEY ("run_id","attempt","boundary_id")
-);
-
--- CreateTable
-CREATE TABLE "runtime_steering_requests" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "content" JSONB NOT NULL,
-    "digest" TEXT NOT NULL,
-    "state" "RuntimeSteeringRequestState" NOT NULL DEFAULT 'pending',
-    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "consumed_at" TIMESTAMP(3),
-
-    CONSTRAINT "runtime_steering_requests_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "runtime_dispatched_commands" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "sequence" INTEGER NOT NULL,
-    "command_id" TEXT NOT NULL,
-    "kind" "RuntimeCommandKind" NOT NULL,
-    "fence" INTEGER NOT NULL,
-    "payload" JSONB,
-    "issued_at" TIMESTAMP(3) NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "runtime_dispatched_commands_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2539,16 +2368,10 @@ CREATE INDEX "channel_invocation_contexts_subject_conversation_idx" ON "channel_
 CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
-
--- CreateIndex
 CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
 
 -- CreateIndex
 CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
-
--- CreateIndex
-CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
 
 -- CreateIndex
 CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_assets"("artifact_id", "revision_id");
@@ -2557,22 +2380,7 @@ CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_
 CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "conversation_assets_exact_output_ticket_key" ON "conversation_assets"("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id");
-
--- CreateIndex
 CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_finalized_receipt_digest_key" ON "conversation_asset_output_tickets"("finalized_receipt_digest");
-
--- CreateIndex
-CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" ON "conversation_asset_output_tickets"("conversation_id", "created_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_run_id_run_attempt_idempo_key" ON "conversation_asset_output_tickets"("run_id", "run_attempt", "idempotency_key");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_exact_asset_key" ON "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversations_activity_sequence_key" ON "conversations"("activity_sequence");
@@ -3101,21 +2909,6 @@ CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "con
 CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
-CREATE INDEX "warm_runtime_reservations_state_idle_deadline_idx" ON "warm_runtime_reservations"("state", "idle_deadline");
-
--- CreateIndex
-CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_pod_uid_key" ON "warm_runtime_reservations"("namespace", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_deployment_uid_pod_name_key" ON "warm_runtime_reservations"("namespace", "deployment_uid", "pod_name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_run_workflow_tasks_task_id_key" ON "agent_run_workflow_tasks"("task_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_run_workflow_tasks_silo_id_task_key_key" ON "agent_run_workflow_tasks"("silo_id", "task_key");
-
--- CreateIndex
 CREATE INDEX "child_run_completion_deliveries_parent_run_id_parent_attemp_idx" ON "child_run_completion_deliveries"("parent_run_id", "parent_attempt");
 
 -- CreateIndex
@@ -3210,30 +3003,6 @@ CREATE INDEX "run_model_credential_mint_authorizations_expires_at_idx" ON "run_m
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_run_id_attempt_gen_key" ON "run_model_credential_mint_authorizations"("run_id", "attempt", "generation");
-
--- CreateIndex
-CREATE INDEX "runtime_continuation_checkpoints_run_id_attempt_revision_idx" ON "runtime_continuation_checkpoints"("run_id", "attempt", "revision");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat_key" ON "runtime_steering_boundaries"("run_id", "attempt", "to_input_generation");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
-
--- CreateIndex
-CREATE INDEX "runtime_dispatched_commands_run_id_attempt_idx" ON "runtime_dispatched_commands"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_run_id_attempt_sequence_key" ON "runtime_dispatched_commands"("run_id", "attempt", "sequence");
 
 -- CreateIndex
 CREATE INDEX "skills_silo_id_state_idx" ON "skills"("silo_id", "state");
@@ -3470,12 +3239,6 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversati
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_attempt_run_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_silo_id_fkey" FOREIGN KEY ("artifact_id", "silo_id") REFERENCES "artifacts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3483,21 +3246,6 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_i
 
 -- AddForeignKey
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey" FOREIGN KEY ("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id") REFERENCES "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3752,15 +3500,6 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fke
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_run_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_assignment_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_run_workflow_tasks" ADD CONSTRAINT "agent_run_workflow_tasks_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3782,9 +3521,6 @@ ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_s
 ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "agent_identity_id", "principal_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_generation_fkey" FOREIGN KEY ("run_id", "attempt", "generation") REFERENCES "warm_runtime_reservations"("run_id", "attempt", "generation") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_run_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3795,15 +3531,6 @@ ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_continuation_checkpoints" ADD CONSTRAINT "runtime_continuation_checkpoints_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -4712,8 +4439,6 @@ BEGIN
         IF OLD."state" = 'cancelling' AND NEW."state" = 'cancelled' THEN
             PERFORM 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             PERFORM 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "agent_run_workflow_tasks" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "warm_runtime_reservations" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             IF EXISTS (
                 SELECT 1 FROM "workload_assignments"
                 WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
@@ -4725,13 +4450,6 @@ BEGIN
                 SELECT 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "revoked_at" IS NULL
             ) THEN
                 RAISE EXCEPTION 'a Cancelled AgentRun requires every RunProofKey revoked';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "warm_runtime_reservations"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
-                  AND ("state" <> 'deleted'::"WarmRuntimeReservationState" OR "deleted_at" IS NULL)
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires every warm runtime reservation deleted';
             END IF;
         END IF;
         IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
@@ -8500,26 +8218,14 @@ ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check"
     OR ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND "claim_expires_at" IS NOT NULL AND "completed_at" IS NULL)
     OR ("state" IN ('clean', 'rejected', 'terminal_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NOT NULL)
 );
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_identity_check" CHECK (
-    "run_attempt" > 0
-    AND "run_event_sequence" > 0
-    AND length(btrim("output_message_id")) BETWEEN 1 AND 256
-    AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
-    AND "expires_at" > "created_at"
-    AND (("finalized_content_address" IS NULL AND "finalized_receipt_digest" IS NULL AND "finalized_at" IS NULL)
-      OR ("finalized_content_address" ~ '^sha256:[0-9a-f]{64}$' AND "finalized_receipt_digest" ~ '^sha256:[0-9a-f]{64}$' AND "finalized_at" IS NOT NULL))
-);
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_check" CHECK (
     length(btrim("display_name")) BETWEEN 1 AND 255
     AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
     AND length(btrim("media_type")) BETWEEN 1 AND 255
     AND ("byte_length" IS NULL OR "byte_length" > 0)
-    AND (("run_id" IS NULL AND "run_attempt" IS NULL AND "run_event_sequence" IS NULL AND "run_message_id" IS NULL)
-      OR ("run_id" IS NOT NULL AND "run_attempt" > 0 AND "run_event_sequence" > 0 AND length(btrim("run_message_id")) BETWEEN 1 AND 256))
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_provenance_check" CHECK (
-    ("provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL AND "output_ticket_id" IS NULL AND "run_id" IS NULL AND "run_attempt" IS NULL AND "run_event_sequence" IS NULL AND "run_message_id" IS NULL)
-    OR ("provenance" = 'agent_output' AND "created_by_user_id" IS NULL AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_attempt" > 0 AND "run_event_sequence" > 0 AND "run_message_id" IS NOT NULL AND "output_ticket_id" IS NOT NULL)
+    "provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_check" CHECK (
     ("state" = 'uploading' AND "upload_lease_id" IS NOT NULL AND "revision_id" IS NULL AND "failure_code" IS NULL)
@@ -8632,52 +8338,6 @@ $$;
 CREATE CONSTRAINT TRIGGER "groups_hierarchy_guard" AFTER INSERT OR UPDATE OF "parent_id" ON "groups"
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION "enforce_group_hierarchy"();
-
-CREATE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    verified BOOLEAN;
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'ConversationAssetOutputTicket cannot be deleted';
-    END IF;
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."finalized_content_address" IS NOT NULL OR NEW."finalized_receipt_digest" IS NOT NULL OR NEW."finalized_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'ConversationAssetOutputTicket must begin unfinalized';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."run_attempt" IS DISTINCT FROM OLD."run_attempt" OR NEW."run_event_sequence" IS DISTINCT FROM OLD."run_event_sequence"
-        OR NEW."output_message_id" IS DISTINCT FROM OLD."output_message_id" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ConversationAssetOutputTicket identity is immutable';
-    END IF;
-    IF OLD."finalized_at" IS NOT NULL THEN
-        IF NEW."finalized_content_address" IS DISTINCT FROM OLD."finalized_content_address"
-            OR NEW."finalized_receipt_digest" IS DISTINCT FROM OLD."finalized_receipt_digest"
-            OR NEW."finalized_at" IS DISTINCT FROM OLD."finalized_at" THEN
-            RAISE EXCEPTION 'ConversationAssetOutputTicket receipt is immutable';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF NEW."finalized_at" IS NULL THEN RETURN NEW; END IF;
-    SELECT EXISTS (
-        SELECT 1 FROM "conversation_assets" asset
-        JOIN "artifact_upload_leases" lease ON lease."id" = asset."upload_lease_id"
-        WHERE asset."output_ticket_id" = OLD."id" AND asset."silo_id" = OLD."silo_id"
-          AND asset."conversation_id" = OLD."conversation_id" AND asset."run_id" = OLD."run_id"
-          AND asset."run_attempt" = OLD."run_attempt" AND asset."run_event_sequence" = OLD."run_event_sequence"
-          AND asset."run_message_id" = OLD."output_message_id" AND lease."state" = 'finalized'
-          AND lease."promoted_content_address" = NEW."finalized_content_address"
-          AND lease."promotion_receipt_digest" = NEW."finalized_receipt_digest"
-    ) INTO verified;
-    IF NOT verified THEN RAISE EXCEPTION 'ConversationAssetOutputTicket finalization lacks exact receipt evidence'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE TRIGGER "conversation_asset_output_tickets_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_asset_output_tickets"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"();
 
 ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_identity_check" CHECK (
     "child_conversation_id" <> "parent_conversation_id"

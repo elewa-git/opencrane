@@ -1,9 +1,6 @@
-export { _CreateConversationAttachmentAdmission } from "./prisma-conversation-asset.composition";
 export { PrismaConversationAssetUnitOfWork } from "./prisma-conversation-asset-unit-of-work";
-export { PrismaConversationAssetOutputUnitOfWork } from "./prisma-conversation-asset-output-unit-of-work";
-export { PrismaConversationAssetOutputRepository } from "./prisma-conversation-asset-output-repository";
+export { PrismaConversationAssetScanRepository } from "./prisma-conversation-asset-scan-repository";
 export { __CreateConversationAssetRouter } from "./conversation-asset.router";
-export { __CreateConversationAssetOutputRouter } from "./conversation-asset-output.router";
 export { _ConversationAssetsOpenapiPaths } from "./openapi";
 export { ConversationAssetDenialReasons } from "./conversation-asset.types";
 export type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types";

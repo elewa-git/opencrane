@@ -2,10 +2,6 @@
 // the remaining import graph runs. Keep this side-effect import first when editing the entrypoint.
 import "./app/instrument";
 
-import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
-import { _CreateElicitationInterruptReader } from "@opencrane/backend/agents/execution/elicitation";
-import { _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
-import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/server/conversation-assets";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config";
@@ -18,9 +14,6 @@ import { _CreateKubernetesClients } from "./app/kubernetes-clients";
 import { _StartProcessLifecycle } from "./app/lifecycle";
 import { _log } from "./app/log";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
-import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition";
-import { _CreateConversationSocketAuthenticator } from "./app/conversation-socket-authenticator";
-import { _RequireExecutionSubjectComposition } from "./app/execution-subject-composition";
 import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
@@ -46,28 +39,19 @@ async function _Main(): Promise<void>
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
 	await _ReconcileChannelTargetRoutes(prisma, config.runtime.channelTargets);
 
-	// 3. Require the complete target evidence adapter before exposing either initial admission or retry.
-	const executionSubjects = _RequireExecutionSubjectComposition(historyStore.historyStore);
-	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
-	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
-	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, executionSubjects.admissionAuthority);
-	const runCancellation = _CreateRunCancellationAuthority(prisma);
-
-	// 4. Compose the retained workload authorities.
+	// 3. Compose the retained workload authorities.
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 
-	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
+	// 4. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, managedRunAdmission, personalRunAdmission, runCancellation, executionSubjects.retryInputCompiler, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects);
+	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution);
-	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, executionSubjects.retryInputCompiler, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
-
-	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore);
+	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, channelTargetRoutes, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

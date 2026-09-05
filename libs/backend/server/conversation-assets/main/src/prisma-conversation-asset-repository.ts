@@ -90,7 +90,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	async list(caller: ConversationAssetCaller, conversationId: string): Promise<readonly ConversationAssetView[]>
 	{
 		if (!await this._canReadConversation(caller, conversationId)) return [];
-		return (await this.transaction.conversationAsset.findMany({ where: { conversationId, siloId: caller.siloId, state: { not: ConversationAssetState.Removed }, OR: [{ provenance: PersistedProvenance.ParticipantUpload }, { provenance: PersistedProvenance.AgentOutput, state: { in: [ConversationAssetState.Processing, ConversationAssetState.Ready, ConversationAssetState.Failed] } }] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] })).map(function _SafeView(asset) { return _ConversationAssetView(asset, caller.subjectId); });
+		return (await this.transaction.conversationAsset.findMany({ where: { conversationId, siloId: caller.siloId, state: { not: ConversationAssetState.Removed }, provenance: PersistedProvenance.ParticipantUpload }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] })).map(function _SafeView(asset) { return _ConversationAssetView(asset, caller.subjectId); });
 	}
 
 	/** Reloads current participant access and one exact ready, published revision. */
@@ -145,10 +145,9 @@ function _ReservationMatches(asset: { readonly displayName: string; readonly med
 }
 
 /** Project a browser-safe view without technical authority facts. */
-export function _ConversationAssetView(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly runMessageId?: string | null; readonly provenance: PersistedProvenance; readonly state: ConversationAssetState; readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly failureCode: string | null; readonly createdByUserId?: string | null; readonly revisionId?: string | null; readonly createdAt: Date }, subjectId: string): ConversationAssetView
+export function _ConversationAssetView(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: PersistedProvenance; readonly state: ConversationAssetState; readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly failureCode: string | null; readonly createdByUserId?: string | null; readonly revisionId?: string | null; readonly createdAt: Date }, subjectId: string): ConversationAssetView
 {
-	const provenance = asset.provenance === PersistedProvenance.ParticipantUpload ? ConversationAssetProvenance.ParticipantUpload : ConversationAssetProvenance.AgentOutput;
-	return { id: asset.id, conversationId: asset.conversationId, messageId: asset.messageId ?? asset.runMessageId ?? null, provenance, state: _Lifecycle(asset.state), displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength === null ? null : Number(asset.byteLength), disposition: ___ConversationAssetMediaDisposition(asset.mediaType), failureCode: asset.failureCode, canRemove: _CanRemove(asset, subjectId), createdAt: asset.createdAt.toISOString() };
+	return { id: asset.id, conversationId: asset.conversationId, messageId: asset.messageId, provenance: ConversationAssetProvenance.ParticipantUpload, state: _Lifecycle(asset.state), displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength === null ? null : Number(asset.byteLength), disposition: ___ConversationAssetMediaDisposition(asset.mediaType), failureCode: asset.failureCode, canRemove: _CanRemove(asset, subjectId), createdAt: asset.createdAt.toISOString() };
 }
 
 /** Convert Prisma enum members to the public string-backed lifecycle. */

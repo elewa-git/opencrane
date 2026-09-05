@@ -1,7 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneProcessConfig } from "../config.types";
@@ -31,7 +30,6 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 		const recoverExpiredInvocation = vi.fn().mockResolvedValue(false);
 		const workers = await _StartBackgroundWorkers(
 			{} as PrismaClient,
-			{} as ManagedRunAdmissionPort,
 			{ schedulerEnabled: false, schedulerIntervalMilliseconds: 60_000 } as OpenCraneProcessConfig,
 			{ recoverExpiredInvocation } as never,
 			{ close, startWorkers } as IWorkflowWorkerRuntime,

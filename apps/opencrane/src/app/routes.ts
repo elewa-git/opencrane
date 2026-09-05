@@ -13,18 +13,13 @@ import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRout
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { spec } from "@opencrane/backend/server/api-spec";
-import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
 import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
-import { _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
-import { _CreateConversationAttachmentAdmission, __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
-import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RetryRunInputCompiler, type RunCancellationRepository, type SelfRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
-import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
+import { __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
 import { PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
-import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
@@ -55,7 +50,7 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  * @param mcpWorkflows - Shared guarded workflow engine plus saved MCP task authorities.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, retryInputCompiler: RetryRunInputCompiler, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
@@ -66,7 +61,6 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, runAdmission
 		{ method: "use", path: "/api/v1/resource-shares", handler: _CreateRateLimitedResourceSharesRouter(prisma) },
 	];
 	const agentRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/agent-services", handler: _CreateAgentServicesRouter(prisma, runAdmission, _log) },
 		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/skills", handler: __CreateSkillAuthoringValidationSubmissionRouter({ resolveCaller: _ResolveSkillAuthoringValidationCaller, authority: new PrismaSkillAuthoringValidationSubmissionUnitOfWork(prisma, mcpWorkflows.execution), logger: _log }) },
 	];
@@ -74,11 +68,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, runAdmission
 		{ method: "use", path: "/api/v1/me/onboarding", handler: onboarding.router },
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow, _CreatePersonaAgentRevisionSelectionFactory()) },
-		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(runCancellation, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, mcpWorkflows.execution, retryInputCompiler, _CreateConversationAttachmentAdmission, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },

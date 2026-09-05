@@ -116,7 +116,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.artifactPreprocessController).toEqual(expect.any(Function));
 		expect(composition.artifactScanner).toEqual(expect.any(Function));
 		expect(composition.channelTargetResolver).toEqual(expect.any(Function));
-		expect(composition.conversationReplay).toEqual(expect.any(Function));
+		expect(composition.conversationReplay).toBeNull();
 	});
 
 	it("refuses an enabled scanner plane without a separate namespace", function _rejectsScannerWithoutNamespace()

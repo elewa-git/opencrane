@@ -3,9 +3,7 @@ import type { Server } from "node:http";
 import type { PrismaClient } from "@prisma/client";
 import type { Express } from "express";
 
-import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
-import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 import type { McpRuntimeAuthority } from "@opencrane/backend/server/gateways/mcp";
@@ -53,14 +51,13 @@ async function _runCleanupStage(stage: string, operation: () => Promise<void>): 
 }
 
 /** Bind the public and workload-facing apps to distinct sockets. */
-function _startHttpServers(publicApp: Express, internalApp: Express, config: OpenCraneProcessConfig, conversationSockets: SelfConversationSocketServer): OpenCraneHttpServers
+function _startHttpServers(publicApp: Express, internalApp: Express, config: OpenCraneProcessConfig): OpenCraneHttpServers
 {
 	_log.info({ port: config.publicPort }, "starting opencrane control plane");
 	const publicServer = publicApp.listen(config.publicPort, function _onPublicListen()
 	{
 		_log.info({ port: config.publicPort }, "control plane listening");
 	});
-	conversationSockets.attach(publicServer);
 	const internalServer = internalApp.listen(config.internalPort, function _onInternalListen()
 	{
 		_log.info({ internalPort: config.internalPort }, "control plane internal API listening");
@@ -74,13 +71,13 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor, historyStore: OpenCraneHistoryStoreComposition): Promise<void>
+export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor, historyStore: OpenCraneHistoryStoreComposition): Promise<void>
 {
 	// 1. Start workers only after application composition has registered every durable task.
 	let backgroundWorkers: OpenCraneBackgroundWorkers;
 	try
 	{
-		backgroundWorkers = await _StartBackgroundWorkers(prisma, managedRunAdmission, config, mcpRuntime, workflowRuntime, providerEffects);
+		backgroundWorkers = await _StartBackgroundWorkers(prisma, config, mcpRuntime, workflowRuntime, providerEffects);
 	}
 	catch (error)
 	{
@@ -97,7 +94,7 @@ export async function _StartProcessLifecycle(publicApp: Express, internalApp: Ex
 	}
 
 	// 2. Bind both listeners after worker startup succeeds, so a broken worker cannot leave a partial server running.
-	const servers = _startHttpServers(publicApp, internalApp, config, conversationSockets);
+	const servers = _startHttpServers(publicApp, internalApp, config);
 
 	// 3. Register one idempotent shutdown path so concurrent signals cannot drain dependencies twice.
 	let shutdownStarted = false;
@@ -114,7 +111,6 @@ export async function _StartProcessLifecycle(publicApp: Express, internalApp: Ex
 		{
 			await _settleCleanup([
 				Promise.resolve().then(_BeginProcessShutdown),
-				Promise.resolve().then(function _CloseConversationSockets() { conversationSockets.close(); }),
 			]);
 		});
 		clean = await _runCleanupStage("drain_workers", async function _DrainWorkers() { await _settleCleanup([backgroundWorkers.stop(), channelTargetRoutes.stop()]); }) && clean;
