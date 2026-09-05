@@ -39,7 +39,6 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
 			],
@@ -76,7 +75,6 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
 			],

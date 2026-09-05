@@ -12,7 +12,6 @@
     { "path": "../conversation-activity" },
     { "path": "../conversation-assets" },
     { "path": "../conversation-elicitation" },
-    { "path": "../../state/conversation/ag-ui" },
     { "path": "../../state/conversation/assets" },
     { "path": "../../state/conversation/elicitation" },
     { "path": "../../state/conversation/render" },

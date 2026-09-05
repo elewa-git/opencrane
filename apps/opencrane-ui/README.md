@@ -54,12 +54,10 @@ If the backend is unreachable the app refuses authenticated actions.
 `Entrypoint: src/main.ts` (bootstraps `AppComponent` with `appConfig` from `src/app/app.config.ts`).
 Route table `src/app/app.routes.ts`: `login`, `onboarding` (the server-authoritative persona state
 shell and first chat), `chats` and `chats/:conversationId` (direct, group, and Agent-session
-workspace), `chats/:parentConversationId/threads/:childConversationId` (breadcrumb child Agent
-session), `settings/members` (organisation directory and invitations), `invite` (public token
+workspace), `settings/members` (organisation directory and invitations), `invite` (public token
 acceptance), and `admin` (MCP tool administration). The root route redirects to
-`/onboarding`; protected routes use `OperatorAccessGuard`. The app mounts and guards the Agent-thread
-URL; the feature library owns its routed component, browser-history restoration, navigation intents,
-and child projection purge.
+`/onboarding`; protected routes use `OperatorAccessGuard`. Conversation history and computer state
+remain on the ordinary chat route; the retired relational Agent-thread projection has no child URL.
 
 ## Boundary
 

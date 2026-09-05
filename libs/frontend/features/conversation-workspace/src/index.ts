@@ -16,4 +16,3 @@
  */
 export { CONVERSATION_WORKSPACE_ROUTES } from "./lib/conversation-workspace-route/conversation-workspace.routes";
 export { ConversationWorkspacePageComponent } from "./lib/components/conversation-workspace-page/conversation-workspace-page.component";
-export type { ConversationThreadNavigationIntent } from "./lib/conversation-workspace-feature.types";

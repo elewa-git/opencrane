@@ -328,9 +328,6 @@
       "@opencrane/state/conversation/render": [
         "./libs/frontend/state/conversation/render/src/index.ts"
       ],
-      "@opencrane/state/conversation/ag-ui": [
-        "./libs/frontend/state/conversation/ag-ui/src/index.ts"
-      ],
       "@opencrane/state/conversation/assets": [
         "./libs/frontend/state/conversation/assets/src/index.ts"
       ],

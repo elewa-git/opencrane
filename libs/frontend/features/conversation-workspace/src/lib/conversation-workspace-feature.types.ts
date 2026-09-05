@@ -1,4 +1,4 @@
-import type { ConversationMessage, ConversationSummary } from "@opencrane/state/conversation/workspace";
+import type { ConversationSummary } from "@opencrane/state/conversation/workspace";
 
 /**
  * Selects the server-backed source a session-rail row opens.
@@ -187,19 +187,6 @@ export interface ConversationMessageView
 	readonly message: import("@opencrane/elements/conversation").ConversationMessagePresentation;
 	/** Sanitized rich-text projection rendered inside the shared rich-card slot. */
 	readonly richText: import("@opencrane/elements/conversation").ConversationRichTextPresentation;
-	/** Child route coordinates when this message invoked an Agent. */
-	readonly agentThread: ConversationMessage["agentThread"];
-}
-
-/** Route intent for opening one child Agent session from its parent message. */
-export interface ConversationThreadNavigationIntent
-{
-	/** Parent group conversation coordinate. */
-	readonly parentConversationId: string;
-	/** Child Agent-session coordinate. */
-	readonly childConversationId: string;
-	/** Parent root-message coordinate restored on return. */
-	readonly parentMessageId: string;
 }
 
 /** Inputs needed to map generic labels without interpreting opaque references. */

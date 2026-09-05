@@ -21,9 +21,9 @@
 // the matching schema admits it.
 import { z } from "zod";
 
-import { __HasValidMessageCompletion, ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
+import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 
-import { ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail } from "./conversation-workspace.types";
+import { ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail } from "./conversation-workspace.types";
 
 /**
  * Accepts a non-empty string and returns it trimmed.
@@ -85,39 +85,6 @@ const _Summary = z.object({
 }).strict();
 
 /**
- * Shape of one message in an open conversation.
- *
- * The nested blocks are held to the same standard as the message around them, so one bad block fails
- * the whole snapshot instead of reaching the renderer as a half-built message. The
- * `rejects malformed nested message values at the model boundary` case in the adapter's
- * conversation-workspace.dto.spec.ts pins that with a block whose `id` is an empty string.
- *
- * `agentThread` is present when an `@agent` mention in this message started a child Agent session; it
- * is null on every other message.
- *
- * `completedAt` follows the same state invariant as a stored message: terminal states require a
- * timestamp and unfinished states require null. The adapter's `rejects message completion times that
- * contradict message state` case pins both mismatch directions at this response boundary.
- */
-const _Message = z.object({
-	id: _RequiredString,
-	position: _Position,
-	role: z.nativeEnum(MessageRoles),
-	state: z.nativeEnum(MessageStates),
-	source: z.nativeEnum(MessageSources),
-	blocks: z.array(z.object({ id: _RequiredString, kind: _RequiredString, value: z.string() }).strict()),
-	runId: _NullableRequiredString,
-	participantRef: _NullableRequiredString,
-	createdAt: z.string().datetime(),
-	completedAt: z.string().datetime().nullable(),
-	agentThread: z.object({ childConversationId: _RequiredString, parentMessageId: _RequiredString }).strict().nullable()
-}).strict().superRefine(function _ValidateMessageCompletion(message, context)
-{
-	if (__HasValidMessageCompletion(message)) return;
-	context.addIssue({ code: z.ZodIssueCode.custom, path: ["completedAt"], message: "must be present exactly when message state is terminal" });
-});
-
-/**
  * Shape of the snapshot for the one open conversation: a summary plus the two access positions and the
  * messages.
  *
@@ -125,17 +92,7 @@ const _Message = z.object({
  * the last one — non-null only after the participant was removed, which is how the store knows to stop
  * accepting new messages while still showing the history.
  */
-const _Detail = _Summary.extend({ visibleFromPosition: _Position, accessEndedPosition: _Position.nullable(), messages: z.array(_Message) }).strict();
-
-/**
- * Shape of one run's status for the signed-in participant.
- *
- * `attempt` must be a positive safe integer because both run commands send it back as
- * `expectedAttempt`: the server only acts if that number still matches, so a cancel or retry cannot
- * hit a newer attempt the participant never saw. A wrong `attempt` here would send the participant's
- * cancel to the wrong attempt, which is why it is not simply `z.number()`.
- */
-const _Run = z.object({ runId: _RequiredString, attempt: z.number().int().safe().positive(), state: z.nativeEnum(ConversationRunStates), conversationId: _NullableRequiredString }).strict();
+const _Detail = _Summary.extend({ visibleFromPosition: _Position, accessEndedPosition: _Position.nullable() }).strict();
 
 /**
  * Checks the creation directory and gives every entry a label the new-conversation form can display.
@@ -172,7 +129,8 @@ export function _ParseConversationWorkspaceDirectory(value: unknown): Conversati
 	let participantNumber = 0;
 	const participants = parsed.participants.map(function _Participant(participant)
 	{
-		if (participant.isSelf) return { ...participant, label: "You" };
+		if (participant.isSelf)
+			return { ...participant, label: "You" };
 		participantNumber += 1;
 		return { ...participant, label: `Participant ${participantNumber}` };
 	});
@@ -229,61 +187,5 @@ export function _ParseConversationSummary(value: unknown): ConversationSummary {
  */
 export function _ParseConversationDetail(value: unknown): ConversationWorkspaceDetail
 {
-	// 1. Reject the whole snapshot first. Sorting a list that has not been checked would read
-	//    `position` off values that may not be positions at all.
-	const parsed = _Detail.parse(value);
-
-	// 2. Sort a copy, because `Array.prototype.sort` reorders in place and the parsed object is
-	//    spread into the result below.
-	const messages = [...parsed.messages].sort(_CompareMessagePosition);
-
-	// 3. Return the snapshot with the ordered messages, leaving the access positions untouched — the
-	//    store reads those to decide whether this participant may still send.
-	return { ...parsed, messages };
-}
-
-/**
- * Checks one run's status for the signed-in participant.
- *
- * Admits the run id, a positive attempt number, a lifecycle from {@link ConversationRunStates}, and the
- * owning conversation id or null. Rejects an unknown lifecycle, a zero or fractional attempt, and any
- * extra field.
- *
- * Refusing an unknown lifecycle is the point of this parser rather than a formality. `ConversationRunStore`
- * decides from `state` alone whether to offer steer, cancel and retry, and retry is offered only for
- * `Failed` — never for `RecoveryRequired`, where an external action's outcome is unknown and a second
- * attempt is unsafe. A state the bundle does not recognise must therefore fail rather than fall through
- * to a default that could put the retry control on screen.
- *
- * Called by: the `workspace/adapter` gateway's `run()` method, through the `_ConversationRun` alias in
- * conversation-workspace.dto.ts. `cancel()` and `retry()` build their result from the response fields
- * instead of calling this.
- *
- * @param value - A decoded response body; assume nothing about it.
- * @returns The run status the store branches on for the steer, cancel and retry controls.
- * @throws ZodError when the payload does not match; the adapter converts it to a `Recoverable`
- *   `ConversationWorkspaceGatewayError` and the store shows the run-status error without touching the
- *   conversation.
- * @see ConversationRun
- */
-export function _ParseConversationRun(value: unknown): ConversationRun { return _Run.parse(value); }
-
-/**
- * Orders two messages by their timeline position, oldest first.
- *
- * `BigInt` rather than `Number` because a position is a 64-bit database counter: values past
- * 9007199254740991 round when converted, and two neighbouring positions can round to the same number,
- * which would make the sort order arbitrary. Comparing the strings directly would be wrong too, since
- * `"10" < "2"` as text. Both operands are already known to be plain digit strings, so `BigInt()` cannot
- * throw here.
- *
- * @param left - One message from the parsed snapshot.
- * @param right - The message it is being ordered against.
- * @returns A negative number, zero, or a positive number, as `Array.prototype.sort` expects.
- */
-function _CompareMessagePosition(left: ConversationMessage, right: ConversationMessage): number
-{
-	if (BigInt(left.position) < BigInt(right.position)) return -1;
-	if (BigInt(left.position) > BigInt(right.position)) return 1;
-	return 0;
+	return _Detail.parse(value);
 }

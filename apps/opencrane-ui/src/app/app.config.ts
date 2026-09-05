@@ -5,7 +5,6 @@ import { provideHttpClient, withFetch } from "@angular/common/http";
 import { providePrimeNG } from "primeng/config";
 
 import { OpenCranePreset } from "@opencrane/core";
-import { AGENT_THREAD_GATEWAY, OpenCraneAgentThreadGateway } from "@opencrane/state/conversation/agent-threads";
 import { PLATFORM_SURFACE } from "@opencrane/state/core";
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
 import { OpenCranePersonaFirstChatGateway, PERSONA_FIRST_CHAT_GATEWAY, PERSONA_GATEWAY } from "@opencrane/state/onboarding";
@@ -44,9 +43,8 @@ export const appConfig: ApplicationConfig =
 		provideWebPlatform(),
 		{ provide: PERSONA_GATEWAY, useClass: OpenCranePersonaGateway },
 		{ provide: PERSONA_FIRST_CHAT_GATEWAY, useClass: OpenCranePersonaFirstChatGateway },
-		{ provide: AGENT_THREAD_GATEWAY, useClass: OpenCraneAgentThreadGateway },
 		{ provide: ORGANIZATION_MEMBERS_GATEWAY, useClass: OpenCraneOrganizationMembersGateway },
-		// Chat gateways, the shared event stream, and A2UI are bound here rather than inside the
+		// Chat metadata, history, and asset gateways are bound here rather than inside the
 		// workspace feature — the app is the only layer allowed to name a concrete adapter. They sit at
 		// the root because the chat routes are lazily loaded and must find these bindings already in
 		// place.

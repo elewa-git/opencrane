@@ -15,7 +15,7 @@ import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHisto
  *
  * @see OpenCraneConversationWorkspaceGateway — the only caller of anything in this file.
  */
-export { _ParseConversationDetail as _ConversationDetail, _ParseConversationRun as _ConversationRun, _ParseConversationSummary as _ConversationSummary, _ParseConversationWorkspaceDirectory as _ConversationWorkspaceDirectory } from "@opencrane/state/conversation/workspace";
+export { _ParseConversationDetail as _ConversationDetail, _ParseConversationSummary as _ConversationSummary, _ParseConversationWorkspaceDirectory as _ConversationWorkspaceDirectory } from "@opencrane/state/conversation/workspace";
 
 /**
  * Checks the onboarding response, then reduces it to what the workspace is allowed to show as history.
@@ -48,11 +48,14 @@ export function _ConversationOnboardingHistory(value: unknown): ConversationOnbo
 	// 1. Validate with the onboarding model's own parser, so this adapter cannot accept a snapshot the onboarding pages would reject.
 	const snapshot = ___ParsePersonaFirstChatSnapshot(value);
 	// 2. Onboarding still in progress is a normal answer: the list says "Onboarding is not complete yet." rather than the read failing.
-	if (snapshot.state !== UserOnboardingRouteStates.Completed) return { status: ConversationOnboardingHistoryStatuses.NotCompleted, history: null };
+	if (snapshot.state !== UserOnboardingRouteStates.Completed)
+		return { status: ConversationOnboardingHistoryStatuses.NotCompleted, history: null };
 	// 3. Completed with no conversation id is the existing-user migration the validator allows (_MigratedCompletionEvidence). Report it, rather than treating the missing transcript as a fault.
-	if (snapshot.conversationId === null) return { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+	if (snapshot.conversationId === null)
+		return { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 	// 4. Past step 3 the validator's completed-bootstrap rules already guarantee these three fields, so this satisfies the null checks and fails loudly if the server ever contradicts itself.
-	if (snapshot.persona === null || snapshot.startedAt === null || snapshot.completedAt === null) throw new Error("Completed onboarding history is missing required evidence.");
+	if (snapshot.persona === null || snapshot.startedAt === null || snapshot.completedAt === null)
+		throw new Error("Completed onboarding history is missing required evidence.");
 	// 5. Copy across only the fields the history panel draws, keeping the server's transcript order.
 	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: snapshot.conversationId, personaDisplayName: snapshot.persona.displayName, startedAt: snapshot.startedAt, completedAt: snapshot.completedAt, transcript: snapshot.transcript.map(_ConversationOnboardingHistoryEntry) } };
 }

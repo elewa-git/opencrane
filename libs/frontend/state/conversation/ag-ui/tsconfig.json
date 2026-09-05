@@ -1,1 +1,0 @@
-{ "extends": "../../../../../tsconfig.frontend.json", "compilerOptions": { "strict": true }, "files": [], "include": [], "references": [{ "path": "./tsconfig.lib.json" }] }

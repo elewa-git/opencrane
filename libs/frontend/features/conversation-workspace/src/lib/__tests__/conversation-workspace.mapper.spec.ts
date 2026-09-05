@@ -1,6 +1,7 @@
-import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageSources, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageView, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
+import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
 import { ConversationSessionRailIconStates } from "../conversation-workspace-feature.types";
 
 /** Builds a direct-conversation summary without introducing display names. */
@@ -10,9 +11,9 @@ function _Summary(): ConversationSummary
 }
 
 /** Builds a participant message containing unsafe markup. */
-function _Message(): ConversationMessage
+function _Message(): MessageEntry
 {
-	return { id: "message-1", position: "1", role: MessageRoles.User, state: MessageStates.Completed, source: MessageSources.UserInput, blocks: [{ id: "block-1", kind: "text", value: "Hello <script>alert('secret')</script>" }], runId: null, participantRef: "other-secret", createdAt: "2026-08-12T11:08:00.000Z", completedAt: "2026-08-12T11:08:01.000Z", agentThread: null };
+	return { schemaVersion: 1, id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", conversationId: "conversation-1", position: "1", author: { kind: "human", principalId: "principal-1", participantId: "participant-1", name: "Jente Rosseel", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: "command-1", correlationId: "request-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", occurredAt: "2026-08-12T11:08:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:digest" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
 }
 
 describe("Conversation workspace presentation", function _ConversationWorkspacePresentation()
@@ -27,8 +28,8 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 
 	it("sanitizes message markup and keeps authorship generic", function _SafeMessage()
 	{
-		const view = _ConversationMessageView(_Message(), { summary: _Summary(), directory: { participants: [{ participantRef: "subject-secret", isSelf: true, label: "You" }, { participantRef: "other-secret", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null } });
-		expect(view.message.authorName).toBe("Participant 1");
+		const view = _ConversationEntryViews([_Message()], { "payload-1": "Hello <script>alert('secret')</script>" })[0]!;
+		expect(view.message.authorName).toBe("Jente Rosseel");
 		expect(view.richText.html).not.toContain("<script");
 		expect(view.richText.html).toContain("Hello");
 	});

@@ -1,14 +1,12 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
 
-import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds } from "@opencrane/models/conversations";
-import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
-import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "@opencrane/state/conversation/stream";
+import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStreamUpdate, type ConversationHistoryProjection } from "@opencrane/state/conversation/stream";
 
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway";
 import { ConversationOnboardingHistoryStore } from "./conversation-onboarding-history.store";
-import { ConversationRunStore } from "./conversation-run.store";
-import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types";
+import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageCommand } from "./conversation-workspace.types";
 
 /** Component-scoped owner for workspace reads, live tailing, drafts, and commands. */
 @Injectable()
@@ -28,8 +26,8 @@ export class ConversationWorkspaceStore
 	private readonly _conversations = signal<readonly ConversationSummary[]>([]);
 	/** Selected canonical snapshot. */
 	private readonly _selected = signal<ConversationWorkspaceDetail | null>(null);
-	/** Live projected state after the bounded snapshot. */
-	private readonly _live = signal<AgUiStreamState>(__CreateAgUiStreamState());
+	/** Kurrent-backed history and current logical computer projection. */
+	private readonly _live = signal<ConversationHistoryProjection>(__CreateConversationHistoryProjection());
 	/** Current stream connection phase. */
 	private readonly _streamStatus = signal<ConversationEventStreamStatuses | null>(null);
 	/** Consecutive reconnect attempt adopted from the current stream. */
@@ -56,8 +54,6 @@ export class ConversationWorkspaceStore
 	private _generation = 0;
 	/** Stops the currently selected conversation stream. */
 	private _streamAbort: AbortController | null = null;
-	/** Separate run-status and run-command owner. */
-	public readonly runs = inject(ConversationRunStore);
 	/** Separate onboarding-history read and selection owner. */
 	public readonly history = inject(ConversationOnboardingHistoryStore);
 
@@ -73,7 +69,7 @@ export class ConversationWorkspaceStore
 	public readonly onboardingHistorySelected = this.history.selected;
 	/** Public selected snapshot. */
 	public readonly selected = this._selected.asReadonly();
-	/** Public live projection. */
+	/** Public Kurrent-backed history projection. */
 	public readonly live = this._live.asReadonly();
 	/** Public stream connection phase. */
 	public readonly streamStatus = this._streamStatus.asReadonly();
@@ -115,17 +111,21 @@ export class ConversationWorkspaceStore
 		try
 		{
 			const [directory, conversations, onboardingHistory] = await Promise.all([this._gateway.directory(), this._gateway.list(), this.history.load()]);
-			if (generation !== this._generation) return;
+			if (generation !== this._generation)
+				return;
 			this.history.adopt(onboardingHistory);
 			this._directory.set(directory);
 			this._conversations.set(conversations);
 			this._routeState.set(ConversationWorkspaceRouteStates.Ready);
-			if (this.history.projection().status === ConversationOnboardingHistoryStatuses.Ready) this.openOnboardingHistory();
-			else if (conversations.length > 0) await this.open(conversations[0]!.id);
+			if (this.history.projection().status === ConversationOnboardingHistoryStatuses.Ready)
+				this.openOnboardingHistory();
+			else if (conversations.length > 0)
+				await this.open(conversations[0]!.id);
 		}
 		catch (error)
 		{
-			if (generation !== this._generation) return;
+			if (generation !== this._generation)
+				return;
 			this._routeState.set(ConversationWorkspaceRouteStates.Unavailable);
 			this._error.set(_Message(error, "OpenCrane could not load conversations."));
 		}
@@ -139,8 +139,7 @@ export class ConversationWorkspaceStore
 		this._Abort();
 		this.history.clearSelection();
 		this._selected.set(null);
-		this._live.set(__CreateAgUiStreamState());
-		this.runs.clear();
+		this._live.set(__CreateConversationHistoryProjection());
 		this._error.set(null);
 		this._streamStatus.set(ConversationEventStreamStatuses.Connecting);
 		this._reconnectAttempt.set(0);
@@ -148,9 +147,11 @@ export class ConversationWorkspaceStore
 		try
 		{
 			const summary = this._conversations().find(candidate => candidate.id === conversationId);
-			if (summary === undefined) throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
-			const detail: ConversationWorkspaceDetail = { ...summary, visibleFromPosition: "0", accessEndedPosition: null, messages: [] };
-			if (generation !== this._generation) return;
+			if (summary === undefined)
+				throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
+			const detail: ConversationWorkspaceDetail = { ...summary, visibleFromPosition: "0", accessEndedPosition: null };
+			if (generation !== this._generation)
+				return;
 			this._selected.set(detail);
 			this._draft.set("");
 			this._pendingMessage = null;
@@ -159,7 +160,8 @@ export class ConversationWorkspaceStore
 		}
 		catch (error)
 		{
-			if (generation !== this._generation) return;
+			if (generation !== this._generation)
+				return;
 			this._HandleFailure(error, previouslyVisible);
 		}
 	}
@@ -167,12 +169,12 @@ export class ConversationWorkspaceStore
 	/** Select the completed onboarding transcript without opening a conversation stream. */
 	public openOnboardingHistory(): void
 	{
-		if (!this.history.select()) return;
+		if (!this.history.select())
+			return;
 		this._generation += 1;
 		this._Abort();
 		this._selected.set(null);
-		this._live.set(__CreateAgUiStreamState());
-		this.runs.clear();
+		this._live.set(__CreateConversationHistoryProjection());
 		this._draft.set("");
 		this._pendingMessage = null;
 		this._streamStatus.set(null);
@@ -195,11 +197,14 @@ export class ConversationWorkspaceStore
 	{
 		const directory = this._directory();
 		const participant = directory?.participants.find(candidate => candidate.participantRef === participantRef && !candidate.isSelf);
-		if (participant === undefined) return;
+		if (participant === undefined)
+			return;
 		const selected = new Set(this._selectedParticipantRefs());
-		if (selected.has(participantRef)) selected.delete(participantRef);
+		if (selected.has(participantRef))
+			selected.delete(participantRef);
 		else selected.add(participantRef);
-		if (this._creationMode() === ConversationModes.Direct && selected.size > 1) this._selectedParticipantRefs.set(new Set([participantRef]));
+		if (this._creationMode() === ConversationModes.Direct && selected.size > 1)
+			this._selectedParticipantRefs.set(new Set([participantRef]));
 		else this._selectedParticipantRefs.set(selected);
 	}
 
@@ -207,7 +212,8 @@ export class ConversationWorkspaceStore
 	public async create(): Promise<ConversationWorkspaceNavigationIntent | null>
 	{
 		const command = this._CreateCommand();
-		if (command === null || this._creationState() === ConversationCreationStates.Creating) return null;
+		if (command === null || this._creationState() === ConversationCreationStates.Creating)
+			return null;
 		const generation = this._generation;
 		this._creationState.set(ConversationCreationStates.Creating);
 		this._error.set(null);
@@ -216,7 +222,8 @@ export class ConversationWorkspaceStore
 			const detail = await this._gateway.create(command);
 			this._conversations.update(current => [detail, ...current.filter(candidate => candidate.id !== detail.id)]);
 			this._creationState.set(ConversationCreationStates.Idle);
-			if (generation !== this._generation) return null;
+			if (generation !== this._generation)
+				return null;
 			return { conversationId: detail.id };
 		}
 		catch (error)
@@ -235,7 +242,8 @@ export class ConversationWorkspaceStore
 	{
 		const selected = this._selected();
 		const status = this._streamStatus();
-		if (selected === null || this._manualReconnectPending() || (status !== ConversationEventStreamStatuses.Reconnecting && status !== ConversationEventStreamStatuses.Failed)) return;
+		if (selected === null || this._manualReconnectPending() || (status !== ConversationEventStreamStatuses.Reconnecting && status !== ConversationEventStreamStatuses.Failed))
+			return;
 		// 1. Fence late events from the failed socket before a replacement can publish its state.
 		const generation = ++this._generation;
 		// 2. Abort the old socket and release an interrupted send; its retained idempotency key makes its retry safe.
@@ -254,15 +262,17 @@ export class ConversationWorkspaceStore
 	{
 		const selected = this._selected();
 		const text = this._draft().trim();
-		if (selected === null || (text.length === 0 && assetIds.length === 0) || !this._CanSend(assetIds.length > 0)) return false;
+		if (selected === null || text.length === 0 || assetIds.length > 0 || !this._CanSend())
+			return false;
 		const generation = this._generation;
-		const command = this._PendingMessageCommand(selected.id, text, assetIds);
+		const command = this._PendingMessageCommand(selected.id, text, selected.mode);
 		this._sending.set(true);
 		this._error.set(null);
 		try
 		{
 			await this._gateway.send(command);
-			if (generation !== this._generation) return false;
+			if (generation !== this._generation)
+				return false;
 			this._draft.set("");
 			this._pendingMessage = null;
 			return true;
@@ -271,19 +281,25 @@ export class ConversationWorkspaceStore
 		{
 			if (generation === this._generation)
 			{
-				if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.Conflict) this._CloseSelectedConversation(selected.id);
+				if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.Conflict)
+					this._CloseSelectedConversation(selected.id);
 				this._HandleFailure(error, true);
 			}
 			return false;
 		}
-		finally { if (generation === this._generation) this._sending.set(false); }
+		finally
+		{
+			if (generation === this._generation)
+				this._sending.set(false);
+		}
 	}
 
 	/** Adopt a server-proven permanent close before the user can submit another message. */
 	private _CloseSelectedConversation(conversationId: string): void
 	{
 		const selected = this._selected();
-		if (selected === null || selected.id !== conversationId) return;
+		if (selected === null || selected.id !== conversationId)
+			return;
 		this._selected.set({ ...selected, lifecycle: ConversationLifecycles.Closed });
 		this._conversations.update(current => current.map(candidate => candidate.id === conversationId ? { ...candidate, lifecycle: ConversationLifecycles.Closed } : candidate));
 		this._pendingMessage = null;
@@ -293,19 +309,25 @@ export class ConversationWorkspaceStore
 	public async archive(): Promise<ConversationWorkspaceNavigationIntent | null>
 	{
 		const selected = this._selected();
-		if (selected === null || this._conversationCommandBusy()) return null;
+		if (selected === null || this._conversationCommandBusy())
+			return null;
 		const generation = this._generation;
 		this._conversationCommandBusy.set(true);
 		try
 		{
 			const archived = await this._gateway.archive(selected.id, true);
 			this._conversations.update(current => current.map(candidate => candidate.id === archived.id ? archived : candidate));
-			if (generation !== this._generation || this._selected()?.id !== selected.id) return null;
+			if (generation !== this._generation || this._selected()?.id !== selected.id)
+				return null;
 			this._ClearSelection();
 			const next = this._conversations().find(candidate => candidate.archivedAt === null);
 			return { conversationId: next?.id ?? null };
 		}
-		catch (error) { if (generation === this._generation) this._HandleFailure(error, true); }
+		catch (error)
+		{
+			if (generation === this._generation)
+				this._HandleFailure(error, true);
+		}
 		finally { this._conversationCommandBusy.set(false); }
 		return null;
 	}
@@ -314,15 +336,21 @@ export class ConversationWorkspaceStore
 	public async close(): Promise<void>
 	{
 		const selected = this._selected();
-		if (selected === null || this._conversationCommandBusy()) return;
+		if (selected === null || this._conversationCommandBusy())
+			return;
 		const generation = this._generation;
 		this._conversationCommandBusy.set(true);
 		try
 		{
 			const detail = await this._gateway.close(selected.id);
-			if (generation === this._generation && this._selected()?.id === selected.id) this._selected.set(detail);
+			if (generation === this._generation && this._selected()?.id === selected.id)
+				this._selected.set(detail);
 		}
-		catch (error) { if (generation === this._generation) this._HandleFailure(error, true); }
+		catch (error)
+		{
+			if (generation === this._generation)
+				this._HandleFailure(error, true);
+		}
 		finally { this._conversationCommandBusy.set(false); }
 	}
 
@@ -337,23 +365,20 @@ export class ConversationWorkspaceStore
 	/** Adopt stream progress only while it still belongs to the selected snapshot. */
 	private _AdoptStreamUpdate(generation: number, update: ConversationEventStreamUpdate): void
 	{
-		if (generation !== this._generation) return;
+		if (generation !== this._generation)
+			return;
 		this._streamStatus.set(update.status);
 		this._reconnectAttempt.set(update.reconnectAttempt);
-		if (update.status !== ConversationEventStreamStatuses.Connecting) this._manualReconnectPending.set(false);
+		if (update.status !== ConversationEventStreamStatuses.Connecting)
+			this._manualReconnectPending.set(false);
 		this._live.set(update.state);
-		if (update.state.accessRevoked) { this._PurgeAccess(); return; }
-		const runId = update.state.runId;
-		const selected = this._selected();
-		if (runId !== null && selected?.mode === ConversationModes.AgentSession) void this.runs.observe(runId, selected.id, update.state.runStatus);
-		else if (selected !== null && selected.mode !== ConversationModes.AgentSession) this.runs.clear();
 	}
 
 	/** Keep the last good snapshot visible after a bounded stream failure. */
 	private _StreamFailed(generation: number, _error: unknown): void
 	{
-		if (generation !== this._generation) return;
-		if (this._live().accessRevoked) { this._PurgeAccess(); return; }
+		if (generation !== this._generation)
+			return;
 		this._streamStatus.set(ConversationEventStreamStatuses.Failed);
 		this._manualReconnectPending.set(false);
 		this._error.set(null);
@@ -362,9 +387,11 @@ export class ConversationWorkspaceStore
 	/** Convert one failed read or command into route state and safe copy. */
 	private _HandleFailure(error: unknown, previouslyVisible: boolean): void
 	{
-		if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged && previouslyVisible) { this._PurgeAccess(); return; }
+		if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged && previouslyVisible)
+			{ this._PurgeAccess(); return; }
 		this._error.set(_Message(error, "OpenCrane could not complete that action."));
-		if (!previouslyVisible && error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged) this._routeState.set(ConversationWorkspaceRouteStates.Unavailable);
+		if (!previouslyVisible && error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged)
+			this._routeState.set(ConversationWorkspaceRouteStates.Unavailable);
 	}
 
 	/** Purge every selected projection after access changes. */
@@ -372,8 +399,7 @@ export class ConversationWorkspaceStore
 	{
 		this._Abort();
 		this._selected.set(null);
-		this._live.set(__CreateAgUiStreamState());
-		this.runs.clear();
+		this._live.set(__CreateConversationHistoryProjection());
 		this.history.clearSelection();
 		this._draft.set("");
 		this._pendingMessage = null;
@@ -390,8 +416,7 @@ export class ConversationWorkspaceStore
 		this._Abort();
 		this._selected.set(null);
 		this.history.clearSelection();
-		this._live.set(__CreateAgUiStreamState());
-		this.runs.clear();
+		this._live.set(__CreateConversationHistoryProjection());
 		this._draft.set("");
 		this._pendingMessage = null;
 		this._reconnectAttempt.set(0);
@@ -413,12 +438,12 @@ export class ConversationWorkspaceStore
 	}
 
 	/** Reuse the exact pending command, or freeze a fresh command from the current composer. */
-	private _PendingMessageCommand(conversationId: string, text: string, assetIds: readonly string[]): SubmitConversationMessageCommand
+	private _PendingMessageCommand(conversationId: string, text: string, mode: ConversationModes): SubmitConversationMessageCommand
 	{
-		if (this._pendingMessage !== null && _PendingMessageMatches(this._pendingMessage, conversationId, text, assetIds)) return this._pendingMessage;
-		const textBlocks: readonly SubmitConversationMessageBlock[] = text.length === 0 ? [] : [{ id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Text, value: text }];
-		const assetBlocks: readonly SubmitConversationMessageBlock[] = assetIds.map(function _AssetBlock(assetId) { return { id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Artifact, value: assetId }; });
-		const command: SubmitConversationMessageCommand = { conversationId, idempotencyKey: globalThis.crypto.randomUUID(), blocks: [...textBlocks, ...assetBlocks] };
+		const activation = mode === ConversationModes.AgentSession ? "start" : "none";
+		if (this._pendingMessage !== null && _PendingMessageMatches(this._pendingMessage, conversationId, text, activation))
+			return this._pendingMessage;
+		const command: SubmitConversationMessageCommand = { conversationId, idempotencyKey: globalThis.crypto.randomUUID(), text, activation };
 		this._pendingMessage = command;
 		return command;
 	}
@@ -427,32 +452,37 @@ export class ConversationWorkspaceStore
 	private _CanCreate(): boolean
 	{
 		const directory = this._directory();
-		if (directory === null || this._creationState() === ConversationCreationStates.Creating) return false;
-		if (this._creationMode() === ConversationModes.AgentSession) return directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ready && directory.personalAgent !== null;
-		if (this._creationMode() === ConversationModes.Direct) return this._selectedParticipantRefs().size === 1;
+		if (directory === null || this._creationState() === ConversationCreationStates.Creating)
+			return false;
+		if (this._creationMode() === ConversationModes.AgentSession)
+			return directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ready && directory.personalAgent !== null;
+		if (this._creationMode() === ConversationModes.Direct)
+			return this._selectedParticipantRefs().size === 1;
 		return this._selectedParticipantRefs().size >= 1;
 	}
 
 	/** Build the command only from choices supplied by the current directory. */
 	private _CreateCommand(): CreateConversationCommand | null
 	{
-		if (!this._CanCreate()) return null;
+		if (!this._CanCreate())
+			return null;
 		const mode = this._creationMode();
 		const directory = this._directory();
-		if (directory === null) return null;
-		if (mode === ConversationModes.AgentSession && directory.personalAgent !== null) return { mode, personalAgentRef: directory.personalAgent.personalAgentRef };
-		if (mode === ConversationModes.Direct || mode === ConversationModes.Group) return { mode, participantRefs: [...this._selectedParticipantRefs()] };
+		if (directory === null)
+			return null;
+		if (mode === ConversationModes.AgentSession && directory.personalAgent !== null)
+			return { mode, personalAgentRef: directory.personalAgent.personalAgentRef };
+		if (mode === ConversationModes.Direct || mode === ConversationModes.Group)
+			return { mode, participantRefs: [...this._selectedParticipantRefs()] };
 		return null;
 	}
 
 }
 
 /** Check whether the current composer still exactly matches a command retained for an ambiguous retry. */
-function _PendingMessageMatches(command: SubmitConversationMessageCommand, conversationId: string, text: string, assetIds: readonly string[]): boolean
+function _PendingMessageMatches(command: SubmitConversationMessageCommand, conversationId: string, text: string, activation: SubmitConversationMessageCommand["activation"]): boolean
 {
-	if (command.conversationId !== conversationId) return false;
-	const expected = [...(text.length === 0 ? [] : [{ kind: MessageContentBlockKinds.Text, value: text }]), ...assetIds.map(function _AssetInput(assetId) { return { kind: MessageContentBlockKinds.Artifact, value: assetId }; })];
-	return command.blocks.length === expected.length && command.blocks.every(function _SameInput(block, index) { return block.kind === expected[index]?.kind && block.value === expected[index]?.value; });
+	return command.conversationId === conversationId && command.text === text && command.activation === activation;
 }
 
 /** Reduce an unknown failure to safe existing gateway copy or a fixed fallback. */

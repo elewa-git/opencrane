@@ -8,7 +8,7 @@ This package owns the normal workspace where a participant can open, create, rea
 to direct, group, and Agent-session conversations. Its thin page composes the approved conversation,
 asset, Activity, elicitation, and A2UI elements. A feature presenter derives browser-safe display
 models and delegates every command to the existing state stores. Its feature-local route coordinator
-owns index/selection URLs, child Agent-thread navigation, and sign-in recovery through the platform seam.
+owns index/selection URLs and sign-in recovery through the platform seam.
 
 The completed onboarding exchange appears as the selected **Welcome** row inside the same **My sessions**
 rail as ordinary conversations. It remains a separate read-only server projection, not a fourth conversation
@@ -26,9 +26,9 @@ when it closes. Direct and group conversations can expose Files but never adopt 
  shared live stream ───────┘                       └── typed intent ─┘
 ```
 
-The snapshot remains canonical while the shared stream adds live messages, run state, tool
-activity, files, questions, and approvals. A2UI surfaces are reported as unavailable until the server owns
-their capability checks and audit trail. Tool failures stay visible even when a later attempt succeeds.
+KurrentDB history remains canonical while finite polling adds immutable messages and current logical
+computer state. Resolved private payload text comes only from the authorized history response. The
+workspace does not reconstruct AG-UI frames or expose run, tool, or sandbox commands.
 
 ## Public surface
 

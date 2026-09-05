@@ -4,10 +4,10 @@
 
 ## What it owns
 
-This package owns the browser state for the normal conversation screen. It loads a bounded snapshot,
-then tails the shared conversation event stream from that snapshot. It keeps direct, group, and Agent
-session modes separate and immutable, holds controlled drafts, and owns list, open, create, send,
-archive, close, steering, cancellation, and retry command state. It also reads the completed onboarding
+This package owns the browser state for the normal conversation screen. It loads conversation metadata,
+then polls immutable Kurrent history through the shared history port. It keeps direct, group, and Agent
+session modes separate and immutable, holds controlled drafts, and owns list, open, create, authenticated
+HTTP message submission, archive, and close command state. It also reads the completed onboarding
 exchange as a separate read-only projection; that projection never receives a conversation mode or stream.
 
 ```
@@ -20,9 +20,9 @@ WebSocket events + messages ──► adapter ──► conversation/stream port
 
 **In this flow:** the generated HTTP adapter · the shared event stream · the conversation workspace feature
 
-`ConversationWorkspaceStore` owns conversation selection, snapshot-first loading, live reconnect state,
-creation choices, and conversation commands. `ConversationRunStore` separately owns run status and the
-steer, cancel, and retry controls. The split keeps ordinary chat commands independent from Agent-run state.
+`ConversationWorkspaceStore` owns conversation selection, metadata loading, history-poll recovery,
+creation choices, and conversation commands. Current computer lifecycle comes from the history response;
+the browser no longer reconstructs or controls a separate run lifecycle.
 
 ## Public surface
 
@@ -50,17 +50,17 @@ The package also owns the Zod response validators used by its transport adapter.
 Opaque participant references are command coordinates, never labels. The state supplies those privacy-safe
 references and a self marker without interpreting either one. The feature mapper turns the self marker into
 `You` and other entries into stable generic labels such as `Participant 1`. On proven access loss, selected
-messages, live surfaces, run state, and drafts are cleared before the access-changed state becomes visible.
+history and drafts are cleared before the access-changed state becomes visible.
 
-The package owns no server authority. It cannot admit a message, create a run, approve an elicitation,
-execute an A2UI action, or decide whether a retry is safe. Those decisions stay behind signed-in APIs.
-The onboarding transcript is disabled by construction: selecting it aborts any conversation stream, clears
-draft and run state, and offers only the existing create-conversation command for continuing work.
+The package owns no server authority. It cannot admit a message, start a computer, or decide whether a
+retry is safe. Those decisions stay behind signed-in APIs.
+The onboarding transcript is disabled by construction: selecting it aborts any conversation history poll,
+clears the draft, and offers only the existing create-conversation command for continuing work.
 
 ## Dependency direction
 
 The package carries `scope:conversation-workspace` and `frontend-role:state-composite`. It depends on the
-existing conversation event-stream port and AG-UI state, but never on a concrete HTTP adapter, feature,
+existing conversation history-stream port, but never on a concrete HTTP adapter, feature,
 element, backend package, or app. The generated-client implementation lives in [`adapter`](./adapter/README.md).
 
 ## See also
@@ -69,4 +69,3 @@ element, backend package, or app. The generated-client implementation lives in [
 - Transport adapter: [`workspace/adapter`](./adapter/README.md)
 - Shared stream contract: [`conversation/stream`](../stream/README.md)
 - Live HTTP implementation: [`conversation/adapter`](../adapter/README.md)
-- Agent threads: [`conversation/agent-threads`](../agent-threads/README.md)

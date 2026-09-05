@@ -17,9 +17,7 @@ owns the client-side stores and caches that hold fetched data.
 | [`conversation/stream`](./conversation/stream/README.md) | Transport-neutral browser stream port and connection states. |
 | [`conversation/adapter`](./conversation/adapter/README.md) | Signed-in HTTP implementation of the conversation stream port. |
 | [`conversation/render`](./conversation/render/README.md) | Vendored render view-models. |
-| [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
 | [`conversation/elicitation`](./conversation/elicitation/README.md) | Recoverable participant-input gateway, store, and Activity mapping. |
-| [`conversation/agent-threads`](./conversation/agent-threads/README.md) | Dependency-neutral Agent-thread gateway, state dimensions, store, and purge rules. |
 | [`conversation/workspace`](./conversation/workspace/README.md) | Snapshot-tail conversation workspace and separate run command state. |
 | [`conversation/workspace/adapter`](./conversation/workspace/adapter/README.md) | Signed-in generated-client adapter for workspace commands. |
 | [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |

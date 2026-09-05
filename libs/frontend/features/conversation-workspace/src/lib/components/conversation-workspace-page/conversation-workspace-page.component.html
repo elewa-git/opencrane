@@ -17,24 +17,18 @@
 						@if (messages().length === 0) { <div class="conversation-workspace__empty"><h2>Start the conversation</h2><p>Messages, tool activity, files, and Agent-created interfaces will appear here.</p></div> }
 						@for (entry of messages(); track entry.message.id) {
 							<div class="conversation-workspace__message" [id]="entry.message.id" tabindex="-1"><wo-conversation-message [message]="entry.message"><wo-conversation-rich-text conversation-message-rich-card [presentation]="entry.richText" /></wo-conversation-message>
-							@if (entry.agentThread; as thread) { <p-button label="Open Agent thread" icon="pi pi-comments" size="small" [outlined]="true" (onClick)="openThread(thread.childConversationId, thread.parentMessageId)" /> }
 							</div>
 						}
-						@for (tool of tools(); track tool.id) { <article class="conversation-workspace__tool" [id]="tool.id" tabindex="-1"><header><strong>{{ tool.name }}</strong><span>{{ tool.status }}</span></header>@if (tool.failures.length > 0) { <p>Tool call failed@if (tool.status === toolStatuses.Recovered) { and later recovered. } @else { . }</p> } @if (tool.result; as result) { <details><summary>Result</summary><pre>{{ result }}</pre></details> }</article> }
-						@for (surface of a2uiSurfaces(); track surface.surfaceId) { <section class="conversation-workspace__a2ui" role="status"><strong>Agent card unavailable</strong><p>This card cannot be used yet. Its actions need server approval and audit support.</p></section> }
-						@if (store.live().interrupts.length > 0) { @if (elicitationStore.elicitation(); as elicitation) { <div [id]="elicitation.requestId" tabindex="-1"><wo-conversation-elicitation-card [elicitation]="elicitation" [draft]="elicitationStore.draft()" [busy]="elicitationStore.busy()" [error]="elicitationStore.error()" [stepUpPath]="elicitationStore.stepUpPath()" (draftSelected)="selectElicitation($event)" (submitRequested)="submitElicitation()" (stepUpRequested)="requestStepUp($event)" /></div> } }
 					</section>
 					<footer class="conversation-workspace__composer">
-						@if (runActions(); as actions) { <wo-conversation-run-actions [presentation]="actions" [steeringDraft]="store.runs.steeringDraft()" (steeringDraftChange)="store.runs.updateSteeringDraft($event)" (steerRequested)="store.runs.steer()" (cancelRequested)="store.runs.cancel()" (retryRequested)="store.runs.retry(selected.id)" /> }
+						@if (computerStatus(); as status) { <p-message severity="info" [text]="status.label" /> }
 						@if (connectionStatus(); as connection) { <wo-conversation-workspace-connection-status [status]="connection.status" [reconnectAvailable]="connection.reconnectAvailable" [reconnectPending]="store.manualReconnectPending()" (reconnectRequested)="reconnect()" /> }
-						<wo-conversation-attachment-tray [items]="assets()" [feedback]="assetFeedback()" (actionRequested)="assetAction($event)" />
-						<div class="conversation-workspace__attach"><label><span class="sr-only">Attach files</span><input type="file" multiple (change)="selectFiles($event)" /><span class="conversation-workspace__attach-button"><i class="pi pi-paperclip" aria-hidden="true"></i> Attach</span></label></div>
 						@if (store.error(); as error) { <p-message severity="error" [text]="error" /> }
-						<wo-conversation-composer fieldId="workspace-message" label="Message conversation" placeholder="Write a message…" [draft]="store.draft()" [state]="composerState()" [allowEmptySubmission]="assetsStore.messageAssetIds().length > 0" (draftChange)="updateDraft($event)" (submitted)="send()" />
+						<wo-conversation-composer fieldId="workspace-message" label="Message conversation" placeholder="Write a message…" [draft]="store.draft()" [state]="composerState()" (draftChange)="updateDraft($event)" (submitted)="send()" />
 					</footer>
 				} @else { <section class="conversation-workspace__empty conversation-workspace__empty--page"><h1>No conversation selected</h1><p>Choose a session or create a new one.</p><p-button label="New session" icon="pi pi-plus" (onClick)="showCreate()" /></section> }
 			</section>
-			@if (store.selected() !== null && contextPanelOpen()) { <wo-conversation-workspace-context-panel [activityVisible]="agentActivityVisible()" [activityRows]="activityRows()" [assets]="assets()" (closed)="closeContextPanel()" (activityTargetRequested)="focusActivity($event)" (assetActionRequested)="assetAction($event)" /> }
+			@if (store.selected() !== null && contextPanelOpen()) { <wo-conversation-workspace-context-panel [activityVisible]="false" [activityRows]="[]" [assets]="assets()" (closed)="closeContextPanel()" (activityTargetRequested)="focusActivity($event)" (assetActionRequested)="assetAction($event)" /> }
 		}
 	}
 	<wo-conversation-create [visible]="creating()" [directory]="store.directory()" [mode]="store.creationMode()" [selectedParticipantRefs]="store.selectedParticipantRefs()" [canCreate]="store.canCreate()" [busy]="store.creationState() === creationStates.Creating" (dismissed)="hideCreate()" (modeSelected)="store.selectCreationMode($event)" (participantToggled)="store.toggleParticipant($event)" (createRequested)="create()" />

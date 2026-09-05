@@ -2,32 +2,23 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ConversationEventStreamMessageError, type ConversationEventStream } from "@opencrane/state/conversation/stream";
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, ConversationWorkspaceGatewayErrorKinds } from "@opencrane/state/conversation/workspace";
 
 import { OpenCraneConversationWorkspaceGateway } from "../opencrane-conversation-workspace.gateway";
 
-/** Creates the workspace gateway with the selected conversation transport port. */
-function _Gateway(stream: ConversationEventStream): OpenCraneConversationWorkspaceGateway
+/** Construct the adapter with one generated-client test double. */
+function _Gateway(post: ReturnType<typeof vi.fn>): OpenCraneConversationWorkspaceGateway
 {
-	const injector = Injector.create({ providers: [{ provide: ControlPlaneApiService, useValue: { client: {} } }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: stream }] });
-	return runInInjectionContext(injector, function _Create(): OpenCraneConversationWorkspaceGateway { return new OpenCraneConversationWorkspaceGateway(); });
+	const injector = Injector.create({ providers: [{ provide: ControlPlaneApiService, useValue: { client: { POST: post } } }] });
+	return runInInjectionContext(injector, function _Create() { return new OpenCraneConversationWorkspaceGateway(); });
 }
 
-describe("OpenCraneConversationWorkspaceGateway", function _Suite()
+describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGateway()
 {
-	it("submits participant messages through the workspace event-stream port", async function _SubmitsThroughPort()
+	it("submits participant text with its explicit computer activation", async function _SubmitsHistoryMessage()
 	{
-		const submit = vi.fn().mockResolvedValue(undefined);
-		const stream = { stream: vi.fn(), submit } as unknown as ConversationEventStream;
-		await expect(_Gateway(stream).send({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).resolves.toBeUndefined();
-		expect(submit).toHaveBeenCalledWith({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] });
-	});
-
-	it("maps a transport-proven access loss to the workspace authority error", async function _MapsAccessLoss()
-	{
-		const submit = vi.fn().mockRejectedValue(new ConversationEventStreamMessageError("conversation_unavailable"));
-		const stream = { stream: vi.fn(), submit } as unknown as ConversationEventStream;
-		await expect(_Gateway(stream).send({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).rejects.toMatchObject({ kind: ConversationWorkspaceGatewayErrorKinds.AccessChanged });
+		const post = vi.fn().mockResolvedValue({ data: { outcome: "appended", position: "1" } });
+		const gateway = _Gateway(post);
+		await gateway.send({ conversationId: "conversation-1", idempotencyKey: "command-1", text: "Hello", activation: "start" });
+		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "command-1", text: "Hello", activation: "start" } });
 	});
 });
