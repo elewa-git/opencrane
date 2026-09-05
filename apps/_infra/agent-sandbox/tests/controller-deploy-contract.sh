@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-DEPLOY="$ROOT_DIR/apps/_infra/agent-sandbox/deploy-controller.sh"
+DEPLOY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/deploy-agent-sandbox-controller.sh"
 FIXTURE_DIR="$(mktemp -d)"
 trap 'rm -rf "$FIXTURE_DIR"' EXIT
 BIN_DIR="$FIXTURE_DIR/bin"

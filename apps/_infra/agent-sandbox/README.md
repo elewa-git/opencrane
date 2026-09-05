@@ -41,7 +41,7 @@ chart renders with its unchanged release context.
 The chart creates release-scoped profiles, server claim RBAC and admission policy only. It never
 installs Agent Sandbox CRDs or its controller, selects a Pod image at claim time, creates a bespoke
 Pod controller, or keeps a legacy warm-runtime workload. The upstream controller and CRDs are external
-cluster prerequisites. `deploy-controller.sh` installs that shared prerequisite from the checksummed
+cluster prerequisites. `deploy-k8s/platform/deploy-agent-sandbox-controller.sh` installs that shared prerequisite from the checksummed
 v0.5.3 upstream manifest with the multi-platform controller image pinned by digest; it requires an
 explicit matching Kubernetes context and is not part of a silo Helm release.
 
