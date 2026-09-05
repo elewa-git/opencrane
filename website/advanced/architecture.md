@@ -98,7 +98,7 @@ depend on its own scope, `scope:shared`, and explicitly approved peers, never a 
 shortcut. See [`docs/agents/monorepo.md`](https://github.com/elewa-git/opencrane/blob/main/docs/agents/monorepo.md)
 for the full placement and dependency rules.
 
-→ [Governed agent runtime](/integrators/agent-runtime) ·
+→ [Conversation computers](/integrators/agent-runtime) ·
 [Central authorization authority](/integrators/authorization-authority) ·
 [Governed packages and container images](/integrators/governed-packages) ·
 [Organisation boundary](/operators/organisation-boundary) ·

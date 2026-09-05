@@ -25,12 +25,6 @@
       "@opencrane/backend/server/conversations": [
         "./libs/backend/server/conversations/main/src/index.ts"
       ],
-      "@opencrane/backend/conversations/projection": [
-        "./libs/backend/conversations/projection/main/src/index.ts"
-      ],
-      "@opencrane/backend/conversations/agent-threads": [
-        "./libs/backend/conversations/agent-threads/main/src/index.ts"
-      ],
       "@opencrane/backend/server/agents/onboarding": [
         "./libs/backend/server/agents/onboarding/main/src/index.ts"
       ],
@@ -280,9 +274,6 @@
       "@opencrane/elements/ui": [
         "./libs/frontend/elements/ui/src/index.ts"
       ],
-      "@opencrane/elements/a2ui": [
-        "./libs/frontend/elements/a2ui/src/index.ts"
-      ],
       "@opencrane/elements/elicitation": [
         "./libs/frontend/elements/elicitation/src/index.ts"
       ],
@@ -393,9 +384,6 @@
     },
     {
       "path": "./libs/frontend/features/tools"
-    },
-    {
-      "path": "./libs/frontend/elements/a2ui"
     },
     {
       "path": "./libs/frontend/elements/elicitation"

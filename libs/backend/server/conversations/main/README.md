@@ -11,22 +11,21 @@ not bind an agent and their ordinary messages never manufacture runs.
 
 ```
  authenticated participant
-          │ directory · list · create · open · message · retry run · archive · close · replay
+          │ directory · list · create · history · message · archive · close
           ▼
  ┌──────────────────────────────────────────┐
  │ conversations  ◄── HERE                   │
  │ immutable mode · participant coordinates │
- │ atomic admission · authorised event read │
+ │ Kurrent entries · encrypted payload read  │
  └──────────────────────────────────────────┘
           │ agent-session message       │ direct/group message
           ▼                             ▼
- execution/admission              canonical message only
+ Agent Sandbox computer           canonical entry only
 ```
 
-**In this flow:** [execution admission](../../../agents/execution/admission/main/README.md) ·
-[channel-proxy](../../../channel-proxy/main/README.md) ·
-[conversation projection](../../../conversations/projection/main/README.md) ·
-[AG-UI browser state](../../../../frontend/state/conversation/ag-ui/README.md)
+**In this flow:** [history store](../../../server/infra/history-store/README.md) ·
+[Agent Sandbox](../../../../../apps/_infra/agent-sandbox/README.md) ·
+[conversation workspace](../../../../frontend/features/conversation-workspace/README.md)
 
 Message admission dispatches through the persisted mode strategy. A direct or group message commits
 as a canonical message without an `AgentRun`. An agent-session message enters the internal personal
@@ -99,39 +98,16 @@ Archive and close are deliberately different. Archive is reversible and affects 
 participant's list. Close is permanent, applies to the conversation, and makes it read-only. Each
 participant separately records the first visible position, the last read position, and an optional
 access-ended position; reads are clipped to those bounds and writes require continuing access.
-Opening a child Agent-thread returns exact unread message count separately from timeline positions.
-The participant may then advance `readThroughPosition` through the exact parent-child route. That
-mutation is monotonic and idempotent, rechecks current parent and child access, and refuses any
-position beyond the current canonical child timeline.
-
-The database allocates one monotonically increasing position across message and run-event timeline
-entries. Timeline entries hold typed references to canonical rows, never copied payloads. The replay
-repository checks membership and participant bounds and reads those linked rows in one repeatable
-snapshot. It hands the result to the separate
-[conversation projection package](../../../conversations/projection/main/README.md), which owns
-redaction, Agent User Interface (AG-UI) mapping, cursors and live streaming for every mode.
-Safe technical failure classifications remain visible there, including when a later attempt retries
-the tool, while credentials and provider details are never exposed.
-
-The server rechecks organisation membership and participant bounds on every page. The public
-browser transport is one same-origin WebSocket: it restores the signed-in cookie session during the
-upgrade, rejects a mismatched origin, replays the canonical timeline as structured frames, and
-accepts only idempotent participant-message commands. Projection pauses when a peer is congested
-and rechecks access before every replay page, so revocation closes the socket instead of becoming an
-empty successful stream. The separate internal replay route remains a one-use channel-context
-transport for workloads; it is not a browser fallback.
+The server rechecks organisation membership and participant bounds on every history page. The
+browser polls the same authenticated API after the last observed immutable stream position. A
+revoked participant loses both entry access and private payload resolution rather than receiving an
+empty successful page.
 
 ## Public surface
 
-- `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, open, message,
-  Agent-thread mark-read, failed-run retry, archive, and close API over Prisma and the internal
-  execution ports. Retry accepts only the observed terminal attempt; all
+- `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, message,
+  history, archive, and close API over Prisma and KurrentDB. All
   identity and authority coordinates come from the signed-in route and are rechecked transactionally.
-- `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
-  access-ending races cannot expose later events.
-- `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.
-- `_CreatePrismaSelfConversationSocketServer` composes the signed-in participant WebSocket from the
-  same message authority and replay repository as the REST conversation metadata API.
 - `_SelfConversationsOpenapiPaths` contributes the remaining REST metadata and lifecycle APIs to the
   server-owned OpenAPI document.
 - `BoundConversationWriter` is a one-use, stream-bound KurrentDB append boundary for a currently
@@ -169,7 +145,7 @@ returned as `capacity_limited` rather than being misreported as a persistence ou
 ## Dependency direction
 
 Tagged `scope:conversations` at the backend layer, it may use its own scope, the narrow
-`scope:conversation-projection` engine, the narrow `scope:history-store` append port, its listed
+`scope:history-store` append port, its listed
 backend authorities, and shared contracts. The auth edge resolves request identity only. It cannot
 import an app, frontend state, or deployment package.
 
@@ -189,5 +165,4 @@ in the caller's host-selected silo; participant rows alone never preserve author
 - Parent index: [server](../../README.md)
 - Related authority: [execution admission](../../../agents/execution/admission/main/README.md) ·
   [channel-targets](../../agents/channel-targets/main/README.md)
-- Stream engine: [conversation projection](../../../conversations/projection/main/README.md)
-- Browser consumer: [AG-UI state](../../../../frontend/state/conversation/ag-ui/README.md)
+- Browser consumer: [conversation workspace](../../../../frontend/features/conversation-workspace/README.md)

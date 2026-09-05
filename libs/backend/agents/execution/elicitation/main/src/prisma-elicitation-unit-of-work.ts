@@ -232,7 +232,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
 		if (membership !== 1)
 			return [];
-		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null, conversation: _ConversationAccessWhere(siloId, subjectId) } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
+		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null, conversation: _ConversationAccessWhere(siloId) } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
 		const readableConversationIds = await this._productAuthorization.filterReadableConversationIds(siloId, subjectId, rows.map(row => row.conversationId), now);
 		return rows.filter(row => readableConversationIds.has(row.conversationId)).map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
 	}
@@ -253,7 +253,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			conversationId,
 			userId: subjectId,
 			accessEndedPosition: null,
-			conversation: _ConversationAccessWhere(siloId, subjectId),
+			conversation: _ConversationAccessWhere(siloId),
 		} });
 		return participant !== null;
 	}
@@ -406,17 +406,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	}
 }
 
-/** Current parent-coupled conversation relation used by single and activity reads. */
-function _ConversationAccessWhere(siloId: string, subjectId: string): Prisma.ConversationWhereInput
-{
-	return {
-		siloId,
-		OR: [
-			{ originAgentThread: { is: null } },
-			{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: subjectId, accessEndedPosition: null } } } } } },
-		],
-	};
-}
+/** Restrict elicitation reads to the selected silo's conversation. */
+function _ConversationAccessWhere(siloId: string): Prisma.ConversationWhereInput { return { siloId }; }
 
 /** Map the public body kind to Prisma vocabulary. */
 function _PrismaBodyKind(kind: ElicitationBodyKinds): ElicitationBodyKind { return { [ElicitationBodyKinds.Approval]: ElicitationBodyKind.Approval, [ElicitationBodyKinds.SingleChoice]: ElicitationBodyKind.SingleChoice, [ElicitationBodyKinds.MultipleChoice]: ElicitationBodyKind.MultipleChoice, [ElicitationBodyKinds.FreeText]: ElicitationBodyKind.FreeText }[kind]; }

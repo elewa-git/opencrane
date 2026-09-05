@@ -65,17 +65,6 @@ does not grant permission to use a run.
   current participant identity, and exact `AgentRun/Retry` grant in the write transaction.
 - `PrismaAgentRunWarmRuntimeUnitOfWork` reserves a warm Pod, records activation and readiness, and
   replaces a dead waiting runtime only after the saved continuation has been checked and fenced.
-- `AgentRunRuntimeContinuationRecoveryPort` lets the run lifecycle ask the protocol authority to
-  validate the saved continuation and fence the dead runtime before advancing the binding generation.
-- `PrismaWarmRuntimeBindingUnitOfWork` binds the reviewed warm Pod to its saved reservation and returns
-  the short-lived model key in memory.
-- `PrismaRunModelCredentialMintAuthorizationRepository` spends the exact saved mint authorization
-  before the post-commit LiteLLM call.
-- `__CreateWarmRuntimeBindingRouter` exposes the private warm-Pod binding route.
-- `__CreateAgentRunWorkflowControllerRouter` exposes the private controller operations used by the
-  saved workflow.
-- `PrismaRuntimeEventReporter` and `PrismaRuntimeTerminalReporter` save accepted runtime progress and
-  terminal results.
 - `PrismaRunCancellationUnitOfWork` owns the database transaction for the exact `AgentRun/Cancel`
   admission, attempt fence, revocations, and workflow cancellation event.
 - The self-run routers expose status, retry, and cancellation to the signed-in participant. Status

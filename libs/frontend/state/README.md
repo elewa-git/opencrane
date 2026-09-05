@@ -38,7 +38,7 @@ owns the client-side stores and caches that hold fetched data.
       ▼
     core  ── defines ports, holds stores ──  gateways (wires ports → adapters)
       │
-      ├─ conversation/{stream,adapter,ag-ui,render}  assets/adapter   skills/adapter
+      ├─ conversation/{stream,adapter,render}  assets/adapter   skills/adapter
       ├─ mcp/adapter   provider-key/adapter   organization/members/adapter
       └─ onboarding ── persona/adapter
       ▼ HTTP

@@ -306,7 +306,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	{
 		const transaction = _ResponseTransaction();
 		await expect(_Unit(transaction).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-ordinary", response: { kind: ElicitationBodyKinds.FreeText, text: "Answer" } }, now: NOW })).resolves.toMatchObject({ outcome: "accepted" });
-		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversation: expect.objectContaining({ OR: expect.arrayContaining([{ originAgentThread: { is: null } }]) }) }) }));
+		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversation: { siloId: "silo-1" } }) }));
 	});
 
 	it("denies child open, response, and activity after immediate-parent access ends", async function _DeniesRevokedParent()
@@ -328,7 +328,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const activityTransaction = { ...access, elicitationRequest: { findMany: vi.fn().mockResolvedValue([]) } };
 		await expect(_Unit(activityTransaction).listOpenOwned("silo-1", "child-1", "user-1", NOW)).resolves.toEqual([]);
 		await expect(_Unit(activityTransaction).listActivityOwned("silo-1", "user-1", 20, NOW)).resolves.toEqual([]);
-		expect(activityTransaction.elicitationRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignedParticipant: expect.objectContaining({ conversation: expect.objectContaining({ OR: expect.arrayContaining([{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: "user-1", accessEndedPosition: null } } } } } }]) }) }) }) }));
+		expect(activityTransaction.elicitationRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignedParticipant: expect.objectContaining({ conversation: { siloId: "silo-1" } }) }) }));
 	});
 
 	it("denies elicitation reads and responses after organisation membership revocation", async function _DeniesRevokedMembership()

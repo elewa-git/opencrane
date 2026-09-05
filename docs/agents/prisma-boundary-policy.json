@@ -1746,6 +1746,7 @@
 			}
 		],
 		"compositions": [
+			"apps/opencrane/src/app/conversation-computer-activation-composition.ts",
 			"apps/opencrane/src/app/conversation-history-composition.ts",
 			"libs/backend/server/conversations/main/src/agent-session-creation.ts",
 			"libs/backend/server/conversations/main/src/agent-session-projection.ts",
@@ -1779,7 +1780,6 @@
 			"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
 			"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 			"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
-			"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
 			"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 			"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 			"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts",

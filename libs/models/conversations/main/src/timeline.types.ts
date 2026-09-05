@@ -17,8 +17,6 @@ export enum ConversationTimelineEntryKinds
 	Membership = "membership",
 	/** Platform-authored lifecycle or informational event. */
 	System = "system",
-	/** Sanitized append-only delivery from an immediate child conversation. */
-	ParentDelivery = "parent_delivery",
 }
 
 /** Display-safe platform events carried by append-only System timeline entries. */
@@ -81,25 +79,14 @@ export interface ConversationSystemTimelineEntry extends ConversationTimelineEnt
 	readonly systemEventId: string;
 }
 
-/** References an agent-thread delivery appended to its immediate parent conversation. */
-export interface ConversationParentDeliveryTimelineEntry extends ConversationTimelineEntryBase
-{
-	/** Selects this entry as an agent-thread delivery to a parent conversation. */
-	readonly kind: ConversationTimelineEntryKinds.ParentDelivery;
-	/** Identifies the agent-thread delivery appended to the immediate parent conversation. */
-	readonly parentDeliveryAgentThreadId: string;
-}
-
 /** Exact source reference occupying one canonical conversation timeline position. */
-export type ConversationTimelineEntry = ConversationMessageTimelineEntry | ConversationRunEventTimelineEntry | ConversationMembershipTimelineEntry | ConversationSystemTimelineEntry | ConversationParentDeliveryTimelineEntry;
+export type ConversationTimelineEntry = ConversationMessageTimelineEntry | ConversationRunEventTimelineEntry | ConversationMembershipTimelineEntry | ConversationSystemTimelineEntry;
 
 /**
  * Where a client resumes replaying one conversation.
  *
  * Bound to a single conversation: a cursor from one conversation must never be accepted for
- * another. `subframe` is present only when a client stopped part-way through the AG-UI events
- * produced by one timeline row, and absent when that row was fully delivered.
- * @see {@link __ProjectAgUiEvents}
+ * another.
  */
 export interface ConversationReplayCursor
 {
@@ -107,6 +94,4 @@ export interface ConversationReplayCursor
 	readonly conversationId: ConversationId;
 	/** Last positive timeline position already observed; absence of a cursor represents the beginning. */
 	readonly position: string;
-	/** Last deterministic AG-UI subframe observed within the position; absent means the row is complete. */
-	readonly subframe?: number;
 }

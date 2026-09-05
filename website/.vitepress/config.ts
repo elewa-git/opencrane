@@ -123,7 +123,7 @@ export default defineConfig({
         items: [
           { text: 'Central authorization authority', link: '/integrators/authorization-authority' },
           { text: 'Governed packages & container images', link: '/integrators/governed-packages' },
-          { text: 'Governed agent runtime', link: '/integrators/agent-runtime' },
+          { text: 'Conversation computers', link: '/integrators/agent-runtime' },
           { text: 'OCI MCP runtime', link: '/integrators/oci-mcp-runtime' },
           { text: 'Memory write, manage & read', link: '/integrators/retrieval-memory' },
           { text: 'Long-term memory & dreaming', link: '/integrators/long-term-memory-cognee' },

@@ -66,12 +66,9 @@ trusted to act. Runtime input is frozen for the accepted attempt, and events are
 before clients receive them. Missing or mismatched identity, assignment, authorization, or ordering
 evidence produces a refusal, never partial authority.
 
-Both conversation routes compose the transport-neutral
-[conversation projection package](../../libs/backend/conversations/projection/main/README.md). It
-turns authorised direct, group and agent-session timelines into the same safe, resumable browser
-stream while this app keeps authentication, Prisma and listener ownership. The browser transport is
-a same-origin WebSocket on the public listener: the app restores the existing cookie session before
-the upgrade, rejects a cross-origin request, and closes active sockets before Prisma drains.
+Conversation routes compose the server-owned KurrentDB history and private-payload authorities.
+They expose one authenticated, cursor-based history API for direct, group and agent-session
+conversations while this app keeps session, Prisma projection and listener ownership.
 
 ## Public surface
 
@@ -225,7 +222,7 @@ remote authority path.
 
 - Parent index: [apps](../README.md)
 - Composed logic: [backend capabilities](../../libs/backend/README.md) ·
-  [conversation projection](../../libs/backend/conversations/projection/main/README.md) ·
+  [conversation authority](../../libs/backend/server/conversations/main/README.md) ·
   [server infrastructure](../../libs/backend/server/infra/README.md)
 - Sibling apps: [opencrane-ui](../opencrane-ui/README.md) ·
   [channel-proxy](../channel-proxy/README.md) ·

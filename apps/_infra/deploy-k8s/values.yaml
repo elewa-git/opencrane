@@ -350,10 +350,6 @@ artifactScanner:
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
 agentController:
   enabled: false
-  # -- Dedicated namespace containing only the personal warm Deployment, Pods, their zero-RBAC KSA,
-  # and Helm-owned runtime policies. Empty derives `<release-fullname>-runtime`. It must never equal
-  # the server release namespace.
-  runtimeNamespace: ""
   image:
     repository: ghcr.io/elewa-git/opencrane-agent-controller
     digest: ""

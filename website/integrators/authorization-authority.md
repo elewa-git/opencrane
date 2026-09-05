@@ -6,7 +6,7 @@ their workloads propose.
 
 > See also: [Silo IAM](/integrators/silo-iam) (membership and grant composition),
 > [Governed packages and container images](/integrators/governed-packages) (MCP and skill content),
-> [Governed agent runtime](/integrators/agent-runtime) (run and workload boundaries), and
+> [Conversation computers](/integrators/agent-runtime) (conversation and workload boundaries), and
 > [Identity and runtime authentication](/security/identity) (proof of caller identity).
 
 ## What transaction-bound means

@@ -10,8 +10,6 @@
     "artifact-preprocessor",
     "artifact-scanner",
     "agent-controller",
-    "agent-runtime",
-    "managed-agent-runtime",
     "mcp-executor",
     "skill-authoring",
     "cognee",

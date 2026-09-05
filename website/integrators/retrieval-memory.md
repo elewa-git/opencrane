@@ -5,7 +5,7 @@ OpenCrane separates **session history**, **run context**, **long-term semantic m
 integrator can see what a running agent may receive, what it may propose, and what remains
 server-owned.
 
-> See also: [Governed agent runtime](/integrators/agent-runtime) (runtime and action custody),
+> See also: [Conversation computers](/integrators/agent-runtime) (compute and action custody),
 > [OCI MCP runtime](/integrators/oci-mcp-runtime) (tool execution),
 > [Long-term memory, Cognee and dreaming](/integrators/long-term-memory-cognee) (datasets and
 > consolidation), and [Silo IAM](/integrators/silo-iam) (scope and grants).

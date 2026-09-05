@@ -68,17 +68,8 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `PublicHealthReport` and its fixed service/status enums — the public-safe `/healthz` response
   shared by the server and future status consumers. It reports only
   recognisable capability names and categorical availability, never internal topology or errors.
-- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AG_UI_RUN_WAIT_STATE_EVENT`, `AgUiProjectionSourceEvent`,
-  `AgUiProjectionEvent`, and `AgUiSseRecord` — the stable AG-UI wire vocabulary shared by server and
-  browser. Projection and SSE encoding policy live in the separate backend
-  [conversation projection package](../backend/conversations/projection/main/README.md).
-- `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiA2uiSurfaceStates`, and
-  `___ParseAgUiA2uiEnvelope` — the versioned CUSTOM envelope, authoritative ten-state presentation
-  lifecycle, and strict parser for governed A2UI surfaces. Each envelope binds conversation, run,
-  message, surface, and monotonic sequence coordinates; admits only ordered upstream
-  `beginRendering`, `surfaceUpdate`, and `dataModelUpdate` operations from the accepted eleven-name
-  catalogue; and may carry one bounded display-safe reason. These are presentation facts only and
-  never grant an action or let a client infer lifecycle authority.
+- `ConversationHistoryResponse`, `ConversationEntry`, and the conversation-computer contracts — the
+  immutable history and generation-fenced computer vocabulary shared by server and browser.
 - `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM envelope for lossy immediate-child terminal
   updates. It never exposes child context or sibling data.
 - `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying

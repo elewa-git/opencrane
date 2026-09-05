@@ -41,7 +41,6 @@ app's source.
 | `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
 | [`libs/backend/artifacts/preprocessor`](../../libs/backend/artifacts/preprocessor/README.md) | PDF workflow controller, one-shot Job policy, and broker-only worker. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
-| [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/iam/organization-members`](../../libs/backend/server/iam/organization-members/main/README.md) | Settings member directory and standalone invitation authority, or fail-closed delegation of the whole capability to Fleet billing. |
 | [`libs/backend/server/iam/audit-writer`](../../libs/backend/server/iam/audit-writer/main/README.md) | Transaction-scoped append-only authorization decision evidence with no read or policy dependency. |
@@ -50,6 +49,7 @@ app's source.
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/server/infra/history-store`](../../libs/backend/server/infra/history-store/README.md) | KurrentDB stream reads, checked appends, and subscriptions for event-history owners. |
+| [`libs/backend/server/infra/agent-sandbox`](../../libs/backend/server/infra/agent-sandbox/README.md) | Kubernetes SandboxClaim realization and lease-bound Pod verification. |
 | [`apps/_infra/kurrentdb`](../../apps/_infra/kurrentdb/README.md) | Private KurrentDB HistoryStore deployment with persistent TLS-only storage. |
 | [`apps/_infra/agent-sandbox`](../../apps/_infra/agent-sandbox/README.md) | Release-scoped Agent Sandbox templates, zero-replica warm pools, and claim admission boundaries. |
 | [`libs/backend/server/infra/workflows`](../../libs/backend/server/infra/workflows/README.md) | Workflow-engine task contract, guardrails, finite respawn chains, the Absurd adapter, and deterministic test support. |
@@ -57,10 +57,10 @@ app's source.
 | [`libs/backend/server/infra/organization-membership-gateway`](../../libs/backend/server/infra/organization-membership-gateway/README.md) | HTTPS and projected-token transport to Fleet membership and billing authority. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 
-The durable product authority is `Conversation -> canonical timeline`; an `agent_session`
-conditionally owns serial `AgentRun -> ordered RunEvent` streams. Direct and ordinary group messages
-create no run. A runtime receives one immutable input snapshot and proposes output; it never becomes
-a second conversation, event, approval, or artifact authority.
+The durable product authority is `Conversation -> immutable KurrentDB entry stream`. An
+`agent_session` may activate one generation-fenced conversation computer through Agent Sandbox.
+Direct and ordinary group messages create no computer activation. The computer receives a bounded
+bootstrap and proposes output; it never becomes a second conversation, approval, or artifact authority.
 
 ## Server infrastructure
 

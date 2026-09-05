@@ -4,7 +4,7 @@ OpenCrane executes each admitted **Model Context Protocol (MCP) server** from it
 image in a one-use Kubernetes Job. Registration, grants, approvals and durable results remain in
 the control plane; an uploaded image never runs inside the generic agent runtime.
 
-> See also: [Governed agent runtime](/integrators/agent-runtime) (run and approval boundaries),
+> See also: [Conversation computers](/integrators/agent-runtime) (compute and approval boundaries),
 > [Governed packages and container images](/integrators/governed-packages) (artifact and image model),
 > [Central authorization authority](/integrators/authorization-authority) (shared MCP and skill permission model),
 > [Manage tools with MCP](/guide/tools) (administrator workflow), and

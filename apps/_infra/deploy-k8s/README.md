@@ -9,7 +9,7 @@
 ## What it owns
 
 This is the **install root** for one **silo** — one customer's isolated slice of OpenCrane. The
-trusted services run in the release namespace; fixed personal and managed warm-runtime pools run in
+trusted services run in the release namespace; conversation computers run in
 two restricted sibling namespaces owned by the same release. Nothing is shared with other customers. Everything else under `apps/` ships a small
 Helm chart; this app is the **umbrella chart** (`opencrane-silo`) that pulls those deployment
 contracts together into one release, plus `deploy.sh`, the entrypoint that installs and upgrades it.
@@ -60,7 +60,7 @@ against the checked-out in-repo `file://` sources. The commit is the version aut
 `Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
-identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image runs in
+identity, bounded scratch, and no ArtifactStore route. The `conversation-computer` image runs in
 two fixed warm Deployments rather than one Job per attempt. Each generic Pod has only DNS and
 same-silo OpenCrane reachability. An admitted run claims one Pod once; that fixed profile additionally
 admits the exact controller binding path and same-silo LiteLLM. The release owns both namespaces,
@@ -94,7 +94,7 @@ deletion surface.
 ## Boundary
 
 The umbrella renders no business logic and installs no cluster-wide controller. It composes app-owned
-templates, the server and runtime namespaces, per-silo `NetworkPolicies`, and the warm runtime Pod's
+templates, the server and sandbox namespaces, per-silo `NetworkPolicies`, and the conversation computer Pod's
 release-scoped `ValidatingAdmissionPolicy`; it does not own the workloads themselves (each app does) or
 the shared substrate helpers (the `k8s-platform` library does). During a forward upgrade, the deploy
 script adopts an unlabelled legacy artifact namespace only when its Helm deployment proves the exact
@@ -110,20 +110,11 @@ package imports it.
 
 - Umbrella chart: `Chart.yaml` (`opencrane-silo`), values in `values.yaml`, and schema in
   `values.schema.json`. Its app-owned helper packages the checked-out local chart sources.
-- `agentController.runtimeNamespace` — optional DNS-label override for the sibling runtime namespace;
-  empty derives `<release>-runtime`, and the chart rejects the trusted server namespace.
-- `agentController.warmRuntime.managedNamespace` — optional DNS-label override for the managed warm
-  pool; empty derives `<release>-managed-runtime`, distinct from the trusted and personal namespaces.
-- `agentController.warmRuntime` — fixes the generic, personal, and managed profile labels, binding
-  port, two-to-five ready Pods per pool, and one-use idle lifetime. These are deployment profiles,
-  never caller-provided run values.
 - `artifactPreprocessor` — disabled until its immutable image digest is supplied; when enabled, the
   worker runs in a dedicated restricted namespace and receives only ephemeral scratch plus
   broker/DNS/optional-telemetry egress.
 - `artifactScanner` — disabled until its immutable image digest is supplied; when enabled, the
   worker scans quarantined uploads in a separate restricted namespace through the server broker.
-- `agentController.runtimeQuota` — aggregate Deployment, Pod, CPU, and memory ceilings applied
-  independently to both untrusted runtime namespaces.
 - Deployment preflight accepts only exact known enforcing-CNI DaemonSet names. GKE Dataplane V2 is
   detected through `anetd`; similarly prefixed helper or operator DaemonSets do not satisfy the gate.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace

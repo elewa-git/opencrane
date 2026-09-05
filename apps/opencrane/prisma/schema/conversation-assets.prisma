@@ -35,7 +35,6 @@ model ConversationAsset {
   artifact              Artifact?                      @relation(fields: [artifactId, siloId], references: [id, siloId], onDelete: Restrict)
   revision              ArtifactRevision?              @relation(fields: [artifactId, revisionId], references: [artifactId, id], onDelete: Restrict)
   uploadLease           ArtifactUploadLease?           @relation(fields: [uploadLeaseId], references: [id], onDelete: Restrict)
-  agentThreadDeliveries AgentThreadParentDelivery[]
 
   @@unique([conversationId, id])
   @@unique([conversationId, createdByUserId, idempotencyKey], map: "conversation_assets_participant_idempotency_key")

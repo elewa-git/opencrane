@@ -5,7 +5,7 @@ run. Grants can narrow what an agent may do, but cannot manufacture organisation
 
 > See also: [Organisation boundary](/operators/organisation-boundary) (silo identity),
 > [Central authorization authority](/integrators/authorization-authority) (transaction-bound product decisions),
-> [Governed agent runtime](/integrators/agent-runtime) (run authority), and
+> [Conversation computers](/integrators/agent-runtime) (compute authority), and
 > [Long-term memory, Cognee and dreaming](/integrators/long-term-memory-cognee) (memory RBAC).
 
 ## Decision order

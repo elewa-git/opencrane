@@ -32,8 +32,8 @@ attribution inline in the source file that carries it.
 
 Consumed by future product conversation UI. It builds view-models and sanitises markup only; it
 never fetches, caches, or streams — the conversation adapter does that. Governed A2UI envelopes do
-not pass through these OpenClaw helpers: the AG-UI state boundary projects them directly to
-`@opencrane/elements/a2ui`.
+not pass through these OpenClaw helpers; structured computer review surfaces use their own
+fenced review contract.
 
 ## Dependency direction
 
