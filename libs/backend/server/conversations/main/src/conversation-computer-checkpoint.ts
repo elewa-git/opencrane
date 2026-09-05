@@ -29,7 +29,8 @@ export class ConversationComputerCheckpointAuthority
 
 		// 2. Ensure the stable generated aggregate exists before using the common artifact publication path.
 		await this.catalogue.ensureGeneratedArtifact({ artifactId, siloId: computer.siloId, ownerPrincipalId: computer.agentIdentityId });
-		const result = await this.uploader.upload({ artifactId, siloId: computer.siloId, capabilityJti: _DeterministicUuid("computer-checkpoint-upload", computer.id, String(revision)), expectedContentAddress: digest, expectedByteLength: bytes.byteLength, mediaType: "application/vnd.opencrane.workspace-tar+gzip", expiresAtEpochSeconds: Math.floor(acceptedAt.getTime() / 1_000) + this.policy.uploadLeaseSeconds, createdBy: computer.agentIdentityId, revision, artifactRevisionId, provenance: { source: "conversation_computer_checkpoint", computerId: computer.id, leaseId: lease.id, generation: lease.generation }, idempotencyKey: _DeterministicUuid("computer-checkpoint-finalize", computer.id, String(revision)), bytes: _OneBuffer(bytes) });
+		const stableExpiry = Math.floor(Date.parse(lease.expiresAt) / 1_000);
+		const result = await this.uploader.upload({ artifactId, siloId: computer.siloId, capabilityJti: _DeterministicUuid("computer-checkpoint-upload", computer.id, String(revision)), expectedContentAddress: digest, expectedByteLength: bytes.byteLength, mediaType: "application/vnd.opencrane.workspace-tar+gzip", expiresAtEpochSeconds: stableExpiry, createdBy: computer.agentIdentityId, revision, artifactRevisionId, provenance: { source: "conversation_computer_checkpoint", computerId: computer.id, leaseId: lease.id, generation: lease.generation }, idempotencyKey: _DeterministicUuid("computer-checkpoint-finalize", computer.id, String(revision)), bytes: _OneBuffer(bytes) });
 		if (result.outcome !== "finalized")
 			throw new Error(`Conversation computer checkpoint publication failed: ${result.reason}`);
 

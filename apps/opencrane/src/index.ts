@@ -9,6 +9,7 @@ import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } fro
 import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
 import { _StartConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition";
 import { _CreateConversationComputerTurnComposition } from "./app/conversation-computer-turn-composition";
+import { _CreateConversationComputerLifecycleComposition } from "./app/conversation-computer-lifecycle-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
@@ -47,6 +48,8 @@ async function _Main(): Promise<void>
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, config.workflows.siloId, agentSandboxReleaseProfile);
+	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, agentSandboxReleaseProfile, workflows.execution);
+	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
 
 	// 4. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
@@ -54,9 +57,9 @@ async function _Main(): Promise<void>
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const conversationComputerTurn = _CreateConversationComputerTurnComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution, conversationComputerTurn);
+	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution, conversationComputerTurn, conversationComputerLifecycle.router);
 	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, channelTargetRoutes, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerActivations);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, channelTargetRoutes, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerWorkers);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

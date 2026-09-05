@@ -43,10 +43,10 @@ function _Command(value: unknown, siloId: string, podUid: string)
 	if (typeof value !== "object" || value === null || Array.isArray(value))
 		return null;
 	const body = value as Record<string, unknown>;
-	const keys = ["agentIdentityId", "computerId", "conversationId", "generation", "leaseId", "profileRevisionId"];
+	const keys = ["computerId", "generation", "leaseId"];
 	if (Object.keys(body).sort().join("\u0000") !== [...keys].sort().join("\u0000") || !keys.filter(function _NotGeneration(key) { return key !== "generation"; }).every((key) => typeof body[key] === "string" && body[key] !== "") || !Number.isSafeInteger(body.generation) || Number(body.generation) <= 0)
 		return null;
-	return { siloId, computerId: body.computerId as string, conversationId: body.conversationId as string, agentIdentityId: body.agentIdentityId as string, profileRevisionId: body.profileRevisionId as string, generation: body.generation as number, leaseId: body.leaseId as string, podUid };
+	return { siloId, computerId: body.computerId as string, generation: body.generation as number, leaseId: body.leaseId as string, podUid };
 }
 
 /** Read one strict bearer value without accepting another authorization scheme. */

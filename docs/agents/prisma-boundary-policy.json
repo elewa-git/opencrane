@@ -555,6 +555,13 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-lifecycle-projection-repository.ts",
+				"adapter": "PrismaConversationComputerLifecycleProjectionRepository",
+				"contract": "ConversationComputerCheckpointCatalogue",
+				"contractImportPath": "../conversation-computer-checkpoint.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-turn-unit-of-work.ts",
 				"adapter": "PrismaConversationComputerTurnRepository",
 				"contract": "ConversationComputerPendingTurnCompiler",
@@ -1739,6 +1746,7 @@
 			}
 		],
 		"compositions": [
+			"apps/opencrane/src/app/conversation-computer-lifecycle-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-activation-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-turn-composition.ts",
 			"apps/opencrane/src/app/internal-app.ts",

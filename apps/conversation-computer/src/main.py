@@ -77,6 +77,17 @@ def _bootstrap(config: dict[str, str]) -> dict[str, Any]:
     return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/bootstrap?{query}", token, empty_outcome="idle")
 
 
+def _restore(config: dict[str, str]) -> dict[str, Any]:
+    """Ask the control plane to restore the exact checkpoint bound to this Pod lease."""
+    token = _read_token(config["tokenPath"])
+    payload = {
+        "computerId": config["computerId"],
+        "generation": int(config["generation"]),
+        "leaseId": config["leaseId"],
+    }
+    return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/checkpoint/restore", token, payload, empty_outcome="absent")
+
+
 def _model_text(response: dict[str, Any]) -> str:
     """Extract only the first assistant text returned by the admitted OpenAI-compatible route."""
     choices = response.get("choices")
@@ -117,9 +128,13 @@ def _turn_loop() -> None:
     """Poll for the single pending activation and finish it without exposing a command listener."""
     global _LAST_FAILURE_TYPE
     config = _configuration()
+    restored = False
     retry_delay_seconds = 2
     while True:
         try:
+            if not restored:
+                _restore(config)
+                restored = True
             bootstrap = _bootstrap(config)
             if bootstrap.get("outcome") == "ready":
                 _execute_turn(config, bootstrap)

@@ -12,7 +12,7 @@ function _App(tokenReviewer = { __Review: vi.fn().mockResolvedValue({ podUid: "p
 	return { app, tokenReviewer, authority };
 }
 
-const _BODY = { computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", generation: 2, leaseId: "lease-2" };
+const _BODY = { computerId: "computer-1", generation: 2, leaseId: "lease-2" };
 
 describe("_CreateConversationComputerCheckpointRouter", function _Suite()
 {

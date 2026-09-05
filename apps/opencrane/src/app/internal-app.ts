@@ -30,7 +30,7 @@ const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventI
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution, conversationComputerTurn?: import("express").Router): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution, conversationComputerTurn?: import("express").Router, conversationComputerCheckpoint?: import("express").Router): Express
 {
 	const app = express();
 
@@ -41,6 +41,8 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use("/api/internal/artifact-scanner", express.json({ limit: 16 * 1_024, strict: true }));
 	if (conversationComputerTurn !== undefined)
 		app.use("/api/internal/conversation-computer", express.json({ limit: 70 * 1_024, strict: true }), conversationComputerTurn);
+	if (conversationComputerCheckpoint !== undefined)
+		app.use("/api/internal/conversation-computer/checkpoint", express.json({ limit: 16 * 1_024, strict: true }), conversationComputerCheckpoint);
 	app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: config.artifactPreprocessorMaximumOutputBytes }));
 	app.use(express.json());
 	app.use(...sessionMiddleware);

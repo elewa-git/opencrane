@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.main as computer_main
-from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _model_text
+from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _model_text, _restore
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -88,6 +88,14 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(exchange.call_args_list[0].args, ("http://litellm:4000/v1/chat/completions", "sk-attempt", {"model": "silo-default", "messages": [{"role": "user", "content": "hi"}]}))
         self.assertEqual(exchange.call_args_list[1].args[0:2], ("http://server:8081/api/internal/conversation-computer/output", "projected-token"))
         self.assertEqual(exchange.call_args_list[1].args[2]["text"], "answer")
+
+    @patch("src.main._read_token", return_value="projected-token")
+    @patch("src.main._json_request", return_value={"outcome": "restored"})
+    def test_requests_exact_checkpoint_restore_before_turns(self, exchange: MagicMock, _token: MagicMock) -> None:
+        """Send immutable computer and lease coordinates while leaving Pod identity to TokenReview."""
+        config = {"computerId": "computer-1", "generation": "2", "internalEndpoint": "http://server:8081", "leaseId": "lease-2", "tokenPath": "/token"}
+        self.assertEqual(_restore(config), {"outcome": "restored"})
+        self.assertEqual(exchange.call_args.args[2], {"computerId": "computer-1", "generation": 2, "leaseId": "lease-2"})
 
     @patch("src.main._read_token", return_value="projected-token")
     def test_executes_real_http_turn_boundaries(self, _token: MagicMock) -> None:

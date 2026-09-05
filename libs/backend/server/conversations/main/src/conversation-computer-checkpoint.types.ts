@@ -46,7 +46,7 @@ export interface ConversationComputerCheckpointReader
 export interface ConversationComputerCheckpointFence
 {
 	/** Rejects a stale generation, lease, or Pod token binding. */
-	assertCurrent(input: { readonly siloId: string; readonly computerId: string; readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string; readonly generation: number; readonly leaseId: string; readonly podUid: string }): Promise<{ readonly computer: ConversationComputer; readonly lease: ComputerLease }>;
+	assertCurrent(input: ConversationComputerCheckpointRestoreCommand): Promise<{ readonly computer: ConversationComputer; readonly lease: ComputerLease }>;
 }
 
 /** Restores one exact current checkpoint under a TokenReviewed Pod identity. */
@@ -56,12 +56,6 @@ export interface ConversationComputerCheckpointRestoreCommand
 	readonly siloId: string;
 	/** Logical computer supplied by the private route. */
 	readonly computerId: string;
-	/** Owning conversation projection coordinate. */
-	readonly conversationId: string;
-	/** Bound agent identity projection coordinate. */
-	readonly agentIdentityId: string;
-	/** Bound immutable profile coordinate. */
-	readonly profileRevisionId: string;
 	/** Current lease generation claimed by the Pod. */
 	readonly generation: number;
 	/** Exact current lease id claimed by the Pod. */
