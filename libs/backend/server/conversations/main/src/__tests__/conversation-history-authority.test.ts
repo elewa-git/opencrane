@@ -65,14 +65,13 @@ describe("ConversationHistoryAuthority", function ()
 		expect(append).not.toHaveBeenCalled();
 	});
 
-	it("maps the no-stream condition to the first immutable conversation position", async function ()
+	it("rejects entries that attempt to replace the immutable genesis", async function ()
 	{
 		const append = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", revision: 0n });
 		const authority = new ConversationHistoryAuthority({ append });
 
-		await authority.append(_Command({ expectedRevision: HistoryExpectedRevisions.NoStream, entry: { ..._Command().entry, position: "0" } }));
-
-		expect(append).toHaveBeenCalledWith(expect.objectContaining({ streamName: "conversation-conversation-1", expectedRevision: HistoryExpectedRevisions.NoStream }));
+		await expect(authority.append(_Command({ expectedRevision: HistoryExpectedRevisions.NoStream, entry: { ..._Command().entry, position: "0" } }))).rejects.toThrow("revision-zero genesis");
+		expect(append).not.toHaveBeenCalled();
 	});
 
 	it("returns only the exact conversation stream's expected-head conflict as a retryable result", async function ()
@@ -85,5 +84,18 @@ describe("ConversationHistoryAuthority", function ()
 		await expect(authority.append(_Command())).resolves.toEqual({ outcome: ConversationHistoryAppendOutcomes.ExpectedHeadConflict });
 		await expect(authority.append(_Command())).rejects.toThrow(foreignConflict);
 		await expect(authority.append(_Command())).rejects.toThrow("KurrentDB unavailable");
+	});
+
+	it("atomically appends a participant message and checked computer activation", async function _AppendsActivation()
+	{
+		const appendAtomic = vi.fn().mockResolvedValue([{ streamName: "conversation-conversation-1", revision: 8n }, { streamName: "computer-activations-silo-1", revision: 3n }]);
+		const authority = new ConversationHistoryAuthority({ append: vi.fn(), appendAtomic });
+		const result = await authority.appendWithActivation({ ..._Command(), activation: { computerId: "computer-1", generation: 2, eventId: "9e60b5de-87a8-5c34-9cca-e6e4cb291369", queueExpectedRevision: 2n } });
+
+		expect(result).toEqual({ outcome: ConversationHistoryAppendOutcomes.Appended, receipt: { streamName: "conversation-conversation-1", revision: 8n } });
+		expect(appendAtomic).toHaveBeenCalledWith(expect.objectContaining({
+			expectedHeads: [{ streamName: "conversation-conversation-1", revision: 7n }, { streamName: "computer-activations-silo-1", revision: 2n }],
+			appends: expect.arrayContaining([expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2 } })] })]),
+		}));
 	});
 });

@@ -46,6 +46,12 @@ model Conversation {
   siloId                        String                          @map("silo_id")
   mode                          ConversationMode
   agentServiceId                String?                         @map("agent_service_id")
+  /// Rebuildable pointer to the logical computer stream for an agent session.
+  computerId                    String?                         @map("computer_id")
+  /// Rebuildable identity coordinate required to validate the computer stream.
+  computerAgentIdentityId       String?                         @map("computer_agent_identity_id")
+  /// Rebuildable profile coordinate required to validate the computer stream.
+  computerProfileRevisionId     String?                         @map("computer_profile_revision_id")
   lifecycle                     ConversationLifecycle           @default(Open)
   contextRevisionId             String?                         @map("context_revision_id")
   closedAt                      DateTime?                       @map("closed_at")
@@ -55,6 +61,7 @@ model Conversation {
   /// Global database allocation order for list sorting. Rollbacks may leave gaps; commit order does not rewrite it.
   activitySequence              BigInt                          @unique @default(autoincrement()) @map("activity_sequence")
   participants                  ConversationParticipant[]
+  privatePayloads               ConversationPrivatePayload[]
   messages                      ConversationMessage[]
   runEvents                     ConversationRunEvent[]
   timelineEntries               ConversationTimelineEntry[]
@@ -76,6 +83,38 @@ model Conversation {
   @@index([siloId, mode, lifecycle, activitySequence])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
+}
+
+/// Stores encrypted participant-visible payload bytes outside immutable KurrentDB history.
+model ConversationPrivatePayload {
+  /// Opaque reference recorded in the conversation entry.
+  id             String       @id
+  /// Organisation boundary copied from the trusted conversation projection.
+  siloId         String       @map("silo_id")
+  /// Conversation whose authorised participants may decrypt this payload.
+  conversationId String       @map("conversation_id")
+  /// Participant that submitted the plaintext before server-side encryption.
+  authorSubject  String       @map("author_subject")
+  /// Browser retry key shared with the immutable KurrentDB entry.
+  idempotencyKey String       @map("idempotency_key")
+  /// Keyring identifier required to decrypt this ciphertext.
+  keyId          String       @map("key_id")
+  /// AES-GCM nonce generated independently for this payload.
+  nonce          Bytes
+  /// AES-GCM authentication tag checked before plaintext is returned.
+  authTag        Bytes        @map("auth_tag")
+  /// AES-GCM ciphertext; plaintext is never persisted.
+  ciphertext     Bytes
+  /// SHA-256 digest of the exact ciphertext recorded in KurrentDB.
+  ciphertextDigest String     @map("ciphertext_digest")
+  /// Creation timestamp retained for encrypted-payload operations.
+  createdAt      DateTime     @default(now()) @map("created_at")
+  /// Exact parent projection prevents a payload from crossing conversations.
+  conversation   Conversation @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([conversationId, authorSubject, idempotencyKey])
+  @@index([siloId, conversationId])
+  @@map("conversation_private_payloads")
 }
 
 model ConversationParticipant {

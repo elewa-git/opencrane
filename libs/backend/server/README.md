@@ -17,7 +17,7 @@ contract.
 | [`tenancy`](./tenancy/) | The organisation boundary used by server capabilities. | cluster-tenants |
 | [`reporting`](./reporting/) | Agent and model economics. | spend |
 | [`utils`](./utils/) | Server-only helpers shared across capability boundaries. | ZIP package parsing |
-| [`infra`](./infra/) | Process-specific transport, identity, and external-I/O seams. | api, auth, agent-runtime-stream, workload-identity, http, memory-gateway-client |
+| [`infra`](./infra/) | Process-specific transport, identity, and external-I/O seams. | api, auth, workload-identity, history-store, http, memory-gateway-client |
 
 [`api-spec`](./api-spec/main/) remains flat because it aggregates public paths from every group;
 placing it in one group would imply ownership of those capabilities.

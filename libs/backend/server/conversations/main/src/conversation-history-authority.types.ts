@@ -47,3 +47,10 @@ export type ConversationHistoryAppendResult =
 		/** States that the expected conversation stream head was stale before KurrentDB accepted the append. */
 		readonly outcome: ConversationHistoryAppendOutcomes.ExpectedHeadConflict;
 	};
+
+/** Checked cross-stream append that commits a message and its computer activation request together. */
+export interface ConversationHistoryActivationAppendCommand extends ConversationHistoryAppendCommand
+{
+	/** Identifies the checked logical computer generation requested by this message. */
+	readonly activation: { readonly computerId: string; readonly generation: number; readonly eventId: string; readonly queueExpectedRevision: HistoryExpectedRevisions.NoStream | bigint };
+}

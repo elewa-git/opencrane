@@ -1739,6 +1739,9 @@
 			}
 		],
 		"compositions": [
+			"apps/opencrane/src/app/conversation-history-composition.ts",
+			"libs/backend/server/conversations/main/src/agent-session-creation.ts",
+			"libs/backend/server/conversations/main/src/prisma-conversation-metadata.ts",
 			"libs/backend/server/gateways/providers/main/src/provider-byok-composition.ts",
 			"libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
 			"libs/backend/server/agents/agent-services/main/src/prisma-agent-services.router.ts",
@@ -1798,6 +1801,26 @@
 		}
 	],
 	"exemptions": [
+		{
+			"path": "libs/backend/server/conversations/main/src/agent-session-creation.ts",
+			"owner": "conversations-agent-session-creation",
+			"reason": "The 0.11 Kurrent-first creation coordinator keeps its serializable projection recheck together until persistence ports are extracted after the baseline ships.",
+			"operations": [
+				"delegate",
+				"transaction"
+			],
+			"expiresOn": "2026-12-31"
+		},
+		{
+			"path": "libs/backend/server/conversations/main/src/prisma-conversation-metadata.ts",
+			"owner": "conversations-metadata",
+			"reason": "The 0.11 projection metadata unit keeps its transaction-bound lifecycle decisions together until its repository ports are extracted after the baseline ships.",
+			"operations": [
+				"delegate",
+				"transaction"
+			],
+			"expiresOn": "2026-12-31"
+		},
 		{
 			"path": "libs/backend/agents/execution/inputs/main/src/personal-memory-scope-source.ts",
 			"owner": "PersonalMemoryScopeSource",

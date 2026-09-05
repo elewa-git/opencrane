@@ -1,8 +1,9 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { ___ConversationEntrySchema } from "@opencrane/contracts";
-import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { ConversationHistoryAppendOutcomes, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult } from "./conversation-history-authority.types";
+import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult } from "./conversation-history-authority.types";
+import type { ConversationHistoryGenesis } from "./conversation-history-reader.types";
 
 /** Recognizes event identifiers that can also serve as the entry idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -22,7 +23,17 @@ const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
 export class ConversationHistoryAuthority
 {
 	/** Connects the authority to the append-only KurrentDB port without granting it stream reads. */
-	public constructor(private readonly historyStore: Pick<HistoryStore, "append">) {}
+	public constructor(private readonly historyStore: Pick<HistoryStore, "append"> & Partial<Pick<HistoryStore, "appendAtomic">>) {}
+
+	/** Builds the checked revision-zero append used by Kurrent-first conversation creation. */
+	public genesisAppend(genesis: ConversationHistoryGenesis, eventId: string): HistoryAppend
+	{
+		if (!_UUID_PATTERN.test(eventId) || !_Identifier(genesis.siloId) || !_Identifier(genesis.conversationId) || !_Identifier(genesis.createdByPrincipalId) || !Number.isFinite(Date.parse(genesis.createdAt)))
+			throw new Error("Conversation genesis requires valid immutable coordinates");
+		if ((genesis.mode === "agent_session") !== _Identifier(genesis.agentServiceId ?? ""))
+			throw new Error("Conversation genesis requires an exact service binding");
+		return { streamName: `conversation-${genesis.conversationId}`, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: eventId, type: "opencrane.conversation-created.v1", data: { genesis }, metadata: { siloId: genesis.siloId, conversationId: genesis.conversationId, causationId: eventId, correlationId: eventId, idempotencyKey: eventId } }] };
+	}
 
 	/**
 	 * Validates and appends one server-stamped entry at the caller's observed conversation stream head.
@@ -43,7 +54,7 @@ export class ConversationHistoryAuthority
 		// 3. Return the stream's conflict for re-authorization and preserve every other store error.
 		try
 		{
-			const receipt = await this.historyStore.append({ streamName, expectedRevision: command.expectedRevision, events: [{ id: entry.id, type: _CONVERSATION_ENTRY_EVENT_TYPE, data: { entry }, metadata: { siloId: command.siloId, conversationId: command.conversationId, causationId: entry.causationId, correlationId: entry.correlationId, idempotencyKey: entry.idempotencyKey } }] });
+			const receipt = await this.historyStore.append({ streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] });
 			return { outcome: ConversationHistoryAppendOutcomes.Appended, receipt };
 		}
 		catch (error)
@@ -53,6 +64,38 @@ export class ConversationHistoryAuthority
 			throw error;
 		}
 	}
+
+	/** Atomically appends one message and its silo activation request after both stream heads are checked. */
+	public async appendWithActivation(command: ConversationHistoryActivationAppendCommand): Promise<ConversationHistoryAppendResult>
+	{
+		if (this.historyStore.appendAtomic === undefined)
+			throw new Error("Conversation activation append requires atomic KurrentDB history support");
+		const entry = _ValidatedEntry(command);
+		const streamName = `conversation-${command.conversationId}`;
+		const queueStreamName = `computer-activations-${command.siloId}`;
+		if (!_Identifier(command.activation.computerId) || !Number.isSafeInteger(command.activation.generation) || command.activation.generation < 1 || !_UUID_PATTERN.test(command.activation.eventId) || !_ExpectedRevision(command.activation.queueExpectedRevision))
+			throw new Error("Conversation activation append requires checked computer and queue coordinates");
+		try
+		{
+			const receipts = await this.historyStore.appendAtomic({ expectedHeads: [{ streamName, revision: command.expectedRevision }, { streamName: queueStreamName, revision: command.activation.queueExpectedRevision }], appends: [{ streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] }, { streamName: queueStreamName, expectedRevision: command.activation.queueExpectedRevision, events: [{ id: command.activation.eventId, type: "opencrane.computer.activation-requested.v1", data: { siloId: command.siloId, computerId: command.activation.computerId, conversationId: command.conversationId, generation: command.activation.generation }, metadata: { causationId: entry.id, correlationId: entry.correlationId, idempotencyKey: command.activation.eventId } }] }] });
+			const receipt = receipts.find(item => item.streamName === streamName);
+			if (receipt === undefined)
+				throw new Error("Conversation activation append omitted its conversation receipt");
+			return { outcome: ConversationHistoryAppendOutcomes.Appended, receipt };
+		}
+		catch (error)
+		{
+			if (error instanceof WrongExpectedVersionError && (error.streamName === streamName || error.streamName === queueStreamName))
+				return { outcome: ConversationHistoryAppendOutcomes.ExpectedHeadConflict };
+			throw error;
+		}
+	}
+}
+
+/** Builds the versioned KurrentDB event envelope for one validated entry. */
+function _EntryEvent(command: ConversationHistoryAppendCommand, entry: ReturnType<typeof _ValidatedEntry>)
+{
+	return { id: entry.id, type: _CONVERSATION_ENTRY_EVENT_TYPE, data: { entry }, metadata: { siloId: command.siloId, conversationId: command.conversationId, causationId: entry.causationId, correlationId: entry.correlationId, idempotencyKey: entry.idempotencyKey } };
 }
 
 /** Validates all coordinates before the authority constructs an immutable KurrentDB event. */
@@ -95,6 +138,6 @@ function _ExpectedRevision(value: HistoryExpectedRevisions.NoStream | bigint): b
 function _Position(expectedRevision: HistoryExpectedRevisions.NoStream | bigint): string
 {
 	if (expectedRevision === HistoryExpectedRevisions.NoStream)
-		return "0";
+		throw new Error("Conversation entries require the immutable revision-zero genesis");
 	return (expectedRevision + 1n).toString();
 }

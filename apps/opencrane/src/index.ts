@@ -4,9 +4,10 @@ import "./app/instrument";
 
 import { ___BindConsole } from "@opencrane/backend/observability";
 
-import { _ReadProcessConfig } from "./app/config";
+import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./app/config";
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
 import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
+import { _StartConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
@@ -33,6 +34,7 @@ async function _Main(): Promise<void>
 
 	// 2. Freeze process configuration and external clients so every component shares one target.
 	const config = _ReadProcessConfig();
+	const agentSandboxReleaseProfile = _ReadAgentSandboxReleaseProfileConfig();
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
 	const historyStore = _CreateHistoryStoreComposition(config.historyStore);
@@ -43,15 +45,16 @@ async function _Main(): Promise<void>
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
+	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, config.workflows.siloId, agentSandboxReleaseProfile);
 
 	// 4. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects);
+	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution);
 	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, channelTargetRoutes, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, channelTargetRoutes, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerActivations);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

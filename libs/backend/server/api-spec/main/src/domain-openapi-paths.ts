@@ -3,6 +3,7 @@ import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/pe
 import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
 import { _PersonalArtifactsOpenapiPaths } from "@opencrane/backend/server/agents/artifacts";
 import { _ConversationAssetsOpenapiPaths } from "@opencrane/backend/server/conversation-assets";
+import { _SelfConversationHistoryOpenapiPaths } from "@opencrane/backend/server/conversations";
 import { _SkillCatalogueOpenapiPaths } from "@opencrane/backend/server/agents/skills";
 import { _UserOnboardingOpenapiPaths } from "@opencrane/backend/server/agents/onboarding";
 import { _McpOpenapiPaths } from "@opencrane/backend/server/gateways/mcp";
@@ -43,4 +44,5 @@ export const _DomainOpenapiPaths = {
 	..._SkillCatalogueOpenapiPaths,
 	..._PersonalArtifactsOpenapiPaths,
 	..._OrganizationMembersOpenapiPaths,
+	..._SelfConversationHistoryOpenapiPaths,
 };

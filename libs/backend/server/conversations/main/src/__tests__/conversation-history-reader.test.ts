@@ -43,6 +43,12 @@ function _Event(revision: bigint, entryId = _FIRST_ENTRY_ID): HistoryRecordedEve
 	return { streamName: "conversation-conversation-1", id: entryId, type: "opencrane.conversation-entry.v1", data: { entry }, metadata: { siloId: "silo-1", conversationId: "conversation-1", causationId: entry.causationId, correlationId: entry.correlationId, idempotencyKey: entry.idempotencyKey }, revision, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
 }
 
+/** Builds the mandatory revision-zero ownership event. */
+function _Genesis(): HistoryRecordedEvent
+{
+	return { streamName: "conversation-conversation-1", id: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", type: "opencrane.conversation-created.v1", data: { genesis: { schemaVersion: 1, siloId: "silo-1", conversationId: "conversation-1", mode: "agent_session", agentServiceId: "service-1", createdByPrincipalId: "principal-1", createdAt: "2026-09-01T00:00:00.000Z" } }, metadata: { siloId: "silo-1", conversationId: "conversation-1" }, revision: 0n, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
+}
+
 /** Retrieves the valid fixture entry before one test deliberately mutates its untyped stored payload. */
 function _FixtureEntry(event: HistoryRecordedEvent): ConversationEntry
 {
@@ -60,49 +66,49 @@ describe("ConversationHistoryReader", function ()
 {
 	it("requests only the derived conversation stream and returns entries from the first position in stream order", async function ()
 	{
-		const readStream = vi.fn().mockReturnValue(_Events([_Event(0n), _Event(1n, _SECOND_ENTRY_ID)]));
+		const readStream = vi.fn().mockReturnValue(_Events([_Genesis(), _Event(1n), _Event(2n, _SECOND_ENTRY_ID)]));
 		const reader = new ConversationHistoryReader({ readStream });
 
 		const result = await reader.read(_Command());
 
 		expect(readStream).toHaveBeenCalledWith({ streamName: "conversation-conversation-1" });
 		expect(result.streamName).toBe("conversation-conversation-1");
-		expect(result.entries.map(entry => entry.position)).toEqual(["0", "1"]);
+		expect(result.entries.map(entry => entry.position)).toEqual(["1", "2"]);
 	});
 
 	it("requests an explicit inclusive revision and preserves its ordered entries", async function ()
 	{
-		const readStream = vi.fn().mockReturnValue(_Events([_Event(4n), _Event(5n, _SECOND_ENTRY_ID)]));
+		const readStream = vi.fn().mockReturnValue(_Events([_Genesis(), _Event(1n), _Event(2n, _SECOND_ENTRY_ID)]));
 		const reader = new ConversationHistoryReader({ readStream });
 
-		const result = await reader.read(_Command({ fromRevision: 4n }));
+		const result = await reader.read(_Command({ fromRevision: 2n }));
 
-		expect(readStream).toHaveBeenCalledWith({ streamName: "conversation-conversation-1", fromRevision: 4n });
-		expect(result.entries.map(entry => entry.position)).toEqual(["4", "5"]);
+		expect(readStream).toHaveBeenCalledWith({ streamName: "conversation-conversation-1" });
+		expect(result.entries.map(entry => entry.position)).toEqual(["2"]);
 	});
 
 	it("fails closed when a store returns an event from a foreign stream, silo, or conversation", async function ()
 	{
-		const foreignStream = { ..._Event(0n), streamName: "conversation-foreign" };
-		const foreignSilo = { ..._Event(0n), metadata: { ..._Event(0n).metadata, siloId: "silo-2" } };
-		const foreignConversationEvent = _Event(0n);
+		const foreignStream = { ..._Event(1n), streamName: "conversation-foreign" };
+		const foreignSilo = { ..._Event(1n), metadata: { ..._Event(1n).metadata, siloId: "silo-2" } };
+		const foreignConversationEvent = _Event(1n);
 		const foreignConversation = { ...foreignConversationEvent, data: { entry: { ..._FixtureEntry(foreignConversationEvent), conversationId: "conversation-2" } } };
 
-		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([foreignStream])) }).read(_Command())).rejects.toThrow("different stream");
-		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([foreignSilo])) }).read(_Command())).rejects.toThrow("different silo");
-		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([foreignConversation])) }).read(_Command())).rejects.toThrow("different conversation");
+		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis(), foreignStream])) }).read(_Command())).rejects.toThrow("different stream");
+		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis(), foreignSilo])) }).read(_Command())).rejects.toThrow("different silo");
+		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis(), foreignConversation])) }).read(_Command())).rejects.toThrow("different conversation");
 	});
 
 	it("fails closed when an event envelope or entry is malformed", async function ()
 	{
-		const mismatchedEnvelope = { ..._Event(0n), metadata: { ..._Event(0n).metadata, idempotencyKey: "other-command" } };
-		const mismatchedIdempotencyEvent = _Event(0n);
+		const mismatchedEnvelope = { ..._Event(1n), metadata: { ..._Event(1n).metadata, idempotencyKey: "other-command" } };
+		const mismatchedIdempotencyEvent = _Event(1n);
 		const mismatchedIdempotency = { ...mismatchedIdempotencyEvent, data: { entry: { ..._FixtureEntry(mismatchedIdempotencyEvent), idempotencyKey: "other-command" } }, metadata: { ...mismatchedIdempotencyEvent.metadata, idempotencyKey: "other-command" } };
-		const malformedEntryEvent = _Event(0n);
+		const malformedEntryEvent = _Event(1n);
 		const malformedEntry = { ...malformedEntryEvent, data: { entry: { ..._FixtureEntry(malformedEntryEvent), occurredAt: "not-a-time" } } };
 
-		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([mismatchedEnvelope])) }).read(_Command())).rejects.toThrow("does not match its envelope");
-		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([mismatchedIdempotency])) }).read(_Command())).rejects.toThrow("invalid idempotency key");
-		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([malformedEntry])) }).read(_Command())).rejects.toThrow("invalid participant-visible entry");
+		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis(), mismatchedEnvelope])) }).read(_Command())).rejects.toThrow("does not match its envelope");
+		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis(), mismatchedIdempotency])) }).read(_Command())).rejects.toThrow("invalid idempotency key");
+		await expect(new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis(), malformedEntry])) }).read(_Command())).rejects.toThrow("invalid participant-visible entry");
 	});
 });

@@ -753,6 +753,9 @@ CREATE TABLE "conversations" (
     "silo_id" TEXT NOT NULL,
     "mode" "ConversationMode" NOT NULL,
     "agent_service_id" TEXT,
+    "computer_id" TEXT,
+    "computer_agent_identity_id" TEXT,
+    "computer_profile_revision_id" TEXT,
     "lifecycle" "ConversationLifecycle" NOT NULL DEFAULT 'open',
     "context_revision_id" TEXT,
     "closed_at" TIMESTAMP(3),
@@ -761,6 +764,23 @@ CREATE TABLE "conversations" (
     "activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
 
     CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_private_payloads" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "author_subject" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "key_id" TEXT NOT NULL,
+    "nonce" BYTEA NOT NULL,
+    "auth_tag" BYTEA NOT NULL,
+    "ciphertext" BYTEA NOT NULL,
+    "ciphertext_digest" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_private_payloads_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2401,6 +2421,12 @@ CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "
 CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
 
 -- CreateIndex
+CREATE INDEX "conversation_private_payloads_silo_id_conversation_id_idx" ON "conversation_private_payloads"("silo_id", "conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_private_payloads_conversation_id_author_subjec_key" ON "conversation_private_payloads"("conversation_id", "author_subject", "idempotency_key");
+
+-- CreateIndex
 CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
 
 -- CreateIndex
@@ -3252,6 +3278,9 @@ ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7183,11 +7212,29 @@ ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_
 ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_membership_revision_check" CHECK ("membership_revision" IS NULL OR "membership_revision" > 0);
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check" CHECK (
         btrim("silo_id") <> '' AND "activity_sequence" > 0 AND
-        (("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> '') OR
-         ("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL)) AND
+        (("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> ''
+          AND "computer_id" IS NOT NULL AND btrim("computer_id") <> ''
+          AND "computer_agent_identity_id" IS NOT NULL AND btrim("computer_agent_identity_id") <> ''
+          AND "computer_profile_revision_id" IS NOT NULL AND btrim("computer_profile_revision_id") <> '') OR
+         ("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL AND "computer_id" IS NULL
+          AND "computer_agent_identity_id" IS NULL AND "computer_profile_revision_id" IS NULL)) AND
         (("lifecycle" = 'open' AND "closed_at" IS NULL) OR
          ("lifecycle" = 'closed' AND "closed_at" IS NOT NULL AND "closed_at" >= "created_at"))
     );
+ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_encryption_check" CHECK (
+        btrim("silo_id") <> '' AND btrim("author_subject") <> '' AND btrim("idempotency_key") <> ''
+        AND btrim("key_id") <> '' AND octet_length("nonce") = 12 AND octet_length("auth_tag") = 16
+        AND octet_length("ciphertext") BETWEEN 1 AND 65536
+        AND "ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$'
+    );
+CREATE FUNCTION "reject_conversation_private_payload_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ConversationPrivatePayload rows are immutable';
+END;
+$$;
+CREATE TRIGGER "conversation_private_payloads_immutable"
+    BEFORE UPDATE OR DELETE ON "conversation_private_payloads"
+    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_private_payload_mutation"();
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_coordinates_check" CHECK (
         btrim("user_id") <> '' AND "visible_from_position" > 0 AND
         "read_through_position" >= "visible_from_position" - 1 AND

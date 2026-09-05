@@ -62,6 +62,14 @@ the matching computer is currently warm. A missing, retired, cooling, released, 
 cross-coordinate snapshot fails closed. This history authority does not create a sandbox claim,
 activate a sandbox, use PostgreSQL, or receive a direct KurrentDB client.
 
+The participant history API rechecks current PostgreSQL membership, participation, and central
+product authorization before it reads `conversation-{id}`. Text enters a purpose-specific mounted
+AES-GCM keyring boundary before PostgreSQL persistence; KurrentDB receives only an opaque payload
+reference and ciphertext digest. The response leaves each immutable entry unchanged and returns
+separately authorized plaintext in a payload-reference map. A `start` message commits its entry and
+checked computer generation to the silo activation queue through one atomic KurrentDB append.
+`interrupt` remains denied until a distinct authority can prove and fence the execution it stops.
+
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also
 projects the caller's active personal Agent only when exactly one service matches their approved
@@ -137,6 +145,10 @@ transport for workloads; it is not a browser fallback.
 - `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
   deterministic KurrentDB stream. Its checked current-head result lets future pre-admission code use
   only one matching warm computer with one active, generation-fenced lease.
+- `_CreateSelfConversationHistoryRouter` exposes exclusive-cursor KurrentDB reads and encrypted
+  participant message admission without a relational transcript fallback.
+- `PrismaSelfConversationHistory` joins current PostgreSQL authorization and encrypted private
+  payload persistence to checked KurrentDB operations.
 
 ## Boundary
 

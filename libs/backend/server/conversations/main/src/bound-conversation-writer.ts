@@ -99,6 +99,8 @@ export class BoundConversationWriter
 	 */
 	private _stampEntry(sourceCommandId: string, draft: ComputerConversationEntryDraft): ConversationEntry
 	{
+		if (this.binding.expectedRevision < 0n)
+			throw new Error("Bound conversation writer requires an immutable conversation genesis");
 		const position = (this.binding.expectedRevision + 1n).toString();
 		return { ...draft, schemaVersion: 1, id: sourceCommandId, conversationId: this.binding.conversationId, position, author: { kind: "agent", agentIdentityId: this.binding.agentIdentityId, agentServiceId: this.binding.agentServiceId, name: this.binding.agentName, avatarArtifactRevisionId: this.binding.agentAvatarArtifactRevisionId }, provenance: "agent-authored", visibility: draft.visibility as ConversationEntry["visibility"], runId: this.binding.runId, causationId: draft.causationId, correlationId: draft.correlationId, idempotencyKey: sourceCommandId, occurredAt: this.clock.now().toISOString(), attestation: null } as ConversationEntry;
 	}

@@ -14,8 +14,22 @@
  * libs/backend/server/api-spec (the conversation OpenAPI fragment).
  */
 export { BoundConversationWriter } from "./bound-conversation-writer";
+export { PrismaAgentSessionCreationUnitOfWork } from "./agent-session-creation";
+export type { AgentSessionReleaseProfile, InitialConversationComputerResolver } from "./agent-session-creation.types";
 export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationParked } from "./conversation-computer-activation.types";
+export { _CreateConversationComputerTurnRouter } from "./conversation-computer-turn.router";
+export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerModelCredential, ConversationComputerOutputCommand, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";
 export { ConversationComputerHistory } from "./conversation-computers";
 export type { ActiveConversationComputerLease, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, CurrentConversationComputer } from "./conversation-computers";
+export { AesGcmConversationPrivatePayloadCipher } from "./conversation-private-payload-cipher";
+export type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadKeyringDocument } from "./conversation-private-payload.types";
+export { _SelfConversationHistoryOpenapiPaths } from "./openapi";
+export { PrismaSelfConversationHistory } from "./prisma-self-conversation-history";
+export { _CreateSelfConversationHistoryRouter } from "./self-conversation-history.router";
+export { ConversationMessageActivations, ConversationMessageAdmissionOutcomes } from "./self-conversation-history.types";
+export type { ConversationCallerResolver, ConversationMessageAdmissionResult, ConversationMessageCommand, SelfConversationHistoryAuthority, SelfConversationHistoryResult } from "./self-conversation-history.types";
+export { PrismaConversationMetadataUnitOfWork } from "./prisma-conversation-metadata";
+export { _CreateConversationMetadataRouter } from "./conversation-metadata.router";
+export type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary } from "./conversation-metadata.types";
