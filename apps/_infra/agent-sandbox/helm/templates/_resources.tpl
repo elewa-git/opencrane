@@ -45,6 +45,60 @@ metadata:
     app.kubernetes.io/component: agent-sandbox
 automountServiceAccountToken: false
 ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-conversation-computer
+  namespace: {{ $sandbox.namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agent-sandbox
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - protocol: TCP
+          port: 8090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: litellm
+      ports:
+        - protocol: TCP
+          port: {{ .Values.litellm.service.port }}
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -56,7 +110,7 @@ metadata:
 rules:
   - apiGroups: ["extensions.agents.x-k8s.io"]
     resources: ["sandboxclaims"]
-    verbs: ["create", "get", "delete"]
+    verbs: ["create", "get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -216,11 +270,26 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.labels['opencrane.ai/computer-lease-id']
-            - name: OPENCRANE_HISTORY_STORE_ENDPOINT
-              value: {{ printf "%s-kurrentdb.%s.svc:%v" (include "opencrane.fullname" $) $.Release.Namespace $.Values.historyStore.kurrentdb.service.port | quote }}
+            - name: OPENCRANE_INTERNAL_ENDPOINT
+              value: {{ printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" $) $.Release.Namespace $.Values.clustertenantManager.service.internalPort | quote }}
+            - name: OPENCRANE_PROJECTED_TOKEN_PATH
+              value: /var/run/secrets/opencrane/token
+            - name: OPENCRANE_WORKSPACE_PATH
+              value: /workspace
+            - name: OPENCRANE_PREVIEW_PORTS
+              value: "3000,4173,4200,5173,8000"
+          volumeMounts:
+            - name: opencrane-conversation-computer-identity
+              mountPath: /var/run/secrets/opencrane
+              readOnly: true
+            - name: opencrane-conversation-workspace
+              mountPath: /workspace
           ports:
             - name: health
               containerPort: 8080
+              protocol: TCP
+            - name: review
+              containerPort: 8090
               protocol: TCP
           readinessProbe:
             httpGet:
@@ -232,6 +301,18 @@ spec:
               port: health
           resources:
             {{- toYaml $profile.resources | nindent 12 }}
+      volumes:
+        - name: opencrane-conversation-workspace
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: opencrane-conversation-computer-identity
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: opencrane-conversation-computer
+                  expirationSeconds: 600
 ---
 apiVersion: extensions.agents.x-k8s.io/v1beta1
 kind: SandboxWarmPool

@@ -20,6 +20,7 @@ import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/serve
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
 import { _CreateConversationHistoryComposition } from "./conversation-history-composition";
+import { ConversationComputerHistory, PrismaConversationMetadataUnitOfWork } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
@@ -35,6 +36,8 @@ import { _CreateUserOnboardingComposition } from "./user-onboarding-composition"
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
+import { _CreateConversationComputerReviewRouter } from "./conversation-computer-review.router";
+import { _ConversationComputerReviewAuthority } from "./conversation-computer-review-authority";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -56,6 +59,9 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined || agentSandboxReleaseProfile === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
+	const unavailableInitialComputer = { resolve: async function _Unavailable() { return null; }, createOrdinaryGenesis: async function _UnavailableGenesis() { throw new Error("review composition cannot create conversations"); } };
+	const computerReviewAuthority = historyStore === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataUnitOfWork(prisma, unavailableInitialComputer), new ConversationComputerHistory(historyStore));
+	const computerReview = computerReviewAuthority === null || agentSandboxReleaseProfile === undefined ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace }, _ResolveRequestPrincipal);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma, function _CreateAuditAuthorization(transaction) { return new PrismaAuthorizationAuthority(transaction); }) },
@@ -74,6 +80,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
 		..._OptionalRoute("/api/v1/me/conversations", conversationHistory),
+		..._OptionalRoute("/api/v1/me/conversations", computerReview),
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];

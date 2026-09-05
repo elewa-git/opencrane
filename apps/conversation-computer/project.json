@@ -5,8 +5,8 @@
   "sourceRoot": "apps/conversation-computer/src",
   "tags": ["type:app", "layer:entrypoint", "scope:conversation-computer"],
   "targets": {
-    "build": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m py_compile src/main.py", "cwd": "apps/conversation-computer" } },
-    "lint": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m py_compile src/main.py", "cwd": "apps/conversation-computer" } },
+    "build": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m py_compile src/*.py", "cwd": "apps/conversation-computer" } },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m py_compile src/*.py", "cwd": "apps/conversation-computer" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m unittest discover -s tests", "cwd": "apps/conversation-computer" } },
     "container": {
       "executor": "nx:run-commands",

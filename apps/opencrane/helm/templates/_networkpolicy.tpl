@@ -115,6 +115,20 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- if .Values.agentSandbox.enabled }}
+    # Conversation computers exchange only their Pod-bound bootstrap and one safe output through
+    # the private listener. TokenReview and the durable lease fence remain the authority gates.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.agentSandbox.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agent-sandbox
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- end }}
     # Allow the fleet-manager to reach the PUBLIC /api/v1/* API for cross-silo operations.
     - from:
         - podSelector:
@@ -125,6 +139,20 @@ spec:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
   egress:
+    {{- if .Values.agentSandbox.enabled }}
+    # Public review requests may reach only the assigned sandbox Service review port; the route
+    # derives its DNS name from the current Kurrent lease and never accepts a caller host or port.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.agentSandbox.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agent-sandbox
+      ports:
+        - protocol: TCP
+          port: 8090
+    {{- end }}
     {{- if .Values.historyStore.kurrentdb.enabled }}
     # The server reaches the release-local HistoryStore through KurrentDB's TLS listener only.
     - to:
@@ -297,5 +325,53 @@ spec:
     {{- end }}
 ---
 {{- end }}
+{{- end }}
+{{- if .Values.agentSandbox.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-conversation-computer-egress" (include "opencrane.fullname" .) | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Values.agentSandbox.namespace | quote }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agent-sandbox
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    # The release-local LiteLLM Pod accepts only the model, budget and time-bounded attempt key.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: litellm
+      ports:
+        - protocol: TCP
+          port: 4000
+    {{- if .Values.networkPolicy.allowDNS }}
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
 {{- end }}
 {{- end }}

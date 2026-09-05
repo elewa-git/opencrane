@@ -1,0 +1,137 @@
+import { Router, type Request, type Response } from "express";
+import type { ConversationComputerReviewPrincipalResolver, ConversationComputerReviewRouterOptions } from "./conversation-computer-review.types";
+
+/** Largest response accepted from a sandbox review gateway. */
+const _MAX_RESPONSE_BYTES = 1024 * 1024;
+/** Fixed review port owned by the 0.11 conversation-computer image. */
+const _REVIEW_PORT = 8090;
+/** Release-owned localhost ports eligible for temporary preview review. */
+const _PREVIEW_PORTS = new Set([3000, 4173, 4200, 5173, 8000]);
+/** DNS label accepted from the controller-owned Sandbox status. */
+const _DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+
+/** Mount authenticated, generation-fenced review operations for one active conversation computer. */
+export function _CreateConversationComputerReviewRouter(options: ConversationComputerReviewRouterOptions, resolvePrincipal: ConversationComputerReviewPrincipalResolver): Router
+{
+	const router = Router();
+	router.get("/:conversationId/review/files", function _Files(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/files?path=${encodeURIComponent(_Query(request, "path"))}`); });
+	router.get("/:conversationId/review/diff", function _Diff(request, response) { void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/diff?path=${encodeURIComponent(_Query(request, "path"))}`); });
+	router.get("/:conversationId/review/previews/:port/*path", function _Preview(request, response)
+	{
+		const port = Number(_Parameter(request, "port"));
+		if (!_PREVIEW_PORTS.has(port))
+		{
+			response.status(400).json({ error: "preview_port_unavailable" });
+			return;
+		}
+		const path = _PathParameter(request, "path");
+		void _Proxy(request, response, options, resolvePrincipal, "GET", `/v1/previews/${port}/${path}`);
+	});
+	router.post("/:conversationId/review/commands", function _Commands(request, response) { void _Proxy(request, response, options, resolvePrincipal, "POST", "/v1/commands", request.body); });
+	return router;
+}
+
+/** Authorize one exact active lease, derive its Service route, and forward only the selected operation. */
+async function _Proxy(request: Request, response: Response, options: ConversationComputerReviewRouterOptions, resolvePrincipal: ConversationComputerReviewPrincipalResolver, method: "GET" | "POST", path: string, body?: unknown): Promise<void>
+{
+	try
+	{
+		// 1. Resolve identity from the authenticated request so neither parameters nor body can select a caller.
+		const principal = resolvePrincipal(request);
+		if (principal === null)
+		{
+			response.status(401).json({ error: "unauthorized" });
+			return;
+		}
+
+		// 2. Reuse conversation metadata admission, then read only server-owned computer coordinates.
+		const conversationId = _Parameter(request, "conversationId");
+		const caller = { principalId: principal.principalId, subjectId: principal.externalSubject, siloId: principal.siloId };
+		const lease = await options.authority.resolve(caller, conversationId);
+		if (lease === null)
+		{
+			response.status(404).json({ error: "conversation_computer_unavailable" });
+			return;
+		}
+		if (!_DNS_LABEL.test(lease.sandboxId) || !_DNS_LABEL.test(options.sandboxNamespace))
+			throw new Error("active sandbox route is invalid");
+
+		// 3. Derive the only upstream host and credential from the admitted lease, then cap its response.
+		const target = `http://${lease.sandboxId}.${options.sandboxNamespace}.svc.cluster.local:${_REVIEW_PORT}${path}`;
+		const headers: Record<string, string> = { authorization: `Bearer ${lease.leaseId}` };
+		let requestBody: string | undefined;
+		if (method === "POST")
+		{
+			headers["content-type"] = "application/json";
+			requestBody = JSON.stringify(body);
+			if (Buffer.byteLength(requestBody) > 64 * 1024)
+			{
+				response.status(413).json({ error: "review_request_too_large" });
+				return;
+			}
+		}
+		const upstream = await (options.fetch ?? fetch)(target, { method, headers, body: requestBody, redirect: "manual", signal: AbortSignal.timeout(35_000) });
+		const bytes = await _ReadBoundedResponse(upstream);
+		response.status(upstream.status).set("cache-control", "no-store").set("content-type", upstream.headers.get("content-type") ?? "application/octet-stream").send(Buffer.from(bytes));
+	}
+	catch
+	{
+		response.status(503).json({ error: "conversation_computer_review_unavailable" });
+	}
+}
+
+/** Read a streamed sandbox response while cancelling as soon as it crosses the public ceiling. */
+async function _ReadBoundedResponse(response: globalThis.Response): Promise<Uint8Array>
+{
+	const declaredLength = Number(response.headers.get("content-length"));
+	if (Number.isFinite(declaredLength) && declaredLength > _MAX_RESPONSE_BYTES)
+		throw new Error("sandbox review response exceeded its limit");
+	if (response.body === null)
+		return new Uint8Array();
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let length = 0;
+	while (true)
+	{
+		const item = await reader.read();
+		if (item.done)
+			break;
+		length += item.value.byteLength;
+		if (length > _MAX_RESPONSE_BYTES)
+		{
+			await reader.cancel();
+			throw new Error("sandbox review response exceeded its limit");
+		}
+		chunks.push(item.value);
+	}
+	const bytes = new Uint8Array(length);
+	let offset = 0;
+	for (const chunk of chunks)
+	{
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return bytes;
+}
+
+/** Read one non-repeated route parameter. */
+function _Parameter(request: Request, name: string): string
+{
+	const value = request.params[name];
+	return typeof value === "string" ? value : "";
+}
+
+/** Read one non-repeated query parameter. */
+function _Query(request: Request, name: string): string
+{
+	const value = request.query[name];
+	return typeof value === "string" ? value : "";
+}
+
+/** Encode a wildcard path without allowing it to create a query or fragment in the upstream URL. */
+function _PathParameter(request: Request, name: string): string
+{
+	const value = request.params[name];
+	const path = Array.isArray(value) ? value.join("/") : value ?? "";
+	return path.split("/").map(segment => encodeURIComponent(segment)).join("/");
+}

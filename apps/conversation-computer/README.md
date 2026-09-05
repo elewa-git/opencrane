@@ -10,28 +10,35 @@ the image from a release-owned profile after OpenCrane admits a generation-bound
 ```text
  KurrentDB lease event ──► SandboxClaim ──► conversation-computer ◄── HERE
                                                   │
-                                                  ├── health and readiness
-                                                  └── future exec, browser and preview children
+                                                  ├── Pod-bound bootstrap
+                                                  ├── one admitted LiteLLM call
+                                                  ├── safe output append
+                                                  └── lease-local review gateway
 ```
 
 **In this flow:** [opencrane](../opencrane/README.md) admits the lease, while
 [agent-sandbox](../_infra/agent-sandbox/README.md) fixes the image and confinement profile.
 
 The process refuses readiness unless it receives the computer id, lease id, computer generation and
-KurrentDB endpoint. Those coordinates are configuration seams only; this first image does not claim
-that it can execute an agent or mutate history.
+private server endpoint. It re-reads a short-lived, audience-bound projected token for every exchange.
+The server returns immutable compiled input and an attempt-scoped LiteLLM route only after binding the
+Pod to the current lease. Output returns through the server-owned conversation writer.
 
 ## Public surface
 
-Entrypoint: `python3 -m src.main` serves `/healthz` and `/readyz` on port 8080.
+Entrypoint: `python3 -m src.main` serves `/healthz` and `/readyz` on port 8080. A second listener on
+private port 8090 accepts the current generation's 96-bit lease id from its Downward API coordinate
+and exposes bounded argv-only commands,
+selected workspace files and diffs, plus GET-only proxying to five release-allowlisted localhost
+preview ports. NetworkPolicy admits that port only from this release's OpenCrane server.
 
 ## Boundary
 
 This app does not implement the retired AgentRun HTTP/server-sent event protocol, warm reservations,
-or continuation checkpoints. It also does not yet provide the identity-aware gateway, agent model
-loop, `execd`, browser/Chrome DevTools Protocol, noVNC, file review or localhost preview proxy. Those
-processes must be added behind the same lease-generation fence; none may become an unauthenticated
-port exposed directly outside the sandbox.
+or continuation checkpoints. It does not provide a public execution port, browser/Chrome DevTools
+Protocol, noVNC, CodeProject, Git service, isolated build, artifact publication or published
+PreviewApp. The review listener is never directly exposed through public ingress and never turns a
+localhost preview into a separately published workload.
 
 ## Dependency direction
 
@@ -42,7 +49,17 @@ holds no product authorization or lifecycle authority.
 
 The image runs as uid/gid 65532 with no writable application files. Readiness requires
 `OPENCRANE_COMPUTER_ID`, `OPENCRANE_COMPUTER_GENERATION`, `OPENCRANE_COMPUTER_LEASE_ID`, and
-`OPENCRANE_HISTORY_STORE_ENDPOINT`. `OPENCRANE_COMPUTER_HEALTH_PORT` defaults to `8080`.
+`OPENCRANE_INTERNAL_ENDPOINT`. The projected token defaults to `/var/run/secrets/opencrane/token`;
+`OPENCRANE_COMPUTER_HEALTH_PORT` defaults to `8080`.
+
+The writable `/workspace` volume is capped at 2 GiB and dies with the sandbox. The command gateway
+admits only `git`, `node`, `npm`, `npx`, and `python3`, passes argv directly without a shell, uses a
+fixed environment, stops after 30 seconds, and truncates combined output at 1 MiB. This list shapes
+the interface; it is not a security boundary because these developer tools can execute code. The
+gVisor runtime, non-root process, dropped capabilities, resource ceiling, ephemeral workspace and
+default-deny network policy provide the confinement boundary. File, diff and preview responses share
+the same 1 MiB ceiling. The preview allowlist defaults to ports 3000, 4173, 4200, 5173 and 8000 and
+always targets `127.0.0.1`.
 
 ## See also
 
