@@ -59,7 +59,15 @@ rendered_pull_secret="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
   --set-string 'global.imagePullSecret=opencrane-ghcr-pull' \
   --show-only templates/app-rollups.yaml)"
-[[ "$(grep -Fc 'name: "opencrane-ghcr-pull"' <<<"$rendered_pull_secret")" == "3" ]]
+# Every image-pulling deployable the umbrella renders must carry the shared pull secret: the server
+# and the memory gateway. Name them instead of counting, so a removed or added deployable is a
+# deliberate edit here rather than a silent count drift.
+for pulling_deployment in opencrane-silo-opencrane-server opencrane-silo-memory-gateway; do
+  pulling_document="$(awk -v name="$pulling_deployment" 'BEGIN { RS="---" } /kind: Deployment/ && index($0, "name: " name) { print }' <<<"$rendered_pull_secret")"
+  [[ -n "$pulling_document" ]]
+  grep -Fq 'name: "opencrane-ghcr-pull"' <<<"$pulling_document"
+done
+[[ "$(grep -Fc 'name: "opencrane-ghcr-pull"' <<<"$rendered_pull_secret")" == "2" ]]
 
 _run_verify() {
   local curl_outcome="$1"

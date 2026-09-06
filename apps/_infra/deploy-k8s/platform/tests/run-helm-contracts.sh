@@ -3,6 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 
+# The contracts rely on `set -e` stopping at the first false test. Bash 3.2 (the macOS default) does
+# not stop on a false [[ ]] after a sourced script, so a local pass there proves less than CI does.
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "[contracts] WARNING: bash ${BASH_VERSION} does not enforce every assertion; treat CI (bash 5) as the authority or run with a newer bash" >&2
+fi
+
 for contract in \
   bootstrap-prerequisites-contract.sh \
   bootstrap-prerequisites-render-contract.sh \
