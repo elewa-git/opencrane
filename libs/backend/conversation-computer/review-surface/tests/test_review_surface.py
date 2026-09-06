@@ -187,6 +187,13 @@ class ReviewSurfaceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "viewport"):
             capture_preview(4173, "", 4096, 720, frozenset({4173}))
 
+    def test_keeps_output_of_a_command_that_exits_before_the_first_read(self) -> None:
+        """Return every byte a short-lived command wrote even when it has already exited."""
+        result = _run_command(self.config, {"argv": ["python3", "-c", "print('quick' * 20)"], "cwd": "."})
+        self.assertEqual(result["outcome"], "completed")
+        self.assertEqual(result["exitCode"], 0)
+        self.assertEqual(result["output"].strip(), "quick" * 20)
+
     def test_git_diff_uses_no_external_diff_and_selected_path(self) -> None:
         """Return only the selected path through Git's built-in diff implementation."""
         subprocess_config = ReviewSurfaceConfig(self.workspace, self.credential_path, frozenset({"git"}), frozenset())

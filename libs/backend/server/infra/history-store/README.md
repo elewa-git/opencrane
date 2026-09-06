@@ -69,6 +69,31 @@ appends a stream. A malformed sentinel also stops the process. Pointing a second
 database therefore fails at boot instead of silently mixing histories; a fresh silo needs a fresh
 database.
 
+## Live proofs against a real KurrentDB
+
+The unit tests under `src/__tests__/*.test.ts` mock the client. ADR 0016 also requires proof that
+the real `@kurrent/kurrentdb-client` and a real KurrentDB 26.x support every operation on the port,
+so `src/__tests__/kurrent-history-store.integration.ts` (and the conversations-level
+`conversation-history-authority.integration.ts`) run the adapter against a live server. They prove
+checked single-stream appends, the atomic multi-stream append used for genesis and for
+message+activation, the exact `WrongExpectedVersionError` the authorities catch (including a
+two-writer race and a stale head that rolls the whole atomic append back), reads, catch-up
+subscriptions, and the persistent consumer group with acknowledge, retry, park, and replay, using the
+same group settings the Helm bootstrap Job provisions.
+
+Run them with a server reachable from this machine:
+
+```
+KURRENTDB_INTEGRATION_URL='kurrentdb://localhost:2113?tls=false' \
+  npx nx run backend-server-infra-history-store:test:integration
+```
+
+Without `KURRENTDB_INTEGRATION_URL` the target still compiles the suite and reports one skipped
+block per file. The default `test` target never runs these files. CI starts KurrentDB 26.1.1 as a
+service container in the "KurrentDB history-store proofs" job of `.github/workflows/docker.yml`;
+that container runs insecure on purpose because TLS, credentials, and the ACL are proven by the
+Helm contract test and bootstrap Job under `apps/_infra/kurrentdb`.
+
 ## See also
 
 - Parent index: [infra](../README.md)

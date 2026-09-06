@@ -369,6 +369,70 @@ jobs:
       - name: Run every PostgreSQL authority suite
         run: npx nx run-many -t test:sql --parallel=1
 
+  # The KurrentDB proofs run beside the database job for the same reason: they need a live server
+  # that nothing else in this workflow starts, and they must not lengthen the test job's critical
+  # path. ADR 0016 requires the admission test to prove the real client and topology support every
+  # HistoryStore operation; the unit tests mock the client, so this job is that proof.
+  history_store:
+    name: KurrentDB history-store proofs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: prepare
+    services:
+      kurrentdb:
+        # The chart pins appVersion 26.1.1 (apps/_infra/kurrentdb/helm/Chart.yaml). The digest is the
+        # published 26.1.1 manifest list, so a moved tag cannot change what this job proves.
+        image: docker.kurrent.io/kurrent-latest/kurrentdb:26.1.1@sha256:ac88a817daca77f42273ca6a30f70d0d9a7cf6b2962733bd7ecdd93be540b7e0
+        env:
+          # Insecure mode is acceptable ONLY for this throwaway CI container. It exists to prove the
+          # client and the stream and consumer-group operations. TLS, credentials, and the stream ACL
+          # are covered by the Helm contract test and the bootstrap Job under apps/_infra/kurrentdb,
+          # and the chart itself hard-codes KURRENTDB_INSECURE=false.
+          KURRENTDB_CLUSTER_SIZE: "1"
+          KURRENTDB_INSECURE: "true"
+          KURRENTDB_MEM_DB: "true"
+          KURRENTDB_RUN_PROJECTIONS: None
+          KURRENTDB_NODE_PORT: "2113"
+        ports:
+          - 2113:2113
+    env:
+      KURRENTDB_INTEGRATION_URL: kurrentdb://localhost:2113?tls=false
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      # The wait runs on the runner rather than as a container health command so the job does not
+      # depend on which HTTP client the KurrentDB image ships.
+      - name: Wait for KurrentDB to report live
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null http://localhost:2113/health/live; then
+              echo "KurrentDB is live after $attempt attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "KurrentDB did not become live within 120 seconds" >&2
+          exit 1
+
+      - name: Prove the KurrentDB client against the live server
+        run: npx nx run backend-server-infra-history-store:test:integration
+
   # The API contract check builds the full server, so when the contract changed it added
   # minutes to the test job. It only needs the prepare outputs and runs beside it instead.
   api_contract:
@@ -618,7 +682,7 @@ jobs:
     name: Build and publish affected images
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke]
+    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke]
     # Manual publication bypasses failed validation only when the operator repeats this workflow's SHA.
     # The exact match prevents approval for one commit from publishing a different commit.
     if: >-
@@ -631,6 +695,7 @@ jobs:
           inputs.validation_override_sha == github.sha) ||
          (needs.test.result == 'success' &&
           needs.database.result == 'success' &&
+          needs.history_store.result == 'success' &&
           (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
           needs.storybook_visual.result == 'success' &&
           (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
@@ -706,7 +771,7 @@ jobs:
     name: Publish develop smoke image (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke, build-and-push]
+    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke, build-and-push]
     if: >-
       ${{
         always() &&
@@ -714,6 +779,7 @@ jobs:
         github.ref == 'refs/heads/develop' &&
         needs.test.result == 'success' &&
         needs.database.result == 'success' &&
+        needs.history_store.result == 'success' &&
         (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
         needs.storybook_visual.result == 'success' &&
         needs.develop_smoke.result == 'success' &&

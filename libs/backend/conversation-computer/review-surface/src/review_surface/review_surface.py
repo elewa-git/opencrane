@@ -110,7 +110,11 @@ def _bounded_process_output(process: subprocess.Popen[bytes]) -> tuple[bytes, st
     outcome = "completed"
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
-    while process.poll() is None:
+    # Read until the pipe reaches end of file, not until the child exits: a fast command can finish
+    # before the first read and its output must still be drained, while a lingering descendant that
+    # keeps the pipe open runs into the deadline and is killed with the whole session below.
+    drained = False
+    while not drained:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             outcome = "timed_out"
@@ -119,6 +123,7 @@ def _bounded_process_output(process: subprocess.Popen[bytes]) -> tuple[bytes, st
         for key, _ in events:
             chunk = os.read(key.fd, min(64 * 1024, _MAX_OUTPUT_BYTES + 1 - length))
             if not chunk:
+                drained = True
                 continue
             chunks.append(chunk)
             length += len(chunk)
