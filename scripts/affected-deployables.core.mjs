@@ -1,6 +1,5 @@
 const DEVELOP_SMOKE_IMAGES = [
 	"artifact-service",
-	"channel-proxy",
 	"cognee",
 	"memory-gateway",
 	"opencrane",
@@ -49,7 +48,7 @@ export function selectForcedContainerProjects(force, allProjects = [])
 	if (!force) return null;
 	if (force === "none") return [];
 	if (force === "all") return [...new Set(allProjects)].sort(function _ByName(left, right) { return left.localeCompare(right); });
-	if (force === "bootstrap") return ["channel-proxy", "memory-gateway"];
+	if (force === "bootstrap") return ["memory-gateway"];
 	if (force === "artifact") return ["artifact-service"];
 	if (force === "qualification") return [...DEVELOP_SMOKE_IMAGES, "postgres"];
 	if (force === "server") return ["opencrane"];

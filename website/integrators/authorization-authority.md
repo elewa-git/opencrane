@@ -226,12 +226,6 @@ The relation writer creates or revokes its managed grant in the same database tr
 migration projects only unambiguous existing relations. Historical conversations have no reliable
 creator coordinate, so the migration grants nobody `Delete` for them rather than guessing.
 
-::: warning
-A registered channel route still needs a durable participant-to-route relation before OpenCrane can
-project a route-bound `ChannelTarget` grant. It must not grant every active organisation member
-channel access merely because they share a silo.
-:::
-
 ## Source
 
 - [`libs/models/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/models/authorization/main/README.md)

@@ -159,8 +159,7 @@ empty successful page.
 The self API receives only server-derived session and host identity. It never accepts silo,
 membership, user, agent authority, or run identifiers as browser-selected trust facts. The private
 computer turn path depends on a narrow application-owned admission port; this package does not
-persist runs, select an execution subject, dispatch workloads, or execute agents. The channel replay route separately
-requires a consumed one-use context and the exact controller-selected route identifier.
+persist runs, select an execution subject, dispatch workloads, or execute agents.
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
 closed through stable denials. The replay persistence port always returns an explicit authorised or
@@ -197,5 +196,5 @@ access require current `Use`.
 
 - Parent index: [server](../../README.md)
 - Related authorities: [execution inputs](../../../agents/execution/inputs/main/README.md) ·
-  [execution runs](../../../agents/execution/runs/main/README.md) · [channel-targets](../../agents/channel-targets/main/README.md)
+  [execution runs](../../../agents/execution/runs/main/README.md)
 - Browser consumer: [conversation workspace](../../../../frontend/features/conversation-workspace/README.md)

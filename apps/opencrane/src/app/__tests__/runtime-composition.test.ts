@@ -41,7 +41,6 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorEnabled: false,
 		artifactPreprocessorMaximumOutputBytes: 1_024,
 		artifactPreprocessorNamespace: undefined,
-		channelTargets: null,
 		mcpCompanionClaimLeaseMilliseconds: 30_000,
 		mcpControllerClaimLeaseMilliseconds: 30_000,
 		mcpExecutorNamespace: "mcp-executors",
@@ -73,7 +72,6 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition).not.toHaveProperty("runtimeStream");
 		expect(composition.artifactPreprocessor).toBeNull();
 		expect(composition.artifactScanner).toBeNull();
-		expect(composition.channelTargetResolver).toBeNull();
 		expect(composition).not.toHaveProperty("conversationReplay");
 	});
 
@@ -101,7 +99,6 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 			artifactPreprocessorNamespace: "artifact-preprocessor",
 			artifactScannerEnabled: true,
 			artifactScannerNamespace: "artifact-scanner",
-			channelTargets: { channelProxyServiceAccountName: "channel-proxy", invocationContextTtlMilliseconds: 60_000, receiverEndpoint: "http://opencrane-server.opencrane-server.svc.cluster.local:8081/api/internal/conversation-replay", receiverId: "internal-channel-replay", siloId: "silo-1", trustedHost: "acme.example.com" },
 		};
 
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config);
@@ -109,7 +106,6 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessController).toEqual(expect.any(Function));
 		expect(composition.artifactScanner).toEqual(expect.any(Function));
-		expect(composition.channelTargetResolver).toEqual(expect.any(Function));
 	});
 
 	it("refuses an enabled scanner plane without a separate namespace", function _rejectsScannerWithoutNamespace()

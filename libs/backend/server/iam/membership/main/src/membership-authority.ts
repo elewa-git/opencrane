@@ -1,29 +1,6 @@
 import { __EvaluateFleetMembershipRevision } from "@opencrane/models/authorization";
 
-import { FleetMembershipAcceptanceStatuses, FleetMembershipEvidenceOutcomes, type FleetMembershipAuthorityRepository, type FleetMembershipSignatureVerifier, type VerifyFleetMembershipCommand, type VerifyFleetMembershipEvidenceResult, type VerifyFleetMembershipResult } from "./membership-authority.types";
-
-/**
- * Checks one subject's fleet membership and reports how long it may be trusted.
- *
- * A thin wrapper over {@link __VerifyCurrentFleetMembershipEvidence} for callers that only need
- * "yes, until when" and have no use for the signed facts. Trust ends at the earlier of the
- * revision's own expiry and the configured staleness limit, so a silo that stops receiving new
- * revisions loses membership by itself instead of coasting on an old one.
- *
- * Called by: SignedFleetMembershipAssertionVerifier in this package — the only caller today.
- * @param repository - Store of signed revisions and of the newest accepted revision per silo.
- * @param verifier - Holder of the issuer's public key.
- * @param command - Silo, subject, assertion, current time, and staleness limit.
- * @returns `trusted` with the revision and the instant trust runs out, or `denied` with the reason
- *          the check failed; a denial never means "retry without checking".
- */
-export async function __VerifyCurrentFleetMembership(repository: FleetMembershipAuthorityRepository, verifier: FleetMembershipSignatureVerifier, command: VerifyFleetMembershipCommand): Promise<VerifyFleetMembershipResult>
-{
-	const result = await __VerifyCurrentFleetMembershipEvidence(repository, verifier, command);
-	if (result.outcome === FleetMembershipEvidenceOutcomes.Denied)
-		return result;
-	return { outcome: "trusted", revision: result.evidence.revision, trustedUntilEpochMs: result.evidence.trustedUntilEpochMs };
-}
+import { FleetMembershipAcceptanceStatuses, FleetMembershipEvidenceOutcomes, type FleetMembershipAuthorityRepository, type FleetMembershipSignatureVerifier, type VerifyFleetMembershipCommand, type VerifyFleetMembershipEvidenceResult } from "./membership-authority.types";
 
 /**
  * Checks one subject's fleet membership and returns the signed facts to record on the run.

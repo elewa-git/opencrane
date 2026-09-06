@@ -28,7 +28,6 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorEnabled: false,
 		artifactPreprocessorMaximumOutputBytes: 1_024,
 		artifactPreprocessorNamespace: undefined,
-		channelTargets: null,
 		mcpCompanionClaimLeaseMilliseconds: 30_000,
 		mcpControllerClaimLeaseMilliseconds: 30_000,
 		mcpExecutorNamespace: "mcp-executors",
@@ -54,7 +53,7 @@ describe("internal workload app", function _Suite()
 {
 	it("rejects scanner JSON above the private command ceiling before route dispatch", async function _RejectsLargeScannerCommand()
 	{
-		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), [_Continue], _McpRuntime());
+		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime());
 		const response = await request(app).put("/api/internal/artifact-scanner/jobs/job-1/result").set("content-type", "application/json").send({ scannerVersion: "x".repeat(20 * 1_024) });
 
 		expect(response.status).toBe(413);

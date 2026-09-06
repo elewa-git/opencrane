@@ -3,7 +3,7 @@ import * as k8s from "@kubernetes/client-node";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "./workload-identity.types";
+import type { FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "./workload-identity.types";
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
 function _IsNamespace(value: string): boolean
@@ -150,14 +150,6 @@ export function _CreateSkillAuthoringValidationTokenReviewer(authApi: ProjectedT
 			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _IsSkillAuthoringValidationServiceAccount(value): boolean { return value === SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME; });
 		},
 	};
-}
-
-/** Build the fixed TokenReview adapter for one deployment-owned channel-proxy identity. */
-export function _CreateChannelProxyTokenReviewer(authApi: ProjectedTokenReviewApi, config: ChannelProxyTokenReviewerConfig): FixedServiceAccountTokenReviewer
-{
-	if (!config.audience.trim() || !config.namespace.trim() || !config.serviceAccountName.trim())
-		throw new Error("channel-proxy workload identity must be configured");
-	return _CreateFixedServiceAccountTokenReviewer(authApi, config.audience, config.namespace, config.serviceAccountName);
 }
 
 /** Build the fixed TokenReview adapter for the sole OpenCrane server admitted by memory-gateway. */

@@ -15,7 +15,6 @@ root version in the same slice. Documentation-only changes do not advance an app
 | [`apps/opencrane`](../../apps/opencrane/README.md) | Authenticated REST API, durable product authority, process composition, Prisma, and the server Helm unit. |
 | [`apps/conversation-computer`](../../apps/conversation-computer/README.md) | Generation-fenced process image for an Agent Sandbox conversation computer. |
 | [`apps/opencrane-ui`](../../apps/opencrane-ui/README.md) | Angular web client for organisation and employee surfaces. |
-| [`apps/channel-proxy`](../../apps/channel-proxy/README.md) | Inbound channel authentication and routing boundary. |
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
 | [`apps/agent-controller`](../../apps/agent-controller/README.md) | Sole Kubernetes mutator for governed one-shot Jobs. |
 | [`apps/mcp-executor`](../../apps/mcp-executor/README.md) | One-shot token-holding companion for OCI-backed MCP Jobs. |
@@ -40,7 +39,6 @@ app's source.
 | `libs/backend/agents/skills/*` | Governed skill authoring, workflow admission, and execution workloads. |
 | `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
 | [`libs/backend/artifacts/preprocessor`](../../libs/backend/artifacts/preprocessor/README.md) | PDF workflow controller, one-shot Job policy, and broker-only worker. |
-| [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/iam/organization-members`](../../libs/backend/server/iam/organization-members/main/README.md) | Settings member directory and standalone invitation authority, or fail-closed delegation of the whole capability to Fleet billing. |
 | [`libs/backend/server/iam/audit-writer`](../../libs/backend/server/iam/audit-writer/main/README.md) | Transaction-scoped append-only authorization decision evidence with no read or policy dependency. |

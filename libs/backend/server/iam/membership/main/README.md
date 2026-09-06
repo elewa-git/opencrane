@@ -46,14 +46,13 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
 
 ## Public surface
 
-- `__VerifyCurrentFleetMembership` — verifies the newest signed membership revision and, on success,
-  atomically records its acceptance; returns a trusted window or a denial with a reason.
-- `__VerifyCurrentFleetMembershipEvidence` — performs the same verification but returns the exact
-  signed issuer, key, assertion, subject, payload digest, revision, and trust window that a run may
-  freeze into its input snapshot.
+- `__VerifyCurrentFleetMembershipEvidence` — verifies the newest signed membership revision and, on
+  success, atomically records its acceptance; returns the exact signed issuer, key, assertion,
+  subject, payload digest, revision, and trust window that a run may freeze into its input snapshot,
+  or a denial with a reason.
 - `PrismaFleetMembershipAuthorityRepository` — the database-backed store of signed revisions and the
-  highest-accepted high-water mark. It can own a transaction or join the run-admission transaction,
-  so the snapshot and membership high-water mark cannot commit separately.
+  highest-accepted high-water mark. It joins the run-admission transaction, so the snapshot and
+  membership high-water mark cannot commit separately.
 - `Ed25519FleetMembershipSignatureVerifier` — verifies the detached base64url signature over the
   recomputed canonical membership payload digest using only exact issuer-key IDs from mounted
   public-key files. A stored assertion cannot change independently of its signature.
@@ -63,9 +62,6 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
   model. `fleet` reloads an independent projected Ed25519 public key. `standalone` requires no
   Fleet key and denies every presented revision until a local issuer exists; an OIDC session is
   never treated as membership. It is neutral to personal and managed agents.
-- `SignedFleetMembershipAssertionVerifier` — the current signed-membership adapter used by product
-  boundaries. It selects the sole exact subject, silo, and scope assertion from the
-  trusted revision instead of accepting an assertion identifier from an application or request.
 - `__SelectCurrentFleetMembershipAssertion` — the reusable transaction-neutral selector used by
   standalone checks and personal or managed run admission. It returns an assertion identifier only
   when the newest trusted-issuer revision contains exactly one matching silo and subject.

@@ -23,7 +23,8 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 	public read(): Promise<PublicHealthReport>
 	{
 		const now = this._dependencies.clock.nowEpochMilliseconds();
-		if (this._cache !== null && now < this._cache.expiresAtEpochMilliseconds) return this._cache.report;
+		if (this._cache !== null && now < this._cache.expiresAtEpochMilliseconds)
+			return this._cache.report;
 		const report = this._ReadFresh();
 		this._cache = { expiresAtEpochMilliseconds: now + this._dependencies.cacheMilliseconds, report };
 		return report;
@@ -33,14 +34,11 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 	private async _ReadFresh(): Promise<PublicHealthReport>
 	{
 		// Run independent checks together so an unavailable service does not delay every later check.
-		const [database, models, memory, files, channels] = await Promise.all([
+		const [database, models, memory, files] = await Promise.all([
 			_ReadProbe(PublicHealthServiceNames.Database, this._dependencies.database, this._dependencies.logger),
 			_ReadProbe(PublicHealthServiceNames.Models, this._dependencies.models, this._dependencies.logger),
 			_ReadProbe(PublicHealthServiceNames.Memory, this._dependencies.memory, this._dependencies.logger),
 			_ReadProbe(PublicHealthServiceNames.Files, this._dependencies.files, this._dependencies.logger),
-			this._dependencies.channels === null
-				? Promise.resolve(PublicHealthServiceStatuses.Disabled)
-				: _ReadProbe(PublicHealthServiceNames.Channels, this._dependencies.channels, this._dependencies.logger),
 		]);
 
 		// Map results to fixed public names so the response reveals no target or failure details.
@@ -50,7 +48,6 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 			[PublicHealthServiceNames.Models]: models,
 			[PublicHealthServiceNames.Memory]: memory,
 			[PublicHealthServiceNames.Files]: files,
-			[PublicHealthServiceNames.Channels]: channels,
 		};
 
 		// Keep readiness tied to the database while still reporting outages in the optional services.
@@ -81,7 +78,7 @@ async function _ReadProbe(name: PublicHealthServiceNames, probe: PublicHealthPro
  * Called by: `apps/opencrane/src/index.ts` while constructing the public listener.
  *
  * @param prisma - Product database client used by the request-bearing readiness probe.
-	 * @param config - Frozen process configuration containing memory and channel targets.
+ * @param config - Frozen process configuration containing the memory-gateway target.
  * @param logger - Process logger used only for structured private failure records.
  * @param environment - Process environment containing existing model and file service targets.
  * @returns Cached report reader consumed by the public `/healthz` handler.
@@ -93,7 +90,6 @@ export function ___CreatePublicHealthReportReader(prisma: Parameters<typeof ___C
 		models: _CreateModelHealthProbe(environment),
 		memory: _CreateHttpHealthProbe(config.runtime.memoryGatewayUrl, "/readyz"),
 		files: _CreateHttpHealthProbe(environment.ARTIFACT_SERVICE_URL?.trim(), "/readyz"),
-		channels: config.runtime.channelTargets === null ? null : _CreateHttpHealthProbe(environment.CHANNEL_PROXY_URL?.trim(), "/readyz"),
 		logger,
 		clock: { nowEpochMilliseconds: function _Now() { return Date.now(); } },
 		cacheMilliseconds: _REPORT_CACHE_MILLISECONDS,

@@ -24,17 +24,6 @@ export type OpenCraneOrganizationMembershipConfig =
 	| { readonly mode: OrganizationMembershipDeploymentModes.Standalone; readonly standalone: StandaloneOrganizationMembershipConfig }
 	| { readonly mode: OrganizationMembershipDeploymentModes.Fleet; readonly fleet: FleetOrganizationMembershipHttpClientConfig };
 
-/** The channel resolver and replay receiver settings fixed by the deployment. */
-export interface ChannelTargetRuntimeConfig
-{
-	readonly channelProxyServiceAccountName: string;
-	readonly invocationContextTtlMilliseconds: number;
-	readonly receiverEndpoint: string;
-	readonly receiverId: string;
-	readonly siloId: string;
-	readonly trustedHost: string;
-}
-
 /** Release-owned Agent Sandbox profile used for every 0.11 conversation computer. */
 export interface AgentSandboxReleaseProfileConfig
 {
@@ -69,8 +58,6 @@ export interface InternalRuntimeConfig
 	readonly artifactPreprocessorMaximumOutputBytes: number;
 	/** Namespace reserved for artifact-preprocessor Pods when enabled. */
 	readonly artifactPreprocessorNamespace: string | undefined;
-	/** Complete resolver and replay configuration, or null when the channel boundary is disabled. */
-	readonly channelTargets: ChannelTargetRuntimeConfig | null;
 	/** Lease held by one Pod-bound companion command claim. */
 	readonly mcpCompanionClaimLeaseMilliseconds: number;
 	/** Lease held by one controller claim or release delivery. */

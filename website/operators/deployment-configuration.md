@@ -50,7 +50,7 @@ These are the public configuration roots owned by the silo umbrella chart.
 
 ::: warning
 Do not copy a child chart's entire value tree into a platform overlay just because it appears in the
-umbrella `values.yaml`. `channelProxy`, `agentController`, `clustertenantManager`, worker planes and
+umbrella `values.yaml`. `agentController`, `clustertenantManager`, worker planes and
 vendored services are forwarded to their app owners. Change them only with the app's documented
 deployment contract and review their trust boundary first.
 :::

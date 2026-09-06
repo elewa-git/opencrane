@@ -95,4 +95,4 @@ SQL workload rows and tables after the replacement code is complete.
 ## See also
 
 - Parent index: [agents](../../README.md)
-- Siblings: [artifacts](../../artifacts/main/README.md) · [agent-services](../../agent-services/main/README.md) · [channel-targets](../../channel-targets/main/README.md)
+- Siblings: [artifacts](../../artifacts/main/README.md) · [agent-services](../../agent-services/main/README.md)

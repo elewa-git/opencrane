@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { AgentSandboxReleaseProfileConfig, ChannelTargetRuntimeConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { AgentSandboxReleaseProfileConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -15,9 +15,6 @@ const _MAXIMUM_ARTIFACT_OUTPUT_BYTES = 64 * 1_024 * 1_024;
 
 /** Default artifact-preprocessor output body limit. */
 const _DEFAULT_ARTIFACT_OUTPUT_BYTES = 16 * 1_024 * 1_024;
-
-/** Receiver-id prefix reserved for migrated route rows; a configured receiver id may never use it. */
-const _LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX = "legacy-route-v0:";
 
 /** Read one bounded whole-number setting from the startup environment. */
 function _readBoundedInteger(name: string, fallback: number, minimum: number, maximum: number): number
@@ -164,25 +161,6 @@ export function _ReadOrganizationMembershipConfig(): OpenCraneOrganizationMember
 	throw new Error("OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet");
 }
 
-/** Read the five channel resolver and replay receiver settings; all must be set or none. */
-function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
-{
-	const values = {
-		channelProxyServiceAccountName: process.env.CHANNEL_PROXY_SERVICE_ACCOUNT_NAME?.trim() ?? "",
-		receiverEndpoint: process.env.CHANNEL_REPLAY_ENDPOINT?.trim() ?? "",
-		receiverId: process.env.CHANNEL_REPLAY_RECEIVER_ID?.trim() ?? "",
-		siloId: process.env.CHANNEL_TARGET_SILO_ID?.trim() ?? "",
-		trustedHost: process.env.CHANNEL_TARGET_TRUSTED_HOST?.trim().toLowerCase() ?? "",
-	};
-	if (Object.values(values).every(value => value.length === 0))
-		return null;
-	if (Object.values(values).some(value => value.length === 0))
-		throw new Error("channel target resolver configuration must be complete");
-	if (values.receiverId.startsWith(_LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX))
-		throw new Error("CHANNEL_REPLAY_RECEIVER_ID uses the reserved legacy route namespace");
-	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
-}
-
 /** Read the sole image-bound conversation-computer profile admitted by this release. */
 export function _ReadAgentSandboxReleaseProfileConfig(): AgentSandboxReleaseProfileConfig
 {
@@ -250,7 +228,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorEnabled: process.env.ARTIFACT_PREPROCESSOR_ENABLED === "true",
 			artifactPreprocessorMaximumOutputBytes: _readArtifactPreprocessorBodyLimit(),
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
-			channelTargets: _readChannelTargetConfig(),
 				mcpCompanionClaimLeaseMilliseconds: _readBoundedSeconds("MCP_COMPANION_CLAIM_LEASE_SECONDS", 150, 1, 300),
 				mcpControllerClaimLeaseMilliseconds: _readBoundedSeconds("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
 				mcpExecutorNamespace: process.env.MCP_EXECUTOR_NAMESPACE?.trim(),

@@ -10,7 +10,6 @@ import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory";
 import { _CreateArtifactScanSourceBroker } from "../infra/artifacts/artifact-scan-source-broker.factory";
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory";
-import { _CreateChannelTargetResolver } from "./channel-target-composition";
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition } from "./runtime-composition.types";
@@ -63,7 +62,7 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
  * @param authApi - Kubernetes TokenReview client for worker identity.
  * @param config - Frozen worker configuration.
  * @param serverNamespace - Namespace containing the trusted server identity.
- * @returns Optional artifact-preprocessor, scanner, and channel-target routers.
+ * @returns Optional artifact-preprocessor and scanner routers.
  */
 function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, controllerTokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">): OptionalRuntimeComposition
 {
@@ -84,9 +83,6 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 				authority: artifactPreprocessRepository,
 				logger: _log,
 			}),
-		channelTargetResolver: config.channelTargets === null
-			? null
-			: _CreateChannelTargetResolver(prisma, authApi, config.channelTargets, serverNamespace),
 		artifactPreprocessor: artifactPreprocessorNamespace === null
 			? null
 			: __CreateArtifactPreprocessorRouter({

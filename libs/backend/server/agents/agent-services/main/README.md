@@ -48,4 +48,4 @@ the execution-runs package.
 ## See also
 
 - Parent index: [agents](../../README.md)
-- Siblings: [skills](../../skills/main/README.md) · [artifacts](../../artifacts/main/README.md) · [channel-targets](../../channel-targets/main/README.md) · [model routing](../../../gateways/model-routing/main/README.md)
+- Siblings: [skills](../../skills/main/README.md) · [artifacts](../../artifacts/main/README.md) · [model routing](../../../gateways/model-routing/main/README.md)

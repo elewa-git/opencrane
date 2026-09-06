@@ -14,7 +14,7 @@ approvals, skills, integrations, memory, artifacts, budgets, and audit evidence;
 their concrete adapters, mounts their routers, and starts and stops them in the correct order.
 
 ```
- signed-in UI / channel proxy                cluster workloads
+ signed-in UI                                cluster workloads
               │ browser session                    │ projected identity
               ▼                                    ▼
  ┌──────────────────────────┐          ┌──────────────────────────┐
@@ -32,7 +32,7 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 ```
 
 **In this flow:** [opencrane-ui](../opencrane-ui/README.md) ·
-[channel-proxy](../channel-proxy/README.md) · [agent-controller](../agent-controller/README.md) ·
+[agent-controller](../agent-controller/README.md) ·
 [conversation-computer](../conversation-computer/README.md) ·
 [backend capabilities](../../libs/backend/README.md)
 
@@ -131,7 +131,7 @@ transport, and external-service seams belong under
 
 The public and workload-facing APIs share a process but not an exposure boundary. Public ingress
 routes `/api` and the public-safe `/healthz` service report only to `:8080`. That report names the
-API, database, models, memory, files, channels, and optional integrations without exposing internal hosts or
+API, database, models, memory, files, and optional integrations without exposing internal hosts or
 failure details. Database loss returns 503; another service can report degradation while the API
 remains ready to serve unaffected data. The `:8081` Service is restricted by Kubernetes NetworkPolicy, and endpoints
 that grant workload authority additionally review the caller's projected Kubernetes identity and
@@ -199,7 +199,7 @@ are:
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
-| `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
+| `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-conversation admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
@@ -207,8 +207,6 @@ are:
 | `OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_*` | Fleet-owned member directory, invitations, paid-seat, and payment decisions through one silo-scoped service credential | required in Fleet mode |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |
-| `CHANNEL_TARGET_*`, `CHANNEL_PROXY_SERVICE_ACCOUNT_NAME` | Exact trusted host/silo and TokenReviewed proxy caller for channel resolution | disabled when absent |
-| `CHANNEL_REPLAY_RECEIVER_ID`, `CHANNEL_REPLAY_ENDPOINT` | Stable replay receiver plus exact internal endpoint; startup and the drained convergence worker reconcile distinct routes per AgentService | disabled when absent |
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.
@@ -226,5 +224,4 @@ remote authority path.
   [conversation authority](../../libs/backend/server/conversations/main/README.md) ·
   [server infrastructure](../../libs/backend/server/infra/README.md)
 - Sibling apps: [opencrane-ui](../opencrane-ui/README.md) ·
-  [channel-proxy](../channel-proxy/README.md) ·
   [agent-controller](../agent-controller/README.md)

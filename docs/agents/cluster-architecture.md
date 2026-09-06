@@ -15,7 +15,6 @@ and credentials are not shared across ClusterTenant boundaries.
 organisation ingress
         |
         +-> opencrane-ui
-        +-> channel-proxy
         +-> opencrane server ---- PostgreSQL
                   |
                   +---- memory-gateway ---- Cognee (sealed foundation)
@@ -60,7 +59,7 @@ one committed result, or one complete rollback
 ```
 
 Kubernetes ServiceAccounts, RBAC, and NetworkPolicy prove and contain workload identity; they do not
-grant access to an agent, skill, MCP tool, artifact, model, dataset, conversation, or channel target.
+grant access to an agent, skill, MCP tool, artifact, model, dataset, or conversation.
 Controllers and workers receive one database-fenced assignment after product authorization. They
 cannot list grants, select another product revision, or mint a follow-on admission.
 
@@ -70,7 +69,6 @@ cannot list grants, select another product revision, or mint a follow-on admissi
 | --- | --- | --- |
 | OpenCrane API | `apps/opencrane` | PostgreSQL product records |
 | Web client | `apps/opencrane-ui` | none; authenticated API client |
-| Channel edge | `apps/channel-proxy` | none; admitted context only |
 | Memory gateway | `apps/memory-gateway` | none; authenticated read-only Cognee boundary |
 | Runtime controller | `apps/agent-controller` | database-fenced assignment claims |
 | OCI MCP executor companion | `apps/mcp-executor` | one durable discovery or tool-call command |
@@ -86,7 +84,7 @@ reusable behaviour and never own a deployment.
 
 ## Namespace classes
 
-- **Trusted server namespace** — API, controller, web, channel edge, and organisation service planes.
+- **Trusted server namespace** — API, controller, web, and organisation service planes.
 - **Conversation-computer namespace** — Agent Sandbox realises one Pod from the release-owned profile
   after OpenCrane records a generation-bound lease. The zero-replica `SandboxWarmPool` is a profile
   selector, not an OpenCrane-owned warm Deployment.
@@ -103,8 +101,7 @@ resource quota, and a dedicated zero- or least-privilege service account.
 
 ## Network direction
 
-Inbound public traffic terminates at organisation ingress. The channel proxy authenticates channel
-traffic and forwards only admitted, bounded requests. Conversation computers call the private server
+Inbound public traffic terminates at organisation ingress. Conversation computers call the private server
 bootstrap and output routes with a projected token; their review Service stays private to the silo.
 
 NetworkPolicy permits only the named service path required by each workload class. Network reach is

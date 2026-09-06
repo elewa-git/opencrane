@@ -86,5 +86,5 @@ Build-time and container config (there is no server-side env here — it is a st
 
 - Parent index: [apps](../README.md)
 - Backend it clients: [opencrane server](../opencrane/README.md)
-- Sibling apps: [channel-proxy](../channel-proxy/README.md) · [artifact-service](../artifact-service/README.md)
+- Sibling apps: [opencrane server](../opencrane/README.md) · [artifact-service](../artifact-service/README.md)
 - Silo chart that composes it: [apps/_infra/deploy-k8s](../_infra/deploy-k8s/README.md)

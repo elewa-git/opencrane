@@ -9,7 +9,6 @@
 #     is workload-authenticated at each target route. Crucially the ingress controller is NOT permitted
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
-#       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
 #       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
 #         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
 #         each request to the registered Pod. ArtifactStore remains unreachable from worker namespaces.
@@ -40,15 +39,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
-    # Allow the channel trust boundary to request one workload-authenticated target decision.
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: channel-proxy
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
     {{- if .Values.artifactPreprocessor.enabled }}
     # The dedicated artifact preprocessor can reach only the brokered internal API.
     # TokenReview binds its projected token to the exact worker ServiceAccount and namespace.
@@ -234,17 +224,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
-    {{- end }}
-    {{- if .Values.channelProxy.enabled }}
-    # Release-local live conversation-event delivery lets the server check the channel proxy.
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: channel-proxy
-      ports:
-        - protocol: TCP
-          port: {{ .Values.channelProxy.service.port }}
     {{- end }}
     {{- if .Values.observability.otel.enabled }}
     # Release-local operator-supplied OTEL collector for trace export.

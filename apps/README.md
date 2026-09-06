@@ -14,7 +14,6 @@ testing on its own, it belongs in a library, not here.
 | --- | --- |
 | [`opencrane`](./opencrane/README.md) | The organisation control plane and authenticated REST API. |
 | [`opencrane-ui`](./opencrane-ui/README.md) | The org-admin single-page app. |
-| [`channel-proxy`](./channel-proxy/README.md) | The inbound-channel edge trust boundary. |
 | [`conversation-computer`](./conversation-computer/README.md) | The generation-fenced process image used by Agent Sandbox. |
 | [`memory-gateway`](./memory-gateway/README.md) | The private authenticated boundary in front of Cognee. |
 | [`artifact-service`](./artifact-service/README.md) | The artifact promote-and-receipt service. |
@@ -31,8 +30,8 @@ service map.
 
 ```
    opencrane (control plane) ──serves──► opencrane-ui (SPA)
-        │                                  channel-proxy (edge)
-        ├── memory-gateway · artifact-service · artifact-preprocessor · artifact-scanner
+        ├── memory-gateway
+ · artifact-service · artifact-preprocessor · artifact-scanner
         ├── conversation-computer (Agent Sandbox process image)
         ├── agent-controller · mcp-executor
         ├── skill-authoring

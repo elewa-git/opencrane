@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 
 const _BASELINE = new URL("./target-baseline.sql", import.meta.url);
-const _MINIMUM_FUNCTIONS = 81;
-const _MINIMUM_TRIGGERS = 91;
-const _MINIMUM_CONSTRAINTS = 235;
+const _MINIMUM_FUNCTIONS = 79;
+const _MINIMUM_TRIGGERS = 89;
+const _MINIMUM_CONSTRAINTS = 227;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
 	'CREATE TABLE "provider_effect_commands"',
@@ -48,7 +48,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE TRIGGER "resource_share_recipients_authority"',
 	'ResourceShareRecipient must link its exact active manager-owned grant',
 	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check"',
-	"'capability-catalog-resource-sharing-v1',\n    'opencrane-resource-sharing',\n    1,\n    'sha256:b5f48844fb545d84297be23804f38dd4a4fc4fa43e59348281f390318b7e9a69'",
+	"'capability-catalog-resource-sharing-v1',\n    'opencrane-resource-sharing',\n    1,\n    'sha256:8f77a4cad03cb7b536f6954df320d5ad3dfa726822ea32a0cf2848af4f45ca95'",
 	'CREATE FUNCTION "enforce_agent_revision_assignment_immutability"()',
 	'CREATE TRIGGER "agent_revision_mcp_tool_assignments_immutable"',
 	'CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete',
@@ -76,12 +76,6 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"completion_migration_revision" IS NOT NULL AND btrim("completion_migration_revision") <> \'\'',
 	'"completion_migration_batch" IS NOT NULL AND btrim("completion_migration_batch") <> \'\'',
 	'CREATE TYPE "ConversationMode" AS ENUM (\'agent_session\', \'direct\', \'group\');',
-	'CREATE TYPE "ChannelInvocationAction" AS ENUM (\'events.read\');',
-	'"legacy_expires_at" TIMESTAMP(3)',
-	'CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action")',
-	'CREATE FUNCTION "enforce_channel_runtime_route_evidence"()',
-	'CREATE TRIGGER "channel_runtime_routes_evidence_guard"',
-	'legacy ChannelRuntimeRoute evidence can only be created by a reviewed migration',
 	'CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at")',
 	'Conversation updated_at moves only with a participant-visible append or a lifecycle change',
 	'AND xmin = pg_current_xact_id()::xid',
@@ -136,6 +130,10 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'conversation_timeline_entries',
 	'ConversationTimelineEntryKind',
 	'conversation_context_revisions',
+	'channel_runtime_routes',
+	'channel_invocation_contexts',
+	'ChannelInvocationAction',
+	'"resourceKind":"channel-target"',
 	'ConversationContextRevision',
 	'"context_revision_id"',
 	'"activity_sequence"',

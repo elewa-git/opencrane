@@ -1014,7 +1014,6 @@ wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
 _verify_control_plane_spa_rollout || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
 _verify_cognee_rollout || exit $?
-wait_for_final_deployment_if_present "${RELEASE}-channel-proxy" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb" || exit $?

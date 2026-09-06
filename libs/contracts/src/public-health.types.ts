@@ -21,8 +21,6 @@ export enum PublicHealthServiceNames
 	Memory = "memory",
 	/** Represents the service that uploads, stores, and retrieves immutable files. */
 	Files = "files",
-	/** Represents the service that delivers live conversation events. */
-	Channels = "channels",
 }
 
 /**
@@ -40,8 +38,6 @@ export enum PublicHealthServiceStatuses
 	Available = "available",
 	/** The configured service failed this report's check; a later report may recover. */
 	Unavailable = "unavailable",
-	/** The optional capability is absent from this deployment until its configuration changes. */
-	Disabled = "disabled",
 }
 
 /**

@@ -9,7 +9,7 @@ contract.
 | Group | Shared concern | Members |
 | --- | --- | --- |
 | [`iam`](./iam/) | Who may act, and evidence of those decisions. | identity, membership, authorization, grants, groups, audit |
-| [`agents`](./agents/) | Agent publication, onboarding, scheduling, channel admission, and artifacts. | agent-services, onboarding, scheduling, skills, artifacts, channel-targets |
+| [`agents`](./agents/) | Agent publication, onboarding, scheduling, and artifacts. | agent-services, onboarding, scheduling, skills, artifacts |
 | [`conversations`](./conversations/main/) | Conversation membership, canonical timeline, mode-correct admission, authorised readers and HTTP stream routes. | conversations |
 | [`conversation-assets`](./conversation-assets/main/) | Participant uploads, quarantine, Files projection, and transaction-bound message attachments. | conversation-assets |
 | [`gateways`](./gateways/) | Governance of external model and tool planes. | mcp, providers, model-routing |

@@ -45,7 +45,7 @@
 {{- $serverServiceName := printf "%s-opencrane-server" (include "opencrane.fullname" .) -}}
 {{- $artifactImage := printf "%s@%s" $artifactValues.image.repository $artifactValues.image.digest -}}
 {{- $artifactInternalUrl := printf "http://%s.%s.svc.cluster.local:%v" $serverServiceName .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
-{{- $siloId := .Values.channelProxy.siloId | default .Values.clustertenantManager.firstUser.clusterTenant | default .Release.Name -}}
+{{- $siloId := .Values.clustertenantManager.firstUser.clusterTenant | default .Release.Name -}}
 {{- $controllerImage := printf "%s@%s" .Values.agentController.image.repository .Values.agentController.image.digest -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
 {{- $skillAdmissionName := printf "%s-skill-authoring" (include "opencrane.agentController.admissionName" .) -}}

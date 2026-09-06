@@ -25,7 +25,7 @@ wires the pieces and the per-silo networking together.
  ┌────────────────────────────────────────────────────────────┐
  │  opencrane-silo umbrella chart  ◄── HERE                     │
  │    composes app-owned template libraries into one release:   │
- │    server · opencrane-ui · channel-proxy · artifact-service  │
+ │    server · opencrane-ui · artifact-service                  │
  │    · artifact-preprocessor · agent-controller                 │
  │    · skill-authoring                                          │
  │    · cognee · litellm                                         │
@@ -36,13 +36,13 @@ wires the pieces and the per-silo networking together.
 ```
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
-· [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
+· [artifact-service](../../artifact-service/README.md)
 · [artifact-preprocessor](../../artifact-preprocessor/README.md) · [artifact-scanner](../../artifact-scanner/README.md)
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 
 A silo installs **only** its own namespaced app releases. `--image-tag` selects one reviewed
-OpenCrane build for the server, channel proxy, memory gateway, and artifact service; the deploy
+OpenCrane build for the server, memory gateway, and artifact service; the deploy
 engine applies it after all values overrides and waits for those Deployments in both the main and
 artifact namespaces. The browser UI and Cognee keep their separate digest-pinning rules.
 Public deployments require an explicit immutable `sha-*` `--image-tag` and a registry inspector
@@ -179,7 +179,7 @@ package imports it.
 
 - Parent index: [_infra](../README.md)
 - Composed apps: [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
-· [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
+· [artifact-service](../../artifact-service/README.md)
   · [artifact-preprocessor](../../artifact-preprocessor/README.md)
   · [artifact-scanner](../../artifact-scanner/README.md)
   · [agent-controller](../../agent-controller/README.md)

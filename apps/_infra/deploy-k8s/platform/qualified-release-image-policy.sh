@@ -7,7 +7,6 @@ append_authoritative_qualified_release_image_helm_args()
 {
   local value_path
   for value_path in \
-    channelProxy.image.tag \
     memoryGateway.image.tag \
     artifactService.image.tag; do
     helm_args+=(--set-literal "${value_path}=${IMAGE_TAG}")
@@ -87,11 +86,10 @@ qualified_workflow_image_references()
 }
 
 # Prints each tagged first-party image that the release will run. The server may use its dedicated
-# override, but the three auxiliary services always stay on the unified release tag.
+# override, but the two auxiliary services always stay on the unified release tag.
 qualified_release_tag_image_references()
 {
   printf '%s\n' \
-    "ghcr.io/elewa-git/opencrane-channel-proxy:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-memory-gateway:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-artifact-service:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-server:${CP_TAG}"

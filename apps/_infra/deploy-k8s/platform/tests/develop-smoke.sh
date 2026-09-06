@@ -31,7 +31,6 @@ CERT_MANAGER_INSTALL_PID=""
 SMOKE_IMAGES=(
   opencrane/opencrane-server:develop-smoke
   opencrane/opencrane-ui:develop-smoke
-  opencrane/channel-proxy:develop-smoke
   opencrane/memory-gateway:develop-smoke
   opencrane/artifact-service:develop-smoke
   opencrane/cognee:develop-smoke
@@ -210,7 +209,6 @@ _prepare_image()
 SMOKE_IMAGE_SPECS=(
   "opencrane|opencrane/opencrane-server:develop-smoke|opencrane-server|apps/opencrane/deploy/Dockerfile"
   "opencrane-ui|opencrane/opencrane-ui:develop-smoke|opencrane-ui|apps/opencrane-ui/deploy/Dockerfile"
-  "channel-proxy|opencrane/channel-proxy:develop-smoke|opencrane-channel-proxy|apps/channel-proxy/deploy/Dockerfile"
   "memory-gateway|opencrane/memory-gateway:develop-smoke|opencrane-memory-gateway|apps/memory-gateway/deploy/Dockerfile"
   "artifact-service|opencrane/artifact-service:develop-smoke|opencrane-artifact-service|apps/artifact-service/deploy/Dockerfile"
   "cognee|opencrane/cognee:develop-smoke|opencrane-cognee|apps/_infra/cognee/deploy/Dockerfile"
@@ -416,9 +414,9 @@ _assert_ingress_health()
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
     && jq -e '
       .ready == true
-      and (.services | keys == ["api", "channels", "database", "files", "memory", "models"])
+      and (.services | keys == ["api", "database", "files", "memory", "models"])
       and ([.services | to_entries[] | select(.key != "models") | .value]
-        | all(. == "available" or . == "disabled"))
+        | all(. == "available"))
       and (.services.models == "available" or .services.models == "unavailable")
       and (.status == "ok" or (.status == "degraded" and .services.models != "available"))
     ' >/dev/null <<<"$response"; do

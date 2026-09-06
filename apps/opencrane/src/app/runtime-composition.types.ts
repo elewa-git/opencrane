@@ -25,8 +25,6 @@ export interface InternalRuntimeComposition
 	readonly artifactPreprocessor: Router | null;
 	/** Optional malware-scanner router, present only when its isolated worker plane is enabled. */
 	readonly artifactScanner: Router | null;
-	/** Router that resolves a browser channel for a workload-authenticated caller. */
-	readonly channelTargetResolver: Router | null;
 }
 
 /** The subset of routers built by the controller-only composition step. */
@@ -36,4 +34,4 @@ export type ControllerRuntimeComposition = Pick<
 >;
 
 /** The subset of routers built by the optional worker composition step. */
-export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessController" | "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver">;
+export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessController" | "artifactPreprocessor" | "artifactScanner">;

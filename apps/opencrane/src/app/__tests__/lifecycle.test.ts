@@ -4,7 +4,6 @@ import type { PrismaClient } from "@prisma/client";
 import type { Express } from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneProcessConfig } from "../config.types";
@@ -75,17 +74,16 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 	{
 		_workerFailures.start = new Error("worker unavailable");
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
-		const channelTargets = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 		const workflowRuntime = { close: async function _CloseWorkflow() { _calls.push("workflow"); } } as IWorkflowWorkerRuntime;
 
 		await expect(_StartProcessLifecycle(
 			_App(_Server("public")), _App(_Server("internal")), prisma,
-			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, channelTargets,
+			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
 			function _UnbindConsole() { _calls.push("console"); },
 			{ recoverExpiredInvocation: vi.fn() } as never, workflowRuntime, {} as never, _HistoryStore(),
 		)).rejects.toThrow("worker unavailable");
 
-		expect(_calls).toEqual(expect.arrayContaining(["workers.start", "routes", "workflow", "history", "prisma", "telemetry", "console"]));
+		expect(_calls).toEqual(expect.arrayContaining(["workers.start", "workflow", "history", "prisma", "telemetry", "console"]));
 		expect(_calls.indexOf("history")).toBeLessThan(_calls.indexOf("telemetry"));
 		expect(_calls.indexOf("prisma")).toBeLessThan(_calls.indexOf("telemetry"));
 		expect(_calls.at(-1)).toBe("console");
@@ -97,14 +95,12 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		const previousInt = new Set(process.listeners("SIGINT"));
 		const exit = vi.spyOn(process, "exit").mockImplementation(function _Exit() { _calls.push("exit"); return undefined as never; });
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
-		const channelTargets = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 
 		await _StartProcessLifecycle(
 			_App(_Server("public")),
 			_App(_Server("internal")),
 			prisma,
 		{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
-		channelTargets,
 		function _UnbindConsole() { _calls.push("console"); },
 			{ recoverExpiredInvocation: vi.fn() } as never,
 			{} as IWorkflowWorkerRuntime,
@@ -135,9 +131,9 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		const previousInt = new Set(process.listeners("SIGINT"));
 		const exit = vi.spyOn(process, "exit").mockImplementation(function _Exit() { _calls.push("exit"); return undefined as never; });
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
-		const routes = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 
-		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, routes, function _Unbind() { _calls.push("console"); }, { recoverExpiredInvocation: vi.fn() } as never, {} as IWorkflowWorkerRuntime, {} as never, _HistoryStore());
+		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, function _Unbind()
+ { _calls.push("console"); }, { recoverExpiredInvocation: vi.fn() } as never, {} as IWorkflowWorkerRuntime, {} as never, _HistoryStore());
 		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
 		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
 		if (term === undefined || interrupt === undefined)

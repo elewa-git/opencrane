@@ -10,8 +10,7 @@
 {{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
-{{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
-{{- $openCraneInternalUrl := .Values.channelProxy.openCraneInternalUrl | default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) -}}
+{{- $siloId := $firstUser.clusterTenant | default .Release.Name -}}
 {{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
 {{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
 {{- end -}}
@@ -102,31 +101,13 @@ spec:
             # Second (internal-only) listener for /api/internal/*.
             - name: INTERNAL_PORT
               value: {{ .Values.clustertenantManager.service.internalPort | quote }}
-            {{- if .Values.channelProxy.enabled }}
-            # Stable receiver identity and exact per-release target. Startup reconciles one distinct
-            # route row per AgentService; the receiver id is never reused as a route-row id.
-            - name: CHANNEL_PROXY_SERVICE_ACCOUNT_NAME
-              value: {{ printf "%s-channel-proxy" (include "opencrane.fullname" .) | quote }}
-            - name: CHANNEL_TARGET_TRUSTED_HOST
-              value: {{ $controlPlaneHost | quote }}
-            - name: CHANNEL_TARGET_SILO_ID
-              value: {{ $channelSiloId | quote }}
-            - name: CHANNEL_REPLAY_RECEIVER_ID
-              value: {{ required "channelProxy.replayReceiverId is required when channelProxy is enabled" .Values.channelProxy.replayReceiverId | quote }}
-            - name: CHANNEL_REPLAY_ENDPOINT
-              value: {{ printf "%s/api/internal/conversation-replay" (trimSuffix "/" $openCraneInternalUrl) | quote }}
-            - name: CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS
-              value: {{ .Values.channelProxy.invocationContextTtlSeconds | quote }}
-            - name: CHANNEL_PROXY_URL
-              value: {{ printf "http://%s-channel-proxy.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.channelProxy.service.port | quote }}
-            {{- end }}
             - name: AGENT_RUN_ADMISSION_MAX_CONCURRENT
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED
               value: {{ .Values.clustertenantManager.runAdmission.maxQueued | quote }}
             # Absurd runs saved control-plane tasks from the same silo database used by product writes.
             - name: OPENCRANE_SILO_ID
-              value: {{ $channelSiloId | quote }}
+              value: {{ $siloId | quote }}
             {{- if .Values.agentSandbox.enabled }}
             {{- $computerProfile := first .Values.agentSandbox.profiles }}
             - name: OPENCRANE_COMPUTER_PROFILE_REVISION_ID

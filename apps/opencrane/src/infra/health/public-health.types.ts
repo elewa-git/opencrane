@@ -37,8 +37,7 @@ export interface PublicHealthClock
 /**
  * Supplies the probes and cache policy for the public health report reader.
  *
- * Non-null probes represent required configured services. The nullable channel probe preserves the
- * difference between a disabled optional capability and a configured service that failed its check.
+ * Every probe represents a required configured service.
  * Called by: `_CreatePublicHealthReportReader` after process composition has frozen every target.
  */
 export interface PublicHealthReaderDependencies
@@ -51,8 +50,6 @@ export interface PublicHealthReaderDependencies
 	readonly memory: PublicHealthProbe;
 	/** Required immutable-file service probe. */
 	readonly files: PublicHealthProbe;
-	/** Optional live-channel service probe; null means intentionally disabled. */
-	readonly channels: PublicHealthProbe | null;
 	/** Structured private logger for collapsed dependency failures. */
 	readonly logger: PublicHealthLogger;
 	/** Clock used to expire one shared report. */

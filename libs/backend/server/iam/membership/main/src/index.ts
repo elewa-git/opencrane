@@ -1,12 +1,10 @@
-export { __VerifyCurrentFleetMembership, __VerifyCurrentFleetMembershipEvidence } from "./membership-authority";
+export { __VerifyCurrentFleetMembershipEvidence } from "./membership-authority";
 export { __SelectCurrentFleetMembershipAssertion } from "./membership-assertion-selection";
 export { __DigestFleetMembershipSignedPayload } from "./fleet-membership-payload-digest";
 export { FleetMembershipAcceptanceStatuses, FleetMembershipAssertionSelectionOutcomes, FleetMembershipDeploymentModes, FleetMembershipEvidenceOutcomes } from "./membership-authority.types";
-export type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier, SelectFleetMembershipAssertionCommand, SelectFleetMembershipAssertionResult, TrustedFleetMembershipEvidence, VerifyFleetMembershipCommand, VerifyFleetMembershipEvidenceResult, VerifyFleetMembershipResult } from "./membership-authority.types";
+export type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier, SelectFleetMembershipAssertionCommand, SelectFleetMembershipAssertionResult, TrustedFleetMembershipEvidence, VerifyFleetMembershipCommand, VerifyFleetMembershipEvidenceResult } from "./membership-authority.types";
 export { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier";
 export { _CreateFleetMembershipEvidenceConfig } from "./fleet-membership-evidence.factory";
-export { PrismaFleetMembershipAuthorityRepository, PrismaFleetMembershipAuthorityUnitOfWork } from "./prisma-membership-authority";
+export { PrismaFleetMembershipAuthorityRepository } from "./prisma-membership-authority";
 export { PrismaRuntimeMembershipEligibilityAuthority } from "./prisma-runtime-membership-eligibility";
 export type { RuntimeMembershipEligibility, RuntimeMembershipEligibilityCommand } from "./runtime-membership-eligibility.types";
-export { SignedFleetMembershipAssertionVerifier } from "./signed-membership-assertion-authority";
-export type { SignedFleetMembershipAssertionAuthority } from "./membership-authority.types";

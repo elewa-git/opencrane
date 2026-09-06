@@ -67,7 +67,6 @@ test("selects the complete current-silo image set from app-owned container metad
 	const projects = [
 		["opencrane", "opencrane-server", "apps/opencrane/deploy/Dockerfile"],
 		["opencrane-ui", "opencrane-ui", "apps/opencrane-ui/deploy/Dockerfile"],
-		["channel-proxy", "opencrane-channel-proxy", "apps/channel-proxy/deploy/Dockerfile"],
 		["cognee", "opencrane-cognee", "apps/_infra/cognee/deploy/Dockerfile"],
 		["memory-gateway", "opencrane-memory-gateway", "apps/memory-gateway/deploy/Dockerfile"],
 		["artifact-service", "opencrane-artifact-service", "apps/artifact-service/deploy/Dockerfile"],
@@ -76,7 +75,6 @@ test("selects the complete current-silo image set from app-owned container metad
 	});
 	assert.deepEqual(selectDevelopSmokeImages(projects), [
 		{ project: "artifact-service", image: "opencrane-artifact-service", dockerfile: "apps/artifact-service/deploy/Dockerfile" },
-		{ project: "channel-proxy", image: "opencrane-channel-proxy", dockerfile: "apps/channel-proxy/deploy/Dockerfile" },
 		{ project: "cognee", image: "opencrane-cognee", dockerfile: "apps/_infra/cognee/deploy/Dockerfile" },
 		{ project: "memory-gateway", image: "opencrane-memory-gateway", dockerfile: "apps/memory-gateway/deploy/Dockerfile" },
 		{ project: "opencrane", image: "opencrane-server", dockerfile: "apps/opencrane/deploy/Dockerfile" },
@@ -91,8 +89,8 @@ test("selects the complete current-silo image set from app-owned container metad
 test("uses Nx affected container owners to select current-silo rebuilds", function _SelectsDevelopSmokeProjects()
 {
 	assert.deepEqual(
-		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "channel-proxy", "opencrane-ui"]),
-		["channel-proxy", "cognee", "opencrane-ui"],
+		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "memory-gateway", "opencrane-ui"]),
+		["cognee", "memory-gateway", "opencrane-ui"],
 	);
 });
 
@@ -107,9 +105,9 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 {
 	assert.deepEqual(selectForcedContainerProjects("none"), []);
 	assert.deepEqual(selectForcedContainerProjects("all", ["skill-authoring", "opencrane", "skill-authoring"]), ["opencrane", "skill-authoring"]);
-	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["channel-proxy", "memory-gateway"]);
+	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
-	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "channel-proxy", "cognee", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
+	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "cognee", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
 	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
 	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);
 	assert.equal(selectForcedContainerProjects(""), null);

@@ -29,7 +29,7 @@ function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionCon
   return config === null ? null : __CreateStandaloneFirstUserAdmissionAuditAppender();
 }
 
-/** Build one session store so channel-proxy cookie delegation resolves the public login session. */
+/** Build the public listener's OIDC service, session middleware, and principal admission. */
 export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null): PublicAuthenticationComposition
 {
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));

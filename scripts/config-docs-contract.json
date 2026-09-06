@@ -16,7 +16,6 @@
         { "path": "observability", "documentation": "website/operators/deployment-configuration.md" }
       ],
       "forwardedKeys": [
-        { "path": "channelProxy", "owner": "apps/channel-proxy/helm" },
         { "path": "memoryGateway", "owner": "apps/memory-gateway/helm" },
         { "path": "opencrane-mcp-executor", "owner": "apps/mcp-executor/helm" },
         { "path": "opencrane-skill-authoring", "owner": "apps/skill-authoring/helm" },

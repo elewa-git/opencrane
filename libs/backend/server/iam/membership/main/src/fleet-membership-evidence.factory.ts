@@ -21,7 +21,7 @@ const _STANDALONE_ISSUER_ID = "opencrane-standalone-unconfigured";
  * so the verifier returned refuses every revision — the silo simply has no fleet membership yet
  * rather than an unchecked one.
  *
- * Called by: apps/opencrane/src/index.ts and apps/opencrane/src/app/channel-target-composition.ts.
+ * Called by: apps/opencrane/src/app/run-admission-composition.ts.
  * @param environment - Process environment to read; defaults to `process.env`, overridden in tests.
  * @returns Trusted issuer, staleness limit in milliseconds, and the verifier to use.
  * @throws Error when the mode is missing or unrecognised, when a required `fleet` variable is

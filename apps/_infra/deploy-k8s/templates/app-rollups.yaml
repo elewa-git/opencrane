@@ -15,8 +15,6 @@
 ---
 {{ include "opencrane.server.networkPolicy" . }}
 ---
-{{ include "opencrane.channelProxy.resources" . }}
----
 {{ include "opencrane.memoryGateway.resources" . }}
 ---
 {{ include "opencrane.artifactService.resources" . }}

@@ -58,8 +58,6 @@ export enum ProductAuthorizationResourceKinds
 	Conversation = "conversation",
 	/** Protects creation inside one silo's conversation collection before a Conversation id exists. */
 	ConversationCollection = "conversation-collection",
-	/** Protects an outbound channel destination. */
-	ChannelTarget = "channel-target",
 	/** Protects use and administration of a provider connection without exposing its secret. */
 	ProviderConnection = "provider-connection",
 	/** Protects one technical or spending budget. */
@@ -108,8 +106,6 @@ export enum ProductAuthorizationActions
 	Delegate = "delegate",
 	/** Lets a Principal grant another subject access to a resource. */
 	Share = "share",
-	/** Lets a Principal send content to a governed channel target. */
-	Send = "send",
 	/** Lets a Principal stop a published revision or grant from future use. */
 	Revoke = "revoke",
 	/** Lets a Principal move a stable product definition to its retired lifecycle. */

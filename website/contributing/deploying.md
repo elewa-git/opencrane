@@ -39,7 +39,7 @@ platform/k8s-deploy.sh
                live health verification
 ```
 
-- `deploy.sh` installs one per-ClusterTenant silo: operator, channel proxy, LiteLLM, Cognee,
+- `deploy.sh` installs one per-ClusterTenant silo: operator, LiteLLM, Cognee,
   opencrane-ui, per-CT networking, and one app-owned PostgreSQL server with isolated logical
   databases. Required flags: `--base-domain`, `--cluster-tenant`, `--acme-email`,
   `--first-user-email`; fresh installs also need `--opencrane-ui-digest` and `--cognee-digest`
@@ -96,7 +96,7 @@ the old build. To move an image, name it.
 
 | To move | Pass |
 | --- | --- |
-| Server, channel proxy, memory gateway, artifact service | `--image-tag sha-<sha>` |
+| Server, memory gateway, artifact service | `--image-tag sha-<sha>` |
 | Server only | `--opencrane-server-tag sha-<sha>` |
 | Browser SPA | `--opencrane-ui-digest sha256:<digest>` |
 | Cognee | `--cognee-digest sha256:<digest>` |

@@ -42,7 +42,6 @@
     { "path": "apps/opencrane/src/app/process-shutdown.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/public-app.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/public-app.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/channel-target-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/routes.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/routes.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/runtime-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
@@ -79,13 +78,6 @@
     { "path": "apps/opencrane-ui/src/environments/environment.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
     { "path": "apps/opencrane-ui/src/main.ts", "owner": "apps/opencrane-ui", "classification": "browser-entrypoint" },
     { "path": "apps/opencrane-ui/vitest.config.ts", "owner": "apps/opencrane-ui", "classification": "test-config" },
-
-    { "path": "apps/channel-proxy/src/config.ts", "owner": "apps/channel-proxy", "classification": "app-config" },
-    { "path": "apps/channel-proxy/src/config.types.ts", "owner": "apps/channel-proxy", "classification": "app-config" },
-    { "path": "apps/channel-proxy/src/index.ts", "owner": "apps/channel-proxy", "classification": "process-entrypoint" },
-    { "path": "apps/channel-proxy/src/instrument.ts", "owner": "apps/channel-proxy", "classification": "process-instrumentation" },
-    { "path": "apps/channel-proxy/src/log.ts", "owner": "apps/channel-proxy", "classification": "process-logging" },
-    { "path": "apps/channel-proxy/src/server.ts", "owner": "apps/channel-proxy", "classification": "route-composition" },
 
     { "path": "apps/memory-gateway/src/config.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
     { "path": "apps/memory-gateway/src/config.types.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
@@ -138,7 +130,6 @@
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",
     "apps/_infra/litellm/project.json",
-    "apps/channel-proxy/project.json",
     "apps/conversation-computer/project.json",
     "libs/backend/conversation-computer/review-surface/project.json",
     "apps/memory-gateway/project.json",

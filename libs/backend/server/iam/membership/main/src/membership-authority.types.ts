@@ -6,7 +6,7 @@ import type { FleetMembershipTrustReason, FleetSignatureVerificationEvidence, Si
  * A fleet issuer signs a numbered revision that lists every membership assertion for a silo. This
  * command names the single assertion the caller wants proved, plus how stale a revision it will
  * accept. Take `assertionId` from the stored revision itself, never from a value that arrived with
- * a request — {@link SignedFleetMembershipAssertionVerifier} exists to do that selection. Pass the
+ * a request — `__SelectCurrentFleetMembershipAssertion` exists to do that selection. Pass the
  * admission transaction's start time as `nowEpochMs` so every check inside one admission judges
  * freshness against the same instant.
  *
@@ -87,10 +87,8 @@ export enum FleetMembershipAcceptanceStatuses
  * stale signed revision gets membership the issuer has already withdrawn, because the old signature
  * is still perfectly valid.
  *
- * Called by: __VerifyCurrentFleetMembershipEvidence and SignedFleetMembershipAssertionVerifier in
- * this package. The live implementation is {@link PrismaFleetMembershipAuthorityRepository}, built by
- * libs/backend/server/agents/agent-services (personal runs), and
- * apps/opencrane/src/app/channel-target-composition.ts.
+ * Called by: __VerifyCurrentFleetMembershipEvidence in this package. The live implementation is {@link PrismaFleetMembershipAuthorityRepository}, built by
+ * libs/backend/server/agents/agent-services (personal runs).
  *
  * @see FleetMembershipAcceptanceResult
  */
@@ -135,7 +133,7 @@ export interface FleetMembershipAuthorityRepository
  * silo with no fleet key still gets an implementation: the standalone one answers `verified: false`
  * for everything, so a missing key can never read as "membership is fine".
  *
- * Called by: __VerifyCurrentFleetMembershipEvidence and SignedFleetMembershipAssertionVerifier;
+ * Called by: __VerifyCurrentFleetMembershipEvidence;
  * supplied through {@link FleetMembershipEvidenceConfig} and implemented by
  * {@link Ed25519FleetMembershipSignatureVerifier}.
  */
@@ -160,9 +158,8 @@ export interface FleetMembershipSignatureVerifier
  * Built once at startup from environment variables by {@link _CreateFleetMembershipEvidenceConfig}
  * and then passed down, so no request can pick its own issuer or widen its own staleness limit.
  *
- * Called by: apps/opencrane/src/index.ts and apps/opencrane/src/app/channel-target-composition.ts
- * build it; {@link SignedFleetMembershipAssertionVerifier} and
- * `PrismaRuntimeMembershipEligibilitySource` consume it.
+ * Called by: apps/opencrane/src/app/run-admission-composition.ts builds it;
+ * `PrismaRuntimeMembershipEligibilitySource` consumes it.
  */
 export interface FleetMembershipEvidenceConfig
 {
@@ -235,45 +232,6 @@ export interface TrustedFleetMembershipEvidence
 	readonly payloadDigest: string;
 	/** UTC epoch-millisecond limit on trust for this verified evidence. */
 	readonly trustedUntilEpochMs: number;
-}
-
-/**
- * Answer of a membership check that reports only the trust window, not the membership facts.
- *
- * `trusted` gives the accepted revision number and the instant trust runs out. `denied` gives a
- * reason — `missing_revision` (nothing stored for this issuer and silo),
- * `signature_verifier_failed` (the verifier threw), `acceptance_conflict` (a newer revision was
- * accepted concurrently), or any {@link FleetMembershipTrustReason} from the signature, scope,
- * expiry, and ordering rules — plus the revision looked at, which is 0 when nothing was stored.
- *
- * @see VerifyFleetMembershipEvidenceResult for the variant that also returns the signed facts.
- */
-export type VerifyFleetMembershipResult =
-	| { readonly outcome: "trusted"; readonly revision: number; readonly trustedUntilEpochMs: number }
-	| { readonly outcome: "denied"; readonly reason: FleetMembershipTrustReason | "missing_revision" | "signature_verifier_failed" | "acceptance_conflict"; readonly revision: number };
-
-/**
- * Answers "is this subject an active member of this silo?" for callers that hold no assertion id.
- *
- * The implementation finds the matching assertion itself, so a request never gets to name the
- * assertion that proves its own membership.
- *
- * Called by: libs/backend/server/agents/channel-targets declares it as a dependency
- * (channel-target-resolution.types.ts); apps/opencrane/src/app/channel-target-composition.ts
- * supplies {@link SignedFleetMembershipAssertionVerifier} as the implementation.
- */
-export interface SignedFleetMembershipAssertionAuthority
-{
-	/**
-	 * Finds the single assertion matching this subject and silo, then runs the full check.
-	 *
-	 * @param subjectId - Subject whose membership is in question.
-	 * @param siloId - Silo the request is happening in.
-	 * @param nowEpochMs - Current time in epoch milliseconds, from the caller.
-	 * @returns `trusted` with the trust window, or `denied` — including `assertion_mismatch` when the
-	 *          stored revision holds no matching assertion, or more than one.
-	 */
-	verifyCurrentMembership(subjectId: string, siloId: string, nowEpochMs: number): Promise<VerifyFleetMembershipResult>;
 }
 
 /** Coordinates used to select membership evidence without accepting an assertion id from a caller. */

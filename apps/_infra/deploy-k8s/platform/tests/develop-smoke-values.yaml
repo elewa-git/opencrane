@@ -20,13 +20,6 @@ controlPlaneSpa:
     tag: develop-smoke
     pullPolicy: IfNotPresent
 
-channelProxy:
-  image:
-    repository: opencrane/channel-proxy
-    tag: develop-smoke
-    pullPolicy: IfNotPresent
-  ingressNamespace: kube-system
-
 memoryGateway:
   image:
     repository: opencrane/memory-gateway

@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import type { FleetMembershipAssertion, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
@@ -128,55 +128,5 @@ export class PrismaFleetMembershipAuthorityRepository implements FleetMembership
 			reasonCode: "verified_revision_accepted",
 		});
 		return { status: "accepted", highestAcceptedRevision: acceptance.revision } as const;
-	}
-}
-
-/** Opens the serializable transaction used by standalone membership verification. */
-export class PrismaFleetMembershipAuthorityUnitOfWork implements FleetMembershipAuthorityRepository
-{
-	/** OpenCrane product-authority database client. */
-	private readonly prisma: PrismaClient;
-
-	/** Creates the standalone membership authority. */
-	constructor(prisma: PrismaClient)
-	{
-		this.prisma = prisma;
-	}
-
-	/** Loads the latest signed membership revision in a short serializable transaction. */
-	async getLatestSignedRevision(trustedIssuerId: string, siloId: string): Promise<SignedFleetMembershipRevision | null>
-	{
-		return this._Run(async function _Load(repository)
-		{
-			return repository.getLatestSignedRevision(trustedIssuerId, siloId);
-		});
-	}
-
-	/** Loads the accepted membership high-watermark in a short serializable transaction. */
-	async getHighestAcceptedRevision(trustedIssuerId: string, siloId: string): Promise<number>
-	{
-		return this._Run(async function _Load(repository)
-		{
-			return repository.getHighestAcceptedRevision(trustedIssuerId, siloId);
-		});
-	}
-
-	/** Advances the membership high-watermark and its audit row atomically. */
-	async acceptRevisionAtomically(acceptance: FleetMembershipAcceptance): Promise<FleetMembershipAcceptanceResult>
-	{
-		return this._Run(async function _Accept(repository)
-		{
-			return repository.acceptRevisionAtomically(acceptance);
-		});
-	}
-
-	/** Runs one standalone membership operation in a serializable transaction. */
-	private _Run<TResult>(operation: (repository: PrismaFleetMembershipAuthorityRepository) => Promise<TResult>): Promise<TResult>
-	{
-		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
-		{
-			const repository = new PrismaFleetMembershipAuthorityRepository(transaction);
-			return operation(repository);
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }

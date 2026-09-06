@@ -469,34 +469,6 @@
 				"constructs": []
 			},
 			{
-				"path": "libs/backend/server/agents/channel-targets/main/src/prisma-channel-target-authority.ts",
-				"adapter": "PrismaChannelTargetParticipantGrantProjectionRepository",
-				"contract": "ChannelTargetParticipantGrantProjectionRepository",
-				"contractImportPath": "./channel-target-resolution.types",
-				"constructs": [
-					{
-						"adapter": "PrismaManagedAuthorizationGrantRepository",
-						"importPath": "@opencrane/backend/server/iam/authorization"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/agents/channel-targets/main/src/prisma-channel-target-authority.ts",
-				"adapter": "PrismaChannelTargetAuthorityTransactionRepository",
-				"contract": "ChannelTargetAuthorityRepository",
-				"contractImportPath": "./channel-target-resolution.types",
-				"constructs": [
-					{
-						"adapter": "PrismaAuthorizationAuthority",
-						"importPath": "@opencrane/backend/server/iam/authorization"
-					},
-					{
-						"adapter": "PrismaChannelTargetParticipantGrantProjectionRepository",
-						"importPath": "<same-file>"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/server/conversations/main/src/db/conversation-product-authorization.ts",
 				"adapter": "PrismaConversationProductAuthorizationRepository",
 				"contract": "ConversationProductAuthorizationRepository",
@@ -1073,18 +1045,6 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/iam/membership/main/src/prisma-membership-authority.ts",
-				"adapter": "PrismaFleetMembershipAuthorityUnitOfWork",
-				"contract": "FleetMembershipAuthorityRepository",
-				"contractImportPath": "./membership-authority.types",
-				"constructs": [
-					{
-						"adapter": "PrismaFleetMembershipAuthorityRepository",
-						"importPath": "<same-file>"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-workflow-engine-qualification-unit-of-work.ts",
 				"adapter": "PrismaWorkflowEngineQualificationUnitOfWork",
 				"contract": "IWorkflowEngineQualificationUnitOfWork",
@@ -1463,18 +1423,6 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/agents/channel-targets/main/src/prisma-channel-target-authority.ts",
-				"adapter": "PrismaChannelTargetAuthorityUnitOfWork",
-				"contract": "ChannelTargetAuthorityUnitOfWork",
-				"contractImportPath": "./channel-target-resolution.types",
-				"constructs": [
-					{
-						"adapter": "PrismaChannelTargetAuthorityTransactionRepository",
-						"importPath": "<same-file>"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/agents/personal/personas/main/src/profile/prisma-persona-persistence-unit-of-work.ts",
 				"adapter": "PrismaPersonaPersistenceUnitOfWork",
 				"contract": "PersonaPersistenceUnitOfWork",
@@ -1748,7 +1696,6 @@
 			"apps/opencrane/src/app/mcp-workflow-composition.ts",
 			"apps/opencrane/src/app/mcp-runtime-composition.ts",
 			"apps/opencrane/src/app/runtime-composition.ts",
-			"apps/opencrane/src/app/channel-target-composition.ts",
 			"apps/opencrane/src/app/lifecycle.ts",
 			"apps/opencrane/src/app/background-workers.ts",
 			"apps/opencrane/src/app/organization-members-composition.ts",
