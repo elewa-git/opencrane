@@ -20,7 +20,8 @@ export function _RequirePersonalUpgradeSessionSnapshot(snapshot: RunInputSnapsho
 /** Reject runtime arguments outside the model-adjacent personal configuration-patch schema. */
 export function _RequirePersonalUpgradeSessionCandidate(candidate: UpgradeSessionInvocation): asserts candidate is PersonalUpgradeSessionCandidate
 {
-	if (!_IsPersonalConfigurationPatch(candidate.arguments)) throw _invalidUpgradeSession();
+	if (!_IsPersonalConfigurationPatch(candidate.arguments))
+		throw _invalidUpgradeSession();
 }
 
 /** Resolve one owner profile and propose its validated future-session change in the same transaction. */
@@ -31,7 +32,8 @@ export async function _ProposeUpgradeSession(profiles: UpgradeSessionProfileRepo
 
 	// 1. Resolve the canonical profile for the immutable execution subject.
 	const profileId = await profiles.readOwnerProfileId(_profileReadCommand(snapshot));
-	if (profileId === null) return null;
+	if (profileId === null)
+		return null;
 
 	// 2. Construct one complete proposal command from frozen runtime evidence.
 	const command = _proposalCommand(candidate, snapshot, profileId, now);

@@ -78,8 +78,7 @@ wait_for_holder_sleeping() {
 
 run_psql <<'SQL'
 INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at") VALUES
-  ('phase-d-model', 'silo-race', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp()),
-  ('phase-d-cancel-proof-model', 'silo-race-cancel-proof', 'global', 'phase-d-cancel-proof-model', 'litellm-phase-d-cancel-proof-model', 'phase-d-cancel-proof-model', clock_timestamp());
+  ('phase-d-model', 'silo-race', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
 
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES
   ('user-race', 'silo-race', 'https://identity.example.test', 'user-race', 'external', clock_timestamp()),
@@ -89,8 +88,7 @@ INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "u
   ('svc-race-retirement-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-retirement', 'internal', clock_timestamp()),
   ('svc-race-run-rollover-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-run-rollover', 'internal', clock_timestamp()),
   ('svc-race-run-first-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-run-first', 'internal', clock_timestamp()),
-  ('svc-race-action-authority-principal', 'silo-race-action', 'urn:opencrane:agent-service', 'svc-race-action-authority', 'internal', clock_timestamp()),
-  ('svc-race-cancel-proof-principal', 'silo-race-cancel-proof', 'urn:opencrane:agent-service', 'svc-race-cancel-proof', 'internal', clock_timestamp());
+  ('svc-race-action-authority-principal', 'silo-race-action', 'urn:opencrane:agent-service', 'svc-race-action-authority', 'internal', clock_timestamp());
 
 SQL
 
@@ -367,9 +365,9 @@ UPDATE "agent_services"
 SET "state" = 'active', "active_revision_id" = 'rev-race-run-rollover-1'
 WHERE "id" = 'svc-race-run-rollover';
 INSERT INTO "conversations" (
-  "id", "silo_id", "agent_service_id", "mode", "updated_at"
+  "id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at"
 ) VALUES (
-  'conversation-race-superseded', 'silo-race', 'svc-race-run-rollover', 'agent_session', clock_timestamp()
+  'conversation-race-superseded', 'silo-race', 'svc-race-run-rollover', 'agent_session', 'computer-race-superseded', 'identity-race', 'profile-race', clock_timestamp()
 );
 SQL
 
@@ -437,8 +435,8 @@ INSERT INTO "agent_revisions" (
 UPDATE "agent_services"
 SET "state" = 'active', "active_revision_id" = 'rev-race-run-first'
 WHERE "id" = 'svc-race-run-first';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
-VALUES ('conversation-race-before-retirement', 'silo-race', 'svc-race-run-first', 'agent_session', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
+VALUES ('conversation-race-before-retirement', 'silo-race', 'svc-race-run-first', 'agent_session', 'computer-race-before-retirement', 'identity-race', 'profile-race', clock_timestamp());
 SQL
 
 (

@@ -78,7 +78,8 @@ INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile
 INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "digest", "prompt_policy_version", "persona_revision_id", "model_definition_id", "budget", "authored_by") VALUES ('agent-1', 'silo-1', 'service-1', 1, 'sha256:' || repeat('a',64), 'prompt-v1', 'persona-1', 'personal-configuration-model', '{}', 'user-1');
 UPDATE "agent_revisions" SET "state"='published', "published_at"=clock_timestamp() WHERE "id"='agent-1';
 UPDATE "agent_services" SET "state"='active', "active_revision_id"='agent-1' WHERE "id"='service-1';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at") VALUES ('conversation-1', 'silo-1', 'service-1', 'agent_session', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
+VALUES ('conversation-1', 'silo-1', 'service-1', 'agent_session', 'configuration-computer', 'identity-1', 'configuration-profile', clock_timestamp());
 INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position") VALUES ('conversation-1', 'user-1', 1, 0);
 INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES ('run-1', 'silo-1', 'service-1', 'agent-1', 'conversation-1', 'interactive', 'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-1', 'sha256:' || repeat('c',64));
 INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "persona_revision_id", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest") VALUES ('run-1-input', 'run-1', 1, 1, 'silo-1', 'service-1', 'agent-1', 'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'persona-1', 'conversation-1', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c',64));
@@ -96,11 +97,11 @@ SELECT pg_temp.expect_personal_configuration_insert_failure('persona revision fe
 SELECT pg_temp.expect_personal_configuration_insert_failure('agent revision fence is enforced', 'change-agent-revision', '{"expectedAgentRevisionId":"agent-2"}', 'provenance or active-revision fence conflict');
 SELECT pg_temp.expect_personal_configuration_insert_failure('source message binding is enforced', 'change-message', '{"sourceMessageId":"missing-message"}', 'source message must belong to its source conversation');
 SET LOCAL session_replication_role = replica;
-UPDATE "conversations" SET "mode"='direct', "agent_service_id"=NULL WHERE "id"='conversation-1';
+UPDATE "conversations" SET "mode"='direct', "agent_service_id"=NULL, "computer_id"=NULL, "computer_agent_identity_id"=NULL, "computer_profile_revision_id"=NULL WHERE "id"='conversation-1';
 SET LOCAL session_replication_role = origin;
 SELECT pg_temp.expect_personal_configuration_insert_failure('agent-session conversation mode is enforced', 'change-direct-conversation', '{}', 'provenance or active-revision fence conflict');
 SET LOCAL session_replication_role = replica;
-UPDATE "conversations" SET "mode"='agent_session', "agent_service_id"='service-1' WHERE "id"='conversation-1';
+UPDATE "conversations" SET "mode"='agent_session', "agent_service_id"='service-1', "computer_id"='configuration-computer', "computer_agent_identity_id"='identity-1', "computer_profile_revision_id"='configuration-profile' WHERE "id"='conversation-1';
 UPDATE "conversation_participants" SET "access_ended_position"=1 WHERE "conversation_id"='conversation-1' AND "user_id"='user-1';
 SET LOCAL session_replication_role = origin;
 SELECT pg_temp.expect_personal_configuration_insert_failure('current participant access is enforced', 'change-ended-access', '{}', 'source conversation requires the initiating participant with current access');

@@ -29,17 +29,17 @@ INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", 
 VALUES ('run-event-revision', 'silo-run-event', 'run-event-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'run-event-model', '{}', 'user-run-event');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'run-event-revision';
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'run-event-revision' WHERE "id" = 'run-event-service';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
-VALUES ('run-event-conversation', 'silo-run-event', 'run-event-service', 'agent_session', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
+VALUES ('run-event-conversation', 'silo-run-event', 'run-event-service', 'agent_session', 'run-event-computer', 'run-event-identity', 'run-event-profile', clock_timestamp());
 INSERT INTO "conversations" ("id", "silo_id", "mode", "updated_at")
 VALUES ('direct-conversation', 'silo-run-event', 'direct', clock_timestamp());
 SELECT pg_temp.expect_failure(
     'an agent run cannot bind a direct conversation',
-    $statement$INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES ('direct-conversation-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'direct-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'direct-conversation-request', 'direct-conversation-run', 'sha256:' || repeat('e', 64))$statement$,
+    $statement$INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES ('direct-conversation-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'direct-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'direct-conversation-request', 'sha256:' || repeat('e', 64))$statement$,
     'AgentRun requires the exact agent-session Conversation authority'
 );
 INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest")
-VALUES ('run-event-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'run-event-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'run-event-request', 'run-event-run', 'sha256:' || repeat('c', 64));
+VALUES ('run-event-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'run-event-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'run-event-request', 'sha256:' || repeat('c', 64));
 INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
 VALUES ('run-event-input', 'run-event-run', 1, 1, 'silo-run-event', 'run-event-service', 'run-event-revision', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'run-event-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64));
 SET CONSTRAINTS ALL IMMEDIATE;

@@ -64,7 +64,12 @@ function _database(ownerProfileId: string | null = "profile-1", createError: Err
 		personaProfile: {
 			findUnique: vi.fn(async function _FindOwnerProfile() { return ownerProfileId === null ? null : { id: ownerProfileId }; }),
 		},
-		personalConfigurationChange: { create: vi.fn(async function _CreateProposal() { if (createError !== null) throw createError; return { id: "change-1" }; }) },
+		personalConfigurationChange: { create: vi.fn(async function _CreateProposal()
+		{
+			if (createError !== null)
+				throw createError;
+			return { id: "change-1" };
+		}) },
 	};
 	const prisma = { $transaction: vi.fn(async function _RunTransaction(work: (value: unknown) => Promise<unknown>) { traceFields = ___GetContext()?.extra; return work(transaction); }) };
 	return { prisma, transaction, traceFields: function _TraceFields() { return traceFields; } };

@@ -73,11 +73,15 @@ export function _CreateConversationAssetContentBroker(prisma: PrismaClient, envi
 			return ___DoWithTrace("conversation.asset.content-broker", { siloId: target.siloId, artifactId: target.artifactId, artifactRevisionId: target.artifactRevisionId }, async function _ReadContent(): Promise<AsyncIterable<Uint8Array> | null>
 			{
 				const issued = await __IssueArtifactReadLease(repository, signer, { siloId: target.siloId, artifactId: target.artifactId, artifactRevisionId: target.artifactRevisionId }, Math.floor(Date.now() / 1_000));
-				if (issued.outcome !== IssueArtifactReadLeaseOutcomes.Issued) return null;
-				if (issued.claims.byteLength !== target.byteLength || issued.claims.mediaType !== target.mediaType) return null;
+				if (issued.outcome !== IssueArtifactReadLeaseOutcomes.Issued)
+					return null;
+				if (issued.claims.byteLength !== target.byteLength || issued.claims.mediaType !== target.mediaType)
+					return null;
 				const response = await readPort.read(issued.compactLease);
-				if (response.headers.get("content-length") !== String(target.byteLength) || response.headers.get("content-type") !== target.mediaType) throw new Error("artifact service read metadata did not match the ready conversation asset");
-				if (response.body === null) throw new Error("artifact service returned no conversation asset body");
+				if (response.headers.get("content-length") !== String(target.byteLength) || response.headers.get("content-type") !== target.mediaType)
+					throw new Error("artifact service read metadata did not match the ready conversation asset");
+				if (response.body === null)
+					throw new Error("artifact service returned no conversation asset body");
 				return _ResponseBytes(response.body);
 			});
 		}
@@ -94,13 +98,18 @@ async function* _ResponseBytes(body: ReadableStream<Uint8Array>): AsyncGenerator
 		while (true)
 		{
 			const next = await reader.read();
-			if (next.done) { complete = true; return; }
+			if (next.done)
+			{
+				complete = true;
+				return;
+			}
 			yield next.value;
 		}
 	}
 	finally
 	{
-		if (!complete) await reader.cancel().catch(function _IgnoreCancellationFailure(): void {});
+		if (!complete)
+			await reader.cancel().catch(function _IgnoreCancellationFailure(): void {});
 		reader.releaseLock();
 	}
 }
@@ -114,7 +123,8 @@ export function _CreateArtifactServicePromotionPort(serviceUrl: string): { promo
 			return ___DoWithTrace("artifact.promote.fetch", {}, async function _Promote(): Promise<{ readonly receipt: string }>
 			{
 				const response = await fetch(`${serviceUrl}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": lease }, body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit, duplex: "half" } as RequestInit);
-				if (!response.ok) throw new Error(`artifact service promotion failed with ${response.status}`);
+				if (!response.ok)
+					throw new Error(`artifact service promotion failed with ${response.status}`);
 				return ___ParseAndValidateJson(await response.text(), "artifact service promotion response", _PromotionReceipt);
 			});
 		},
@@ -124,7 +134,8 @@ export function _CreateArtifactServicePromotionPort(serviceUrl: string): { promo
 /** Validate the exact receipt returned after artifact promotion. */
 function _PromotionReceipt(value: unknown): { readonly receipt: string }
 {
-	if (typeof value !== "object" || value === null || Array.isArray(value) || !("receipt" in value) || typeof value.receipt !== "string" || value.receipt.length === 0) throw new Error("artifact service promotion returned no receipt");
+	if (typeof value !== "object" || value === null || Array.isArray(value) || !("receipt" in value) || typeof value.receipt !== "string" || value.receipt.length === 0)
+		throw new Error("artifact service promotion returned no receipt");
 	return { receipt: value.receipt };
 }
 
@@ -181,14 +192,17 @@ export function _CreateArtifactPreprocessOutputBroker(prisma: PrismaClient, maxi
 				const output = await _CollectBounded(bytes, maximumOutputBytes);
 				const contentAddress = `sha256:${createHash("sha256").update(output).digest("hex")}`;
 				const issued = await __IssueArtifactPreprocessOutputLease(jobs, { ...command, contentAddress, byteLength: output.byteLength });
-				if (issued === null) return "conflict";
-				if (issued === "completed") return "completed";
+				if (issued === null)
+					return "conflict";
+				if (issued === "completed")
+					return "completed";
 
 				// 2. Sign and consume the exact-byte write lease entirely inside OpenCrane.
 				const compactLease = __SignArtifactWriteLease(issued.writeLease, leasePrivateKey, Math.floor(Date.now() / 1_000));
 				const promoted = await promotionPort.promote(compactLease, _OneBuffer(output));
 				const promotion = __VerifyArtifactPromotionReceipt(promoted.receipt, receiptPublicKey);
-				if (promotion === null) throw new Error("artifact service returned an invalid promotion receipt");
+				if (promotion === null)
+					throw new Error("artifact service returned an invalid promotion receipt");
 
 				// 3. Commit the verified receipt, generated revision, lineage, and job atomically.
 				const completed = await __CompleteArtifactPreprocessJob(jobs, { ...command, derivedRevisionId: issued.derivedRevisionId, promotion, receiptDigest: `sha256:${createHash("sha256").update(promoted.receipt, "utf8").digest("hex")}` });
@@ -206,7 +220,8 @@ async function _CollectBounded(bytes: AsyncIterable<Uint8Array>, maximumBytes: n
 	for await (const chunk of bytes)
 	{
 		length += chunk.byteLength;
-		if (length > maximumBytes) throw new Error("artifact preprocess output exceeded the configured byte limit");
+		if (length > maximumBytes)
+			throw new Error("artifact preprocess output exceeded the configured byte limit");
 		chunks.push(Buffer.from(chunk));
 	}
 	return Buffer.concat(chunks, length);

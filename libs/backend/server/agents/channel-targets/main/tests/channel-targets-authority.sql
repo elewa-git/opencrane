@@ -27,7 +27,8 @@ VALUES ('channel-service-2', 'silo-channel', 'managed', 'Second channel agent', 
 INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at")
 VALUES ('channel-revision', 'silo-channel', 'channel-service', 1, 'published', 'sha256:' || repeat('a', 64), 'prompt-v1', 'channel-model', '{}', 'user-1', clock_timestamp());
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'channel-revision' WHERE "id" = 'channel-service';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at") VALUES ('channel-conversation', 'silo-channel', 'channel-service', 'agent_session', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
+VALUES ('channel-conversation', 'silo-channel', 'channel-service', 'agent_session', 'channel-computer', 'channel-identity', 'channel-profile', clock_timestamp());
 INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position")
 VALUES ('channel-conversation', 'user-1', 1, 0);
 

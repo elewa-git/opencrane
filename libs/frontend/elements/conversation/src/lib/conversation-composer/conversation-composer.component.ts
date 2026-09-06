@@ -83,7 +83,8 @@ export class ConversationComposerComponent
 	protected changeDraft(event: Event): void
 	{
 		const target = event.target;
-		if (target instanceof HTMLTextAreaElement) this.draftChange.emit(target.value);
+		if (target instanceof HTMLTextAreaElement)
+			this.draftChange.emit(target.value);
 	}
 
 	/**
@@ -95,7 +96,8 @@ export class ConversationComposerComponent
 	 */
 	protected handleKeydown(event: KeyboardEvent): void
 	{
-		if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+		if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey))
+			return;
 		event.preventDefault();
 		this.submit();
 	}
@@ -110,10 +112,12 @@ export class ConversationComposerComponent
 	{
 		// 1. Refuse in any state but Available: Submitting means the parent's send is still out, and
 		// re-emitting there would send the same message twice.
-		if (this.state() !== ConversationComposerStates.Available) return;
+		if (this.state() !== ConversationComposerStates.Available)
+			return;
 
 		// 2. Require something to send — text, or content the parent holds and we cannot see, such as
 		// selected attachments. Emit the draft as displayed, empty string included.
-		if (this.draft().trim().length > 0 || this.allowEmptySubmission()) this.submitted.emit(this.draft());
+		if (this.draft().trim().length > 0 || this.allowEmptySubmission())
+			this.submitted.emit(this.draft());
 	}
 }

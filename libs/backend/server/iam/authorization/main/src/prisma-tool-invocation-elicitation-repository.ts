@@ -41,7 +41,8 @@ export class PrismaToolInvocationElicitationRepository implements ToolInvocation
 		if (invocation.runId === null || invocation.attempt === null)
 			return false;
 		const current = await this.findById(claim.invocationId);
-		if (current === null) return false;
+		if (current === null)
+			return false;
 		const currentEvidence = current.authorizationEvidence;
 		const invocationEvidence = invocation.authorizationEvidence;
 		if (currentEvidence === null || invocationEvidence === null || !("executionSubject" in currentEvidence) || !("executionSubject" in invocationEvidence))

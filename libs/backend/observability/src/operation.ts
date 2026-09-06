@@ -40,7 +40,8 @@ export function ___GetActiveSpan()
 export function ___MarkActiveSpanFailed(): void
 {
   const span = trace.getActiveSpan();
-  if (span === undefined) return;
+  if (span === undefined)
+    return;
   _failedActiveSpans.add(span);
   span.setStatus({ code: SpanStatusCode.ERROR, message: "operation_failed" });
 }
@@ -112,7 +113,8 @@ export async function ___DoWithTrace<T>(
       try
       {
         const result = await fn();
-        if (!_failedActiveSpans.has(span)) span.setStatus({ code: SpanStatusCode.OK });
+        if (!_failedActiveSpans.has(span))
+          span.setStatus({ code: SpanStatusCode.OK });
         return result;
       }
       catch (err)

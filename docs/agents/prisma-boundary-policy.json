@@ -1726,6 +1726,7 @@
 			}
 		],
 		"compositions": [
+			"apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts",
 			"apps/opencrane/src/app/public-app.ts",
 			"apps/opencrane/src/app/run-admission-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-lifecycle-composition.ts",
@@ -1761,6 +1762,7 @@
 			"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 			"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
 			"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
+			"libs/backend/agents/execution/runs/main/src/prisma-self-run-status.router.ts",
 			"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 			"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
 			"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",

@@ -27,7 +27,8 @@ const _ADDRESS = `sha256:${"a".repeat(64)}`;
 /** Active access delegates reused by focused authority tests. */
 function _Access(active: boolean)
 {
-	if (active) return { conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ id: "participant-1" }) }, orgMembership: { count: vi.fn().mockResolvedValue(1) } };
+	if (active)
+		return { conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ id: "participant-1" }) }, orgMembership: { count: vi.fn().mockResolvedValue(1) } };
 	return { conversationParticipant: { findFirst: vi.fn().mockResolvedValue(null) }, orgMembership: { count: vi.fn().mockResolvedValue(0) } };
 }
 

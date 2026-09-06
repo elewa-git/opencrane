@@ -93,8 +93,10 @@ function _proposalDenied(reason: PersonalConfigurationProposalCodes): Error
 /** Resolves the committed transaction outcome into the unchanged runtime-facing contract. */
 function _resolveProposal(result: ProposePersonalConfigurationChangeResult | null): UpgradeSessionProposalReceipt
 {
-	if (result === null) throw new Error("upgrade_session personal profile is unavailable");
-	if (result.outcome !== PersonalConfigurationProposalCodes.Proposed) throw _proposalDenied(result.reason);
+	if (result === null)
+		throw new Error("upgrade_session personal profile is unavailable");
+	if (result.outcome !== PersonalConfigurationProposalCodes.Proposed)
+		throw _proposalDenied(result.reason);
 	return _receipt(result.changeId);
 }
 

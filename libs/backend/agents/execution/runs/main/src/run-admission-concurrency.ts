@@ -27,8 +27,10 @@ export class RunAdmissionConcurrencyGate
 	 */
 	constructor(policy: RunAdmissionConcurrencyPolicy)
 	{
-		if (!_isPositiveInteger(policy.maxConcurrentAdmissions)) throw new Error("maxConcurrentAdmissions must be a positive integer");
-		if (!_isNonNegativeInteger(policy.maxQueuedAdmissions)) throw new Error("maxQueuedAdmissions must be a non-negative integer");
+		if (!_isPositiveInteger(policy.maxConcurrentAdmissions))
+			throw new Error("maxConcurrentAdmissions must be a positive integer");
+		if (!_isNonNegativeInteger(policy.maxQueuedAdmissions))
+			throw new Error("maxQueuedAdmissions must be a non-negative integer");
 		this.policy = policy;
 	}
 
@@ -88,7 +90,8 @@ export class RunAdmissionConcurrencyGate
 		const next = queue.waiting.shift();
 		if (next === undefined)
 		{
-			if (queue.active === 0) this.queues.delete(key);
+			if (queue.active === 0)
+				this.queues.delete(key);
 			return;
 		}
 

@@ -23,9 +23,11 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Reserves one logical artifact, hidden write lease, and browser asset row. */
 	async reserve(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>
 	{
-		if (!await this._canMutateConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
+		if (!await this._canMutateConversation(caller, conversationId))
+			return { outcome: "denied", reason: "conversation_unavailable" };
 		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_createdByUserId_idempotencyKey: { conversationId, createdByUserId: caller.subjectId, idempotencyKey: request.idempotencyKey } }, include: { uploadLease: true } });
-		if (existing !== null) return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _ConversationAssetView(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
+		if (existing !== null)
+			return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _ConversationAssetView(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
 		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ArtifactCollection, id: caller.siloId }, ProductAuthorizationActions.Create, { conversationId, request } as unknown as JsonValue))
 			return { outcome: "denied", reason: "conversation_unavailable" };
 		const artifactId = randomUUID();
@@ -40,10 +42,12 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Reads one live hidden upload lease. */
 	async readUploadTarget(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetUploadTarget | null>
 	{
-		if (!await this._canMutateConversation(caller, conversationId)) return null;
+		if (!await this._canMutateConversation(caller, conversationId))
+			return null;
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, state: ConversationAssetState.Uploading }, include: { uploadLease: true } });
 		const lease = asset?.uploadLease;
-		if (lease === null || lease === undefined || lease.state !== ArtifactUploadLeaseState.Active || lease.expiresAt <= new Date() || lease.expectedContentAddress === null || lease.expectedByteLength === null) return null;
+		if (lease === null || lease === undefined || lease.state !== ArtifactUploadLeaseState.Active || lease.expiresAt <= new Date() || lease.expectedContentAddress === null || lease.expectedByteLength === null)
+			return null;
 		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: lease.artifactId }, ProductAuthorizationActions.Edit, { operation: "read-upload-target", conversationId, assetId, leaseId: lease.id }))
 			return null;
 		return { lease: { leaseId: lease.id, siloId: lease.siloId, artifactId: lease.artifactId, action: "artifact.write", expiresAtEpochSeconds: Math.floor(lease.expiresAt.getTime() / 1_000), expectedContentAddress: lease.expectedContentAddress, expectedByteLength: Number(lease.expectedByteLength), mediaType: lease.mediaType } };
@@ -52,15 +56,20 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Converts a verified promotion into a quarantined revision and scan job. */
 	async finalize(caller: ConversationAssetCaller, conversationId: string, assetId: string, promotion: import("@opencrane/backend/artifacts/authorization").ArtifactPromotionReceiptClaims, receiptDigest: string): Promise<ConversationAssetResult>
 	{
-		if (!await this._canMutateConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
+		if (!await this._canMutateConversation(caller, conversationId))
+			return { outcome: "denied", reason: "conversation_unavailable" };
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId } });
-		if (asset === null) return { outcome: "denied", reason: "asset_unavailable" };
-		if (asset.state === ConversationAssetState.Processing || asset.state === ConversationAssetState.Ready) return { outcome: "idempotent", asset: _ConversationAssetView(asset, caller.subjectId) };
-		if (asset.state !== ConversationAssetState.Uploading || asset.uploadLeaseId !== promotion.leaseId || asset.artifactId === null) return { outcome: "denied", reason: "asset_unavailable" };
+		if (asset === null)
+			return { outcome: "denied", reason: "asset_unavailable" };
+		if (asset.state === ConversationAssetState.Processing || asset.state === ConversationAssetState.Ready)
+			return { outcome: "idempotent", asset: _ConversationAssetView(asset, caller.subjectId) };
+		if (asset.state !== ConversationAssetState.Uploading || asset.uploadLeaseId !== promotion.leaseId || asset.artifactId === null)
+			return { outcome: "denied", reason: "asset_unavailable" };
 		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: asset.artifactId }, ProductAuthorizationActions.Create, { assetId, conversationId, receiptDigest }))
 			return { outcome: "denied", reason: "asset_unavailable" };
 		const lease = await this.transaction.artifactUploadLease.findUnique({ where: { id: promotion.leaseId } });
-		if (lease === null || lease.state !== ArtifactUploadLeaseState.Active || lease.expectedContentAddress !== promotion.contentAddress || lease.expectedByteLength !== BigInt(promotion.byteLength) || lease.mediaType !== promotion.mediaType) return { outcome: "denied", reason: "upload_failed" };
+		if (lease === null || lease.state !== ArtifactUploadLeaseState.Active || lease.expectedContentAddress !== promotion.contentAddress || lease.expectedByteLength !== BigInt(promotion.byteLength) || lease.mediaType !== promotion.mediaType)
+			return { outcome: "denied", reason: "upload_failed" };
 		const now = new Date();
 		const revisionId = randomUUID();
 		await this.transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Finalized, promotionReceiptDigest: receiptDigest, promotedContentAddress: promotion.contentAddress, promotedByteLength: BigInt(promotion.byteLength), promotedAt: now, finalizedAt: now } });
@@ -72,16 +81,22 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Removes only the caller's unlinked upload reservation and revokes its live write lease. */
 	async remove(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetResult>
 	{
-		if (!await this._canMutateConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
+		if (!await this._canMutateConversation(caller, conversationId))
+			return { outcome: "denied", reason: "conversation_unavailable" };
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, provenance: PersistedProvenance.ParticipantUpload } });
-		if (asset === null) return { outcome: "denied", reason: "asset_unavailable" };
-		if (asset.state === ConversationAssetState.Removed) return { outcome: "idempotent", asset: _ConversationAssetView(asset, caller.subjectId) };
-		if (!_CanRemove(asset, caller.subjectId)) return { outcome: "denied", reason: "asset_unavailable" };
+		if (asset === null)
+			return { outcome: "denied", reason: "asset_unavailable" };
+		if (asset.state === ConversationAssetState.Removed)
+			return { outcome: "idempotent", asset: _ConversationAssetView(asset, caller.subjectId) };
+		if (!_CanRemove(asset, caller.subjectId))
+			return { outcome: "denied", reason: "asset_unavailable" };
 		if (asset.artifactId === null || !await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: asset.artifactId }, ProductAuthorizationActions.Edit, { assetId, conversationId, removed: true }))
 			return { outcome: "denied", reason: "asset_unavailable" };
 		const now = new Date();
-		if (asset.uploadLeaseId !== null) await this.transaction.artifactUploadLease.updateMany({ where: { id: asset.uploadLeaseId, state: ArtifactUploadLeaseState.Active }, data: { state: ArtifactUploadLeaseState.Cancelled } });
-		if (asset.artifactId !== null) await this.transaction.artifact.updateMany({ where: { id: asset.artifactId, state: ArtifactState.Active }, data: { state: ArtifactState.DeletionPending, deletedAt: now } });
+		if (asset.uploadLeaseId !== null)
+			await this.transaction.artifactUploadLease.updateMany({ where: { id: asset.uploadLeaseId, state: ArtifactUploadLeaseState.Active }, data: { state: ArtifactUploadLeaseState.Cancelled } });
+		if (asset.artifactId !== null)
+			await this.transaction.artifact.updateMany({ where: { id: asset.artifactId, state: ArtifactState.Active }, data: { state: ArtifactState.DeletionPending, deletedAt: now } });
 		const removed = await this.transaction.conversationAsset.update({ where: { id: asset.id }, data: { state: ConversationAssetState.Removed, displayName: "Attachment removed", mediaType: "application/octet-stream", byteLength: null, failureCode: null, removedAt: now } });
 		return { outcome: "accepted", asset: _ConversationAssetView(removed, caller.subjectId) };
 	}
@@ -89,22 +104,28 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Lists browser-safe metadata for a current participant. */
 	async list(caller: ConversationAssetCaller, conversationId: string): Promise<readonly ConversationAssetView[]>
 	{
-		if (!await this._canReadConversation(caller, conversationId)) return [];
+		if (!await this._canReadConversation(caller, conversationId))
+			return [];
 		return (await this.transaction.conversationAsset.findMany({ where: { conversationId, siloId: caller.siloId, state: { not: ConversationAssetState.Removed }, provenance: PersistedProvenance.ParticipantUpload }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] })).map(function _SafeView(asset) { return _ConversationAssetView(asset, caller.subjectId); });
 	}
 
 	/** Reloads current participant access and one exact ready, published revision. */
 	async readReadyTarget(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetReadTarget | null>
 	{
-		if (!await this._canReadConversation(caller, conversationId)) return null;
+		if (!await this._canReadConversation(caller, conversationId))
+			return null;
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, state: ConversationAssetState.Ready }, include: { artifact: true, revision: true } });
-		if (asset === null || asset.artifactId === null || asset.revisionId === null || asset.artifact === null || asset.revision === null) return null;
+		if (asset === null || asset.artifactId === null || asset.revisionId === null || asset.artifact === null || asset.revision === null)
+			return null;
 		if (!await this.authorization.canAccess(caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: asset.artifactId }, ProductAuthorizationActions.Read))
 			return null;
-		if (asset.artifact.state !== ArtifactState.Active || asset.revision.state !== ArtifactRevisionState.Published || asset.revision.artifactId !== asset.artifactId || asset.revision.id !== asset.revisionId) return null;
-		if (asset.byteLength === null || asset.byteLength !== asset.revision.byteLength || asset.mediaType !== asset.revision.mediaType || asset.byteLength <= 0n || asset.byteLength > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+		if (asset.artifact.state !== ArtifactState.Active || asset.revision.state !== ArtifactRevisionState.Published || asset.revision.artifactId !== asset.artifactId || asset.revision.id !== asset.revisionId)
+			return null;
+		if (asset.byteLength === null || asset.byteLength !== asset.revision.byteLength || asset.mediaType !== asset.revision.mediaType || asset.byteLength <= 0n || asset.byteLength > BigInt(Number.MAX_SAFE_INTEGER))
+			return null;
 		const disposition = ___ConversationAssetMediaDisposition(asset.mediaType);
-		if (disposition === null) return null;
+		if (disposition === null)
+			return null;
 		return { siloId: caller.siloId, artifactId: asset.artifactId, artifactRevisionId: asset.revisionId, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: Number(asset.byteLength), disposition };
 	}
 
