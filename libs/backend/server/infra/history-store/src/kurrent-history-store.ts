@@ -1,4 +1,4 @@
-import { BACKWARDS, END, FORWARDS, NO_STREAM, PARK, RETRY, START, STREAM_STATE, KurrentDBClient, jsonEvent, type EventType, type PersistentSubscriptionToStream, type PersistentSubscriptionToStreamResolvedEvent, type ResolvedEvent, type StreamStateCheck } from "@kurrent/kurrentdb-client";
+import { BACKWARDS, END, FORWARDS, NO_STREAM, PARK, RETRY, START, STREAM_STATE, KurrentDBClient, StreamNotFoundError, jsonEvent, type EventType, type PersistentSubscriptionToStream, type PersistentSubscriptionToStreamResolvedEvent, type ResolvedEvent, type StreamStateCheck } from "@kurrent/kurrentdb-client";
 
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAppendReceipt, type HistoryAtomicAppend, type HistoryEvent, type HistoryPersistentRecordedEvent, type HistoryPersistentSubscription, type HistoryPersistentSubscriptionRequest, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore, type HistoryStreamHead, type HistorySubscription } from "./history-store.types";
 
@@ -24,10 +24,19 @@ export class _KurrentHistoryStore implements HistoryStore
 	public async readHead(streamName: string): Promise<HistoryStreamHead>
 	{
 		const events = this.client.readStream(streamName, { direction: BACKWARDS, fromRevision: END, maxCount: 1 });
-		for await (const resolved of events)
+		try
 		{
-			if (resolved.event)
-				return { streamName, revision: resolved.event.revision };
+			for await (const resolved of events)
+			{
+				if (resolved.event)
+					return { streamName, revision: resolved.event.revision };
+			}
+		}
+		catch (error)
+		{
+			// The real client reports a stream that was never written as an error; the port promises null.
+			if (!(error instanceof StreamNotFoundError))
+				throw error;
 		}
 		return { streamName, revision: null };
 	}
@@ -102,7 +111,32 @@ function _CreateAtomicChecks(command: HistoryAtomicAppend): StreamStateCheck[]
 /** Converts an OpenCrane event into the JSON record accepted by KurrentDB. */
 function _ToKurrentEvent(event: HistoryEvent)
 {
-	return jsonEvent({ id: event.id, type: event.type, data: event.data, metadata: event.metadata });
+	return jsonEvent({ id: event.id, type: event.type, data: event.data, metadata: _ToWireMetadata(event.metadata) });
+}
+
+/**
+ * Flattens event metadata to the string map every KurrentDB append path accepts.
+ *
+ * The atomic multi-stream append rejects any non-string metadata value before sending, and readers
+ * only ever compare metadata as strings, so both append paths write the same shape: strings stay,
+ * numbers, booleans and bigints become their decimal or literal text, and null or undefined fields
+ * are left out. A nested value is a programming error and fails loudly instead of being mangled.
+ */
+function _ToWireMetadata(metadata: HistoryEvent["metadata"]): Record<string, string>
+{
+	const wire: Record<string, string> = {};
+	for (const [key, value] of Object.entries(metadata ?? {}))
+	{
+		if (value === null || value === undefined)
+			continue;
+		if (typeof value === "string")
+			wire[key] = value;
+		else if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint")
+			wire[key] = String(value);
+		else
+			throw new Error(`History event metadata '${key}' must be a flat string, number or boolean`);
+	}
+	return wire;
 }
 
 /** Converts an OpenCrane expected revision into the official client's stream condition. */
