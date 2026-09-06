@@ -1,23 +1,8 @@
 BEGIN;
 
-INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES
-('personal-configuration-model', 'silo-1', 'global', 'personal-configuration-model', 'litellm-personal-configuration-model', 'personal-configuration-model', clock_timestamp()),
-('careful-model', 'silo-1', 'global', 'careful', 'litellm-careful-model', 'careful-model', clock_timestamp());
-INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
-VALUES ('user-1', 'silo-1', 'https://identity.example.test', 'user-1', 'external', clock_timestamp());
-
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
-DECLARE actual_message TEXT;
-BEGIN
-    BEGIN EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN RAISE NOTICE 'PASS: %', test_name; RETURN; END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
+SELECT pg_temp.seed_silo_model('silo-1', 'personal-configuration-model');
+SELECT pg_temp.seed_silo_model('silo-1', 'careful');
+SELECT pg_temp.seed_external_user('silo-1', 'user-1');
 
 CREATE FUNCTION pg_temp.expect_personal_configuration_insert_failure(test_name TEXT, change_id TEXT, overrides JSONB, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
@@ -78,9 +63,8 @@ INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile
 INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "digest", "prompt_policy_version", "persona_revision_id", "model_definition_id", "budget", "authored_by") VALUES ('agent-1', 'silo-1', 'service-1', 1, 'sha256:' || repeat('a',64), 'prompt-v1', 'persona-1', 'personal-configuration-model', '{}', 'user-1');
 UPDATE "agent_revisions" SET "state"='published', "published_at"=clock_timestamp() WHERE "id"='agent-1';
 UPDATE "agent_services" SET "state"='active', "active_revision_id"='agent-1' WHERE "id"='service-1';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
-VALUES ('conversation-1', 'silo-1', 'service-1', 'agent_session', 'configuration-computer', 'identity-1', 'configuration-profile', clock_timestamp());
-INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position") VALUES ('conversation-1', 'user-1', 1, 0);
+SELECT pg_temp.seed_agent_conversation('conversation-1', 'silo-1', 'service-1');
+SELECT pg_temp.seed_participant('conversation-1', 'user-1');
 INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES ('run-1', 'silo-1', 'service-1', 'agent-1', 'conversation-1', 'interactive', 'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'request-1', 'sha256:' || repeat('c',64));
 INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "persona_revision_id", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest") VALUES ('run-1-input', 'run-1', 1, 1, 'silo-1', 'service-1', 'agent-1', 'identity-1', 'user-1', '{"runScope":{"attempt":1}}', 'persona-1', 'conversation-1', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c',64));
 
@@ -101,7 +85,7 @@ UPDATE "conversations" SET "mode"='direct', "agent_service_id"=NULL, "computer_i
 SET LOCAL session_replication_role = origin;
 SELECT pg_temp.expect_personal_configuration_insert_failure('agent-session conversation mode is enforced', 'change-direct-conversation', '{}', 'provenance or active-revision fence conflict');
 SET LOCAL session_replication_role = replica;
-UPDATE "conversations" SET "mode"='agent_session', "agent_service_id"='service-1', "computer_id"='configuration-computer', "computer_agent_identity_id"='identity-1', "computer_profile_revision_id"='configuration-profile' WHERE "id"='conversation-1';
+UPDATE "conversations" SET "mode"='agent_session', "agent_service_id"='service-1', "computer_id"='computer-conversation-1', "computer_agent_identity_id"='identity-conversation-1', "computer_profile_revision_id"='profile-conversation-1' WHERE "id"='conversation-1';
 UPDATE "conversation_participants" SET "access_ended_position"=1 WHERE "conversation_id"='conversation-1' AND "user_id"='user-1';
 SET LOCAL session_replication_role = origin;
 SELECT pg_temp.expect_personal_configuration_insert_failure('current participant access is enforced', 'change-ended-access', '{}', 'source conversation requires the initiating participant with current access');
@@ -116,7 +100,7 @@ SELECT pg_temp.expect_failure('unknown patch fields are rejected', $statement$IN
 SELECT pg_temp.expect_failure('whitespace model alias is rejected', $statement$INSERT INTO "personal_configuration_changes" ("id", "silo_id", "user_id", "persona_profile_id", "agent_service_id", "source_conversation_id", "source_run_id", "requested_patch", "requested_patch_digest", "expected_persona_revision_id", "expected_agent_revision_id") VALUES ('change-whitespace', 'silo-1', 'user-1', 'profile-1', 'service-1', 'conversation-1', 'run-1', '{"kind":"model_alias","modelAlias":"\t"}', 'sha256:' || repeat('f',64), 'persona-1', 'agent-1')$statement$, 'personal_configuration_changes_valid_check');
 
 SELECT pg_temp.expect_failure('refresh interview rejects a non-refresh proposal', $statement$INSERT INTO "persona_interviews" ("id", "persona_profile_id", "user_id", "refresh_configuration_change_id", "question_set_id", "question_set_version", "scoring_policy_id", "scoring_policy_version", "interpolation_map_id", "interpolation_map_version") VALUES ('invalid-refresh-interview','profile-1','user-1','change-1','personal-agent-onboarding',1,'personal-agent-scoring',1,'personal-agent-interpolation',1)$statement$, 'PersonaInterview refresh must bind one accepted owner persona_refresh proposal');
-INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "parent_revision_id", "digest", "prompt_policy_version", "persona_revision_id", "model_definition_id", "budget", "authored_by") VALUES ('agent-2', 'silo-1', 'service-1', 2, 'agent-1', 'sha256:' || repeat('2',64), 'prompt-v1', 'persona-1', 'careful-model', '{}', 'user-1');
+INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "parent_revision_id", "digest", "prompt_policy_version", "persona_revision_id", "model_definition_id", "budget", "authored_by") VALUES ('agent-2', 'silo-1', 'service-1', 2, 'agent-1', 'sha256:' || repeat('2',64), 'prompt-v1', 'persona-1', 'careful', '{}', 'user-1');
 UPDATE "agent_revisions" SET "state"='published', "published_at"=clock_timestamp() WHERE "id"='agent-2';
 UPDATE "agent_services" SET "active_revision_id"='agent-2' WHERE "id"='service-1';
 UPDATE "personal_configuration_changes" SET "state"='applied', "applied_agent_revision_id"='agent-2' WHERE "id"='change-1';

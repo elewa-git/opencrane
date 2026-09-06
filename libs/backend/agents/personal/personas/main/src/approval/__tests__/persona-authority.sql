@@ -1,28 +1,10 @@
 BEGIN;
 
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
-DECLARE actual_message TEXT;
-BEGIN
-    BEGIN EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN RAISE NOTICE 'PASS: %', test_name; RETURN; END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
-
-CREATE FUNCTION pg_temp.assert_true(condition BOOLEAN, message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
-BEGIN
-    IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION 'FAIL: %', message; END IF;
-END;
-$$;
-
-SELECT pg_temp.assert_true((SELECT count(*) = 10 FROM "persona_questions" WHERE "question_set_id" = 'personal-agent-onboarding' AND "question_set_version" = 1), 'clean baseline seeds all ten onboarding questions');
-SELECT pg_temp.assert_true((SELECT count(*) = 37 FROM "persona_question_choices" WHERE "question_set_id" = 'personal-agent-onboarding' AND "question_set_version" = 1), 'clean baseline seeds every reviewed answer choice');
-SELECT pg_temp.assert_true((SELECT count(*) = 37 FROM "persona_scoring_weights" WHERE "scoring_policy_id" = 'personal-agent-scoring' AND "scoring_policy_version" = 1), 'clean baseline seeds every reviewed scoring weight');
-SELECT pg_temp.assert_true((SELECT "state" = 'reviewed' AND "reviewed_by" = 'opencrane-clean-build' FROM "persona_question_sets" WHERE "question_set_id" = 'personal-agent-onboarding' AND "version" = 1), 'clean baseline freezes the onboarding question set as reviewed');
-SELECT pg_temp.assert_true((SELECT count(*) = 8 FROM "persona_soul_templates" WHERE "version" = 1), 'clean baseline seeds all eight colour and modifier SOUL templates');
+SELECT pg_temp.assert_true('clean baseline seeds all ten onboarding questions', (SELECT count(*) = 10 FROM "persona_questions" WHERE "question_set_id" = 'personal-agent-onboarding' AND "question_set_version" = 1));
+SELECT pg_temp.assert_true('clean baseline seeds every reviewed answer choice', (SELECT count(*) = 37 FROM "persona_question_choices" WHERE "question_set_id" = 'personal-agent-onboarding' AND "question_set_version" = 1));
+SELECT pg_temp.assert_true('clean baseline seeds every reviewed scoring weight', (SELECT count(*) = 37 FROM "persona_scoring_weights" WHERE "scoring_policy_id" = 'personal-agent-scoring' AND "scoring_policy_version" = 1));
+SELECT pg_temp.assert_true('clean baseline freezes the onboarding question set as reviewed', (SELECT "state" = 'reviewed' AND "reviewed_by" = 'opencrane-clean-build' FROM "persona_question_sets" WHERE "question_set_id" = 'personal-agent-onboarding' AND "version" = 1));
+SELECT pg_temp.assert_true('clean baseline seeds all eight colour and modifier SOUL templates', (SELECT count(*) = 8 FROM "persona_soul_templates" WHERE "version" = 1));
 
 SELECT pg_temp.expect_failure('reviewed question set cannot gain questions', $statement$
     INSERT INTO "persona_questions" ("question_set_id", "question_set_version", "question_id", "category", "prompt", "ordinal")
@@ -271,10 +253,10 @@ BEGIN
         "completed_at" = completion_time, "updated_at" = completion_time WHERE "id" = 'onboarding-1';
 END;
 $$;
-SELECT pg_temp.assert_true((SELECT onboarding."state" = 'completed' AND onboarding."completed_at" IS NOT NULL
+SELECT pg_temp.assert_true('bootstrap completion remains parent-owned and requires the exact three-answer conversation',
+    (SELECT onboarding."state" = 'completed' AND onboarding."completed_at" IS NOT NULL
         AND (SELECT count(*) FROM "user_onboarding_bootstrap_answers" answer WHERE answer."conversation_id" = conversation."id") = 3
     FROM "user_onboardings" onboarding JOIN "user_onboarding_bootstrap_conversations" conversation
-      ON conversation."id" = onboarding."bootstrap_conversation_id" WHERE onboarding."id" = 'onboarding-1'),
-    'bootstrap completion remains parent-owned and requires the exact three-answer conversation');
+      ON conversation."id" = onboarding."bootstrap_conversation_id" WHERE onboarding."id" = 'onboarding-1'));
 
 ROLLBACK;

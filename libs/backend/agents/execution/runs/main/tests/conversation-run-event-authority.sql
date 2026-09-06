@@ -1,38 +1,10 @@
 BEGIN;
 
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
-DECLARE actual_message TEXT;
-BEGIN
-    BEGIN
-        EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN
-            RAISE NOTICE 'PASS: %', test_name;
-            RETURN;
-        END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
-
-INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('run-event-model', 'silo-run-event', 'global', 'run-event-model', 'litellm-run-event-model', 'run-event-model', clock_timestamp());
-INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
-VALUES
-    ('user-run-event', 'silo-run-event', 'https://identity.example.test', 'user-run-event', 'external', clock_timestamp()),
-    ('run-event-service-principal', 'silo-run-event', 'urn:opencrane:agent-service', 'run-event-service', 'internal', clock_timestamp());
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
-VALUES ('run-event-service', 'silo-run-event', 'managed', 'Run event test', 'managed-agent', 'run-event-service-principal', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
-VALUES ('run-event-revision', 'silo-run-event', 'run-event-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'run-event-model', '{}', 'user-run-event');
-UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'run-event-revision';
-UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'run-event-revision' WHERE "id" = 'run-event-service';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
-VALUES ('run-event-conversation', 'silo-run-event', 'run-event-service', 'agent_session', 'run-event-computer', 'run-event-identity', 'run-event-profile', clock_timestamp());
-INSERT INTO "conversations" ("id", "silo_id", "mode", "updated_at")
-VALUES ('direct-conversation', 'silo-run-event', 'direct', clock_timestamp());
+SELECT pg_temp.seed_silo_model('silo-run-event', 'run-event-model');
+SELECT pg_temp.seed_external_user('silo-run-event', 'user-run-event');
+SELECT pg_temp.seed_managed_service('silo-run-event', 'run-event-service', 'run-event-model', 'run-event-revision');
+SELECT pg_temp.seed_agent_conversation('run-event-conversation', 'silo-run-event', 'run-event-service');
+SELECT pg_temp.seed_direct_conversation('direct-conversation', 'silo-run-event');
 SELECT pg_temp.expect_failure(
     'an agent run cannot bind a direct conversation',
     $statement$INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES ('direct-conversation-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'direct-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'direct-conversation-request', 'sha256:' || repeat('e', 64))$statement$,
@@ -45,9 +17,8 @@ VALUES ('run-event-input', 'run-event-run', 1, 1, 'silo-run-event', 'run-event-s
 SET CONSTRAINTS ALL IMMEDIATE;
 SET CONSTRAINTS ALL DEFERRED;
 
-INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position") VALUES
-    ('run-event-conversation', 'user-run-event', 1, 0),
-    ('direct-conversation', 'user-run-event', 1, 0);
+SELECT pg_temp.seed_participant('run-event-conversation', 'user-run-event');
+SELECT pg_temp.seed_participant('direct-conversation', 'user-run-event');
 SELECT pg_temp.expect_failure(
     'conversation mode is immutable after creation',
     $statement$UPDATE "conversations" SET "mode" = 'group' WHERE "id" = 'direct-conversation'$statement$,

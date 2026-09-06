@@ -1,24 +1,5 @@
 BEGIN;
 
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
-DECLARE actual_message TEXT;
-BEGIN
-    BEGIN EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN RAISE NOTICE 'PASS: %', test_name; RETURN; END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
-
-CREATE FUNCTION pg_temp.assert_true(test_name TEXT, condition BOOLEAN) RETURNS VOID LANGUAGE plpgsql AS $$
-BEGIN
-    IF condition IS NOT TRUE THEN RAISE EXCEPTION 'FAIL: %', test_name; END IF;
-    RAISE NOTICE 'PASS: %', test_name;
-END;
-$$;
-
 INSERT INTO "artifacts" ("id", "silo_id", "owner_principal_id", "kind", "updated_at")
 VALUES ('validation-artifact', 'validation-silo', 'validation-user', 'skill', clock_timestamp());
 INSERT INTO "artifact_revisions" ("id", "artifact_id", "revision", "content_address", "byte_length", "media_type", "provenance", "created_by")

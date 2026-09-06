@@ -1,36 +1,11 @@
 BEGIN;
 
-INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('channel-model', 'silo-channel', 'global', 'channel-model', 'litellm-channel-model', 'channel-model', clock_timestamp());
-
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
-DECLARE actual_message TEXT;
-BEGIN
-    BEGIN EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN RAISE NOTICE 'PASS: %', test_name; RETURN; END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
-
-INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES
-    ('channel-user-principal', 'silo-channel', 'https://issuer.test', 'user-1', 'external', clock_timestamp()),
-    ('channel-service-principal', 'silo-channel', 'urn:opencrane:agent-service', 'channel-service', 'internal', clock_timestamp()),
-    ('channel-service-2-principal', 'silo-channel', 'urn:opencrane:agent-service', 'channel-service-2', 'internal', clock_timestamp());
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
-VALUES ('channel-service', 'silo-channel', 'managed', 'Channel agent', 'managed-agent', 'channel-service-principal', clock_timestamp());
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
-VALUES ('channel-service-2', 'silo-channel', 'managed', 'Second channel agent', 'managed-agent', 'channel-service-2-principal', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at")
-VALUES ('channel-revision', 'silo-channel', 'channel-service', 1, 'published', 'sha256:' || repeat('a', 64), 'prompt-v1', 'channel-model', '{}', 'user-1', clock_timestamp());
-UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'channel-revision' WHERE "id" = 'channel-service';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
-VALUES ('channel-conversation', 'silo-channel', 'channel-service', 'agent_session', 'channel-computer', 'channel-identity', 'channel-profile', clock_timestamp());
-INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position")
-VALUES ('channel-conversation', 'user-1', 1, 0);
+SELECT pg_temp.seed_silo_model('silo-channel', 'channel-model');
+SELECT pg_temp.seed_external_user('silo-channel', 'user-1');
+SELECT pg_temp.seed_managed_service('silo-channel', 'channel-service', 'channel-model', 'channel-revision');
+SELECT pg_temp.seed_managed_service('silo-channel', 'channel-service-2', 'channel-model', 'channel-revision-2');
+SELECT pg_temp.seed_agent_conversation('channel-conversation', 'silo-channel', 'channel-service');
+SELECT pg_temp.seed_participant('channel-conversation', 'user-1');
 
 INSERT INTO "channel_runtime_routes" ("id", "receiver_id", "silo_id", "agent_service_id", "action", "endpoint")
 VALUES ('route-events', 'conversation-replay-v1', 'silo-channel', 'channel-service', 'events.read', 'http://agent-runtime.silo-channel.svc.cluster.local:8080/v1/events');
@@ -54,12 +29,12 @@ INSERT INTO "authorization_grants" (
     "catalog_revision", "catalog_digest", "capability_id", "resource_kind", "resource_id",
     "effect", "priority", "created_by"
 ) VALUES (
-    'channel-participant-send', 'silo-channel', 'principal', 'channel-user-principal', 'personal',
-    'channel-user-principal', 'exact', 'channel-target-participant-access',
+    'channel-participant-send', 'silo-channel', 'principal', 'user-1', 'personal',
+    'user-1', 'exact', 'channel-target-participant-access',
     'opencrane-product-authorization', 1,
     'sha256:2e5c65be1512d8e4ce7dfa495d125f9de3238e57376fa45f74850de44e3d4952',
     'channel-target:send', 'channel-target', 'route-events', 'allow', 0,
-    'channel-user-principal'
+    'user-1'
 );
 UPDATE "conversation_participants"
    SET "access_ended_position" = 0

@@ -1,24 +1,5 @@
 BEGIN;
 
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
-DECLARE actual_message TEXT;
-BEGIN
-    BEGIN EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN RAISE NOTICE 'PASS: %', test_name; RETURN; END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
-
-CREATE FUNCTION pg_temp.assert_true(test_name TEXT, condition BOOLEAN) RETURNS VOID LANGUAGE plpgsql AS $$
-BEGIN
-    IF condition IS NOT TRUE THEN RAISE EXCEPTION 'FAIL: %', test_name; END IF;
-    RAISE NOTICE 'PASS: %', test_name;
-END;
-$$;
-
 INSERT INTO "artifacts" ("id", "silo_id", "owner_principal_id", "kind", "updated_at") VALUES ('artifact-1','silo-artifact','user-1','upload',clock_timestamp());
 INSERT INTO "artifact_upload_leases" ("id", "artifact_id", "silo_id", "capability_jti", "media_type", "expires_at") VALUES ('lease-1','artifact-1','silo-artifact','capability-lease-1','text/plain',clock_timestamp() + interval '5 minutes');
 SELECT pg_temp.expect_failure('artifact upload lease cannot cross its artifact silo', $statement$INSERT INTO "artifact_upload_leases" ("id", "artifact_id", "silo_id", "capability_jti", "media_type", "expires_at") VALUES ('lease-cross-silo','artifact-1','other-silo','capability-lease-cross-silo','text/plain',clock_timestamp() + interval '5 minutes')$statement$, 'must stay inside its Artifact silo');

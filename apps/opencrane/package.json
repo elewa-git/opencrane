@@ -112,7 +112,7 @@
       "test:sql": {
         "executor": "nx:run-commands",
         "options": {
-          "command": "bash prisma/tests/phase-d-authority-integration.sh",
+          "command": "sh ../../scripts/run-postgres-authority-tests.sh prisma/tests/authorization-active-grant-uniqueness.sql prisma/tests/phase-d-authority-integration.sql prisma/tests/skill-authoring-validation-authority.sql",
           "cwd": "apps/opencrane"
         }
       },

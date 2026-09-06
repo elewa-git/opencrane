@@ -1,47 +1,10 @@
 BEGIN;
 
-INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('phase-d-model', 'silo-1', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
-
-INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
-VALUES
-    ('user-1', 'silo-1', 'https://identity.example.test', 'user-1', 'external', clock_timestamp()),
-    ('svc-main-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-main', 'internal', clock_timestamp()),
-    ('svc-invalid-initial-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-invalid-initial', 'internal', clock_timestamp()),
-    ('svc-lifecycle-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-lifecycle', 'internal', clock_timestamp()),
-    ('svc-run-retirement-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-run-retirement', 'internal', clock_timestamp()),
-    ('svc-run-rollover-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-run-rollover', 'internal', clock_timestamp());
-
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT)
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-DECLARE
-    actual_message TEXT;
-BEGIN
-    BEGIN
-        EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN
-            RAISE NOTICE 'PASS: %', test_name;
-            RETURN;
-        END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
-
-CREATE FUNCTION pg_temp.assert_true(test_name TEXT, condition BOOLEAN)
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF condition IS NOT TRUE THEN
-        RAISE EXCEPTION 'FAIL: %', test_name;
-    END IF;
-    RAISE NOTICE 'PASS: %', test_name;
-END;
-$$;
+SELECT pg_temp.seed_silo_model('silo-1', 'phase-d-model');
+SELECT pg_temp.seed_external_user('silo-1', 'user-1');
+SELECT pg_temp.seed_service_principal('silo-1', 'svc-main');
+SELECT pg_temp.seed_service_principal('silo-1', 'svc-invalid-initial');
+SELECT pg_temp.seed_service_principal('silo-1', 'svc-lifecycle');
 
 CREATE FUNCTION pg_temp.seed_run_snapshot(run_identifier TEXT, snapshot_identifier TEXT, snapshot_attempt INTEGER, snapshot_digest TEXT, snapshot_subject JSONB)
 RETURNS VOID
@@ -238,25 +201,8 @@ SELECT pg_temp.expect_failure(
     'is closed and cannot be changed'
 );
 
-INSERT INTO "agent_services" (
-    "id", "silo_id", "kind", "name",
-    "state", "workload_profile", "principal_id", "created_at", "updated_at"
-) VALUES (
-    'svc-run-retirement', 'silo-1', 'managed', 'Run retirement service',
-    'draft', 'standard', 'svc-run-retirement-principal', clock_timestamp(), clock_timestamp()
-);
-INSERT INTO "agent_revisions" (
-    "id", "silo_id", "agent_service_id", "revision", "state", "digest",
-    "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
-) VALUES (
-    'rev-run-retirement', 'silo-1', 'svc-run-retirement', 1, 'published', 'sha256:' || repeat('7', 64),
-    'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp()
-);
-UPDATE "agent_services"
-SET "active_revision_id" = 'rev-run-retirement', "state" = 'active'
-WHERE "id" = 'svc-run-retirement';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
-VALUES ('conversation-retry-retirement', 'silo-1', 'svc-run-retirement', 'agent_session', 'computer-retry-retirement', 'identity-1', 'profile-retry-retirement', clock_timestamp());
+SELECT pg_temp.seed_managed_service('silo-1', 'svc-run-retirement', 'phase-d-model', 'rev-run-retirement');
+SELECT pg_temp.seed_agent_conversation('conversation-retry-retirement', 'silo-1', 'svc-run-retirement');
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
     "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest"
@@ -300,26 +246,10 @@ SELECT pg_temp.expect_failure(
     'AgentRun attempt is immutable'
 );
 
-INSERT INTO "agent_services" (
-    "id", "silo_id", "kind", "name",
-    "state", "workload_profile", "principal_id", "created_at", "updated_at"
-) VALUES (
-    'svc-run-rollover', 'silo-1', 'managed', 'Run rollover service',
-    'draft', 'standard', 'svc-run-rollover-principal', clock_timestamp(), clock_timestamp()
-);
-INSERT INTO "agent_revisions" (
-    "id", "silo_id", "agent_service_id", "revision", "state", "digest",
-    "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
-) VALUES
-    ('rev-run-rollover-1', 'silo-1', 'svc-run-rollover', 1, 'published', 'sha256:' || repeat('8', 64),
-     'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp()),
-    ('rev-run-rollover-2', 'silo-1', 'svc-run-rollover', 2, 'published', 'sha256:' || repeat('9', 64),
-     'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp());
-UPDATE "agent_services"
-SET "active_revision_id" = 'rev-run-rollover-1', "state" = 'active'
-WHERE "id" = 'svc-run-rollover';
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
-VALUES ('conversation-retry-rollover', 'silo-1', 'svc-run-rollover', 'agent_session', 'computer-retry-rollover', 'identity-1', 'profile-retry-rollover', clock_timestamp());
+SELECT pg_temp.seed_managed_service('silo-1', 'svc-run-rollover', 'phase-d-model', 'rev-run-rollover-1');
+INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at")
+VALUES ('rev-run-rollover-2', 'silo-1', 'svc-run-rollover', 2, 'published', 'sha256:' || repeat('9', 64), 'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp());
+SELECT pg_temp.seed_agent_conversation('conversation-retry-rollover', 'silo-1', 'svc-run-rollover');
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
     "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest"
@@ -362,8 +292,7 @@ SELECT pg_temp.expect_failure(
     'AgentRun attempt is immutable'
 );
 
-INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "computer_id", "computer_agent_identity_id", "computer_profile_revision_id", "updated_at")
-VALUES ('conversation-run-state', 'silo-1', 'svc-main', 'agent_session', 'computer-run-state', 'identity-1', 'profile-run-state', clock_timestamp());
+SELECT pg_temp.seed_agent_conversation('conversation-run-state', 'silo-1', 'svc-main');
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
     "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest"
