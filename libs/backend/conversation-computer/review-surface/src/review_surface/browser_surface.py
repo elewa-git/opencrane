@@ -79,7 +79,7 @@ def capture_preview(port: int, path: str, width: int, height: int, allowed_ports
     with tempfile.TemporaryDirectory(prefix="opencrane-browser-") as directory:
         screenshot = Path(directory) / "preview.png"
         argv = [executable, "--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-background-networking", "--no-first-run", f"--screenshot={screenshot}", f"--window-size={width},{height}", preview_url]
-        result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)  # codeql[py/command-line-injection] argv list, no shell; the only reviewer input is a percent-encoded URL path behind a fixed loopback origin
+        result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)
         if result.returncode != 0 or not screenshot.is_file():
             raise RuntimeError("browser could not render the localhost preview")
         body = screenshot.read_bytes()

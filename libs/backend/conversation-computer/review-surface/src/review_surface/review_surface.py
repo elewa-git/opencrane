@@ -95,7 +95,7 @@ def _run_command(config: ReviewSurfaceConfig, payload: dict[str, Any]) -> dict[s
     # Running reviewer-chosen argv is this surface's purpose: the binary must be on the release
     # allowlist, there is no shell, the cwd is fenced to the workspace, and the caller already
     # proved the per-lease review credential inside a gVisor sandbox.
-    process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)  # codeql[py/command-line-injection] allowlisted argv, no shell, workspace-fenced cwd
+    process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     output, outcome, truncated = _bounded_process_output(process)
     return {"exitCode": process.returncode if outcome == "completed" else None, "outcome": outcome, "output": output.decode("utf-8", errors="replace"), "truncated": truncated}
 
