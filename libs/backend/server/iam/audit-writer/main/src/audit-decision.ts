@@ -65,8 +65,6 @@ export class PrismaAuditDecisionWriterRepository implements AuditDecisionWriterR
 			attempt: decision.attempt,
 			agentServiceId: decision.agentServiceId,
 			agentRevisionId: decision.agentRevisionId,
-			proofKeyId: decision.proofKeyId,
-			proofKeyThumbprint: decision.proofKeyThumbprint,
 			resourceKind: decision.resourceKind,
 			resourceId: decision.resourceId,
 			action: decision.action,

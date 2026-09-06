@@ -37,7 +37,7 @@ INSERT INTO "authorization_grants" (
     'user-1'
 );
 UPDATE "conversation_participants"
-   SET "access_ended_position" = 0
+   SET "access_ended_position" = 1
  WHERE "conversation_id" = 'channel-conversation' AND "user_id" = 'user-1';
 DO $$
 BEGIN

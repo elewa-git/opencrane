@@ -80,10 +80,10 @@ BEGIN
 END;
 $$;
 
--- Joins a user to a conversation; the participant trigger allocates the timeline positions.
+-- Joins a user to a conversation at the start of its history stream; positions are stream positions the server supplies.
 CREATE FUNCTION pg_temp.seed_participant(conversation_id TEXT, user_id TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
     IF EXISTS (SELECT 1 FROM "conversation_participants" participant WHERE participant."conversation_id" = seed_participant.conversation_id AND participant."user_id" = seed_participant.user_id) THEN RETURN; END IF;
-    INSERT INTO "conversation_participants" ("conversation_id", "user_id") VALUES (conversation_id, user_id);
+    INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position") VALUES (conversation_id, user_id, 1, 0);
 END;
 $$;

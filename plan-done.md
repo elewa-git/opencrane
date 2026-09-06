@@ -1375,3 +1375,19 @@ workloads or runtime behaviour.
   module-boundary lint, Phase A/B positive and adversarial guards, Helm dependency/lint/render
   checks, documentation build, residue searches, and independent architecture/reaper reviews cover
   the new layout.
+
+## 0.11.0 conversation replacement — relational history deletion (complete 2026-09-06)
+
+The 0.11.0 cutover slice removed the PostgreSQL transcript that ADR 0016 replaced with the KurrentDB
+`conversation-{id}` stream. PR [#826](https://github.com/elewa-git/opencrane/pull/826).
+
+- [x] **PostgreSQL holds no message, run-event, or timeline rows.** `ConversationMessage`,
+  `ConversationRunEvent`, `ConversationTimelineEntry`, their enums, triggers, functions, indexes,
+  and foreign keys left the schema and the target baseline; the tool lifecycle and recovery
+  reporters only recheck the run fence and no longer write run events.
+- [x] **A computer resolves exactly one conversation.** `conversations (silo_id, computer_id)` is
+  unique, so a duplicate projection row can never answer for another conversation.
+- [x] **Retired run-owned wiring is gone.** The dead `conversation-replay` internal mount, the
+  `RunProofKey` audit columns, the `ws` root dependency, the run-event SQL suite, and every
+  authority proof that inserted relational run events were deleted.
+

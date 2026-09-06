@@ -32,8 +32,8 @@ or sandbox template as a data-plane/exec/PTY port, and any execd endpoint.
 
 1. **Charts and manifests.** Across `apps/*/helm` and `apps/_infra/deploy-k8s`:
    - No Service, Ingress, or Gateway/HTTPRoute exposes a sensitive port, and none targets
-     runtime/sandbox pods directly (Service selectors matching warm-runtime, sandbox, or
-     computer labels are findings unless they are the gateway's own internal path).
+     sandbox pods directly (Service selectors matching Agent Sandbox or conversation-computer
+     labels are findings unless they are the gateway's own internal path).
    - No `hostNetwork`, `hostPort`, or `NodePort`/`LoadBalancer` Service in any runtime,
      sandbox, or preview namespace template.
    - Default-deny NetworkPolicies still exist for every runtime/sandbox namespace, and

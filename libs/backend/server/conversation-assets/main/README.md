@@ -82,8 +82,7 @@ frontend and unrelated server domains do not import its persistence adapters.
 
 Owns `ConversationAsset` and `ConversationAssetOutputTicket` in
 `apps/opencrane/prisma/schema/conversation-assets.prisma`. Output tickets are structurally tied to
-their immutable execution subject and `ConversationRunEvent`; finalization stores the content and receipt
-proof exactly once. The package creates the quarantined `ArtifactRevision` and `ArtifactScanJob`
+their immutable execution subject; finalization stores the content and receipt proof exactly once. The package creates the quarantined `ArtifactRevision` and `ArtifactScanJob`
 through the artifact domain's reviewed schema and transaction contract rather than taking ownership
 of those models.
 

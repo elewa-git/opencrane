@@ -36,13 +36,11 @@ OIDC subject + signed organisation membership
 The canonical conversation and conditional run hierarchy is:
 
 ```text
-Conversation (immutable mode)
-  ├── Message + ordered ConversationTimelineEntry
+Conversation (immutable mode) -> ordered KurrentDB conversation-{id} stream
   └── agent_session only
-        └── AgentRun
+        └── ConversationComputer -> AgentRun
               ├── RunInputSnapshot
-              ├── ordered RunEvent
-                    └── fenced attempt commands and candidates
+              └── fenced attempt commands and candidates
 ```
 
 Direct and ordinary group messages never create runs. The database enforces that an `AgentRun` has

@@ -1,4 +1,4 @@
-import { AgentRunState, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRunState, type Prisma, type PrismaClient } from "@prisma/client";
 
 import { ToolInvocationEventTypes, type ToolInvocationLifecycleEvent } from "@opencrane/backend/server/iam/authorization";
 
@@ -16,7 +16,7 @@ export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocat
 		this.prisma = prisma;
 	}
 
-	/** Append a pre-dispatch event in its own transaction or fail closed. */
+	/** Check a pre-dispatch event against the run fence in its own transaction or fail closed. */
 	async append(event: ToolInvocationLifecycleEvent): Promise<void>
 	{
 		const appended = await this.prisma.$transaction(async function _append(transaction)
@@ -30,7 +30,7 @@ export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocat
 		}
 	}
 
-	/** Append within the invocation owner's exact state transaction. */
+	/** Check the event against the run fence within the invocation owner's exact state transaction. */
 	async appendInTransaction(transaction: unknown, event: ToolInvocationLifecycleEvent): Promise<boolean>
 	{
 		const unitOfWork = new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction as Prisma.TransactionClient);
@@ -38,7 +38,7 @@ export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocat
 	}
 }
 
-/** Transaction owner for one tool lifecycle event append. */
+/** Transaction owner for one tool lifecycle event fence check. */
 class PrismaToolInvocationLifecycleEventAppendUnitOfWork implements ToolInvocationLifecycleEventAppendUnitOfWork
 {
 	/** Exact invocation transition transaction. */
@@ -50,7 +50,7 @@ class PrismaToolInvocationLifecycleEventAppendUnitOfWork implements ToolInvocati
 		this.transaction = transaction;
 	}
 
-	/** Append through the transaction-bound repository. */
+	/** Check the event through the transaction-bound repository. */
 	append(event: ToolInvocationLifecycleEvent): Promise<boolean>
 	{
 		const repository = new PrismaToolInvocationLifecycleEventAppendRepository(this.transaction);
@@ -58,7 +58,13 @@ class PrismaToolInvocationLifecycleEventAppendUnitOfWork implements ToolInvocati
 	}
 }
 
-/** Canonical run-event repository for server-owned tool lifecycle evidence. */
+/**
+ * Checks that a tool lifecycle event still belongs to the current run attempt.
+ *
+ * Nothing is written here: participant-visible tool history lives in the KurrentDB conversation
+ * stream, which the conversation computer appends. This repository only tells the worker whether
+ * the run fence still admits the event.
+ */
 class PrismaToolInvocationLifecycleEventAppendRepository implements ToolInvocationLifecycleEventAppendRepository
 {
 	/** Exact invocation transition transaction. */
@@ -70,7 +76,7 @@ class PrismaToolInvocationLifecycleEventAppendRepository implements ToolInvocati
 		this.transaction = transaction;
 	}
 
-	/** Recheck the run fence, validate the safe payload, and append the next event. */
+	/** Validate the safe payload and recheck the run fence; true means the event is still admissible. */
 	async append(event: ToolInvocationLifecycleEvent): Promise<boolean>
 	{
 		if (!_EventIsSafe(event))
@@ -78,17 +84,7 @@ class PrismaToolInvocationLifecycleEventAppendRepository implements ToolInvocati
 			return false;
 		}
 		const run = await this.transaction.agentRun.findUnique({ where: { id: event.runId } });
-		if (run === null || run.attempt !== event.attempt || !_EventAllowedForRun(run.state, event.eventType))
-		{
-			return false;
-		}
-		if (run.conversationId === null)
-		{
-			return true;
-		}
-		const maximum = await this.transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await this.transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, type: event.eventType, payload: event.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
-		return true;
+		return run !== null && run.attempt === event.attempt && _EventAllowedForRun(run.state, event.eventType);
 	}
 }
 

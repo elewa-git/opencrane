@@ -586,9 +586,11 @@ Each slice introduces its target owner and deletes the authority or runtime path
    after twenty minutes without interrupting an active attempt.
 6. **Warm capacity.** Qualify the cold path first, then add `SandboxWarmPool` capacity and measured
    latency targets. Delete the current Deployment and label-flip reservation design.
-7. **Cutover and deletion.** Remove `AgentRun`-owned warm workflows, `WarmRuntimeReservation`, label
-   activation, run-owned Pod cleanup, old Prisma lifecycle authority, and obsolete Helm, RBAC,
-   configuration, tests, and documentation. No run-owned computer workflow survives.
+7. **Cutover and deletion.** The run-owned warm workflows, `WarmRuntimeReservation`, label
+   activation, run-owned Pod cleanup, and the relational message, run-event, and timeline authority
+   are gone (see plan-done.md, 2026-09-06). Remaining: decide whether channel reply delivery
+   (`CHANNEL_REPLAY_ENDPOINT`, `replayReceiverId`, the channel-target route reconciler) is deferred
+   or rebuilt on the conversation stream, then delete or replace that wiring.
 
 CodeProject, the Git-backed CodeService, isolated build paths, ArtifactRevision publication, and
 published PreviewApps are the next phase after 0.11.0. Temporary localhost previews may be exposed

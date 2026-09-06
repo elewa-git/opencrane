@@ -79,7 +79,6 @@ SELECT pg_temp.expect_personal_configuration_insert_failure('service provenance 
 SELECT pg_temp.expect_personal_configuration_insert_failure('silo provenance is enforced', 'change-silo', '{"siloId":"silo-2"}', 'provenance or active-revision fence conflict');
 SELECT pg_temp.expect_personal_configuration_insert_failure('persona revision fence is enforced', 'change-persona-revision', '{"expectedPersonaRevisionId":"persona-2"}', 'provenance or active-revision fence conflict');
 SELECT pg_temp.expect_personal_configuration_insert_failure('agent revision fence is enforced', 'change-agent-revision', '{"expectedAgentRevisionId":"agent-2"}', 'provenance or active-revision fence conflict');
-SELECT pg_temp.expect_personal_configuration_insert_failure('source message binding is enforced', 'change-message', '{"sourceMessageId":"missing-message"}', 'source message must belong to its source conversation');
 SET LOCAL session_replication_role = replica;
 UPDATE "conversations" SET "mode"='direct', "agent_service_id"=NULL, "computer_id"=NULL, "computer_agent_identity_id"=NULL, "computer_profile_revision_id"=NULL WHERE "id"='conversation-1';
 SET LOCAL session_replication_role = origin;

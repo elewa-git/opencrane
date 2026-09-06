@@ -307,20 +307,9 @@ UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" = 'run-state';
 UPDATE "agent_runs"
 SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" = 'run-state';
-INSERT INTO "conversation_run_events" (
-    "conversation_id", "run_id", "attempt", "sequence", "type", "message_id", "payload", "occurred_at"
-) VALUES (
-    'conversation-run-state', 'run-state', 1, 1, 'message.started', 'retry-message',
-    '{"messageId":"retry-message","role":"assistant"}', clock_timestamp()
-);
 UPDATE "agent_runs"
 SET "state" = 'failed', "finished_at" = clock_timestamp(), "terminal_reason" = 'runtime_failure'
 WHERE "id" = 'run-state';
-INSERT INTO "conversation_run_events" (
-    "conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at"
-) VALUES (
-    'conversation-run-state', 'run-state', 1, 2, 'run.failed', '{}', clock_timestamp()
-);
 
 SELECT pg_temp.expect_failure(
     'terminal attempt cannot resurrect in place',
@@ -344,30 +333,6 @@ SELECT pg_temp.expect_failure(
         WHERE "id" = 'run-state'
     $statement$,
     'AgentRun attempt is immutable'
-);
-
-SELECT pg_temp.expect_failure(
-    'RunEvent cannot append after the attempt is terminal',
-    $statement$
-        INSERT INTO "conversation_run_events" (
-            "conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at"
-        ) VALUES (
-            'conversation-run-state', 'run-state', 1, 3, 'run.completed', '{}', clock_timestamp()
-        )
-    $statement$,
-    'RunEvent attempt stream is terminal'
-);
-
-SELECT pg_temp.assert_true(
-    'RunEvents keep a run-global sequence bound to the sealed attempt',
-    (
-        SELECT string_agg(
-            "attempt"::text || ':' || "sequence"::text || ':' || "type",
-            ',' ORDER BY "sequence"
-        ) = '1:1:message.started,1:2:run.failed'
-        FROM "conversation_run_events"
-        WHERE "run_id" = 'run-state'
-    )
 );
 
 INSERT INTO "capability_catalog_revisions" (
@@ -558,23 +523,19 @@ SELECT pg_temp.expect_failure(
     'strictly newer verified revision'
 );
 
-INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at") VALUES
-    ('conversation-retry-retirement', 'run-retry-retirement', 1, 1, 'run.failed', '{}', clock_timestamp()),
-    ('conversation-retry-rollover', 'run-retry-rollover', 1, 1, 'run.failed', '{}', clock_timestamp());
-
 -- Every run above already sealed its single attempt snapshot through seed_run_snapshot.
 SET CONSTRAINTS ALL IMMEDIATE;
 
 INSERT INTO "audit_decisions" (
     "id", "decision_digest", "silo_id", "actor_kind", "actor_id", "audience", "namespace",
     "service_account_name", "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt",
-    "agent_service_id", "agent_revision_id", "proof_key_id", "proof_key_thumbprint",
+    "agent_service_id", "agent_revision_id",
     "resource_kind", "resource_id", "action", "catalog_id", "catalog_revision", "catalog_digest",
     "arguments_digest", "policy_revision_hash", "effective_authorization_digest", "outcome", "reason_code"
 ) VALUES (
     'audit-1', 'sha256:' || repeat('0', 64), 'silo-1', 'workload', 'pod-uid-1', 'service:email-send', 'tenant-silo-1',
 	'runtime', 'job', 'job-uid-1', 'pod-uid-1', 'run-state', 1,
-    'svc-main', 'rev-published', 'proof-key-1', repeat('k', 43),
+    'svc-main', 'rev-published',
     'message', 'message-1', 'send', 'catalog-1', 1, 'sha256:' || repeat('6', 64),
     'sha256:' || repeat('8', 64), 'sha256:' || repeat('7', 64), 'sha256:' || repeat('9', 64), 'allow', 'authorized'
 );

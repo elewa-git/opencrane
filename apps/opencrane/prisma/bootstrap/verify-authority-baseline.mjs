@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 
 const _BASELINE = new URL("./target-baseline.sql", import.meta.url);
-const _MINIMUM_FUNCTIONS = 90;
-const _MINIMUM_TRIGGERS = 101;
+const _MINIMUM_FUNCTIONS = 83;
+const _MINIMUM_TRIGGERS = 93;
 const _MINIMUM_CONSTRAINTS = 235;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
@@ -82,10 +82,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_channel_runtime_route_evidence"()',
 	'CREATE TRIGGER "channel_runtime_routes_evidence_guard"',
 	'legacy ChannelRuntimeRoute evidence can only be created by a reviewed migration',
-	'CREATE FUNCTION "enforce_conversation_timeline_entry"()',
-	'CREATE TRIGGER "conversation_timeline_entries_allocate"',
 	'"activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL',
-	'"activity_sequence" = DEFAULT',
 	'jsonb_typeof("mcp_tools") = \'array\'',
 	'CREATE UNIQUE INDEX "conversations_activity_sequence_key"',
 	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
@@ -114,19 +111,11 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"tool_invocation_revision" INTEGER NOT NULL',
 	'"input_snapshot_digest" TEXT NOT NULL',
 	'"persona_revision_id" TEXT NOT NULL',
-	"'tool.failed'",
-	"'run.error'",
-	"'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated'",
 	'ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check"',
+	'CREATE UNIQUE INDEX "conversations_silo_id_computer_id_key" ON "conversations"("silo_id", "computer_id")',
 	'"computer_agent_identity_id" IS NOT NULL AND btrim("computer_agent_identity_id") <> \'\'',
 	'ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_encryption_check"',
 	'CREATE TRIGGER "conversation_private_payloads_immutable"',
-	'ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check"',
-	'CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_attempt_sequ_key"',
-	'CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id")',
-	'RunEvent must bind the current AgentRun attempt',
-	'RunEvent attempt stream is terminal',
-	'event."payload"->>\'messageId\' = NEW."source_message_id"',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'CREATE UNIQUE INDEX "model_definitions_litellm_model_id_key" ON "model_definitions"("litellm_model_id")',
@@ -139,14 +128,19 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'conversation_threads',
 	'"thread_id"',
 	'"source_thread_id"',
+	'conversation_messages',
+	'conversation_run_events',
+	'conversation_timeline_entries',
+	'ConversationTimelineEntryKind',
+	'"proof_key_id"',
+	'"proof_key_thumbprint"',
+	'enforce_terminal_agent_run_event',
 	'ConversationThread',
 	'"allowed_tools"',
 	'has_nonempty_distinct_tool_ids',
 	'runtime_external_action_retries',
 	'run.attempt_requested',
 	'run.workload_release_requested',
-	'CREATE INDEX "conversation_run_events_run_id_message_id_idx"',
-	'RunEvent stream is terminal',
 	"'capability-catalog-opencrane-core-v1'",
 	"'opencrane-core'",
 ];

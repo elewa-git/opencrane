@@ -9,28 +9,6 @@ enum ConversationLifecycle {
   Closed @map("closed")
 }
 
-enum ConversationMessageRole {
-  User      @map("user")
-  Assistant @map("assistant")
-  Tool      @map("tool")
-  System    @map("system")
-}
-
-enum ConversationMessageState {
-  Pending   @map("pending")
-  Streaming @map("streaming")
-  Completed @map("completed")
-  Failed    @map("failed")
-  Cancelled @map("cancelled")
-}
-
-enum ConversationTimelineEntryKind {
-  Message        @map("message")
-  RunEvent       @map("run_event")
-  Membership     @map("membership")
-  System         @map("system")
-}
-
 model Conversation {
   id                            String                          @id @default(cuid())
   siloId                        String                          @map("silo_id")
@@ -52,9 +30,6 @@ model Conversation {
   activitySequence              BigInt                          @unique @default(autoincrement()) @map("activity_sequence")
   participants                  ConversationParticipant[]
   privatePayloads               ConversationPrivatePayload[]
-  messages                      ConversationMessage[]
-  runEvents                     ConversationRunEvent[]
-  timelineEntries               ConversationTimelineEntry[]
   contextRevisions              ConversationContextRevision[]   @relation("ConversationContextRevisions")
   runs                          AgentRun[]
   elicitationRequests           ElicitationRequest[]
@@ -66,6 +41,8 @@ model Conversation {
   @@unique([id, siloId])
   @@unique([id, siloId, agentServiceId], map: "conversations_exact_service_key")
   @@unique([id, contextRevisionId])
+  /// One computer stream resolves exactly one conversation inside a silo, so a duplicate projection row can never answer for another conversation.
+  @@unique([siloId, computerId])
   @@index([siloId, mode, lifecycle, activitySequence])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
@@ -157,80 +134,11 @@ model ConversationParticipant {
   archivedAt            DateTime?                   @map("archived_at")
   joinedAt              DateTime                    @default(now()) @map("joined_at")
   conversation          Conversation                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntries       ConversationTimelineEntry[]
   assignedElicitations  ElicitationRequest[]
 
   @@id([conversationId, userId])
   @@index([userId, archivedAt, conversationId])
   @@map("conversation_participants")
-}
-
-model ConversationMessage {
-  id                 String                     @id @default(cuid())
-  conversationId     String                     @map("conversation_id")
-  runId              String?                    @map("run_id")
-  userId             String?                    @map("user_id")
-  idempotencyKey     String                     @map("idempotency_key")
-  role               ConversationMessageRole
-  state              ConversationMessageState
-  source             String
-  blocks             Json
-  createdAt          DateTime                   @default(now()) @map("created_at")
-  completedAt        DateTime?                  @map("completed_at")
-  conversation       Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntry      ConversationTimelineEntry?
-  assets             ConversationAsset[]
-
-  @@unique([conversationId, id])
-  @@unique([conversationId, idempotencyKey])
-  @@index([runId])
-  @@map("conversation_messages")
-}
-
-model ConversationRunEvent {
-  conversationId     String                          @map("conversation_id")
-  runId              String                          @map("run_id")
-  attempt            Int
-  sequence           Int
-  type               String
-  messageId          String?                         @map("message_id")
-  payload            Json
-  occurredAt         DateTime                        @default(now()) @map("occurred_at")
-  conversation       Conversation                    @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntry      ConversationTimelineEntry?
-
-  @@id([runId, sequence])
-  @@unique([conversationId, runId, sequence])
-  @@unique([conversationId, runId, attempt, sequence])
-  @@index([runId, attempt, messageId])
-  @@index([runId, occurredAt])
-  @@map("conversation_run_events")
-}
-
-model ConversationTimelineEntry {
-  conversationId              String                        @map("conversation_id")
-  position                    BigInt                        @default(0)
-  kind                        ConversationTimelineEntryKind
-  messageId                   String?                       @map("message_id")
-  runId                       String?                       @map("run_id")
-  runEventSequence            Int?                          @map("run_event_sequence")
-  membershipEventId           String?                       @map("membership_event_id")
-  participantUserId           String?                       @map("participant_user_id")
-  systemEventId               String?                       @map("system_event_id")
-  payload                     Json?
-  occurredAt                  DateTime                      @default(now()) @map("occurred_at")
-  conversation                Conversation                  @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  message                     ConversationMessage?          @relation(fields: [conversationId, messageId], references: [conversationId, id], onDelete: Restrict)
-  runEvent                    ConversationRunEvent?         @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
-  participant                 ConversationParticipant?      @relation(fields: [conversationId, participantUserId], references: [conversationId, userId], onDelete: Restrict)
-
-  @@id([conversationId, position])
-  @@unique([conversationId, messageId])
-  @@unique([conversationId, runId, runEventSequence])
-  @@unique([conversationId, membershipEventId])
-  @@unique([conversationId, systemEventId])
-  @@index([conversationId, occurredAt])
-  @@map("conversation_timeline_entries")
 }
 
 model ConversationContextRevision {

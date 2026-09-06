@@ -42,8 +42,6 @@ model AuditDecision {
   attempt                      Int?
   agentServiceId               String?                @map("agent_service_id")
   agentRevisionId              String?                @map("agent_revision_id")
-  proofKeyId                   String?                @map("proof_key_id")
-  proofKeyThumbprint           String?                @map("proof_key_thumbprint")
   resourceKind                 String                 @map("resource_kind")
   resourceId                   String                 @map("resource_id")
   action                       String

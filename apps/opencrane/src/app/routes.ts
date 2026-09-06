@@ -169,14 +169,13 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
 }
 
 /**
- * Register the workload-facing API from explicit controller, authoring, worker, and replay lists.
+ * Register the workload-facing API from explicit controller, authoring, and worker lists.
  *
  * None of these routes sits behind the browser-session guard, because none of their callers is a
  * browser. Each one authorises the bearer token on the request itself: the controller, authoring, and
  * worker routers put it through Kubernetes TokenReview and accept only a ServiceAccount from the
- * namespace their reviewer was built for, and `/api/internal/conversation-replay` instead spends a
- * single-use channel context token. Being on the internal listener is not the protection — a router
- * mounted here without its own check would be open to every workload in the cluster.
+ * namespace their reviewer was built for. Being on the internal listener is not the protection — a
+ * router mounted here without its own check would be open to every workload in the cluster.
  *
  * Skill-authoring validation workers use the `/api/internal/skill-authoring` base path.
  *
@@ -204,8 +203,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);
 	const internalChannelTargetRoutes = _OptionalRoute("/api/internal/channel-targets:resolve", runtime.channelTargetResolver);
-	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
-	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes]);
 }
 
 /** Return a one-entry route list for a router, or an empty list when the router is null. */

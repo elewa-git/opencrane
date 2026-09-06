@@ -172,14 +172,15 @@ import an app, frontend state, or deployment package.
 
 ## Data & persistence
 
-Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
-`ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
-transactions and projects create, archive, and close results from the same authorised write
-snapshot. Agent-session turn compilation delegates durable run and input persistence through its
-injected admission port after local authority checks. The replay adapter is read-only and joins
-timeline references to canonical messages and `RunEvent`; neither path
-reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
-in the caller's host-selected silo; participant rows alone never preserve authority after revocation.
+Owns participant-facing operations over the `Conversation` and `ConversationParticipant`
+projections, the `ConversationPrivatePayload` ciphertext store, and the
+`ConversationComputerActiveLease` projection. Ordered history lives in the KurrentDB
+`conversation-{id}` stream; PostgreSQL holds no message, run-event, or timeline rows. The write
+authority uses serialisable transactions and projects create, archive, and close results from the
+same authorised write snapshot. Agent-session turn compilation delegates durable run and input
+persistence through its injected admission port after local authority checks. All paths depend on
+current active `OrgMembership` in the caller's host-selected silo; participant rows alone never
+preserve authority after revocation.
 
 The computer-review router keeps sandbox routes and lease credentials server-side: file, diff, and
 browser discovery require current `Read`, while commands, page creation, screenshots, and preview

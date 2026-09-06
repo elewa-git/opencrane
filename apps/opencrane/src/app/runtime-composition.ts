@@ -54,16 +54,16 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 }
 
 /**
- * Bind optional worker and replay capabilities without changing the always-present runtime boundary.
+ * Bind optional worker capabilities without changing the always-present runtime boundary.
  *
  * Each optional route validates its own deployment switch before a router exists. A missing switch
  * therefore leaves the capability unreachable instead of mounting a partially configured endpoint.
  *
  * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for worker identity.
- * @param config - Frozen worker and replay configuration.
+ * @param config - Frozen worker configuration.
  * @param serverNamespace - Namespace containing the trusted server identity.
- * @returns Optional artifact-preprocessor and conversation-replay routers.
+ * @returns Optional artifact-preprocessor, scanner, and channel-target routers.
  */
 function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, controllerTokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">): OptionalRuntimeComposition
 {
@@ -87,7 +87,6 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		channelTargetResolver: config.channelTargets === null
 			? null
 			: _CreateChannelTargetResolver(prisma, authApi, config.channelTargets, serverNamespace),
-		conversationReplay: null,
 		artifactPreprocessor: artifactPreprocessorNamespace === null
 			? null
 			: __CreateArtifactPreprocessorRouter({

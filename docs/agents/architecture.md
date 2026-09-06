@@ -10,10 +10,10 @@ The whole deployment view is in [`cluster-architecture.md`](./cluster-architectu
 OpenCrane owns the durable product record:
 
 ```text
-Conversation -> ordered ConversationTimelineEntry
+Conversation -> ordered KurrentDB conversation-{id} stream (messages, safe logs, membership)
      |
-     +-> direct/group Message (no run)
-     +-> agent_session -> AgentRun -> ordered RunEvent
+     +-> direct/group entries (no run)
+     +-> agent_session -> ConversationComputer -> AgentRun
                               |
                               +-> immutable RunInputSnapshot
                               +-> approvals and tool invocations
