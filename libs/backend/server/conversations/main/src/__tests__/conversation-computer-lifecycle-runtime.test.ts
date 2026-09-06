@@ -9,8 +9,8 @@ const _LEASE: ComputerLease = { schemaVersion: 1, id: "lease-abc", computerId: "
 /** Records the coordinates it was asked for and returns one fixed secret. */
 function _Deriver()
 {
-	const derive = vi.fn(function _Derive() { return "derived-review-secret"; });
-	return { derive };
+	const bearer = vi.fn(function _Bearer() { return "derived-review-secret,older-review-secret"; });
+	return { bearer, derive: vi.fn() };
 }
 
 /** Yields one small chunk the way the checkpoint store streams a revision. */
@@ -32,10 +32,10 @@ describe("HttpConversationComputerCheckpointSandbox", function _Suite()
 		for await (const chunk of await new HttpConversationComputerCheckpointSandbox(deriver).capture(_COMPUTER, _LEASE))
 			bytes.push(...chunk);
 		expect(bytes).toEqual([1, 2, 3]);
-		expect(deriver.derive).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", generation: 3, leaseId: "lease-abc" });
+		expect(deriver.bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", generation: 3, leaseId: "lease-abc" });
 		const request = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
 		expect(request[0]).toBe("http://computer-1.sandboxes.svc.cluster.local:8090/v1/checkpoints/capture");
-		expect((request[1].headers as Record<string, string>).authorization).toBe("Bearer derived-review-secret");
+		expect((request[1].headers as Record<string, string>).authorization).toBe("Bearer derived-review-secret,older-review-secret");
 		expect(JSON.stringify(request[1].headers)).not.toContain("lease-abc");
 	});
 
@@ -46,6 +46,6 @@ describe("HttpConversationComputerCheckpointSandbox", function _Suite()
 		const deriver = _Deriver();
 		await expect(new HttpConversationComputerCheckpointSandbox(deriver).restore(_COMPUTER, _LEASE, _Bytes())).rejects.toThrow("checkpoint restore failed with 401");
 		const request = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-		expect((request[1].headers as Record<string, string>).authorization).toBe("Bearer derived-review-secret");
+		expect((request[1].headers as Record<string, string>).authorization).toBe("Bearer derived-review-secret,older-review-secret");
 	});
 });

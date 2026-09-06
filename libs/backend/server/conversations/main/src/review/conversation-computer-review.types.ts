@@ -56,7 +56,11 @@ export interface ConversationComputerReviewCaller
  */
 export interface ConversationComputerReviewRoute
 {
-	/** Server-derived gateway bearer for the current lease; the Pod learns it only through its bootstrap exchange. */
+	/**
+	 * Server-derived gateway bearer for the current lease, listing one credential per keyring key so a
+	 * key rotation cannot lock out a live Pod. The Pod learns its own credential only through its
+	 * bootstrap exchange.
+	 */
 	readonly reviewCredential: string;
 	/** Controller-owned Sandbox name used only after DNS-label validation. */
 	readonly sandboxId: string;
@@ -78,16 +82,23 @@ export interface ConversationComputerReviewCredentialCoordinates
 }
 
 /**
- * Derives the review gateway bearer from lease coordinates under a server-only key.
+ * Derives the review gateway bearer from lease coordinates under server-only keyring keys.
  *
- * Called by: `_ConversationComputerReviewAuthority` and `ConversationComputerTurnAuthority`.
+ * `derive` gives a Pod the one credential it stores, keyed with the current key. `bearer` gives the
+ * server everything it may present to that Pod: the same credential under every key still in the
+ * keyring, current first, so the Pod still matches after `currentKeyId` moves during its lease.
  *
- * @see ConversationComputerReviewCredentialDeriver
+ * Called by: `_ConversationComputerReviewAuthority`, `HttpConversationComputerCheckpointSandbox` and
+ * `ConversationComputerTurnAuthority`.
+ *
+ * @see KeyedConversationComputerReviewCredentialDeriver
  */
 export interface ConversationComputerReviewCredentialDeriver
 {
-	/** Returns the same secret for the same lease and a different secret for any other lease. */
+	/** Returns the same secret for the same lease under the current key and a different secret for any other lease. */
 	derive(coordinates: ConversationComputerReviewCredentialCoordinates): string;
+	/** Returns the comma-separated credentials for the lease under every keyring key, current first. */
+	bearer(coordinates: ConversationComputerReviewCredentialCoordinates): string;
 }
 
 /**

@@ -65,7 +65,7 @@ function _Harness() {
       assertCurrent: vi.fn().mockResolvedValue(undefined),
       admit: vi.fn().mockResolvedValue(undefined),
     },
-    reviewCredentials: { derive: vi.fn().mockReturnValue("keyed-review-secret") },
+    reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") },
     credentials: {
       issueOrRotate: vi
         .fn()

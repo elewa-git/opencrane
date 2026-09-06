@@ -333,13 +333,19 @@ class _ReviewHandler(BaseHTTPRequestHandler):
         """Suppress request logs because command content may include private workspace data."""
 
     def _authenticated(self) -> bool:
-        """Compare the bearer with the server-derived secret file; refuse everything until the turn loop has written it."""
+        """Compare every presented bearer with the server-derived secret file; refuse everything until the turn loop has written it.
+
+        The server presents one credential per key still in its keyring, comma-separated and newest
+        first, so a key rotation during this lease cannot lock it out of the Pod it granted.
+        """
         try:
             expected = self.server.config.credential_path.read_text(encoding="utf-8").strip()
         except OSError:
             return False
         supplied = self.headers.get("Authorization", "").removeprefix("Bearer ")
-        return bool(expected) and hmac.compare_digest(supplied, expected)
+        # Compare every value so the response time does not reveal which position matched.
+        matched = [hmac.compare_digest(candidate.strip(), expected) for candidate in supplied.split(",")]
+        return bool(expected) and any(matched)
 
     def _bytes(self, status: int, content_type: str, body: bytes) -> None:
         """Write one bounded byte response with defensive browser headers."""

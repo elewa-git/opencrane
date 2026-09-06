@@ -35,7 +35,10 @@ the TokenReviewed private API and writes it to a tmpfs file; the listener refuse
 the file exists. The lease id itself is a public Pod label and never grants access. The listener
 exposes bounded argv-only commands, selected workspace files and diffs, plus GET-only proxying to five
 release-allowlisted localhost preview ports. NetworkPolicy admits that port only from this release's
-OpenCrane server.
+OpenCrane server. The server presents one credential per key still in its keyring, comma-separated
+and newest first; the listener accepts the request when any of them equals the secret it holds, so a
+keyring rotation during the lease does not lock the server out. Retiring the granting key ends access
+until the next lease.
 The same authenticated gateway exposes Chromium 142 CDP discovery, creates targets only for those
 localhost previews, and renders bounded preview screenshots. Raw CDP remains on Pod loopback port
 9222 and is neither a container port nor a public server route.

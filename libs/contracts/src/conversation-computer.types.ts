@@ -42,28 +42,6 @@ export enum ComputerLeaseStates
 }
 
 /**
- * Lists review surfaces an admitted computer profile may make available.
- *
- * A listed surface is still subject to current participant authorization; this enum describes the
- * profile capability, not a permission granted to a particular participant.
- */
-export enum ComputerReviewSurfaces
-{
-	/** Allows an authorized participant to view the browser or desktop surface. */
-	DesktopView = "desktop_view",
-	/** Allows an authorized participant to control the browser or desktop surface. */
-	DesktopControl = "desktop_control",
-	/** Allows an authorized participant to view a selected terminal session. */
-	TerminalView = "terminal_view",
-	/** Allows an authorized participant to control a selected terminal session. */
-	TerminalControl = "terminal_control",
-	/** Allows an authorized participant to inspect selected workspace files. */
-	FileInspect = "file_inspect",
-	/** Allows an authorized participant to open one admitted preview application. */
-	PreviewOpen = "preview_open",
-}
-
-/**
  * Fixes the requested and maximum resources that one immutable profile permits.
  *
  * A profile keeps resource limits with the admitted realization rather than letting an individual
@@ -121,8 +99,6 @@ export interface ComputerProfileRevision
 	readonly resourceCeiling: ComputerResourceCeiling;
 	/** Identifies the default-deny network policy profile. */
 	readonly networkProfileId: string;
-	/** Lists the review surfaces this profile makes eligible for separate authorization. */
-	readonly reviewSurfaces: readonly ComputerReviewSurfaces[];
 	/** Identifies the principal that admitted this immutable profile. */
 	readonly admittedByPrincipalId: string;
 	/** Records when this profile was admitted. */

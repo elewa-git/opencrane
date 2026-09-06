@@ -142,7 +142,7 @@ describe("conversation computer turn integration", function _Suite() {
         assertCurrent: vi.fn(),
         admit: vi.fn(),
       },
-      reviewCredentials: { derive: vi.fn().mockReturnValue("keyed-review-secret") },
+      reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") },
       credentials: {
         issueOrRotate: vi
           .fn()

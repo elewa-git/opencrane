@@ -11,7 +11,7 @@ import type { ConversationComputerReviewAuthority, ConversationComputerReviewCal
  * authority applies that action through conversation metadata before it reads the active lease, so
  * a caller cannot learn sandbox coordinates from a conversation it cannot access. Missing sandbox
  * coordinates return `null` and the router exposes the same unavailable response as failed admission.
- * The returned route carries the derived review credential, never the public lease id.
+ * The returned route carries the derived review bearer for every keyring key, never the public lease id.
  *
  * Called by: `_CreateConversationComputerReviewRouter` through `ConversationComputerReviewAuthority`.
  *
@@ -35,7 +35,7 @@ export class _ConversationComputerReviewAuthority implements ConversationCompute
 			return null;
 		if (current.lease.serviceFQDN === null)
 			return null;
-		const reviewCredential = this.credentials.derive({ siloId: caller.siloId, computerId: coordinates.computerId, generation: current.lease.generation, leaseId: current.lease.id });
+		const reviewCredential = this.credentials.bearer({ siloId: caller.siloId, computerId: coordinates.computerId, generation: current.lease.generation, leaseId: current.lease.id });
 		return { reviewCredential, sandboxId: current.lease.sandboxId, serviceFQDN: current.lease.serviceFQDN };
 	}
 }

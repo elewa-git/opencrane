@@ -46,11 +46,27 @@ append rechecks the active lease generation.
 ## Review surface
 
 The server proxies participant review calls to the computer's private gateway with a credential it
-derives under a server-only key from the current lease. The computer receives that secret once, over
-its TokenReviewed bootstrap channel, and its gateway refuses every call until then; the lease id on
-the Pod label is only a name. Review gives a participant a fenced view of that computer; it never
-grants a product action or publishes an application. Durable CodeProject, Git, build and PreviewApp publication belong to the
-next phase.
+derives under a server-only keyring key from the current lease. The computer receives that secret
+once, over its TokenReviewed bootstrap channel, and its gateway refuses every call until then; the
+lease id on the Pod label is only a name. When the server calls the gateway it presents one
+credential per key still in the keyring, newest first, and the computer accepts any match, so
+rotating the keyring while a lease is alive does not lock the server out of its own computer. A key
+retired from the keyring ends access to computers that were granted under it, so retire a key only
+after those leases have ended.
+
+What a participant can do in 0.11:
+
+| Route | Product action | What it returns |
+|---|---|---|
+| files, diff | `Read` | one workspace file (1 MiB ceiling) or a `git diff` of one path |
+| browser version, targets | `Read` | headless Chromium metadata and its open preview targets |
+| browser pages, screenshots | `Use` | opens or renders one allow-listed `127.0.0.1` preview port as a bounded PNG |
+| previews | `Use` | GET-only proxy to the same allow-listed localhost ports |
+| commands | `Use` | one argv-only command from the release allowlist (`git`, `node`, `npm`, `npx`, `python3`); no shell |
+
+Every participant with `Use` on the conversation gets every surface above; 0.11 has no
+per-participant surface selection. Not in 0.11: an interactive browser or desktop view, noVNC, a
+terminal, artifact routes, and durable CodeProject, Git, build or PreviewApp publication. Review gives a participant a fenced view of that computer; it never grants a product action or publishes an application.
 
 ## Source
 

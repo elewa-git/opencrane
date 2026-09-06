@@ -56,6 +56,19 @@ dependencies. It must not import a backend domain or an app entrypoint.
 The composing server creates the KurrentDB client with the silo-local TLS endpoint and credential.
 The adapter receives that client and reads no environment variable itself.
 
+### One KurrentDB instance per silo
+
+Stream names such as `conversation-{id}` and `conversation-computer-{id}` carry no silo id, so silo
+isolation depends on every silo owning its own KurrentDB endpoint. The OpenCrane server checks that
+at startup (`apps/opencrane/src/app/history-store-silo-guard.ts`). The first server to start writes
+one event of type `opencrane.silo.v1` to the well-known stream `opencrane-silo`, carrying its
+configured silo id and fenced with the `NoStream` expected revision so two racing replicas cannot
+both create it. Every later start reads that event and compares it with its own silo id: a match
+starts normally without writing again, a mismatch stops the process before any worker reads or
+appends a stream. A malformed sentinel also stops the process. Pointing a second silo at an existing
+database therefore fails at boot instead of silently mixing histories; a fresh silo needs a fresh
+database.
+
 ## See also
 
 - Parent index: [infra](../README.md)

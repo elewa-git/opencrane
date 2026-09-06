@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ComputerLeaseStates, ComputerReviewSurfaces, ConversationComputerStates } from "../index";
+import { ComputerLeaseStates, ConversationComputerStates } from "../index";
 import type { ComputerLease, ComputerProfileRevision, ConversationComputer } from "../index";
 
 describe("conversation computer contracts", function ()
@@ -17,7 +17,6 @@ describe("conversation computer contracts", function ()
 			workspaceCheckpointFormat: "opencrane.workspace.v1",
 			resourceCeiling: { requestedCpu: "250m", requestedMemory: "512Mi", maximumCpu: "1", maximumMemory: "2Gi" },
 			networkProfileId: "computer-default-deny-v1",
-			reviewSurfaces: [ComputerReviewSurfaces.DesktopView],
 			admittedByPrincipalId: "principal-admin-1",
 			admittedAt: "2026-08-31T20:00:00.000Z",
 		};
@@ -49,6 +48,6 @@ describe("conversation computer contracts", function ()
 		};
 
 		expect(lease.generation).toBe(computer.leaseGeneration);
-		expect(profile.reviewSurfaces).toContain(ComputerReviewSurfaces.DesktopView);
+		expect(computer.profileRevisionId).toBe(profile.id);
 	});
 });

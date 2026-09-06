@@ -6,6 +6,7 @@ import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./app/config";
 import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
+import { _AssertHistoryStoreSilo } from "./app/history-store-silo-guard";
 import { _StartConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition";
 import { _CreateConversationComputerTurnComposition } from "./app/conversation-computer-turn-composition";
 import { _CreateConversationComputerLifecycleComposition } from "./app/conversation-computer-lifecycle-composition";
@@ -40,6 +41,8 @@ async function _Main(): Promise<void>
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
 	const historyStore = _CreateHistoryStoreComposition(config.historyStore);
+	// Stream names carry no silo id, so refuse to share one KurrentDB instance between silos before any worker touches it.
+	await _AssertHistoryStoreSilo(historyStore.historyStore, config.workflows.siloId);
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
 
 	// 3. Compose the retained workload authorities.

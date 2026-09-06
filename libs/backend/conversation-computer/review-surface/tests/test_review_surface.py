@@ -87,6 +87,16 @@ class ReviewSurfaceTest(unittest.TestCase):
         with urllib.request.urlopen(self._request("/v1/files?path=note.txt", "keyed-review-secret"), timeout=2) as response:
             self.assertEqual(response.read(), b"safe")
 
+    def test_accepts_any_presented_credential_after_a_key_rotation(self) -> None:
+        """Match the held secret against every comma-separated credential the server presents, in any position."""
+        (self.workspace / "note.txt").write_text("safe", encoding="utf-8")
+        for presented in ("newer-key-secret,lease-secret", "lease-secret,older-key-secret"):
+            with urllib.request.urlopen(self._request("/v1/files?path=note.txt", presented), timeout=2) as response:
+                self.assertEqual(response.read(), b"safe")
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            urllib.request.urlopen(self._request("/v1/files?path=note.txt", "newer-key-secret,retired-key-secret"), timeout=2)
+        self.assertEqual(context.exception.code, 401)
+
     def test_reads_selected_file_but_rejects_path_escape(self) -> None:
         """Keep selected file reads inside the resolved workspace root."""
         (self.workspace / "note.txt").write_text("safe", encoding="utf-8")

@@ -25,10 +25,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   agent identity revision, capability grant, sandbox lease generation, and compiled input snapshot;
   completion can resume after a worker restart without duplicating model output.
 
-- **People can inspect and control an active conversation computer from the conversation workspace.**
-  Authorized participants can review files and diffs, run allowlisted commands, use a private
-  Chromium session, inspect pages and screenshots, and view bounded localhost previews without
-  exposing raw sandbox control ports.
+- **People can inspect an active conversation computer from the conversation workspace.**
+  Authorized participants can read workspace files and diffs, run release-allowlisted argv commands
+  (`git`, `node`, `npm`, `npx`, `python3`; no shell), take headless Chromium screenshots of
+  allow-listed localhost preview ports, and view those previews through a GET-only proxy, all
+  without exposing raw sandbox control ports. Not in 0.11: an interactive browser or desktop view,
+  noVNC, a terminal, artifact routes, and per-participant review-surface selection (every
+  participant with `Use` on the conversation gets every shipped surface).
 
 - **Conversation computers can cool to zero and recover their workspace on demand.** OpenCrane
   checkpoints an idle workspace before releasing its Agent Sandbox claim, restores the checkpoint
@@ -60,6 +63,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   partial failure.** LiteLLM keys are bounded by the immutable turn budget, checked against the exact
   active lease after issuance, revoked when custody cannot be recorded, and recoverable without
   leaving an untracked usable credential.
+
+- **A server refuses to start against a KurrentDB instance that belongs to another silo.** Stream
+  names carry no silo id, so the first start records its silo id in the `opencrane-silo` sentinel
+  stream and every later start compares against it; a mismatch stops the process before any worker
+  touches history.
 
 - **Operators cannot begin a `testv5` installation with an insecure or ambiguous history and sandbox
   foundation.** The installer rejects missing immutable KurrentDB credentials, unhashed workload

@@ -9,25 +9,25 @@ const _COORDINATES = { computerId: "computer-1", agentIdentityId: "identity-1", 
 /** Proves the review route carries a derived credential and never the public lease id. */
 describe("_ConversationComputerReviewAuthority", function _Suite()
 {
-	it("derives the review credential from the admitted active lease", async function _Derives()
+	it("derives the review bearer for every keyring key from the admitted active lease", async function _Derives()
 	{
 		const metadata = { reviewCoordinates: vi.fn().mockResolvedValue(_COORDINATES) };
 		const history = { loadActiveLease: vi.fn().mockResolvedValue({ lease: { id: "lease-1", generation: 2, sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.ns.svc.cluster.local" } }) };
-		const derive = vi.fn().mockReturnValue("keyed-secret");
-		const authority = new _ConversationComputerReviewAuthority(metadata, history as never, { derive });
+		const bearer = vi.fn().mockReturnValue("keyed-secret,older-keyed-secret");
+		const authority = new _ConversationComputerReviewAuthority(metadata, history as never, { bearer, derive: vi.fn() });
 		const route = await authority.resolve(_CALLER, "conversation-1", ProductAuthorizationActions.Use);
-		expect(route).toEqual({ reviewCredential: "keyed-secret", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.ns.svc.cluster.local" });
-		expect(derive).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-1" });
+		expect(route).toEqual({ reviewCredential: "keyed-secret,older-keyed-secret", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.ns.svc.cluster.local" });
+		expect(bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-1" });
 		expect(metadata.reviewCoordinates).toHaveBeenCalledWith(_CALLER, "conversation-1", ProductAuthorizationActions.Use);
 	});
 
 	it("derives nothing when admission fails or the lease has no route", async function _Withholds()
 	{
-		const derive = vi.fn();
-		const denied = new _ConversationComputerReviewAuthority({ reviewCoordinates: vi.fn().mockResolvedValue(null) }, { loadActiveLease: vi.fn() } as never, { derive });
+		const bearer = vi.fn();
+		const denied = new _ConversationComputerReviewAuthority({ reviewCoordinates: vi.fn().mockResolvedValue(null) }, { loadActiveLease: vi.fn() } as never, { bearer, derive: vi.fn() });
 		expect(await denied.resolve(_CALLER, "conversation-1", ProductAuthorizationActions.Read)).toBeNull();
-		const unrouted = new _ConversationComputerReviewAuthority({ reviewCoordinates: vi.fn().mockResolvedValue(_COORDINATES) }, { loadActiveLease: vi.fn().mockResolvedValue({ lease: { id: "lease-1", generation: 2, sandboxId: "sandbox-1", serviceFQDN: null } }) } as never, { derive });
+		const unrouted = new _ConversationComputerReviewAuthority({ reviewCoordinates: vi.fn().mockResolvedValue(_COORDINATES) }, { loadActiveLease: vi.fn().mockResolvedValue({ lease: { id: "lease-1", generation: 2, sandboxId: "sandbox-1", serviceFQDN: null } }) } as never, { bearer, derive: vi.fn() });
 		expect(await unrouted.resolve(_CALLER, "conversation-1", ProductAuthorizationActions.Read)).toBeNull();
-		expect(derive).not.toHaveBeenCalled();
+		expect(bearer).not.toHaveBeenCalled();
 	});
 });

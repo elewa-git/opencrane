@@ -35,10 +35,10 @@ export class HttpConversationComputerCheckpointSandbox implements ConversationCo
 			throw new Error(`Conversation computer checkpoint restore failed with ${response.status}`);
 	}
 
-	/** Bind the credential to the exact computer, generation and lease the Pod was admitted with. */
+	/** Bind the bearer to the exact computer, generation and lease the Pod was admitted with, under every keyring key. */
 	private _Credential(computer: Parameters<ConversationComputerCheckpointSandbox["capture"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["capture"]>[1]): string
 	{
-		return this.credentials.derive({ siloId: computer.siloId, computerId: computer.id, generation: lease.generation, leaseId: lease.id });
+		return this.credentials.bearer({ siloId: computer.siloId, computerId: computer.id, generation: lease.generation, leaseId: lease.id });
 	}
 }
 

@@ -560,9 +560,11 @@ Each slice introduces its target owner and deletes the authority or runtime path
 - Computers share a Kubernetes ServiceAccount per admitted computer profile. A short-lived,
   generation-bound `ComputerLease` proves the exact silo, agent, conversation, computer, audience,
   and expiry. Do not create one Kubernetes ServiceAccount per conversation computer.
-- The admitted computer image contains the agent runtime, `execd`, browser/CDP, optional noVNC,
-  shell/files, optional Jupyter, and a preview proxy. The identity-aware gateway exposes only
-  selected files, diffs, artifacts, browser/noVNC, and approved localhost preview ports.
+- The admitted computer image contains the agent runtime, a headless Chromium behind a private CDP
+  port, and a lease-local review gateway. In 0.11 the gateway exposes only selected files, diffs,
+  release-allowlisted argv commands (no shell), preview screenshots, and GET-only proxying of
+  approved localhost preview ports. Not in 0.11: `execd`, noVNC or any interactive browser/desktop
+  view, a terminal, Jupyter, and artifact routes.
 - Absurd remains for schedules, application jobs, and durable waits/retries. It no longer owns
   computer activation, cooling, leasing, or Kubernetes lifecycle.
 
@@ -579,8 +581,10 @@ Each slice introduces its target owner and deletes the authority or runtime path
    deterministic `SandboxClaim`; make server retries and upstream-controller restarts converge on
    the same generation.
 4. **Usable computer and review surface.** Build the pinned computer image and gateway routes for
-   commands, files, browser, noVNC, selected outputs, diffs, artifacts, and approved local preview
-   ports. A person can inspect work without receiving unrestricted access to the Pod.
+   allowlisted argv commands, files, diffs, headless preview screenshots, and approved local preview
+   ports. A person can inspect work without receiving unrestricted access to the Pod. Not in 0.11:
+   an interactive browser or desktop view, noVNC, a terminal, selected outputs, artifact routes, and
+   per-participant surface selection; a participant with `Use` receives every shipped surface.
 5. **Checkpoint and cooling.** Checkpoint workspaces to ArtifactStore. Reconstruct idle deadlines
    from durable timestamps, mark a computer stale after five idle minutes, and suspend or retire it
    after twenty minutes without interrupting an active attempt.
