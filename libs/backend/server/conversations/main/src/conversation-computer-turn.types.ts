@@ -1,4 +1,5 @@
 import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
+import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { BoundConversationWriter } from "./bound-conversation-writer";
 import type { BoundConversationWriterBinding } from "./bound-conversation-writer.types";
@@ -202,26 +203,8 @@ export interface ConversationComputerPrePersistedMessageInput
 }
 
 /** Server-resolved authority facts passed to the application-owned run admission composition. */
-export interface ConversationComputerRunAdmissionCommand
+export interface ConversationComputerRunAdmissionCommand extends PersonalConversationExecutionSubjectCoordinates
 {
-	/** Stable logical run identifier derived from the pending immutable entry. */
-	readonly runId: string;
-	/** Names the silo, conversation, computer and agent identity proven by the active computer projection. */
-	readonly computer: ComputerScope;
-	/** Names the bound agent service, the published revision observed in the participant-authorized transaction, and the computer profile. */
-	readonly agent: AgentScope;
-	/** Names the active lease, its generation and the SandboxClaim whose Pod binding passed the infrastructure verifier. */
-	readonly lease: ClaimedLeaseScope;
-	/** Principal stamped on the pending human entry and rechecked against current membership and Use authority. */
-	readonly requesterPrincipalId: string;
-	/** Issuer loaded from that exact durable Principal rather than accepted from the computer. */
-	readonly requesterIssuer: string;
-	/** Subject loaded from that exact durable Principal rather than accepted from the computer. */
-	readonly requesterSubjectId: string;
-	/** Verified credential authentication instant preserved on the immutable human author. */
-	readonly requesterAuthenticatedAt: string;
-	/** Immutable pending entry used as the admission idempotency coordinate. */
-	readonly requestIdempotencyKey: string;
 	/** Selects the already persisted Kurrent entry without asking run admission to write it again. */
 	readonly messageInput: ConversationComputerPrePersistedMessageInput;
 }

@@ -133,7 +133,7 @@ export default [
             { sourceTag: "scope:skills-controller", onlyDependOnLibsWithTags: ["scope:skills-controller", "scope:skills-launcher", "scope:skills-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:execution-runs", "scope:execution-runs-workflow-contract", "scope:runtime-workloads", "scope:skills-controller", "scope:skills-workflow-contract", "scope:mcp-runtime", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
-			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:agent-sandbox", "scope:agents", "scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-runs", "scope:history-store", "scope:identity", "scope:shared", "scope:workload-identity", "scope:workflows"] },
+			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:agent-sandbox", "scope:agents", "scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-inputs", "scope:execution-runs", "scope:history-store", "scope:identity", "scope:shared", "scope:workflows", "scope:workload-identity"] },
 			{ sourceTag: "scope:conversation-assets", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:conversation-assets", "scope:execution-runs", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:auth", "scope:personal-configuration", "scope:shared"] },
 			{ sourceTag: "scope:user-onboarding", onlyDependOnLibsWithTags: ["scope:user-onboarding", "scope:shared"] },
@@ -161,7 +161,7 @@ export default [
             { sourceTag: "scope:model-routing", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:cluster-tenants", "scope:http", "scope:model-routing", "scope:shared"] },
 			{ sourceTag: "scope:personal-personas", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:personal-configuration", "scope:personal-personas", "scope:shared"] },
 			{ sourceTag: "scope:persona-onboarding", onlyDependOnLibsWithTags: ["scope:persona-onboarding", "scope:shared", "scope:user-onboarding"] },
-            { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:artifacts", "scope:authorization", "scope:conversations", "scope:membership", "scope:execution-runs", "scope:execution-inputs", "scope:personal-memory", "scope:shared"] },
+            { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:artifacts", "scope:authorization", "scope:conversations", "scope:execution-inputs", "scope:execution-runs", "scope:identity", "scope:membership", "scope:personal-memory", "scope:shared"] },
             { sourceTag: "scope:providers", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:cluster-tenants", "scope:model-routing", "scope:providers", "scope:shared"] },
             { sourceTag: "scope:retrieval", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:retrieval", "scope:shared"] },
 			{ sourceTag: "scope:execution-runs", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-runs", "scope:execution-runs-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
@@ -189,6 +189,7 @@ export default [
                 "scope:authorization",
                 "scope:conversations",
                 "scope:conversation-assets",
+                "scope:execution-inputs",
                 "scope:execution-runs",
 				"scope:execution-runs-workflow-contract",
                 "scope:execution-elicitation",
@@ -279,7 +280,7 @@ export default [
     // Vitest configs are build tooling, not product modules: every one imports the
     // root vitest.cache.js helper by relative path (the ROOT-CACHE style rule requires
     // it), which the boundaries rule would misread as an unregistered external import.
-    files: ["**/vitest.config.ts"],
+    files: ["**/vitest.config.ts", "**/vitest.*.config.ts"],
     rules: { "@nx/enforce-module-boundaries": "off" },
   },
   {
