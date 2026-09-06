@@ -381,8 +381,9 @@ jobs:
     services:
       kurrentdb:
         # The chart pins appVersion 26.1.1 (apps/_infra/kurrentdb/helm/Chart.yaml). The digest is the
-        # published 26.1.1 manifest list, so a moved tag cannot change what this job proves.
-        image: docker.kurrent.io/kurrent-latest/kurrentdb:26.1.1@sha256:ac88a817daca77f42273ca6a30f70d0d9a7cf6b2962733bd7ecdd93be540b7e0
+        # amd64 OCI image manifest behind that tag (the registry's default tag response is a legacy
+        # schema-1 manifest whose digest Docker cannot pull), so a moved tag cannot change this proof.
+        image: docker.kurrent.io/kurrent-latest/kurrentdb:26.1.1@sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8
         env:
           # Insecure mode is acceptable ONLY for this throwaway CI container. It exists to prove the
           # client and the stream and consumer-group operations. TLS, credentials, and the stream ACL
