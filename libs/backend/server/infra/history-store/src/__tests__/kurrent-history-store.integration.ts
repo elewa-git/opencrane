@@ -435,7 +435,14 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 			const refusal = _within(rivalIterator.next(), "the second consumer was neither admitted nor refused");
 			await expect(refusal).rejects.toBeInstanceOf(PersistentSubscriptionMaximumSubscribersReachedError);
 			await holder.close();
-			const holderEnded = await _within(holderWaiting, "the first consumer did not end after close");
+			// A delivery left over from an earlier group test may reach the holder before the close lands;
+			// acknowledge anything it received and read on until the iteration reports its end.
+			let holderEnded = await _within(holderWaiting, "the first consumer did not end after close");
+			while (!holderEnded.done)
+			{
+				await holder.acknowledge(holderEnded.value);
+				holderEnded = await _within(holderIterator.next(), "the first consumer did not end after close");
+			}
 			await _eventually(async function _released()
 			{
 				const info = await client.getPersistentSubscriptionToStreamInfo(queueStream, _ACTIVATION_GROUP);
