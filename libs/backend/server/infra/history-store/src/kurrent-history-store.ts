@@ -1,4 +1,4 @@
-import { BACKWARDS, END, FORWARDS, NO_STREAM, PARK, RETRY, START, STREAM_STATE, KurrentDBClient, StreamNotFoundError, jsonEvent, type EventType, type PersistentSubscriptionToStream, type PersistentSubscriptionToStreamResolvedEvent, type ResolvedEvent, type StreamStateCheck } from "@kurrent/kurrentdb-client";
+import { BACKWARDS, END, FORWARDS, NO_STREAM, PARK, RETRY, START, STREAM_STATE, AppendConsistencyViolationError, KurrentDBClient, StreamNotFoundError, WrongExpectedVersionError, jsonEvent, type EventType, type PersistentSubscriptionToStream, type PersistentSubscriptionToStreamResolvedEvent, type ResolvedEvent, type StreamStateCheck } from "@kurrent/kurrentdb-client";
 
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAppendReceipt, type HistoryAtomicAppend, type HistoryEvent, type HistoryPersistentRecordedEvent, type HistoryPersistentSubscription, type HistoryPersistentSubscriptionRequest, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore, type HistoryStreamHead, type HistorySubscription } from "./history-store.types";
 
@@ -53,14 +53,28 @@ export class _KurrentHistoryStore implements HistoryStore
 	{
 		const records = command.appends.flatMap(append => append.events.map(event => ({ streamName: append.streamName, record: _ToKurrentEvent(event) })));
 		const checks = _CreateAtomicChecks(command);
-		const receipt = await this.client.appendRecords(records, checks);
-		return receipt.responses.map(response => ({ streamName: response.streamName, revision: response.revision }));
+		try
+		{
+			const receipt = await this.client.appendRecords(records, checks);
+			return receipt.responses.map(response => ({ streamName: response.streamName, revision: response.revision }));
+		}
+		catch (error)
+		{
+			// A stale head on the atomic path arrives as a consistency violation, not as the single-stream
+			// wrong-expected-version error; callers get the same error class for both so one handler suffices.
+			if (!(error instanceof AppendConsistencyViolationError) || error.violations.length === 0)
+				throw error;
+			const violation = error.violations[0] as (typeof error.violations)[number];
+			throw new WrongExpectedVersionError(undefined, { streamName: violation.streamName, expected: violation.expectedState, current: violation.actualState });
+		}
 	}
 
 	/** Opens a stream-scoped subscription that callers explicitly close. */
 	public async subscribe(request: HistoryReadRequest): Promise<HistorySubscription>
 	{
-		const subscription = this.client.subscribeToStream(request.streamName, { fromRevision: request.fromRevision ?? START });
+		// The client starts delivery after the revision it is given; the port promises delivery from it.
+		const fromRevision = request.fromRevision === undefined || request.fromRevision === 0n ? START : request.fromRevision - 1n;
+		const subscription = this.client.subscribeToStream(request.streamName, { fromRevision });
 		return { events: _MapSubscription(subscription), close: subscription.unsubscribe.bind(subscription) };
 	}
 
@@ -152,7 +166,8 @@ function _MapRecordedEvent(event: ResolvedEvent<EventType>["event"] & object): H
 {
 	if (!_IsRecord(event.data))
 		throw new Error(`KurrentDB event '${event.id}' has a non-object payload`);
-	const metadata = _IsRecord(event.metadata) ? event.metadata : {};
+	// The client stamps its own "$schema.*" registry keys onto metadata; they are transport detail, not history.
+	const metadata = Object.fromEntries(Object.entries(_IsRecord(event.metadata) ? event.metadata : {}).filter(([key]) => !key.startsWith("$schema.")));
 	return { streamName: event.streamId, id: event.id, type: event.type, data: event.data, metadata, revision: event.revision, recordedAt: event.created };
 }
 

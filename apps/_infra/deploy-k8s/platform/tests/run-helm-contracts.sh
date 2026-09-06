@@ -27,5 +27,11 @@ for contract in \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
   skill-authoring-contract.sh; do
-  bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/$contract"
+  # Name every contract as it starts and on failure, so a silent `set -e` exit is still attributable in CI logs.
+  echo "[contracts] $contract"
+  if ! bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/$contract"; then
+    echo "[contracts] FAILED: $contract" >&2
+    exit 1
+  fi
 done
+echo "[contracts] all passed"

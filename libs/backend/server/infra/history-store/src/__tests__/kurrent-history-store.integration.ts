@@ -277,7 +277,13 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 		const command = { expectedHeads: [{ streamName: conversationStream, revision: 0n }, { streamName: queueStream, revision: HistoryExpectedRevisions.NoStream }], appends: [{ streamName: conversationStream, expectedRevision: 0n, events: [message] }, { streamName: queueStream, expectedRevision: HistoryExpectedRevisions.NoStream, events: [activation] }] };
 
 		const receipts = await store.appendAtomic(command);
-		const retried = await _staleHeadConflict(store.appendAtomic(command));
+		// The server treats a byte-identical retry (same event ids at the same heads) as already done.
+		expect(await store.appendAtomic(command)).toEqual(receipts);
+		// A different write against the now-stale heads must be refused.
+		const freshMessage = _event(message.type, message.data, message.metadata);
+		const freshActivation = _event(activation.type, activation.data, activation.metadata);
+		const stale = { ...command, appends: command.appends.map((append, index) => ({ ...append, events: [index === 0 ? freshMessage : freshActivation] })) };
+		const retried = await _staleHeadConflict(store.appendAtomic(stale));
 
 		expect(receipts).toEqual(expect.arrayContaining([{ streamName: conversationStream, revision: 1n }, { streamName: queueStream, revision: 0n }]));
 		expect([conversationStream, queueStream]).toContain(retried.streamName);
