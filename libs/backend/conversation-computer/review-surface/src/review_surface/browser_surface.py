@@ -73,11 +73,13 @@ def capture_preview(port: int, path: str, width: int, height: int, allowed_ports
     if width < 320 or width > 1920 or height < 240 or height > 1080:
         raise ValueError("browser viewport is outside the review limit")
     executable = os.environ.get("OPENCRANE_CHROMIUM_PATH", "/usr/bin/chromium-browser")
-    preview_url = f"http://127.0.0.1:{port}/{path.lstrip('/')}"
+    # The reviewer-supplied path becomes one percent-encoded URL argument after the fixed scheme,
+    # loopback host and allowlisted port, so it can never be parsed as a Chromium flag or a shell word.
+    preview_url = f"http://127.0.0.1:{port}/{urllib.parse.quote(path.lstrip('/'), safe='/?=&%-._~')}"
     with tempfile.TemporaryDirectory(prefix="opencrane-browser-") as directory:
         screenshot = Path(directory) / "preview.png"
         argv = [executable, "--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-background-networking", "--no-first-run", f"--screenshot={screenshot}", f"--window-size={width},{height}", preview_url]
-        result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)
+        result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)  # codeql[py/command-line-injection] argv list, no shell; the only reviewer input is a percent-encoded URL path behind a fixed loopback origin
         if result.returncode != 0 or not screenshot.is_file():
             raise RuntimeError("browser could not render the localhost preview")
         body = screenshot.read_bytes()
