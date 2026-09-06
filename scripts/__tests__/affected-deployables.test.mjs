@@ -231,7 +231,8 @@ test("keeps heavyweight remote qualification ahead of image publication", functi
 	assert.match(workflow, /run: \.\/apps\/_infra\/deploy-k8s\/platform\/tests\/develop-smoke\.sh/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'k3d'/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'all'/u);
-	assert.match(workflow, /needs: \[prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke\]/u);
+	assert.match(workflow, /needs: \[prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke\]/u);
+	assert.match(workflow, /needs\.history_store\.result == 'success'/u);
 	assert.match(developSmokeJob[0], /needs: prepare/u);
 	assert.match(developSmokeJob[0], /needs\.prepare\.outputs\.develop_smoke_can_skip != 'true'/u);
 	assert.match(workflow, /continue-on-error: true[\s\S]*?run: node scripts\/develop-smoke-baseline\.mjs/u);
