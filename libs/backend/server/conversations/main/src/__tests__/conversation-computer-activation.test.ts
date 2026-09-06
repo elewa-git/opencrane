@@ -34,7 +34,7 @@ describe("ConversationComputer activation consumer", function ()
 		expect(park).toHaveBeenCalledTimes(2);
 		expect(wait).not.toHaveBeenCalled();
 		await __ConsumeConversationComputerActivation({ acknowledge: vi.fn(), park, retry }, unavailable, _Delivery({ retryCount: 3 }), { wait });
-		expect(wait).toHaveBeenCalledWith(8_000);
+		expect(wait).toHaveBeenCalledWith(8_000, undefined);
 		expect(retry).toHaveBeenCalledWith(expect.objectContaining({ id: "activation-1" }), "conversation computer activation authority unavailable");
 		expect(wait.mock.invocationCallOrder[0]).toBeLessThan(retry.mock.invocationCallOrder[0]!);
 	});

@@ -58,7 +58,16 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-claim-pending", lease.id), computer: { ...current.computer, state: ConversationComputerStates.ClaimPending, leaseGeneration: command.generation, updatedAt: now.toISOString() }, lease });
 			current = await this.computers.load(coordinates);
 		}
-		if (current === null || current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)
+		if (current === null)
+			return "denied";
+		// A competing consumer may have finished this generation between our load and reload; report
+		// that as the idempotent replay it is instead of a denial.
+		if (current.computer.state === ConversationComputerStates.Warm && _IsCurrentActiveLease(current.computer.leaseGeneration, current.lease, command.generation, new Date()))
+		{
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, current.lease));
+			return "idempotent";
+		}
+		if (current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)
 			return "denied";
 
 		// 3. Converge the deterministic claim and keep the delivery live until its controller assigns a sandbox.

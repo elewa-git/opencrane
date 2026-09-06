@@ -211,6 +211,32 @@ are:
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.
 
+### Conversation-computer activation consumer
+
+Every server replica joins the silo's `conversation-computer-activation` KurrentDB consumer group as
+a competing consumer, so `clustertenantManager.replicas` can be raised and a rolling restart never
+leaves activations unread. Operator notes:
+
+- The group is created once by the KurrentDB bootstrap Job with
+  `historyStore.kurrentdb.activationSubscription.maxSubscriberCount` (default `4`) and the
+  `RoundRobin` strategy. Keep the count at or above the server replica count plus one for the extra
+  Pod a rolling update adds. The bootstrap Job does not update an existing group, so a change needs a
+  fresh silo. `Pinned` is not an option here: it hashes on the source stream, which for one activation
+  stream would send everything to a single consumer.
+- Two replicas may handle the same computer at once. That is safe without a lock: every history write
+  carries an expected revision and a deterministic event id, the SandboxClaim name is derived from the
+  computer and generation, and the PostgreSQL lease projection only accepts an identical row. The
+  loser of a race gets a revision conflict, retries the delivery, and then observes the finished
+  activation as an idempotent replay.
+- A dropped or ended subscription is logged at `warn` and reopened with jittered backoff (1 s doubling
+  to 30 s). After 20 consecutive drops without a healthy session (roughly eight minutes of a KurrentDB
+  outage) the consumer logs `fatal` with `conversation computer activation consumer gave up`, sends
+  the process SIGTERM, and shutdown exits non-zero so Kubernetes restarts only that replica. A session
+  that delivered an event or stayed open for 60 s resets the drop count.
+- On SIGTERM the consumer stops pulling deliveries, lets the delivery it holds finish or hands it back
+  to the group with a retry nack, then closes the subscription. Deliveries KurrentDB had buffered for
+  that replica are redelivered to the remaining replicas after the group's 60 s message timeout.
+
 In standalone mode, successful OIDC authentication does not itself grant product access. Existing
 active members proceed normally. A verified identity without membership can call only the signed
 invitation-acceptance endpoint; once that transaction creates its active silo membership, the next

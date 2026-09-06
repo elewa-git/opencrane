@@ -71,8 +71,140 @@ export type ConversationComputerActivationOutcome = "activated" | "idempotent" |
 /** Lets a test replace the real clock wait used between a not-ready delivery and its retry. */
 export interface ConversationComputerActivationListenerOptions
 {
-	/** Resolves after the requested number of milliseconds; defaults to a timer. */
-	readonly wait?: (milliseconds: number) => Promise<void>;
+	/** Resolves after the requested number of milliseconds, or earlier once the signal aborts; defaults to a timer. */
+	readonly wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+	/** Shortens the retry wait so a held delivery is handed back as soon as shutdown starts. */
+	readonly signal?: AbortSignal;
+}
+
+/**
+ * Names the lifecycle state of one supervised activation consumer.
+ *
+ * The state is process-local and point-in-time. `Failed` is terminal for this consumer: the process
+ * must restart before the silo queue is consumed again from this replica.
+ */
+export enum ConversationComputerActivationConsumerStates
+{
+	/** No subscription has been opened yet. */
+	Starting = "starting",
+	/** A persistent subscription is open and deliveries are being handled. */
+	Subscribed = "subscribed",
+	/** The subscription dropped and the consumer is waiting before it reopens. */
+	Reconnecting = "reconnecting",
+	/** The consumer used its whole consecutive-failure budget and will not reopen. */
+	Failed = "failed",
+	/** Shutdown stopped the consumer after its in-flight delivery settled. */
+	Stopped = "stopped",
+}
+
+/** Names the observations one supervised consumer reports to its composition. */
+export enum ConversationComputerActivationConsumerEventKinds
+{
+	/** A persistent subscription opened. */
+	Subscribed = "subscribed",
+	/** The subscription dropped, ended, or a queue action failed; the consumer will reopen after the reported wait. */
+	Dropped = "dropped",
+	/** The consumer gave up after its last consecutive failure. */
+	Failed = "failed",
+	/** Shutdown completed. */
+	Stopped = "stopped",
+}
+
+/** Reports that one persistent subscription opened. */
+export interface ConversationComputerActivationConsumerSubscribed
+{
+	/** Identifies the observation. */
+	readonly kind: ConversationComputerActivationConsumerEventKinds.Subscribed;
+}
+
+/** Reports one dropped subscription and the wait before the consumer reopens. */
+export interface ConversationComputerActivationConsumerDropped
+{
+	/** Identifies the observation. */
+	readonly kind: ConversationComputerActivationConsumerEventKinds.Dropped;
+	/** Carries the error that ended the session, or the stream-ended reason. */
+	readonly error: unknown;
+	/** Counts drops since the last healthy session. */
+	readonly consecutiveFailures: number;
+	/** Reports the jittered wait before the next subscription attempt. */
+	readonly nextWaitMilliseconds: number;
+}
+
+/** Reports that the consumer used its whole failure budget. */
+export interface ConversationComputerActivationConsumerFailed
+{
+	/** Identifies the observation. */
+	readonly kind: ConversationComputerActivationConsumerEventKinds.Failed;
+	/** Carries the last error before the consumer gave up. */
+	readonly error: unknown;
+	/** Counts the consecutive drops that used the budget. */
+	readonly consecutiveFailures: number;
+}
+
+/** Reports that shutdown finished. */
+export interface ConversationComputerActivationConsumerStopped
+{
+	/** Identifies the observation. */
+	readonly kind: ConversationComputerActivationConsumerEventKinds.Stopped;
+}
+
+/** Lists every observation a supervised consumer reports. */
+export type ConversationComputerActivationConsumerEvent = ConversationComputerActivationConsumerSubscribed | ConversationComputerActivationConsumerDropped | ConversationComputerActivationConsumerFailed | ConversationComputerActivationConsumerStopped;
+
+/** Point-in-time health of one supervised consumer, read by the composition and by tests. */
+export interface ConversationComputerActivationConsumerHealth
+{
+	/** Current lifecycle state. */
+	readonly state: ConversationComputerActivationConsumerStates;
+	/** Drops since the last healthy session; zero while healthy. */
+	readonly consecutiveFailures: number;
+}
+
+/**
+ * Bounds how a dropped subscription is reopened.
+ *
+ * The wait doubles from the base up to the cap with random jitter, so several replicas that lose
+ * KurrentDB at the same moment do not reconnect in lockstep. A session that delivered an event or
+ * stayed open for the healthy duration resets the failure count.
+ */
+export interface ConversationComputerActivationResubscribePolicy
+{
+	/** First wait after a drop. */
+	readonly baseMilliseconds: number;
+	/** Longest wait between attempts. */
+	readonly maxMilliseconds: number;
+	/** Consecutive drops after which the consumer stops trying and reports `Failed`. */
+	readonly maxConsecutiveFailures: number;
+	/** Open time after which a session counts as healthy and clears earlier drops. */
+	readonly healthySessionMilliseconds: number;
+}
+
+/** Settings for one supervised activation consumer. */
+export interface ConversationComputerActivationConsumerOptions extends ConversationComputerActivationListenerOptions
+{
+	/** Stops the consumer: no new deliveries, the in-flight one settles, then the subscription closes. */
+	readonly signal: AbortSignal;
+	/** Overrides part of the default reopen policy. */
+	readonly resubscribe?: Partial<ConversationComputerActivationResubscribePolicy>;
+	/** Receives lifecycle observations so the composition can log them. */
+	readonly onEvent?: (event: ConversationComputerActivationConsumerEvent) => void;
+	/** Supplies jitter in [0, 1); defaults to `Math.random`. */
+	readonly random?: () => number;
+	/** Supplies epoch milliseconds; defaults to `Date.now`. */
+	readonly now?: () => number;
+}
+
+/**
+ * Owns one supervised, competing consumer for the silo activation queue.
+ *
+ * Called by: apps/opencrane/src/app/conversation-computer-activation-composition.ts.
+ */
+export interface ConversationComputerActivationConsumer
+{
+	/** Settles once the consumer has stopped or failed; it never rejects. */
+	readonly done: Promise<void>;
+	/** Reads the current health snapshot. */
+	health(): ConversationComputerActivationConsumerHealth;
 }
 
 /**
