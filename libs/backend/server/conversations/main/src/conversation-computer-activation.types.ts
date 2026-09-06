@@ -17,6 +17,20 @@ export interface ConversationComputerActivationCommand
 }
 
 /**
+ * Names the persistent-subscription action an authority outcome asks the listener to take.
+ *
+ * `Park` removes a terminal failure from live delivery for operator repair; `Retry` keeps an
+ * in-progress or transiently failed delivery live after a bounded wait.
+ */
+export enum ConversationComputerActivationQueueActions
+{
+	/** Move the delivery to the consumer group's parked queue. */
+	Park = "park",
+	/** Ask KurrentDB to redeliver after the listener's backoff wait. */
+	Retry = "retry",
+}
+
+/**
  * Directs the listener to remove a valid but terminal activation failure from its active queue.
  *
  * Parking preserves the delivery and its operator-facing reason for repair instead of retrying an
@@ -25,18 +39,41 @@ export interface ConversationComputerActivationCommand
 export interface ConversationComputerActivationParked
 {
 	/** Identifies the persistent-subscription action for this terminal activation outcome. */
-	readonly action: "park";
+	readonly action: ConversationComputerActivationQueueActions.Park;
 	/** Explains the terminal outcome to the operator inspecting the parked delivery. */
 	readonly reason: string;
 }
 
 /**
- * Lists every authority outcome a persistent activation delivery can resolve without a retry.
+ * Directs the listener to keep the delivery live because the sandbox is not assigned yet.
+ *
+ * A gVisor Pod cold start takes seconds to minutes. This outcome is expected progress, not a
+ * failure, so the listener waits with bounded backoff and asks KurrentDB to redeliver instead of
+ * spending the group's retry budget on immediate retries.
+ */
+export interface ConversationComputerActivationPending
+{
+	/** Identifies the persistent-subscription action for an in-progress cold start. */
+	readonly action: ConversationComputerActivationQueueActions.Retry;
+	/** Explains the wait to the operator inspecting delivery retries. */
+	readonly reason: string;
+}
+
+/**
+ * Lists every authority outcome a persistent activation delivery can resolve.
  *
  * Activated, idempotent, and denied outcomes acknowledge the delivery. A parked outcome moves it
- * aside with an operator-facing reason; an authority exception is the separate transient path.
+ * aside with an operator-facing reason; a pending outcome retries after backoff; an authority
+ * exception is the separate transient-failure path, which also retries after backoff.
  */
-export type ConversationComputerActivationOutcome = "activated" | "idempotent" | "denied" | ConversationComputerActivationParked;
+export type ConversationComputerActivationOutcome = "activated" | "idempotent" | "denied" | ConversationComputerActivationParked | ConversationComputerActivationPending;
+
+/** Lets a test replace the real clock wait used between a not-ready delivery and its retry. */
+export interface ConversationComputerActivationListenerOptions
+{
+	/** Resolves after the requested number of milliseconds; defaults to a timer. */
+	readonly wait?: (milliseconds: number) => Promise<void>;
+}
 
 /**
  * Decides whether a validated computer generation can activate.

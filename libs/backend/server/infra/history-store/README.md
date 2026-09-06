@@ -38,6 +38,8 @@ does not create it, so its deployment owner must provision group settings before
 Each delivery is at least once: a consumer acknowledges successful work, retries a transient
 failure, parks a poison event, or closes without acknowledging outstanding work. A redelivery
 supersedes the prior opaque client handle, while consumers make their own handlers idempotent.
+`replayParked` moves a group's parked queue back into live delivery once an operator has repaired
+the cause; the events then follow the same at-least-once contract.
 
 ## Boundary
 

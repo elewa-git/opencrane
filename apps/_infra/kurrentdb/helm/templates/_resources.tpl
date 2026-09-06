@@ -168,12 +168,15 @@ data:
       200)
         ;;
       404)
+        # A gVisor cold start can take minutes. The consumer waits with bounded backoff (at most ten
+        # seconds per hold) before each retry, so sixty retries give a claim more than nine minutes to
+        # converge, and a sixty second message timeout never redelivers a delivery the consumer still holds.
         jq -n '{
           resolveLinktos: false,
           startFrom: 0,
-          messageTimeoutMilliseconds: 30000,
+          messageTimeoutMilliseconds: 60000,
           extraStatistics: false,
-          maxRetryCount: 10,
+          maxRetryCount: 60,
           liveBufferSize: 500,
           bufferSize: 500,
           readBatchSize: 20,

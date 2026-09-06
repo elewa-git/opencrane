@@ -74,6 +74,12 @@ export class _KurrentHistoryStore implements HistoryStore
 			close: async function _Close(): Promise<void> { await subscription.unsubscribe(); },
 		};
 	}
+
+	/** Replays the whole parked queue of one consumer group through the official client. */
+	public async replayParked(request: HistoryPersistentSubscriptionRequest): Promise<void>
+	{
+		await this.client.replayParkedMessagesToStream(request.streamName, request.groupName);
+	}
 }
 
 /** Builds unique KurrentDB checks and refuses an append whose own revision is not checked. */

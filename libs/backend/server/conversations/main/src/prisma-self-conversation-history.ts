@@ -113,7 +113,7 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 		const current = await this.dependencies.computerReader.load({ siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId!, profileRevisionId: projection.computerProfileRevisionId! });
 		if (current === null || current.computer.leaseGeneration < 1)
 			throw new Error("Conversation computer activation requires a current checked computer generation");
-		const generation = current.lease?.state === ComputerLeaseStates.Released ? current.computer.leaseGeneration + 1 : current.computer.leaseGeneration;
+		const generation = current.lease?.state === ComputerLeaseStates.Released || current.lease?.state === ComputerLeaseStates.Lost ? current.computer.leaseGeneration + 1 : current.computer.leaseGeneration;
 		const queueStreamName = `computer-activations-${caller.siloId}`;
 		const queueHead = await this.historyStore.readHead(queueStreamName);
 		if (queueHead.streamName !== queueStreamName)

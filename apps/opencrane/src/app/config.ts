@@ -198,7 +198,8 @@ export function _ReadAgentSandboxReleaseProfileConfig(): AgentSandboxReleaseProf
 		warmPoolName: _readRequired("OPENCRANE_COMPUTER_WARM_POOL_NAME"),
 		namespace: _readRequired("OPENCRANE_COMPUTER_NAMESPACE"),
 		serviceAccountName: _readRequired("OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME"),
-		leaseTtlMilliseconds: _readBoundedSeconds("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", 3_600, 60, 86_400),
+		// The lifecycle worker renews an in-use lease at half of this lifetime on a 30 second cadence, so the floor stays well above one pass.
+		leaseTtlMilliseconds: _readBoundedSeconds("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", 3_600, 300, 86_400),
 		maximumTurnCostUsdMicros,
 	};
 }

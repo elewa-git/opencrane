@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
+import { _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";
 import type { ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
@@ -137,7 +138,7 @@ async function _Events(history: Pick<HistoryStore, "readStream">, streamName: st
 
 function _ActiveStream(command: { readonly siloId: string; readonly computerId: string; readonly generation: number; readonly leaseId: string }): string
 {
-	return `conversation-computer-active-turn-${createHash("sha256").update(JSON.stringify([command.siloId, command.computerId, command.generation, command.leaseId])).digest("hex")}`;
+	return _ConversationComputerActiveTurnStreamName(command);
 }
 
 function _ActiveBootstrap(event: HistoryRecordedEvent, command: { readonly siloId: string; readonly computerId: string; readonly generation: number; readonly leaseId: string }): string

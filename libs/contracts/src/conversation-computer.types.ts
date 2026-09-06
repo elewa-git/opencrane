@@ -37,7 +37,7 @@ export enum ComputerLeaseStates
 	Active = "active",
 	/** The computer released this realization after work reached a safe boundary. */
 	Released = "released",
-	/** The realization ended unexpectedly and cannot report further work. */
+	/** The lease expired or its claim disappeared before an orderly release, so no checkpoint was captured. */
 	Lost = "lost",
 }
 

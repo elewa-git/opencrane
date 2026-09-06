@@ -34,6 +34,16 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 		return { siloId, computerId, conversationId: row.id, agentIdentityId: row.computerAgentIdentityId, profileRevisionId: row.computerProfileRevisionId };
 	}
 
+	/** Move the projected expiry later for exactly the canonical lease that history just renewed. */
+	public async extendActiveLease(command: { readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly agentIdentityId: string; readonly leaseId: string; readonly leaseGeneration: number; readonly expiresAt: string }): Promise<boolean>
+	{
+		const expiresAt = new Date(command.expiresAt);
+		if (Number.isNaN(expiresAt.getTime()))
+			throw new Error("Conversation computer active lease renewal requires a valid expiry");
+		const touched = await this.prisma.conversationComputerActiveLease.updateMany({ where: { siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, agentIdentityId: command.agentIdentityId, leaseId: command.leaseId, leaseGeneration: command.leaseGeneration, expiresAt: { lt: expiresAt } }, data: { expiresAt } });
+		return touched.count === 1;
+	}
+
 	/** Remove only an idle exact lease while holding the same row fence used by attempt admission. */
 	public async clearActiveLease(command: { readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly agentIdentityId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<boolean>
 	{

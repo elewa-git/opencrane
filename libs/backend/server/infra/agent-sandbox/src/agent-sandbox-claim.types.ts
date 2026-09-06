@@ -30,3 +30,28 @@ export interface AgentSandboxClaimReleaseCommand
 	readonly leaseId: string;
 	readonly generation: number;
 }
+
+/** Supplies the exact deterministic claim coordinates whose shutdown time may move later. */
+export interface AgentSandboxClaimRenewCommand extends AgentSandboxClaimReleaseCommand
+{
+	/** Sets the new ISO shutdown instant that must be later than the current one. */
+	readonly expiresAt: string;
+}
+
+/**
+ * Reports what the controller currently records for one deterministic claim.
+ *
+ * The lifecycle worker compares these values with canonical KurrentDB lease history to decide
+ * whether a realization is still alive, not to grant it any authority.
+ */
+export interface AgentSandboxClaimStatus
+{
+	/** Names the deterministic claim that was read. */
+	readonly claimId: string;
+	/** Identifies the assigned sandbox, or null while the controller is still assigning one. */
+	readonly sandboxId: string | null;
+	/** Carries the controller-reported Service DNS name after assignment. */
+	readonly serviceFQDN: string | null;
+	/** Reports the shutdown instant the claim currently carries. */
+	readonly shutdownTime: string | null;
+}

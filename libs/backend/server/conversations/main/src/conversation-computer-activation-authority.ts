@@ -4,7 +4,7 @@ import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease } f
 import type { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationOutcome, ConversationComputerActivationProfile, ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
+import { ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActivationOutcome, type ConversationComputerActivationProfile, type ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
 import { ConversationComputerHistory } from "./conversation-computers";
 
 /** Realizes activation requests through one release-owned Agent Sandbox profile. */
@@ -19,7 +19,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		this.computers = new ConversationComputerHistory(historyStore);
 	}
 
-	/** Reserve or observe the exact generation, and acknowledge only after a sandbox is assigned. */
+	/** Reserve or observe the exact generation, and report pending until a sandbox is assigned. */
 	public async activate(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationOutcome>
 	{
 		// 1. Resolve immutable identity and profile coordinates from the server-owned projection.
@@ -27,7 +27,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		if (projection === null)
 			return "denied";
 		if (projection.profileRevisionId !== this.profile.profileRevisionId)
-			return { action: "park", reason: "conversation computer profile is not admitted by this release" };
+			return { action: ConversationComputerActivationQueueActions.Park, reason: "conversation computer profile is not admitted by this release" };
 		const coordinates = { siloId: command.siloId, computerId: command.computerId, conversationId: command.conversationId, agentIdentityId: projection.agentIdentityId, profileRevisionId: projection.profileRevisionId };
 		let current = await this.computers.load(coordinates);
 		if (current === null || current.computer.state === ConversationComputerStates.Retired)
@@ -51,7 +51,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		// 2. Persist the generation reservation before creating an external claim, so a retry has one owner.
 		const expiresAt = new Date(now.getTime() + this.profile.leaseTtlMilliseconds).toISOString();
 		const initialClaim = current.computer.state === ConversationComputerStates.Cold && current.lease === null && current.computer.leaseGeneration === command.generation;
-		const recoveryClaim = (current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.Cooling) && current.lease?.state === ComputerLeaseStates.Released && current.computer.leaseGeneration + 1 === command.generation;
+		const recoveryClaim = (current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.Cooling) && _IsTerminalLease(current.lease) && current.computer.leaseGeneration + 1 === command.generation;
 		if (initialClaim || recoveryClaim)
 		{
 			const lease = _ClaimedLease(command.computerId, command.generation, now.toISOString(), expiresAt);
@@ -61,10 +61,10 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		if (current === null || current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)
 			return "denied";
 
-		// 3. Converge the deterministic claim and retain delivery until its controller assigns a sandbox.
+		// 3. Converge the deterministic claim and keep the delivery live until its controller assigns a sandbox.
 		const claim = await this.claims.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: current.lease.id, generation: command.generation, namespace: this.profile.namespace, profileName: this.profile.profileName, warmPoolName: this.profile.warmPoolName, expiresAt: current.lease.expiresAt, reason: current.computer.workspaceCheckpoint === null ? "activation_requested" : "recovery_requested" });
 		if (claim.sandboxId === null || claim.serviceFQDN === null)
-			throw new Error("Agent Sandbox has not assigned the conversation computer yet");
+			return { action: ConversationComputerActivationQueueActions.Retry, reason: "Agent Sandbox has not assigned the conversation computer yet" };
 
 		// 4. Fence the assigned sandbox into history before the queue acknowledges activation.
 		const activeLease: ComputerLease = { ...current.lease, sandboxClaimId: claim.claimId, sandboxId: claim.sandboxId, serviceFQDN: claim.serviceFQDN, state: ComputerLeaseStates.Active };
@@ -72,6 +72,12 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, activeLease));
 		return "activated";
 	}
+}
+
+/** Recognize a lease that ended, by orderly release or by loss, so the next generation may open. */
+function _IsTerminalLease(lease: ComputerLease | null): boolean
+{
+	return lease?.state === ComputerLeaseStates.Released || lease?.state === ComputerLeaseStates.Lost;
 }
 
 /** Accept only the requested, unexpired active generation for replay or reactivation. */

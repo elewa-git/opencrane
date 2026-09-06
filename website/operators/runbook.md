@@ -48,6 +48,38 @@ product incident key.
 Do not create, edit or replace a claim manually. A Pod without the recorded lease cannot bootstrap,
 and a changed claim is denied by admission policy.
 
+## Parked activations
+
+The activation consumer waits with bounded backoff while Agent Sandbox assigns a Pod, and KurrentDB
+parks a delivery only after sixty retries (more than nine minutes) or on a terminal authority
+outcome such as a profile the release does not admit. A parked activation is never replayed on its
+own, so the conversation stays cold until an operator replays the queue.
+
+1. Read the parked queue: `GET /subscriptions/computer-activations-<silo>/conversation-computer-activation/parked`
+   on the KurrentDB HTTP port with the bootstrap admin credential, and fix the recorded cause
+   (profile revision, claim admission, controller health).
+2. Replay the queue through the OpenCrane API as a Principal holding the current
+   Organization/Administer grant:
+
+   ```bash
+   curl --request POST --cookie "$SESSION" https://<silo-host>/api/v1/conversation-computers/activations/parked:replay
+   ```
+
+   A `202 {"outcome":"replay_requested"}` means every parked delivery re-enters live delivery with the
+   ordinary at-least-once contract. `403` means the caller lacks the grant; `503` means the queue is
+   unreachable.
+
+Do not edit the consumer group or acknowledge parked messages in the KurrentDB UI; the replay
+route keeps the group's checkpoint and retry accounting intact.
+
+## Lost and renewed leases
+
+Every thirty seconds the lifecycle worker inspects each active lease. It renews a lease (claim
+`shutdownTime`, KurrentDB lease, PostgreSQL projection) once less than half of the lease lifetime
+remains, and it records the lease as `lost` and the computer as `cold` when the lease expired or the
+`SandboxClaim` is gone. The next message with activation opens generation + 1 from either `released`
+or `lost`. A `lost` lease captured no checkpoint, so the workspace restores from the previous one.
+
 ## Claim cannot activate
 
 ```bash

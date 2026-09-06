@@ -17,6 +17,7 @@ export { PrismaAgentSessionCreationUnitOfWork } from "./agent-session-creation";
 export type { AgentSessionReleaseProfile, InitialConversationComputerResolver } from "./agent-session-creation.types";
 export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
 export { __RunConversationComputerActivationListener } from "./conversation-computer-activation";
+export { ConversationComputerActivationQueueActions } from "./conversation-computer-activation.types";
 export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationListenerOptions, ConversationComputerActivationOutcome, ConversationComputerActivationParked, ConversationComputerActivationPending, ConversationComputerActivationProjection, ConversationComputerActivationProjectionRepository, ConversationComputerActiveLeaseProjectionCommand } from "./conversation-computer-activation.types";
 export { ConversationComputerActivationAuthorityAdapter } from "./conversation-computer-activation-authority";
 export { KurrentConversationComputerActivityReader, _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";

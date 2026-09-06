@@ -8,7 +8,7 @@ This package realizes conversation-computer SandboxClaims and verifies the exact
 
 ## Public surface
 
-- `AgentSandboxClaimAdapter` creates or observes the deterministic claim and returns controller-owned sandbox identity and Service DNS evidence.
+- `AgentSandboxClaimAdapter` creates or observes the deterministic claim and returns controller-owned sandbox identity and Service DNS evidence. It also inspects, renews (moves `shutdownTime` later) and releases a claim only when its immutable lease labels still match.
 - `AgentSandboxPodBindingAdapter` verifies the TokenReviewed Pod UID, ServiceAccount, claim, and copied lease labels.
 
 ## See also

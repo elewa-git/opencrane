@@ -2,30 +2,43 @@ import { Readable } from "node:stream";
 
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 
+import type { ConversationComputerActivityReader } from "./conversation-computer-activity.types";
 import type { ConversationComputerCheckpointRestoreCommand, ConversationComputerCheckpointSandbox } from "./conversation-computer-checkpoint.types";
+import { _ConversationComputerIdleMilliseconds, _ConversationComputerRenewalDue, _ValidateConversationComputerIdlePolicy } from "./conversation-computer-lifecycle";
 import type { ConversationComputerLifecycleCandidate } from "./conversation-computer-lifecycle-scheduler.types";
 import type { ConversationComputerCheckpointCurrent, ConversationComputerCheckpointFenceDependencies, ConversationComputerLifecycleLogger, ConversationComputerLifecycleProjection } from "./conversation-computer-lifecycle-runtime.types";
-import type { ConversationComputerHistory } from "./conversation-computers";
+import type { ConversationComputerIdlePolicy, ConversationComputerSandboxClaims } from "./conversation-computer-lifecycle.types";
+import type { ConversationComputerHistory, CurrentConversationComputer } from "./conversation-computers";
 import type { ConversationComputerLifecycleScheduler } from "./conversation-computer-lifecycle-scheduler";
+import type { ConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review.types";
 
 /** Streams workspace checkpoints only to the current cluster-local sandbox Service. */
 export class HttpConversationComputerCheckpointSandbox implements ConversationComputerCheckpointSandbox
 {
-	/** Capture one bounded response through the lease-local bearer credential. */
-	public async capture(_computer: Parameters<ConversationComputerCheckpointSandbox["capture"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["capture"]>[1]): Promise<AsyncIterable<Uint8Array>>
+	/** Derives the per-lease review credential the Pod accepts; the lease id itself is only a name. */
+	public constructor(private readonly credentials: ConversationComputerReviewCredentialDeriver) {}
+
+	/** Capture one bounded response through the derived review credential. */
+	public async capture(computer: Parameters<ConversationComputerCheckpointSandbox["capture"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["capture"]>[1]): Promise<AsyncIterable<Uint8Array>>
 	{
-		const response = await fetch(_SandboxUrl(lease.serviceFQDN, "/v1/checkpoints/capture"), { headers: { authorization: `Bearer ${lease.id}` }, signal: AbortSignal.timeout(30_000) });
+		const response = await fetch(_SandboxUrl(lease.serviceFQDN, "/v1/checkpoints/capture"), { headers: { authorization: `Bearer ${this._Credential(computer, lease)}` }, signal: AbortSignal.timeout(30_000) });
 		if (!response.ok || response.body === null || response.headers.get("content-type") !== "application/vnd.opencrane.workspace-tar+gzip")
 			throw new Error(`Conversation computer checkpoint capture failed with ${response.status}`);
 		return _WebBytes(response.body);
 	}
 
-	/** Restore one verified stream through the lease-local bearer credential. */
-	public async restore(_computer: Parameters<ConversationComputerCheckpointSandbox["restore"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["restore"]>[1], bytes: AsyncIterable<Uint8Array>): Promise<void>
+	/** Restore one verified stream through the derived review credential. */
+	public async restore(computer: Parameters<ConversationComputerCheckpointSandbox["restore"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["restore"]>[1], bytes: AsyncIterable<Uint8Array>): Promise<void>
 	{
-		const response = await fetch(_SandboxUrl(lease.serviceFQDN, "/v1/checkpoints/restore"), { method: "POST", headers: { authorization: `Bearer ${lease.id}`, "content-type": "application/vnd.opencrane.workspace-tar+gzip" }, body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit, duplex: "half", signal: AbortSignal.timeout(30_000) } as RequestInit);
+		const response = await fetch(_SandboxUrl(lease.serviceFQDN, "/v1/checkpoints/restore"), { method: "POST", headers: { authorization: `Bearer ${this._Credential(computer, lease)}`, "content-type": "application/vnd.opencrane.workspace-tar+gzip" }, body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit, duplex: "half", signal: AbortSignal.timeout(30_000) } as RequestInit);
 		if (!response.ok)
 			throw new Error(`Conversation computer checkpoint restore failed with ${response.status}`);
+	}
+
+	/** Bind the credential to the exact computer, generation and lease the Pod was admitted with. */
+	private _Credential(computer: Parameters<ConversationComputerCheckpointSandbox["capture"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["capture"]>[1]): string
+	{
+		return this.credentials.derive({ siloId: computer.siloId, computerId: computer.id, generation: lease.generation, leaseId: lease.id });
 	}
 }
 
@@ -52,11 +65,20 @@ export class ConversationComputerCheckpointFenceAdapter
 	}
 }
 
-/** Filters rebuildable relational coordinates through canonical Kurrent lifecycle deadlines. */
+/**
+ * Filters rebuildable relational coordinates through canonical Kurrent lifecycle deadlines.
+ *
+ * A computer is due when its lease expired, its claim disappeared, its lease needs renewal, or its
+ * newest turn activity crossed the stale or retire boundary. The reconciler re-reads history and
+ * decides the actual transition.
+ */
 export class ConversationComputerLifecycleDueEnumerator
 {
-	/** Bind a silo projection to canonical history and the two idle deadlines. */
-	public constructor(private readonly projections: ConversationComputerLifecycleProjection, private readonly history: ConversationComputerHistory, private readonly siloId: string, private readonly staleAfterMilliseconds: number, private readonly retireAfterMilliseconds: number) {}
+	/** Bind a silo projection to canonical history, turn activity, claim evidence, and the idle policy. */
+	public constructor(private readonly projections: ConversationComputerLifecycleProjection, private readonly history: ConversationComputerHistory, private readonly activity: ConversationComputerActivityReader, private readonly claims: Pick<ConversationComputerSandboxClaims, "inspect">, private readonly siloId: string, private readonly namespace: string, private readonly policy: ConversationComputerIdlePolicy)
+	{
+		_ValidateConversationComputerIdlePolicy(policy);
+	}
 
 	/** Return due nonterminal computers only after validating their current history snapshots. */
 	public async enumerateDue(now: Date, limit: number): Promise<readonly ConversationComputerLifecycleCandidate[]>
@@ -68,12 +90,33 @@ export class ConversationComputerLifecycleDueEnumerator
 			const current = await this.history.load(coordinate);
 			if (current === null || current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.RecoveryRequired || current.computer.state === ConversationComputerStates.Retired)
 				continue;
-			const delay = current.computer.state === ConversationComputerStates.Warm ? this.staleAfterMilliseconds : this.retireAfterMilliseconds;
-			const deadline = new Date(Date.parse(current.computer.updatedAt) + delay);
-			if (deadline <= now)
+			const deadline = await this._deadline(current, now);
+			if (deadline !== null && deadline <= now)
 				candidates.push({ ...coordinate, state: current.computer.state, deadline });
 		}
 		return candidates;
+	}
+
+	/** Compute the earliest instant at which this computer needs a lifecycle decision. */
+	private async _deadline(current: CurrentConversationComputer, now: Date): Promise<Date | null>
+	{
+		const lease = current.lease;
+		if (lease === null || lease.state === ComputerLeaseStates.Lost)
+			return null;
+		if (lease.state === ComputerLeaseStates.Released)
+			return new Date(lease.releasedAt ?? current.computer.updatedAt);
+		const expiresAt = new Date(lease.expiresAt);
+		if (lease.state === ComputerLeaseStates.Claimed || expiresAt <= now)
+			return expiresAt;
+		const claim = await this.claims.inspect({ namespace: this.namespace, claimId: lease.sandboxClaimId, computerId: current.computer.id, leaseId: lease.id, generation: lease.generation });
+		if (claim === null || _ConversationComputerRenewalDue(lease, claim.shutdownTime, this.policy, now))
+			return now;
+		const activity = await this.activity.lastActivity({ siloId: current.computer.siloId, computerId: current.computer.id, generation: lease.generation, leaseId: lease.id });
+		if (activity?.busy)
+			return expiresAt;
+		const delay = current.computer.state === ConversationComputerStates.Warm ? this.policy.staleAfterMilliseconds : this.policy.retireAfterMilliseconds;
+		const idleDeadline = new Date(now.getTime() - _ConversationComputerIdleMilliseconds(current.computer, activity, now) + delay);
+		return idleDeadline < expiresAt ? idleDeadline : expiresAt;
 	}
 }
 

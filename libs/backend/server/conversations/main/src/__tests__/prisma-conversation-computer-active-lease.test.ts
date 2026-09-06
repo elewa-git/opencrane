@@ -46,6 +46,18 @@ describe("PrismaConversationComputerActivationProjectionRepository", function _S
 
 describe("PrismaConversationComputerLifecycleProjectionRepository", function _LifecycleSuite()
 {
+	it("extends only the exact projected lease and only to a later expiry", async function _ExtendsLease()
+	{
+		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = { conversationComputerActiveLease: { updateMany } } as unknown as Prisma.TransactionClient;
+		const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
+		await expect(repository.extendActiveLease({ ..._LEASE, expiresAt: "2099-09-05T14:00:00.000Z" })).resolves.toBe(true);
+		expect(updateMany).toHaveBeenCalledWith({ where: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1", leaseId: "lease-2", leaseGeneration: 2, expiresAt: { lt: new Date("2099-09-05T14:00:00.000Z") } }, data: { expiresAt: new Date("2099-09-05T14:00:00.000Z") } });
+		updateMany.mockResolvedValue({ count: 0 });
+		await expect(repository.extendActiveLease({ ..._LEASE, expiresAt: "2099-09-05T14:00:00.000Z" })).resolves.toBe(false);
+		await expect(repository.extendActiveLease({ ..._LEASE, expiresAt: "not a date" })).rejects.toThrow("valid expiry");
+	});
+
 	it("keeps the lease fenced when a contending approval became pending", async function _KeepsPendingApprovalLease()
 	{
 		const updateMany = vi.fn().mockResolvedValue({ count: 1 });

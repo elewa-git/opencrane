@@ -1,5 +1,5 @@
-import type * as k8s from "@kubernetes/client-node";
-import type { AgentSandboxClaimCommand, AgentSandboxClaimReleaseCommand, AgentSandboxClaimResult } from "./agent-sandbox-claim.types";
+import { PatchStrategy, setHeaderOptions, type CustomObjectsApi } from "@kubernetes/client-node";
+import type { AgentSandboxClaimCommand, AgentSandboxClaimReleaseCommand, AgentSandboxClaimRenewCommand, AgentSandboxClaimResult, AgentSandboxClaimStatus } from "./agent-sandbox-claim.types";
 
 const _GROUP = "extensions.agents.x-k8s.io";
 const _VERSION = "v1beta1";
@@ -28,7 +28,7 @@ interface SandboxClaimResource
  */
 export class AgentSandboxClaimAdapter
 {
-	public constructor(private readonly api: Pick<k8s.CustomObjectsApi, "createNamespacedCustomObject" | "deleteNamespacedCustomObject" | "getNamespacedCustomObject">) {}
+	public constructor(private readonly api: Pick<CustomObjectsApi, "createNamespacedCustomObject" | "deleteNamespacedCustomObject" | "getNamespacedCustomObject" | "patchNamespacedCustomObject">) {}
 
 	/** Converges the exact claim and rejects malformed input or a conflicting existing resource. */
 	public async claim(command: AgentSandboxClaimCommand): Promise<AgentSandboxClaimResult>
@@ -56,6 +56,36 @@ export class AgentSandboxClaimAdapter
 		}
 	}
 
+	/** Reads the controller's current view of the exact claim, or null once the claim is gone. */
+	public async inspect(command: AgentSandboxClaimReleaseCommand): Promise<AgentSandboxClaimStatus | null>
+	{
+		_ValidateReleaseCommand(command);
+		const existing = await this._read(command.namespace, command.claimId);
+		if (existing === null)
+			return null;
+		_AssertLeaseLabels(existing, command, "Agent Sandbox claim inspection does not match the computer lease");
+		const shutdownTime = existing.spec?.lifecycle?.shutdownTime;
+		return { claimId: command.claimId, sandboxId: _OptionalIdentifier(existing.status?.sandbox?.name), serviceFQDN: _OptionalServiceFqdn(existing.status?.sandbox?.serviceFQDN), shutdownTime: typeof shutdownTime === "string" ? shutdownTime : null };
+	}
+
+	/** Moves the claim's shutdown time later so the controller keeps the leased Pod alive. */
+	public async renew(command: AgentSandboxClaimRenewCommand): Promise<"renewed" | "absent">
+	{
+		_ValidateReleaseCommand(command);
+		if (Number.isNaN(Date.parse(command.expiresAt)))
+			throw new Error("Agent Sandbox claim renewal requires an ISO shutdown timestamp");
+		const existing = await this._read(command.namespace, command.claimId);
+		if (existing === null)
+			return "absent";
+		_AssertLeaseLabels(existing, command, "Agent Sandbox claim renewal does not match the computer lease");
+		const currentShutdown = existing.spec?.lifecycle?.shutdownTime;
+		if (typeof currentShutdown === "string" && Date.parse(currentShutdown) >= Date.parse(command.expiresAt))
+			throw new Error("Agent Sandbox claim renewal must move the shutdown time later");
+		// Custom resources accept only merge-patch bodies; the client default header is JSON-Patch.
+		await this.api.patchNamespacedCustomObject({ group: _GROUP, version: _VERSION, namespace: command.namespace, plural: _PLURAL, name: command.claimId, body: { spec: { lifecycle: { shutdownTime: command.expiresAt } } } }, setHeaderOptions("Content-Type", PatchStrategy.MergePatch));
+		return "renewed";
+	}
+
 	/** Deletes only the claim whose immutable labels still prove the terminal lease coordinates. */
 	public async release(command: AgentSandboxClaimReleaseCommand): Promise<"released" | "absent">
 	{
@@ -63,9 +93,7 @@ export class AgentSandboxClaimAdapter
 		const existing = await this._read(command.namespace, command.claimId);
 		if (existing === null)
 			return "absent";
-		const labels = existing.metadata?.labels;
-		if (existing.metadata?.name !== command.claimId || existing.metadata?.namespace !== command.namespace || labels?.["opencrane.ai/computer-id"] !== command.computerId || labels?.["opencrane.ai/computer-generation"] !== String(command.generation) || labels?.["opencrane.ai/computer-lease-id"] !== command.leaseId)
-			throw new Error("Agent Sandbox claim release does not match the terminal computer lease");
+		_AssertLeaseLabels(existing, command, "Agent Sandbox claim release does not match the terminal computer lease");
 		try
 		{
 			await this.api.deleteNamespacedCustomObject({ group: _GROUP, version: _VERSION, namespace: command.namespace, plural: _PLURAL, name: command.claimId, body: { propagationPolicy: "Foreground" } });
@@ -91,6 +119,14 @@ export class AgentSandboxClaimAdapter
 			throw error;
 		}
 	}
+}
+
+/** Rejects a claim whose immutable labels no longer prove the requested lease coordinates. */
+function _AssertLeaseLabels(existing: SandboxClaimResource, command: AgentSandboxClaimReleaseCommand, message: string): void
+{
+	const labels = existing.metadata?.labels;
+	if (existing.metadata?.name !== command.claimId || existing.metadata?.namespace !== command.namespace || labels?.["opencrane.ai/computer-id"] !== command.computerId || labels?.["opencrane.ai/computer-generation"] !== String(command.generation) || labels?.["opencrane.ai/computer-lease-id"] !== command.leaseId)
+		throw new Error(message);
 }
 
 /** Rejects broad or stale deletion coordinates before reading Kubernetes. */

@@ -151,6 +151,15 @@ export interface HistoryStore
 	 * @throws {Error} Propagates a KurrentDB connection failure.
 	 */
 	subscribePersistent(request: HistoryPersistentSubscriptionRequest): Promise<HistoryPersistentSubscription>;
+	/**
+	 * Moves every parked delivery of one consumer group back into its live queue.
+	 *
+	 * An operator calls this after repairing the cause of a parked activation. The group then
+	 * redelivers each parked event with the ordinary at-least-once contract.
+	 * @param request - Names the stream and pre-provisioned consumer group whose parked queue is replayed.
+	 * @throws {Error} Propagates a KurrentDB connection or permission failure.
+	 */
+	replayParked(request: HistoryPersistentSubscriptionRequest): Promise<void>;
 }
 
 /** Carries one active stream subscription and its explicit cleanup action. */

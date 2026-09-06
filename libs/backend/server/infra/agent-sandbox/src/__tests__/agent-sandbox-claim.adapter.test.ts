@@ -71,4 +71,31 @@ describe("AgentSandboxClaimAdapter", function _AgentSandboxClaimAdapterSuite()
 		await expect(adapter.release({ namespace: "silo-1-computers", claimId: "computer-1-g2", computerId: "computer-1", leaseId: "lease-2", generation: 2 })).rejects.toThrow(/does not match/);
 		expect(deleteNamespacedCustomObject).not.toHaveBeenCalled();
 	});
+
+	it("renews only a matching claim through a merge patch that moves the shutdown later", async function _RenewClaim()
+	{
+		const getNamespacedCustomObject = vi.fn().mockResolvedValue({ metadata: { name: "computer-1-g2", namespace: "silo-1-computers", labels: { "opencrane.ai/computer-id": "computer-1", "opencrane.ai/computer-generation": "2", "opencrane.ai/computer-lease-id": "lease-2" } }, spec: { lifecycle: { shutdownPolicy: "DeleteForeground", shutdownTime: "2026-09-05T12:00:00.000Z" } } });
+		const patchNamespacedCustomObject = vi.fn().mockResolvedValue({});
+		const adapter = new AgentSandboxClaimAdapter({ getNamespacedCustomObject, createNamespacedCustomObject: vi.fn(), patchNamespacedCustomObject } as never);
+		const command = { namespace: "silo-1-computers", claimId: "computer-1-g2", computerId: "computer-1", leaseId: "lease-2", generation: 2 };
+
+		await expect(adapter.renew({ ...command, expiresAt: "2026-09-05T13:00:00.000Z" })).resolves.toBe("renewed");
+		expect(patchNamespacedCustomObject).toHaveBeenCalledWith(expect.objectContaining({ name: "computer-1-g2", plural: "sandboxclaims", body: { spec: { lifecycle: { shutdownTime: "2026-09-05T13:00:00.000Z" } } } }), expect.anything());
+		await expect(adapter.renew({ ...command, expiresAt: "2026-09-05T11:00:00.000Z" })).rejects.toThrow(/later/);
+		expect(patchNamespacedCustomObject).toHaveBeenCalledOnce();
+		getNamespacedCustomObject.mockRejectedValue({ code: 404 });
+		await expect(adapter.renew({ ...command, expiresAt: "2026-09-05T13:00:00.000Z" })).resolves.toBe("absent");
+	});
+
+	it("inspects the controller view of a matching claim and reports a deleted claim as null", async function _InspectClaim()
+	{
+		const getNamespacedCustomObject = vi.fn().mockResolvedValue({ metadata: { name: "computer-1-g2", namespace: "silo-1-computers", labels: { "opencrane.ai/computer-id": "computer-1", "opencrane.ai/computer-generation": "2", "opencrane.ai/computer-lease-id": "lease-2" } }, spec: { lifecycle: { shutdownTime: "2026-09-05T12:00:00.000Z" } }, status: { sandbox: { name: "sandbox-2", serviceFQDN: "sandbox-2.silo-1-computers.svc.cluster.local" } } });
+		const adapter = new AgentSandboxClaimAdapter({ getNamespacedCustomObject, createNamespacedCustomObject: vi.fn() } as never);
+		const command = { namespace: "silo-1-computers", claimId: "computer-1-g2", computerId: "computer-1", leaseId: "lease-2", generation: 2 };
+
+		await expect(adapter.inspect(command)).resolves.toEqual({ claimId: "computer-1-g2", sandboxId: "sandbox-2", serviceFQDN: "sandbox-2.silo-1-computers.svc.cluster.local", shutdownTime: "2026-09-05T12:00:00.000Z" });
+		await expect(adapter.inspect({ ...command, leaseId: "lease-9" })).rejects.toThrow(/does not match/);
+		getNamespacedCustomObject.mockRejectedValue({ code: 404 });
+		await expect(adapter.inspect(command)).resolves.toBeNull();
+	});
 });

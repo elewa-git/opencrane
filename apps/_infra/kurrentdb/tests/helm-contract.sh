@@ -60,6 +60,8 @@ grep -Fq 'activation_group="conversation-computer-activation"' <<<"$rendered"
 grep -Fq 'subscription_url="$endpoint/subscriptions/$activation_stream/$activation_group"' <<<"$rendered"
 grep -Fq -- '--user "admin:$admin_password" --request PUT' <<<"$rendered"
 grep -Fq 'maxSubscriberCount: 1' <<<"$rendered"
+grep -Fq 'messageTimeoutMilliseconds: 60000' <<<"$rendered"
+grep -Fq 'maxRetryCount: 60' <<<"$rendered"
 if grep -F -- '--user "$history_username:$history_password" --request PUT' <<<"$rendered"; then
   echo "HistoryStore service credentials gained persistent-subscription administration" >&2
   exit 1
