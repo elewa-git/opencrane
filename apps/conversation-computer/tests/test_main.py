@@ -81,13 +81,23 @@ class ConfigurationTests(unittest.TestCase):
         """Send only compiled messages to LiteLLM and safe assistant text back to the server."""
         exchange.side_effect = [{"choices": [{"message": {"content": "answer"}}]}, {"outcome": "accepted"}]
         config = {"internalEndpoint": "http://server:8081", "tokenPath": "/token"}
-        bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"messages": [{"role": "user", "content": "hi"}]}, "modelCredential": {"endpoint": "http://litellm:4000", "key": "sk-attempt", "model": "silo-default"}}
+        bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"messages": [{"role": "user", "content": "hi"}], "model": {"maxOutputTokens": 512}, "budget": {"maxModelTurns": 1, "maxCompletionTokens": 256}}, "modelCredential": {"endpoint": "http://litellm:4000", "key": "sk-attempt", "model": "silo-default"}}
 
         _execute_turn(config, bootstrap)
 
-        self.assertEqual(exchange.call_args_list[0].args, ("http://litellm:4000/v1/chat/completions", "sk-attempt", {"model": "silo-default", "messages": [{"role": "user", "content": "hi"}]}))
+        self.assertEqual(exchange.call_args_list[0].args, ("http://litellm:4000/v1/chat/completions", "sk-attempt", {"model": "silo-default", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 256}))
         self.assertEqual(exchange.call_args_list[1].args[0:2], ("http://server:8081/api/internal/conversation-computer/output", "projected-token"))
         self.assertEqual(exchange.call_args_list[1].args[2]["text"], "answer")
+
+    @patch("src.main._json_request")
+    def test_rejects_a_turn_before_model_request_when_budget_has_no_model_call(self, exchange: MagicMock) -> None:
+        """Refuse a missing model-turn allowance before sending credentials or prompt data."""
+        bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"messages": [], "model": {"maxOutputTokens": 128}, "budget": {"maxModelTurns": 0, "maxCompletionTokens": 256}}, "modelCredential": {"endpoint": "http://litellm:4000", "key": "sk-attempt", "model": "silo-default"}}
+
+        with self.assertRaisesRegex(RuntimeError, "does not admit a model turn"):
+            _execute_turn({"internalEndpoint": "http://server", "tokenPath": "/token"}, bootstrap)
+
+        exchange.assert_not_called()
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request", return_value={"outcome": "restored"})
@@ -124,7 +134,7 @@ class ConfigurationTests(unittest.TestCase):
         for thread in threads:
             thread.start()
         try:
-            bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"messages": [{"role": "user", "content": "hi"}]}, "modelCredential": {"endpoint": f"http://127.0.0.1:{model.server_port}", "key": "sk-attempt", "model": "silo-default"}}
+            bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"messages": [{"role": "user", "content": "hi"}], "model": {"maxOutputTokens": None}, "budget": {"maxModelTurns": 1, "maxCompletionTokens": 256}}, "modelCredential": {"endpoint": f"http://127.0.0.1:{model.server_port}", "key": "sk-attempt", "model": "silo-default"}}
             _execute_turn({"internalEndpoint": f"http://127.0.0.1:{server.server_port}", "tokenPath": "/token"}, bootstrap)
         finally:
             model.shutdown()

@@ -1,19 +1,19 @@
 import { createHash } from "node:crypto";
 import { AgentRevisionState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
-import type { CompiledMessage, MessageEntry } from "@opencrane/contracts";
+import type { MessageEntry } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryReader } from "../conversation-history-reader";
 import type { ConversationPrivatePayloadCipher } from "../conversation-private-payload.types";
-import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerTurnCandidate, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { PrismaConversationProductAuthorizationRepository } from "./conversation-product-authorization";
 
-/** Resolves and decrypts a pending turn against the current published revision before Kurrent freezes it. */
+/** Resolves a pending turn and delegates its durable run admission before Kurrent freezes it. */
 export class PrismaConversationComputerTurnRepository implements ConversationComputerTurnProjectionRepository, ConversationComputerPendingTurnCompiler, ConversationComputerOutputPayloadStore
 {
 	private readonly histories: ConversationHistoryReader;
-	public constructor(private readonly prisma: Prisma.TransactionClient, history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number)
+	public constructor(private readonly prisma: Prisma.TransactionClient, history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number, private readonly runAdmission: ConversationComputerRunAdmissionPort)
 	{
 		this.histories = new ConversationHistoryReader(history);
 	}
@@ -34,6 +34,9 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 		const pending = messages.slice(lastAgent + 1).findLast(entry => entry.author.kind === "human" && (entry.addressedAgentIdentityId === null || entry.addressedAgentIdentityId === command.agentIdentityId));
 		if (pending === undefined)
 			return null;
+		if (pending.author.kind !== "human")
+			throw new Error("Conversation computer turn requires a pending human entry");
+		const pendingAuthor = pending.author;
 		const expectedRevision = BigInt(history.entries.at(-1)?.position ?? "0");
 		const loaded = await (async () =>
 		{
@@ -42,36 +45,23 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 				throw new Error("Conversation computer turn requires an active agent revision");
 			const subjects = conversation.participants.map(participant => participant.userId);
 			const memberships = await this.prisma.orgMembership.findMany({ where: { clusterTenant: command.siloId, subject: { in: subjects }, status: OrgMemberStatus.Active }, select: { subject: true } });
-			const principals = await this.prisma.principal.findMany({ where: { siloId: command.siloId, subject: { in: memberships.map(membership => membership.subject) } }, select: { id: true, subject: true } });
+			const principal = await this.prisma.principal.findFirst({ where: { id: pendingAuthor.principalId, siloId: command.siloId, issuer: pendingAuthor.issuer, subject: pendingAuthor.participantId }, select: { id: true, issuer: true, subject: true } });
+			const isActiveMember = memberships.some(membership => membership.subject === pendingAuthor.participantId);
 			const authorization = new PrismaConversationProductAuthorizationRepository(this.prisma);
-			let admitted = false;
-			for (const principal of principals)
-				admitted ||= await authorization.canAccess({ siloId: command.siloId, principalId: principal.id, subjectId: principal.subject }, command.conversationId, ProductAuthorizationActions.Use);
-			if (!admitted)
+			const admitted = principal !== null && isActiveMember && await authorization.canAccess({ siloId: command.siloId, principalId: principal.id, subjectId: principal.subject, externalIssuer: principal.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, command.conversationId, ProductAuthorizationActions.Use);
+			if (!admitted || principal === null)
 				throw new Error("Conversation computer turn requires one currently authorized active participant");
 			const revision = conversation.service.activeRevision;
 			if (revision.state !== AgentRevisionState.Published || revision.publishedAt === null)
 				throw new Error("Conversation computer turn requires the pinned revision to remain published");
-			const persona = revision.personaRevisionId === null ? null : await this.prisma.personaRevision.findUnique({ where: { id: revision.personaRevisionId }, select: { compiledInstructions: true } });
-			const refs = messages.flatMap(entry => entry.blocks.flatMap(block => block.kind === "text" ? [block.payloadRef] : []));
-			const payloads = await this.prisma.conversationPrivatePayload.findMany({ where: { siloId: command.siloId, conversationId: command.conversationId, id: { in: refs } } });
-			return { service: conversation.service, revision, instructions: persona?.compiledInstructions ?? "", payloads };
+			return { principal, service: conversation.service, revision };
 		})();
-		const expectedAuthors = new Map<string, string>();
-		for (const entry of messages)
-			for (const block of entry.blocks)
-				if (block.kind === "text")
-					expectedAuthors.set(block.payloadRef, _AuthorSubject(entry));
-		if (loaded.payloads.length !== expectedAuthors.size || loaded.payloads.some(row => expectedAuthors.get(row.id) !== row.authorSubject || row.siloId !== command.siloId || row.conversationId !== command.conversationId))
-			throw new Error("Conversation computer turn requires every private payload exactly once with its original author binding");
-		const text = new Map(loaded.payloads.map(row => [row.id, this.cipher.decrypt({ keyId: row.keyId, nonce: row.nonce, authTag: row.authTag, ciphertext: row.ciphertext, ciphertextDigest: row.ciphertextDigest }, { siloId: row.siloId, conversationId: row.conversationId, payloadRef: row.id, authorSubject: row.authorSubject })]));
-		const compiledMessages: CompiledMessage[] = messages.map(entry => _CompiledMessage(entry, text));
 		const runId = _Uuid("turn", pending.id);
-		const budget = loaded.revision.budget as { readonly maxTokens?: number; readonly maxDurationMs?: number };
-		const capabilities = _GeneratedOutputCapabilities(loaded.revision.modelDefinition.generatedOutputCapabilities);
-		const partial = { promptCompilerVersion: loaded.revision.promptPolicyVersion, runId, attempt: 1, instructions: loaded.instructions, messages: compiledMessages, tools: [], model: { modelAlias: loaded.revision.modelDefinition.publicModelName, maxOutputTokens: null, generatedOutputCapabilities: capabilities }, budget: { maxTotalTokens: budget.maxTokens ?? null, maxCostUsdMicros: this.maximumTurnCostUsdMicros, maxToolInvocations: 0, wallClockDeadlineEpochMs: null } };
-		const compiledInput = { ...partial, digest: `sha256:${createHash("sha256").update(JSON.stringify(partial)).digest("hex")}` };
-		return { binding: { siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, leaseGeneration: command.generation, agentIdentityId: command.agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: loaded.revision.modelDefinition.publicModelName, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: 300, sandboxClaimId: command.sandboxClaimId };
+		const admissionCommand = { runId, siloId: command.siloId, conversationId: command.conversationId, agentServiceId: loaded.service.id, agentRevisionId: loaded.revision.id, agentIdentityId: command.agentIdentityId, profileRevisionId: command.profileRevisionId, requesterPrincipalId: loaded.principal.id, requesterIssuer: loaded.principal.issuer, requesterSubjectId: loaded.principal.subject, requesterAuthenticatedAt: pendingAuthor.authenticatedAt, requestIdempotencyKey: pending.id, messageInput: { mode: "pre_persisted_history" as const, messageId: pending.id, historyRevision: expectedRevision.toString(), orderedMessageIds: messages.map(message => message.id) }, computerId: command.computerId, leaseId: command.leaseId, leaseGeneration: command.generation, sandboxClaimId: command.sandboxClaimId };
+		const compiledInput = await this.runAdmission.admit(admissionCommand);
+		if (compiledInput.runId !== runId || compiledInput.attempt !== 1)
+			throw new Error("Conversation computer run admission returned input for another run attempt");
+		return { binding: { siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, leaseGeneration: command.generation, agentIdentityId: command.agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: 300, sandboxClaimId: command.sandboxClaimId };
 	}
 
 	/** Encrypt and idempotently persist assistant text before history references it. */
@@ -95,7 +85,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 /** Opens an isolated Prisma transaction for each conversation-computer persistence operation. */
 export class PrismaConversationComputerTurnUnitOfWork implements ConversationComputerTurnProjectionRepository, ConversationComputerPendingTurnCompiler, ConversationComputerOutputPayloadStore
 {
-	public constructor(private readonly prisma: PrismaClient, private readonly history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number) {}
+	public constructor(private readonly prisma: PrismaClient, private readonly history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number, private readonly runAdmission: ConversationComputerRunAdmissionPort) {}
 
 	public resolve(siloId: string, computerId: string)
 	{
@@ -117,42 +107,12 @@ export class PrismaConversationComputerTurnUnitOfWork implements ConversationCom
 		const history = this.history;
 		const cipher = this.cipher;
 		const maximumTurnCostUsdMicros = this.maximumTurnCostUsdMicros;
+		const runAdmission = this.runAdmission;
 		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
 		{
-			return await operation(new PrismaConversationComputerTurnRepository(transaction, history, cipher, maximumTurnCostUsdMicros));
+			return await operation(new PrismaConversationComputerTurnRepository(transaction, history, cipher, maximumTurnCostUsdMicros, runAdmission));
 		}, { isolationLevel });
 	}
-}
-
-function _AuthorSubject(entry: MessageEntry): string
-{
-	if (entry.author.kind === "agent")
-		return entry.author.agentIdentityId;
-	if (entry.author.kind === "human")
-		return entry.author.participantId;
-	return "";
-}
-
-function _GeneratedOutputCapabilities(values: readonly string[]): ("image_png" | "code_execution_files")[]
-{
-	if (!values.every(value => value === "image_png" || value === "code_execution_files"))
-		throw new Error("Conversation computer turn received an unsupported generated-output capability");
-	return values as ("image_png" | "code_execution_files")[];
-}
-
-function _CompiledMessage(entry: MessageEntry, text: ReadonlyMap<string, string>): CompiledMessage
-{
-	const role = entry.author.kind === "agent" ? "assistant" : "user";
-	const content = entry.blocks.flatMap(function _Text(block)
-	{
-		if (block.kind !== "text")
-			return [];
-		const value = text.get(block.payloadRef);
-		if (value === undefined)
-			throw new Error("Conversation computer turn omitted a referenced private payload");
-		return [value];
-	}).join("\n");
-	return { role, content };
 }
 
 function _Uuid(domain: string, coordinate: string): string

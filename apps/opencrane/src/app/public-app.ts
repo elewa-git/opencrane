@@ -43,10 +43,6 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * Authentication precedes every product route, while the OIDC router remains public so it can
  * establish the browser session that the product routes require.
  * @param prisma - The main product database client.
- * @param runAdmission - Managed run admission port shared with scheduler execution.
- * @param personalRunAdmission - Browser-session personal run admission port.
- * @param runCancellation - Shared attempt-fenced cancellation authority.
- * @param retryInputCompiler - Compiles the fresh snapshot required for participant run retries.
  * @param authentication - One browser-session composition shared with the internal resolver.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
  * @param health - Cached public service report reader with no topology or error details.

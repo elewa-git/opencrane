@@ -1356,6 +1356,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a signed-in owner's fifty most recent personal runs
+         * @description The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.
+         */
+        get: operations["listMyRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one signed-in owner's personal run status
+         * @description The server derives the owner and silo from session and host. It never accepts owner coordinates from the request.
+         */
+        get: operations["getMyRunStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -2066,19 +2106,13 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "completed" | "failed";
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
             acceptedAt: string;
             /** Format: date-time */
             finishedAt: string | null;
-        };
-        SelfRunCancellation: {
-            runId: string;
-            attempt: number;
-            /** @enum {string} */
-            state: "cancelling" | "cancelled";
         };
         AgentService: {
             id: string;
@@ -7443,6 +7477,105 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listMyRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent canonical lifecycle views for the owned runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runs: components["schemas"]["SelfRunStatus"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMyRunStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current canonical lifecycle view for the owned run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunStatus"];
+                };
+            };
+            /** @description The run identifier is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };

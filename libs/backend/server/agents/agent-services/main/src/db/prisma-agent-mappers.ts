@@ -62,8 +62,6 @@ export function _runTrigger(value: string): AgentRunTrigger
 	switch (value)
 	{
 		case "Interactive": return "interactive";
-		case "Schedule": return "schedule";
-		case "ManagedInvocation": return "managed_invocation";
 		default: throw new Error(`unknown AgentRun trigger: ${value}`);
 	}
 }
@@ -78,10 +76,8 @@ export function _runState(value: string): AgentRunState
 		case "Assigned": return "assigned";
 		case "Running": return "running";
 		case "WaitingForInput": return "waiting_for_input";
-		case "Cancelling": return "cancelling";
 		case "Completed": return "completed";
 		case "Failed": return "failed";
-		case "Cancelled": return "cancelled";
 		default: throw new Error(`unknown AgentRun state: ${value}`);
 	}
 }
@@ -94,7 +90,6 @@ export function _runTerminalReason(value: string | null): AgentRunTerminalReason
 	switch (value)
 	{
 		case "Success": return "success";
-		case "UserCancelled": return "user_cancelled";
 		case "PolicyDenied": return "policy_denied";
 		case "BudgetExhausted": return "budget_exhausted";
 		case "RuntimeFailure": return "runtime_failure";
@@ -159,7 +154,6 @@ export function _mapRun(row: AgentRunRow): AgentRun
 		trigger: _runTrigger(row.trigger),
 		executionSubject: parsedSubject.data,
 		requestIdempotencyKey: row.requestIdempotencyKey,
-		lineage: { rootRunId: row.rootRunId, parentRunId: row.parentRunId },
 		attempt: row.attempt,
 		state: _runState(row.state),
 		inputSnapshotDigest: row.inputSnapshotDigest,

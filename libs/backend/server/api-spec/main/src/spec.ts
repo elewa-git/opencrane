@@ -18,7 +18,7 @@ import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas";
 import { _McpIamOpenapiSchemas } from "./mcp-iam-schemas";
 import { _MetaOpenapiPaths } from "./meta-openapi-paths";
 import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas";
-import { _SelfRunCancellationSchema, _SelfRunStatusSchema } from "./run-schemas";
+import { _SelfRunStatusSchema } from "./run-schemas";
 
 // ---------------------------------------------------------------------------
 // Shared schema references
@@ -274,7 +274,6 @@ export const spec = {
       ThirdPartySource: ThirdPartySourceSchema,
       TokenUsage: TokenUsageSchema,
       SelfRunStatus: _SelfRunStatusSchema,
-      SelfRunCancellation: _SelfRunCancellationSchema,
       AgentService: {
         type: "object",
         required: ["id", "siloId", "kind", "name", "state", "activeRevisionId", "workloadProfile", "createdAt", "updatedAt"],

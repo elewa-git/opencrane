@@ -5,14 +5,6 @@ import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/wor
 
 import type { OpenCraneProcessConfig } from "../config.types";
 
-vi.mock("@opencrane/backend/server/agents/scheduling", function _Scheduling()
-{
-	return {
-		_CreateScheduleTicker: function _CreateTicker() { return { runOnce: vi.fn() }; },
-		PrismaScheduleTickerUnitOfWork: class PrismaScheduleTickerUnitOfWork {},
-	};
-});
-
 vi.mock("../log", function _Log()
 {
 	return { _log: { error: vi.fn() } };
@@ -30,7 +22,7 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 		const recoverExpiredInvocation = vi.fn().mockResolvedValue(false);
 		const workers = await _StartBackgroundWorkers(
 			{} as PrismaClient,
-			{ schedulerEnabled: false, schedulerIntervalMilliseconds: 60_000 } as OpenCraneProcessConfig,
+			{} as OpenCraneProcessConfig,
 			{ recoverExpiredInvocation } as never,
 			{ close, startWorkers } as IWorkflowWorkerRuntime,
 			{ reconcileNext: vi.fn().mockResolvedValue(false) } as never,

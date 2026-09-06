@@ -17,7 +17,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
-  while the web workspace reads and posts through the same typed conversation API.
+  while the authenticated web workspace reads and posts through the same typed backend conversation
+  API and can receive the resulting assistant output.
+
+- **Personal conversations can admit and execute one fenced model turn from verified durable
+  evidence.** Admission binds the exact authenticated caller, membership, conversation history,
+  agent identity revision, capability grant, sandbox lease generation, and compiled input snapshot;
+  completion can resume after a worker restart without duplicating model output.
 
 - **People can inspect and control an active conversation computer from the conversation workspace.**
   Authorized participants can review files and diffs, run allowlisted commands, use a private
@@ -43,7 +49,17 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   proof keys, compatibility routes, socket fallback, and migration scaffolding are absent from the
   fresh-install-only 0.11 baseline.
 
+- **The API no longer advertises managed-agent execution controls that have no production execution
+  authority.** Managed scheduling and run-now, retry, and cancellation surfaces are absent until a
+  future phase provides their required lease and identity evidence; CodeProject, CodeService, Git,
+  isolated builds, and published PreviewApps likewise remain outside 0.11.0.
+
 ### Security
+
+- **Personal conversation credentials remain scoped to the admitted turn and recover safely across
+  partial failure.** LiteLLM keys are bounded by the immutable turn budget, checked against the exact
+  active lease after issuance, revoked when custody cannot be recorded, and recoverable without
+  leaving an untracked usable credential.
 
 - **Operators cannot begin a `testv5` installation with an insecure or ambiguous history and sandbox
   foundation.** The installer rejects missing immutable KurrentDB credentials, unhashed workload

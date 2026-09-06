@@ -93,7 +93,6 @@ the same vocabulary.
   models, backend finalization, and frontend projections.
 - Transcript enums (`ThreadState`, `MessageRole`, `MessageState`, `MessageProvenanceSource`, and
   `MessageContentBlockType`) in `@opencrane/models/agents`.
-- `AgentScheduleOverlapPolicy`, duplicated between schedule ticks and agent-service revision
   authoring.
 
 ## Priority 2: cohesive local policy vocabularies

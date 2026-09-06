@@ -32,6 +32,13 @@ export interface AttemptLiteLlmKeyRevocation
 	key: string;
 }
 
+/** Requests cleanup by the deterministic attempt alias when the raw key was not retained. */
+export interface AttemptLiteLlmKeyAliasRevocation
+{
+	/** Names the exact attempt key recorded before provider issuance. */
+	keyAlias: string;
+}
+
 /**
  * A freshly minted attempt key, plus the bindings it was issued under.
  *

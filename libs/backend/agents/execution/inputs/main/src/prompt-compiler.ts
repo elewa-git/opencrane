@@ -59,7 +59,8 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
  */
 export function __AppendCompiledTool(input: CompiledRunInput, tool: CompiledToolDefinition): CompiledRunInput
 {
-	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.name === tool.name; })) throw new Error(`compiled input already contains tool ${tool.name} or revision ${tool.toolRevisionId}`);
+	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.name === tool.name; }))
+		throw new Error(`compiled input already contains tool ${tool.name} or revision ${tool.toolRevisionId}`);
 	const unsealed = { ...input, tools: _orderTools([...input.tools, tool]) };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
@@ -114,8 +115,10 @@ function _orderTools(tools: readonly CompiledToolDefinition[]): readonly Compile
 /** Compare two canonical text identifiers without locale-dependent ordering. */
 function _compareText(left: string, right: string): number
 {
-	if (left < right) return -1;
-	if (left > right) return 1;
+	if (left < right)
+		return -1;
+	if (left > right)
+		return 1;
 	return 0;
 }
 
@@ -123,9 +126,12 @@ function _compareText(left: string, right: string): number
 function _assembleInstructions(personaInstructions: string, artifactSummaries: readonly string[], skillSummaries: readonly string[]): string
 {
 	const sections: string[] = [];
-	if (personaInstructions.trim().length > 0) sections.push(personaInstructions.trim());
-	if (artifactSummaries.length > 0) sections.push(`Artifacts available for this run:\n${_bullets(artifactSummaries)}`);
-	if (skillSummaries.length > 0) sections.push(`Skills available for this run:\n${_bullets(skillSummaries)}`);
+	if (personaInstructions.trim().length > 0)
+		sections.push(personaInstructions.trim());
+	if (artifactSummaries.length > 0)
+		sections.push(`Artifacts available for this run:\n${_bullets(artifactSummaries)}`);
+	if (skillSummaries.length > 0)
+		sections.push(`Skills available for this run:\n${_bullets(skillSummaries)}`);
 	return sections.join("\n\n");
 }
 
@@ -140,7 +146,8 @@ function _resolveBudget(budgetPolicy: JsonValue): CompiledBudget
 {
 	const policy: { readonly [key: string]: JsonValue } = budgetPolicy && typeof budgetPolicy === "object" && !Array.isArray(budgetPolicy) ? budgetPolicy as { readonly [key: string]: JsonValue } : {};
 	return {
-		maxTotalTokens: _optionalCount(policy["maxTotalTokens"]),
+		maxModelTurns: _optionalCount(policy["maxModelTurns"]),
+		maxCompletionTokens: _optionalCount(policy["maxCompletionTokens"]),
 		maxCostUsdMicros: _optionalCount(policy["maxCostUsdMicros"]),
 		maxToolInvocations: _optionalCount(policy["maxToolInvocations"]),
 		wallClockDeadlineEpochMs: _optionalCount(policy["wallClockDeadlineEpochMs"]),

@@ -6,10 +6,14 @@ type ToolInvocationStateHandler = (input: ToolInvocationLifecycleInput) => ToolI
 /** Interpret events before any provider adapter is eligible to run. */
 function _preparing(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
-	if (input.event === ToolInvocationLifecycleEvents.Prepared) return ToolInvocationLifecycleActions.MarkReady;
-	if (input.event === ToolInvocationLifecycleEvents.PreparedForApproval) return ToolInvocationLifecycleActions.AwaitApproval;
-	if (input.event === ToolInvocationLifecycleEvents.Cancelled) return ToolInvocationLifecycleActions.Fail;
-	if (input.event !== ToolInvocationLifecycleEvents.PreparationFailed) return ToolInvocationLifecycleActions.Reject;
+	if (input.event === ToolInvocationLifecycleEvents.Prepared)
+		return ToolInvocationLifecycleActions.MarkReady;
+	if (input.event === ToolInvocationLifecycleEvents.PreparedForApproval)
+		return ToolInvocationLifecycleActions.AwaitApproval;
+	if (input.event === ToolInvocationLifecycleEvents.Cancelled)
+		return ToolInvocationLifecycleActions.Fail;
+	if (input.event !== ToolInvocationLifecycleEvents.PreparationFailed)
+		return ToolInvocationLifecycleActions.Reject;
 	return input.preparationAttempt + 1 < input.preparationAttemptLimit && input.withinPreparationDeadline
 		? ToolInvocationLifecycleActions.RetryPreparation
 		: ToolInvocationLifecycleActions.Fail;
@@ -18,15 +22,18 @@ function _preparing(input: ToolInvocationLifecycleInput): ToolInvocationLifecycl
 /** Interpret authenticated decisions while provider dispatch remains impossible. */
 function _awaitingApproval(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
-	if (input.event === ToolInvocationLifecycleEvents.Approved) return ToolInvocationLifecycleActions.Approve;
-	if (input.event === ToolInvocationLifecycleEvents.ApprovalRejected || input.event === ToolInvocationLifecycleEvents.Cancelled) return ToolInvocationLifecycleActions.Fail;
+	if (input.event === ToolInvocationLifecycleEvents.Approved)
+		return ToolInvocationLifecycleActions.Approve;
+	if (input.event === ToolInvocationLifecycleEvents.ApprovalRejected || input.event === ToolInvocationLifecycleEvents.Cancelled)
+		return ToolInvocationLifecycleActions.Fail;
 	return ToolInvocationLifecycleActions.Reject;
 }
 
 /** Interpret events for prepared work awaiting a provider claim. */
 function _ready(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
-	if (input.event === ToolInvocationLifecycleEvents.DispatchClaimed) return ToolInvocationLifecycleActions.ClaimDispatch;
+	if (input.event === ToolInvocationLifecycleEvents.DispatchClaimed)
+		return ToolInvocationLifecycleActions.ClaimDispatch;
 	if (input.event === ToolInvocationLifecycleEvents.Cancelled || input.event === ToolInvocationLifecycleEvents.UnusedBeforeDispatch)
 		return ToolInvocationLifecycleActions.Fail;
 	return ToolInvocationLifecycleActions.Reject;
@@ -35,37 +42,50 @@ function _ready(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleAct
 /** Select the sole safe response after a dispatch outcome or an expired dispatch claim. */
 function _claimed(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
-	if (input.event === ToolInvocationLifecycleEvents.DispatchSucceeded) return ToolInvocationLifecycleActions.Succeed;
-	if (input.event === ToolInvocationLifecycleEvents.DispatchRejected) return ToolInvocationLifecycleActions.Fail;
+	if (input.event === ToolInvocationLifecycleEvents.DispatchSucceeded)
+		return ToolInvocationLifecycleActions.Succeed;
+	if (input.event === ToolInvocationLifecycleEvents.DispatchRejected)
+		return ToolInvocationLifecycleActions.Fail;
 	if (input.event === ToolInvocationLifecycleEvents.DispatchProvenNotStarted)
 	{
 		return input.preparationAttempt + 1 < input.preparationAttemptLimit && input.withinPreparationDeadline
 			? ToolInvocationLifecycleActions.Redispatch
 			: ToolInvocationLifecycleActions.Fail;
 	}
-	if (input.event !== ToolInvocationLifecycleEvents.DispatchAmbiguous && input.event !== ToolInvocationLifecycleEvents.DispatchClaimExpired) return ToolInvocationLifecycleActions.Reject;
-	if (input.recoveryMode === ExternalActionRecoveryModes.ProviderIdempotency) return ToolInvocationLifecycleActions.RedispatchIdempotently;
-	if (input.recoveryMode === ExternalActionRecoveryModes.Reconciliation) return ToolInvocationLifecycleActions.BeginReconciliation;
+	if (input.event !== ToolInvocationLifecycleEvents.DispatchAmbiguous && input.event !== ToolInvocationLifecycleEvents.DispatchClaimExpired)
+		return ToolInvocationLifecycleActions.Reject;
+	if (input.recoveryMode === ExternalActionRecoveryModes.ProviderIdempotency)
+		return ToolInvocationLifecycleActions.RedispatchIdempotently;
+	if (input.recoveryMode === ExternalActionRecoveryModes.Reconciliation)
+		return ToolInvocationLifecycleActions.BeginReconciliation;
 	return ToolInvocationLifecycleActions.RequireManualRecovery;
 }
 
 /** Interpret provider-readback outcomes without granting a provider dispatch. */
 function _reconciling(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimed && input.claimKind === null) return ToolInvocationLifecycleActions.ClaimReconciliation;
-	if (input.event === ToolInvocationLifecycleEvents.Cancelled && input.claimKind === null) return ToolInvocationLifecycleActions.Fail;
-	if (input.claimKind !== ExternalActionClaimKinds.Reconcile) return ToolInvocationLifecycleActions.Reject;
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileSucceeded) return ToolInvocationLifecycleActions.Succeed;
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileFailed) return ToolInvocationLifecycleActions.Fail;
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileAbsent) return ToolInvocationLifecycleActions.Redispatch;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimed && input.claimKind === null)
+		return ToolInvocationLifecycleActions.ClaimReconciliation;
+	if (input.event === ToolInvocationLifecycleEvents.Cancelled && input.claimKind === null)
+		return ToolInvocationLifecycleActions.Fail;
+	if (input.claimKind !== ExternalActionClaimKinds.Reconcile)
+		return ToolInvocationLifecycleActions.Reject;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileSucceeded)
+		return ToolInvocationLifecycleActions.Succeed;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileFailed)
+		return ToolInvocationLifecycleActions.Fail;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileAbsent)
+		return ToolInvocationLifecycleActions.Redispatch;
 	if (input.event === ToolInvocationLifecycleEvents.ReconcileProvenNotStarted)
 	{
 		return input.preparationAttempt + 1 < input.preparationAttemptLimit && input.withinPreparationDeadline
 			? ToolInvocationLifecycleActions.RetryReconciliation
 			: ToolInvocationLifecycleActions.RequireManualRecovery;
 	}
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimExpired) return ToolInvocationLifecycleActions.RetryReconciliation;
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileInconclusive) return ToolInvocationLifecycleActions.RequireManualRecovery;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimExpired)
+		return ToolInvocationLifecycleActions.RetryReconciliation;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileInconclusive)
+		return ToolInvocationLifecycleActions.RequireManualRecovery;
 	return ToolInvocationLifecycleActions.Reject;
 }
 
@@ -104,9 +124,8 @@ const _STATE_HANDLERS: Readonly<Record<ToolInvocationStates, ToolInvocationState
  * one, `Claimed` without a dispatch claim, `Reconciling` with a dispatch claim, or any claim at all
  * in a state that cannot hold one.
  *
- * Called by: ./prisma-tool-invocation-repository.ts (`_plan`, and directly in
- * `recordPreparationFailure`) and ./run-approval-cancellation.ts (`terminaliseCancellable`, which
- * throws if the answer is not `Fail`).
+ * Called by: `tool-invocation-persistence-policy.ts` for repository transitions and
+ * `prisma-mcp-unused-tool-invocation-repository.ts` before unused prepared work is failed.
  * @param input - Observed state, the event being applied, the frozen recovery mode, the active
  *   claim kind, and the retry budget.
  * @returns The single permitted write, or `Reject` meaning write nothing at all.
@@ -114,10 +133,15 @@ const _STATE_HANDLERS: Readonly<Record<ToolInvocationStates, ToolInvocationState
  */
 export function __PlanToolInvocationLifecycle(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
-	if (!Number.isSafeInteger(input.preparationAttempt) || input.preparationAttempt < 0) return ToolInvocationLifecycleActions.Reject;
-	if (!Number.isSafeInteger(input.preparationAttemptLimit) || input.preparationAttemptLimit < 1) return ToolInvocationLifecycleActions.Reject;
-	if (input.state === ToolInvocationStates.Claimed && input.claimKind !== ExternalActionClaimKinds.Dispatch) return ToolInvocationLifecycleActions.Reject;
-	if (input.state === ToolInvocationStates.Reconciling && input.claimKind !== null && input.claimKind !== ExternalActionClaimKinds.Reconcile) return ToolInvocationLifecycleActions.Reject;
-	if (input.state !== ToolInvocationStates.Claimed && input.state !== ToolInvocationStates.Reconciling && input.claimKind !== null) return ToolInvocationLifecycleActions.Reject;
+	if (!Number.isSafeInteger(input.preparationAttempt) || input.preparationAttempt < 0)
+		return ToolInvocationLifecycleActions.Reject;
+	if (!Number.isSafeInteger(input.preparationAttemptLimit) || input.preparationAttemptLimit < 1)
+		return ToolInvocationLifecycleActions.Reject;
+	if (input.state === ToolInvocationStates.Claimed && input.claimKind !== ExternalActionClaimKinds.Dispatch)
+		return ToolInvocationLifecycleActions.Reject;
+	if (input.state === ToolInvocationStates.Reconciling && input.claimKind !== null && input.claimKind !== ExternalActionClaimKinds.Reconcile)
+		return ToolInvocationLifecycleActions.Reject;
+	if (input.state !== ToolInvocationStates.Claimed && input.state !== ToolInvocationStates.Reconciling && input.claimKind !== null)
+		return ToolInvocationLifecycleActions.Reject;
 	return _STATE_HANDLERS[input.state](input);
 }

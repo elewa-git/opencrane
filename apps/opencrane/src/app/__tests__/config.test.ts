@@ -53,8 +53,6 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("ARTIFACT_SCANNER_NAMESPACE", "artifact-scanner");
 		vi.stubEnv("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", "20");
 		vi.stubEnv("MCP_COMPANION_CLAIM_LEASE_SECONDS", "25");
-		vi.stubEnv("OPENCRANE_SCHEDULER_ENABLED", "true");
-		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "2500");
 
 			expect(_ReadProcessConfig()).toMatchObject({
 				authWatchNamespace: "workspace-seeds",
@@ -80,8 +78,6 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				skillAuthoringNamespace: "skill-authoring",
 				siloId: "silo-test",
 			},
-			schedulerEnabled: true,
-			schedulerIntervalMilliseconds: 2500,
 			workflows: {
 				databasePoolSize: 2,
 				databaseUrl: "postgresql://opencrane:test@localhost:5432/opencrane",
@@ -107,6 +103,17 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS", "100000");
 		vi.stubEnv("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", "1800");
 		expect(_ReadAgentSandboxReleaseProfileConfig()).toEqual({ profileRevisionId: `sha256:${"a".repeat(64)}`, profileName: "developer", warmPoolName: "developer-pool", namespace: "opencrane-testv5", serviceAccountName: "opencrane-conversation-computer", leaseTtlMilliseconds: 1_800_000, maximumTurnCostUsdMicros: 100_000 });
+	});
+
+	it("reads bounded run-admission capacity from the existing chart settings", function _ReadRunAdmissionCapacity()
+	{
+		vi.stubEnv("AGENT_RUN_ADMISSION_MAX_CONCURRENT", "7");
+		vi.stubEnv("AGENT_RUN_ADMISSION_MAX_QUEUED", "23");
+
+		expect(_ReadProcessConfig().runAdmission).toEqual({ maxConcurrentAdmissions: 7, maxQueuedAdmissions: 23 });
+
+		vi.stubEnv("AGENT_RUN_ADMISSION_MAX_QUEUED", "1001");
+		expect(function _ReadExcessiveRunAdmissionQueue() { _ReadProcessConfig(); }).toThrow(/integer from 0 through 1000/);
 	});
 
 	it("rejects missing or excessive durable workflow settings", function _RejectInvalidWorkflowConfig()
@@ -235,12 +242,4 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readExcessiveTimeout() { _ReadProcessConfig(); }).toThrow(/integer from 1 through 300/);
 	});
 
-	it("rejects malformed or excessive scheduler intervals before a tight loop can start", function _RejectInvalidSchedulerInterval()
-	{
-		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "bad");
-		expect(function _readMalformedInterval() { _ReadProcessConfig(); }).toThrow(/integer from 1000 through 3600000/);
-
-		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "3600001");
-		expect(function _readExcessiveInterval() { _ReadProcessConfig(); }).toThrow(/integer from 1000 through 3600000/);
-	});
 });

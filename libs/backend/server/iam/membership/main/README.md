@@ -66,6 +66,9 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
 - `SignedFleetMembershipAssertionVerifier` — the current signed-membership adapter used by product
   boundaries. It selects the sole exact subject, silo, and scope assertion from the
   trusted revision instead of accepting an assertion identifier from an application or request.
+- `__SelectCurrentFleetMembershipAssertion` — the reusable transaction-neutral selector used by
+  standalone checks and personal or managed run admission. It returns an assertion identifier only
+  when the newest trusted-issuer revision contains exactly one matching silo and subject.
 - Contract types: `VerifyFleetMembershipCommand`/`Result`, `FleetMembershipAuthorityRepository`,
   `FleetMembershipSignatureVerifier`, `FleetMembershipAcceptance`/`Result`,
   `FleetMembershipEvidenceConfig`, and `TrustedFleetMembershipEvidence`.

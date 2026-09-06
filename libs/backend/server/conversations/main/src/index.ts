@@ -38,7 +38,7 @@ export { ActiveConversationComputerTurnCandidateResolver } from "./conversation-
 export { KurrentConversationComputerTurnStore } from "./conversation-computer-turn-store";
 export { PrismaConversationComputerTurnUnitOfWork } from "./db/prisma-conversation-computer-turn-unit-of-work";
 export { PrismaConversationComputerCredentialUnitOfWork } from "./db/prisma-conversation-computer-credential-issuer";
-export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssuer, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPodBindingVerifier, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssuer, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPodBindingVerifier, ConversationComputerPrePersistedMessageInput, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 export type { ConversationComputerRawCredentialAuthority } from "./conversation-computer-turn.types";
 export { ConversationComputerHistory } from "./conversation-computers";
 export type { ActiveConversationComputerLease, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, CurrentConversationComputer } from "./conversation-computers";
@@ -47,6 +47,8 @@ export type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadKeyrin
 export { _SelfConversationHistoryOpenapiPaths } from "./openapi";
 export { PrismaSelfConversationHistoryUnitOfWork } from "./prisma-self-conversation-history";
 export { ConversationHistoryAuthority } from "./conversation-history-authority";
+export { KurrentConversationHistoryAdmissionReader } from "./kurrent-conversation-history-admission-reader";
+export { PrismaKurrentConversationPromptMessageRepository } from "./db/prisma-kurrent-conversation-prompt-message-repository";
 export { _CreateSelfConversationHistoryRouter } from "./self-conversation-history.router";
 export { ConversationMessageActivations, ConversationMessageAdmissionOutcomes } from "./self-conversation-history.types";
 export type { ConversationCallerResolver, ConversationMessageAdmissionResult, ConversationMessageCommand, SelfConversationHistoryAuthority, SelfConversationHistoryResult } from "./self-conversation-history.types";

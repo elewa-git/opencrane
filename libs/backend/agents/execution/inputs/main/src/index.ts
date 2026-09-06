@@ -1,5 +1,10 @@
 export { __AreRunInputSnapshotMcpToolsValid, __IsRunInputSnapshotMcpToolValid } from "./mcp-tool-snapshot.validator";
+export * from "./conversation-prompt-message-repository";
+export * from "./personal-conversation-execution-subject-authority";
+export * from "./personal-conversation-execution-subject-authority.types";
 export * from "./prisma-session-assembly-authorities";
+export * from "./prisma-prompt-compiler-repository";
+export * from "./prompt-compiler-unit-of-work.types";
 export * from "./prisma-skill-revision-eligibility-source";
 export * from "./prompt-compiler";
 export * from "./prompt-compiler.types";

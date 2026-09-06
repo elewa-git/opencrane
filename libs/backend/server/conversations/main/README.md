@@ -28,19 +28,29 @@ not bind an agent and their ordinary messages never manufacture runs.
 [conversation workspace](../../../../frontend/features/conversation-workspace/README.md)
 
 Message admission dispatches through the persisted mode strategy. A direct or group message commits
-as a canonical message without an `AgentRun`. An agent-session message enters the internal personal
-run-admission port so the message, immutable input snapshot, run, and first dispatch intent commit in
-one transaction. A single active foreground run blocks another agent-session message. The public API
-does not expose a separate run-start route.
+as a canonical message without an `AgentRun`. An agent-session message first commits as the canonical
+Kurrent entry and activates its conversation computer. After the lease-bound Pod claims that turn,
+bootstrap passes the pre-persisted entry coordinate into durable run admission, which stores the run
+and immutable input without writing a duplicate relational message. A single active foreground run
+blocks another agent-session message. The public API does not expose a separate run-start route.
 
-The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
-dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
-the handoff into execution admission's authoritative final transaction. Conversation composition
-supplies the route facts and the required execution-inputs compiler. The runs package then checks
-replay, requester, run, and service authority, requires its compiler to recheck the next attempt's
-AgentIdentity, membership, capability decision, and computer lease, and commits its
-immutable snapshot through the same serializable compare-and-swap. Browser requester coordinates
-identify the request and never substitute for execution authority.
+The general conversation unit of work owns participant reads and aggregate lifecycle writes. After
+the active computer history and lease-bound Pod have checked out, turn compilation rechecks the
+pending entry's exact author Principal, active membership, participation, conversation Use grant,
+and published revision. It then calls an application-supplied run-admission port with only those
+server-resolved coordinates. That port owns durable run assembly and returns the compiled immutable
+input. A denial fails bootstrap closed; the conversation package never creates an execution subject
+or treats computer-supplied coordinates as authority.
+
+Attempt-key issuance uses the configured silo authority independently of the Kubernetes namespace.
+It commits encrypted custody before a separate ready-state promotion. If promotion and immediate
+provider cleanup both fail, the custodied row remains decryptable for a later cleanup or retry.
+
+Before appending assistant history, the turn store records a receipt containing only the already
+encrypted payload coordinates and the source command identifier. It also maintains one active-turn
+pointer per exact computer lease. If the process restarts between those durable steps and run
+completion, the next bootstrap replays the same history event idempotently, completes the fenced run,
+revokes its model key, and settles the pointer before another turn can start.
 
 `BoundConversationWriter` is the KurrentDB-facing computer boundary. A caller mints one binding for
 one silo, conversation, computer lease generation, agent identity, run, and expected stream
@@ -128,13 +138,21 @@ empty successful page.
   participant message admission without a relational transcript fallback.
 - `PrismaSelfConversationHistoryUnitOfWork` joins current PostgreSQL authorization and encrypted private
   payload persistence to checked KurrentDB operations.
+- `PrismaConversationComputerTurnUnitOfWork` rechecks the pending human author's current authority
+  before handing server-derived lease, identity, revision, and requester coordinates to the injected
+  run-admission port. It accepts compiled input only for the deterministic first attempt.
+- `KurrentConversationHistoryAdmissionReader` re-reads one exact stream revision and returns its
+  completed message order plus the immutable final human author to durable run admission.
+- `PrismaKurrentConversationPromptMessageRepository` resolves that admitted message set through
+  conversation-bound encrypted payload rows. It verifies the silo, conversation, payload reference,
+  author and ciphertext digest before decrypting, and has no relational transcript fallback.
 
 ## Boundary
 
 The self API receives only server-derived session and host identity. It never accepts silo,
-membership, user, agent authority, or run identifiers as browser-selected trust facts. It does not
-currently call execution inputs or execution runs, so an agent-session message does not create a run.
-It also does not dispatch workloads or execute agents. The channel replay route separately
+membership, user, agent authority, or run identifiers as browser-selected trust facts. The private
+computer turn path depends on a narrow application-owned admission port; this package does not
+persist runs, select an execution subject, dispatch workloads, or execute agents. The channel replay route separately
 requires a consumed one-use context and the exact controller-selected route identifier.
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
@@ -142,7 +160,7 @@ closed through stable denials. The replay persistence port always returns an exp
 revoked-or-missing outcome from the same snapshot as its rows; it has no rows-only fallback that
 could turn authority loss into an empty successful page. Every self-service read and write also
 rechecks active organisation membership inside its own database snapshot, so revocation closes
-list, open, retry, archive, close, message, and replay authority immediately. Admission overload is
+list, open, archive, close, message, and replay authority immediately. Admission overload is
 returned as `capacity_limited` rather than being misreported as a persistence outage.
 
 ## Dependency direction
@@ -157,8 +175,8 @@ import an app, frontend state, or deployment package.
 Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
 `ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
 transactions and projects create, archive, and close results from the same authorised write
-snapshot. Message admission currently persists ordinary messages without binding agent messages to
-a run-input transaction. The replay adapter is read-only and joins
+snapshot. Agent-session turn compilation delegates durable run and input persistence through its
+injected admission port after local authority checks. The replay adapter is read-only and joins
 timeline references to canonical messages and `RunEvent`; neither path
 reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
 in the caller's host-selected silo; participant rows alone never preserve authority after revocation.

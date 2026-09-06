@@ -2,7 +2,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log";
-import type { AttemptLiteLlmKey, AttemptLiteLlmKeyRequest, AttemptLiteLlmKeyRevocation } from "./attempt-litellm-key.types";
+import type { AttemptLiteLlmKey, AttemptLiteLlmKeyAliasRevocation, AttemptLiteLlmKeyRequest, AttemptLiteLlmKeyRevocation } from "./attempt-litellm-key.types";
 
 /**
  * Per-request timeout for the LiteLLM `/key/generate` call. Bounds the mint so an unreachable
@@ -19,7 +19,7 @@ const _MAX_EXPIRY_SECONDS = 86_400;
 /**
  * Mint one short-lived, alias- and budget-bound LiteLLM virtual key for a single run attempt.
  *
- * Reusing the client posture of the BYOK `/credentials` path, this calls LiteLLM's `/key/generate`
+ * Like the BYOK `/credentials` client, this calls LiteLLM's `/key/generate`
  * with the master key as the bearer and returns the minted virtual key for the Job builder to
  * project as a group-readable Secret. Unlike the best-effort credential upsert, issuance fails hard:
  * a missing endpoint or master key, a rejected alias, an unbounded budget or expiry, or any non-OK
@@ -34,9 +34,12 @@ export async function _IssueAttemptLiteLlmKey(input: AttemptLiteLlmKeyRequest): 
   // 1. Reject an alias, budget, or expiry that would widen the key beyond one bounded attempt.
   if (!_ATTEMPT_KEY_ALIAS.test(input.keyAlias))
     throw new Error("attempt LiteLLM key requires an attempt-scoped alias");
-  if (typeof input.modelAlias !== "string" || input.modelAlias.trim().length === 0) throw new Error("attempt LiteLLM key requires a single model alias");
-  if (!Number.isFinite(input.maxBudgetUsd) || input.maxBudgetUsd <= 0) throw new Error("attempt LiteLLM key requires a positive budget");
-  if (!Number.isSafeInteger(input.expirySeconds) || input.expirySeconds <= 0 || input.expirySeconds > _MAX_EXPIRY_SECONDS) throw new Error("attempt LiteLLM key requires a bounded positive expiry");
+	  if (typeof input.modelAlias !== "string" || input.modelAlias.trim().length === 0)
+	    throw new Error("attempt LiteLLM key requires a single model alias");
+	  if (!Number.isFinite(input.maxBudgetUsd) || input.maxBudgetUsd <= 0)
+	    throw new Error("attempt LiteLLM key requires a positive budget");
+	  if (!Number.isSafeInteger(input.expirySeconds) || input.expirySeconds <= 0 || input.expirySeconds > _MAX_EXPIRY_SECONDS)
+	    throw new Error("attempt LiteLLM key requires a bounded positive expiry");
 
 	const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
 	const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
@@ -79,6 +82,23 @@ export async function _RevokeAttemptLiteLlmKey(input: AttemptLiteLlmKeyRevocatio
 			throw new Error(`litellm attempt key revocation returned status ${response.status}`);
 		}
 		_log.info({ keyAlias: input.keyAlias }, "litellm attempt key revoked");
+	});
+}
+
+/** Revoke every key under one exact attempt alias when a raw mint response could not be retained. */
+export async function _RevokeAttemptLiteLlmKeyByAlias(input: AttemptLiteLlmKeyAliasRevocation): Promise<void>
+{
+	if (!_ATTEMPT_KEY_ALIAS.test(input.keyAlias))
+		throw new Error("attempt LiteLLM alias revocation requires an attempt-scoped alias");
+	const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
+	const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
+	if (!endpoint || !masterKey)
+		throw new Error("attempt LiteLLM alias revocation requires LITELLM_ENDPOINT and LITELLM_MASTER_KEY");
+	await ___DoWithTrace("litellm.key.revoke_by_alias", { keyAlias: input.keyAlias }, async function _RevokeByAlias(): Promise<void>
+	{
+		const response = await fetch(`${endpoint}/key/delete`, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${masterKey}` }, body: JSON.stringify({ key_aliases: [input.keyAlias] }), signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS) });
+		if (!response.ok)
+			throw new Error(`litellm attempt key alias revocation returned status ${response.status}`);
 	});
 }
 

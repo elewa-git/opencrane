@@ -258,7 +258,6 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 							{ state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, claimExpiresAt: { lte: now } },
 						],
 					},
-					{ run: { is: { state: "Cancelling" } }, state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, claimExpiresAt: { lte: now } },
 				],
 			},
 			include: { run: { select: { attempt: true } } },
@@ -401,7 +400,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		if (state !== ToolInvocationState.Succeeded && state !== ToolInvocationState.Failed)
 			return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: _record(before) };
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_ToolInvocationIsMcpTaskOwned(before) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: before.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } }) },
+			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_ToolInvocationIsMcpTaskOwned(before) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: before.attempt ?? -1, state: "Running" } } }) },
 			data: { state, result, failureCode, claimKind: null, claimExpiresAt: null, completedAt: now, revision: { increment: 1 } },
 		});
 		const winner = await this._winner(claim.invocationId);
@@ -424,7 +423,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		if (target === null)
 			return { changed: false, invocation: _record(invocation) };
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_ToolInvocationIsMcpTaskOwned(invocation) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } }) },
+			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_ToolInvocationIsMcpTaskOwned(invocation) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: invocation.attempt ?? -1, state: "Running" } } }) },
 			data: { state: target, recoveryRequiredAt: target === ToolInvocationState.RecoveryRequired ? now : null, claimKind: null, claimExpiresAt: null, revision: { increment: 1 } },
 		});
 		return { changed: updated.count === 1, invocation: await this._winner(claim.invocationId) };
@@ -442,7 +441,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		const recoveryRequiredAt = target === ToolInvocationState.RecoveryRequired ? now : null;
 		const completedAt = target === ToolInvocationState.Failed ? now : null;
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } },
+			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, run: { is: { attempt: invocation.attempt ?? -1, state: "Running" } } },
 			data: { state: target, preparationAttempt: { increment: 1 }, failureCode: "external_action_start_event_failed", nextPreparationAttemptAt: now, recoveryRequiredAt, claimKind: null, claimExpiresAt: null, completedAt, revision: { increment: 1 } },
 		});
 		if (updated.count === 1 && target === ToolInvocationState.Failed)
@@ -460,7 +459,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		if (target === null)
 			return { changed: false, invocation: _record(invocation) };
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: invocationId, state: invocation.state, claimKind: invocation.claimKind, claimFence: invocation.claimFence, claimExpiresAt: { lte: now }, revision: invocation.revision, run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } },
+			where: { id: invocationId, state: invocation.state, claimKind: invocation.claimKind, claimFence: invocation.claimFence, claimExpiresAt: { lte: now }, revision: invocation.revision, run: { is: { attempt: invocation.attempt ?? -1, state: "Running" } } },
 			data: { state: target, recoveryRequiredAt: target === ToolInvocationState.RecoveryRequired ? now : null, claimKind: null, claimExpiresAt: null, revision: { increment: 1 } },
 		});
 		return { changed: updated.count === 1, invocation: await this._winner(invocationId) };

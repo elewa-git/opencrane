@@ -20,6 +20,13 @@ const _BASE = {
 
 describe("conversation entry validation", function ()
 {
+	it("requires verified requester evidence on human-authored entries", function ()
+	{
+		const human = { ..._BASE, author: { kind: "human", principalId: "principal-1", participantId: "participant-1", issuer: "https://issuer.test", authenticatedAt: "2026-09-05T00:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored", runId: null, kind: "message", state: "completed", blocks: [{ id: "text-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:payload" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "start" };
+		expect(___ConversationEntrySchema.safeParse(human).success).toBe(true);
+		expect(___ConversationEntrySchema.safeParse({ ...human, author: { ...human.author, authenticatedAt: undefined } }).success).toBe(false);
+	});
+
 	it("keeps encrypted message payloads and display-safe artifact references distinct", function ()
 	{
 		const entry: MessageEntry = {

@@ -171,7 +171,7 @@ describe("AgentIdentityHistory", function ()
 		const readHead = vi.fn().mockResolvedValue({ streamName: "agent-identity-identity-1", revision: 0n });
 		const history = new AgentIdentityHistory(_Store({ readStream, readHead }));
 
-		await expect(history.load(_CurrentCommand())).resolves.toEqual(expect.objectContaining({ streamName: "agent-identity-identity-1", revision: 0n, headDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u), identity }));
+		await expect(history.load(_CurrentCommand())).resolves.toEqual(expect.objectContaining({ streamName: "agent-identity-identity-1", revision: 0n, headEventId: _EVENT_ID, headDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u), identity }));
 		expect(readStream).toHaveBeenCalledWith({ streamName: "agent-identity-identity-1" });
 	});
 

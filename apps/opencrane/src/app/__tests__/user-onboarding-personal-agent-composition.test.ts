@@ -285,7 +285,7 @@ describe("personal Agent onboarding app composition", function _PersonalAgentCom
 		expect(response.body).toMatchObject({ state: "completed", canConclude: false });
 		expect(fixture.state()).toMatchObject({ onboardingState: UserOnboardingState.Completed, completionProvenance: UserOnboardingCompletionProvenance.BootstrapConcluded, agentService: { id: _ONBOARDING_ID, state: AgentServiceState.Active }, agentRevision: { state: AgentRevisionState.Published, personaRevisionId: _PERSONA_REVISION_ID }, auditCount: 6 });
 		expect(fixture.state().agentService?.activeRevisionId).toBe(fixture.state().agentRevision?.id);
-		expect(fixture.state().authorizationGrants).toHaveLength(20);
+		expect(fixture.state().authorizationGrants).toHaveLength(19);
 		expect(fixture.attempts()).toBe(2);
 	});
 

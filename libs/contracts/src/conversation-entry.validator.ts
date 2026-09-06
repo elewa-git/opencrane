@@ -21,7 +21,7 @@ const _ServiceAuthorKind = "service";
 const _SystemAuthorKind = "system";
 const _OpenCraneServiceId = "opencrane";
 const _AuthorSchema = z.discriminatedUnion("kind", [
-	z.object({ kind: z.literal("human"), principalId: _IdentifierSchema, participantId: _IdentifierSchema, name: _IdentifierSchema, avatarArtifactRevisionId: _IdentifierSchema.nullable() }).strict(),
+	z.object({ kind: z.literal("human"), principalId: _IdentifierSchema, participantId: _IdentifierSchema, issuer: _IdentifierSchema, authenticatedAt: _InstantSchema, name: _IdentifierSchema, avatarArtifactRevisionId: _IdentifierSchema.nullable() }).strict(),
 	z.object({ kind: z.literal("agent"), agentIdentityId: _IdentifierSchema, agentServiceId: _IdentifierSchema, name: _IdentifierSchema, avatarArtifactRevisionId: _IdentifierSchema.nullable() }).strict(),
 	z.object({ kind: z.literal("service"), serviceId: _IdentifierSchema, name: _IdentifierSchema }).strict(),
 	z.object({ kind: z.literal("system"), systemId: z.literal("opencrane"), name: z.literal("OpenCrane") }).strict(),

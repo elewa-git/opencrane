@@ -121,6 +121,8 @@ export interface OpenCraneWorkflowConfig
 /** Process-owned settings that shape the OpenCrane server lifecycle. */
 export interface OpenCraneProcessConfig
 {
+	/** Per-service process capacity applied before personal run admission reaches PostgreSQL. */
+	readonly runAdmission: RunAdmissionCapacityConfig;
 	/** Namespace in which OIDC authentication resources are resolved. */
 	readonly authWatchNamespace: string;
 	/** Absolute path of the Secret-mounted conversation private-payload encryption keyring. */
@@ -133,12 +135,17 @@ export interface OpenCraneProcessConfig
 	readonly runtime: InternalRuntimeConfig;
 	/** Public ingress-facing API port. */
 	readonly publicPort: number;
-	/** Whether the managed-agent schedule loop should run. */
-	readonly schedulerEnabled: boolean;
-	/** Delay between managed-agent schedule passes. */
-	readonly schedulerIntervalMilliseconds: number;
 	/** Optional verified-email contract that can claim exactly one standalone-silo owner. */
 	readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
 	/** Durable control-plane task and MCP protocol-check settings. */
 	readonly workflows: OpenCraneWorkflowConfig;
+}
+
+/** Process-local bounds that protect PostgreSQL from one service's admission burst. */
+export interface RunAdmissionCapacityConfig
+{
+	/** Largest number of admissions for one silo and AgentService that may execute together. */
+	readonly maxConcurrentAdmissions: number;
+	/** Largest number of admissions for one silo and AgentService that may wait outside PostgreSQL. */
+	readonly maxQueuedAdmissions: number;
 }

@@ -35,10 +35,10 @@ INSERT INTO "conversations" ("id", "silo_id", "mode", "updated_at")
 VALUES ('direct-conversation', 'silo-run-event', 'direct', clock_timestamp());
 SELECT pg_temp.expect_failure(
     'an agent run cannot bind a direct conversation',
-    $statement$INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest") VALUES ('direct-conversation-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'direct-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'direct-conversation-request', 'direct-conversation-run', 'sha256:' || repeat('e', 64))$statement$,
+    $statement$INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES ('direct-conversation-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'direct-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'direct-conversation-request', 'direct-conversation-run', 'sha256:' || repeat('e', 64))$statement$,
     'AgentRun requires the exact agent-session Conversation authority'
 );
-INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest")
+INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest")
 VALUES ('run-event-run', 'silo-run-event', 'run-event-service', 'run-event-revision', 'run-event-conversation', 'interactive', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'run-event-request', 'run-event-run', 'sha256:' || repeat('c', 64));
 INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
 VALUES ('run-event-input', 'run-event-run', 1, 1, 'silo-run-event', 'run-event-service', 'run-event-revision', 'identity-run-event', 'user-run-event', '{"runScope":{"attempt":1}}', 'run-event-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64));
@@ -73,11 +73,6 @@ SELECT pg_temp.expect_failure(
     'run events cannot skip a sequence',
     $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 1, 3, 'run.started', '{}')$statement$,
     'RunEvent sequence must be contiguous'
-);
-SELECT pg_temp.expect_failure(
-    'child completion events require a canonical delivery',
-    $statement$INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload") VALUES ('run-event-conversation', 'run-event-run', 1, 2, 'child.run.completed', '{"childRunId":"forged-child","childAttempt":1}')$statement$,
-    'child RunEvent requires child completion delivery authority'
 );
 SELECT pg_temp.expect_failure(
     'completed events require a completed run',

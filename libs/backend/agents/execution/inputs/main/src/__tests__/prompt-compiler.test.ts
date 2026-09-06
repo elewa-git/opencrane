@@ -39,7 +39,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		memoryQueryPolicy: {},
 		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
 		modelRoute: { alias: "silo-default" },
-		budgetPolicy: { maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
+		budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		executionSubject: _executionSubject(),
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,
 		digest: "sha256:snap",
@@ -109,14 +109,14 @@ describe("__CompileRunInput", function _describeCompiler()
 	{
 		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
-		expect(compiled.budget).toEqual({ maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
+		expect(compiled.budget).toEqual({ maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
 	});
 
 	it("nulls malformed or absent budget limits rather than inventing them", async function _nullsBadBudget()
 	{
-		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxTotalTokens: "lots" as unknown as JsonValue } }), 1, _repositories());
+		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxCompletionTokens: "lots" as unknown as JsonValue } }), 1, _repositories());
 
-		expect(compiled.budget).toEqual({ maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
+		expect(compiled.budget).toEqual({ maxModelTurns: null, maxCompletionTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
 	});
 
 	it("assembles persona, artifact, and skill sections without memory content", async function _assembles()

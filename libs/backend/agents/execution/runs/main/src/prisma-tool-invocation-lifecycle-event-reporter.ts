@@ -24,7 +24,10 @@ export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocat
 			const unitOfWork = new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction);
 			return unitOfWork.append(event);
 		});
-		if (!appended) throw new Error("tool lifecycle event is no longer valid for the run attempt");
+		if (!appended)
+		{
+			throw new Error("tool lifecycle event is no longer valid for the run attempt");
+		}
 	}
 
 	/** Append within the invocation owner's exact state transaction. */
@@ -70,29 +73,42 @@ class PrismaToolInvocationLifecycleEventAppendRepository implements ToolInvocati
 	/** Recheck the run fence, validate the safe payload, and append the next event. */
 	async append(event: ToolInvocationLifecycleEvent): Promise<boolean>
 	{
-		if (!_EventIsSafe(event)) return false;
+		if (!_EventIsSafe(event))
+		{
+			return false;
+		}
 		const run = await this.transaction.agentRun.findUnique({ where: { id: event.runId } });
-		if (run === null || run.attempt !== event.attempt || !_EventAllowedForRun(run.state, event.eventType)) return false;
-		if (run.conversationId === null) return true;
+		if (run === null || run.attempt !== event.attempt || !_EventAllowedForRun(run.state, event.eventType))
+		{
+			return false;
+		}
+		if (run.conversationId === null)
+		{
+			return true;
+		}
 		const maximum = await this.transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 		await this.transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, type: event.eventType, payload: event.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
 		return true;
 	}
 }
 
-/** Allow cancellation-safe settlement evidence without admitting any new provider operation. */
+/** Allow lifecycle evidence only while the current run can still progress. */
 function _EventAllowedForRun(state: AgentRunState, eventType: ToolInvocationEventTypes): boolean
 {
-	if (state === AgentRunState.Running || state === AgentRunState.RecoveryRequired) return true;
-	if (state !== AgentRunState.Cancelling) return false;
-	return eventType === ToolInvocationEventTypes.Completed || eventType === ToolInvocationEventTypes.Failed;
+	return (state === AgentRunState.Running || state === AgentRunState.RecoveryRequired) && eventType !== undefined;
 }
 
 /** Enforce the fixed credential-free event shape even for an incorrectly wired internal caller. */
 function _EventIsSafe(event: ToolInvocationLifecycleEvent): boolean
 {
-	if (event.runId.length === 0 || event.runId.length > 256 || !Number.isSafeInteger(event.attempt) || event.attempt < 1 || event.payload.toolInvocationId.length === 0 || event.payload.toolInvocationId.length > 256) return false;
-	if (event.eventType !== ToolInvocationEventTypes.Failed) return true;
+	if (event.runId.length === 0 || event.runId.length > 256 || !Number.isSafeInteger(event.attempt) || event.attempt < 1 || event.payload.toolInvocationId.length === 0 || event.payload.toolInvocationId.length > 256)
+	{
+		return false;
+	}
+	if (event.eventType !== ToolInvocationEventTypes.Failed)
+	{
+		return true;
+	}
 	return event.payload.toolRevisionId.length > 0
 		&& event.payload.toolRevisionId.length <= 256
 		&& event.payload.reason.length > 0

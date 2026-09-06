@@ -15,9 +15,8 @@ import { _ClusterTenantFromHost } from "./request-silo";
  * router converts it into whatever caller type it owns, so this file needs no dependency
  * on those domains.
  *
- * Called by: prisma-personal-configuration.router.ts, prisma-persona-onboarding.router.ts,
- * prisma-steering-ingest.router.ts, and prisma-self-run-cancellation.router.ts (all under
- * libs/backend/agents), each in its own local `_resolveCaller`.
+ * Called by: authenticated product routers, including personal configuration, persona onboarding,
+ * elicitation, and self-run status, each through its own local caller mapping.
  *
  * @param request - The request, after session authentication has run.
  * @returns The caller, or null when there is no session or no silo can be derived from
@@ -28,7 +27,8 @@ export function _ResolveRequestPrincipal(request: Request): RequestPrincipal | n
   const authUser = request.session?.authUser;
   const admittedPrincipal = request.authenticatedPrincipal;
   const siloId = _ClusterTenantFromHost(_RequestHost(request)) ?? "";
-	if (!authUser || !admittedPrincipal || !siloId || admittedPrincipal.siloId !== siloId || !admittedPrincipal.principalId.trim()) return null;
+	if (!authUser || !admittedPrincipal || !siloId || admittedPrincipal.siloId !== siloId || !admittedPrincipal.principalId.trim())
+		return null;
 	const authenticatedAt = new Date(authUser.authenticatedAt);
 	const verifiedAuthenticationAt = Number.isFinite(authenticatedAt.getTime()) ? authenticatedAt : null;
 

@@ -115,6 +115,6 @@ export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittab
  * must stay apart. On `denied`, nothing was written and `reason` says what to do next; see
  * {@link SessionAssemblyRefusalReason}.
  *
- * Returned by {@link __AssembleRunInputSnapshot}; the package currently has no production caller.
+ * Returned by {@link __AssembleRunInputSnapshot} to the OpenCrane conversation admission owner.
  */
 export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };

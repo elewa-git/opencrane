@@ -238,6 +238,10 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		historyStore: _readHistoryStoreConfig(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		publicPort: Number(process.env.PORT ?? "8080"),
+		runAdmission: {
+			maxConcurrentAdmissions: _readBoundedInteger("AGENT_RUN_ADMISSION_MAX_CONCURRENT", 4, 1, 100),
+			maxQueuedAdmissions: _readBoundedInteger("AGENT_RUN_ADMISSION_MAX_QUEUED", 16, 0, 1_000),
+		},
 			runtime: {
 			artifactScannerEnabled: process.env.ARTIFACT_SCANNER_ENABLED === "true",
 			artifactScannerClaimLeaseMilliseconds: _readBoundedSeconds("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", 300, 60, 300),
@@ -256,8 +260,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 				serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
 				siloId: _readRequired("OPENCRANE_SILO_ID"),
 		},
-		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
-		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),
 		standaloneFirstUserAdmission: _readStandaloneFirstUserAdmission(),
 		workflows: _readWorkflowConfig(),
 	};

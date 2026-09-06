@@ -15,29 +15,18 @@ INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updat
 ('snapshot-other-conversation', 'silo-snapshot', 'snapshot-service', 'agent_session', clock_timestamp()),
 ('snapshot-missing-conversation', 'silo-snapshot', 'snapshot-service', 'agent_session', clock_timestamp());
 
-INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest") VALUES
-('snapshot-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-conversation', 'interactive', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1}}', 'snapshot-request', 'snapshot-run', 'sha256:' || repeat('c', 64)),
-('snapshot-scheduled-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', NULL, 'schedule', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1}}', 'snapshot-scheduled-request', 'snapshot-scheduled-run', 'sha256:' || repeat('f', 64));
+INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES
+('snapshot-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-conversation', 'interactive', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1}}', 'snapshot-request', 'sha256:' || repeat('c', 64));
 INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest") VALUES
-('snapshot-run-input', 'snapshot-run', 1, 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1}}', 'snapshot-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64)),
-('snapshot-scheduled-run-input', 'snapshot-scheduled-run', 1, 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1}}', NULL, '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('f', 64));
+('snapshot-run-input', 'snapshot-run', 1, 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1}}', 'snapshot-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64));
 SET CONSTRAINTS ALL IMMEDIATE;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM "run_input_snapshots" WHERE "run_id" = 'snapshot-scheduled-run' AND "conversation_id" IS NULL) THEN
-        RAISE EXCEPTION 'FAIL: a non-conversational run did not preserve its null conversation binding';
-    END IF;
-    RAISE NOTICE 'PASS: conversational and non-conversational runs bind their exact authority snapshots';
-END;
-$$;
 
 SET CONSTRAINTS ALL DEFERRED;
 DO $$
 DECLARE actual_message TEXT;
 BEGIN
     BEGIN
-        INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest")
+        INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest")
         VALUES ('snapshot-missing', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-missing-conversation', 'interactive', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1}}', 'snapshot-missing-request', 'snapshot-missing', 'sha256:' || repeat('1', 64));
         SET CONSTRAINTS agent_runs_input_snapshot_complete IMMEDIATE;
     EXCEPTION WHEN foreign_key_violation THEN
@@ -56,7 +45,7 @@ DO $$
 DECLARE actual_message TEXT;
 BEGIN
     BEGIN
-        INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "root_run_id", "input_snapshot_digest")
+        INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest")
         VALUES ('snapshot-subject-mismatch', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-other-conversation', 'interactive', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1},"authority":"run"}', 'snapshot-subject-mismatch-request', 'snapshot-subject-mismatch', 'sha256:' || repeat('2', 64));
         INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
         VALUES ('snapshot-subject-mismatch-input', 'snapshot-subject-mismatch', 1, 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":1},"authority":"snapshot"}', 'snapshot-other-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('2', 64));
@@ -69,27 +58,6 @@ BEGIN
         RETURN;
     END;
     RAISE EXCEPTION 'FAIL: mismatched execution subjects unexpectedly succeeded';
-END;
-$$;
-
-UPDATE "agent_runs"
-SET "state" = 'failed', "finished_at" = clock_timestamp(), "terminal_reason" = 'runtime_failure'
-WHERE "id" = 'snapshot-scheduled-run';
-INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
-VALUES ('snapshot-run-retry-input', 'snapshot-scheduled-run', 2, 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-principal', '{"runScope":{"attempt":2}}', NULL, '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('3', 64));
-UPDATE "agent_runs"
-SET "attempt" = 2, "state" = 'accepted', "execution_subject" = '{"runScope":{"attempt":2}}', "input_snapshot_digest" = 'sha256:' || repeat('3', 64), "accepted_at" = clock_timestamp(), "started_at" = NULL, "finished_at" = NULL, "terminal_reason" = NULL
-WHERE "id" = 'snapshot-scheduled-run';
-SET CONSTRAINTS ALL IMMEDIATE;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM "agent_runs" WHERE "id" = 'snapshot-scheduled-run' AND "attempt" = 2 AND "state" = 'accepted')
-        OR NOT EXISTS (SELECT 1 FROM "run_input_snapshots" WHERE "run_id" = 'snapshot-scheduled-run' AND "attempt" = 1 AND "input_digest" = 'sha256:' || repeat('f', 64))
-        OR NOT EXISTS (SELECT 1 FROM "run_input_snapshots" WHERE "run_id" = 'snapshot-scheduled-run' AND "attempt" = 2 AND "input_digest" = 'sha256:' || repeat('3', 64)) THEN
-        RAISE EXCEPTION 'FAIL: the failed run was not admitted for its next attempt';
-    END IF;
-    RAISE NOTICE 'PASS: a failed run can atomically bind a fresh snapshot for exactly one next attempt';
 END;
 $$;
 

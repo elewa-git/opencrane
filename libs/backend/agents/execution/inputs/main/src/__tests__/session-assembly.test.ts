@@ -1,16 +1,16 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import { RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand, type RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
-import { MessageContentBlockKinds } from "@opencrane/models/conversations";
+import { RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand, type RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it } from "vitest";
 
 import { __AssembleRunInputSnapshot } from "../session-assembly";
+import { TransactionBoundProductResourceAuthorizationSource } from "../product-resource-authorization-source";
 import type { SessionAssemblyAuthorities } from "../session-assembly.types";
 
 /** Builds one command whose subject is pre-verified by the injected authority. */
 function _command(): RunAdmissionCommand
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "interactive", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }], requester: { subjectId: "requester-subject-1", issuer: "https://issuer.example", authenticatedAt: "2026-09-01T00:00:00.000Z" } };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "interactive", requestIdempotencyKey: "request-1", messageInput: { mode: RunAdmissionMessageInputModes.PrePersistedHistory, messageId: "message-1", historyRevision: "7", orderedMessageIds: ["message-1"], author: { principalId: "principal-1", issuer: "https://issuer.example", subjectId: "requester-subject-1", authenticatedAt: "2026-09-01T00:00:00.000Z" } }, requester: { subjectId: "requester-subject-1", issuer: "https://issuer.example", authenticatedAt: "2026-09-01T00:00:00.000Z" } };
 }
 
 /** Builds the fully fenced subject required before any identity-scoped input can load. */
@@ -23,16 +23,16 @@ function _subject(): RunInputSnapshot["executionSubject"]
 function _authorities(): SessionAssemblyAuthorities
 {
 	return {
-		admission: { admit: async function _admit(_command, build) { const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 }); return compiled.outcome === "denied" ? { outcome: "denied", reason: compiled.reason } : { outcome: "accepted", snapshot: compiled.value.snapshot }; } },
-		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed }, promptCompilerVersion: "v1", trigger: "interactive", rootRunId: "run-1", parentRunId: null } } as const; } },
+		admission: { admit: async function _admit(_command, _verifyExisting, build) { const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 }); return compiled.outcome === "denied" ? { outcome: "denied", reason: compiled.reason } : { outcome: "accepted", snapshot: compiled.value.snapshot }; } },
+		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed }, promptCompilerVersion: "v1", trigger: "interactive" } } as const; } },
 		executionSubject: { load: async function _load() { return { outcome: "loaded", value: _subject() } as const; } },
 		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId: "persona-1", personaId: "persona-1" } } as const; } },
-		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-1"], pendingUserMessage: { id: "message-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] } } } as const; } },
+		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-1"] } } as const; } },
 		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [] } as const; } },
 		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: {}, datasetId: null } } as const; } },
 		toolPolicy: { load: async function _load() { const schema = { type: "object" } as const; return { outcome: "loaded", value: { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [{ toolRevisionId: "tool-1", name: "search", description: null, inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
-		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
+		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; }, verifyExisting: async function _VerifyExisting() { return { outcome: "loaded", value: null } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: {} } } as const; } },
 	};
 }
@@ -62,5 +62,28 @@ describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
 		const authorities = _authorities();
 		authorities.memoryScope = { load: async function _load() { return { outcome: "denied", reason: "memory_scope_unavailable" } as const; } };
 		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+	});
+
+	it("does not persist when final-transaction Conversation Use is denied", async function _RefusesRevokedConversationUse()
+	{
+		let persisted = false;
+		const authorities = _authorities();
+		authorities.productAuthorization = new TransactionBoundProductResourceAuthorizationSource();
+		authorities.admission = { admit: async function _Admit(_command, _verifyExisting, build)
+		{
+			const compiled = await build({ prisma: {} as never, authorization: { admitPrincipal: async function _Deny() { return { outcome: "deny", evidence: null } as never; }, admitPrincipalBatch: async function _Unexpected() { throw new Error("resource batch must not run"); } }, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 } as never);
+			if (compiled.outcome === "denied")
+				return { outcome: "denied", reason: compiled.reason };
+			persisted = true;
+			return { outcome: "accepted", snapshot: compiled.value.snapshot };
+		} };
+		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
+		expect(persisted).toBe(false);
+	});
+
+	it("rejects reordered or repeated pre-persisted message provenance before authority reads", async function _RejectsInvalidHistoryBoundary()
+	{
+		const command = { ..._command(), messageInput: { ..._command().messageInput!, orderedMessageIds: ["message-1", "message-1"] } };
+		await expect(__AssembleRunInputSnapshot(command, _authorities())).resolves.toEqual({ outcome: "denied", reason: "invalid_command" });
 	});
 });

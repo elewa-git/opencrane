@@ -14,6 +14,9 @@ run-admission transaction that persists it. After that instant nothing about the
 change — a retry, an audit, or a replay all see the exact same record, identified by its digest
 (a SHA-256 fingerprint of the canonical content).
 
+The compiled budget retains the frozen model-turn limit. A conversation computer consumes exactly
+one admitted turn and refuses the model request when that limit is absent or below one.
+
 ```
  run request  (runId · silo · service · conversation? · subject · idempotency key)
           │  __AssembleRunInputSnapshot
@@ -26,7 +29,7 @@ change — a retry, an audit, or a replay all see the exact same record, identif
  └─────────────────────────────────────────┘
           │  ready (authority + snapshot) / denied (one precise reason)
           ▼
- runs · RunAdmissionRepository  ── persists run + snapshot + workflow task in one commit
+ runs · RunAdmissionRepository  ── persists run + snapshot in one commit
 ```
 
 **In this flow:** [execution/runs](../../runs/main/README.md) *(owns the admission transaction, the digest
@@ -41,6 +44,11 @@ millisecond before commit can never leak into the frozen record. In particular, 
 after effective-grant intersection is an assigned, same-silo, still-published, non-revoked revision. One refusal anywhere denies the
 whole assembly with a single precise reason; a duplicate request (same idempotency key) returns the
 previously admitted snapshot without recompiling anything.
+
+Conversational admission records an exact `Conversation / Use` decision for the requester inside
+that final transaction, using the same membership revision, run-arguments digest, and admission
+instant. The earlier participant check remains defense-in-depth; it cannot replace this final fence
+because membership or grants may change before persistence.
 
 MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
 saved tool identifier, name, description, input schema, and schema digest. Missing, malformed, or
@@ -58,8 +66,14 @@ caller input.
 - `ExecutionSubjectAuthority` — injects one current AgentIdentity, Principal, membership,
   capability, run, and ConversationComputer-lease proof. A requester remains provenance, never
   an execution identity.
+- `PersonalConversationExecutionSubjectAuthority` — joins the checked current AgentIdentity head,
+  transaction-bound personal service and authorization evidence, and the current active
+  ConversationComputer lease. It rechecks every request, service, revision, profile, computer,
+  lease, generation, and SandboxClaim coordinate before issuing an attempt-one subject. Its
+  evidence-authority factory receives the admission transaction so Prisma evidence cannot escape
+  onto a root client.
 - `__CreatePrismaSessionAssemblyAuthorities` — composes the production readers around that subject
-  authority and an explicit run policy. It freezes only the verified principal's active Cognee
+  authority, an exact durable-history reader, and an explicit run policy. It freezes only the verified principal's active Cognee
   dataset coordinates when that policy allows personal memory.
   Admission never stores the recall query, reads fact content, or calls Cognee. The model chooses a
   query only through the approval-required `memory_recall` tool; safe content delivery is deferred to #601.
@@ -73,9 +87,19 @@ caller input.
   and a version stamp that makes a compiler change visible in evidence.
 - `PromptCompilerRepositories` — injected read ports used only to dereference snapshot-authorized
   content while compiling.
+- `ConversationHistoryAdmissionReader` re-reads the exact Kurrent revision, ordered identifiers,
+  final triggering message, and immutable human author before those identifiers enter a snapshot.
+- `VerifiedConversationPromptMessageRepository` accepts decrypted messages only when the
+  conversation-owned source returns the complete snapshot set exactly once and in order.
 
 All other source adapters and assembly ports are package-private implementation details. Same-package
 tests import their owning modules directly; adding a test does not widen this barrel.
+
+`PrismaPromptCompilerRepository` is the transaction-bound dereference boundary for admitted
+persona instructions, MCP tool revisions, artifact revisions, skill revisions, and model routes.
+It receives canonical conversation messages through `VerifiedConversationPromptMessageRepository`,
+so it has no relational transcript path. Missing rows, changed schemas, foreign model coordinates,
+inactive parents, and unsupported generated-output capabilities fail compilation closed.
 
 ## Boundary
 
@@ -91,9 +115,11 @@ non-canonical digest, or any single source refusal denies the run.
 The OpenCrane app composes one admission variant. The participant-owned conversation route derives
 requester provenance from the authenticated session and host; the injected subject authority then
 resolves the exact AgentIdentity, Principal, membership, capability, run, and computer lease inside
-the admission fence. The message body contains only bounded content blocks and an idempotency key.
-The conversation ID comes from the route; identity, principal, silo, service, dataset, and membership
-coordinates never come from the browser.
+the admission fence. Conversation history already contains the encrypted human entry before run
+admission. The injected history adapter re-reads that exact Kurrent revision and decrypts referenced
+private payloads for prompt compilation; this package never inserts a relational copy. The
+conversation ID comes from verified computer state, and identity, principal, silo, service, dataset,
+and membership coordinates never come from the browser.
 
 There is no public run-start endpoint. Direct and group messages never enter this package; only an
 agent-session message or an internal managed trigger can request snapshot assembly.

@@ -17,14 +17,6 @@ enum AgentRevisionState {
   Retired   @map("retired")
 }
 
-/// How a scheduled run behaves when a prior scheduled run of the same service is still active.
-enum AgentScheduleOverlapPolicy {
-  /// Do not admit the new scheduled slot while a prior scheduled run is still active.
-  Skip  @map("skip")
-  /// Admit every due scheduled slot regardless of any in-flight scheduled run.
-  Allow @map("allow")
-}
-
 model AgentService {
   id                 String                           @id @default(cuid())
   siloId             String                           @map("silo_id")
@@ -39,7 +31,6 @@ model AgentService {
   revisions          AgentRevision[]                  @relation("AgentServiceRevisions")
   runs               AgentRun[]
   conversations      Conversation[]
-  schedules          AgentServiceSchedule[]
   mcpToolAssignments AgentRevisionMcpToolAssignment[]
   activeRevision     AgentRevision?                   @relation("ActiveAgentRevision", fields: [id, activeRevisionId], references: [agentServiceId, id], onDelete: Restrict)
   principal          Principal?                       @relation("ManagedAgentServicePrincipal", fields: [principalId, siloId], references: [id, siloId], onDelete: Restrict)
@@ -137,30 +128,4 @@ model AgentRevisionMcpToolAssignment {
   @@index([agentServiceId, siloId])
   @@index([toolRevisionId, siloId])
   @@map("agent_revision_mcp_tool_assignments")
-}
-
-/// A recurring schedule that admits managed runs of one AgentService's active revision. The
-/// scheduler (composed inside the control API) evaluates `cron` in `timezone`, catches up missed
-/// slots within a bounded lookback, applies the `overlapPolicy`, and admits each due slot through
-/// the existing run-admission path with a deterministic idempotency key — it never dispatches or
-/// executes anything itself. `enabled=false` suspends evaluation without deleting the schedule.
-model AgentServiceSchedule {
-  id                   String                     @id @default(cuid())
-  siloId               String                     @map("silo_id")
-  agentServiceId       String                     @map("agent_service_id")
-  cron                 String
-  timezone             String
-  overlapPolicy        AgentScheduleOverlapPolicy @default(Skip) @map("overlap_policy")
-  enabled              Boolean                    @default(true)
-  /// Bounded catch-up horizon in seconds; a missed slot older than this is not admitted.
-  catchupWindowSeconds Int                        @default(3600) @map("catchup_window_seconds")
-  /// Wall-clock instant of the newest slot already admitted, advanced after each successful tick.
-  lastScheduledAt      DateTime?                  @map("last_scheduled_at")
-  createdAt            DateTime                   @default(now()) @map("created_at")
-  updatedAt            DateTime                   @updatedAt @map("updated_at")
-  service              AgentService               @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
-
-  @@index([siloId, agentServiceId])
-  @@index([enabled])
-  @@map("agent_service_schedules")
 }

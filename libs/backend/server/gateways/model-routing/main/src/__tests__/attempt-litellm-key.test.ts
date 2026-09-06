@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _IssueAttemptLiteLlmKey } from "../core/attempt-litellm-key";
+import { _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "../core/attempt-litellm-key";
 
 /** Preserve and restore the LiteLLM env the issuer reads. */
 const _saved: Record<string, string | undefined> = {};
@@ -31,7 +31,13 @@ describe("_IssueAttemptLiteLlmKey", function _describeIssuer()
 	afterEach(function _restore()
 	{
 		vi.unstubAllGlobals();
-		for (const key of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"]) { if (_saved[key] === undefined) delete process.env[key]; else process.env[key] = _saved[key]; }
+		for (const key of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"])
+		{
+			if (_saved[key] === undefined)
+				delete process.env[key];
+			else
+				process.env[key] = _saved[key];
+		}
 	});
 
 	it("mints a key bound to the single model, budget, and expiry", async function _mints()
@@ -79,6 +85,15 @@ describe("_IssueAttemptLiteLlmKey", function _describeIssuer()
 		vi.stubGlobal("fetch", _fetchMock({ ok: true, status: 200, body: {} }));
 
 		await expect(_IssueAttemptLiteLlmKey({ keyAlias: "attempt-run1-1", modelAlias: "silo-default", maxBudgetUsd: 2, expirySeconds: 3600 })).rejects.toThrow(/returned no key/);
+	});
+
+	it("revokes every uncertain mint under the exact attempt alias", async function _RevokesAlias()
+	{
+		const mock = _fetchMock({ ok: true, status: 200, body: {} });
+		vi.stubGlobal("fetch", mock);
+		await _RevokeAttemptLiteLlmKeyByAlias({ keyAlias: "attempt-run1-1" });
+		expect(JSON.parse(String(_captured.init?.body))).toEqual({ key_aliases: ["attempt-run1-1"] });
+		expect(_captured.url).toBe("http://litellm.svc/key/delete");
 	});
 
 	it("identifies invalid JSON before it can become an attempt key", async function _RejectsInvalidJson()

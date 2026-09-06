@@ -75,6 +75,7 @@ export class AgentIdentityHistory
 		let expectedRevision = 0n;
 		let firstIdentity: AgentIdentity | null = null;
 		let currentIdentity: AgentIdentity | null = null;
+		let currentHeadEventId: string | null = null;
 		let currentHeadDigest: string | null = null;
 
 		for await (const event of this.historyStore.readStream({ streamName }))
@@ -85,6 +86,7 @@ export class AgentIdentityHistory
 			else if (!_SameAgentIdentityCoordinates(firstIdentity, identity))
 				throw new Error("Agent identity history changed stable identity coordinates");
 			currentIdentity = identity;
+			currentHeadEventId = event.id;
 			currentHeadDigest = _IdentityEventDigest(event);
 			expectedRevision += 1n;
 		}
@@ -99,9 +101,9 @@ export class AgentIdentityHistory
 		if (head.streamName !== streamName || head.revision !== expectedRevision - 1n)
 			throw new Error("Agent identity history changed while loading its current state");
 
-		if (currentHeadDigest === null)
+		if (currentHeadEventId === null || currentHeadDigest === null)
 			throw new Error("Agent identity history did not preserve its current event digest");
-		return { streamName, revision: head.revision, headDigest: currentHeadDigest, identity: currentIdentity };
+		return { streamName, revision: head.revision, headEventId: currentHeadEventId, headDigest: currentHeadDigest, identity: currentIdentity };
 }
 
 	/** Resolves the active parent chain and returns every checked parent head for an atomic child append. */

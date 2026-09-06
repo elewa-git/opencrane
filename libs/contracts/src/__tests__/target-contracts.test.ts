@@ -59,7 +59,6 @@ describe("canonical model exports", function ()
 			admission: { authorizingPrincipalId: "principal-authorizer-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-09-01T00:00:00.000Z" },
 		},
       requestIdempotencyKey: "request-1",
-      lineage: { rootRunId: "run-1", parentRunId: null },
       attempt: 1,
       state: "waiting_for_input",
       inputSnapshotDigest: "sha256:input",

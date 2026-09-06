@@ -1,8 +1,3 @@
-export { __PublishAgentRevision } from "./agent-publication";
-export type { AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult, PublishAgentRevisionCommand, PublishAgentRevisionFailureReason, PublishAgentRevisionResult } from "./agent-publication.types";
-export { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle";
-export { ManagedRunAdmissionOutcomes } from "./agent-revision-lifecycle.types";
-export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, ManagedRunTrigger, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
 export { PrismaAgentRevisionModelSelectionRepository } from "./db/prisma-agent-revision-model-selection";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types";
 export { PrismaAgentRevisionPersonaSelectionRepository } from "./db/prisma-agent-revision-persona-selection";
@@ -15,12 +10,9 @@ export type { PersonalAgentProductEffects } from "./personal-agent-product-effec
 export { InitialPersonalAgentDefaultModelResolutionStatuses } from "./initial-personal-agent-publication.types";
 export type { InitialPersonalAgentDefaultModelResolver } from "./initial-personal-agent-publication.types";
 export { PersonalAgentBootstrapStatuses } from "./personal-agent-bootstrap.types";
-export { __CreateAgentServicesRouter } from "./agent-revision.router";
-export { _CreateAgentServicesRouter } from "./prisma-agent-services.router";
-export type { AgentServicesRouterDependencies, ManagementCaller, ManagementClock } from "./agent-revision.router.types";
-export { _AgentServicesOpenapiPaths } from "./openapi";
-export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule";
-export { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleDenial, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "./agent-schedule.types";
-export { __ManagedAgentServicePrincipal } from "./managed-agent-service-principal";
-export { _CreateManagedExecutionEvidenceAuthority } from "./managed-execution-evidence.factory";
-export type { ManagedExecutionCapabilityEvidence, ManagedExecutionEvidence, ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction, ManagedExecutionIdentityCoordinates, ManagedExecutionMembershipEvidence } from "./managed-execution-evidence.types";
+export { __ExecutionCapabilityEvidence } from "./execution-capability-evidence";
+export type { ExecutionCapabilityEvidence, ExecutionCapabilityEvidenceInput } from "./execution-capability-evidence.types";
+export { PrismaPersonalExecutionEvidenceRepository } from "./db/prisma-personal-execution-evidence-repository";
+export { PersonalExecutionEvidenceAuthority } from "./personal-execution-evidence";
+export { PersonalExecutionEvidenceDenialReasons } from "./personal-execution-evidence.types";
+export type { PersonalExecutionEvidence, PersonalExecutionEvidenceAuthorityPort, PersonalExecutionEvidenceCommand, PersonalExecutionEvidenceMembership, PersonalExecutionEvidenceRepository, PersonalExecutionEvidenceResult, PersonalExecutionEvidenceTransaction, PersonalExecutionIdentityCoordinates, PersonalExecutionRevisionEvidence } from "./personal-execution-evidence.types";

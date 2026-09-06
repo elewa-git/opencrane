@@ -66,6 +66,17 @@ export type FleetMembershipAcceptanceResult =
 	| { readonly status: "accepted" | "already_accepted"; readonly highestAcceptedRevision: number }
 	| { readonly status: "conflict"; readonly highestAcceptedRevision: number };
 
+/** Stable outcomes of advancing the signed-membership acceptance high-water mark. */
+export enum FleetMembershipAcceptanceStatuses
+{
+	/** The high-water mark advanced to the verified revision. */
+	Accepted = "accepted",
+	/** The same verified revision and digest were already accepted. */
+	AlreadyAccepted = "already_accepted",
+	/** A newer revision or another digest already owns the high-water mark. */
+	Conflict = "conflict",
+}
+
 /**
  * Stores the signed membership revisions a silo has received, plus the newest one it has accepted.
  *
@@ -78,8 +89,7 @@ export type FleetMembershipAcceptanceResult =
  *
  * Called by: __VerifyCurrentFleetMembershipEvidence and SignedFleetMembershipAssertionVerifier in
  * this package. The live implementation is {@link PrismaFleetMembershipAuthorityRepository}, built by
- * libs/backend/agents/execution/inputs (personal runs),
- * libs/backend/server/agents/agent-services (managed runs), and
+ * libs/backend/server/agents/agent-services (personal runs), and
  * apps/opencrane/src/app/channel-target-composition.ts.
  *
  * @see FleetMembershipAcceptanceResult
@@ -264,6 +274,31 @@ export interface SignedFleetMembershipAssertionAuthority
 	 *          stored revision holds no matching assertion, or more than one.
 	 */
 	verifyCurrentMembership(subjectId: string, siloId: string, nowEpochMs: number): Promise<VerifyFleetMembershipResult>;
+}
+
+/** Coordinates used to select membership evidence without accepting an assertion id from a caller. */
+export interface SelectFleetMembershipAssertionCommand
+{
+	/** Deployment-trusted issuer whose newest revision is eligible. */
+	readonly trustedIssuerId: string;
+	/** Silo whose signed membership revision is being checked. */
+	readonly siloId: string;
+	/** Subject that must occur exactly once in the newest signed revision. */
+	readonly subjectId: string;
+}
+
+/** Result of selecting one exact assertion from the newest signed membership revision. */
+export type SelectFleetMembershipAssertionResult =
+	| { readonly outcome: "selected"; readonly assertionId: string }
+	| { readonly outcome: "denied"; readonly reason: "missing_revision" | "assertion_mismatch"; readonly revision: number };
+
+/** Stable outcomes returned by exact signed-membership assertion selection. */
+export enum FleetMembershipAssertionSelectionOutcomes
+{
+	/** Exactly one assertion matched the trusted silo and subject. */
+	Selected = "selected",
+	/** No unambiguous assertion could be selected. */
+	Denied = "denied",
 }
 
 /**

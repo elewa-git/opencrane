@@ -48,7 +48,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE TRIGGER "resource_share_recipients_authority"',
 	'ResourceShareRecipient must link its exact active manager-owned grant',
 	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check"',
-	"'capability-catalog-resource-sharing-v1',\n    'opencrane-resource-sharing',\n    1,\n    'sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775'",
+	"'capability-catalog-resource-sharing-v1',\n    'opencrane-resource-sharing',\n    1,\n    'sha256:b5f48844fb545d84297be23804f38dd4a4fc4fa43e59348281f390318b7e9a69'",
 	'CREATE FUNCTION "enforce_agent_revision_assignment_immutability"()',
 	'CREATE TRIGGER "agent_revision_mcp_tool_assignments_immutable"',
 	'CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete',
@@ -124,10 +124,8 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check"',
 	'CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_attempt_sequ_key"',
 	'CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id")',
-	'CREATE UNIQUE INDEX "child_run_completion_deliveries_one_delivery_per_attempt"',
 	'RunEvent must bind the current AgentRun attempt',
 	'RunEvent attempt stream is terminal',
-	'delivered child completion requires exact parent attempt event',
 	'event."payload"->>\'messageId\' = NEW."source_message_id"',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
@@ -147,7 +145,6 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'runtime_external_action_retries',
 	'run.attempt_requested',
 	'run.workload_release_requested',
-	'"parent_delivery_child_run_id"',
 	'CREATE INDEX "conversation_run_events_run_id_message_id_idx"',
 	'RunEvent stream is terminal',
 	"'capability-catalog-opencrane-core-v1'",

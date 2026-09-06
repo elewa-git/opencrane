@@ -58,8 +58,6 @@ export enum RunEventTypes
 	RunCompleted = "run.completed",
 	/** The run failed and will not continue. Payload: `reason` from a closed list, and an optional `errorType`. */
 	RunFailed = "run.failed",
-	/** The run was cancelled. Cancelling is the server's decision, so the runtime cannot report this one. */
-	RunCancelled = "run.cancelled",
 }
 
 /** The same event types as a plain string union, for producers that hold the value rather than the enum. */
@@ -70,7 +68,7 @@ export interface RunEvent
 {
 	/** Run whose history this event belongs to. */
 	readonly runId: AgentRunId;
-	/** Identifies the run attempt that emitted this event; sequence remains global across retries. */
+	/** Identifies the immutable run attempt that emitted this event. */
 	readonly attempt: number;
 	/** Position in this run's history, starting at 1 with no gaps. */
 	readonly sequence: number;

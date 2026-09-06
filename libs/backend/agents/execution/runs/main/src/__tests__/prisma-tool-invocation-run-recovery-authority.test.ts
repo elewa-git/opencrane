@@ -39,16 +39,7 @@ describe("PrismaToolInvocationRunRecoveryAuthority", function _DescribeRunRecove
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.RecoveryRequired }, data: { state: AgentRunState.Running } });
 	});
 
-	it("does not cross a cancelling run", async function _RejectCancellingRun()
-	{
-		const transaction = _Transaction(0, { attempt: 2, state: AgentRunState.Cancelling });
-		const authority = new PrismaToolInvocationRunRecoveryAuthority();
-
-		await expect(authority.enterRecoveryRequiredInTransaction(transaction, { runId: "run-1", attempt: 2 })).resolves.toBe(ToolInvocationRunRecoveryEnterResults.Cancelling);
-		await expect(authority.resumeRunningInTransaction(transaction, { runId: "run-1", attempt: 2 })).resolves.toBe(false);
-	});
-
-	it("distinguishes a stale attempt from cancellation", async function _RejectStaleAttempt()
+	it("distinguishes a stale attempt from the current attempt", async function _RejectStaleAttempt()
 	{
 		const transaction = _Transaction(0, { attempt: 3, state: AgentRunState.RecoveryRequired });
 		const authority = new PrismaToolInvocationRunRecoveryAuthority();

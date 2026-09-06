@@ -314,7 +314,7 @@ describe("defer tool request authority", function _deferSuite()
 	it("reports unavailable when the run no longer has an active lease subject", async function _unavailable()
 	{
 		const transaction = {
-			agentRun: { findUnique: vi.fn().mockResolvedValue({ ...RUN, state: AgentRunState.Cancelled }) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ ...RUN, state: AgentRunState.Failed }) },
 			conversationComputerActiveLease: _ActiveLeaseDelegate(null),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },

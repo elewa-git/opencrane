@@ -91,7 +91,10 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 		return this._execute(async function _preparationFailure(repository, transaction)
 		{
 			const transition = await repository.recordPreparationFailure(invocationId, expectedRevision, now, policy, failureCode);
-			if (!transition.changed || transition.invocation === null) return transition.invocation;
+			if (!transition.changed || transition.invocation === null)
+			{
+				return transition.invocation;
+			}
 			const invocation = transition.invocation;
 			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, invocation.failureCode ?? "external_action_preparation_failed", invocation.state === ToolInvocationStates.Preparing, policy.attemptLimit));
 			return invocation;
@@ -143,11 +146,17 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 		return this._execute(async function _releaseClaim(repository, transaction)
 		{
 			const transition = await repository.releaseClaimBeforeDispatch(claim, now);
-			if (!transition.changed || transition.invocation === null) return transition.invocation;
+			if (!transition.changed || transition.invocation === null)
+			{
+				return transition.invocation;
+			}
 			const invocation = transition.invocation;
 			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
 			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _START_EVENT_FAILURE_CODE, retrying, TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit));
-			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
+			if (invocation.state === ToolInvocationStates.RecoveryRequired)
+			{
+				await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
+			}
 			return invocation;
 		});
 	}
@@ -161,11 +170,17 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 		return this._execute(async function _recoverExpiredClaim(repository, transaction)
 		{
 			const transition = await repository.recoverExpiredClaim(invocationId, now);
-			if (!transition.changed || transition.invocation === null) return transition.invocation;
+			if (!transition.changed || transition.invocation === null)
+			{
+				return transition.invocation;
+			}
 			const invocation = transition.invocation;
 			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
 			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _EXPIRED_CLAIM_FAILURE_CODE, retrying, TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit));
-			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
+			if (invocation.state === ToolInvocationStates.RecoveryRequired)
+			{
+				await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
+			}
 			return invocation;
 		});
 	}
@@ -196,7 +211,10 @@ function _failedEvent(invocation: ToolInvocationRecord, reason: string, retrying
 /** Append the timeline entry, and throw if the run refuses it — that rolls back the state change too, so a transition can never happen invisibly. */
 async function _appendLifecycleEvent(sink: ToolInvocationLifecycleEventSink, transaction: Prisma.TransactionClient, event: ToolInvocationLifecycleEvent): Promise<void>
 {
-	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool invocation transition requires its canonical lifecycle event");
+	if (!await sink.appendInTransaction(transaction, event))
+	{
+		throw new Error("tool invocation transition requires its canonical lifecycle event");
+	}
 }
 
 /** Append the "a person must decide this" entry, and throw if the run refuses it, so a tool call can never reach `RecoveryRequired` unnoticed. */
@@ -205,18 +223,21 @@ async function _appendRecoveryEvent(sink: ToolInvocationRecoveryEventSink, trans
 	if (invocation.runId === null || invocation.attempt === null)
 		throw new Error("AgentRun tool recovery event requires a run owner");
 	const event: ToolInvocationRecoveryEvent = { runId: invocation.runId, expectedAttempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationRetryCount: invocation.preparationAttempt, preparationRetryLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, providerOutcome: "unknown_after_dispatch" };
-	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool recovery state requires its canonical recovery event");
+	if (!await sink.appendInTransaction(transaction, event))
+	{
+		throw new Error("tool recovery state requires its canonical recovery event");
+	}
 }
 
-/** Move the run into manual recovery and record it, in the same transaction as the tool call's change. See the comment inside for why a cancelling run is the one case that records nothing. */
+/** Move the run into manual recovery and record it in the same transaction as the tool call's change. */
 async function _enterRecoveryRequired(authority: ToolInvocationRunRecoveryAuthority, sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
 {
 	if (invocation.runId === null || invocation.attempt === null)
 		throw new Error("AgentRun tool recovery requires a run owner");
 	const outcome = await authority.enterRecoveryRequiredInTransaction(transaction, { runId: invocation.runId, attempt: invocation.attempt });
-	// Cancelling is the only valid outcome that suppresses the recovery event. The invocation's
-	// claim-clearing evidence still commits so cancellation can finish without repeating provider I/O.
-	if (outcome === ToolInvocationRunRecoveryEnterResults.Cancelling) return;
-	if (outcome === ToolInvocationRunRecoveryEnterResults.Conflict) throw new Error("tool recovery state conflicts with its owning run attempt");
+	if (outcome === ToolInvocationRunRecoveryEnterResults.Conflict)
+	{
+		throw new Error("tool recovery state conflicts with its owning run attempt");
+	}
 	await _appendRecoveryEvent(sink, transaction, invocation);
 }

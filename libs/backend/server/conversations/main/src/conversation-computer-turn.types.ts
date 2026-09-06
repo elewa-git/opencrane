@@ -83,6 +83,16 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly leaseId: string;
 	readonly siloId: string;
 	readonly outputSourceCommandId: string | null;
+	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
+}
+
+/** Durable material that lets a restarted worker finish an output without retaining plaintext. */
+export interface ConversationComputerTurnOutputReceipt
+{
+	readonly sourceCommandId: string;
+	readonly blockId: string;
+	readonly payloadRef: string;
+	readonly ciphertextDigest: string;
 }
 
 /** Resolves only a currently active, Pod-bound computer and its next pending input. */
@@ -110,12 +120,73 @@ export interface ConversationComputerPendingTurnCompiler
 	compile(command: { readonly siloId: string; readonly computerId: string; readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string; readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string }): Promise<ConversationComputerTurnCandidate | null>;
 }
 
+/** Identifies the canonical Kurrent history already persisted before run admission. */
+export interface ConversationComputerPrePersistedMessageInput
+{
+	/** Selects the history-owned input path. */
+	readonly mode: "pre_persisted_history";
+	/** Identifies the exact pending immutable human message. */
+	readonly messageId: string;
+	/** Records the Kurrent stream revision observed with the ordered message set. */
+	readonly historyRevision: string;
+	/** Preserves canonical message order for the admission snapshot. */
+	readonly orderedMessageIds: readonly string[];
+}
+
+/** Server-resolved authority facts passed to the application-owned run admission composition. */
+export interface ConversationComputerRunAdmissionCommand
+{
+	/** Stable logical run identifier derived from the pending immutable entry. */
+	readonly runId: string;
+	/** Product silo fixed by trusted server configuration. */
+	readonly siloId: string;
+	/** Conversation selected by the verified active computer projection. */
+	readonly conversationId: string;
+	/** Agent service bound immutably to the conversation. */
+	readonly agentServiceId: string;
+	/** Published agent revision observed in the participant-authorized transaction. */
+	readonly agentRevisionId: string;
+	/** Agent identity fixed by the active computer history. */
+	readonly agentIdentityId: string;
+	/** Profile revision fixed by the active computer history. */
+	readonly profileRevisionId: string;
+	/** Principal stamped on the pending human entry and rechecked against current membership and Use authority. */
+	readonly requesterPrincipalId: string;
+	/** Issuer loaded from that exact durable Principal rather than accepted from the computer. */
+	readonly requesterIssuer: string;
+	/** Subject loaded from that exact durable Principal rather than accepted from the computer. */
+	readonly requesterSubjectId: string;
+	/** Verified credential authentication instant preserved on the immutable human author. */
+	readonly requesterAuthenticatedAt: string;
+	/** Immutable pending entry used as the admission idempotency coordinate. */
+	readonly requestIdempotencyKey: string;
+	/** Selects the already persisted Kurrent entry without asking run admission to write it again. */
+	readonly messageInput: ConversationComputerPrePersistedMessageInput;
+	/** Logical computer proven active by current Kurrent history. */
+	readonly computerId: string;
+	/** Active lease proven by current Kurrent history. */
+	readonly leaseId: string;
+	/** Lease generation copied from the verified current computer state. */
+	readonly leaseGeneration: number;
+	/** SandboxClaim whose Pod binding passed the infrastructure verifier. */
+	readonly sandboxClaimId: string;
+}
+
+/** Application-supplied boundary that atomically admits and compiles one immutable run input. */
+export interface ConversationComputerRunAdmissionPort
+{
+	/** Admit only the server-resolved command; rejection must fail instead of producing an untracked turn. */
+	admit(command: ConversationComputerRunAdmissionCommand): Promise<CompiledRunInput>;
+}
+
 /** Owns idempotent Kurrent-backed turn freezing and output completion state. */
 export interface ConversationComputerTurnStore
 {
 	createOrRead(turn: FrozenConversationComputerTurn): Promise<FrozenConversationComputerTurn>;
 	load(bootstrapId: string): Promise<FrozenConversationComputerTurn | null>;
-	markOutput(bootstrapId: string, sourceCommandId: string): Promise<"accepted" | "idempotent">;
+	loadActive(command: Pick<ConversationComputerBootstrapCommand, "computerId" | "generation" | "leaseId"> & { readonly siloId: string }): Promise<FrozenConversationComputerTurn | null>;
+	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<"accepted" | "idempotent">;
+	settle(turn: FrozenConversationComputerTurn): Promise<void>;
 }
 
 /** Mints a short-lived virtual key restricted to one model alias and attempt budget. */
@@ -142,12 +213,21 @@ export interface ConversationComputerBoundWriterFactory
 /** Dependencies of the durable computer-turn product authority. */
 export interface ConversationComputerTurnAuthorityDependencies
 {
+	readonly siloId: string;
 	readonly candidates: ConversationComputerTurnCandidateResolver;
 	readonly credentials: ConversationComputerCredentialIssuer;
 	readonly endpoint: string;
 	readonly outputPayloads: ConversationComputerOutputPayloadStore;
 	readonly store: ConversationComputerTurnStore;
 	readonly writers: ConversationComputerBoundWriterFactory;
+	readonly runLifecycle: ConversationComputerRunLifecycle;
+}
+
+/** Advances the exact admitted run after durable turn milestones. */
+export interface ConversationComputerRunLifecycle
+{
+	start(command: { readonly runId: string; readonly siloId: string; readonly attempt: number; readonly computerId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<void>;
+	complete(command: { readonly runId: string; readonly siloId: string; readonly attempt: number; readonly computerId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<void>;
 }
 
 /** Mints and revokes raw provider-gateway keys behind encrypted retry custody. */
@@ -155,6 +235,7 @@ export interface ConversationComputerRawCredentialAuthority
 {
 	issue(input: { readonly keyAlias: string; readonly modelAlias: string; readonly maxBudgetUsd: number; readonly expirySeconds: number }): Promise<{ readonly key: string }>;
 	revoke(input: { readonly keyAlias: string; readonly key: string }): Promise<void>;
+	revokeByAlias(input: { readonly keyAlias: string }): Promise<void>;
 }
 
 /** Dependencies fixed before the private conversation-computer router is mounted. */

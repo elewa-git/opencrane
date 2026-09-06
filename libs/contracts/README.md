@@ -47,7 +47,9 @@ revision identifiers plus each saved name, description, exact input JSON Schema,
 schema digest. Registry and provider credentials remain entirely behind server-owned execution
 boundaries and never enter the snapshot or conversation computer. The compiled model
 route also freezes the model registry's generated-output allowlist; the executor
-cannot infer image-generation authority from a prompt or provider response. Identity is
+cannot infer image-generation authority from a prompt or provider response. The compiled budget
+preserves the admitted model-turn limit alongside token, cost, tool, and wall-clock ceilings.
+Identity is
 explicitly tagged: a user run
 pins a human's signed fleet membership, while a managed run pins the derived service principal, its
 signed membership, and the exact approved non-personal scopes. A service record cannot be read as a

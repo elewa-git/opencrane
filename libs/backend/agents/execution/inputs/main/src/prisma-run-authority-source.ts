@@ -1,4 +1,4 @@
-import { AgentRevisionState, AgentServiceKind, AgentServiceState } from "@prisma/client";
+import { AgentRevisionState, AgentServiceKind, AgentServiceState, Prisma } from "@prisma/client";
 
 import { RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
@@ -19,13 +19,16 @@ import type { RunAuthoritySource, SessionAssemblyCommand, SessionAssemblyLoad } 
  *
  * @implements RunAuthoritySource
  */
-export class PrismaRunAuthoritySource implements RunAuthoritySource
+export class PrismaRunAuthority implements RunAuthoritySource
 {
+	/** Binds service and revision reads to one admission transaction. */
+	constructor(private readonly prisma: Prisma.TransactionClient) {}
+
 	/** Loads the service only if it is active, and only the published revision its activeRevisionId points to. */
-	async load(command: SessionAssemblyCommand, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<InitialRunAuthority>>
+	async load(command: SessionAssemblyCommand, _transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<InitialRunAuthority>>
 	{
 		// 1. Re-read the service in this silo now that admission has put competing commands in order.
-		const service = await transaction.prisma.agentService.findFirst({
+		const service = await this.prisma.agentService.findFirst({
 			where: { id: command.agentServiceId, siloId: command.siloId, state: AgentServiceState.Active, activeRevisionId: { not: null } },
 			select: {
 				id: true,
@@ -56,8 +59,6 @@ export class PrismaRunAuthoritySource implements RunAuthoritySource
 					: { persona: RunExecutionPersonaPolicies.None, personalMemory: RunExecutionPersonalMemoryPolicies.None },
 				promptCompilerVersion: service.activeRevision.promptPolicyVersion,
 				trigger: command.trigger,
-				rootRunId: command.runId,
-				parentRunId: null,
 			},
 		};
 	}

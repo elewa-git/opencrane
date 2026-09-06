@@ -1,6 +1,6 @@
 import { __EvaluateFleetMembershipRevision } from "@opencrane/models/authorization";
 
-import type { FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifier, VerifyFleetMembershipCommand, VerifyFleetMembershipEvidenceResult, VerifyFleetMembershipResult } from "./membership-authority.types";
+import { FleetMembershipAcceptanceStatuses, FleetMembershipEvidenceOutcomes, type FleetMembershipAuthorityRepository, type FleetMembershipSignatureVerifier, type VerifyFleetMembershipCommand, type VerifyFleetMembershipEvidenceResult, type VerifyFleetMembershipResult } from "./membership-authority.types";
 
 /**
  * Checks one subject's fleet membership and reports how long it may be trusted.
@@ -20,7 +20,7 @@ import type { FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifi
 export async function __VerifyCurrentFleetMembership(repository: FleetMembershipAuthorityRepository, verifier: FleetMembershipSignatureVerifier, command: VerifyFleetMembershipCommand): Promise<VerifyFleetMembershipResult>
 {
 	const result = await __VerifyCurrentFleetMembershipEvidence(repository, verifier, command);
-	if (result.outcome === "denied")
+	if (result.outcome === FleetMembershipEvidenceOutcomes.Denied)
 		return result;
 	return { outcome: "trusted", revision: result.evidence.revision, trustedUntilEpochMs: result.evidence.trustedUntilEpochMs };
 }
@@ -36,8 +36,8 @@ export async function __VerifyCurrentFleetMembership(repository: FleetMembership
  * comes from the signed revision, never from the caller's input, so a run's stored membership can
  * be checked against the issuer's signature later.
  *
- * Called by `libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence.ts`,
- * which passes the transaction of the run admission it is already inside.
+ * Called by `PrismaPersonalExecutionEvidenceRepository`, which passes the transaction of the run
+ * admission it is already inside.
  * @param repository - Store of signed revisions and of the newest accepted revision per silo.
  * @param verifier - Holder of the issuer's public key.
  * @param command - Silo, subject, assertion, current time, and staleness limit.
@@ -75,7 +75,7 @@ export async function __VerifyCurrentFleetMembershipEvidence(repository: FleetMe
 		lastAcceptedRevision: highestAcceptedRevision,
 		maximumStalenessMs: command.maximumStalenessMs,
 	});
-	if (decision.outcome !== "trusted")
+	if (decision.outcome !== FleetMembershipEvidenceOutcomes.Trusted)
 	{
 		return { outcome: "denied", reason: decision.reason, revision: decision.revision };
 	}
@@ -83,7 +83,7 @@ export async function __VerifyCurrentFleetMembershipEvidence(repository: FleetMe
 	// 4. Record this revision as the newest accepted one. If another admission already recorded a
 	//    newer one, this check loses and denies rather than trusting an older revision.
 	const acceptance = await repository.acceptRevisionAtomically({ issuerId: revision.issuerId, siloId: revision.siloId, revision: revision.revision, payloadDigest: revision.payloadDigest });
-	if (acceptance.status === "conflict")
+	if (acceptance.status === FleetMembershipAcceptanceStatuses.Conflict)
 	{
 		return { outcome: "denied", reason: "acceptance_conflict", revision: revision.revision };
 	}

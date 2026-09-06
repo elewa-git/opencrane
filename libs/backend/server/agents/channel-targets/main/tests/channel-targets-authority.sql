@@ -56,7 +56,7 @@ INSERT INTO "authorization_grants" (
     'channel-participant-send', 'silo-channel', 'principal', 'channel-user-principal', 'personal',
     'channel-user-principal', 'exact', 'channel-target-participant-access',
     'opencrane-product-authorization', 1,
-    'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
+    'sha256:2e5c65be1512d8e4ce7dfa495d125f9de3238e57376fa45f74850de44e3d4952',
     'channel-target:send', 'channel-target', 'route-events', 'allow', 0,
     'channel-user-principal'
 );

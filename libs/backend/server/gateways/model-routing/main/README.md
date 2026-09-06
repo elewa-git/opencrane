@@ -77,6 +77,8 @@ derived from their governed Global resource, so a late first POST cannot create 
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a
   single agent-run attempt (fails hard; the master key never leaves the control plane), with its
   request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`.
+- `_RevokeAttemptLiteLlmKeyByAlias` — reconcile an uncertain mint from its durable attempt alias when
+  encrypted custody could not retain the raw key.
 
 ## Boundary
 

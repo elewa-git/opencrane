@@ -40,10 +40,9 @@ Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. require one app-owned target adapter that joins checked AgentIdentity history, current membership
-   and capability evidence, and an active ConversationComputer lease before it composes both initial
-   admission and retry snapshot authorities. Startup stops until that adapter is supplied; it never
-   substitutes retired request identity or a partial PostgreSQL-only authority;
+3. compose conversation-computer transport with the bounded personal run-admission port. Admission
+   rechecks Kurrent identity, lease and message history plus every immutable compiler input; it never
+   substitutes request identity, relational conversation history, or a partial PostgreSQL authority;
 4. build the public and internal Express applications; and
 5. start the registered workflow and bounded background workers, then open both listeners and attach
    the signed-in conversation WebSocket under one coordinated shutdown path.
@@ -105,7 +104,7 @@ its resources to the lifecycle owner.
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
   configuration and do not expose a reusable ArtifactStore client.
-- `src/app/background-workers.ts` owns the Absurd worker, schedule ticks, durable external-action
+- `src/app/background-workers.ts` owns the Absurd worker, durable external-action
   passes, and MCP completion recovery. Shutdown lets active work finish before Prisma closes.
 - `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
   canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
@@ -140,19 +139,23 @@ bind it to durable assignment evidence.
 
 ### Run admission boundary
 
-Run admission is not an agent proxy and does not execute an agent session. Managed admission
-synchronously combines three existing product authorities:
+Run admission is not an agent proxy and does not execute an agent session. Personal
+ConversationComputer admission synchronously combines three existing product authorities:
 
-1. verify the managed agent service and its current signed membership evidence;
+1. verify the personal agent service, proxied identity, active computer lease, and current signed membership evidence;
 2. assemble one immutable input snapshot from the active revision and effective grants; and
 3. persist the run and admission outcome in the canonical transaction.
 
 The reusable authorities live in
 [`execution/runs`](../../libs/backend/agents/execution/runs/main/README.md) and
-[`execution/inputs`](../../libs/backend/agents/execution/inputs/main/README.md). The current app does
-not compose either authority into its personal-conversation, run-now, or scheduler paths, so this
-checkout cannot admit a production run. The capacity gate likewise has tests but no production
-constructor.
+[`execution/inputs`](../../libs/backend/agents/execution/inputs/main/README.md). The app owns a
+process-wide capacity gate plus Kurrent-backed personal execution-subject, conversation-context, and
+encrypted prompt-message authorities. The production compiler repository resolves persona
+instructions, tools, artifacts, skills, and the model route through a transaction-bound Prisma read
+snapshot and refuses any missing or mismatched immutable reference. Personal ConversationComputer
+admission is mounted; managed run-now and scheduler paths remain absent by design.
+
+Personal run status is mounted for signed-in owners.
 
 When the app composes admission, moving it into another deployable would add a network and availability boundary without
 giving it independent data, credentials, lifecycle, or scaling. A future agent-session gateway
@@ -169,10 +172,10 @@ another deployable's source.
 ## Data & persistence
 
 PostgreSQL owns the durable product record: agent services and revisions, runs and immutable input
-snapshots, the `Conversation -> canonical timeline` authority, approvals, artifacts, skills,
-membership, grants, provider configuration, spend, and audit evidence. An `agent_session`
-conversation conditionally owns serial `AgentRun -> ordered RunEvent` streams; direct and group
-messages create no run.
+snapshots, conversation projections and policy, approvals, artifacts, skills, membership, grants,
+provider configuration, spend, and audit evidence. KurrentDB owns the canonical conversation
+timeline. An `agent_session` conversation conditionally owns serial `AgentRun -> ordered RunEvent`
+streams; direct and group messages create no run.
 
 Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. KurrentDB
 holds canonical conversation and computer lifecycle evidence; Agent Sandbox realizes only the
@@ -198,11 +201,10 @@ are:
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
-| `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
+| `AGENT_RUN_ADMISSION_*` | Active and queued personal-conversation admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
 | `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |
 | `OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_*` | Fleet-owned member directory, invitations, paid-seat, and payment decisions through one silo-scoped service credential | required in Fleet mode |
-| `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |
 | `CHANNEL_TARGET_*`, `CHANNEL_PROXY_SERVICE_ACCOUNT_NAME` | Exact trusted host/silo and TokenReviewed proxy caller for channel resolution | disabled when absent |

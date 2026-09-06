@@ -1,9 +1,9 @@
-import { AgentRunState, ConversationLifecycle, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
+import { AgentRunState, ConversationLifecycle, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
-import { RunAdmissionDenialReasons, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
+import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { ConversationContextInput, ConversationContextRepository, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
+import type { ConversationContextInput, ConversationContextRepository, ConversationHistoryAdmissionReader, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Turns one conversation into an ordered list of message ids, for the snapshot.
@@ -22,24 +22,29 @@ export class PrismaConversationContextRepository implements ConversationContextR
 {
 	/** The admission transaction every input source shares. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Durable history reader supplied by the conversation composition owner. */
+	private readonly history: ConversationHistoryAdmissionReader;
 
 	/** Creates the reader over one admission transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, history: ConversationHistoryAdmissionReader)
 	{
 		this.transaction = transaction;
+		this.history = history;
 	}
 
 	/** Returns no messages for non-conversational work; otherwise only completed messages the caller may see. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject): Promise<SessionAssemblyLoad<ConversationContextInput>>
 	{
-		// 1. Avoid an unnecessary conversation lookup for scheduled and other non-conversational work.
+		// 1. Avoid an unnecessary conversation lookup when the admitted run has no conversation.
 		if (command.conversationId === null)
 		{
-			return { outcome: "loaded", value: { messageIds: [], pendingUserMessage: null } };
+			return command.messageInput === null ? { outcome: "loaded", value: { messageIds: [] } } : { outcome: "denied", reason: "conversation_unavailable" };
 		}
+		if (command.messageInput === null || command.messageInput.mode !== RunAdmissionMessageInputModes.PrePersistedHistory)
+			return { outcome: "denied", reason: "conversation_unavailable" };
 
 		// 2. Re-check the verified principal's organization membership before returning any conversation state.
-		const membership = await this.transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: executionSubject.principalId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
+		const membership = await this.transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requester.subjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		if (membership === null)
 		{
 			return { outcome: "denied", reason: "conversation_unavailable" };
@@ -47,8 +52,8 @@ export class PrismaConversationContextRepository implements ConversationContextR
 
 		// 3. Bind the conversation to its silo, service, mode, open lifecycle, and participant.
 		const conversation = await this.transaction.conversation.findFirst({
-			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: executionSubject.principalId, accessEndedPosition: null } } },
-			select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } }, take: 1, select: { id: true } } },
+			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: command.requester.subjectId, accessEndedPosition: null } } },
+			select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed] } }, take: 1, select: { id: true } } },
 		});
 		if (conversation === null)
 		{
@@ -59,18 +64,30 @@ export class PrismaConversationContextRepository implements ConversationContextR
 			return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun };
 		}
 
-		// 4. Take only completed messages, in transcript order. A message still being written stays out of the snapshot.
-		const entries = await this.transaction.conversationTimelineEntry.findMany({
-			where: { conversationId: conversation.id, message: { is: { state: ConversationMessageState.Completed } } },
-			orderBy: { position: "asc" },
-			select: { messageId: true },
-		});
-		return {
-			outcome: "loaded",
-			value: {
-				messageIds: [...entries.flatMap(function _MessageId(entry): readonly string[] { return entry.messageId === null ? [] : [entry.messageId]; }), command.inputMessageId!],
-				pendingUserMessage: { id: command.inputMessageId!, blocks: command.inputMessageBlocks! },
-			},
-		};
+		// 4. Re-read the exact Kurrent revision so the snapshot cannot trust history coordinates copied by a caller.
+		const history = await this.history.read({ siloId: command.siloId, conversationId: conversation.id, expectedRevision: command.messageInput.historyRevision });
+		if (history === null || !_MatchesHistory(command, executionSubject, history))
+			return { outcome: "denied", reason: "conversation_unavailable" };
+		return { outcome: "loaded", value: { messageIds: [...history.orderedMessageIds] } };
 	}
+}
+
+/** Require exact revision, ordering, final trigger, and immutable human author provenance. */
+function _MatchesHistory(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, history: Awaited<ReturnType<ConversationHistoryAdmissionReader["read"]>>): history is Exclude<typeof history, null>
+{
+	if (history === null || command.messageInput === null)
+		return false;
+	const expected = command.messageInput;
+	return history.historyRevision === expected.historyRevision
+		&& history.orderedMessageIds.length === expected.orderedMessageIds.length
+		&& history.orderedMessageIds.every(function _SameMessage(messageId, index): boolean { return expected.orderedMessageIds[index] === messageId; })
+		&& history.orderedMessageIds.at(-1) === expected.messageId
+		&& history.finalMessageAuthor.principalId === executionSubject.principalId
+		&& history.finalMessageAuthor.principalId === expected.author.principalId
+		&& history.finalMessageAuthor.issuer === expected.author.issuer
+		&& history.finalMessageAuthor.subjectId === expected.author.subjectId
+		&& history.finalMessageAuthor.authenticatedAt === expected.author.authenticatedAt
+		&& expected.author.issuer === command.requester.issuer
+		&& expected.author.subjectId === command.requester.subjectId
+		&& expected.author.authenticatedAt === command.requester.authenticatedAt;
 }

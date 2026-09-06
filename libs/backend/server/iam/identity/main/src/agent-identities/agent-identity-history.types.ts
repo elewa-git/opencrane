@@ -32,6 +32,8 @@ export interface CurrentAgentIdentity
 	readonly streamName: string;
 	/** Reports the exact KurrentDB revision that supplied this current snapshot. */
 	readonly revision: bigint;
+	/** Identifies the exact immutable event stored at the current history head. */
+	readonly headEventId: string;
 	/** Canonical digest of the exact stream event that supplied this current snapshot. */
 	readonly headDigest: string;
 	/** Carries the validated identity snapshot at the reported revision. */

@@ -8,8 +8,6 @@ export type { OrganizationAdminGrantBootstrapRepository, ReconcileOrganizationAd
 export { PrismaOrganizationAdminGrantBootstrapRepository } from "./prisma-organization-admin-grant-bootstrap-repository";
 export type { OrganizationMemberProductGrantBootstrapRepository, ReconcileOrganizationMemberProductGrantsCommand } from "./organization-member-product-grant-bootstrap.types";
 export { ORGANIZATION_MEMBER_PRODUCT_GRANT_MANAGER_ID, PrismaOrganizationMemberProductGrantBootstrapRepository } from "./prisma-organization-member-product-grant-bootstrap-repository";
-export { __CancelPendingRunApprovalAuthority } from "./run-approval-cancellation";
-export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult } from "./run-approval-cancellation.types";
 export { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "./deferred-tool-approval";
 export { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle";
 export { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";

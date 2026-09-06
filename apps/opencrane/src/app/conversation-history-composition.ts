@@ -24,12 +24,14 @@ export function _CreateConversationHistoryComposition(
     request: import("express").Request,
   ) {
     const principal = _ResolveRequestPrincipal(request);
-    return principal === null
+    return principal === null || principal.verifiedAuthenticationAt === null
       ? null
       : {
           siloId: principal.siloId,
           subjectId: principal.externalSubject,
           principalId: principal.principalId,
+		  externalIssuer: principal.externalIssuer,
+		  verifiedAuthenticationAt: principal.verifiedAuthenticationAt.toISOString(),
         };
   };
   const creation = new PrismaAgentSessionCreationUnitOfWork(

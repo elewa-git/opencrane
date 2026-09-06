@@ -1,16 +1,14 @@
 /**
  * Public entry point for `@opencrane/backend/agents/execution/runs`, the package that owns the life
- * of one agent run: admitting it, dispatching it, reporting on it, cancelling it, and retrying it.
+ * of one personal conversation run: admission, immutable input, lifecycle, and owner-visible status.
  *
  * What comes out of here is what another package needs to compose or drive a run — ready-to-mount
- * routers, transaction-owning authorities, the OpenAPI path fragments, the run-input digest, the
- * workflow task controls, and the port types an app must implement or pass through.
+ * routers, transaction-owning authorities, the OpenAPI path fragments, the run-input digest, and
+ * the ports an app must implement or pass through.
  *
  * The narrowed `export type` lists further down are deliberate. Anything not named there stays
- * inside the package. Run retry exposes only `RunRetryAuthority` and its request/result shapes;
- * transaction repositories and the domain decision remain internal so another package cannot go
- * around the package-owned transaction boundary. The same applies to workload-assignment helpers
- * and shapes, which are not exported at all.
+ * inside the package. Transaction repositories and row mappers remain internal so another package
+ * cannot go around the package-owned transaction boundaries.
  *
  * Imported by: apps/opencrane composition and route files, libs/backend/agents/execution
  * (admission, inputs, protocol), libs/backend/server/conversations, and
@@ -18,7 +16,9 @@
  */
 export * from "./attempt-model-key.types";
 export * from "./openapi";
-export * from "./prisma-self-run-cancellation.router";
+export * from "./prisma-run-admission-unit-of-work";
+export * from "./prisma-conversation-run-lifecycle-authority";
+export * from "./conversation-run-lifecycle.types";
 export * from "./prisma-tool-recovery-event-reporter";
 export * from "./prisma-tool-invocation-lifecycle-event-reporter";
 export * from "./prisma-tool-invocation-run-recovery-authority";
@@ -30,8 +30,5 @@ export * from "./run-admission-concurrency";
 export { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyOutcomes } from "./run-admission-concurrency.types";
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types";
 export * from "./run-admission.types";
-export type { RunCancellationRepository } from "./run-cancellation.types";
-export type { SelfRunCancellationRepository } from "./self-run-cancellation.types";
+export type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
 export * from "./run-input-snapshot-digest";
-export { RetryRunInputCompileOutcomes } from "./retry-run-input.types";
-export type { RetryRunInputCompiler } from "./retry-run-input.types";

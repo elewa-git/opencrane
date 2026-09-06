@@ -35,7 +35,7 @@ function _revision(row: { revision: number; issuerId: string; issuerKeyId: strin
  * The accepted-revision row and its audit row commit together with the caller's work, so a run can
  * never exist while the membership it relied on was rolled back.
  *
- * Called by `libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence.ts`.
+ * Called by `PrismaPersonalExecutionEvidenceRepository` during personal run admission.
  * @implements FleetMembershipAuthorityRepository
  */
 export class PrismaFleetMembershipAuthorityRepository implements FleetMembershipAuthorityRepository

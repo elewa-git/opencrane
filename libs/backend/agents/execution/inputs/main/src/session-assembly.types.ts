@@ -1,7 +1,7 @@
 import type { RunInputSnapshotMcpTool } from "@opencrane/contracts";
-import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionMessageAuthor, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject, PersonaRevisionId } from "@opencrane/models/agents";
-import type { MessageContentBlock, MessageId } from "@opencrane/models/conversations";
+import type { MessageId } from "@opencrane/models/conversations";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { JsonValue } from "@opencrane/util";
 
@@ -49,8 +49,24 @@ export interface ConversationContextInput
 {
 	/** Ordered message identifiers included in the runtime prompt. */
 	messageIds: readonly MessageId[];
-	/** The user's new message, waiting to be saved in the same transaction as the run. Null unless a browser conversation is being admitted. */
-	pendingUserMessage: { readonly id: MessageId; readonly blocks: readonly MessageContentBlock[] } | null;
+}
+
+/** Exact durable history facts re-read before the snapshot may freeze its message identifiers. */
+export interface ConversationHistoryAdmissionRead
+{
+	/** Kurrent stream revision that bounded this read. */
+	readonly historyRevision: string;
+	/** Canonical message identifiers in stream order. */
+	readonly orderedMessageIds: readonly MessageId[];
+	/** Immutable human author stored on the final triggering entry. */
+	readonly finalMessageAuthor: RunAdmissionMessageAuthor;
+}
+
+/** Infrastructure-neutral port for re-reading one exact durable conversation-history revision. */
+export interface ConversationHistoryAdmissionReader
+{
+	/** Read through the expected revision or return null when that exact stream boundary is unavailable. */
+	read(command: { readonly siloId: string; readonly conversationId: string; readonly expectedRevision: string }): Promise<ConversationHistoryAdmissionRead | null>;
 }
 
 /** Names one stored preference fact chosen to personalise the prompt. */
@@ -89,6 +105,8 @@ export interface ProductResourceAuthorizationSource
 {
 	/** Batch-checks current Use grants through the transaction-bound central authority. */
 	load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+	/** Rechecks only current Conversation Use before an existing immutable snapshot is returned. */
+	verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
 }
 
 /** Effective run limits resolved from service, silo, and policy. */
@@ -119,7 +137,7 @@ export interface ExecutionSubjectAuthority
  * service can be paused, retired, or have its active revision swapped, and admitting against the
  * old revision would run the wrong instructions.
  *
- * Implemented by: {@link PrismaRunAuthoritySource}. Wired in by
+ * Implemented by: {@link PrismaRunAuthority}. Wired in by
  * `__CreatePrismaManagedSessionAssemblyAuthorities` and
  * `__CreatePrismaPersonalSessionAssemblyAuthorities` (prisma-session-assembly-authorities.ts).
  */
@@ -149,7 +167,7 @@ export interface RunAuthoritySource
  * instructions. `__AssembleRunInputSnapshot` checks the explicit persona policy and refuses with
  * `persona_unavailable` when the loaded value does not match it.
  *
- * Implemented by: {@link PrismaApprovedPersonaSource}.
+ * Implemented by: {@link PrismaApprovedPersonaAuthority}.
  */
 export interface ApprovedPersonaSource
 {
@@ -288,7 +306,7 @@ export interface MemoryScopeSource
  * It updates the MCP admission claim before reading inside the Serializable admission transaction.
  * A concurrent publication change then conflicts with snapshot persistence.
  *
- * Implemented by: {@link PrismaRevisionToolPolicySource}.
+ * Implemented by: {@link PrismaRevisionToolPolicyAuthority}.
  */
 export interface ToolPolicySource
 {
@@ -381,7 +399,7 @@ export interface AssignedSkillRevision
  * a caller can never extend its own run by supplying one. Missing or malformed limits are refused
  * rather than defaulted — an unbudgeted run could burn tokens without bound.
  *
- * Implemented by: {@link PrismaRevisionBudgetPolicySource}.
+ * Implemented by: {@link PrismaRevisionBudgetPolicyAuthority}.
  */
 export interface BudgetPolicySource
 {

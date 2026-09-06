@@ -143,7 +143,7 @@ export interface ExecutionSubject
 }
 
 /** Trigger that created an agent run. */
-export type AgentRunTrigger = "interactive" | "schedule" | "managed_invocation";
+export type AgentRunTrigger = "interactive";
 
 /** Stable durable lifecycle vocabulary for one agent-run attempt. */
 export enum AgentRunStates
@@ -160,30 +160,17 @@ export enum AgentRunStates
 	WaitingForInput = "waiting_for_input",
 	/** Provider ambiguity requires operator recovery. */
 	RecoveryRequired = "recovery_required",
-	/** Cancellation is requested while the stop signal drains. */
-	Cancelling = "cancelling",
 	/** The run completed successfully. */
 	Completed = "completed",
 	/** The run ended in failure. */
 	Failed = "failed",
-	/** The run ended after cancellation. */
-	Cancelled = "cancelled",
 }
 
 /** Durable lifecycle state serialized for one agent-run attempt. */
 export type AgentRunState = `${AgentRunStates}`;
 
 /** Terminal classification recorded for a finished run. */
-export type AgentRunTerminalReason = "success" | "user_cancelled" | "policy_denied" | "budget_exhausted" | "runtime_failure" | "invalid_input";
-
-/** Immutable lineage of a run within a root invocation. */
-export interface AgentRunLineage
-{
-	/** Root run identifier shared by the invocation tree. */
-	readonly rootRunId: AgentRunId;
-	/** Immediate parent run identifier, or null for the root. */
-	readonly parentRunId: AgentRunId | null;
-}
+export type AgentRunTerminalReason = "success" | "policy_denied" | "budget_exhausted" | "runtime_failure" | "invalid_input";
 
 /** Durable record of one agent execution attempt. */
 export interface AgentRun
@@ -204,8 +191,6 @@ export interface AgentRun
 	readonly executionSubject: ExecutionSubject;
 	/** Idempotency key for the request that created the run. */
 	readonly requestIdempotencyKey: string;
-	/** Root and parent lineage for delegated or child work. */
-	readonly lineage: AgentRunLineage;
 	/** One-based attempt number; retries create a new attempt. */
 	readonly attempt: number;
 	/** Current durable lifecycle state. */

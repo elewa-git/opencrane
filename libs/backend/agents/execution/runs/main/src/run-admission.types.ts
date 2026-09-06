@@ -1,8 +1,7 @@
-import type { Prisma } from "@prisma/client";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId } from "@opencrane/models/agents";
-import type { ConversationId, MessageContentBlock, MessageId } from "@opencrane/models/conversations";
+import type { ConversationId, MessageId } from "@opencrane/models/conversations";
 
 /** The run, service, and revision facts accepted when a logical run is first admitted; they never change afterwards. */
 export interface InitialRunAuthority
@@ -16,11 +15,7 @@ export interface InitialRunAuthority
 	/** Version of the prompt compiler selected by the published revision. */
 	readonly promptCompilerVersion: string;
 	/** Trigger accepted for the initial logical run. */
-	readonly trigger: "interactive" | "schedule" | "managed_invocation";
-	/** Root lineage identifier fixed when the logical run is admitted. */
-	readonly rootRunId: string;
-	/** Immediate parent run, or null for a root admission. */
-	readonly parentRunId: string | null;
+	readonly trigger: "interactive";
 }
 
 /** States whether the current immutable execution policy requires a persona revision. */
@@ -39,6 +34,60 @@ export enum RunExecutionPersonalMemoryPolicies
 	Allowed = "allowed",
 	/** The snapshot must not retrieve personal memory. */
 	None = "none",
+}
+
+/**
+ * Selects the persistence state of the message that triggered a conversational run.
+ *
+ * This stable string crosses the conversation and input-assembly packages. It requires every
+ * admitted personal message to exist in Kurrent before the run transaction starts, preventing a
+ * second relational copy.
+ *
+ * Called by: personal conversation turn admission and `__AssembleRunInputSnapshot`.
+ * @see RunAdmissionMessageInput for the fields allowed by each state.
+ */
+export enum RunAdmissionMessageInputModes
+{
+	/** Durable conversation history already contains the server-verified message identifier. */
+	PrePersistedHistory = "pre_persisted_history",
+}
+
+/**
+ * Carries exact server-verified message provenance into snapshot assembly.
+ *
+ * Called by: conversation admission after durable history append.
+ * @see RunAdmissionMessageInputModes for the persistence meaning of each arm.
+ */
+export interface RunAdmissionMessageInput
+{
+	/** Selects the already committed conversation-history path. */
+	readonly mode: RunAdmissionMessageInputModes.PrePersistedHistory;
+	/** Exact final human message that triggered admission. */
+	readonly messageId: MessageId;
+	/** Kurrent stream revision observed with the ordered message set. */
+	readonly historyRevision: string;
+	/** Canonical message order that the snapshot must preserve exactly. */
+	readonly orderedMessageIds: readonly MessageId[];
+	/** Immutable human author facts sealed into the durable history entry. */
+	readonly author: RunAdmissionMessageAuthor;
+}
+
+/**
+ * Preserves immutable human author provenance for the final Kurrent message.
+ *
+ * Called by: conversation history admission readers and the run persistence fence.
+ * @see RunAdmissionMessageInput for the exact history boundary that carries these facts.
+ */
+export interface RunAdmissionMessageAuthor
+{
+	/** Durable local Principal that authored the triggering message. */
+	readonly principalId: string;
+	/** Verified OpenID Connect issuer stored with the human entry. */
+	readonly issuer: string;
+	/** Issuer-scoped subject stored with the human entry. */
+	readonly subjectId: string;
+	/** Credential authentication instant stored with the human entry. */
+	readonly authenticatedAt: string;
 }
 
 /** Gives the input compiler explicit policy choices without branching on an identity class. */
@@ -63,16 +112,14 @@ export interface RunAdmissionCommandCoordinates
 	readonly conversationId: ConversationId | null;
 	/** User-visible key making duplicate transport delivery return the first admission. */
 	readonly requestIdempotencyKey: string;
-	/** Server-allocated input message included in a conversational user snapshot before its atomic insert. */
-	readonly inputMessageId?: MessageId;
-	/** Validated participant content staged until the run row exists in the same transaction. */
-	readonly inputMessageBlocks?: readonly MessageContentBlock[];
+	/** Exact conversational message provenance, or null for non-conversational work. */
+	readonly messageInput: RunAdmissionMessageInput | null;
 }
 
 /** Captures server-verified request provenance before the transaction resolves its durable principal. */
 export interface RunAdmissionRequester
 {
-	/** OIDC subject from the verified browser or scheduler credential. */
+	/** OIDC subject from the verified browser credential. */
 	readonly subjectId: string;
 	/** OIDC issuer that namespaces the verified subject. */
 	readonly issuer: string;
@@ -84,7 +131,7 @@ export interface RunAdmissionRequester
 export interface RunAdmissionCommand extends RunAdmissionCommandCoordinates
 {
 	/** Trigger accepted for this new logical run. */
-	readonly trigger: "interactive" | "schedule" | "managed_invocation";
+	readonly trigger: "interactive";
 	/** Provenance from which transaction-scoped authority resolves the requester principal. */
 	readonly requester: RunAdmissionRequester;
 }
@@ -93,7 +140,7 @@ export interface RunAdmissionCommand extends RunAdmissionCommandCoordinates
 export interface RunAdmissionTransaction
 {
 	/** Prisma transaction through which all admission reads and durable writes must occur. */
-	readonly prisma: Prisma.TransactionClient;
+	readonly prisma: unknown;
 	/** Central product authority bound to this exact admission transaction. */
 	readonly authorization?: Pick<AuthorizationAuthority, "admit" | "admitPrincipal" | "admitPrincipalBatch" | "listPrincipalEntitled">;
 	/** Canonical server-owned admission time used by every fenced authority read and immutable snapshot. */
@@ -169,7 +216,7 @@ export enum RunAdmissionDenialReasons
 	 */
 	AuthorityConflict = "authority_conflict",
 	/**
-	 * Another run on this conversation has not reached Completed, Failed or Cancelled yet, and a
+	 * Another run on this conversation has not reached Completed or Failed yet, and a
 	 * conversation runs one foreground run at a time. Nothing was written and no queue was joined —
 	 * the caller must wait for the other run to end and send the request again.
 	 */
@@ -197,47 +244,44 @@ export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idem
 /**
  * Extra rows the caller writes in the same transaction as the run, after the run exists.
  *
- * Use it when a row must not be able to exist without its run. The conversation caller writes the
- * user's message here, so a stored message without a run is impossible. It runs last, once the run,
- * its snapshot and its workflow task are already inserted, so it may read anything admission wrote
+ * Use it when a caller-owned relational row must not exist without its run. It runs last, once the
+ * run and snapshot are inserted, so it may read anything admission wrote
  * and may use `value.snapshot.runId` as a foreign key. Throwing rolls the whole admission back.
  *
- * Called by: `PrismaConversationMessageAdmissionUnitOfWork` (server/conversations/main), through
- * {@link RunAdmissionRepository.admit} and `__AssembleRunInputSnapshot`.
+ * Called by: specialized admission compositions through {@link RunAdmissionRepository.admit}.
  */
 export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: RunAdmissionBuild) => Promise<void>;
 
 /**
  * Rows the caller writes inside the admission transaction *before* the snapshot is compiled.
  *
- * This exists for one situation: the run's own inputs do not exist yet. A group `@agent` mention has
- * to create the child conversation, its participants and the parent message first, because the
- * conversation input loader then reads that child conversation inside the same transaction to freeze
- * the transcript. So preparation runs after duplicate detection and before `build`.
+ * Preparation runs after duplicate detection and before `build` when a specialized admission owns
+ * relational authority rows that the snapshot must read in the same transaction. Personal
+ * conversation messages are already durable in Kurrent and do not use this hook.
  *
  * It is skipped entirely for a duplicate request: a repeat of an already-admitted key returns the
- * original snapshot without preparing anything, so the child conversation is created once however
- * many times the browser retries. If compilation then refuses, or the compiled snapshot does not
+	 * original snapshot without preparing anything, so caller-owned preparation is not repeated however
+	 * many times the caller retries. If compilation then refuses, or the compiled snapshot does not
  * match the command, the transaction is rolled back and the prepared rows never commit — the caller
  * still gets the refusal as an ordinary `denied` result rather than an exception.
  *
- * Called by: admission authorities that pass preparation through `__AssembleRunInputSnapshot`.
- * Ordering and rollback are pinned by
- * `prisma-run-admission-repository.test.ts` ("prepares child authority before compilation", "rolls
- * back prepared child authority when snapshot compilation denies", "does not replay preparation for
- * an existing exact run").
+ * Called by: specialized admission authorities that pass preparation through
+ * `__AssembleRunInputSnapshot`; personal conversation admission leaves it absent.
  *
  * @see RunAdmissionCommit for the writes that belong after the run exists instead.
  */
 export type RunAdmissionPrepare = (transaction: RunAdmissionTransaction) => Promise<void>;
+
+/** Rechecks current authority before an existing snapshot may leave the admission transaction. */
+export type RunAdmissionExistingVerifier<TDenial> = (snapshot: RunInputSnapshot, transaction: RunAdmissionTransaction) => Promise<{ readonly outcome: "verified" } | { readonly outcome: "denied"; readonly reason: TDenial }>;
 
 /**
  * The single transaction in which a logical run becomes real.
  *
  * It works through a fixed order at Serializable isolation: resolves committed duplicates,
  * optionally lets the caller write the rows its own inputs need
- * ({@link RunAdmissionPrepare}), re-reads every authority input, and writes the run, its snapshot and
- * its Absurd workflow task. The unique request key chooses one winner, and a concurrent input
+ * ({@link RunAdmissionPrepare}), re-reads every authority input, and writes the run with its first
+ * immutable snapshot. The unique request key chooses one winner, and a concurrent input
  * change makes the transaction retry instead of reaching a committed snapshot.
  *
  * Called by: `__AssembleRunInputSnapshot` in
@@ -248,27 +292,27 @@ export type RunAdmissionPrepare = (transaction: RunAdmissionTransaction) => Prom
 export interface RunAdmissionRepository
 {
 	/**
-	 * Admits one run, or returns the run a previous identical request already admitted.
+	 * Admits one run, or verifies current authority before returning a previous identical request.
 	 *
-		 * `build` runs inside the Serializable transaction and must re-read
+	 * `verifyExisting` runs inside the transaction for every committed duplicate, including unique-key
+	 * race recovery, and must recheck the current authority needed to release the stored snapshot.
+	 * `build` runs inside the Serializable transaction and must re-read
 	 * every input it depends on rather than trusting anything read before the call. If `build`
 	 * returns `denied`, the whole transaction is rolled back and nothing is written. `commit` runs
-	 * last, in the same transaction, for callers that need extra rows written atomically with the
-	 * run. `prepare` is the mirror image, for the caller whose inputs do not exist yet: it runs
-	 * before `build`, and its rows are rolled back with everything else if the admission refuses.
-	 * Neither callback is replayed for a duplicate request, because the duplicate is resolved and
-	 * returned before either is reached.
+	 * last for specialized authorities that own additional relational rows. `prepare` runs before
+	 * `build` for those same specialized authorities. Personal conversation messages already exist
+	 * in Kurrent history, so personal admission supplies neither callback. Neither callback is
+	 * replayed for a duplicate request.
 	 *
 	 * @param command - Run coordinates plus the `requestIdempotencyKey` that makes a repeat safe.
+	 * @param verifyExisting - Rechecks current authority before releasing an existing snapshot.
 	 * @param build - Called inside the transaction to compile the snapshot; its refusal aborts the
 	 * admission with that reason.
 	 * @param commit - Optional extra writes, run in the same transaction after the run exists.
-	 * @param prepare - Optional writes the run's own inputs depend on, run in the same transaction
-	 * before compilation. Only the group `@agent` path uses it, to create the child conversation that
-	 * the conversation input loader then reads. See {@link RunAdmissionPrepare}.
+	 * @param prepare - Optional specialized relational writes run before compilation.
 	 * @returns `accepted` for a new run and `idempotent` for a repeat of one already admitted — both
 	 * carry the same snapshot and both mean the caller may proceed. `denied` carries either the
 	 * reason `build` gave or a {@link RunAdmissionDenialReasons} value.
 	 */
-	admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<RunAdmissionResult<TDenial>>;
+	admit<TDenial>(command: RunAdmissionCommand, verifyExisting: RunAdmissionExistingVerifier<TDenial>, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<RunAdmissionResult<TDenial>>;
 }

@@ -16,9 +16,6 @@
       "@opencrane/backend/server/agents/agent-services": [
         "./libs/backend/server/agents/agent-services/main/src/index.ts"
       ],
-      "@opencrane/backend/server/agents/scheduling": [
-        "./libs/backend/server/agents/scheduling/main/src/index.ts"
-      ],
       "@opencrane/backend/server/agents/channel-targets": [
         "./libs/backend/server/agents/channel-targets/main/src/index.ts"
       ],

@@ -10,7 +10,6 @@ const config: StorybookConfig =
 	stories:
 	[
 		"../src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)",
-		"../../a2ui/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)",
 		"../../../features/onboarding/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)",
 		"../../../features/context/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)",
 		"../../../features/conversation-assets/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)",

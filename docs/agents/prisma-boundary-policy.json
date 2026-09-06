@@ -17,39 +17,18 @@
 				"constructs": []
 			},
 			{
-				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-publication.ts",
-				"adapter": "PrismaAgentServicePublicationRepository",
-				"contract": "AgentServicePublicationRepository",
-				"contractImportPath": "../agent-publication.types",
+				"path": "libs/backend/agents/execution/inputs/main/src/prisma-approved-persona-source.ts",
+				"adapter": "PrismaApprovedPersonaAuthority",
+				"contract": "ApprovedPersonaSource",
+				"contractImportPath": "./session-assembly.types",
 				"constructs": []
 			},
 			{
-				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-lifecycle.ts",
-				"adapter": "PrismaAgentRevisionLifecycleRepository",
-				"contract": "AgentRevisionLifecycleRepository",
-				"contractImportPath": "../agent-revision-lifecycle.types",
-				"constructs": [
-					{
-						"adapter": "PrismaAgentRevisionWriterRepository",
-						"importPath": "./prisma-agent-revision-writer"
-					},
-					{
-						"adapter": "PrismaManagedAuthorizationGrantRepository",
-						"importPath": "@opencrane/backend/server/iam/authorization"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-schedule.ts",
-				"adapter": "PrismaAgentScheduleRepository",
-				"contract": "AgentScheduleRepository",
-				"contractImportPath": "../agent-schedule.types",
-				"constructs": [
-					{
-						"adapter": "PrismaManagedAuthorizationGrantRepository",
-						"importPath": "@opencrane/backend/server/iam/authorization"
-					}
-				]
+				"path": "libs/backend/agents/execution/inputs/main/src/prisma-run-authority-source.ts",
+				"adapter": "PrismaRunAuthority",
+				"contract": "RunAuthoritySource",
+				"contractImportPath": "./session-assembly.types",
+				"constructs": []
 			},
 			{
 				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-runtime-agent-effect-eligibility.ts",
@@ -108,13 +87,6 @@
 				"adapter": "_PrismaDbHealthProbeRepository",
 				"contract": "DbHealthProbeRepository",
 				"contractImportPath": "@opencrane/backend/server/infra/http",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/agents/execution/runs/main/src/prisma-child-run-completion-repository.ts",
-				"adapter": "PrismaChildRunCompletionRepository",
-				"contract": "ChildRunCompletionRepository",
-				"contractImportPath": "./child-run-completion.types",
 				"constructs": []
 			},
 			{
@@ -322,13 +294,6 @@
 				"adapter": "PrismaAgentRevisionWriterRepository",
 				"contract": "AgentRevisionWriterRepository",
 				"contractImportPath": "./prisma-agent-revision-writer.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal-repository.ts",
-				"adapter": "PrismaManagedAgentServicePrincipalRepository",
-				"contract": "ManagedAgentServicePrincipalRepository",
-				"contractImportPath": "../managed-agent-service-principal.types",
 				"constructs": []
 			},
 			{
@@ -588,8 +553,8 @@
 			{
 				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-credential-issuer.ts",
 				"adapter": "PrismaConversationComputerCredentialRepository",
-				"contract": "ConversationComputerCredentialIssuer",
-				"contractImportPath": "../conversation-computer-turn.types",
+				"contract": "ConversationComputerCredentialPersistenceRepository",
+				"contractImportPath": "./conversation-computer-credential-persistence.types",
 				"constructs": []
 			},
 			{
@@ -611,27 +576,6 @@
 				"adapter": "PrismaDefaultModelDefinitionResolverRepository",
 				"contract": "DefaultModelDefinitionResolver",
 				"contractImportPath": "./default-model-definition-resolver.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
-				"adapter": "PrismaEnabledScheduleSnapshotRepository",
-				"contract": "EnabledScheduleSnapshotRepository",
-				"contractImportPath": "./schedule-ticker-unit-of-work.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
-				"adapter": "PrismaActiveScheduledRunRepository",
-				"contract": "ActiveScheduledRunRepository",
-				"contractImportPath": "./schedule-ticker-unit-of-work.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
-				"adapter": "PrismaScheduleCursorRepository",
-				"contract": "ScheduleCursorRepository",
-				"contractImportPath": "./schedule-ticker-unit-of-work.types",
 				"constructs": []
 			},
 			{
@@ -795,13 +739,6 @@
 				"adapter": "PrismaToolInvocationElicitationRepository",
 				"contract": "ToolInvocationElicitationRepository",
 				"contractImportPath": "./tool-invocation-elicitation-authority.types",
-				"constructs": []
-			},
-			{
-				"path": "libs/backend/server/iam/authorization/main/src/run-approval-cancellation.ts",
-				"adapter": "PrismaRunApprovalCancellationRepository",
-				"contract": "RunApprovalCancellationRepository",
-				"contractImportPath": "./run-approval-cancellation.types",
 				"constructs": []
 			},
 			{
@@ -997,9 +934,108 @@
 				"contract": "ModelDefinitionRepository",
 				"contractImportPath": "./model-definition-repository.types",
 				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-run-admission-unit-of-work.ts",
+				"adapter": "PrismaRunAdmissionRepository",
+				"contract": "RunAdmissionPersistenceRepository",
+				"contractImportPath": "./run-admission-persistence.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-conversation-run-lifecycle-authority.ts",
+				"adapter": "PrismaConversationRunLifecycleRepository",
+				"contract": "ConversationRunLifecycleRepository",
+				"contractImportPath": "./conversation-run-lifecycle.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-personal-execution-evidence-repository.ts",
+				"adapter": "PrismaPersonalExecutionEvidenceRepository",
+				"contract": "PersonalExecutionEvidenceRepository",
+				"contractImportPath": "../personal-execution-evidence.types",
+				"constructs": [
+					{
+						"adapter": "PrismaFleetMembershipAuthorityRepository",
+						"importPath": "@opencrane/backend/server/iam/membership"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-kurrent-conversation-prompt-message-repository.ts",
+				"adapter": "PrismaKurrentConversationPromptMessageRepository",
+				"contract": "ConversationPromptMessageSource",
+				"contractImportPath": "@opencrane/backend/agents/execution/inputs",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/inputs/main/src/prisma-prompt-compiler-repository.ts",
+				"adapter": "PrismaPromptCompilerRepository",
+				"contract": "PromptCompilerRepositories",
+				"contractImportPath": "./prompt-compiler.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/inputs/main/src/prisma-revision-tool-policy-source.ts",
+				"adapter": "PrismaRevisionToolPolicyAuthority",
+				"contract": "ToolPolicySource",
+				"contractImportPath": "./session-assembly.types",
+				"constructs": [
+					{
+						"adapter": "PrismaMcpToolAdmissionClaimRepository",
+						"importPath": "./prisma-mcp-tool-admission-claim-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/agents/execution/inputs/main/src/prisma-revision-tool-policy-source.ts",
+				"adapter": "PrismaRevisionBudgetPolicyAuthority",
+				"contract": "BudgetPolicySource",
+				"contractImportPath": "./session-assembly.types",
+				"constructs": []
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/agents/execution/inputs/main/src/prisma-prompt-compiler-repository.ts",
+				"adapter": "PrismaPromptCompilerUnitOfWork",
+				"contract": "PromptCompilerUnitOfWork",
+				"contractImportPath": "./prompt-compiler-unit-of-work.types",
+				"constructs": [
+					{
+						"adapter": "PrismaPromptCompilerRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-run-admission-unit-of-work.ts",
+				"adapter": "PrismaRunAdmissionUnitOfWork",
+				"contract": "RunAdmissionRepository",
+				"contractImportPath": "./run-admission.types",
+				"constructs": [
+					{
+						"adapter": "PrismaRunAdmissionRepository",
+						"importPath": "<same-file>"
+					},
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-conversation-run-lifecycle-authority.ts",
+				"adapter": "PrismaConversationRunLifecycleUnitOfWork",
+				"contract": "ConversationRunLifecycleAuthority",
+				"contractImportPath": "./conversation-run-lifecycle.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationRunLifecycleRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
 			{
 				"path": "libs/backend/server/conversations/main/src/prisma-self-conversation-history.ts",
 				"adapter": "PrismaSelfConversationHistoryUnitOfWork",
@@ -1033,54 +1069,6 @@
 					{
 						"adapter": "PrismaConversationComputerCredentialRepository",
 						"importPath": "<same-file>"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-publication.ts",
-				"adapter": "PrismaAgentServicePublicationUnitOfWork",
-				"contract": "AgentServicePublicationRepository",
-				"contractImportPath": "../agent-publication.types",
-				"constructs": [
-					{
-						"adapter": "PrismaAgentServicePublicationRepository",
-						"importPath": "<same-file>"
-					},
-					{
-						"adapter": "PrismaAuthorizationAuthority",
-						"importPath": "@opencrane/backend/server/iam/authorization"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-lifecycle-unit-of-work.ts",
-				"adapter": "PrismaAgentRevisionLifecycleUnitOfWork",
-				"contract": "AgentRevisionLifecycleRepository",
-				"contractImportPath": "../agent-revision-lifecycle.types",
-				"constructs": [
-					{
-						"adapter": "PrismaAgentRevisionLifecycleRepository",
-						"importPath": "./prisma-agent-revision-lifecycle"
-					},
-					{
-						"adapter": "PrismaAuthorizationAuthority",
-						"importPath": "@opencrane/backend/server/iam/authorization"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-schedule.ts",
-				"adapter": "PrismaAgentScheduleUnitOfWork",
-				"contract": "AgentScheduleRepository",
-				"contractImportPath": "../agent-schedule.types",
-				"constructs": [
-					{
-						"adapter": "PrismaAgentScheduleRepository",
-						"importPath": "<same-file>"
-					},
-					{
-						"adapter": "PrismaAuthorizationAuthority",
-						"importPath": "@opencrane/backend/server/iam/authorization"
 					}
 				]
 			},
@@ -1487,26 +1475,6 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-unit-of-work.ts",
-				"adapter": "PrismaScheduleTickerUnitOfWork",
-				"contract": "ScheduleTickerUnitOfWork",
-				"contractImportPath": "./schedule-ticker-unit-of-work.types",
-				"constructs": [
-					{
-						"adapter": "PrismaEnabledScheduleSnapshotRepository",
-						"importPath": "./prisma-schedule-tick-repositories"
-					},
-					{
-						"adapter": "PrismaActiveScheduledRunRepository",
-						"importPath": "./prisma-schedule-tick-repositories"
-					},
-					{
-						"adapter": "PrismaScheduleCursorRepository",
-						"importPath": "./prisma-schedule-tick-repositories"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/agents/personal/personas/main/src/profile/prisma-persona-persistence-unit-of-work.ts",
 				"adapter": "PrismaPersonaPersistenceUnitOfWork",
 				"contract": "PersonaPersistenceUnitOfWork",
@@ -1627,18 +1595,6 @@
 					{
 						"adapter": "PrismaMcpUnusedToolInvocationRepository",
 						"importPath": "./prisma-mcp-unused-tool-invocation-repository"
-					}
-				]
-			},
-			{
-				"path": "libs/backend/server/iam/authorization/main/src/run-approval-cancellation.ts",
-				"adapter": "PrismaRunApprovalCancellationUnitOfWork",
-				"contract": "RunApprovalCancellationUnitOfWork",
-				"contractImportPath": "./run-approval-cancellation.types",
-				"constructs": [
-					{
-						"adapter": "PrismaRunApprovalCancellationRepository",
-						"importPath": "<same-file>"
 					}
 				]
 			},
@@ -1770,6 +1726,8 @@
 			}
 		],
 		"compositions": [
+			"apps/opencrane/src/app/public-app.ts",
+			"apps/opencrane/src/app/run-admission-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-lifecycle-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-activation-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-turn-composition.ts",
@@ -1779,8 +1737,6 @@
 			"libs/backend/server/conversations/main/src/agent-session-projection.ts",
 			"libs/backend/server/conversations/main/src/prisma-conversation-metadata.ts",
 			"libs/backend/server/gateways/providers/main/src/provider-byok-composition.ts",
-			"libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
-			"libs/backend/server/agents/agent-services/main/src/prisma-agent-services.router.ts",
 			"apps/opencrane/src/app/routes.ts",
 			"libs/backend/server/iam/groups/main/src/routes/groups.ts",
 			"libs/backend/server/iam/audit/main/src/routes/audit.ts",

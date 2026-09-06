@@ -358,7 +358,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const authorized = await _Unit(transaction).verifyMemoryPermission(invocation, claim, snapshot, NOW);
 		expect(transaction.personalMemoryPermissionReceipt.findUnique).toHaveBeenCalledTimes(1);
 		expect(authorized).toEqual({ outcome: "authorized" });
-		transaction.agentRun.findUnique.mockResolvedValueOnce({ attempt: 2, state: AgentRunState.Cancelling });
+		transaction.agentRun.findUnique.mockResolvedValueOnce({ attempt: 2, state: AgentRunState.Running });
 		await expect(_Unit(transaction).verifyMemoryPermission(invocation, claim, snapshot, NOW)).resolves.toEqual({ outcome: "denied" });
 		transaction.toolInvocation.findUnique.mockResolvedValueOnce({ ...invocation, state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 8 });
 		await expect(_Unit(transaction).verifyMemoryPermission(invocation, claim, snapshot, NOW)).resolves.toEqual({ outcome: "denied" });

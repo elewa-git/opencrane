@@ -10,6 +10,10 @@ export interface HumanConversationAuthor
 	readonly principalId: string;
 	/** Identifies the conversation participant represented by this author. */
 	readonly participantId: string;
+	/** Preserves the verified issuer that namespaced the participant subject at message admission. */
+	readonly issuer: string;
+	/** Preserves the server-verified credential authentication instant used for later run admission. */
+	readonly authenticatedAt: string;
 	/** Captures the display name at append time. */
 	readonly name: string;
 	/** Identifies the optional immutable avatar artifact revision. */

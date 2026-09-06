@@ -78,8 +78,10 @@ export interface CompiledModelRoute
 /** Limits OpenCrane enforces across the whole attempt. */
 export interface CompiledBudget
 {
-	/** Maximum total tokens across the attempt, or null when uncapped. */
-	readonly maxTotalTokens: number | null;
+	/** Maximum model calls admitted for the attempt; the conversation computer consumes one. */
+	readonly maxModelTurns: number | null;
+	/** Maximum completion tokens produced by the attempt, or null when uncapped. */
+	readonly maxCompletionTokens: number | null;
 	/** Maximum spend in micro-US-dollars across the attempt, or null when uncapped. */
 	readonly maxCostUsdMicros: number | null;
 	/** Maximum external tool invocations across the attempt, or null when uncapped. */

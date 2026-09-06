@@ -1,4 +1,5 @@
 import { _ElicitationOpenapiPaths } from "@opencrane/backend/agents/execution/elicitation";
+import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
 import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
 import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
 import { _PersonalArtifactsOpenapiPaths } from "@opencrane/backend/server/agents/artifacts";
@@ -45,4 +46,5 @@ export const _DomainOpenapiPaths = {
 	..._PersonalArtifactsOpenapiPaths,
 	..._OrganizationMembersOpenapiPaths,
 	..._SelfConversationHistoryOpenapiPaths,
+	..._SelfRunStatusOpenapiPaths,
 };
