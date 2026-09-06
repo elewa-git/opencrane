@@ -346,3 +346,27 @@ Full run reports belong in the corresponding pull request or issue.
   made every schema change a multi-file ceremony while no external user depends on an upgrade path.
 - lesson: do not attempt an in-place schema upgrade on any dev silo while the pre-1.0 policy stands;
   rebuild instead. Upgrade contracts return at MVP, most likely as a Prisma-ledger migrator Job.
+
+## 2026-09-06 · render-only · testv5 KurrentDB backup and restore qualification · PR #826 · PARTIAL
+
+- findings: chart: the KurrentDB plane now renders TLS `GET /health/live` readiness and liveness
+  probes, a `minAvailable: 1` PodDisruptionBudget, and the `<release>-kurrentdb-backup` CronJob in
+  `fileCopy` (default) or `volumeSnapshot` mode with `values.schema.json` coverage; the Helm
+  contract, workload-ownership, module-growth, and release-versioning gates pass on the default,
+  history-store, and develop-smoke value sets. script: `k8s-deploy.sh --kurrentdb-restore` builds its
+  restore Job from the CronJob's own jobTemplate, refuses a serving ledger without
+  `--kurrentdb-restore-confirm-serving`, keeps a pre-restore safety copy, and re-runs the bootstrap
+  Job; proven only against mocked kubectl/helm in `kurrentdb-restore-contract.sh`. docs: the
+  KurrentDB 26.0 guide marks online file copies as possibly inconsistent for secondary-index files
+  (secondary indexing is on by default) and recommends volume snapshots; the dev GKE cluster had no
+  `VolumeSnapshotClass` on 2026-08-31, so `fileCopy` is the shipped default. Recovery objectives with
+  the default schedule: RPO 24 h plus run time, RTO unmeasured (expected minutes for 20Gi).
+- friction: no offline evidence exists that `/health/live` answers anonymously under
+  `AllowAnonymousEndpointAccess=false`; the official secure-cluster compose examples probe it without
+  credentials, which is the basis for the HTTPS probes. A 3-node topology stays unrendered because
+  per-node advertised hostnames, gossip seeds, and a wildcard node certificate are not produced yet.
+- lesson: the live testv5 drill must (1) confirm the probes report Ready on 26.1.1 with anonymous
+  endpoint access disabled, (2) run one scheduled `fileCopy` backup and one `--kurrentdb-restore
+  latest` end to end and record the measured RTO, (3) create a `VolumeSnapshotClass` on the dev
+  cluster and repeat the drill in `volumeSnapshot` mode, and (4) verify that the restored node
+  accepts the copied secondary-index files or document disabling secondary indexing.

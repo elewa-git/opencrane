@@ -183,7 +183,7 @@ data:
           checkPointAfterMilliseconds: 1000,
           minCheckPointCount: 10,
           maxCheckPointCount: 1000,
-          maxSubscriberCount: 1,
+          maxSubscriberCount: {{ $history.activationSubscription.maxSubscriberCount }},
           namedConsumerStrategy: "RoundRobin"
         }' > "$subscription_body"
         create_subscription_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" --request PUT --header 'Content-Type: application/json' --data-binary "@$subscription_body" "$subscription_url")"
@@ -363,16 +363,27 @@ spec:
                 secretKeyRef:
                   name: {{ $history.bootstrapOps.existingSecret }}
                   key: password
+          # /health/live is served over the node's TLS listener without credentials; the official
+          # secure-cluster compose examples probe it the same way. The kubelet does not verify the
+          # private CA, so the probe proves the HTTP/gRPC listener answers, not the certificate.
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health/live
               port: grpc
-            initialDelaySeconds: 20
-            periodSeconds: 10
+              scheme: HTTPS
+            initialDelaySeconds: {{ $history.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ $history.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ $history.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ $history.probes.readiness.failureThreshold }}
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health/live
               port: grpc
-            initialDelaySeconds: 40
-            periodSeconds: 20
+              scheme: HTTPS
+            initialDelaySeconds: {{ $history.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ $history.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $history.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ $history.probes.liveness.failureThreshold }}
           resources:
             {{- toYaml $history.resources | nindent 12 }}
           volumeMounts:
@@ -397,6 +408,25 @@ spec:
         resources:
           requests:
             storage: {{ $history.persistence.size | quote }}
+{{- if $history.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $serviceName }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kurrentdb
+spec:
+  minAvailable: {{ $history.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "opencrane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: kurrentdb
+{{- end }}
+{{- if $history.backup.enabled }}
+{{ include "opencrane.kurrentdb.backup" . }}
+{{- end }}
 {{- if .Values.networkPolicy.enabled }}
 ---
 apiVersion: networking.k8s.io/v1

@@ -35,6 +35,15 @@
 #                            [--postgres-values FILE]
 #                            [--values FILE] [--set k=v ...] [--helm-arg ARG ...]
 #                            [--reuse-values | --reset-values]
+#                            [--kurrentdb-restore-list]
+#                            [--kurrentdb-restore BACKUP_ID [--kurrentdb-restore-confirm-serving]]
+#
+# KurrentDB restore: --kurrentdb-restore-list prints the scheduled backups of this silo and exits.
+# --kurrentdb-restore BACKUP_ID (or `latest`) scales KurrentDB to zero, restores the data volume
+# from that backup with the same image and scripts the backup CronJob uses, scales it back up,
+# re-runs the bootstrap verification Job, and exits without touching any other release step. It
+# refuses while KurrentDB is serving traffic unless --kurrentdb-restore-confirm-serving is passed,
+# because every conversation entry written after the backup is lost.
 #
 # Value preservation: on an UPGRADE (release already exists) this engine defaults to Helm's
 # --reset-then-reuse-values, so prior --set/-f overrides are NOT silently dropped when a run
@@ -108,6 +117,7 @@ source "$SCRIPT_DIR/provider-key-secrets.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/postgres-release.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
+source "$SCRIPT_DIR/kurrentdb-restore.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -228,6 +238,10 @@ VERIFY_INSECURE="${OPENCRANE_VERIFY_INSECURE:-0}"
 POSTGRES_RELEASE=""
 RELEASE_VERSION="${OPENCRANE_RELEASE_VERSION:-}"
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
+# KurrentDB restore inputs (see the usage header). Both exit before any other release step.
+KURRENTDB_RESTORE_BACKUP_ID=""
+KURRENTDB_RESTORE_CONFIRM_SERVING="0"
+KURRENTDB_RESTORE_LIST="0"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[k8s-deploy]\033[0m $1"; }
@@ -274,6 +288,9 @@ while [[ $# -gt 0 ]]; do
     --set)           EXTRA_SET+=(--set "$2"); shift 2 ;;
     --set-string)    EXTRA_SET+=(--set-string "$2"); shift 2 ;;
     --helm-arg)      EXTRA_HELM_ARGS+=("$2"); shift 2 ;;
+    --kurrentdb-restore)                 KURRENTDB_RESTORE_BACKUP_ID="$2"; shift 2 ;;
+    --kurrentdb-restore-confirm-serving) KURRENTDB_RESTORE_CONFIRM_SERVING="1"; shift ;;
+    --kurrentdb-restore-list)            KURRENTDB_RESTORE_LIST="1"; shift ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
@@ -305,6 +322,45 @@ if [[ -z "$POSTGRES_OPERAND_IMAGE" ]]; then
 fi
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
 KUBERNETES_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
+
+wait_for_final_kurrentdb_bootstrap_job_if_present()
+{
+  local job_name="${RELEASE}-kurrentdb-bootstrap"
+  local job_resource
+  local command_status
+  if job_resource="$(kubectl get "job/$job_name" -n "$NAMESPACE" --ignore-not-found -o name)"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  if (( command_status != 0 )); then
+    err "Unable to inventory final KurrentDB bootstrap Job '$job_name'."
+    return "$command_status"
+  fi
+  if [[ -z "$job_resource" ]]; then
+    return 0
+  fi
+  if kubectl wait --for=condition=complete "job/$job_name" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+    return 0
+  fi
+  command_status=$?
+  err "KurrentDB bootstrap Job '$job_name' did not complete successfully."
+  kubectl get "job/$job_name" -n "$NAMESPACE" -o wide >&2 || true
+  kubectl describe "job/$job_name" -n "$NAMESPACE" >&2 || true
+  kubectl logs "job/$job_name" -n "$NAMESPACE" --all-containers=true >&2 || true
+  return "$command_status"
+}
+
+# The KurrentDB restore paths run once the target silo is known and exit before image resolution,
+# so a silo with a broken ledger never has to wait on registry access to recover its history.
+if [[ "$KURRENTDB_RESTORE_LIST" == "1" ]]; then
+  list_kurrentdb_backups || exit $?
+  exit 0
+fi
+if [[ -n "$KURRENTDB_RESTORE_BACKUP_ID" ]]; then
+  run_kurrentdb_restore "$KURRENTDB_RESTORE_BACKUP_ID" "$KURRENTDB_RESTORE_CONFIRM_SERVING" || exit $?
+  exit 0
+fi
 # --base-domain validation. When supplied it must be a syntactically valid, lowercase
 # FQDN (≥2 labels, no scheme/port/path, no trailing dot) so it can stand in for
 # release hosts.
@@ -595,6 +651,9 @@ _load_kubernetes_api_helm_args memoryGateway "memory gateway"
 MEMORY_GATEWAY_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 _load_kubernetes_api_helm_args agentController "agent controller"
 AGENT_CONTROLLER_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
+# The KurrentDB snapshot Job needs these only in volumeSnapshot mode; the chart ignores them otherwise.
+_load_kubernetes_api_helm_args historyStore.kurrentdb.backup.volumeSnapshot "KurrentDB backup"
+KURRENTDB_BACKUP_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 
 _copy_cnpg_uri_secret() {
   local source_secret="$1"
@@ -903,7 +962,8 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMBERSHIP_HELM_ARGS[@]}"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}"
-  "${AGENT_CONTROLLER_KUBERNETES_API_ARGS[@]}")
+  "${AGENT_CONTROLLER_KUBERNETES_API_ARGS[@]}"
+  "${KURRENTDB_BACKUP_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
@@ -1017,33 +1077,6 @@ _verify_cognee_rollout || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb" || exit $?
-wait_for_final_kurrentdb_bootstrap_job_if_present()
-{
-  local job_name="${RELEASE}-kurrentdb-bootstrap"
-  local job_resource
-  local command_status
-  if job_resource="$(kubectl get "job/$job_name" -n "$NAMESPACE" --ignore-not-found -o name)"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    err "Unable to inventory final KurrentDB bootstrap Job '$job_name'."
-    return "$command_status"
-  fi
-  if [[ -z "$job_resource" ]]; then
-    return 0
-  fi
-  if kubectl wait --for=condition=complete "job/$job_name" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-    return 0
-  fi
-  command_status=$?
-  err "KurrentDB bootstrap Job '$job_name' did not complete successfully."
-  kubectl get "job/$job_name" -n "$NAMESPACE" -o wide >&2 || true
-  kubectl describe "job/$job_name" -n "$NAMESPACE" >&2 || true
-  kubectl logs "job/$job_name" -n "$NAMESPACE" --all-containers=true >&2 || true
-  return "$command_status"
-}
 wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?
 
 _wait_for_release_certificate || exit $?

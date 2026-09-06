@@ -70,7 +70,7 @@
       "properties": {
         "kurrentdb": {
           "type": "object",
-          "required": ["bootstrapOps", "serviceCredential", "bootstrap"],
+          "required": ["bootstrapOps", "serviceCredential", "bootstrap", "probes", "podDisruptionBudget", "backup"],
           "properties": {
             "bootstrapOps": {
               "type": "object",
@@ -124,6 +124,99 @@
                 "activeDeadlineSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
                 "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
                 "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3599 }
+              }
+            },
+            "probes": {
+              "type": "object",
+              "required": ["readiness", "liveness"],
+              "properties": {
+                "readiness": { "$ref": "#/definitions/kurrentdbProbe" },
+                "liveness": { "$ref": "#/definitions/kurrentdbProbe" }
+              }
+            },
+            "podDisruptionBudget": {
+              "type": "object",
+              "required": ["enabled", "minAvailable"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "minAvailable": { "type": "integer", "minimum": 0, "maximum": 3 }
+              }
+            },
+            "backup": {
+              "type": "object",
+              "required": ["enabled", "mode", "schedule", "startingDeadlineSeconds", "activeDeadlineSeconds", "retention", "archive", "volumeSnapshot", "resources"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "mode": { "type": "string", "enum": ["fileCopy", "volumeSnapshot"] },
+                "schedule": {
+                  "type": "string",
+                  "description": "Five-field cron expression or @hourly/@daily/@midnight/@weekly/@monthly, evaluated by the CronJob controller.",
+                  "pattern": "^(@(hourly|daily|midnight|weekly|monthly)|(\\S+\\s+){4}\\S+)$"
+                },
+                "startingDeadlineSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+                "retention": {
+                  "type": "object",
+                  "required": ["keepLast"],
+                  "properties": { "keepLast": { "type": "integer", "minimum": 1, "maximum": 365 } }
+                },
+                "archive": {
+                  "type": "object",
+                  "required": ["persistence"],
+                  "properties": {
+                    "persistence": {
+                      "type": "object",
+                      "required": ["storageClassName", "size"],
+                      "properties": {
+                        "storageClassName": { "type": "string", "maxLength": 253 },
+                        "size": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$" }
+                      }
+                    }
+                  }
+                },
+                "volumeSnapshot": {
+                  "type": "object",
+                  "required": ["className", "readyTimeoutSeconds", "image", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort"],
+                  "properties": {
+                    "className": { "type": "string", "maxLength": 253 },
+                    "readyTimeoutSeconds": { "type": "integer", "minimum": 30, "maximum": 86400 },
+                    "image": {
+                      "type": "object",
+                      "required": ["repository", "digest", "pullPolicy"],
+                      "properties": {
+                        "repository": { "type": "string" },
+                        "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+                        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+                      }
+                    },
+                    "kubernetesApiServerCidrs": { "$ref": "#/definitions/exactCidrList" },
+                    "kubernetesApiServerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                    "kubernetesApiServerEndpointCidrs": { "$ref": "#/definitions/exactCidrList" },
+                    "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "required": ["requests", "limits"],
+                  "properties": {
+                    "requests": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    },
+                    "limits": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -250,6 +343,23 @@
           }
         }
       }
+    }
+  },
+  "definitions": {
+    "kurrentdbProbe": {
+      "type": "object",
+      "required": ["initialDelaySeconds", "periodSeconds", "timeoutSeconds", "failureThreshold"],
+      "properties": {
+        "initialDelaySeconds": { "type": "integer", "minimum": 0, "maximum": 600 },
+        "periodSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 60 },
+        "failureThreshold": { "type": "integer", "minimum": 1, "maximum": 30 }
+      }
+    },
+    "exactCidrList": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+      "uniqueItems": true
     }
   },
   "allOf": [

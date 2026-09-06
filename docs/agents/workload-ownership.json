@@ -15,6 +15,7 @@
     "litellm",
     "kurrentdb",
     "kurrentdb-bootstrap",
+    "kurrentdb-backup",
     "agent-sandbox",
     "postgres-database",
     "postgres-pooler",
@@ -93,7 +94,8 @@
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm",
         "StatefulSet/opencrane-kurrentdb",
-        "Job/opencrane-kurrentdb-bootstrap"
+        "Job/opencrane-kurrentdb-bootstrap",
+        "CronJob/opencrane-kurrentdb-backup"
       ]
     }
   ],
@@ -247,6 +249,15 @@
       "image": "purpose-built bootstrap image at immutable OCI digest",
       "owner": "apps/_infra/kurrentdb",
       "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_resources.tpl", "anchor": "kind: Job", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
+    },
+    {
+      "id": "kurrentdb-backup",
+      "podClass": "CronJob/kurrentdb-backup",
+      "renderedPodClass": "CronJob/opencrane-kurrentdb-backup",
+      "image": "fileCopy mode reuses the bootstrap image at its immutable OCI digest; volumeSnapshot mode uses the operator-supplied digest-pinned kubectl image. The deploy engine derives the one-off restore Job from this CronJob's jobTemplate.",
+      "owner": "apps/_infra/kurrentdb",
+      "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_backup.tpl", "anchor": "kind: CronJob", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
     },
     {

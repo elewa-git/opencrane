@@ -115,6 +115,12 @@ historyStore:
       pullPolicy: IfNotPresent
     service:
       port: 2113
+    # -- Consumer group for conversation-computer activations. Every opencrane-server replica joins
+    # it as a competing consumer, so keep this at or above `clustertenantManager.replicas` plus the
+    # extra replica a rolling restart adds. Activations are idempotent across consumers; the group
+    # is created once by the bootstrap Job, so a change here needs a fresh silo.
+    activationSubscription:
+      maxSubscriberCount: 4
     tls:
       existingSecret: ""
     bootstrapAdmin:
@@ -155,6 +161,64 @@ historyStore:
       limits:
         cpu: "2"
         memory: 2Gi
+    # -- Kubernetes probes call the TLS HTTP health endpoint (`GET /health/live`) instead of only
+    # opening the TCP socket, so a node that listens but cannot serve is taken out of the Service.
+    probes:
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        timeoutSeconds: 5
+        failureThreshold: 3
+    # -- The ledger runs as one node. The budget refuses voluntary evictions (node drains) until an
+    # operator has a fresh backup and allows the disruption; involuntary failures are not affected.
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    # -- Scheduled backup of the KurrentDB data volume. `volumeSnapshot` takes a CSI VolumeSnapshot
+    # (the method KurrentDB documents as consistent while the node runs); `fileCopy` copies the
+    # data files in the documented order into a release-local backup PVC and needs no CSI support.
+    backup:
+      enabled: true
+      mode: fileCopy
+      schedule: "0 2 * * *"
+      startingDeadlineSeconds: 900
+      activeDeadlineSeconds: 3600
+      retention:
+        # -- Number of scheduled backups kept; older ones are pruned after each successful run.
+        keepLast: 7
+      # -- `fileCopy` target volume. Size it for `keepLast` full copies of the data volume.
+      archive:
+        persistence:
+          storageClassName: ""
+          size: 60Gi
+      volumeSnapshot:
+        # -- VolumeSnapshotClass used for scheduled and pre-restore snapshots; required in
+        # `volumeSnapshot` mode.
+        className: ""
+        readyTimeoutSeconds: 900
+        # -- Operator-supplied, digest-pinned image with `sh`, `kubectl`, `date`, `wc`, and `head`.
+        image:
+          repository: ""
+          digest: ""
+          pullPolicy: IfNotPresent
+        # -- Exact Kubernetes API Service and endpoint CIDRs the snapshot Job may reach. The deploy
+        # engine fills these in the same way as the memory gateway values.
+        kubernetesApiServerCidrs: []
+        kubernetesApiServerPort: 443
+        kubernetesApiServerEndpointCidrs: []
+        kubernetesApiServerEndpointPort: 443
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi
 
 # -- Defines release-scoped profiles for the external Kubernetes Agent Sandbox v1beta1 controller.
 # The chart creates profiles and claim admission only; it never installs the controller or CRDs.

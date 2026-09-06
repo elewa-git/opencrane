@@ -126,3 +126,64 @@ the KurrentDB history plus a separately verified ArtifactStore checkpoint when o
 Source: [`apps/conversation-computer`](https://github.com/elewa-git/opencrane/blob/main/apps/conversation-computer/README.md),
 [`apps/_infra/agent-sandbox`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/agent-sandbox/README.md),
 and [`libs/backend/server/conversations`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/conversations/main/README.md).
+
+## KurrentDB backup and restore
+
+KurrentDB holds every conversation entry and conversation-computer state. PostgreSQL only holds the
+leases and credentials that point at that history, so a lost KurrentDB volume without a backup
+leaves the silo unrecoverable. The silo release therefore runs a backup CronJob,
+`<release>-kurrentdb-backup`, in the server namespace.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `historyStore.kurrentdb.backup.schedule` | `0 2 * * *` | one backup per night (UTC) |
+| `historyStore.kurrentdb.backup.retention.keepLast` | `7` | scheduled backups kept; older ones are pruned after each successful run |
+| `historyStore.kurrentdb.backup.mode` | `fileCopy` | `fileCopy` writes into the `<release>-kurrentdb-backups` PVC; `volumeSnapshot` creates CSI `VolumeSnapshot` objects |
+
+**Where backups live.** In `fileCopy` mode each backup is a directory named by its UTC timestamp
+(for example `20260906T020000Z`) inside the `<release>-kurrentdb-backups` PVC; a directory counts
+only once it carries `manifest.json`. In `volumeSnapshot` mode each backup is a `VolumeSnapshot`
+named `<release>-kurrentdb-<timestamp>` with the label
+`opencrane.ai/kurrentdb-backup-kind=scheduled`.
+
+**Recovery objectives.** RPO is one schedule interval plus the run time: with the default schedule
+up to 24 hours of conversation history and computer state is lost on restore. RTO is the copy or
+snapshot-restore time of the data volume plus the node restart and the bootstrap verification Job,
+expected to be minutes for the default 20Gi volume; the live testv5 drill has not measured it yet.
+The ledger runs as one node, so a node loss means downtime until the restore completes.
+
+**Consistency.** KurrentDB documents volume snapshots as the consistent method while the node runs.
+The `fileCopy` order (index checkpoints, index, database checkpoints, chunks) is the documented
+online procedure for the log and default index, but KurrentDB warns that the secondary-index files
+it rewrites in place can be inconsistent during an online copy. Prefer `volumeSnapshot` wherever a
+`VolumeSnapshotClass` exists.
+
+```bash
+kubectl get cronjob,jobs -n <server-namespace> -l app.kubernetes.io/component=kurrentdb-backup
+kubectl logs -n <server-namespace> job/<latest-backup-job>
+```
+
+**Restore.** Restores run only through the deploy entrypoint with the same silo flags as a deploy:
+
+```bash
+apps/_infra/deploy-k8s/deploy.sh <silo flags> --kurrentdb-restore-list
+apps/_infra/deploy-k8s/deploy.sh <silo flags> --kurrentdb-restore latest
+apps/_infra/deploy-k8s/deploy.sh <silo flags> --kurrentdb-restore <backup-id> --kurrentdb-restore-confirm-serving
+```
+
+The engine refuses while KurrentDB is serving traffic unless `--kurrentdb-restore-confirm-serving`
+is passed, because everything written after the backup is discarded. It then scales the StatefulSet
+to zero, keeps a pre-restore safety copy (a `<timestamp>-prerestore` archive directory, or a
+`VolumeSnapshot` labelled `opencrane.ai/kurrentdb-backup-kind=pre-restore` that pruning never
+touches), restores the chosen backup into the data volume, scales the node back up, and re-runs the
+bootstrap Job so the service user, ACL, and activation subscription are verified against the
+restored ledger. Afterwards expect conversation computers whose leases postdate the backup to be
+recorded as `lost`; their next message opens a new generation.
+
+::: warning
+Never `kubectl cp` files into the KurrentDB volume, edit the data PVC by hand, or delete the
+pre-restore safety copy before the restored silo has served traffic correctly.
+:::
+
+Source: [`apps/_infra/kurrentdb`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/kurrentdb/README.md)
+and [`apps/_infra/deploy-k8s/platform`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/platform/README.md).
