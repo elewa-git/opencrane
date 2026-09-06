@@ -12,6 +12,7 @@ source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 prepare_current_chart_sources
 trap 'cleanup_current_chart_sources' EXIT
 CHART_FIXTURE="$(current_chart_sources_dir)"
+echo "[health] render ingress"
 rendered_ingress="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -26,6 +27,7 @@ grep -Fq '            pathType: Exact' <<<"$health_route"
 grep -Fq '                name: opencrane-silo-opencrane-server' <<<"$health_route"
 grep -Fq '                  number: 8080' <<<"$health_route"
 
+echo "[health] render server deployment"
 server_deployment="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -40,6 +42,7 @@ fi
 grep -Fq 'readinessProbe:' <<<"$server_deployment"
 grep -Fq 'path: /healthz' <<<"$server_deployment"
 
+echo "[health] render spa deployment"
 spa_deployment="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -50,6 +53,7 @@ grep -Fq 'image: "ghcr.io/elewa-git/opencrane-ui@sha256:aaaaaaaaaaaaaaaaaaaaaaaa
 grep -Fq 'livenessProbe:' <<<"$spa_deployment"
 grep -Fq 'readinessProbe:' <<<"$spa_deployment"
 
+echo "[health] render pull secret"
 rendered_pull_secret="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -91,6 +95,7 @@ _run_verify() {
   rm -f "$curl_args_file"
 }
 
+echo "[health] verify healthy"
 healthy_output="$(_run_verify healthy 0)"
 grep -Fq 'https://acme.opencrane.local/healthz is healthy' <<<"$healthy_output"
 grep -Fq -- '--connect-timeout' <<<"$healthy_output"
@@ -100,12 +105,15 @@ if grep -Fq -- '--insecure' <<<"$healthy_output"; then
   exit 1
 fi
 
+echo "[health] verify insecure"
 insecure_output="$(_run_verify healthy 1)"
 grep -Fq -- '--insecure' <<<"$insecure_output"
 
+echo "[health] verify unhealthy"
 unhealthy_output="$(_run_verify unhealthy 0)"
 grep -Fq 'https://acme.opencrane.local/healthz is unavailable or unhealthy' <<<"$unhealthy_output"
 
+echo "[health] verify missing curl"
 missing_curl_output="$(_run_verify healthy 0 1)"
 grep -Fq 'curl is unavailable — skipping the HTTP health check.' <<<"$missing_curl_output"
 
@@ -137,6 +145,7 @@ JSON
   grep -Fq 'observed image IDs: ghcr.io/elewa-git/opencrane-ui@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' <<<"$result"
 }
 
+echo "[health] verify spa rollout"
 _verify_spa_rollout
 
 if (
@@ -213,4 +222,5 @@ if (
   exit 1
 fi
 
+echo "post-deploy health contract: PASS"
 echo "post-deploy health contract: PASS"
