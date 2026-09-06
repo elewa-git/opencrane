@@ -709,11 +709,9 @@ CREATE TABLE "conversations" (
     "computer_agent_identity_id" TEXT,
     "computer_profile_revision_id" TEXT,
     "lifecycle" "ConversationLifecycle" NOT NULL DEFAULT 'open',
-    "context_revision_id" TEXT,
     "closed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
 
     CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
 );
@@ -782,20 +780,6 @@ CREATE TABLE "conversation_participants" (
     "joined_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "conversation_participants_pkey" PRIMARY KEY ("conversation_id","user_id")
-);
-
--- CreateTable
-CREATE TABLE "conversation_context_revisions" (
-    "id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "revision" INTEGER NOT NULL,
-    "through_message_id" TEXT NOT NULL,
-    "summary" JSONB NOT NULL,
-    "digest" TEXT NOT NULL,
-    "created_by_run_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_context_revisions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2199,10 +2183,7 @@ CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversatio
 CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "conversations_activity_sequence_key" ON "conversations"("activity_sequence");
-
--- CreateIndex
-CREATE INDEX "conversations_silo_id_mode_lifecycle_activity_sequence_idx" ON "conversations"("silo_id", "mode", "lifecycle", "activity_sequence");
+CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at");
 
 -- CreateIndex
 CREATE INDEX "conversations_silo_id_agent_service_id_lifecycle_idx" ON "conversations"("silo_id", "agent_service_id", "lifecycle");
@@ -2212,9 +2193,6 @@ CREATE UNIQUE INDEX "conversations_id_silo_id_key" ON "conversations"("id", "sil
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "silo_id", "agent_service_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversations_silo_id_computer_id_key" ON "conversations"("silo_id", "computer_id");
@@ -2253,15 +2231,6 @@ CREATE INDEX "conversation_computer_attempt_credentials_expires_at_idx" ON "conv
 
 -- CreateIndex
 CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
-
--- CreateIndex
-CREATE INDEX "conversation_context_revisions_created_by_run_id_idx" ON "conversation_context_revisions"("created_by_run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_revision_key" ON "conversation_context_revisions"("conversation_id", "revision");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_id_key" ON "conversation_context_revisions"("conversation_id", "id");
 
 -- CreateIndex
 CREATE INDEX "elicitation_requests_conversation_id_state_created_at_idx" ON "elicitation_requests"("conversation_id", "state", "created_at");
@@ -2941,9 +2910,6 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_i
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2954,9 +2920,6 @@ ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private
 
 -- AddForeignKey
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3281,8 +3244,6 @@ CREATE TRIGGER "channel_runtime_routes_evidence_guard"
 -- Cross-domain transcript and persona provenance constraints are deliberately database-enforced.
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_fkey"
     FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_created_by_run_id_fkey"
-    FOREIGN KEY ("conversation_id", "created_by_run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_question_fkey"
     FOREIGN KEY ("question_set_id", "question_set_version", "question_id") REFERENCES "persona_questions"("question_set_id", "question_set_version", "question_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_answer_provenance_fkey"
@@ -4021,6 +3982,41 @@ DECLARE
     current_invocation "tool_invocations"%ROWTYPE;
     bound_request "approval_requests"%ROWTYPE;
 BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+            OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+            OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+            OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
+            OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+            OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest" OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
+            OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+            OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
+            OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+            OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+            OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+            OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+            OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+            OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest identity and action bindings are immutable';
+        END IF;
+        IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+            RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
+        END IF;
+        -- The expiry sweep runs after the computer lease may have lapsed, so pending -> expired skips the run and lease fence.
+        IF NEW."state" = 'expired' THEN
+            IF decision_time < OLD."expires_at" THEN
+                RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
+            END IF;
+            IF NEW."decided_by" IS NOT NULL OR NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+                RAISE EXCEPTION 'ApprovalRequest expiry records no decider and no final arguments';
+            END IF;
+            NEW."decided_at" := decision_time;
+            RETURN NEW;
+        END IF;
+    END IF;
     bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
     SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
@@ -4063,28 +4059,6 @@ BEGIN
         END IF;
         RETURN NEW;
     END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
-        OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
-        OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
-        OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest" OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
-        OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
-        OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
-        OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
-        OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
-        OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
-        OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
-        OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
-        OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest identity and action bindings are immutable';
-    END IF;
-    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
-        RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
-    END IF;
     IF NEW."state" = 'cancelled' THEN
         IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
             RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
@@ -4093,9 +4067,7 @@ BEGIN
     ELSE
         NEW."decided_at" := decision_time;
     END IF;
-    IF NEW."state" = 'expired' AND decision_time < OLD."expires_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
-    ELSIF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
+    IF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
         RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
     END IF;
     RETURN NEW;
@@ -4198,6 +4170,19 @@ BEGIN
     END IF;
     IF OLD."lifecycle" = 'closed' THEN
         RAISE EXCEPTION 'closed Conversation is read-only';
+    END IF;
+    -- updated_at orders conversation lists, so it moves only when this transaction stored a new
+    -- participant-visible payload for the conversation or when the lifecycle changes. The database
+    -- stamps the real time itself; a caller-supplied value is only the request to move it.
+    IF NEW."updated_at" IS DISTINCT FROM OLD."updated_at" THEN
+        IF NEW."lifecycle" IS NOT DISTINCT FROM OLD."lifecycle" AND NOT EXISTS (
+            SELECT 1 FROM "conversation_private_payloads"
+            WHERE "conversation_id" = OLD."id" AND "silo_id" = OLD."silo_id"
+              AND xmin = pg_current_xact_id()::xid
+        ) THEN
+            RAISE EXCEPTION 'Conversation updated_at moves only with a participant-visible append or a lifecycle change';
+        END IF;
+        NEW."updated_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
     END IF;
     IF NEW."lifecycle" = 'open' THEN
         IF NEW."closed_at" IS NOT NULL THEN
@@ -4321,22 +4306,6 @@ BEGIN
     END IF;
     IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'failed') THEN
         RAISE EXCEPTION 'non-terminal AgentRun requires an open Conversation';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_conversation_immutable_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'canonical conversation history is immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_context_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_conversation_id TEXT;
-BEGIN
-    SELECT "conversation_id" INTO run_conversation_id FROM "agent_runs" WHERE "id" = NEW."created_by_run_id" FOR UPDATE;
-    IF run_conversation_id IS DISTINCT FROM NEW."conversation_id" THEN
-        RAISE EXCEPTION 'ConversationContextRevision provenance must belong to the exact conversation';
     END IF;
     RETURN NEW;
 END;
@@ -5988,7 +5957,7 @@ ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_
     );
 ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_membership_revision_check" CHECK ("membership_revision" IS NULL OR "membership_revision" > 0);
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check" CHECK (
-        btrim("silo_id") <> '' AND "activity_sequence" > 0 AND
+        btrim("silo_id") <> '' AND
         (("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> ''
           AND "computer_id" IS NOT NULL AND btrim("computer_id") <> ''
           AND "computer_agent_identity_id" IS NOT NULL AND btrim("computer_agent_identity_id") <> ''
@@ -6022,9 +5991,6 @@ ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participant
 CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
     ON "agent_runs"("conversation_id")
     WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed');
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_revision_check" CHECK ("revision" > 0);
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_digest_check" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_summary_check" CHECK (jsonb_typeof("summary") = 'object');
 ALTER TABLE "persona_question_sets" ADD CONSTRAINT "persona_question_sets_valid_check" CHECK (
         btrim("question_set_id") <> '' AND "version" > 0 AND
         (("state" = 'draft' AND "reviewed_by" IS NULL AND "reviewed_at" IS NULL) OR
@@ -6425,10 +6391,6 @@ CREATE TRIGGER "conversation_participants_coordinates" BEFORE INSERT OR UPDATE O
 CREATE TRIGGER "conversation_participants_channel_target_grant_revoke"
     AFTER UPDATE OF "access_ended_position" ON "conversation_participants"
     FOR EACH ROW EXECUTE FUNCTION "revoke_channel_target_grant_after_participant_access_end"();
-CREATE TRIGGER "conversation_context_revisions_append_only" BEFORE UPDATE OR DELETE ON "conversation_context_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_immutable_mutation"();
-CREATE TRIGGER "conversation_context_revisions_exact_provenance" BEFORE INSERT ON "conversation_context_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_context_provenance"();
 CREATE TRIGGER "agent_runs_conversation_authority" BEFORE INSERT OR UPDATE OF "conversation_id", "silo_id", "agent_service_id", "state" ON "agent_runs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_conversation_authority"();
 CREATE TRIGGER "persona_question_sets_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_question_sets"

@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 
 const _BASELINE = new URL("./target-baseline.sql", import.meta.url);
-const _MINIMUM_FUNCTIONS = 83;
-const _MINIMUM_TRIGGERS = 93;
+const _MINIMUM_FUNCTIONS = 81;
+const _MINIMUM_TRIGGERS = 91;
 const _MINIMUM_CONSTRAINTS = 235;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
@@ -82,9 +82,12 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_channel_runtime_route_evidence"()',
 	'CREATE TRIGGER "channel_runtime_routes_evidence_guard"',
 	'legacy ChannelRuntimeRoute evidence can only be created by a reviewed migration',
-	'"activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL',
+	'CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at")',
+	'Conversation updated_at moves only with a participant-visible append or a lifecycle change',
+	'AND xmin = pg_current_xact_id()::xid',
+	'The expiry sweep runs after the computer lease may have lapsed, so pending -> expired skips the run and lease fence.',
+	'ApprovalRequest expiry records no decider and no final arguments',
 	'jsonb_typeof("mcp_tools") = \'array\'',
-	'CREATE UNIQUE INDEX "conversations_activity_sequence_key"',
 	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
 	'CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"(\n  "silo_id", "subject_kind", COALESCE("subject_group_id", \'\'), COALESCE("subject_principal_id", \'\'),\n  "boundary_kind", COALESCE("boundary_group_id", \'\'), COALESCE("boundary_principal_id", \'\'), "boundary_coverage",\n  "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", \'\'), "effect", "priority", COALESCE("manager_id", \'\')\n) WHERE "revoked_at" IS NULL',
 	'CONSTRAINT "model_definitions_generated_output_capabilities_check"',
@@ -132,6 +135,10 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'conversation_run_events',
 	'conversation_timeline_entries',
 	'ConversationTimelineEntryKind',
+	'conversation_context_revisions',
+	'ConversationContextRevision',
+	'"context_revision_id"',
+	'"activity_sequence"',
 	'"proof_key_id"',
 	'"proof_key_thumbprint"',
 	'enforce_terminal_agent_run_event',

@@ -545,4 +545,121 @@ SELECT pg_temp.assert_true(
     EXISTS (SELECT 1 FROM "audit_decisions" WHERE "id" = 'audit-1' AND "audience" = 'service:email-send')
 );
 
+-- Conversation updated_at orders lists, so it moves only with a participant-visible append in the same transaction or a lifecycle change.
+SELECT pg_temp.seed_direct_conversation('conversation-activity-plain', 'silo-1');
+SELECT pg_temp.seed_direct_conversation('conversation-activity-append', 'silo-1');
+SELECT pg_temp.seed_participant('conversation-activity-append', 'user-1');
+INSERT INTO "conversation_private_payloads" ("id", "silo_id", "conversation_id", "author_subject", "idempotency_key", "key_id", "nonce", "auth_tag", "ciphertext", "ciphertext_digest")
+VALUES ('payload-activity-1', 'silo-1', 'conversation-activity-append', 'user-1', 'retry-activity-1', 'key-1', decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), decode('01', 'hex'), 'sha256:' || repeat('a', 64));
+
+SELECT pg_temp.expect_failure(
+    'plain UPDATE of Conversation updated_at is rejected without an append for that conversation',
+    $statement$ UPDATE "conversations" SET "updated_at" = clock_timestamp() WHERE "id" = 'conversation-activity-plain' $statement$,
+    'Conversation updated_at moves only with a participant-visible append or a lifecycle change'
+);
+
+UPDATE "conversations" SET "updated_at" = TIMESTAMP '2000-01-01 00:00:00' WHERE "id" = 'conversation-activity-append';
+SELECT pg_temp.assert_true(
+    'an append in the same transaction moves Conversation updated_at to the database clock, not the caller value',
+    (SELECT "updated_at" <> TIMESTAMP '2000-01-01 00:00:00' AND "updated_at" > clock_timestamp() - interval '1 minute' AND "updated_at" <= clock_timestamp()
+       FROM "conversations" WHERE "id" = 'conversation-activity-append')
+);
+
+UPDATE "conversations" SET "lifecycle" = 'closed', "closed_at" = clock_timestamp(), "updated_at" = clock_timestamp() WHERE "id" = 'conversation-activity-plain';
+SELECT pg_temp.assert_true(
+    'a lifecycle change may move Conversation updated_at without an append',
+    (SELECT "lifecycle" = 'closed' AND "updated_at" > clock_timestamp() - interval '1 minute' FROM "conversations" WHERE "id" = 'conversation-activity-plain')
+);
+
+-- ApprovalRequest expiry outlives the computer lease; every other decision still needs the live run and lease.
+CREATE FUNCTION pg_temp.approval_execution_subject() RETURNS JSONB LANGUAGE sql IMMUTABLE AS $$
+    SELECT ('{"siloId":"silo-1","agentIdentityId":"identity-conversation-approval","principalId":"user-1",'
+        || '"identity":{"agentIdentityId":"identity-conversation-approval","principalId":"user-1"},'
+        || '"membership":{"principalId":"user-1"},'
+        || '"capability":{"agentIdentityId":"identity-conversation-approval","capabilitySetDigest":"sha256:' || repeat('e', 64) || '"},'
+        || '"runScope":{"runId":"run-approval","attempt":1,"agentServiceId":"svc-approval","agentRevisionId":"rev-approval"},'
+        || '"computerScope":{"computerId":"computer-conversation-approval","leaseId":"lease-approval","leaseGeneration":1}}')::jsonb;
+$$;
+SELECT pg_temp.seed_managed_service('silo-1', 'svc-approval', 'phase-d-model', 'rev-approval');
+SELECT pg_temp.seed_agent_conversation('conversation-approval', 'silo-1', 'svc-approval');
+SELECT pg_temp.seed_participant('conversation-approval', 'user-1');
+-- The audit block above forced every constraint immediate; the run and its snapshot reference each other, so defer the pair again.
+SET CONSTRAINTS "agent_runs_input_snapshot_fkey", agent_runs_input_snapshot_complete DEFERRED;
+INSERT INTO "agent_runs" (
+    "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
+    "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest"
+) VALUES (
+    'run-approval', 'silo-1', 'svc-approval', 'rev-approval', 'conversation-approval', 'interactive',
+    'identity-conversation-approval', 'user-1', pg_temp.approval_execution_subject(), 'request-approval', 'sha256:' || repeat('d', 64)
+);
+SELECT pg_temp.seed_run_snapshot('run-approval', 'run-approval-input-1', 1, 'sha256:' || repeat('d', 64), pg_temp.approval_execution_subject());
+UPDATE "agent_runs" SET "state" = 'running', "started_at" = clock_timestamp() WHERE "id" = 'run-approval';
+UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-approval';
+INSERT INTO "tool_invocations" (
+    "id", "silo_id", "run_id", "attempt", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id",
+    "authorization_actor_kind", "authorization_execution_subject", "authorization_coordinates", "authorization_decision_digests",
+    "authorization_assignment_digest", "authorization_evidence_digest",
+    "runtime_instance_id", "command_id", "candidate_id", "tool_revision_id", "tool_invocation_id",
+    "arguments", "arguments_digest", "effective_arguments", "effective_arguments_digest", "request_fingerprint", "request_identity",
+    "approval_required", "recovery_mode", "retry_deadline_at", "next_preparation_attempt_at", "updated_at"
+) VALUES (
+    'invocation-approval', 'silo-1', 'run-approval', 1, 'svc-approval', 'rev-approval', 'identity-conversation-approval', 'user-1',
+    'workload', pg_temp.approval_execution_subject(), '[{"resource":{"kind":"tool","id":"tool-rev-1"},"action":"invoke"}]', ARRAY['sha256:' || repeat('1', 64)],
+    'sha256:' || repeat('2', 64), 'sha256:' || repeat('3', 64),
+    'runtime-approval', 'command-approval', 'candidate-approval', 'tool-rev-1', 'tool-invocation-approval',
+    '{}', 'sha256:' || repeat('4', 64), '{}', 'sha256:' || repeat('4', 64), 'sha256:' || repeat('5', 64), '{}',
+    true, 'manual', clock_timestamp() + interval '1 hour', clock_timestamp(), clock_timestamp()
+);
+UPDATE "tool_invocations" SET "state" = 'awaiting_approval', "revision" = 1, "updated_at" = clock_timestamp() WHERE "id" = 'invocation-approval';
+INSERT INTO "conversation_computer_active_leases" ("computer_id", "silo_id", "conversation_id", "agent_identity_id", "lease_id", "lease_generation", "expires_at", "updated_at")
+VALUES ('computer-conversation-approval', 'silo-1', 'conversation-approval', 'identity-conversation-approval', 'lease-approval', 1, clock_timestamp() + interval '1 hour', clock_timestamp());
+INSERT INTO "elicitation_requests" ("id", "silo_id", "conversation_id", "run_id", "attempt", "assigned_participant_id", "request_key", "purpose", "body_kind", "body", "body_digest", "purpose_payload_digest", "expires_at")
+VALUES ('approval-lapsed-lease', 'silo-1', 'conversation-approval', 'run-approval', 1, 'user-1', 'sha256:' || repeat('6', 64), 'tool_approval', 'approval', '{}', 'sha256:' || repeat('7', 64), 'sha256:' || repeat('8', 64), clock_timestamp() + interval '1 hour');
+INSERT INTO "approval_requests" (
+    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id", "agent_identity_id", "principal_id",
+    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest", "approver_policy_revision", "effective_policy_digest",
+    "expires_at", "elicitation_request_id", "tool_invocation_row_id", "reviewed_tool_arguments", "reviewed_tool_schema",
+    "reviewed_tool_schema_digest", "safe_proposed_arguments", "response_schema"
+) VALUES (
+    'approval-lapsed-lease', 'run-approval', 1, 'rev-approval', 'svc-approval', 'silo-1', 'identity-conversation-approval', 'user-1',
+    'tool', 'tool-rev-1', 'invoke', 'sha256:' || repeat('4', 64), 'sha256:' || repeat('6', 64), 'policy-1', 'sha256:' || repeat('9', 64),
+    clock_timestamp() + interval '500 milliseconds', 'approval-lapsed-lease', 'invocation-approval', '{}', '{}',
+    'sha256:' || repeat('a', 64), '{}', '{}'
+);
+
+-- The lease lapses (the row is gone) while the approval is still pending.
+DELETE FROM "conversation_computer_active_leases" WHERE "computer_id" = 'computer-conversation-approval';
+
+SELECT pg_temp.expect_failure(
+    'ApprovalRequest approval still requires the active computer lease',
+    $statement$ UPDATE "approval_requests" SET "state" = 'approved', "decided_by" = 'user-1', "final_arguments" = '{}', "final_arguments_digest" = 'sha256:' || repeat('4', 64) WHERE "id" = 'approval-lapsed-lease' $statement$,
+    'ApprovalRequest requires its exact active conversation computer lease'
+);
+SELECT pg_temp.expect_failure(
+    'ApprovalRequest expiry without a lease still waits for its deadline',
+    $statement$ UPDATE "approval_requests" SET "state" = 'expired', "decided_at" = clock_timestamp() WHERE "id" = 'approval-lapsed-lease' $statement$,
+    'ApprovalRequest may expire only after its deadline'
+);
+SELECT pg_sleep(0.6);
+SELECT pg_temp.expect_failure(
+    'ApprovalRequest expiry cannot change identity or action bindings',
+    $statement$ UPDATE "approval_requests" SET "state" = 'expired', "decided_at" = clock_timestamp(), "action" = 'other' WHERE "id" = 'approval-lapsed-lease' $statement$,
+    'ApprovalRequest identity and action bindings are immutable'
+);
+SELECT pg_temp.expect_failure(
+    'ApprovalRequest expiry cannot record a decider',
+    $statement$ UPDATE "approval_requests" SET "state" = 'expired', "decided_at" = clock_timestamp(), "decided_by" = 'user-1' WHERE "id" = 'approval-lapsed-lease' $statement$,
+    'ApprovalRequest expiry records no decider and no final arguments'
+);
+UPDATE "approval_requests" SET "state" = 'expired', "decided_at" = clock_timestamp(), "decided_by" = NULL WHERE "id" = 'approval-lapsed-lease';
+SELECT pg_temp.assert_true(
+    'ApprovalRequest expires after its lease lapsed and carries a database decision time without a decider',
+    (SELECT "state" = 'expired' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL FROM "approval_requests" WHERE "id" = 'approval-lapsed-lease')
+);
+SELECT pg_temp.expect_failure(
+    'ApprovalRequest expiry of a non-pending row is rejected',
+    $statement$ UPDATE "approval_requests" SET "state" = 'expired', "decided_at" = clock_timestamp() WHERE "id" = 'approval-lapsed-lease' $statement$,
+    'ApprovalRequest may be decided exactly once'
+);
+
 ROLLBACK;

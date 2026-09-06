@@ -21,29 +21,25 @@ model Conversation {
   /// Rebuildable profile coordinate required to validate the computer stream.
   computerProfileRevisionId     String?                         @map("computer_profile_revision_id")
   lifecycle                     ConversationLifecycle           @default(Open)
-  contextRevisionId             String?                         @map("context_revision_id")
   closedAt                      DateTime?                       @map("closed_at")
   createdAt                     DateTime                        @default(now()) @map("created_at")
-  /// Real database append time for display. Lifecycle or context updates do not advance it.
+  /// Real database time of the latest participant-visible append; conversation lists sort by it.
+  /// The database stamps it inside the transaction that stores a new private payload, and rejects
+  /// any other move except a lifecycle change.
   updatedAt                     DateTime                        @default(now()) @map("updated_at")
-  /// Global database allocation order for list sorting. Rollbacks may leave gaps; commit order does not rewrite it.
-  activitySequence              BigInt                          @unique @default(autoincrement()) @map("activity_sequence")
   participants                  ConversationParticipant[]
   privatePayloads               ConversationPrivatePayload[]
-  contextRevisions              ConversationContextRevision[]   @relation("ConversationContextRevisions")
   runs                          AgentRun[]
   elicitationRequests           ElicitationRequest[]
-  activeContext                 ConversationContextRevision?    @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
   assets                        ConversationAsset[]
   activeComputerLease           ConversationComputerActiveLease?
   service                       AgentService?                   @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
   @@unique([id, siloId, agentServiceId], map: "conversations_exact_service_key")
-  @@unique([id, contextRevisionId])
   /// One computer stream resolves exactly one conversation inside a silo, so a duplicate projection row can never answer for another conversation.
   @@unique([siloId, computerId])
-  @@index([siloId, mode, lifecycle, activitySequence])
+  @@index([siloId, mode, lifecycle, updatedAt])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
 }
@@ -139,22 +135,4 @@ model ConversationParticipant {
   @@id([conversationId, userId])
   @@index([userId, archivedAt, conversationId])
   @@map("conversation_participants")
-}
-
-model ConversationContextRevision {
-  id               String         @id @default(cuid())
-  conversationId   String         @map("conversation_id")
-  revision         Int
-  throughMessageId String         @map("through_message_id")
-  summary          Json
-  digest           String
-  createdByRunId   String         @map("created_by_run_id")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  conversation     Conversation   @relation("ConversationContextRevisions", fields: [conversationId], references: [id], onDelete: Restrict)
-  activeFor        Conversation[] @relation("ActiveConversationContext")
-
-  @@unique([conversationId, revision])
-  @@unique([conversationId, id])
-  @@index([createdByRunId])
-  @@map("conversation_context_revisions")
 }

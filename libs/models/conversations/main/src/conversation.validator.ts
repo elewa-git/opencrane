@@ -20,7 +20,6 @@ const _ConversationBaseShape = {
 	id: _IdentifierSchema,
 	siloId: _IdentifierSchema,
 	lifecycle: z.nativeEnum(ConversationLifecycles),
-	contextRevisionId: _IdentifierSchema.nullable(),
 	closedAt: _InstantSchema.nullable(),
 	createdAt: _InstantSchema,
 	updatedAt: _InstantSchema,

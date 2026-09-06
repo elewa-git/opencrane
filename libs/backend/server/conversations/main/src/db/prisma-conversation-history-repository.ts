@@ -34,13 +34,15 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 		return this._authorize(caller, conversationId, ProductAuthorizationActions.Use, true);
 	}
 
-	/** Stores ciphertext once per participant retry key and returns the winning encrypted row. */
+	/** Stores ciphertext once per participant retry key, moves the conversation to the top of every list, and returns the winning encrypted row. */
 	public async createOrReadPayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string, payloadRef: string, payload: EncryptedConversationPrivatePayload): Promise<{ readonly created: boolean; readonly payload: StoredConversationPrivatePayload }>
 	{
 		const existing = await this.transaction.conversationPrivatePayload.findUnique({ where: { conversationId_authorSubject_idempotencyKey: { conversationId, authorSubject: caller.subjectId, idempotencyKey } } });
 		if (existing !== null)
 			return { created: false, payload: _Stored(existing) };
 		const created = await this.transaction.conversationPrivatePayload.create({ data: { id: payloadRef, siloId: caller.siloId, conversationId, authorSubject: caller.subjectId, idempotencyKey, keyId: payload.keyId, nonce: Buffer.from(payload.nonce), authTag: Buffer.from(payload.authTag), ciphertext: Buffer.from(payload.ciphertext), ciphertextDigest: payload.ciphertextDigest } });
+		// The conversation trigger accepts this move only because the payload above was stored in the same transaction, and stamps the real database time.
+		await this.transaction.conversation.update({ where: { id_siloId: { id: conversationId, siloId: caller.siloId } }, data: { updatedAt: new Date() }, select: { id: true } });
 		return { created: true, payload: _Stored(created) };
 	}
 

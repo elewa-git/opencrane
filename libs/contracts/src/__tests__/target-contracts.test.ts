@@ -81,7 +81,6 @@ describe("canonical model exports", function ()
       mode: ConversationModes.AgentSession,
       lifecycle: ConversationLifecycles.Open,
       agentServiceId: "agent-1",
-      contextRevisionId: null,
       closedAt: null,
       createdAt: "2026-08-10T08:00:00.000Z",
       updatedAt: "2026-08-10T08:00:00.000Z",

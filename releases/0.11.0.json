@@ -4,7 +4,7 @@
   "database": {
     "schemaVersion": "0.11.0",
     "baselinePath": "apps/opencrane/prisma/bootstrap/target-baseline.sql",
-    "baselineSha256": "bf95af480ba0dbab0cdce3c99be117cd4b09c6af52d6393c6c8c14477a8ede2e",
+    "baselineSha256": "a1de1ad453e370acf1e20acdcbb3fc2d53fc8b2645362e85ea4c8fc670900284",
     "operandImage": "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-be461113253b9cd6d51532cf007775ec8385bfe7@sha256:9c27816e67b9f0b23e771a4c8a8a4c8eb4c84abeefead14f727747d21d7d70c7"
   },
   "projects": {
@@ -13,7 +13,6 @@
     "artifact-preprocessor": { "root": "apps/artifact-preprocessor", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "artifact-scanner": { "root": "apps/artifact-scanner", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "artifact-service": { "root": "apps/artifact-service", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
-    "channel-proxy": { "root": "apps/channel-proxy", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "conversation-computer": { "root": "apps/conversation-computer", "adaptedVersion": "0.11.0" },
     "cognee": { "root": "apps/_infra/cognee", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "deploy-k8s": { "root": "apps/_infra/deploy-k8s", "adaptedVersion": "0.11.0", "chartVersion": "0.11.0", "chartAppVersion": "0.11.0" },

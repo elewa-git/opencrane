@@ -77,8 +77,8 @@ unbounded transcript.
 
 ✅ Conversation writes are durable and ordered. 🔶 At admission, however, OpenCrane currently selects
 **every completed message** in the conversation, and the prompt compiler expands every selected
-message into the model input. `ConversationContextRevision` provides a schema for compacted context,
-but no production writer or reader uses it yet.
+message into the model input. No compacted-context store exists yet; the earlier placeholder table was
+removed because nothing wrote to or read from it, and compaction will bring its own schema when it lands.
 
 The target read path is therefore:
 

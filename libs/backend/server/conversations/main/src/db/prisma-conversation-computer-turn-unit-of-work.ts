@@ -5,7 +5,7 @@ import type { MessageEntry } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryReader } from "../conversation-history-reader";
-import type { ConversationPrivatePayloadCipher } from "../conversation-private-payload.types";
+import type { ConversationPrivatePayloadCipher, EncryptedConversationPrivatePayload } from "../conversation-private-payload.types";
 import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { PrismaConversationProductAuthorizationRepository } from "./conversation-product-authorization";
 
@@ -64,7 +64,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 		return { binding: { siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, leaseGeneration: command.generation, agentIdentityId: command.agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: 300, sandboxClaimId: command.sandboxClaimId };
 	}
 
-	/** Encrypt and idempotently persist assistant text before history references it. */
+	/** Encrypt and idempotently persist assistant text before history references it, moving the conversation to the top of every list. */
 	public store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string)
 	{
 		const payloadRef = _Uuid("payload", sourceCommandId);
@@ -74,11 +74,20 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 		return (async () =>
 		{
 			const existing = await this.prisma.conversationPrivatePayload.findUnique({ where: { conversationId_authorSubject_idempotencyKey: { conversationId: turn.binding.conversationId, authorSubject: turn.binding.agentIdentityId, idempotencyKey: sourceCommandId } } });
-			const row = existing ?? await this.prisma.conversationPrivatePayload.create({ data: { id: payloadRef, siloId: turn.siloId, conversationId: turn.binding.conversationId, authorSubject: turn.binding.agentIdentityId, idempotencyKey: sourceCommandId, keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest } });
+			const row = existing ?? await this._createPayload(turn, sourceCommandId, payloadRef, encrypted);
 			if (this.cipher.decrypt({ keyId: row.keyId, nonce: row.nonce, authTag: row.authTag, ciphertext: row.ciphertext, ciphertextDigest: row.ciphertextDigest }, { siloId: row.siloId, conversationId: row.conversationId, payloadRef: row.id, authorSubject: row.authorSubject }) !== text)
 				throw new Error("Conversation computer output idempotency key was reused for different text");
 			return { blockId, payloadRef: row.id, ciphertextDigest: row.ciphertextDigest };
 		})();
+	}
+
+	/** Store one new encrypted payload and move its conversation to the top of every list in the same transaction. */
+	private async _createPayload(turn: FrozenConversationComputerTurn, sourceCommandId: string, payloadRef: string, encrypted: EncryptedConversationPrivatePayload)
+	{
+		const row = await this.prisma.conversationPrivatePayload.create({ data: { id: payloadRef, siloId: turn.siloId, conversationId: turn.binding.conversationId, authorSubject: turn.binding.agentIdentityId, idempotencyKey: sourceCommandId, keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest } });
+		// The conversation trigger accepts this move only because the payload above was stored in the same transaction, and stamps the real database time.
+		await this.prisma.conversation.update({ where: { id_siloId: { id: turn.binding.conversationId, siloId: turn.siloId } }, data: { updatedAt: new Date() }, select: { id: true } });
+		return row;
 	}
 }
 

@@ -76,7 +76,8 @@ export class PrismaConversationMetadataUnitOfWork
           conversation: { siloId: caller.siloId },
         },
         include: { conversation: { include: { participants: true } } },
-        orderBy: { conversation: { activitySequence: "desc" } },
+        // Newest participant-visible append first; the id keeps equal timestamps stable.
+        orderBy: [{ conversation: { updatedAt: "desc" } }, { conversationId: "asc" }],
       });
       const authorization =
         new PrismaConversationProductAuthorizationRepository(transaction);

@@ -43,12 +43,6 @@ function _ReplaceExactlyOnce(source, search, replacement, label)
 
 let normalizedGenerated = _ReplaceExactlyOnce(
 	generated,
-	'    "activity_sequence" BIGSERIAL NOT NULL,',
-	'    "activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,',
-	"conversation activity sequence column",
-);
-normalizedGenerated = _ReplaceExactlyOnce(
-	normalizedGenerated,
 	'    CONSTRAINT "model_definitions_pkey" PRIMARY KEY ("id")\n);',
 	'    CONSTRAINT "model_definitions_pkey" PRIMARY KEY ("id"),\n    CONSTRAINT "model_definitions_generated_output_capabilities_check" CHECK ("generated_output_capabilities" <@ ARRAY[\'image_png\', \'code_execution_files\']::TEXT[])\n);',
 	"model definition primary key",
@@ -130,6 +124,41 @@ DECLARE
     current_invocation "tool_invocations"%ROWTYPE;
     bound_request "approval_requests"%ROWTYPE;
 BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+            OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+            OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+            OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
+            OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+            OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest" OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
+            OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+            OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
+            OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+            OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+            OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+            OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+            OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+            OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest identity and action bindings are immutable';
+        END IF;
+        IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+            RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
+        END IF;
+        -- The expiry sweep runs after the computer lease may have lapsed, so pending -> expired skips the run and lease fence.
+        IF NEW."state" = 'expired' THEN
+            IF decision_time < OLD."expires_at" THEN
+                RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
+            END IF;
+            IF NEW."decided_by" IS NOT NULL OR NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+                RAISE EXCEPTION 'ApprovalRequest expiry records no decider and no final arguments';
+            END IF;
+            NEW."decided_at" := decision_time;
+            RETURN NEW;
+        END IF;
+    END IF;
     bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
     SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
@@ -172,28 +201,6 @@ BEGIN
         END IF;
         RETURN NEW;
     END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
-        OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
-        OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
-        OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest" OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
-        OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
-        OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
-        OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
-        OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
-        OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
-        OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
-        OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
-        OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest identity and action bindings are immutable';
-    END IF;
-    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
-        RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
-    END IF;
     IF NEW."state" = 'cancelled' THEN
         IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
             RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
@@ -202,9 +209,7 @@ BEGIN
     ELSE
         NEW."decided_at" := decision_time;
     END IF;
-    IF NEW."state" = 'expired' AND decision_time < OLD."expires_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
-    ELSIF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
+    IF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
         RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
     END IF;
     RETURN NEW;

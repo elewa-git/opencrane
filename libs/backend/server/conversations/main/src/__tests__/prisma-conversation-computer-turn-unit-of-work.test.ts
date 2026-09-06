@@ -104,9 +104,11 @@ async function* _Events(): AsyncIterable<HistoryRecordedEvent> {
 function _Harness(
   memberships: readonly object[] = [{ subject: "user-1" }],
   admission = { admit: vi.fn().mockResolvedValue(_CompiledInput()) },
+  existingPayload: object | null = null,
 ) {
   const transaction = {
     conversation: {
+      update: vi.fn().mockResolvedValue({ id: "conversation-1" }),
       findFirst: vi
         .fn()
         .mockResolvedValue({
@@ -141,6 +143,8 @@ function _Harness(
     },
     personaRevision: { findUnique: vi.fn() },
     conversationPrivatePayload: {
+      findUnique: vi.fn().mockResolvedValue(existingPayload),
+      create: vi.fn().mockResolvedValue(_PayloadRow("payload-created")),
       findMany: vi
         .fn()
         .mockResolvedValue([
@@ -167,10 +171,17 @@ function _Harness(
   const history = { readStream: vi.fn().mockImplementation(_Events) };
   const cipher = {
     decrypt: vi.fn().mockReturnValue("Hello"),
-    encrypt: vi.fn(),
+    encrypt: vi.fn().mockReturnValue({
+      keyId: "key-1",
+      nonce: new Uint8Array(12),
+      authTag: new Uint8Array(16),
+      ciphertext: new Uint8Array([1]),
+      ciphertextDigest: "sha256:cipher",
+    }),
   };
   return {
     admission,
+    transaction,
     authority: new PrismaConversationComputerTurnUnitOfWork(
       prisma as never,
       history,
@@ -179,6 +190,28 @@ function _Harness(
       admission,
     ),
   };
+}
+
+function _PayloadRow(id: string) {
+  return {
+    id,
+    siloId: "silo-1",
+    conversationId: "conversation-1",
+    authorSubject: "identity-1",
+    idempotencyKey: "command-1",
+    keyId: "key-1",
+    nonce: Buffer.alloc(12),
+    authTag: Buffer.alloc(16),
+    ciphertext: Buffer.from([1]),
+    ciphertextDigest: "sha256:cipher",
+  };
+}
+
+function _Turn() {
+  return {
+    siloId: "silo-1",
+    binding: { conversationId: "conversation-1", agentIdentityId: "identity-1" },
+  } as never;
 }
 
 function _CompiledInput(): CompiledRunInput {
@@ -274,6 +307,29 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
     await expect(
       _Harness(undefined, admission).authority.compile(_COMMAND),
     ).rejects.toThrow("run admission denied");
+  });
+
+  it("moves the conversation to the top of every list in the same transaction that stores new agent output", async function _BumpsOnStoredOutput() {
+    const harness = _Harness();
+    const receipt = await harness.authority.store(_Turn(), "command-1", "Hello");
+    expect(receipt.payloadRef).toBe("payload-created");
+    expect(harness.transaction.conversationPrivatePayload.create).toHaveBeenCalledTimes(1);
+    expect(harness.transaction.conversation.update).toHaveBeenCalledWith({
+      where: { id_siloId: { id: "conversation-1", siloId: "silo-1" } },
+      data: { updatedAt: expect.any(Date) },
+      select: { id: true },
+    });
+    expect(harness.transaction.conversation.update.mock.invocationCallOrder[0]).toBeGreaterThan(
+      harness.transaction.conversationPrivatePayload.create.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("leaves the conversation ordering alone when the output payload was already stored", async function _NoBumpOnStoredRetry() {
+    const harness = _Harness(undefined, undefined, _PayloadRow("payload-existing"));
+    const receipt = await harness.authority.store(_Turn(), "command-1", "Hello");
+    expect(receipt.payloadRef).toBe("payload-existing");
+    expect(harness.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
+    expect(harness.transaction.conversation.update).not.toHaveBeenCalled();
   });
 
   it("rejects compiled input for another run attempt", async function _MismatchedCompiledInput() {

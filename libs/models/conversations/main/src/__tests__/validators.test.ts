@@ -5,7 +5,7 @@ import { ___ConversationCreationRequestSchema, ___ConversationParticipantSchema,
 /** Builds one valid exact immutable-mode conversation value. */
 function _conversation(mode: ConversationModes): Record<string, unknown>
 {
-	const common = { id: "conversation-1", siloId: "silo-1", mode, lifecycle: ConversationLifecycles.Open, contextRevisionId: null, closedAt: null, createdAt: "2026-08-10T08:00:00.000Z", updatedAt: "2026-08-10T08:00:00.000Z" };
+	const common = { id: "conversation-1", siloId: "silo-1", mode, lifecycle: ConversationLifecycles.Open, closedAt: null, createdAt: "2026-08-10T08:00:00.000Z", updatedAt: "2026-08-10T08:00:00.000Z" };
 	return mode === ConversationModes.AgentSession ? { ...common, agentServiceId: "agent-service-1" } : common;
 }
 
