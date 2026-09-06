@@ -20,12 +20,15 @@ import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agen
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
-import { _CreateConversationHistoryComposition } from "./conversation-history-composition";
-import { _ConversationComputerReviewAuthority, _CreateConversationComputerReviewRouter, ConversationComputerHistory, PrismaConversationMetadataUnitOfWork } from "@opencrane/backend/server/conversations";
+import { _CreateConversationHistoryComposition, _ReadConversationPrivatePayloadKeyring } from "./conversation-history-composition";
+import { _ConversationComputerReviewAuthority, _CreateConversationComputerOperatorRouter, _CreateConversationComputerReviewRouter, ConversationComputerHistory, KeyedConversationComputerReviewCredentialDeriver, PrismaConversationMetadataUnitOfWork, type ConversationComputerOperatorCaller } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { AgentSandboxReleaseProfileConfig, InternalRuntimeConfig } from "./config.types";
@@ -55,8 +58,9 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined || agentSandboxReleaseProfile === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	const unavailableInitialComputer = { resolve: async function _Unavailable() { return null; }, createOrdinaryGenesis: async function _UnavailableGenesis() { throw new Error("review composition cannot create conversations"); } };
-	const computerReviewAuthority = historyStore === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataUnitOfWork(prisma, unavailableInitialComputer), new ConversationComputerHistory(historyStore));
+	const computerReviewAuthority = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataUnitOfWork(prisma, unavailableInitialComputer), new ConversationComputerHistory(historyStore), KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversationPrivatePayloadKeyringPath)));
 	const computerReview = computerReviewAuthority === null || agentSandboxReleaseProfile === undefined ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace, logger: _log }, _ResolveRequestPrincipal);
+	const computerOperations = historyStore === undefined ? null : _CreateConversationComputerOperatorRouter({ authorization: { admitReplayParkedActivations: function _Admit(caller) { return _AdmitOrganizationAdministration(prisma, caller, { action: "replay-parked-conversation-computer-activations" }); } }, activations: { replayParked: function _ReplayParked(siloId) { return historyStore.replayParked({ streamName: `computer-activations-${siloId}`, groupName: "conversation-computer-activation" }); } }, logger: _log }, _ResolveRequestPrincipal);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma, function _CreateAuditAuthorization(transaction) { return new PrismaAuthorizationAuthority(transaction); }) },
@@ -77,6 +81,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
 		..._OptionalRoute("/api/v1/me/conversations", conversationHistory),
 		..._OptionalRoute("/api/v1/me/conversations", computerReview),
+		..._OptionalRoute("/api/v1/conversation-computers", computerOperations),
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];
@@ -110,6 +115,16 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		infrastructureRoutes,
 	]);
 	return app;
+}
+
+/** Admit one operator action under the caller's current Organization/Administer grant, inside its own transaction. */
+function _AdmitOrganizationAdministration(prisma: PrismaClient, caller: ConversationComputerOperatorCaller, argumentsValue: Record<string, string>): Promise<boolean>
+{
+	return ___RunInPrismaUnitOfWork(prisma, async function _InTransaction(transaction)
+	{
+		const admission = await new PrismaAuthorizationAuthority(transaction).admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest: ___DigestCanonicalJson(argumentsValue), nowEpochMs: Date.now() });
+		return admission.outcome === AuthorizationDecisionOutcomes.Allow;
+	}, { isolationLevel: "ReadCommitted", operation: "conversation computer operator admission" });
 }
 
 /** Resolve the onboarding owner only from the authenticated user on the request, never from the request body. */

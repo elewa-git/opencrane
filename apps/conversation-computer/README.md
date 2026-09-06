@@ -29,10 +29,13 @@ through the server-owned conversation writer.
 ## Public surface
 
 Entrypoint: `python3 -m src.main` serves `/healthz` and `/readyz` on port 8080. A second listener on
-private port 8090 accepts the current generation's 96-bit lease id from its Downward API coordinate
-and exposes bounded argv-only commands,
-selected workspace files and diffs, plus GET-only proxying to five release-allowlisted localhost
-preview ports. NetworkPolicy admits that port only from this release's OpenCrane server.
+private port 8090 accepts one bearer: a review credential the server derives with a server-only key
+from the silo, computer, generation and lease id. The process fetches that secret once at start over
+the TokenReviewed private API and writes it to a tmpfs file; the listener refuses every request until
+the file exists. The lease id itself is a public Pod label and never grants access. The listener
+exposes bounded argv-only commands, selected workspace files and diffs, plus GET-only proxying to five
+release-allowlisted localhost preview ports. NetworkPolicy admits that port only from this release's
+OpenCrane server.
 The same authenticated gateway exposes Chromium 142 CDP discovery, creates targets only for those
 localhost previews, and renders bounded preview screenshots. Raw CDP remains on Pod loopback port
 9222 and is neither a container port nor a public server route.
@@ -55,7 +58,9 @@ holds no product authorization or lifecycle authority.
 The image runs as uid/gid 65532 with no writable application files. Readiness requires
 `OPENCRANE_COMPUTER_ID`, `OPENCRANE_COMPUTER_GENERATION`, `OPENCRANE_COMPUTER_LEASE_ID`, and
 `OPENCRANE_INTERNAL_ENDPOINT`. The projected token defaults to `/var/run/secrets/opencrane/token`;
-`OPENCRANE_COMPUTER_HEALTH_PORT` defaults to `8080`.
+the review credential file (`OPENCRANE_REVIEW_CREDENTIAL_PATH`) defaults to
+`/var/run/opencrane/review/credential` on a memory-backed volume; `OPENCRANE_COMPUTER_HEALTH_PORT`
+defaults to `8080`.
 
 The writable `/workspace` volume is capped at 2 GiB and dies with the sandbox. The command gateway
 admits only `git`, `node`, `npm`, `npx`, and `python3`, passes argv directly without a shell, uses a

@@ -2,6 +2,7 @@ import type { CompiledRunInput } from "@opencrane/contracts";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { BoundConversationWriter } from "./bound-conversation-writer";
 import type { BoundConversationWriterBinding } from "./bound-conversation-writer.types";
+import type { ConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review.types";
 
 /** Coordinates a sandbox Pod must prove before receiving one pending turn. */
 export interface ConversationComputerBootstrapCommand
@@ -40,6 +41,19 @@ export interface ConversationComputerBootstrap
 	readonly outcome: "ready";
 }
 
+/**
+ * Review gateway secret handed to the bound Pod once per lease.
+ *
+ * The Pod writes this value to its private credential file and the review surface accepts only this
+ * bearer. The server derives the same value for the review proxy and for checkpoint transport, so
+ * nothing is stored and the secret dies with the lease.
+ */
+export interface ConversationComputerReviewCredentialGrant
+{
+	/** Keyed HMAC over the lease coordinates; it is never a label, an env var or a log field. */
+	readonly reviewCredential: string;
+}
+
 /** Carries untrusted computer output that still requires server stamping, encryption, and lease fencing. */
 export interface ConversationComputerOutputCommand
 {
@@ -56,6 +70,8 @@ export interface ConversationComputerOutputCommand
 /** Product authority behind the private transport. */
 export interface ConversationComputerTurnAuthority
 {
+	/** Return the review gateway secret after the same lease and Pod checks as bootstrap, without admitting a run. */
+	reviewCredential(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerReviewCredentialGrant>;
 	/** Return the next pending turn or null while no work is admitted. */
 	bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>;
 	/** Append untrusted output through the bootstrap-bound conversation writer and encrypted payload store. */
@@ -125,6 +141,8 @@ export interface ConversationComputerTurnOutputReceipt
 /** Resolves only a currently active, Pod-bound computer and its next pending input. */
 export interface ConversationComputerTurnCandidateResolver
 {
+	/** Throw unless the command names the current active lease and the TokenReviewed Pod bound to it; admit nothing. */
+	admit(command: ConversationComputerBootstrapCommand): Promise<void>;
 	resolve(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerTurnCandidate | null>;
 	assertCurrent(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<void>;
 }
@@ -244,6 +262,8 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly candidates: ConversationComputerTurnCandidateResolver;
 	readonly credentials: ConversationComputerCredentialIssuer;
 	readonly endpoint: string;
+	/** Derives the review gateway secret under the server-only key. */
+	readonly reviewCredentials: ConversationComputerReviewCredentialDeriver;
 	readonly outputPayloads: ConversationComputerOutputPayloadStore;
 	readonly store: ConversationComputerTurnStore;
 	readonly writers: ConversationComputerBoundWriterFactory;

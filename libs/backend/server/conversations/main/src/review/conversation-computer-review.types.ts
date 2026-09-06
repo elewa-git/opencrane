@@ -7,8 +7,8 @@ import type { Logger } from "@opencrane/backend/observability";
  *
  * Production callers provide the sandbox namespace from the release profile and a structured logger.
  * Tests may replace `fetch`, but no public route may supply either the namespace or the upstream
- * transport target. Failure logs omit request bodies and private lease coordinates so diagnostics do
- * not disclose the credential used by the sandbox gateway.
+ * transport target. Failure logs omit request bodies and the derived review credential so diagnostics
+ * do not disclose the bearer used by the sandbox gateway.
  *
  * @see _CreateConversationComputerReviewRouter
  */
@@ -20,7 +20,7 @@ export interface ConversationComputerReviewRouterOptions
 	readonly sandboxNamespace: string;
 	/** Performs the fixed upstream exchange; tests replace it without opening a socket. */
 	readonly fetch?: typeof fetch;
-	/** Records proxy failures without copying request bodies or private lease coordinates into logs. */
+	/** Records proxy failures without copying request bodies or the review credential into logs. */
 	readonly logger: Pick<Logger, "warn">;
 }
 
@@ -52,16 +52,42 @@ export interface ConversationComputerReviewCaller
  * Carries the private upstream coordinates resolved from the active computer lease.
  *
  * These values stay in the server proxy. The router validates the Service DNS name against its
- * configured namespace and sends the lease id as the sandbox gateway credential.
+ * configured namespace and sends the derived review credential as the sandbox gateway bearer.
  */
 export interface ConversationComputerReviewRoute
 {
-	/** High-entropy current lease identifier used as the private gateway credential. */
-	readonly leaseId: string;
+	/** Server-derived gateway bearer for the current lease; the Pod learns it only through its bootstrap exchange. */
+	readonly reviewCredential: string;
 	/** Controller-owned Sandbox name used only after DNS-label validation. */
 	readonly sandboxId: string;
 	/** Controller-reported Service DNS name persisted with the current active lease. */
 	readonly serviceFQDN: string;
+}
+
+/** Lease coordinates that select exactly one review credential. */
+export interface ConversationComputerReviewCredentialCoordinates
+{
+	/** Silo fixed by trusted server configuration or the authenticated request host. */
+	readonly siloId: string;
+	/** Logical computer named on the Pod label. */
+	readonly computerId: string;
+	/** Lease generation that fences the credential. */
+	readonly generation: number;
+	/** Current lease name; it is public, so it never acts as the credential by itself. */
+	readonly leaseId: string;
+}
+
+/**
+ * Derives the review gateway bearer from lease coordinates under a server-only key.
+ *
+ * Called by: `_ConversationComputerReviewAuthority` and `ConversationComputerTurnAuthority`.
+ *
+ * @see ConversationComputerReviewCredentialDeriver
+ */
+export interface ConversationComputerReviewCredentialDeriver
+{
+	/** Returns the same secret for the same lease and a different secret for any other lease. */
+	derive(coordinates: ConversationComputerReviewCredentialCoordinates): string;
 }
 
 /**

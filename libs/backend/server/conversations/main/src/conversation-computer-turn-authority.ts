@@ -2,12 +2,25 @@ import { createHash } from "node:crypto";
 
 import type { CompiledRunInput } from "@opencrane/contracts";
 
-import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /** Coordinates one durable, lease-fenced conversation turn for a bound sandbox Pod. */
 export class ConversationComputerTurnAuthority implements ConversationComputerTurnAuthorityPort
 {
 	public constructor(private readonly dependencies: ConversationComputerTurnAuthorityDependencies) {}
+
+	/**
+	 * Hand the review gateway secret to the Pod that proved it holds the current lease.
+	 *
+	 * The Pod calls this once at start, before checkpoint restore, so the server can already reach its
+	 * review surface when it streams the workspace back. The value is derived, not stored, so a retry
+	 * returns the same secret and a new lease invalidates it.
+	 */
+	public async reviewCredential(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerReviewCredentialGrant>
+	{
+		await this.dependencies.candidates.admit(command);
+		return { reviewCredential: this.dependencies.reviewCredentials.derive({ siloId: this.dependencies.siloId, computerId: command.computerId, generation: command.generation, leaseId: command.leaseId }) };
+	}
 
 	/**
 	 * Freeze the next pending turn's coordinates, recompile against them, and issue the attempt-scoped model credential.

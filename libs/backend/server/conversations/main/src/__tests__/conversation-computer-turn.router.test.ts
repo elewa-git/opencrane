@@ -8,7 +8,7 @@ import { _CreateConversationComputerTurnRouter } from "../conversation-computer-
 function _App()
 {
 	const workload = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" };
-	const authority = { bootstrap: vi.fn().mockResolvedValue({ outcome: "ready", bootstrapId: "bootstrap-1", compiledInput: { digest: "sha256:input", messages: [] }, modelCredential: { endpoint: "http://litellm:4000", key: "sk-attempt", model: "silo-default" } }), appendOutput: vi.fn().mockResolvedValue("accepted") };
+	const authority = { reviewCredential: vi.fn().mockResolvedValue({ reviewCredential: "keyed-review-secret" }), bootstrap: vi.fn().mockResolvedValue({ outcome: "ready", bootstrapId: "bootstrap-1", compiledInput: { digest: "sha256:input", messages: [] }, modelCredential: { endpoint: "http://litellm:4000", key: "sk-attempt", model: "silo-default" } }), appendOutput: vi.fn().mockResolvedValue("accepted") };
 	const app = express();
 	app.use(express.json({ limit: 70_000 }));
 	app.use(_CreateConversationComputerTurnRouter({ tokenReviewer: { __Review: vi.fn().mockResolvedValue(workload) }, authority } as never));
@@ -23,6 +23,19 @@ describe("conversation computer private turn router", function _Suite()
 		const response = await request(fixture.app).get("/bootstrap?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token");
 		expect(response.status).toBe(200);
 		expect(fixture.authority.bootstrap).toHaveBeenCalledWith({ computerId: "computer-one", generation: 2, leaseId: "lease-one", workload: fixture.workload });
+	});
+
+	it("hands the review credential only to a TokenReviewed Pod with exact lease coordinates", async function _ReviewCredential()
+	{
+		const fixture = _App();
+		const response = await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token");
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ reviewCredential: "keyed-review-secret" });
+		expect(fixture.authority.reviewCredential).toHaveBeenCalledWith({ computerId: "computer-one", generation: 2, leaseId: "lease-one", workload: fixture.workload });
+		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&leaseId=lease-one").set("authorization", "Bearer projected-token")).status).toBe(400);
+		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one")).status).toBe(401);
+		fixture.authority.reviewCredential.mockRejectedValue(new Error("not the bound Pod"));
+		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token")).status).toBe(409);
 	});
 
 	it("passes only bounded safe text to the output authority", async function _Output()

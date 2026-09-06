@@ -12,7 +12,7 @@ describe("conversation computer review router", function _Suite()
 	const fetchReview = vi.fn();
 	const warn = vi.fn();
 	const principal = { externalSubject: "subject-1", principalId: "principal-1", siloId: "silo-1" };
-	const active = { leaseId: "lease-secret", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.computer-ns.svc.cluster.local" };
+	const active = { reviewCredential: "keyed-review-secret", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.computer-ns.svc.cluster.local" };
 
 	beforeEach(function _Reset()
 	{
@@ -30,12 +30,12 @@ describe("conversation computer review router", function _Suite()
 		return app;
 	}
 
-	it("derives the active sandbox host and lease credential after participant admission", async function _DerivesRoute()
+	it("sends the derived review credential to the active sandbox host after participant admission", async function _DerivesRoute()
 	{
 		const response = await request(_App()).get("/api/v1/me/conversations/conversation-1/review/files?path=src/main.ts");
 		expect(response.status).toBe(200);
 		expect(response.text).toBe("selected");
-		expect(fetchReview).toHaveBeenCalledWith("http://sandbox-one.computer-ns.svc.cluster.local:8090/v1/files?path=src%2Fmain.ts", expect.objectContaining({ headers: { authorization: "Bearer lease-secret" }, method: "GET", redirect: "manual" }));
+		expect(fetchReview).toHaveBeenCalledWith("http://sandbox-one.computer-ns.svc.cluster.local:8090/v1/files?path=src%2Fmain.ts", expect.objectContaining({ headers: { authorization: "Bearer keyed-review-secret" }, method: "GET", redirect: "manual" }));
 		expect(resolveReview).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1" }), "conversation-1", ProductAuthorizationActions.Read);
 	});
 
@@ -73,12 +73,13 @@ describe("conversation computer review router", function _Suite()
 
 	it("rejects a controller Service outside the configured sandbox namespace", async function _RejectsForeignService()
 	{
-		resolveReview.mockResolvedValue({ leaseId: "lease-secret", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.foreign.svc.cluster.local" });
+		resolveReview.mockResolvedValue({ reviewCredential: "keyed-review-secret", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.foreign.svc.cluster.local" });
 		const response = await request(_App()).get("/api/v1/me/conversations/conversation-1/review/files?path=README.md");
 		expect(response.status).toBe(503);
 		expect(fetchReview).not.toHaveBeenCalled();
 		expect(warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error), conversationId: "conversation-1", reviewAction: ProductAuthorizationActions.Read, reviewMethod: "GET" }), "Conversation computer review request failed");
-		expect(warn.mock.calls[0]?.[0]).not.toHaveProperty("leaseId");
+		expect(warn.mock.calls[0]?.[0]).not.toHaveProperty("reviewCredential");
+		expect(JSON.stringify(warn.mock.calls[0]?.[0])).not.toContain("keyed-review-secret");
 	});
 
 	it("does not load a lease when participant admission fails", async function _RejectsParticipant()

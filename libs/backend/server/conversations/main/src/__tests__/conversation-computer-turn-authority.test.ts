@@ -63,7 +63,9 @@ function _Harness() {
           sandboxClaimId: "computer-1-g2",
         }),
       assertCurrent: vi.fn().mockResolvedValue(undefined),
+      admit: vi.fn().mockResolvedValue(undefined),
     },
+    reviewCredentials: { derive: vi.fn().mockReturnValue("keyed-review-secret") },
     credentials: {
       issueOrRotate: vi
         .fn()
@@ -122,6 +124,19 @@ function _Harness() {
 }
 
 describe("ConversationComputerTurnAuthority", function _Suite() {
+  it("hands out the derived review credential after Pod admission without compiling or admitting a run", async function _ReviewCredential() {
+    const { authority, dependencies } = _Harness();
+    const command = { computerId: "computer-1", generation: 2, leaseId: "lease-1", workload: _WORKLOAD };
+    expect(await authority.reviewCredential(command)).toEqual({ reviewCredential: "keyed-review-secret" });
+    expect(dependencies.candidates.admit).toHaveBeenCalledWith(command);
+    expect(dependencies.reviewCredentials.derive).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", generation: 2, leaseId: "lease-1" });
+    expect(dependencies.candidates.resolve).not.toHaveBeenCalled();
+    expect(dependencies.runLifecycle.start).not.toHaveBeenCalled();
+    dependencies.candidates.admit.mockRejectedValue(new Error("not the bound Pod"));
+    await expect(authority.reviewCredential(command)).rejects.toThrow("not the bound Pod");
+    expect(dependencies.reviewCredentials.derive).toHaveBeenCalledTimes(1);
+  });
+
   it("freezes a deterministic turn and returns only an attempt-scoped credential", async function _Bootstrap() {
     const { authority, dependencies } = _Harness();
     const command = {

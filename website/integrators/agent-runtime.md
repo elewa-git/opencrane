@@ -45,9 +45,11 @@ append rechecks the active lease generation.
 
 ## Review surface
 
-The server may issue a short-lived, generation-bound review ticket for the current computer. The
-ticket gives a participant a fenced view of that computer; it never grants a product action or
-publishes an application. Durable CodeProject, Git, build and PreviewApp publication belong to the
+The server proxies participant review calls to the computer's private gateway with a credential it
+derives under a server-only key from the current lease. The computer receives that secret once, over
+its TokenReviewed bootstrap channel, and its gateway refuses every call until then; the lease id on
+the Pod label is only a name. Review gives a participant a fenced view of that computer; it never
+grants a product action or publishes an application. Durable CodeProject, Git, build and PreviewApp publication belong to the
 next phase.
 
 ## Source

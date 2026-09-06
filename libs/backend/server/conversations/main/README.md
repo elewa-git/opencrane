@@ -126,8 +126,15 @@ empty successful page.
 - `__RunConversationComputerActivationListener` consumes one silo-scoped, persistent KurrentDB
   activation subscription in delivery order. It validates the stream-bound command before calling
   the computer authority, parks malformed input and an explicitly parked authority outcome,
-  acknowledges activated, idempotent, or denied outcomes, retries only a transient authority
-  failure, and leaves an acknowledgement failure for KurrentDB to redeliver.
+  acknowledges activated, idempotent, or denied outcomes, waits with bounded exponential backoff
+  before retrying a pending sandbox assignment or a transient authority failure, and leaves an
+  acknowledgement failure for KurrentDB to redeliver.
+- `_CreateConversationComputerOperatorRouter` exposes `POST /conversation-computers/activations/parked:replay`
+  for a Principal holding Organization/Administer; it replays the silo's parked activation queue.
+- `ConversationComputerLifecycleAuthority` measures idleness from the newest turn activity on the
+  lease's active-turn stream (`KurrentConversationComputerActivityReader`), renews an in-use lease at
+  half of its lifetime, records an expired or claim-less lease as `lost` with a cold computer, and
+  otherwise cools, checkpoints, and releases. Activation opens generation + 1 from `released` or `lost`.
 - `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
   deterministic KurrentDB stream. Its checked current-head result lets future pre-admission code use
   only one matching warm computer with one active, generation-fenced lease.
@@ -182,7 +189,7 @@ persistence through its injected admission port after local authority checks. Al
 current active `OrgMembership` in the caller's host-selected silo; participant rows alone never
 preserve authority after revocation.
 
-The computer-review router keeps sandbox routes and lease credentials server-side: file, diff, and
+The computer-review router keeps sandbox routes and the keyed review credential server-side (the lease id is a public label, never a bearer): file, diff, and
 browser discovery require current `Read`, while commands, page creation, screenshots, and preview
 access require current `Use`.
 

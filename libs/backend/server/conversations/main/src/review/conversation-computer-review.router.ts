@@ -16,8 +16,8 @@ const _DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
  * Mounts the authenticated human-review API for an active conversation computer.
  *
  * File, diff, and browser discovery routes request `Read`; commands, page creation, screenshots, and
- * localhost responses request `Use`. Every route resolves its upstream host and lease credential on
- * the server, so public request fields cannot select a sandbox or its Service address.
+ * localhost responses request `Use`. Every route resolves its upstream host and derived review
+ * credential on the server, so public request fields cannot select a sandbox or its Service address.
  *
  * Called by: `_CreateRoutes` in `apps/opencrane/src/app/routes.ts` when computer history and the Agent
  * Sandbox release profile are configured.
@@ -76,9 +76,9 @@ async function _Proxy(request: Request, response: Response, options: Conversatio
 		if (!_DNS_LABEL.test(lease.sandboxId) || !_DNS_LABEL.test(options.sandboxNamespace) || !_ServiceFqdn(lease.serviceFQDN, options.sandboxNamespace))
 			throw new Error("active sandbox route is invalid");
 
-		// 3. Derive the only upstream host and credential from the admitted lease, then cap its response.
+		// 3. Send the keyed review credential to the only admitted upstream host, then cap its response.
 		const target = `http://${lease.serviceFQDN}:${_REVIEW_PORT}${path}`;
-		const headers: Record<string, string> = { authorization: `Bearer ${lease.leaseId}` };
+		const headers: Record<string, string> = { authorization: `Bearer ${lease.reviewCredential}` };
 		let requestBody: string | undefined;
 		if (method === "POST")
 		{

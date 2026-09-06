@@ -275,6 +275,8 @@ spec:
               value: {{ printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" $) $.Release.Namespace $.Values.clustertenantManager.service.internalPort | quote }}
             - name: OPENCRANE_PROJECTED_TOKEN_PATH
               value: /var/run/secrets/opencrane/token
+            - name: OPENCRANE_REVIEW_CREDENTIAL_PATH
+              value: /var/run/opencrane/review/credential
             - name: OPENCRANE_WORKSPACE_PATH
               value: /workspace
             - name: OPENCRANE_PREVIEW_PORTS
@@ -283,6 +285,8 @@ spec:
             - name: opencrane-conversation-computer-identity
               mountPath: /var/run/secrets/opencrane
               readOnly: true
+            - name: opencrane-conversation-review-credential
+              mountPath: /var/run/opencrane/review
             - name: opencrane-conversation-workspace
               mountPath: /workspace
           ports:
@@ -306,6 +310,10 @@ spec:
         - name: opencrane-conversation-workspace
           emptyDir:
             sizeLimit: 2Gi
+        - name: opencrane-conversation-review-credential
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
         - name: opencrane-conversation-computer-identity
           projected:
             defaultMode: 0440

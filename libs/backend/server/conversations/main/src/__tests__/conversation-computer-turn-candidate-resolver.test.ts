@@ -18,6 +18,21 @@ describe("ActiveConversationComputerTurnCandidateResolver", function _ActiveConv
 		expect(compiler.compile).not.toHaveBeenCalled();
 	});
 
+	it("admits a bound Pod without compiling and rejects an unbound one", async function _Admit()
+	{
+		vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-05T00:00:00.000Z"));
+		const computers = { load: vi.fn().mockResolvedValue({ computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { id: "lease-1", generation: 1, state: ComputerLeaseStates.Active, sandboxId: "sandbox-1", expiresAt: "2026-09-05T00:10:00.000Z" } }) };
+		const projections = { resolve: vi.fn().mockResolvedValue({ conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" }) };
+		const pods = { verify: vi.fn().mockResolvedValue(true) };
+		const compiler = { compile: vi.fn() };
+		const resolver = new ActiveConversationComputerTurnCandidateResolver("silo-1", projections, computers as never, pods, compiler);
+		await expect(resolver.admit(_COMMAND)).resolves.toBeUndefined();
+		expect(pods.verify).toHaveBeenCalledWith(expect.objectContaining({ sandboxClaimId: "computer-1-g1", workload: _COMMAND.workload }));
+		expect(compiler.compile).not.toHaveBeenCalled();
+		pods.verify.mockResolvedValue(false);
+		await expect(resolver.admit(_COMMAND)).rejects.toThrow("lease-bound Sandbox Pod");
+	});
+
 	it("bounds the credential lifetime to the remaining lease", async function _BoundCredentialLifetime()
 	{
 		vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-05T00:00:00.000Z"));

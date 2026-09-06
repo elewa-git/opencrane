@@ -34,7 +34,7 @@ class ReviewSurfaceConfig:
     """Freeze the workspace, credential and preview boundaries for one computer lease."""
 
     workspace: Path
-    token_path: Path
+    credential_path: Path
     command_names: frozenset[str]
     preview_ports: frozenset[int]
     host: str = "0.0.0.0"
@@ -44,13 +44,13 @@ class ReviewSurfaceConfig:
 def _configuration() -> ReviewSurfaceConfig:
     """Read the release-owned review surface policy from the sandbox template."""
     workspace = Path(os.environ.get("OPENCRANE_WORKSPACE_PATH", "/workspace")).resolve()
-    token_path = Path(os.environ.get("OPENCRANE_REVIEW_TOKEN_PATH", "/var/run/secrets/opencrane/review-token"))
+    credential_path = Path(os.environ.get("OPENCRANE_REVIEW_CREDENTIAL_PATH", "/var/run/opencrane/review/credential"))
     command_names = frozenset(filter(None, os.environ.get("OPENCRANE_REVIEW_COMMANDS", ",".join(_DEFAULT_COMMANDS)).split(",")))
     preview_values = filter(None, os.environ.get("OPENCRANE_PREVIEW_PORTS", "3000,4173,4200,5173,8000").split(","))
     preview_ports = frozenset(int(value) for value in preview_values)
     if any(port < 1024 or port > 65535 for port in preview_ports):
         raise RuntimeError("preview ports must be unprivileged TCP ports")
-    return ReviewSurfaceConfig(workspace, token_path, command_names, preview_ports)
+    return ReviewSurfaceConfig(workspace, credential_path, command_names, preview_ports)
 
 
 def _workspace_path(config: ReviewSurfaceConfig, requested: str) -> Path:
@@ -284,7 +284,7 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._json(400, {"error": str(error)})
 
     def _restore_checkpoint(self) -> None:
-        """Accept one exact-length checkpoint archive under the current lease bearer."""
+        """Accept one exact-length checkpoint archive under the current review credential."""
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > _MAX_CHECKPOINT_BYTES:
@@ -330,13 +330,11 @@ class _ReviewHandler(BaseHTTPRequestHandler):
         """Suppress request logs because command content may include private workspace data."""
 
     def _authenticated(self) -> bool:
-        """Compare the current bearer value with the rotating lease-local credential file."""
-        expected = os.environ.get("OPENCRANE_COMPUTER_LEASE_ID", "").strip()
-        if not expected:
-            try:
-                expected = self.server.config.token_path.read_text(encoding="utf-8").strip()
-            except OSError:
-                return False
+        """Compare the bearer with the server-derived secret file; refuse everything until the turn loop has written it."""
+        try:
+            expected = self.server.config.credential_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return False
         supplied = self.headers.get("Authorization", "").removeprefix("Bearer ")
         return bool(expected) and hmac.compare_digest(supplied, expected)
 

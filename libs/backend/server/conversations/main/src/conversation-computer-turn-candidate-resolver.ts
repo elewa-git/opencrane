@@ -8,8 +8,27 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 {
 	public constructor(private readonly siloId: string, private readonly projections: ConversationComputerTurnProjectionRepository, private readonly computers: ConversationComputerHistory, private readonly pods: ConversationComputerPodBindingVerifier, private readonly compiler: ConversationComputerPendingTurnCompiler) {}
 
+	/** Check the lease and Pod binding with the same rules as resolve while admitting no run. */
+	public async admit(command: ConversationComputerBootstrapCommand): Promise<void>
+	{
+		await this._Admit(command);
+	}
+
 	/** Resolve one currently active generation and compile its pending input. */
 	public async resolve(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerTurnCandidate | null>
+	{
+		const { projection, current, sandboxClaimId } = await this._Admit(command);
+		const candidate = await this.compiler.compile({ siloId: this.siloId, computerId: command.computerId, generation: command.generation, leaseId: command.leaseId, sandboxClaimId, ...projection });
+		if (candidate === null)
+			return null;
+		const remainingLeaseSeconds = Math.floor((Date.parse(current.lease.expiresAt) - Date.now()) / 1_000);
+		if (remainingLeaseSeconds < 1)
+			throw new Error("Conversation computer bootstrap requires enough remaining lease time");
+		return { ...candidate, credentialLifetimeSeconds: Math.min(candidate.credentialLifetimeSeconds, remainingLeaseSeconds) };
+	}
+
+	/** Load the projection and current history, then require the exact active lease and its bound Pod. */
+	private async _Admit(command: ConversationComputerBootstrapCommand)
 	{
 		const projection = await this.projections.resolve(this.siloId, command.computerId);
 		if (projection === null)
@@ -20,13 +39,7 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 		const sandboxClaimId = `${command.computerId}-g${command.generation}`;
 		if (!await this.pods.verify({ computerId: command.computerId, generation: command.generation, leaseId: command.leaseId, sandboxClaimId, workload: command.workload }))
 			throw new Error("Conversation computer bootstrap workload is not the lease-bound Sandbox Pod");
-		const candidate = await this.compiler.compile({ siloId: this.siloId, computerId: command.computerId, generation: command.generation, leaseId: command.leaseId, sandboxClaimId, ...projection });
-		if (candidate === null)
-			return null;
-		const remainingLeaseSeconds = Math.floor((Date.parse(current.lease.expiresAt) - Date.now()) / 1_000);
-		if (remainingLeaseSeconds < 1)
-			throw new Error("Conversation computer bootstrap requires enough remaining lease time");
-		return { ...candidate, credentialLifetimeSeconds: Math.min(candidate.credentialLifetimeSeconds, remainingLeaseSeconds) };
+		return { projection, current: { ...current, lease: current.lease }, sandboxClaimId };
 	}
 
 	/** Recheck lease, generation, Pod binding and the exact conversation revision before output. */

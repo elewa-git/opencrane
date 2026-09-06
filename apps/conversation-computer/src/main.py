@@ -20,6 +20,7 @@ from review_surface.review_surface import start_review_surface
 _HEALTH_PATH: Final = "/healthz"
 _READINESS_PATH: Final = "/readyz"
 _DEFAULT_TOKEN_PATH: Final = "/var/run/secrets/opencrane/token"
+_DEFAULT_REVIEW_CREDENTIAL_PATH: Final = "/var/run/opencrane/review/credential"
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
 _LOGGER = logging.getLogger("opencrane.conversation-computer")
 _LAST_FAILURE_TYPE: str | None = None
@@ -40,6 +41,7 @@ def _configuration() -> dict[str, str]:
         "generation": _required("OPENCRANE_COMPUTER_GENERATION"),
         "internalEndpoint": _required("OPENCRANE_INTERNAL_ENDPOINT").rstrip("/"),
         "leaseId": _required("OPENCRANE_COMPUTER_LEASE_ID"),
+        "reviewCredentialPath": os.environ.get("OPENCRANE_REVIEW_CREDENTIAL_PATH", _DEFAULT_REVIEW_CREDENTIAL_PATH),
         "tokenPath": os.environ.get("OPENCRANE_PROJECTED_TOKEN_PATH", _DEFAULT_TOKEN_PATH),
     }
 
@@ -70,11 +72,31 @@ def _json_request(url: str, token: str, payload: dict[str, Any] | None = None, e
     return value
 
 
+def _lease_query(config: dict[str, str]) -> str:
+    """Encode the immutable lease coordinates that every Pod-initiated GET exchange presents."""
+    return urllib.parse.urlencode({"computerId": config["computerId"], "generation": config["generation"], "leaseId": config["leaseId"]})
+
+
+def _install_review_credential(config: dict[str, str]) -> None:
+    """Fetch the server-derived review secret once and place it where only the review surface reads it."""
+    token = _read_token(config["tokenPath"])
+    grant = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/review-credential?{_lease_query(config)}", token)
+    credential = grant.get("reviewCredential")
+    if not isinstance(credential, str) or not credential.strip():
+        raise RuntimeError("review credential exchange returned no secret")
+    target = Path(config["reviewCredentialPath"])
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = target.with_name(f"{target.name}.tmp")
+    descriptor = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(credential.strip())
+    staging.replace(target)
+
+
 def _bootstrap(config: dict[str, str]) -> dict[str, Any]:
     """Exchange the Pod-bound token and immutable lease coordinates for one admitted turn."""
     token = _read_token(config["tokenPath"])
-    query = urllib.parse.urlencode({"computerId": config["computerId"], "generation": config["generation"], "leaseId": config["leaseId"]})
-    return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/bootstrap?{query}", token, empty_outcome="idle")
+    return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/bootstrap?{_lease_query(config)}", token, empty_outcome="idle")
 
 
 def _restore(config: dict[str, str]) -> dict[str, Any]:
@@ -136,13 +158,17 @@ def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> None:
 
 
 def _turn_loop() -> None:
-    """Poll for the single pending activation and finish it without exposing a command listener."""
+    """Install the review secret, restore the workspace, then poll for the single pending activation."""
     global _LAST_FAILURE_TYPE
     config = _configuration()
+    credentialed = False
     restored = False
     retry_delay_seconds = 2
     while True:
         try:
+            if not credentialed:
+                _install_review_credential(config)
+                credentialed = True
             if not restored:
                 _restore(config)
                 restored = True

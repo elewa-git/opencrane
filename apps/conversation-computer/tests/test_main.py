@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import unittest
 import json
 import threading
@@ -15,7 +16,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.main as computer_main
-from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _model_text, _restore
+from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _install_review_credential, _model_text, _restore
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -30,7 +31,7 @@ class ConfigurationTests(unittest.TestCase):
             "OPENCRANE_INTERNAL_ENDPOINT": "http://opencrane-internal:8081",
         }
         with patch.dict(os.environ, environment, clear=True):
-            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://opencrane-internal:8081", "leaseId": "lease-1", "tokenPath": "/var/run/secrets/opencrane/token"})
+            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://opencrane-internal:8081", "leaseId": "lease-1", "reviewCredentialPath": "/var/run/opencrane/review/credential", "tokenPath": "/var/run/secrets/opencrane/token"})
 
     def test_rejects_missing_generation(self) -> None:
         """Fail readiness when the sandbox lacks a generation fence."""
@@ -98,6 +99,23 @@ class ConfigurationTests(unittest.TestCase):
             _execute_turn({"internalEndpoint": "http://server", "tokenPath": "/token"}, bootstrap)
 
         exchange.assert_not_called()
+
+    @patch("src.main._read_token", return_value="projected-token")
+    @patch("src.main._json_request", return_value={"reviewCredential": "keyed-review-secret"})
+    def test_installs_the_server_derived_review_credential_as_a_private_file(self, exchange: MagicMock, _token: MagicMock) -> None:
+        """Ask the private route with lease coordinates and write only its secret where the review surface reads."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "review" / "credential"
+            config = {"computerId": "computer-1", "generation": "2", "internalEndpoint": "http://server:8081", "leaseId": "lease-2", "reviewCredentialPath": str(path), "tokenPath": "/token"}
+            _install_review_credential(config)
+            self.assertEqual(exchange.call_args.args[0:2], ("http://server:8081/api/internal/conversation-computer/review-credential?computerId=computer-1&generation=2&leaseId=lease-2", "projected-token"))
+            self.assertEqual(path.read_text(encoding="utf-8"), "keyed-review-secret")
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertFalse(path.with_name("credential.tmp").exists())
+            exchange.return_value = {"outcome": "idle"}
+            with self.assertRaisesRegex(RuntimeError, "no secret"):
+                _install_review_credential(config)
+            self.assertEqual(path.read_text(encoding="utf-8"), "keyed-review-secret")
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request", return_value={"outcome": "restored"})

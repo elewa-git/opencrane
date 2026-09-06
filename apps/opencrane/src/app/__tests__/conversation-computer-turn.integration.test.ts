@@ -140,7 +140,9 @@ describe("conversation computer turn integration", function _Suite() {
             sandboxClaimId: "computer-one-g1",
           }),
         assertCurrent: vi.fn(),
+        admit: vi.fn(),
       },
+      reviewCredentials: { derive: vi.fn().mockReturnValue("keyed-review-secret") },
       credentials: {
         issueOrRotate: vi
           .fn()

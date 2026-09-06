@@ -2,7 +2,7 @@ import { ConversationComputerHistory } from "../conversation-computers";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import type { ConversationMetadataAuthority } from "../conversation-metadata.types";
 
-import type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewRoute } from "./conversation-computer-review.types";
+import type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewCredentialDeriver, ConversationComputerReviewRoute } from "./conversation-computer-review.types";
 
 /**
  * Resolves a participant-authorized conversation to its active computer lease.
@@ -11,6 +11,7 @@ import type { ConversationComputerReviewAuthority, ConversationComputerReviewCal
  * authority applies that action through conversation metadata before it reads the active lease, so
  * a caller cannot learn sandbox coordinates from a conversation it cannot access. Missing sandbox
  * coordinates return `null` and the router exposes the same unavailable response as failed admission.
+ * The returned route carries the derived review credential, never the public lease id.
  *
  * Called by: `_CreateConversationComputerReviewRouter` through `ConversationComputerReviewAuthority`.
  *
@@ -20,8 +21,8 @@ import type { ConversationComputerReviewAuthority, ConversationComputerReviewCal
  */
 export class _ConversationComputerReviewAuthority implements ConversationComputerReviewAuthority
 {
-	/** Binds the metadata admission authority and active-lease history reader used by review requests. */
-	public constructor(private readonly metadata: Pick<ConversationMetadataAuthority, "reviewCoordinates">, private readonly history: ConversationComputerHistory) {}
+	/** Binds metadata admission, the active-lease history reader, and the keyed credential deriver used by review requests. */
+	public constructor(private readonly metadata: Pick<ConversationMetadataAuthority, "reviewCoordinates">, private readonly history: ConversationComputerHistory, private readonly credentials: ConversationComputerReviewCredentialDeriver) {}
 
 	/** @inheritdoc */
 	public async resolve(caller: ConversationComputerReviewCaller, conversationId: string, action: ProductAuthorizationActions): Promise<ConversationComputerReviewRoute | null>
@@ -34,6 +35,7 @@ export class _ConversationComputerReviewAuthority implements ConversationCompute
 			return null;
 		if (current.lease.serviceFQDN === null)
 			return null;
-		return { leaseId: current.lease.id, sandboxId: current.lease.sandboxId, serviceFQDN: current.lease.serviceFQDN };
+		const reviewCredential = this.credentials.derive({ siloId: caller.siloId, computerId: coordinates.computerId, generation: current.lease.generation, leaseId: current.lease.id });
+		return { reviewCredential, sandboxId: current.lease.sandboxId, serviceFQDN: current.lease.serviceFQDN };
 	}
 }

@@ -40,9 +40,9 @@ class ReviewSurfaceTest(unittest.TestCase):
         """Create an isolated workspace and authenticated review listener."""
         self.temporary = tempfile.TemporaryDirectory()
         self.workspace = Path(self.temporary.name)
-        self.token_path = self.workspace / "token"
-        self.token_path.write_text("lease-secret", encoding="utf-8")
-        self.config = ReviewSurfaceConfig(self.workspace, self.token_path, frozenset({"python3", "git"}), frozenset(), port=0)
+        self.credential_path = self.workspace.parent / f"review-credential-{os.getpid()}-{id(self)}"
+        self.credential_path.write_text("lease-secret", encoding="utf-8")
+        self.config = ReviewSurfaceConfig(self.workspace, self.credential_path, frozenset({"python3", "git"}), frozenset(), port=0)
         self.server = ReviewSurfaceServer(self.config)
         self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.worker.start()
@@ -52,6 +52,7 @@ class ReviewSurfaceTest(unittest.TestCase):
         """Stop the listener and remove the isolated workspace."""
         self.server.shutdown()
         self.server.server_close()
+        self.credential_path.unlink(missing_ok=True)
         self.temporary.cleanup()
 
     def _request(self, path: str, token: str | None = "lease-secret", payload: dict[str, object] | None = None) -> urllib.request.Request:
@@ -65,25 +66,26 @@ class ReviewSurfaceTest(unittest.TestCase):
         return request
 
     def test_refuses_missing_or_wrong_credential(self) -> None:
-        """Require the current lease-local bearer value before every operation."""
+        """Require the current review credential before every operation."""
         for token in (None, "wrong"):
             with self.assertRaises(urllib.error.HTTPError) as context:
                 urllib.request.urlopen(self._request("/v1/files?path=note.txt", token), timeout=2)
             self.assertEqual(context.exception.code, 401)
 
-    def test_current_lease_id_is_the_server_proxy_credential(self) -> None:
-        """Prefer the generation-fenced lease credential shared by canonical server history."""
-        previous = os.environ.get("OPENCRANE_COMPUTER_LEASE_ID")
-        os.environ["OPENCRANE_COMPUTER_LEASE_ID"] = "current-lease-secret"
-        try:
+    def test_refuses_every_request_until_the_credential_file_exists(self) -> None:
+        """Accept only the server-derived file secret, never a Pod label or environment value."""
+        self.credential_path.unlink()
+        with patch.dict(os.environ, {"OPENCRANE_COMPUTER_LEASE_ID": "lease-secret"}):
             with self.assertRaises(urllib.error.HTTPError) as context:
                 urllib.request.urlopen(self._request("/v1/files?path=note.txt", "lease-secret"), timeout=2)
             self.assertEqual(context.exception.code, 401)
-        finally:
-            if previous is None:
-                os.environ.pop("OPENCRANE_COMPUTER_LEASE_ID", None)
-            else:
-                os.environ["OPENCRANE_COMPUTER_LEASE_ID"] = previous
+        (self.workspace / "note.txt").write_text("safe", encoding="utf-8")
+        self.credential_path.write_text("keyed-review-secret\n", encoding="utf-8")
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            urllib.request.urlopen(self._request("/v1/files?path=note.txt", "lease-secret"), timeout=2)
+        self.assertEqual(context.exception.code, 401)
+        with urllib.request.urlopen(self._request("/v1/files?path=note.txt", "keyed-review-secret"), timeout=2) as response:
+            self.assertEqual(response.read(), b"safe")
 
     def test_reads_selected_file_but_rejects_path_escape(self) -> None:
         """Keep selected file reads inside the resolved workspace root."""
@@ -119,7 +121,7 @@ class ReviewSurfaceTest(unittest.TestCase):
         preview_worker = threading.Thread(target=preview.serve_forever, daemon=True)
         preview_worker.start()
         try:
-            self.server.config = ReviewSurfaceConfig(self.workspace, self.token_path, frozenset({"git"}), frozenset({preview.server_port}), port=self.server.server_port)
+            self.server.config = ReviewSurfaceConfig(self.workspace, self.credential_path, frozenset({"git"}), frozenset({preview.server_port}), port=self.server.server_port)
             with urllib.request.urlopen(self._request(f"/v1/previews/{preview.server_port}/index.html"), timeout=2) as response:
                 self.assertEqual(response.read(), b"<h1>preview</h1>")
                 self.assertEqual(response.headers["Cache-Control"], "no-store")
@@ -177,7 +179,7 @@ class ReviewSurfaceTest(unittest.TestCase):
 
     def test_git_diff_uses_no_external_diff_and_selected_path(self) -> None:
         """Return only the selected path through Git's built-in diff implementation."""
-        subprocess_config = ReviewSurfaceConfig(self.workspace, self.token_path, frozenset({"git"}), frozenset())
+        subprocess_config = ReviewSurfaceConfig(self.workspace, self.credential_path, frozenset({"git"}), frozenset())
         _run_command(subprocess_config, {"argv": ["git", "init"], "cwd": "."})
         _run_command(subprocess_config, {"argv": ["git", "config", "user.email", "test@opencrane.invalid"], "cwd": "."})
         _run_command(subprocess_config, {"argv": ["git", "config", "user.name", "OpenCrane Test"], "cwd": "."})
@@ -202,8 +204,8 @@ class ReviewSurfaceTest(unittest.TestCase):
         self.assertEqual((self.workspace / "nested" / "note.txt").read_text(encoding="utf-8"), "durable")
         self.assertFalse((self.workspace / "ignored-link").exists())
 
-    def test_checkpoint_routes_require_the_current_lease_bearer(self) -> None:
-        """Fence capture and restoration with the same rotating lease credential as review calls."""
+    def test_checkpoint_routes_require_the_review_credential(self) -> None:
+        """Fence capture and restoration with the same server-derived credential as review calls."""
         (self.workspace / "note.txt").write_text("before", encoding="utf-8")
         with urllib.request.urlopen(self._request("/v1/checkpoints/capture"), timeout=2) as response:
             checkpoint = response.read()
