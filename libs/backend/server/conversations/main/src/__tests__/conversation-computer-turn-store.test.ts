@@ -31,31 +31,16 @@ const _TURN = {
     expectedRevision: 1n,
     maximumEntryBytes: 65_536,
   },
-  compiledInput: {
-    promptCompilerVersion: "computer-v1",
+  compile: {
     runId: "run-1",
     attempt: 1,
-    instructions: "Help",
-    messages: [{ role: "user" as const, content: "Hi" }],
-    tools: [],
-    model: {
-      modelAlias: "testv5-default",
-      maxOutputTokens: 512,
-      generatedOutputCapabilities: [],
-    },
-    budget: {
-      maxModelTurns: 1,
-      maxCompletionTokens: 1_024,
-      maxCostUsdMicros: 50_000,
-      maxToolInvocations: 0,
-      wallClockDeadlineEpochMs: null,
-    },
+    promptCompilerVersion: "computer-v1",
     digest: `sha256:${"a".repeat(64)}`,
   },
 } satisfies FrozenConversationComputerTurn;
 
 describe("KurrentConversationComputerTurnStore", function _Suite() {
-  it("freezes compiled input without a raw model credential", async function _Freeze() {
+  it("freezes only coordinates and a digest, never compiled content or a raw model credential", async function _Freeze() {
     const append = vi
       .fn()
       .mockResolvedValue({
@@ -66,12 +51,48 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       append,
       readStream: vi.fn(() => (async function* _Empty() {})()),
     });
-    await store.createOrRead(_TURN);
+    const leaking = {
+      ..._TURN,
+      compiledInput: { instructions: "Help", messages: [{ role: "user", content: "Hi" }] },
+    } as FrozenConversationComputerTurn;
+    await store.createOrRead(leaking);
     const event = append.mock.calls[0]![0].events[0];
-    expect(JSON.stringify(event)).not.toContain("sk-");
-    expect(event.data.turn.compiledInput.messages).toEqual([
-      { role: "user", content: "Hi" },
-    ]);
+    const serialized = JSON.stringify(event);
+    expect(serialized).not.toContain("sk-");
+    expect(serialized).not.toContain("compiledInput");
+    expect(serialized).not.toContain("instructions");
+    expect(serialized).not.toContain("messages");
+    expect(serialized).not.toContain("Help");
+    expect(serialized).not.toContain('"Hi"');
+    expect(event.data.turn.compile).toEqual({
+      runId: "run-1",
+      attempt: 1,
+      promptCompilerVersion: "computer-v1",
+      digest: `sha256:${"a".repeat(64)}`,
+    });
+  });
+
+  it("rejects a frozen event that lacks the compile anchor", async function _MalformedFrozen() {
+    const frozenEvent = {
+      streamName: `conversation-computer-turn-${_ID}`,
+      revision: 0n,
+      recordedAt: new Date(),
+      id: _ID,
+      type: "opencrane.conversation-computer-turn-frozen.v1",
+      data: {
+        turn: {
+          ..._TURN,
+          compile: undefined,
+          binding: { ..._TURN.binding, expectedRevision: "1" },
+        },
+      },
+      metadata: {},
+    };
+    const store = new KurrentConversationComputerTurnStore({
+      append: vi.fn(),
+      readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()),
+    });
+    await expect(store.load(_ID)).rejects.toThrow("malformed frozen data");
   });
 
   it("recognizes the same output retry after a checked-append conflict", async function _Retry() {

@@ -9,7 +9,7 @@ const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v1";
 const _ACTIVE_EVENT = "opencrane.conversation-computer-turn-active.v1";
 const _SETTLED_EVENT = "opencrane.conversation-computer-turn-settled.v1";
 
-/** Persists immutable turn input and terminal output coordinates in a deterministic Kurrent stream. */
+/** Persists immutable turn coordinates, a compile digest, and terminal output coordinates in a deterministic Kurrent stream; compiled content never enters it. */
 export class KurrentConversationComputerTurnStore implements ConversationComputerTurnStore
 {
 	public constructor(private readonly history: Pick<HistoryStore, "append" | "readStream">) {}
@@ -168,9 +168,23 @@ function _Stream(bootstrapId: string): string
 	return `conversation-computer-turn-${bootstrapId}`;
 }
 
+/** Copy the frozen record field by field; a spread could leak an unexpected property into the immutable event. */
 function _Serializable(turn: FrozenConversationComputerTurn): Record<string, unknown>
 {
-	return { ...turn, binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() } };
+	return {
+		bootstrapId: turn.bootstrapId,
+		siloId: turn.siloId,
+		computerId: turn.computerId,
+		generation: turn.generation,
+		leaseId: turn.leaseId,
+		binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() },
+		latestPendingEntryId: turn.latestPendingEntryId,
+		modelAlias: turn.modelAlias,
+		maximumBudgetUsd: turn.maximumBudgetUsd,
+		credentialLifetimeSeconds: turn.credentialLifetimeSeconds,
+		sandboxClaimId: turn.sandboxClaimId,
+		compile: { runId: turn.compile.runId, attempt: turn.compile.attempt, promptCompilerVersion: turn.compile.promptCompilerVersion, digest: turn.compile.digest },
+	};
 }
 
 function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown>
@@ -183,7 +197,7 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 	if (event.type !== _FROZEN_EVENT || event.id !== bootstrapId || event.streamName !== _Stream(bootstrapId))
 		throw new Error("Conversation computer turn received an invalid frozen event");
 	const value = event.data["turn"] as FrozenConversationComputerTurn & { readonly binding: FrozenConversationComputerTurn["binding"] & { readonly expectedRevision: string } };
-	if (value?.bootstrapId !== bootstrapId || typeof value.binding?.expectedRevision !== "string")
+	if (value?.bootstrapId !== bootstrapId || typeof value.binding?.expectedRevision !== "string" || typeof value.compile?.digest !== "string" || typeof value.compile.runId !== "string" || typeof value.compile.attempt !== "number" || typeof value.compile.promptCompilerVersion !== "string")
 		throw new Error("Conversation computer turn received malformed frozen data");
 	return { ...value, binding: { ...value.binding, expectedRevision: BigInt(value.binding.expectedRevision) }, outputSourceCommandId: null, outputReceipt: null };
 }

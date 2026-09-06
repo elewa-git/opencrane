@@ -32,7 +32,7 @@ export interface ConversationComputerBootstrap
 {
 	/** Stable idempotency coordinate for bootstrap and output retry. */
 	readonly bootstrapId: string;
-	/** Deterministically compiled input for this attempt. */
+	/** Recompiled input for this attempt, proven equal to the frozen digest; it travels only over the private transport. */
 	readonly compiledInput: CompiledRunInput;
 	/** Bounded route minted for only this attempt. */
 	readonly modelCredential: ConversationComputerModelCredential;
@@ -62,11 +62,11 @@ export interface ConversationComputerTurnAuthority
 	appendOutput(command: ConversationComputerOutputCommand): Promise<"accepted" | "idempotent">;
 }
 
-/** Server-resolved immutable material used to freeze one pending computer turn. */
-export interface ConversationComputerTurnCandidate
+/** Server-resolved coordinates shared by a freshly compiled candidate and its frozen record. */
+export interface ConversationComputerTurnCoordinates
 {
 	readonly binding: BoundConversationWriterBinding;
-	readonly compiledInput: CompiledRunInput;
+	/** Pending human entry the turn answers; it also anchors the deterministic bootstrap identifier. */
 	readonly latestPendingEntryId: string;
 	readonly modelAlias: string;
 	readonly maximumBudgetUsd: number;
@@ -74,14 +74,41 @@ export interface ConversationComputerTurnCandidate
 	readonly sandboxClaimId: string;
 }
 
-/** Durable turn record; it deliberately excludes the raw LiteLLM credential. */
-export interface FrozenConversationComputerTurn extends ConversationComputerTurnCandidate
+/** Server-resolved material used to freeze one pending computer turn; only the authority holds the compiled input. */
+export interface ConversationComputerTurnCandidate extends ConversationComputerTurnCoordinates
+{
+	/** Compiled from the admitted run input snapshot; it never enters an immutable event. */
+	readonly compiledInput: CompiledRunInput;
+}
+
+/**
+ * Coordinates that let the server recompile one turn and prove the result matches the frozen record.
+ *
+ * The run input snapshot in PostgreSQL keeps the message references, and the compiler re-reads the
+ * exact encrypted revisions, so these fields plus the digest are enough to rebuild the compiled input.
+ */
+export interface ConversationComputerTurnCompileAnchor
+{
+	/** Run whose first attempt snapshot the turn was compiled from. */
+	readonly runId: string;
+	/** Attempt number of that snapshot. */
+	readonly attempt: number;
+	/** Prompt compiler version that produced the frozen digest. */
+	readonly promptCompilerVersion: string;
+	/** Digest of the compiled input, written as `sha256:<hex>`; a recompile must reproduce it byte for byte. */
+	readonly digest: string;
+}
+
+/** Durable turn record; it carries only coordinates and a digest, never compiled content or a raw LiteLLM credential. */
+export interface FrozenConversationComputerTurn extends ConversationComputerTurnCoordinates
 {
 	readonly bootstrapId: string;
 	readonly computerId: string;
 	readonly generation: number;
 	readonly leaseId: string;
 	readonly siloId: string;
+	/** Recompile anchor checked against every fresh compile before the Pod receives input. */
+	readonly compile: ConversationComputerTurnCompileAnchor;
 	readonly outputSourceCommandId: string | null;
 	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
 }

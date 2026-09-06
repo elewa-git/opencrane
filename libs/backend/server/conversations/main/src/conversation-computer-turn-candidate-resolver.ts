@@ -35,7 +35,7 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 		if (turn.siloId !== this.siloId)
 			throw new Error("Conversation computer output crossed its admitted silo");
 		const candidate = await this.resolve({ computerId: turn.computerId, generation: turn.generation, leaseId: turn.leaseId, workload });
-		if (candidate === null || candidate.binding.expectedRevision !== turn.binding.expectedRevision || candidate.latestPendingEntryId !== turn.latestPendingEntryId || candidate.compiledInput.digest !== turn.compiledInput.digest || candidate.modelAlias !== turn.modelAlias)
+		if (candidate === null || candidate.binding.expectedRevision !== turn.binding.expectedRevision || candidate.latestPendingEntryId !== turn.latestPendingEntryId || candidate.compiledInput.digest !== turn.compile.digest || candidate.modelAlias !== turn.modelAlias)
 			throw new Error("Conversation computer output requires rebootstrap after conversation history changed");
 	}
 }

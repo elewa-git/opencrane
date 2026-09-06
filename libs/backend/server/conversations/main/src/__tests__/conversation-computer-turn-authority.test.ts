@@ -133,6 +133,15 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const first = await authority.bootstrap(command);
     const duplicate = await authority.bootstrap(command);
     expect(duplicate?.bootstrapId).toBe(first?.bootstrapId);
+    expect(first?.compiledInput).toEqual(_COMPILED);
+    const frozen = dependencies.store.createOrRead.mock.calls[0]?.[0];
+    expect(frozen).not.toHaveProperty("compiledInput");
+    expect(frozen?.compile).toEqual({
+      runId: "run-1",
+      attempt: 1,
+      promptCompilerVersion: "conversation-computer-v1",
+      digest: `sha256:${"a".repeat(64)}`,
+    });
     expect(first?.modelCredential).toEqual({
       endpoint: "http://litellm.testv5.svc.cluster.local:4000",
       key: "sk-attempt",
@@ -205,6 +214,30 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     );
     expect(dependencies.runLifecycle.complete).toHaveBeenCalledTimes(2);
     expect(dependencies.store.settle).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when a retried bootstrap recompiles to a different digest", async function _DigestDrift() {
+    const { authority, dependencies } = _Harness();
+    const command = {
+      computerId: "computer-1",
+      generation: 2,
+      leaseId: "lease-1",
+      workload: _WORKLOAD,
+    };
+    await authority.bootstrap(command);
+    dependencies.candidates.resolve.mockResolvedValue({
+      binding: _BINDING,
+      compiledInput: { ..._COMPILED, instructions: "Changed", digest: `sha256:${"c".repeat(64)}` },
+      latestPendingEntryId: "entry-1",
+      modelAlias: "testv5-default",
+      maximumBudgetUsd: 0.1,
+      credentialLifetimeSeconds: 300,
+      sandboxClaimId: "computer-1-g2",
+    });
+    await expect(authority.bootstrap(command)).rejects.toThrow(
+      /recompiled input .* does not match the frozen turn digest/,
+    );
+    expect(dependencies.credentials.issueOrRotate).toHaveBeenCalledTimes(1);
   });
 
   it("rejects stale or cross-silo workload evidence before credential or output use", async function _Fence() {
