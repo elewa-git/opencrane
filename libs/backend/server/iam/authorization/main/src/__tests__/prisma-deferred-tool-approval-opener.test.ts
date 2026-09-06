@@ -48,7 +48,7 @@ function _LiveTransaction()
 {
 	return {
 		agentRun: { findUnique: vi.fn(async function _run() { return { id: "run-1", siloId: "silo-1", conversationId: "conversation-1", attempt: 1, state: AgentRunState.Running, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: EXECUTION_SUBJECT }; }), updateMany: vi.fn(async function _pause() { return { count: 1 }; }) },
-		conversationComputerActiveLease: { updateMany: vi.fn(async function _touch() { return { count: 1 }; }), findUnique: vi.fn(async function _lease() { return { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1", leaseId: "lease-2", leaseGeneration: 2, expiresAt: new Date("2026-07-29T00:01:00.000Z") }; }) },
+		conversationComputerActiveLease: { findUnique: vi.fn(async function _lease() { return { expiresAt: new Date("2026-07-29T00:01:00.000Z") }; }) },
 		elicitationRequest: { create: vi.fn(async function _createElicitation() { return { id: "interrupt-1" }; }) },
 		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }), findFirst: vi.fn(async function _existing() { return null; }), count: vi.fn(async function _pending() { return 0; }) },
 		principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
@@ -93,6 +93,25 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 
 		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), _Logger() as never)).resolves.toBe(false);
 		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ failureCode: "approval_unavailable" }) }));
+	});
+
+	it("terminalises the invocation as unavailable when the approval trigger rejects a stale computer lease", async function _mapsLeaseFenceToUnavailable()
+	{
+		const transaction = _LiveTransaction();
+		transaction.approvalRequest.create.mockRejectedValueOnce(new Prisma.PrismaClientUnknownRequestError("Invalid `prisma.approvalRequest.create()` invocation: ApprovalRequest requires its exact active conversation computer lease", { clientVersion: "test" }));
+		const terminalisationTransaction = { toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn(async function _fail() { return { count: 1 }; }) }, toolResultDelivery: { create: vi.fn() } };
+		const prisma = {
+			$transaction: vi.fn()
+				.mockImplementationOnce(async function _defer(callback) { return callback(transaction); })
+				.mockImplementationOnce(async function _terminalise(callback) { return callback(terminalisationTransaction); }),
+		};
+		const logger = _Logger();
+
+		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), logger as never)).resolves.toBe(false);
+		expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+		expect(terminalisationTransaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ failureCode: "approval_unavailable" }) }));
+		expect(logger.warn).not.toHaveBeenCalled();
+		expect(logger.error).not.toHaveBeenCalled();
 	});
 
 	it("recognises a linked approval after an ambiguous transaction failure", async function _recoversCommittedApproval()

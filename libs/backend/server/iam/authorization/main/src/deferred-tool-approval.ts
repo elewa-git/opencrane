@@ -18,6 +18,28 @@ import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejected
 /** Stable manager that owns the assigned reviewer's exact approval grants. */
 export const DEFERRED_TOOL_APPROVAL_GRANT_MANAGER_ID = "deferred-tool-approval-assignee";
 
+/** Messages the approval_requests trigger raises when a write fails its run, invocation, or computer-lease fence. */
+const _APPROVAL_REQUEST_FENCE_MESSAGES: readonly string[] = [
+	"ApprovalRequest requires its exact active conversation computer lease",
+	"ApprovalRequest requires the current waiting run and its exact computer-lease invocation",
+];
+
+/**
+ * Returns whether PostgreSQL's approval_requests trigger rejected a write because the run, its
+ * awaiting invocation, or its active conversation computer lease no longer matches.
+ *
+ * That trigger is the only lease fence: it locks the lease row and compares it for every writer.
+ * It raises inside the statement, so the whole transaction attempt rolled back and nothing
+ * committed. The transaction owner maps this to its unavailable outcome instead of treating the
+ * failure as ambiguous.
+ *
+ * Called by: ./prisma-deferred-tool-approval-opener.ts.
+ */
+export function _IsApprovalRequestFenceRejection(error: unknown): boolean
+{
+	return error instanceof Prisma.PrismaClientUnknownRequestError && _APPROVAL_REQUEST_FENCE_MESSAGES.some(function _Matches(message) { return error.message.includes(message); });
+}
+
 /** Resolves the exact assignment principal and its authenticated participant subject. */
 async function _ResolveAssignedPrincipal(transaction: Prisma.TransactionClient, siloId: string, principalId: string): Promise<{ readonly principalId: string; readonly subjectId: string } | null>
 {
@@ -65,9 +87,14 @@ function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates 
  * Deferral is idempotent through the `(runId, attempt, actionDigest)` key: a repeated defer returns
  * the existing pending row rather than opening a second approval.
  *
+ * The active conversation computer lease is fenced once, by the approval_requests trigger in
+ * PostgreSQL: it locks the lease row and compares it with the run's execution subject when the
+ * approval row is written. A stale lease therefore surfaces as a thrown Prisma error, which the
+ * transaction owner recognises with {@link _IsApprovalRequestFenceRejection}.
+ *
  * @param transaction - Prisma transaction already holding the owning run's approval fence.
  * @param command - Awaiting invocation coordinates, tool identity, and expiry.
- * @returns The opened (or replayed) approval id, or `unavailable` when its computer lease is stale.
+ * @returns The opened (or replayed) approval id, or `unavailable` when the run, invocation, or approver no longer allow an approval.
  */
 export async function __DeferToolRequest(transaction: Prisma.TransactionClient, command: DeferToolRequestCommand): Promise<DeferToolRequestResult>
 {
@@ -78,22 +105,18 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 	const invocationSubject = invocation?.authorizationEvidence !== null && invocation?.authorizationEvidence !== undefined && "executionSubject" in invocation.authorizationEvidence
 		? ___ExecutionSubjectSchema.safeParse(invocation.authorizationEvidence.executionSubject)
 		: null;
-	const subject = runSubject?.success === true ? runSubject.data : null;
-	const touchedLease = subject === null ? { count: 0 } : await transaction.conversationComputerActiveLease.updateMany({ where: { computerId: subject.computerScope.computerId, siloId: subject.siloId, conversationId: run?.conversationId ?? "", agentIdentityId: subject.agentIdentityId, leaseId: subject.computerScope.leaseId, leaseGeneration: subject.computerScope.leaseGeneration, expiresAt: { gt: command.now } }, data: { updatedAt: command.now } });
-	const activeLease = subject === null || touchedLease.count !== 1 ? null : await transaction.conversationComputerActiveLease.findUnique({ where: { computerId: subject.computerScope.computerId } });
 	if (run === null || runSubject === null || !runSubject.success || invocationSubject === null || !invocationSubject.success
 		|| run.attempt !== command.attempt || run.conversationId === null
 		|| runSubject.data.runScope.runId !== command.runId || runSubject.data.runScope.attempt !== command.attempt
 		|| Date.parse(runSubject.data.membership.trustedUntil) <= command.now.getTime()
-		|| activeLease === null || activeLease.siloId !== run.siloId || activeLease.conversationId !== run.conversationId
-		|| activeLease.agentIdentityId !== run.agentIdentityId || activeLease.leaseId !== runSubject.data.computerScope.leaseId
-		|| activeLease.leaseGeneration !== runSubject.data.computerScope.leaseGeneration || activeLease.expiresAt.getTime() <= command.now.getTime()
 		|| __DigestCanonicalJson(runSubject.data as unknown as JsonValue) !== __DigestCanonicalJson(invocationSubject.data as unknown as JsonValue))
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	const assignedPrincipal = await _ResolveAssignedPrincipal(transaction, run.siloId, run.principalId);
 	if (assignedPrincipal === null)
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
-	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), Date.parse(runSubject.data.membership.trustedUntil), activeLease.expiresAt.getTime()));
+	// The lease row is read only for its expiry, which caps the approval deadline; the trigger validates the lease itself when the row is created.
+	const activeLease = await transaction.conversationComputerActiveLease.findUnique({ where: { computerId: runSubject.data.computerScope.computerId }, select: { expiresAt: true } });
+	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), Date.parse(runSubject.data.membership.trustedUntil), activeLease?.expiresAt.getTime() ?? Number.POSITIVE_INFINITY));
 	if (expiresAt.getTime() <= command.now.getTime())
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	if (invocation === null || invocation.runId !== command.runId || invocation.attempt !== command.attempt || invocation.toolRevisionId !== command.toolRevisionId || invocation.argumentsDigest !== command.argumentsDigest || invocation.state !== ToolInvocationStates.AwaitingApproval)
@@ -223,6 +246,9 @@ function _decisionOf(state: ApprovalRequestState): DeferredToolDecisionKinds | n
  * way returns `already_decided`, and any conflicting decision (different outcome, or a row that was
  * cancelled/expired out from under the reviewer) returns `conflict` rather than mutating a terminal
  * approval. The caller commits this in the same transaction that transitions the owning run state.
+ * The active conversation computer lease is fenced once, by the approval_requests trigger on the
+ * decision update; when it rejects a stale lease the Prisma error propagates so the transaction
+ * owner rolls back (recognisable with {@link _IsApprovalRequestFenceRejection}).
  *
  * The browser-facing Phase F decision route supplies only an authenticated owner, a silo, and the
  * terminal choice. This authority rechecks that ownership against the durable row and mints no
@@ -295,16 +321,12 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	}
 
 	// 4. Validate the frozen schema and proposed arguments before an actor replacement becomes effective.
+	//    The active computer lease is not compared here: the approval_requests trigger fences it once, on the update below.
 	if (invocation.state !== ToolInvocationStates.AwaitingApproval)
 		return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	const runSubject = ___ExecutionSubjectSchema.safeParse(run.executionSubject);
 	const invocationSubject = invocation.authorizationEvidence !== null && "executionSubject" in invocation.authorizationEvidence ? ___ExecutionSubjectSchema.safeParse(invocation.authorizationEvidence.executionSubject) : null;
-	const touchedLease = runSubject.success ? await transaction.conversationComputerActiveLease.updateMany({ where: { computerId: runSubject.data.computerScope.computerId, siloId: runSubject.data.siloId, conversationId: run.conversationId ?? "", agentIdentityId: runSubject.data.agentIdentityId, leaseId: runSubject.data.computerScope.leaseId, leaseGeneration: runSubject.data.computerScope.leaseGeneration, expiresAt: { gt: command.now } }, data: { updatedAt: command.now } }) : { count: 0 };
-	const activeLease = runSubject.success && touchedLease.count === 1 ? await transaction.conversationComputerActiveLease.findUnique({ where: { computerId: runSubject.data.computerScope.computerId } }) : null;
-	if (!runSubject.success || invocationSubject === null || !invocationSubject.success || activeLease === null
-		|| activeLease.siloId !== approval.siloId || activeLease.conversationId !== run.conversationId
-		|| activeLease.agentIdentityId !== run.agentIdentityId || activeLease.leaseId !== runSubject.data.computerScope.leaseId
-		|| activeLease.leaseGeneration !== runSubject.data.computerScope.leaseGeneration || activeLease.expiresAt.getTime() <= command.now.getTime()
+	if (!runSubject.success || invocationSubject === null || !invocationSubject.success
 		|| __DigestCanonicalJson(runSubject.data as unknown as JsonValue) !== __DigestCanonicalJson(invocationSubject.data as unknown as JsonValue))
 		return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	if (!replacementAllowed || command.arguments === undefined || command.arguments === null || typeof command.arguments !== "object" || Array.isArray(command.arguments) || !__ValidateDeferredToolArguments(reviewedSchema, command.arguments))

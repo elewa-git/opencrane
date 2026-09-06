@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest";
-import { __DeferToolRequest } from "./deferred-tool-approval";
+import { __DeferToolRequest, _IsApprovalRequestFenceRejection } from "./deferred-tool-approval";
 import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";
 import { DeferToolRequestOutcomes, type DeferredToolApprovalOpenRepository, type DeferredToolApprovalOpenUnitOfWork, type DeferToolRequestCommand, type DeferToolRequestResult, type OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types";
 import { __MarkToolInvocationApprovalRejectedInTransaction } from "./tool-invocation-transaction";
@@ -97,6 +97,14 @@ class PrismaDeferredToolApprovalOpenUnitOfWork implements DeferredToolApprovalOp
 	}
 }
 
+/** Fail the still-awaiting invocation because nothing can own its approval; throws when another writer already moved it on. */
+async function _closeUnavailableInvocation(repository: DeferredToolApprovalOpenRepository, command: OpenDeferredToolApprovalCommand): Promise<boolean>
+{
+	if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_unavailable", command.now))
+		throw new Error("deferred approval lost its awaiting-approval invocation fence");
+	return false;
+}
+
 /** Perform the traced unit-of-work body without exposing Prisma beyond this module. */
 async function _openDeferredToolApproval(command: OpenDeferredToolApprovalCommand, logger: Logger, transaction: ApprovalOpenTransaction): Promise<boolean>
 {
@@ -137,18 +145,25 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 			if (result.outcome !== DeferToolRequestOutcomes.Unavailable)
 				return true;
 
-			// 2. A stale or unavailable computer lease makes the awaiting invocation terminal in the same commit.
-			if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_unavailable", command.now))
-				throw new Error("deferred approval lost its awaiting-approval invocation fence");
-			return false;
+			// 2. A run, invocation, or approver that can no longer own an approval makes the awaiting invocation terminal in the same commit.
+			return _closeUnavailableInvocation(repository, command);
 		});
 	}
 	catch (transactionError)
 	{
+		// 3. The approval_requests trigger is the single computer-lease fence. When it rejects the create,
+		//    PostgreSQL rolled the attempt back, so close the invocation in a fresh transaction exactly as step 2 does.
+		if (_IsApprovalRequestFenceRejection(transactionError))
+		{
+			return transaction(async function _unavailable(repository): Promise<boolean>
+			{
+				return _closeUnavailableInvocation(repository, command);
+			});
+		}
 		const evidence = { runId: command.runId, attempt: command.attempt, invocationId: command.invocationId, toolInvocationId: command.toolInvocationId };
 		logger.warn({ err: transactionError, ...evidence }, "deferred approval transaction outcome is ambiguous");
 
-		// 3. A linked approval proves an ambiguous transaction committed before its connection failed.
+		// 4. A linked approval proves an ambiguous transaction committed before its connection failed.
 		try
 		{
 			const linked = await transaction(async function _recoverRead(repository)
@@ -163,7 +178,7 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 			logger.error({ err: recoveryReadError, ...evidence }, "deferred approval recovery read failed");
 		}
 
-		// 4. Recheck linkage and close the invocation inside one transaction. A transient failure in the
+		// 5. Recheck linkage and close the invocation inside one transaction. A transient failure in the
 		// first recovery read can never turn an already-committed approval into a failed invocation.
 		try
 		{
