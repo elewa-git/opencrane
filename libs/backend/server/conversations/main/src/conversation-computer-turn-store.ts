@@ -4,6 +4,7 @@ import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore 
 
 import { _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";
 import type { ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
 const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v1";
@@ -56,7 +57,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	}
 
 	/** Append exactly one output coordinate or recognize the same uncertain retry. */
-	public async loadActive(command: { readonly siloId: string; readonly computerId: string; readonly generation: number; readonly leaseId: string }): Promise<FrozenConversationComputerTurn | null>
+	public async loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>
 	{
 		let active: string | null = null;
 		for await (const event of this.history.readStream({ streamName: _ActiveStream(command) }))
@@ -117,7 +118,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			throw new Error("Conversation computer already has an unsettled turn");
 		try
 		{
-			await this.history.append({ streamName, expectedRevision: events.length === 0 ? HistoryExpectedRevisions.NoStream : BigInt(events.length - 1), events: [{ id: turn.bootstrapId, type: _ACTIVE_EVENT, data: { bootstrapId: turn.bootstrapId, siloId: turn.siloId, computerId: turn.computerId, generation: turn.generation, leaseId: turn.leaseId }, metadata: _Metadata(turn) }] });
+			await this.history.append({ streamName, expectedRevision: events.length === 0 ? HistoryExpectedRevisions.NoStream : BigInt(events.length - 1), events: [{ id: turn.bootstrapId, type: _ACTIVE_EVENT, data: { bootstrapId: turn.bootstrapId, siloId: turn.siloId, computerId: turn.computerId, generation: turn.lease.leaseGeneration, leaseId: turn.lease.leaseId }, metadata: _Metadata(turn) }] });
 		}
 		catch (error)
 		{
@@ -136,15 +137,16 @@ async function _Events(history: Pick<HistoryStore, "readStream">, streamName: st
 	return events;
 }
 
-function _ActiveStream(command: { readonly siloId: string; readonly computerId: string; readonly generation: number; readonly leaseId: string }): string
+function _ActiveStream(command: ConversationComputerLeaseCoordinates): string
 {
 	return _ConversationComputerActiveTurnStreamName(command);
 }
 
-function _ActiveBootstrap(event: HistoryRecordedEvent, command: { readonly siloId: string; readonly computerId: string; readonly generation: number; readonly leaseId: string }): string
+/** Reads the bootstrap id off an active event after checking the event names this exact lease. */
+function _ActiveBootstrap(event: HistoryRecordedEvent, command: ConversationComputerLeaseCoordinates): string
 {
 	const bootstrapId = event.data["bootstrapId"];
-	if (typeof bootstrapId !== "string" || event.data["siloId"] !== command.siloId || event.data["computerId"] !== command.computerId || event.data["generation"] !== command.generation || event.data["leaseId"] !== command.leaseId)
+	if (typeof bootstrapId !== "string" || event.data["siloId"] !== command.siloId || event.data["computerId"] !== command.computerId || event.data["generation"] !== command.lease.leaseGeneration || event.data["leaseId"] !== command.lease.leaseId)
 		throw new Error("Conversation computer active-turn history crossed its lease fence");
 	return bootstrapId;
 }
@@ -169,38 +171,60 @@ function _Stream(bootstrapId: string): string
 	return `conversation-computer-turn-${bootstrapId}`;
 }
 
-/** Copy the frozen record field by field; a spread could leak an unexpected property into the immutable event. */
+/**
+ * Copy the frozen record field by field; a spread could leak an unexpected property into the immutable event.
+ *
+ * The event keeps the lease flat under its original names (`generation`, `leaseId`, `sandboxClaimId`),
+ * so every turn already stored in KurrentDB keeps loading unchanged.
+ */
 function _Serializable(turn: FrozenConversationComputerTurn): Record<string, unknown>
 {
 	return {
 		bootstrapId: turn.bootstrapId,
 		siloId: turn.siloId,
 		computerId: turn.computerId,
-		generation: turn.generation,
-		leaseId: turn.leaseId,
+		generation: turn.lease.leaseGeneration,
+		leaseId: turn.lease.leaseId,
 		binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() },
 		latestPendingEntryId: turn.latestPendingEntryId,
 		modelAlias: turn.modelAlias,
 		maximumBudgetUsd: turn.maximumBudgetUsd,
 		credentialLifetimeSeconds: turn.credentialLifetimeSeconds,
-		sandboxClaimId: turn.sandboxClaimId,
+		sandboxClaimId: turn.lease.sandboxClaimId,
 		compile: { runId: turn.compile.runId, attempt: turn.compile.attempt, promptCompilerVersion: turn.compile.promptCompilerVersion, digest: turn.compile.digest },
 	};
 }
 
 function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown>
 {
-	return { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.leaseId, generation: turn.generation, bootstrapId: turn.bootstrapId };
+	return { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.lease.leaseId, generation: turn.lease.leaseGeneration, bootstrapId: turn.bootstrapId };
 }
 
+/** Shape of the frozen event data as it is stored: the lease flattened to `generation`, `leaseId` and `sandboxClaimId`, and the stream revision as a string. */
+type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
+
+/** Rebuild the in-memory record from the stored event, gathering the flat lease fields into the `lease` bundle. */
 function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConversationComputerTurn
 {
 	if (event.type !== _FROZEN_EVENT || event.id !== bootstrapId || event.streamName !== _Stream(bootstrapId))
 		throw new Error("Conversation computer turn received an invalid frozen event");
-	const value = event.data["turn"] as FrozenConversationComputerTurn & { readonly binding: FrozenConversationComputerTurn["binding"] & { readonly expectedRevision: string } };
+	const value = event.data["turn"] as _StoredFrozenTurn;
 	if (value?.bootstrapId !== bootstrapId || typeof value.binding?.expectedRevision !== "string" || typeof value.compile?.digest !== "string" || typeof value.compile.runId !== "string" || typeof value.compile.attempt !== "number" || typeof value.compile.promptCompilerVersion !== "string")
 		throw new Error("Conversation computer turn received malformed frozen data");
-	return { ...value, binding: { ...value.binding, expectedRevision: BigInt(value.binding.expectedRevision) }, outputSourceCommandId: null, outputReceipt: null };
+	return {
+		bootstrapId: value.bootstrapId,
+		siloId: value.siloId,
+		computerId: value.computerId,
+		lease: { leaseId: value.leaseId, leaseGeneration: value.generation, sandboxClaimId: value.sandboxClaimId },
+		binding: { ...value.binding, expectedRevision: BigInt(value.binding.expectedRevision) },
+		latestPendingEntryId: value.latestPendingEntryId,
+		modelAlias: value.modelAlias,
+		maximumBudgetUsd: value.maximumBudgetUsd,
+		credentialLifetimeSeconds: value.credentialLifetimeSeconds,
+		compile: value.compile,
+		outputSourceCommandId: null,
+		outputReceipt: null,
+	};
 }
 
 function _Output(event: HistoryRecordedEvent, bootstrapId: string): ConversationComputerTurnOutputReceipt

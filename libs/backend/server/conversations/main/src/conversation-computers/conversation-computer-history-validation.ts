@@ -19,13 +19,13 @@ export function _ConversationComputerStreamName(computerId: string): string
 /** Validates trusted coordinates before they can select a durable computer history stream. */
 export function _ValidateConversationComputerCurrentCommand(command: ConversationComputerCurrentCommand): void
 {
-	if (!_Identifier(command.siloId))
+	if (!_Identifier(command.computer.siloId))
 		throw new Error("Conversation computer history load requires a server-provided silo identifier");
-	if (!_Identifier(command.computerId))
+	if (!_Identifier(command.computer.computerId))
 		throw new Error("Conversation computer history load requires a server-provided computer identifier");
-	if (!_Identifier(command.conversationId))
+	if (!_Identifier(command.computer.conversationId))
 		throw new Error("Conversation computer history load requires a server-provided conversation identifier");
-	if (!_Identifier(command.agentIdentityId))
+	if (!_Identifier(command.computer.agentIdentityId))
 		throw new Error("Conversation computer history load requires a server-provided agent identity identifier");
 	if (!_Identifier(command.profileRevisionId))
 		throw new Error("Conversation computer history load requires a server-provided profile revision identifier");
@@ -45,13 +45,13 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 	const snapshot = _ValidatedConversationComputerSnapshot(event.data);
 	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null))
 		throw new Error("Conversation computer history received an event that does not match its envelope");
-	if (snapshot.computer.siloId !== command.siloId)
+	if (snapshot.computer.siloId !== command.computer.siloId)
 		throw new Error("Conversation computer history received a computer from a different silo");
-	if (snapshot.computer.id !== command.computerId)
+	if (snapshot.computer.id !== command.computer.computerId)
 		throw new Error("Conversation computer history received a different computer");
-	if (snapshot.computer.conversationId !== command.conversationId)
+	if (snapshot.computer.conversationId !== command.computer.conversationId)
 		throw new Error("Conversation computer history received a computer for a different conversation");
-	if (snapshot.computer.agentIdentityId !== command.agentIdentityId)
+	if (snapshot.computer.agentIdentityId !== command.computer.agentIdentityId)
 		throw new Error("Conversation computer history received a computer for a different agent identity");
 	if (snapshot.computer.profileRevisionId !== command.profileRevisionId)
 		throw new Error("Conversation computer history received a computer for a different profile revision");

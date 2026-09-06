@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { KurrentConversationComputerActivityReader, _ConversationComputerActiveTurnStreamName } from "../conversation-computer-activity";
 import { KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
 
-const _COMMAND = { siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-2" };
+const _COMMAND = { siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-2", leaseGeneration: 2 } };
+/** Flat lease fields as the turn store writes them into the active-turn event. */
+const _EVENT_LEASE = { siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-2" };
 
 function _Reader(events: readonly Record<string, unknown>[])
 {
@@ -29,7 +31,7 @@ describe("KurrentConversationComputerActivityReader", function _Suite()
 	it("reports the newest settled turn as idle activity from its head event only", async function _Settled()
 	{
 		const { reader, readStream } = _Reader([
-			{ id: "a", type: "opencrane.conversation-computer-turn-active.v1", data: { bootstrapId: "turn-1", ..._COMMAND }, metadata: {}, recordedAt: new Date("2026-09-05T12:00:00.000Z") },
+			{ id: "a", type: "opencrane.conversation-computer-turn-active.v1", data: { bootstrapId: "turn-1", ..._EVENT_LEASE }, metadata: {}, recordedAt: new Date("2026-09-05T12:00:00.000Z") },
 			{ id: "b", type: "opencrane.conversation-computer-turn-settled.v1", data: { bootstrapId: "turn-1" }, metadata: {}, recordedAt: new Date("2026-09-05T12:07:00.000Z") },
 		]);
 		await expect(reader.lastActivity(_COMMAND)).resolves.toEqual({ lastActivityAt: new Date("2026-09-05T12:07:00.000Z"), busy: false });
@@ -38,10 +40,10 @@ describe("KurrentConversationComputerActivityReader", function _Suite()
 
 	it("reports an unsettled turn as busy and rejects a foreign lease in the stream", async function _Busy()
 	{
-		const busy = _Reader([{ id: "a", type: "opencrane.conversation-computer-turn-active.v1", data: { bootstrapId: "turn-2", ..._COMMAND }, metadata: {}, recordedAt: new Date("2026-09-05T12:10:00.000Z") }]);
+		const busy = _Reader([{ id: "a", type: "opencrane.conversation-computer-turn-active.v1", data: { bootstrapId: "turn-2", ..._EVENT_LEASE }, metadata: {}, recordedAt: new Date("2026-09-05T12:10:00.000Z") }]);
 		await expect(busy.reader.lastActivity(_COMMAND)).resolves.toEqual({ lastActivityAt: new Date("2026-09-05T12:10:00.000Z"), busy: true });
 
-		const foreign = _Reader([{ id: "a", type: "opencrane.conversation-computer-turn-active.v1", data: { bootstrapId: "turn-2", ..._COMMAND, leaseId: "lease-9" }, metadata: {}, recordedAt: new Date("2026-09-05T12:10:00.000Z") }]);
+		const foreign = _Reader([{ id: "a", type: "opencrane.conversation-computer-turn-active.v1", data: { bootstrapId: "turn-2", ..._EVENT_LEASE, leaseId: "lease-9" }, metadata: {}, recordedAt: new Date("2026-09-05T12:10:00.000Z") }]);
 		await expect(foreign.reader.lastActivity(_COMMAND)).rejects.toThrow("crossed its lease fence");
 	});
 

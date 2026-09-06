@@ -20,12 +20,13 @@ export class PrismaConversationComputerActivationProjectionRepository implements
 	/** Publish the exact canonical lease, including an expired lease replayed after an outage. */
 	public async publishActiveLease(command: ConversationComputerActiveLeaseProjectionCommand): Promise<void>
 	{
-		const expiresAt = new Date(command.expiresAt);
+		const expiresAt = new Date(command.lease.expiresAt);
 		if (Number.isNaN(expiresAt.getTime()))
 			throw new Error("Conversation computer active lease projection requires a valid expiry");
-		await this.prisma.conversationComputerActiveLease.upsert({ where: { computerId: command.computerId }, create: { siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, agentIdentityId: command.agentIdentityId, leaseId: command.leaseId, leaseGeneration: command.leaseGeneration, expiresAt }, update: {} });
-		const existing = await this.prisma.conversationComputerActiveLease.findUnique({ where: { computerId: command.computerId } });
-		if (existing === null || existing.siloId !== command.siloId || existing.conversationId !== command.conversationId || existing.agentIdentityId !== command.agentIdentityId || existing.leaseId !== command.leaseId || existing.leaseGeneration !== command.leaseGeneration || existing.expiresAt.getTime() !== expiresAt.getTime())
+		const { computer, lease } = command;
+		await this.prisma.conversationComputerActiveLease.upsert({ where: { computerId: computer.computerId }, create: { siloId: computer.siloId, conversationId: computer.conversationId, computerId: computer.computerId, agentIdentityId: computer.agentIdentityId, leaseId: lease.leaseId, leaseGeneration: lease.leaseGeneration, expiresAt }, update: {} });
+		const existing = await this.prisma.conversationComputerActiveLease.findUnique({ where: { computerId: computer.computerId } });
+		if (existing === null || existing.siloId !== computer.siloId || existing.conversationId !== computer.conversationId || existing.agentIdentityId !== computer.agentIdentityId || existing.leaseId !== lease.leaseId || existing.leaseGeneration !== lease.leaseGeneration || existing.expiresAt.getTime() !== expiresAt.getTime())
 			throw new Error("Conversation computer active lease projection conflicts with current authority");
 	}
 }

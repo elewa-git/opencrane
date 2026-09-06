@@ -2,6 +2,7 @@ import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/cont
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, CurrentConversationComputer } from "./conversation-computer-history.types";
+import { _ComputerScopeOf } from "./conversation-computer-scope";
 import { _ConversationComputerStreamName, _ValidateConversationComputerCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
 /** Recognizes UUID event identifiers without treating a computer coordinate as an idempotency key. */
@@ -37,13 +38,7 @@ export class ConversationComputerHistory
 			throw new Error("Conversation computer history append requires a UUID event identifier");
 		if (command.expectedRevision !== HistoryExpectedRevisions.NoStream)
 		{
-			const previous = await this.load({
-				siloId: snapshot.computer.siloId,
-				computerId: snapshot.computer.id,
-				conversationId: snapshot.computer.conversationId,
-				agentIdentityId: snapshot.computer.agentIdentityId,
-				profileRevisionId: snapshot.computer.profileRevisionId,
-			});
+			const previous = await this.load({ computer: _ComputerScopeOf(snapshot.computer), profileRevisionId: snapshot.computer.profileRevisionId });
 			if (previous === null || previous.revision !== command.expectedRevision)
 				throw new Error("Conversation computer history append requires the current expected revision");
 			_ValidateSnapshotTransition(previous, snapshot);
@@ -80,7 +75,7 @@ export class ConversationComputerHistory
 	public async load(command: ConversationComputerCurrentCommand): Promise<CurrentConversationComputer | null>
 	{
 		_ValidateConversationComputerCurrentCommand(command);
-		const streamName = _ConversationComputerStreamName(command.computerId);
+		const streamName = _ConversationComputerStreamName(command.computer.computerId);
 		let expectedRevision = 0n;
 		let current: ConversationComputerHistorySnapshot | null = null;
 

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationComputerCredentialRepository, PrismaConversationComputerCredentialUnitOfWork } from "../db/prisma-conversation-computer-credential-issuer";
 
-const _INPUT = { bootstrapId: "bootstrap-1", keyAlias: "attempt-1", modelAlias: "model-1", siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1, expirySeconds: 300, maxBudgetUsd: 0.1 };
+const _INPUT = { bootstrapId: "bootstrap-1", keyAlias: "attempt-1", modelAlias: "model-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1 }, expirySeconds: 300, maxBudgetUsd: 0.1 };
 
 function _Cipher()
 {

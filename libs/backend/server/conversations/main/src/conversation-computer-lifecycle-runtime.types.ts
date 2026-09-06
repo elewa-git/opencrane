@@ -1,5 +1,5 @@
 import type { ComputerLease, ConversationComputer } from "@opencrane/contracts";
-import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
+import type { AgentSandboxPodBinding } from "@opencrane/backend/server/infra/agent-sandbox";
 
 import type { ConversationComputerCheckpointRestoreCommand } from "./conversation-computer-checkpoint.types";
 import type { ConversationComputerCurrentCommand, ConversationComputerHistory } from "./conversation-computers";
@@ -11,13 +11,6 @@ export interface ConversationComputerLifecycleProjection
 	resolve(siloId: string, computerId: string): Promise<ConversationComputerCurrentCommand | null>;
 	/** Enumerate bounded open computer projections. */
 	enumerate(siloId: string, limit: number): Promise<readonly ConversationComputerCurrentCommand[]>;
-}
-
-/** Verifies that one TokenReviewed Pod still belongs to the exact SandboxClaim. */
-export interface ConversationComputerCheckpointPodFence
-{
-	/** Rejects a stale or foreign Pod binding. */
-	verify(command: { readonly computerId: string; readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly workload: RuntimeWorkloadIdentity }): Promise<boolean>;
 }
 
 /** Minimal structured failure logger used by the bounded lifecycle loop. */
@@ -52,8 +45,8 @@ export interface ConversationComputerCheckpointFenceDependencies
 	readonly projections: ConversationComputerLifecycleProjection;
 	/** Reads canonical Kurrent history. */
 	readonly history: ConversationComputerHistory;
-	/** Verifies Kubernetes claim and Pod coordinates. */
-	readonly pods: ConversationComputerCheckpointPodFence;
+	/** Verifies Kubernetes claim and Pod coordinates against the lease the Pod claims. */
+	readonly pods: AgentSandboxPodBinding;
 	/** Supplies release-fixed workload identity. */
 	readonly profile: ConversationComputerCheckpointRuntimeProfile;
 }

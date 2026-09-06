@@ -1,15 +1,4 @@
-/** Names the exact lease whose turn activity is being measured. */
-export interface ConversationComputerActivityCommand
-{
-	/** Identifies the owning silo. */
-	readonly siloId: string;
-	/** Identifies the logical computer. */
-	readonly computerId: string;
-	/** Fences the measurement to one lease generation. */
-	readonly generation: number;
-	/** Identifies the exact lease whose turns count as activity. */
-	readonly leaseId: string;
-}
+import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
 
 /**
  * Reports the last durable turn activity recorded for one lease.
@@ -33,5 +22,5 @@ export interface ConversationComputerActivity
 export interface ConversationComputerActivityReader
 {
 	/** Returns the newest activity for the lease, or null when the lease has never run a turn. */
-	lastActivity(command: ConversationComputerActivityCommand): Promise<ConversationComputerActivity | null>;
+	lastActivity(command: ConversationComputerLeaseCoordinates): Promise<ConversationComputerActivity | null>;
 }

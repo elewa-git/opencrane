@@ -25,11 +25,11 @@ export function _CreatePersonalConversationRunAdmission(prisma: ConstructorParam
 	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(keyringPath));
 	function _CreateMessages(command: ConversationComputerRunAdmissionCommand, transaction: Prisma.TransactionClient): VerifiedConversationPromptMessageRepository
 	{
-		const source = new PrismaKurrentConversationPromptMessageRepository(transaction, history, cipher, command.siloId, command.conversationId, command.messageInput.historyRevision);
+		const source = new PrismaKurrentConversationPromptMessageRepository(transaction, history, cipher, command.computer.siloId, command.computer.conversationId, command.messageInput.historyRevision);
 		return new VerifiedConversationPromptMessageRepository(source);
 	}
 	const compilers: ConversationRunInputCompilerRepositoryFactory = {
-		create: function _CreateCompiler(command, transaction) { return new PrismaPromptCompilerRepository(transaction, _CreateMessages(command, transaction), command.siloId); },
+		create: function _CreateCompiler(command, transaction) { return new PrismaPromptCompilerRepository(transaction, _CreateMessages(command, transaction), command.computer.siloId); },
 		compile: function _CompileIdempotent(command, snapshot)
 		{
 			const compiler = new PrismaPromptCompilerUnitOfWork(prisma, function _CreateIdempotentMessages(transaction) { return _CreateMessages(command, transaction); });
@@ -74,9 +74,9 @@ export function _CreateConversationRunAdmission(prisma: ConstructorParameters<ty
 			let compiled;
 			const admission = {
 				runId: command.runId,
-				siloId: command.siloId,
-				agentServiceId: command.agentServiceId,
-				conversationId: command.conversationId,
+				siloId: command.computer.siloId,
+				agentServiceId: command.agent.agentServiceId,
+				conversationId: command.computer.conversationId,
 				requestIdempotencyKey: command.requestIdempotencyKey,
 				messageInput: {
 					...command.messageInput,
@@ -98,7 +98,7 @@ export function _CreateConversationRunAdmission(prisma: ConstructorParameters<ty
 				throw new Error("Conversation run admission capacity is exhausted");
 			if (result.value.outcome === SessionAssemblyOutcomes.Denied)
 				throw new Error(`Conversation run admission was denied: ${result.value.reason}`);
-			if (command.agentRevisionId !== result.value.snapshot.agentRevisionId)
+			if (command.agent.agentRevisionId !== result.value.snapshot.agentRevisionId)
 				throw new Error("Conversation run admission selected another agent revision");
 			return compiled ?? await compilers.compile(command, result.value.snapshot);
 		},

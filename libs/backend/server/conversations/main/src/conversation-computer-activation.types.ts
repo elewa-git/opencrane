@@ -1,8 +1,13 @@
+import type { ActiveLeaseScope, ComputerScope } from "@opencrane/contracts";
+
 /**
  * Carries one stream-bound computer activation request after the listener validates its delivery.
  *
  * The silo queue, computer, conversation, and generation stay together so the authority can reject
- * a stale wake request rather than applying it to a replacement computer lease.
+ * a stale wake request rather than applying it to a replacement computer lease. The fields stay flat
+ * because the request arrives before the agent identity or a lease id exists: the queue event names
+ * the computer and the generation it wants, and the authority resolves the rest.
+ * @see ComputerScope for the bundle the authority builds once the projection supplies the identity.
  */
 export interface ConversationComputerActivationCommand
 {
@@ -250,23 +255,14 @@ export interface ConversationComputerActivationProjectionRepository
  *
  * Deferred approval transactions compare every field with the immutable execution subject. A missing,
  * expired, or replaced row therefore prevents a tool action from being approved for a released sandbox.
+ * Lifecycle renewal reuses the same command to move the projected expiry later.
  */
 export interface ConversationComputerActiveLeaseProjectionCommand
 {
-	/** Identifies the owning silo. */
-	readonly siloId: string;
-	/** Identifies the owning conversation. */
-	readonly conversationId: string;
-	/** Identifies the logical conversation computer. */
-	readonly computerId: string;
-	/** Identifies the agent whose execution subject may use the lease. */
-	readonly agentIdentityId: string;
-	/** Identifies the exact active lease. */
-	readonly leaseId: string;
-	/** Fences every earlier realization. */
-	readonly leaseGeneration: number;
-	/** Ends approval and effect admission for this realization. */
-	readonly expiresAt: string;
+	/** Names the silo, conversation, computer and agent identity the row is published for. */
+	readonly computer: ComputerScope;
+	/** Names the active lease, its generation and the instant it stops admitting approvals and effects. */
+	readonly lease: ActiveLeaseScope;
 }
 
 /** Release-owned realization policy supplied to activation authority. */

@@ -93,7 +93,7 @@ async function _LeaseCommand(request: Request, response: Response, options: Conv
 		response.sendStatus(400);
 		return null;
 	}
-	return { computerId, leaseId, generation, workload };
+	return { computerId, lease: { leaseId, leaseGeneration: generation }, workload };
 }
 
 /** TokenReview one bearer credential without exposing denial details. */

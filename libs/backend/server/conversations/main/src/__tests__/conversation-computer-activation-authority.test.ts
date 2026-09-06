@@ -19,21 +19,21 @@ function _Authority(claim: { readonly sandboxId: string | null; readonly service
 	const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 3n, computer: _COMPUTER, lease: _LOST }).mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 4n, computer: { ..._COMPUTER, state: ConversationComputerStates.ClaimPending, leaseGeneration: 2 }, lease: claimed });
 	const append = vi.spyOn(ConversationComputerHistory.prototype, "append").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 4n });
 	const authority = new ConversationComputerActivationAuthorityAdapter(projections, {} as never, claims, _PROFILE);
-	return { authority, claims, projections, load, append, restore: function _Restore() { load.mockRestore(); append.mockRestore(); } };
+	return { authority, claims, projections, load, append, claimed, restore: function _Restore() { load.mockRestore(); append.mockRestore(); } };
 }
 
 describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 {
 	it("opens generation + 1 from a lost lease exactly as it does from a released one", async function _RecoversFromLost()
 	{
-		const { authority, claims, projections, append, restore } = _Authority({ sandboxId: "sandbox-2", serviceFQDN: "sandbox-2.testv5-computers.svc.cluster.local" });
+		const { authority, claims, projections, append, claimed, restore } = _Authority({ sandboxId: "sandbox-2", serviceFQDN: "sandbox-2.testv5-computers.svc.cluster.local" });
 		try
 		{
 			await expect(authority.activate(_COMMAND)).resolves.toBe("activated");
 			expect(append).toHaveBeenNthCalledWith(1, expect.objectContaining({ expectedRevision: 3n, computer: expect.objectContaining({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 2 }), lease: expect.objectContaining({ generation: 2, state: ComputerLeaseStates.Claimed }) }));
 			expect(claims.claim).toHaveBeenCalledWith(expect.objectContaining({ generation: 2, reason: "recovery_requested" }));
 			expect(append).toHaveBeenNthCalledWith(2, expect.objectContaining({ expectedRevision: 4n, computer: expect.objectContaining({ state: ConversationComputerStates.Warm }), lease: expect.objectContaining({ generation: 2, state: ComputerLeaseStates.Active, sandboxId: "sandbox-2" }) }));
-			expect(projections.publishActiveLease).toHaveBeenCalledWith(expect.objectContaining({ leaseGeneration: 2 }));
+			expect(projections.publishActiveLease).toHaveBeenCalledWith({ computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-one", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-new", leaseGeneration: 2, expiresAt: claimed.expiresAt } });
 		}
 		finally
 		{

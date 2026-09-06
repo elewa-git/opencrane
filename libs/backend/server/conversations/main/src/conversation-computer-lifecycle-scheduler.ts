@@ -26,7 +26,7 @@ export class ConversationComputerLifecycleScheduler
 /** Derive one retry-stable UUID from the state transition boundary selected by the projection. */
 export function _LifecycleEventId(candidate: ConversationComputerLifecycleCandidate): string
 {
-	const bytes = Buffer.from(createHash("sha256").update([candidate.computerId, candidate.state, candidate.deadline.toISOString()].join("\u0000"), "utf8").digest().subarray(0, 16));
+	const bytes = Buffer.from(createHash("sha256").update([candidate.computer.computerId, candidate.state, candidate.deadline.toISOString()].join("\u0000"), "utf8").digest().subarray(0, 16));
 	bytes[6] = (bytes[6]! & 0x0f) | 0x50;
 	bytes[8] = (bytes[8]! & 0x3f) | 0x80;
 	const hex = bytes.toString("hex");

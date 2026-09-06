@@ -4,7 +4,7 @@ import type { AgentSandboxClaimReleaseCommand } from "@opencrane/backend/server/
 import { _DeterministicUuid } from "./agent-session-identifiers";
 import type { ConversationComputerActivity, ConversationComputerActivityReader } from "./conversation-computer-activity.types";
 import type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerIdlePolicy, ConversationComputerLeaseProjectionCommand, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome, ConversationComputerSandboxClaims } from "./conversation-computer-lifecycle.types";
-import type { ConversationComputerHistory, CurrentConversationComputer } from "./conversation-computers";
+import { _ComputerScopeOf, _LeaseScopeOf, type ConversationComputerHistory, type CurrentConversationComputer } from "./conversation-computers";
 
 /** Checks that the three policy durations are positive, increasing where required, and safe integers. */
 export function _ValidateConversationComputerIdlePolicy(policy: ConversationComputerIdlePolicy): void
@@ -75,7 +75,7 @@ export class ConversationComputerLifecycleAuthority
 			return "current";
 
 		// 2. Measure idleness from turn activity, and retire a cooling computer before any renewal.
-		const activity = await this.activity.lastActivity({ siloId: current.computer.siloId, computerId: current.computer.id, generation: lease.generation, leaseId: lease.id });
+		const activity = await this.activity.lastActivity({ siloId: current.computer.siloId, computerId: current.computer.id, lease: _LeaseScopeOf(lease) });
 		const idleMilliseconds = _ConversationComputerIdleMilliseconds(current.computer, activity, command.now);
 		if (current.computer.state === ConversationComputerStates.Cooling && idleMilliseconds >= this.policy.retireAfterMilliseconds)
 			return this._checkpointAndRelease(current, lease, command);
@@ -98,7 +98,8 @@ export class ConversationComputerLifecycleAuthority
 		if (await this.claims.renew({ ...this._claimCommand(current.computer, lease), expiresAt }) === "absent")
 			return this._markLost(current, lease, command);
 		await this.computers.append({ expectedRevision: current.revision, eventId: _DeterministicUuid("computer-lease-renewed", lease.id, current.revision.toString()), computer: current.computer, lease: { ...lease, expiresAt } });
-		if (!await this.attempts.extendActiveLease({ ..._LeaseProjectionCommand(current.computer, lease), expiresAt }))
+		const projection = _LeaseProjectionCommand(current.computer, lease);
+		if (!await this.attempts.extendActiveLease({ computer: projection.computer, lease: { ...projection.lease, expiresAt } }))
 			throw new Error("Conversation computer active lease projection changed before renewal completion");
 		return "renewed";
 	}
@@ -154,7 +155,7 @@ export class ConversationComputerLifecycleAuthority
 /** Bind a projection change to every canonical computer and lease coordinate. */
 function _LeaseProjectionCommand(computer: ConversationComputer, lease: ComputerLease): ConversationComputerLeaseProjectionCommand
 {
-	return { siloId: computer.siloId, conversationId: computer.conversationId, computerId: computer.id, agentIdentityId: computer.agentIdentityId, leaseId: lease.id, leaseGeneration: lease.generation };
+	return { computer: _ComputerScopeOf(computer), lease: _LeaseScopeOf(lease) };
 }
 
 /** Derive a distinct deterministic completion event after the release intent is durable. */

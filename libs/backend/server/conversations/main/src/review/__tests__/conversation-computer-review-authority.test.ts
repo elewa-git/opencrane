@@ -17,7 +17,7 @@ describe("_ConversationComputerReviewAuthority", function _Suite()
 		const authority = new _ConversationComputerReviewAuthority(metadata, history as never, { bearer, derive: vi.fn() });
 		const route = await authority.resolve(_CALLER, "conversation-1", ProductAuthorizationActions.Use);
 		expect(route).toEqual({ reviewCredential: "keyed-secret,older-keyed-secret", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.ns.svc.cluster.local" });
-		expect(bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-1" });
+		expect(bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 } });
 		expect(metadata.reviewCoordinates).toHaveBeenCalledWith(_CALLER, "conversation-1", ProductAuthorizationActions.Use);
 	});
 

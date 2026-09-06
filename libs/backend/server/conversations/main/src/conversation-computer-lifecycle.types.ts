@@ -1,6 +1,7 @@
-import type { ComputerLease, ComputerWorkspaceCheckpoint, ConversationComputer } from "@opencrane/contracts";
+import type { ComputerLease, ComputerScope, ComputerWorkspaceCheckpoint, ConversationComputer, LeaseScope } from "@opencrane/contracts";
 import type { AgentSandboxClaimReleaseCommand, AgentSandboxClaimRenewCommand, AgentSandboxClaimStatus } from "@opencrane/backend/server/infra/agent-sandbox";
 
+import type { ConversationComputerActiveLeaseProjectionCommand } from "./conversation-computer-activation.types";
 import type { ConversationComputerCurrentCommand } from "./conversation-computers";
 
 /**
@@ -28,12 +29,10 @@ export interface ConversationComputerCheckpointStore
 /** Names the exact projection row that one lease published. */
 export interface ConversationComputerLeaseProjectionCommand
 {
-	readonly siloId: string;
-	readonly conversationId: string;
-	readonly computerId: string;
-	readonly agentIdentityId: string;
-	readonly leaseId: string;
-	readonly leaseGeneration: number;
+	/** Names the silo, conversation, computer and agent identity stored on the row. */
+	readonly computer: ComputerScope;
+	/** Names the lease and generation stored on the row. */
+	readonly lease: LeaseScope;
 }
 
 /**
@@ -51,7 +50,7 @@ export interface ConversationComputerAttemptActivity
 	/** Clears this active-lease projection only while no admitted attempt or approval uses it. */
 	clearActiveLease(command: ConversationComputerLeaseProjectionCommand): Promise<boolean>;
 	/** Extends the projected expiry of exactly this active lease. */
-	extendActiveLease(command: ConversationComputerLeaseProjectionCommand & { readonly expiresAt: string }): Promise<boolean>;
+	extendActiveLease(command: ConversationComputerActiveLeaseProjectionCommand): Promise<boolean>;
 }
 
 /**

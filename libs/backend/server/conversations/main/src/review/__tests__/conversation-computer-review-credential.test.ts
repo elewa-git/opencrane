@@ -5,7 +5,7 @@ import { KeyedConversationComputerReviewCredentialDeriver } from "../conversatio
 const _KEY = Buffer.alloc(32, 7).toString("base64url");
 const _OLDER_KEY = Buffer.alloc(32, 9).toString("base64url");
 const _KEYRING = { currentKeyId: "k1", keys: { k1: _KEY } };
-const _LEASE = { siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-1" };
+const _LEASE = { siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 } };
 
 /** Proves the review bearer is keyed, lease-specific, rotation-safe and unavailable without a server key. */
 describe("KeyedConversationComputerReviewCredentialDeriver", function _Suite()
@@ -22,8 +22,8 @@ describe("KeyedConversationComputerReviewCredentialDeriver", function _Suite()
 	{
 		const deriver = KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_KEYRING);
 		const base = deriver.derive(_LEASE);
-		expect(deriver.derive({ ..._LEASE, generation: 3 })).not.toBe(base);
-		expect(deriver.derive({ ..._LEASE, leaseId: "lease-2" })).not.toBe(base);
+		expect(deriver.derive({ ..._LEASE, lease: { ..._LEASE.lease, leaseGeneration: 3 } })).not.toBe(base);
+		expect(deriver.derive({ ..._LEASE, lease: { ..._LEASE.lease, leaseId: "lease-2" } })).not.toBe(base);
 		expect(deriver.derive({ ..._LEASE, computerId: "computer-2" })).not.toBe(base);
 		expect(deriver.derive({ ..._LEASE, siloId: "silo-2" })).not.toBe(base);
 		const otherKey = new KeyedConversationComputerReviewCredentialDeriver("k2", { k2: _OLDER_KEY });
@@ -47,8 +47,8 @@ describe("KeyedConversationComputerReviewCredentialDeriver", function _Suite()
 	it("never equals the public lease id or any unkeyed digest of it", function _NotDerivableFromLabels()
 	{
 		const deriver = KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_KEYRING);
-		expect(deriver.derive(_LEASE)).not.toBe(_LEASE.leaseId);
-		expect(deriver.bearer(_LEASE)).not.toContain(_LEASE.leaseId);
+		expect(deriver.derive(_LEASE)).not.toBe(_LEASE.lease.leaseId);
+		expect(deriver.bearer(_LEASE)).not.toContain(_LEASE.lease.leaseId);
 	});
 
 	it("fails closed without a usable key or complete coordinates", function _FailsClosed()
@@ -57,7 +57,7 @@ describe("KeyedConversationComputerReviewCredentialDeriver", function _Suite()
 		expect(() => new KeyedConversationComputerReviewCredentialDeriver("k1", { k1: Buffer.alloc(16, 1).toString("base64url") })).toThrow("256 bits");
 		expect(() => new KeyedConversationComputerReviewCredentialDeriver("k1", { k1: _KEY, k0: Buffer.alloc(16, 1).toString("base64url") })).toThrow("256 bits");
 		const deriver = KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_KEYRING);
-		expect(() => deriver.derive({ ..._LEASE, leaseId: "" })).toThrow("complete lease coordinates");
-		expect(() => deriver.bearer({ ..._LEASE, generation: 0 })).toThrow("complete lease coordinates");
+		expect(() => deriver.derive({ ..._LEASE, lease: { ..._LEASE.lease, leaseId: "" } })).toThrow("complete lease coordinates");
+		expect(() => deriver.bearer({ ..._LEASE, lease: { ..._LEASE.lease, leaseGeneration: 0 } })).toThrow("complete lease coordinates");
 	});
 });

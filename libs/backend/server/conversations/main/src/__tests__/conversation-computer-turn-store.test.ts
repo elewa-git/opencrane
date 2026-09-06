@@ -9,13 +9,11 @@ const _TURN = {
   bootstrapId: _ID,
   siloId: "testv5",
   computerId: "computer-1",
-  generation: 1,
-  leaseId: "lease-1",
+  lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
   latestPendingEntryId: "entry-1",
   modelAlias: "testv5-default",
   maximumBudgetUsd: 0.05,
   credentialLifetimeSeconds: 300,
-  sandboxClaimId: "computer-1-g1",
   outputSourceCommandId: null,
   outputReceipt: null,
   binding: {
@@ -38,6 +36,22 @@ const _TURN = {
     digest: `sha256:${"a".repeat(64)}`,
   },
 } satisfies FrozenConversationComputerTurn;
+
+/** The frozen event data as KurrentDB stores it: flat lease fields and a string stream revision. */
+const _STORED_TURN = {
+  bootstrapId: _TURN.bootstrapId,
+  siloId: _TURN.siloId,
+  computerId: _TURN.computerId,
+  generation: 1,
+  leaseId: "lease-1",
+  binding: { ..._TURN.binding, expectedRevision: "1" },
+  latestPendingEntryId: _TURN.latestPendingEntryId,
+  modelAlias: _TURN.modelAlias,
+  maximumBudgetUsd: _TURN.maximumBudgetUsd,
+  credentialLifetimeSeconds: _TURN.credentialLifetimeSeconds,
+  sandboxClaimId: "computer-1-g1",
+  compile: _TURN.compile,
+};
 
 describe("KurrentConversationComputerTurnStore", function _Suite() {
   it("freezes only coordinates and a digest, never compiled content or a raw model credential", async function _Freeze() {
@@ -70,6 +84,13 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       promptCompilerVersion: "computer-v1",
       digest: `sha256:${"a".repeat(64)}`,
     });
+    expect(event.data.turn).toEqual(_STORED_TURN);
+  });
+
+  it("gathers the stored flat lease fields back into the lease bundle", async function _LoadsStoredShape() {
+    const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
+    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()) });
+    await expect(store.load(_ID)).resolves.toEqual(_TURN);
   });
 
   it("rejects a frozen event that lacks the compile anchor", async function _MalformedFrozen() {
@@ -80,11 +101,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       id: _ID,
       type: "opencrane.conversation-computer-turn-frozen.v1",
       data: {
-        turn: {
-          ..._TURN,
-          compile: undefined,
-          binding: { ..._TURN.binding, expectedRevision: "1" },
-        },
+        turn: { ..._STORED_TURN, compile: undefined },
       },
       metadata: {},
     };
@@ -103,12 +120,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       recordedAt: new Date(),
       id: _ID,
       type: "opencrane.conversation-computer-turn-frozen.v1",
-      data: {
-        turn: {
-          ..._TURN,
-          binding: { ..._TURN.binding, expectedRevision: "1" },
-        },
-      },
+      data: { turn: _STORED_TURN },
       metadata: {},
     };
     const outputEvent = {

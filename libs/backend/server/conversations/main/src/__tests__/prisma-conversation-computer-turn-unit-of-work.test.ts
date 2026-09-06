@@ -6,14 +6,9 @@ import { PrismaConversationComputerTurnUnitOfWork } from "../db/prisma-conversat
 import { PrismaConversationProductAuthorizationRepository } from "../db/conversation-product-authorization";
 
 const _COMMAND = {
-  siloId: "silo-1",
-  conversationId: "conversation-1",
-  computerId: "computer-1",
-  generation: 2,
-  leaseId: "lease-1",
-  agentIdentityId: "identity-1",
+  computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" },
   profileRevisionId: "profile-1",
-  sandboxClaimId: "computer-1-g2",
+  lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
 };
 
 function _Entry(): ConversationEntry {
@@ -272,12 +267,9 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
     });
     expect(harness.admission.admit).toHaveBeenCalledWith({
       runId: "96c97e9c-839f-481c-80bc-f2cdd6e4603b",
-      siloId: "silo-1",
-      conversationId: "conversation-1",
-      agentServiceId: "service-1",
-      agentRevisionId: "revision-1",
-      agentIdentityId: "identity-1",
-      profileRevisionId: "profile-1",
+      computer: _COMMAND.computer,
+      agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" },
+      lease: _COMMAND.lease,
       requesterPrincipalId: "principal-1",
       requesterIssuer: "https://issuer.test",
       requesterSubjectId: "user-1",
@@ -289,10 +281,6 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
         historyRevision: "1",
         orderedMessageIds: ["31c1f1dc-0010-4f13-9c2f-d3841ffd6651"],
       },
-      computerId: "computer-1",
-      leaseId: "lease-1",
-      leaseGeneration: 2,
-      sandboxClaimId: "computer-1-g2",
     });
   });
 

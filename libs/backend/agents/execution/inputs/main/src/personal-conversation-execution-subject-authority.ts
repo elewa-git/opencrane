@@ -14,15 +14,16 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 	public async load(command: SessionAssemblyCommand, run: Parameters<ExecutionSubjectAuthority["load"]>[1], transaction: Parameters<ExecutionSubjectAuthority["load"]>[2]): Promise<SessionAssemblyLoad<ExecutionSubject>>
 	{
 		const coordinates = this.dependencies.coordinates;
+		const { computer, agent, lease } = coordinates;
 		if (command.conversationId === null || command.trigger !== "interactive" || !_MatchesCommand(command, run, coordinates)
 			|| coordinates.requesterPrincipalId.trim().length === 0
-			|| !Number.isSafeInteger(coordinates.leaseGeneration) || coordinates.leaseGeneration <= 0)
+			|| !Number.isSafeInteger(lease.leaseGeneration) || lease.leaseGeneration <= 0)
 			return { outcome: "denied", reason: "identity_unavailable" };
 
 		let currentIdentity;
 		try
 		{
-			currentIdentity = await this.dependencies.identityHistory.loadActive({ siloId: command.siloId, agentIdentityId: coordinates.agentIdentityId, agentServiceId: run.agentServiceId, principalId: coordinates.requesterPrincipalId });
+			currentIdentity = await this.dependencies.identityHistory.loadActive({ siloId: command.siloId, agentIdentityId: computer.agentIdentityId, agentServiceId: run.agentServiceId, principalId: coordinates.requesterPrincipalId });
 		}
 		catch
 		{
@@ -40,7 +41,7 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 		let activeComputer;
 		try
 		{
-			activeComputer = await this.dependencies.computerHistory.loadActiveLease({ siloId: command.siloId, computerId: coordinates.computerId, conversationId: command.conversationId, agentIdentityId: coordinates.agentIdentityId, profileRevisionId: coordinates.profileRevisionId, nowEpochMilliseconds: transaction.admittedAtEpochMs });
+			activeComputer = await this.dependencies.computerHistory.loadActiveLease({ computer: { siloId: command.siloId, computerId: computer.computerId, conversationId: command.conversationId, agentIdentityId: computer.agentIdentityId }, profileRevisionId: agent.profileRevisionId, nowEpochMilliseconds: transaction.admittedAtEpochMs });
 		}
 		catch
 		{
@@ -48,25 +49,26 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 		}
 
 		const value = evidence.value;
-		if (value.identity.siloId !== command.siloId || value.identity.agentIdentityId !== coordinates.agentIdentityId
+		if (value.identity.siloId !== command.siloId || value.identity.agentIdentityId !== computer.agentIdentityId
 			|| value.identity.agentServiceId !== run.agentServiceId || value.identity.agentRevisionId !== run.agentRevisionId
 			|| value.identity.principalId !== coordinates.requesterPrincipalId || activeComputer.computer.siloId !== command.siloId
-			|| activeComputer.computer.conversationId !== command.conversationId || activeComputer.computer.agentIdentityId !== coordinates.agentIdentityId
-			|| activeComputer.computer.profileRevisionId !== coordinates.profileRevisionId || activeComputer.lease.id !== coordinates.leaseId
-			|| activeComputer.lease.computerId !== coordinates.computerId || activeComputer.lease.generation !== coordinates.leaseGeneration
-			|| activeComputer.lease.sandboxClaimId !== coordinates.sandboxClaimId)
+			|| activeComputer.computer.conversationId !== command.conversationId || activeComputer.computer.agentIdentityId !== computer.agentIdentityId
+			|| activeComputer.computer.profileRevisionId !== agent.profileRevisionId || activeComputer.lease.id !== lease.leaseId
+			|| activeComputer.lease.computerId !== computer.computerId || activeComputer.lease.generation !== lease.leaseGeneration
+			|| activeComputer.lease.sandboxClaimId !== lease.sandboxClaimId)
 			return { outcome: "denied", reason: "identity_unavailable" };
 
+		// The stored execution subject keeps `computerScope` flat with `leaseId` and `leaseGeneration`: PostgreSQL triggers read that shape.
 		return { outcome: "loaded", value: {
 			schemaVersion: 1,
 			siloId: command.siloId,
-			agentIdentityId: coordinates.agentIdentityId,
+			agentIdentityId: computer.agentIdentityId,
 			principalId: coordinates.requesterPrincipalId,
-			identity: { agentIdentityId: coordinates.agentIdentityId, principalId: coordinates.requesterPrincipalId, siloId: command.siloId, headRevision: currentIdentity.revision.toString(10), headDigest: currentIdentity.headDigest, decisionEvidenceId: currentIdentity.headEventId, verifiedAt: transaction.admittedAt },
+			identity: { agentIdentityId: computer.agentIdentityId, principalId: coordinates.requesterPrincipalId, siloId: command.siloId, headRevision: currentIdentity.revision.toString(10), headDigest: currentIdentity.headDigest, decisionEvidenceId: currentIdentity.headEventId, verifiedAt: transaction.admittedAt },
 			membership: { principalId: coordinates.requesterPrincipalId, siloId: command.siloId, revision: value.membership.revision, assertionId: value.membership.assertionId, payloadDigest: value.membership.payloadDigest, decisionEvidenceId: value.membership.assertionId, trustedUntil: value.membership.trustedUntil },
-			capability: { agentIdentityId: coordinates.agentIdentityId, computerId: coordinates.computerId, capabilitySetDigest: value.capability.effectiveBoundaryAttachmentDigest, effectiveContractDigest: value.capability.effectiveContractDigest, decisionEvidenceId: value.admissionDecisionDigest, decidedAt: transaction.admittedAt },
+			capability: { agentIdentityId: computer.agentIdentityId, computerId: computer.computerId, capabilitySetDigest: value.capability.effectiveBoundaryAttachmentDigest, effectiveContractDigest: value.capability.effectiveContractDigest, decisionEvidenceId: value.admissionDecisionDigest, decidedAt: transaction.admittedAt },
 			runScope: { siloId: command.siloId, runId: command.runId, attempt: 1, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId },
-			computerScope: { siloId: command.siloId, computerId: coordinates.computerId, leaseId: coordinates.leaseId, leaseGeneration: coordinates.leaseGeneration },
+			computerScope: { siloId: command.siloId, computerId: computer.computerId, leaseId: lease.leaseId, leaseGeneration: lease.leaseGeneration },
 			requester: { siloId: command.siloId, requesterPrincipalId: coordinates.requesterPrincipalId, requestIdempotencyKey: command.requestIdempotencyKey, authenticatedAt: command.requester.authenticatedAt },
 			admission: { authorizingPrincipalId: coordinates.requesterPrincipalId, decisionEvidenceId: value.admissionDecisionDigest, admittedAt: transaction.admittedAt },
 		} };
@@ -76,9 +78,9 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 /** Compares the app-bound conversation command with the command admitted by the transaction. */
 function _MatchesCommand(command: SessionAssemblyCommand, run: Parameters<ExecutionSubjectAuthority["load"]>[1], coordinates: PersonalConversationExecutionSubjectCoordinates): boolean
 {
-	return command.runId === coordinates.runId && command.siloId === coordinates.siloId
-		&& command.conversationId === coordinates.conversationId && command.agentServiceId === coordinates.agentServiceId
-		&& run.agentServiceId === coordinates.agentServiceId && run.agentRevisionId === coordinates.agentRevisionId
+	return command.runId === coordinates.runId && command.siloId === coordinates.computer.siloId
+		&& command.conversationId === coordinates.computer.conversationId && command.agentServiceId === coordinates.agent.agentServiceId
+		&& run.agentServiceId === coordinates.agent.agentServiceId && run.agentRevisionId === coordinates.agent.agentRevisionId
 		&& command.requester.issuer === coordinates.requesterIssuer && command.requester.subjectId === coordinates.requesterSubjectId
 		&& command.requester.authenticatedAt === coordinates.requesterAuthenticatedAt
 		&& command.requestIdempotencyKey === coordinates.requestIdempotencyKey;

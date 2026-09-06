@@ -1,4 +1,4 @@
-import type { ComputerLease, ComputerWorkspaceCheckpoint, ConversationComputer } from "@opencrane/contracts";
+import type { ComputerLease, ComputerWorkspaceCheckpoint, ConversationComputer, LeaseScope } from "@opencrane/contracts";
 import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 
 /** Supplies the release-fixed format and byte ceiling for durable computer workspaces. */
@@ -56,10 +56,8 @@ export interface ConversationComputerCheckpointRestoreCommand
 	readonly siloId: string;
 	/** Logical computer supplied by the private route. */
 	readonly computerId: string;
-	/** Current lease generation claimed by the Pod. */
-	readonly generation: number;
-	/** Exact current lease id claimed by the Pod. */
-	readonly leaseId: string;
+	/** Lease and generation the Pod claims to hold; the fence checks both against current history. */
+	readonly lease: LeaseScope;
 	/** Pod UID returned by Kubernetes TokenReview. */
 	readonly podUid: string;
 }

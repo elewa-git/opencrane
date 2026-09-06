@@ -1,19 +1,39 @@
-import type { ComputerLease, ConversationComputer } from "@opencrane/contracts";
+import type { ComputerLease, ComputerScope, ConversationComputer, LeaseScope } from "@opencrane/contracts";
 import type { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
-/** Names the immutable coordinates that select one logical conversation computer. */
+/**
+ * Names the immutable coordinates that select one logical conversation computer.
+ *
+ * The history loader rejects any stored snapshot whose silo, conversation, agent identity or profile
+ * differs from this command, so a caller can only read the computer it already resolved.
+ * @see ComputerScope for the four ownership fields and when they change.
+ */
 export interface ConversationComputerCurrentCommand
 {
-	/** Identifies the silo that owns the requested computer. */
-	readonly siloId: string;
-	/** Identifies the one logical computer whose deterministic stream may be read. */
-	readonly computerId: string;
-	/** Identifies the one agent conversation that owns this computer. */
-	readonly conversationId: string;
-	/** Identifies the agent identity that must remain bound to this computer. */
-	readonly agentIdentityId: string;
-	/** Identifies the immutable profile revision that must remain bound to this computer. */
+	/** Names the silo, conversation, computer and agent identity that must all match the stored snapshot. */
+	readonly computer: ComputerScope;
+	/** Identifies the immutable profile revision that must remain bound to this computer; it is fixed together with `computer.agentIdentityId`. */
 	readonly profileRevisionId: string;
+}
+
+/**
+ * Names one lease of one computer using only what a sandbox Pod can prove about itself.
+ *
+ * A Pod knows its computer id and lease from its labels and the server adds the silo from trusted
+ * configuration, so this is the coordinate used for the active-turn stream, the review credential
+ * and the turn store. It carries no conversation or agent identity because the Pod never learns them.
+ *
+ * Called by: `KurrentConversationComputerActivityReader`, `KurrentConversationComputerTurnStore`
+ * and `KeyedConversationComputerReviewCredentialDeriver`.
+ */
+export interface ConversationComputerLeaseCoordinates
+{
+	/** Identifies the silo fixed by server configuration, never by the Pod. */
+	readonly siloId: string;
+	/** Identifies the logical computer named on the Pod label. */
+	readonly computerId: string;
+	/** Names the lease and generation the Pod claims to hold. */
+	readonly lease: LeaseScope;
 }
 
 /** Adds the server-owned clock required to decide whether one warm lease remains usable. */

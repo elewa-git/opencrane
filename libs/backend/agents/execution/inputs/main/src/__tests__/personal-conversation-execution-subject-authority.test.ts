@@ -10,7 +10,7 @@ const _IDENTITY = { schemaVersion: 1, id: "identity-1", siloId: "silo-1", agentS
 /** Supplies every immutable coordinate captured by app composition. */
 function _Coordinates(overrides: Partial<PersonalConversationExecutionSubjectCoordinates> = {}): PersonalConversationExecutionSubjectCoordinates
 {
-	return { runId: "run-1", siloId: "silo-1", conversationId: "conversation-1", agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", requesterPrincipalId: "principal-1", requesterIssuer: "issuer-1", requesterSubjectId: "subject-1", requesterAuthenticatedAt: _NOW, requestIdempotencyKey: "request-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 3, sandboxClaimId: "claim-1", ...overrides };
+	return { runId: "run-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 3, sandboxClaimId: "claim-1" }, requesterPrincipalId: "principal-1", requesterIssuer: "issuer-1", requesterSubjectId: "subject-1", requesterAuthenticatedAt: _NOW, requestIdempotencyKey: "request-1", ...overrides };
 }
 
 /** Builds the transaction-facing admission command without computer-owned fields. */
@@ -49,7 +49,7 @@ describe("PersonalConversationExecutionSubjectAuthority", function _Suite()
 
 	it("fails closed when the active lease does not match the exact SandboxClaim", async function _RejectsLeaseDrift()
 	{
-		const dependencies = _Dependencies(_Coordinates({ sandboxClaimId: "claim-other" }));
+		const dependencies = _Dependencies(_Coordinates({ lease: { leaseId: "lease-1", leaseGeneration: 3, sandboxClaimId: "claim-other" } }));
 		const authority = new PersonalConversationExecutionSubjectAuthority({ ...dependencies, executionEvidence: dependencies.executionEvidenceFactory } as never);
 		await expect(authority.load(_Command(), { agentServiceId: "service-1", agentRevisionId: "revision-1" } as never, { prisma: {}, authorization: {}, admittedAt: _NOW, admittedAtEpochMs: Date.parse(_NOW) } as never)).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
 	});

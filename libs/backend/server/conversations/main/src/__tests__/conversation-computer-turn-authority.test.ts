@@ -60,7 +60,7 @@ function _Harness() {
           modelAlias: "testv5-default",
           maximumBudgetUsd: 0.1,
           credentialLifetimeSeconds: 300,
-          sandboxClaimId: "computer-1-g2",
+          lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
         }),
       assertCurrent: vi.fn().mockResolvedValue(undefined),
       admit: vi.fn().mockResolvedValue(undefined),
@@ -126,10 +126,10 @@ function _Harness() {
 describe("ConversationComputerTurnAuthority", function _Suite() {
   it("hands out the derived review credential after Pod admission without compiling or admitting a run", async function _ReviewCredential() {
     const { authority, dependencies } = _Harness();
-    const command = { computerId: "computer-1", generation: 2, leaseId: "lease-1", workload: _WORKLOAD };
+    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD };
     expect(await authority.reviewCredential(command)).toEqual({ reviewCredential: "keyed-review-secret" });
     expect(dependencies.candidates.admit).toHaveBeenCalledWith(command);
-    expect(dependencies.reviewCredentials.derive).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", generation: 2, leaseId: "lease-1" });
+    expect(dependencies.reviewCredentials.derive).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 } });
     expect(dependencies.candidates.resolve).not.toHaveBeenCalled();
     expect(dependencies.runLifecycle.start).not.toHaveBeenCalled();
     dependencies.candidates.admit.mockRejectedValue(new Error("not the bound Pod"));
@@ -141,8 +141,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const { authority, dependencies } = _Harness();
     const command = {
       computerId: "computer-1",
-      generation: 2,
-      leaseId: "lease-1",
+      lease: { leaseId: "lease-1", leaseGeneration: 2 },
       workload: _WORKLOAD,
     };
     const first = await authority.bootstrap(command);
@@ -176,8 +175,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const { authority, append, dependencies } = _Harness();
     const bootstrap = await authority.bootstrap({
       computerId: "computer-1",
-      generation: 2,
-      leaseId: "lease-1",
+      lease: { leaseId: "lease-1", leaseGeneration: 2 },
       workload: _WORKLOAD,
     });
     const command = {
@@ -205,8 +203,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const { authority, append, dependencies } = _Harness();
     const bootstrap = await authority.bootstrap({
       computerId: "computer-1",
-      generation: 2,
-      leaseId: "lease-1",
+      lease: { leaseId: "lease-1", leaseGeneration: 2 },
       workload: _WORKLOAD,
     });
     dependencies.runLifecycle.complete
@@ -222,7 +219,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       "lifecycle unavailable",
     );
     const restartedWorker = new ConversationComputerTurnAuthority(dependencies);
-    await expect(restartedWorker.bootstrap({ computerId: "computer-1", generation: 2, leaseId: "lease-1", workload: _WORKLOAD })).resolves.toBeNull();
+    await expect(restartedWorker.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD })).resolves.toBeNull();
     expect(append).toHaveBeenCalledTimes(2);
     expect(append.mock.calls[0]?.[0].sourceCommandId).toBe(
       append.mock.calls[1]?.[0].sourceCommandId,
@@ -235,8 +232,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const { authority, dependencies } = _Harness();
     const command = {
       computerId: "computer-1",
-      generation: 2,
-      leaseId: "lease-1",
+      lease: { leaseId: "lease-1", leaseGeneration: 2 },
       workload: _WORKLOAD,
     };
     await authority.bootstrap(command);
@@ -247,7 +243,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       modelAlias: "testv5-default",
       maximumBudgetUsd: 0.1,
       credentialLifetimeSeconds: 300,
-      sandboxClaimId: "computer-1-g2",
+      lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
     });
     await expect(authority.bootstrap(command)).rejects.toThrow(
       /recompiled input .* does not match the frozen turn digest/,
@@ -263,8 +259,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     await expect(
       authority.bootstrap({
         computerId: "computer-1",
-        generation: 3,
-        leaseId: "lease-old",
+        lease: { leaseId: "lease-old", leaseGeneration: 3 },
         workload: { ..._WORKLOAD, namespace: "foreign" },
       }),
     ).rejects.toThrow(/stale lease/);

@@ -88,7 +88,7 @@ export class AgentSessionHistory
 		const history = await this.conversations.read({ siloId: caller.siloId, conversationId: coordinates.conversationId });
 		if (history.genesis.mode !== ConversationModes.AgentSession || history.genesis.agentServiceId !== candidate.agentServiceId || history.genesis.createdByPrincipalId !== caller.principalId)
 			throw new Error("Existing conversation genesis does not match the requested agent session");
-		const current = await this.computers.load({ siloId: caller.siloId, computerId: coordinates.computerId, conversationId: coordinates.conversationId, agentIdentityId: coordinates.agentIdentityId, profileRevisionId: candidate.profileRevisionId });
+		const current = await this.computers.load({ computer: { siloId: caller.siloId, computerId: coordinates.computerId, conversationId: coordinates.conversationId, agentIdentityId: coordinates.agentIdentityId }, profileRevisionId: candidate.profileRevisionId });
 		if (current === null || current.computer.state !== ConversationComputerStates.Cold || current.computer.leaseGeneration !== 1 || current.lease !== null)
 			throw new Error("Conversation creation requires one cold generation-one computer");
 	}

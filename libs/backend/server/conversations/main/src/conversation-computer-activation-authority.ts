@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
 import type { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActivationOutcome, type ConversationComputerActivationProfile, type ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
-import { ConversationComputerHistory } from "./conversation-computers";
+import { ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActiveLeaseProjectionCommand, type ConversationComputerActivationOutcome, type ConversationComputerActivationProfile, type ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
+import { ConversationComputerHistory, _ComputerScopeOf, _LeaseScopeOf } from "./conversation-computers";
 
 /** Realizes activation requests through one release-owned Agent Sandbox profile. */
 export class ConversationComputerActivationAuthorityAdapter implements ConversationComputerActivationAuthority
@@ -28,7 +28,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 			return "denied";
 		if (projection.profileRevisionId !== this.profile.profileRevisionId)
 			return { action: ConversationComputerActivationQueueActions.Park, reason: "conversation computer profile is not admitted by this release" };
-		const coordinates = { siloId: command.siloId, computerId: command.computerId, conversationId: command.conversationId, agentIdentityId: projection.agentIdentityId, profileRevisionId: projection.profileRevisionId };
+		const coordinates = { computer: { siloId: command.siloId, computerId: command.computerId, conversationId: command.conversationId, agentIdentityId: projection.agentIdentityId }, profileRevisionId: projection.profileRevisionId };
 		let current = await this.computers.load(coordinates);
 		if (current === null || current.computer.state === ConversationComputerStates.Retired)
 			return "denied";
@@ -37,14 +37,14 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		const currentActiveLease = _IsCurrentActiveLease(current.computer.leaseGeneration, lease, command.generation, now);
 		if (current.computer.state === ConversationComputerStates.Warm && currentActiveLease)
 		{
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, lease));
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer, lease));
 			return "idempotent";
 		}
 		if (current.computer.state === ConversationComputerStates.Cooling && currentActiveLease)
 		{
 			const reactivatedAt = now.toISOString();
 			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${lease.id}:${command.generation}:${current.revision}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease });
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, lease));
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer, lease));
 			return "activated";
 		}
 
@@ -64,7 +64,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		// that as the idempotent replay it is instead of a denial.
 		if (current.computer.state === ConversationComputerStates.Warm && _IsCurrentActiveLease(current.computer.leaseGeneration, current.lease, command.generation, new Date()))
 		{
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, current.lease));
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer, current.lease));
 			return "idempotent";
 		}
 		if (current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)
@@ -78,7 +78,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		// 4. Fence the assigned sandbox into history before the queue acknowledges activation.
 		const activeLease: ComputerLease = { ...current.lease, sandboxClaimId: claim.claimId, sandboxId: claim.sandboxId, serviceFQDN: claim.serviceFQDN, state: ComputerLeaseStates.Active };
 		await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-lease-active", activeLease.id), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: new Date().toISOString() }, lease: activeLease });
-		await this.projections.publishActiveLease(_ActiveProjection(current.computer.siloId, current.computer.conversationId, current.computer.agentIdentityId, activeLease));
+		await this.projections.publishActiveLease(_ActiveProjection(current.computer, activeLease));
 		return "activated";
 	}
 }
@@ -96,9 +96,9 @@ function _IsCurrentActiveLease(currentGeneration: number, lease: ComputerLease |
 }
 
 /** Convert canonical active history into the exact rebuildable transaction fence. */
-function _ActiveProjection(siloId: string, conversationId: string, agentIdentityId: string, lease: ComputerLease)
+function _ActiveProjection(computer: ConversationComputer, lease: ComputerLease): ConversationComputerActiveLeaseProjectionCommand
 {
-	return { siloId, conversationId, computerId: lease.computerId, agentIdentityId, leaseId: lease.id, leaseGeneration: lease.generation, expiresAt: lease.expiresAt };
+	return { computer: _ComputerScopeOf(computer), lease: { ..._LeaseScopeOf(lease), expiresAt: lease.expiresAt } };
 }
 
 /** Build a deterministic DNS-label lease so redelivery cannot reserve a second realization. */

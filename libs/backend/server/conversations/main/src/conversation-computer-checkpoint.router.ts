@@ -46,7 +46,7 @@ function _Command(value: unknown, siloId: string, podUid: string)
 	const keys = ["computerId", "generation", "leaseId"];
 	if (Object.keys(body).sort().join("\u0000") !== [...keys].sort().join("\u0000") || !keys.filter(function _NotGeneration(key) { return key !== "generation"; }).every((key) => typeof body[key] === "string" && body[key] !== "") || !Number.isSafeInteger(body.generation) || Number(body.generation) <= 0)
 		return null;
-	return { siloId, computerId: body.computerId as string, generation: body.generation as number, leaseId: body.leaseId as string, podUid };
+	return { siloId, computerId: body.computerId as string, lease: { leaseId: body.leaseId as string, leaseGeneration: body.generation as number }, podUid };
 }
 
 /** Read one strict bearer value without accepting another authorization scheme. */

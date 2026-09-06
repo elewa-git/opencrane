@@ -25,7 +25,8 @@ function _Harness(computer: ConversationComputer = _COMPUTER, activeAttempt = fa
 	return { authority, history, append, checkpoints, attempts, claims, activityReader, checkpoint };
 }
 
-const _COMMAND = { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", now: _NOW, eventId: "15078eb4-5016-41d9-b749-985eba59ef70" };
+const _SCOPE = { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1" };
+const _COMMAND = { computer: _SCOPE, profileRevisionId: "profile-1", now: _NOW, eventId: "15078eb4-5016-41d9-b749-985eba59ef70" };
 
 describe("ConversationComputerLifecycleAuthority", function _Suite()
 {
@@ -43,7 +44,7 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 		const recent = _Harness(_COMPUTER, false, _LEASE, { lastActivityAt: new Date("2026-09-05T12:18:00.000Z"), busy: false });
 		await expect(recent.authority.reconcile(_COMMAND)).resolves.toBe("current");
 		expect(recent.append).not.toHaveBeenCalled();
-		expect(recent.activityReader.lastActivity).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-2" });
+		expect(recent.activityReader.lastActivity).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-2", leaseGeneration: 2 } });
 
 		const stale = _Harness(_COMPUTER, false, _LEASE, { lastActivityAt: new Date("2026-09-05T12:14:00.000Z"), busy: false });
 		await expect(stale.authority.reconcile(_COMMAND)).resolves.toBe("cooling");
@@ -106,7 +107,7 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("renewed");
 		expect(claims.renew).toHaveBeenCalledWith({ ..._CLAIM_COMMAND, expiresAt: "2026-09-05T13:20:00.000Z" });
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 2n, computer: _COMPUTER, lease: { ...lease, expiresAt: "2026-09-05T13:20:00.000Z" } }));
-		expect(attempts.extendActiveLease).toHaveBeenCalledWith({ siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1", leaseId: "lease-2", leaseGeneration: 2, expiresAt: "2026-09-05T13:20:00.000Z" });
+		expect(attempts.extendActiveLease).toHaveBeenCalledWith({ computer: _SCOPE, lease: { leaseId: "lease-2", leaseGeneration: 2, expiresAt: "2026-09-05T13:20:00.000Z" } });
 		expect(claims.renew.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
 		expect(append.mock.invocationCallOrder[0]).toBeLessThan(attempts.extendActiveLease.mock.invocationCallOrder[0]!);
 		expect(claims.release).not.toHaveBeenCalled();
@@ -176,7 +177,7 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 
 describe("ConversationComputerLifecycleDueEnumerator", function _EnumeratorSuite()
 {
-	const coordinate = { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" };
+	const coordinate = { computer: _SCOPE, profileRevisionId: "profile-1" };
 
 	function _Enumerator(computer: ConversationComputer, lease: ComputerLease, activity: ConversationComputerActivity | null, claim: unknown = { claimId: "computer-1-g2", sandboxId: "sandbox-2", serviceFQDN: lease.serviceFQDN, shutdownTime: lease.expiresAt })
 	{

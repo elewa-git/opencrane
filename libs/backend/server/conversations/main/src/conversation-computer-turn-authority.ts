@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
-import type { CompiledRunInput } from "@opencrane/contracts";
+import type { CompiledRunInput, ComputerScope } from "@opencrane/contracts";
 
-import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /** Coordinates one durable, lease-fenced conversation turn for a bound sandbox Pod. */
 export class ConversationComputerTurnAuthority implements ConversationComputerTurnAuthorityPort
@@ -19,7 +19,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	public async reviewCredential(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerReviewCredentialGrant>
 	{
 		await this.dependencies.candidates.admit(command);
-		return { reviewCredential: this.dependencies.reviewCredentials.derive({ siloId: this.dependencies.siloId, computerId: command.computerId, generation: command.generation, leaseId: command.leaseId }) };
+		return { reviewCredential: this.dependencies.reviewCredentials.derive({ siloId: this.dependencies.siloId, computerId: command.computerId, lease: command.lease }) };
 	}
 
 	/**
@@ -31,7 +31,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	 */
 	public async bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>
 	{
-		const active = await this.dependencies.store.loadActive({ siloId: this.dependencies.siloId, computerId: command.computerId, generation: command.generation, leaseId: command.leaseId });
+		const active = await this.dependencies.store.loadActive({ siloId: this.dependencies.siloId, computerId: command.computerId, lease: command.lease });
 		if (active !== null && active.outputReceipt !== null)
 		{
 			await this._FinishOutput(active, command.workload);
@@ -40,7 +40,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const candidate = await this.dependencies.candidates.resolve(command);
 		if (candidate === null)
 			return null;
-		const bootstrapId = _Uuid("bootstrap", [candidate.binding.siloId, command.computerId, String(command.generation), command.leaseId, candidate.latestPendingEntryId]);
+		const bootstrapId = _Uuid("bootstrap", [candidate.binding.siloId, command.computerId, String(command.lease.leaseGeneration), command.lease.leaseId, candidate.latestPendingEntryId]);
 		const proposed = _Freeze(candidate, command, bootstrapId);
 		const turn = active ?? await this.dependencies.store.createOrRead(proposed);
 		_AssertSameTurn(proposed, turn);
@@ -52,7 +52,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const keyAlias = `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`;
 		const snapshotBudget = candidate.compiledInput.budget.maxCostUsdMicros;
 		const maxBudgetUsd = snapshotBudget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, snapshotBudget / 1_000_000);
-		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, leaseId: turn.leaseId, leaseGeneration: turn.generation, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: turn.credentialLifetimeSeconds });
+		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, computer: _ComputerScope(turn), lease: turn.lease, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: turn.credentialLifetimeSeconds });
 		return { bootstrapId: turn.bootstrapId, compiledInput: candidate.compiledInput, modelCredential: { endpoint: this.dependencies.endpoint, key: credential.key, model: turn.modelAlias }, outcome: "ready" };
 	}
 
@@ -90,12 +90,23 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 }
 
 /** Copies only the immutable attempt and lease fence needed by run lifecycle. */
-function _RunLifecycleCommand(turn: FrozenConversationComputerTurn)
+function _RunLifecycleCommand(turn: FrozenConversationComputerTurn): ConversationComputerRunLifecycleCommand
 {
-	return { runId: turn.compile.runId, siloId: turn.siloId, attempt: turn.compile.attempt, computerId: turn.computerId, leaseId: turn.leaseId, leaseGeneration: turn.generation };
+	return { runId: turn.compile.runId, siloId: turn.siloId, attempt: turn.compile.attempt, computerId: turn.computerId, lease: { leaseId: turn.lease.leaseId, leaseGeneration: turn.lease.leaseGeneration } };
 }
 
-/** Build the durable record field by field so compiled content can never ride along into the Kurrent event. */
+/** Reads the computer's ownership coordinates back out of the frozen turn and its writer binding. */
+function _ComputerScope(turn: FrozenConversationComputerTurn): ComputerScope
+{
+	return { siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId };
+}
+
+/**
+ * Build the durable record field by field so compiled content can never ride along into the Kurrent event.
+ *
+ * The lease is copied from the candidate: the compiler received it from this same bootstrap command
+ * and added the SandboxClaim the Pod-binding check proved.
+ */
 function _Freeze(candidate: ConversationComputerTurnCandidate, command: ConversationComputerBootstrapCommand, bootstrapId: string): FrozenConversationComputerTurn
 {
 	const input = candidate.compiledInput;
@@ -103,14 +114,12 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		bootstrapId,
 		siloId: candidate.binding.siloId,
 		computerId: command.computerId,
-		generation: command.generation,
-		leaseId: command.leaseId,
+		lease: { leaseId: candidate.lease.leaseId, leaseGeneration: candidate.lease.leaseGeneration, sandboxClaimId: candidate.lease.sandboxClaimId },
 		binding: candidate.binding,
 		latestPendingEntryId: candidate.latestPendingEntryId,
 		modelAlias: candidate.modelAlias,
 		maximumBudgetUsd: candidate.maximumBudgetUsd,
 		credentialLifetimeSeconds: candidate.credentialLifetimeSeconds,
-		sandboxClaimId: candidate.sandboxClaimId,
 		compile: { runId: input.runId, attempt: input.attempt, promptCompilerVersion: input.promptCompilerVersion, digest: input.digest },
 		outputSourceCommandId: null,
 		outputReceipt: null,
@@ -137,6 +146,6 @@ function _Uuid(domain: string, coordinates: readonly string[]): string
 /** Reject a conflicting event at the deterministic bootstrap coordinate. */
 function _AssertSameTurn(expected: FrozenConversationComputerTurn, actual: FrozenConversationComputerTurn): void
 {
-	if (actual.bootstrapId !== expected.bootstrapId || actual.siloId !== expected.siloId || actual.computerId !== expected.computerId || actual.generation !== expected.generation || actual.leaseId !== expected.leaseId || actual.latestPendingEntryId !== expected.latestPendingEntryId || actual.binding.expectedRevision !== expected.binding.expectedRevision || actual.modelAlias !== expected.modelAlias)
+	if (actual.bootstrapId !== expected.bootstrapId || actual.siloId !== expected.siloId || actual.computerId !== expected.computerId || actual.lease.leaseGeneration !== expected.lease.leaseGeneration || actual.lease.leaseId !== expected.lease.leaseId || actual.latestPendingEntryId !== expected.latestPendingEntryId || actual.binding.expectedRevision !== expected.binding.expectedRevision || actual.modelAlias !== expected.modelAlias)
 		throw new Error("Conversation computer bootstrap conflicts with its durable turn record");
 }

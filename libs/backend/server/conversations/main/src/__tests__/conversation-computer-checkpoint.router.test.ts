@@ -21,7 +21,7 @@ describe("_CreateConversationComputerCheckpointRouter", function _Suite()
 		const { app, authority } = _App();
 		const response = await request(app).post("/restore").set("authorization", "Bearer projected").send(_BODY);
 		expect(response.status).toBe(200);
-		expect(authority.restore).toHaveBeenCalledWith({ ..._BODY, siloId: "silo-1", podUid: "pod-1" });
+		expect(authority.restore).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-2", leaseGeneration: 2 }, podUid: "pod-1" });
 	});
 
 	it("refuses a missing or rejected projected token before restoration", async function _RejectsToken()

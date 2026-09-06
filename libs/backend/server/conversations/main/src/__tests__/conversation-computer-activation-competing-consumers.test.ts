@@ -93,7 +93,7 @@ async function _ConsumeUntilSettled(consumer: ReturnType<typeof _Consumer>): Pro
 /** Reads the projected lease coordinates every consumer published. */
 function _PublishedLeases(...consumers: ReturnType<typeof _Consumer>[]): Array<{ leaseId: string; leaseGeneration: number }>
 {
-	return consumers.flatMap(consumer => consumer.projections.publishActiveLease.mock.calls.map(([command]) => ({ leaseId: command.leaseId, leaseGeneration: command.leaseGeneration })));
+	return consumers.flatMap(consumer => consumer.projections.publishActiveLease.mock.calls.map(([command]) => ({ leaseId: command.lease.leaseId, leaseGeneration: command.lease.leaseGeneration })));
 }
 
 describe("competing conversation computer activation consumers", function _Suite()

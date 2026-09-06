@@ -6,7 +6,7 @@ import type { HistoryStore } from "@opencrane/backend/server/infra/history-store
 
 import { ConversationHistoryReader } from "../conversation-history-reader";
 import type { ConversationPrivatePayloadCipher, EncryptedConversationPrivatePayload } from "../conversation-private-payload.types";
-import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnCompileCommand, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { PrismaConversationProductAuthorizationRepository } from "./conversation-product-authorization";
 
 /** Resolves a pending turn and delegates its durable run admission before Kurrent freezes it. */
@@ -26,12 +26,13 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 	}
 
 	/** Compile the latest unhandled human entry with the current published revision; later refreshes conflict with the frozen digest. */
-	public async compile(command: Parameters<ConversationComputerPendingTurnCompiler["compile"]>[0]): Promise<ConversationComputerTurnCandidate | null>
+	public async compile(command: ConversationComputerTurnCompileCommand): Promise<ConversationComputerTurnCandidate | null>
 	{
-		const history = await this.histories.read({ siloId: command.siloId, conversationId: command.conversationId });
+		const { siloId, conversationId, computerId, agentIdentityId } = command.computer;
+		const history = await this.histories.read({ siloId, conversationId });
 		const messages = history.entries.filter((entry): entry is MessageEntry => entry.kind === "message" && entry.state === "completed");
 		const lastAgent = messages.findLastIndex(entry => entry.author.kind === "agent");
-		const pending = messages.slice(lastAgent + 1).findLast(entry => entry.author.kind === "human" && (entry.addressedAgentIdentityId === null || entry.addressedAgentIdentityId === command.agentIdentityId));
+		const pending = messages.slice(lastAgent + 1).findLast(entry => entry.author.kind === "human" && (entry.addressedAgentIdentityId === null || entry.addressedAgentIdentityId === agentIdentityId));
 		if (pending === undefined)
 			return null;
 		if (pending.author.kind !== "human")
@@ -40,15 +41,15 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 		const expectedRevision = BigInt(history.entries.at(-1)?.position ?? "0");
 		const loaded = await (async () =>
 		{
-			const conversation = await this.prisma.conversation.findFirst({ where: { id: command.conversationId, siloId: command.siloId, computerId: command.computerId, lifecycle: ConversationLifecycle.Open, service: { is: { state: AgentServiceState.Active } } }, select: { participants: { where: { accessEndedPosition: null }, select: { userId: true } }, service: { select: { id: true, name: true, activeRevision: { select: { id: true, state: true, publishedAt: true, promptPolicyVersion: true, personaRevisionId: true, budget: true, modelDefinition: { select: { publicModelName: true, generatedOutputCapabilities: true } } } } } } } });
+			const conversation = await this.prisma.conversation.findFirst({ where: { id: conversationId, siloId, computerId, lifecycle: ConversationLifecycle.Open, service: { is: { state: AgentServiceState.Active } } }, select: { participants: { where: { accessEndedPosition: null }, select: { userId: true } }, service: { select: { id: true, name: true, activeRevision: { select: { id: true, state: true, publishedAt: true, promptPolicyVersion: true, personaRevisionId: true, budget: true, modelDefinition: { select: { publicModelName: true, generatedOutputCapabilities: true } } } } } } } });
 			if (conversation?.service?.activeRevision === null || conversation?.service?.activeRevision === undefined)
 				throw new Error("Conversation computer turn requires an active agent revision");
 			const subjects = conversation.participants.map(participant => participant.userId);
-			const memberships = await this.prisma.orgMembership.findMany({ where: { clusterTenant: command.siloId, subject: { in: subjects }, status: OrgMemberStatus.Active }, select: { subject: true } });
-			const principal = await this.prisma.principal.findFirst({ where: { id: pendingAuthor.principalId, siloId: command.siloId, issuer: pendingAuthor.issuer, subject: pendingAuthor.participantId }, select: { id: true, issuer: true, subject: true } });
+			const memberships = await this.prisma.orgMembership.findMany({ where: { clusterTenant: siloId, subject: { in: subjects }, status: OrgMemberStatus.Active }, select: { subject: true } });
+			const principal = await this.prisma.principal.findFirst({ where: { id: pendingAuthor.principalId, siloId, issuer: pendingAuthor.issuer, subject: pendingAuthor.participantId }, select: { id: true, issuer: true, subject: true } });
 			const isActiveMember = memberships.some(membership => membership.subject === pendingAuthor.participantId);
 			const authorization = new PrismaConversationProductAuthorizationRepository(this.prisma);
-			const admitted = principal !== null && isActiveMember && await authorization.canAccess({ siloId: command.siloId, principalId: principal.id, subjectId: principal.subject, externalIssuer: principal.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, command.conversationId, ProductAuthorizationActions.Use);
+			const admitted = principal !== null && isActiveMember && await authorization.canAccess({ siloId, principalId: principal.id, subjectId: principal.subject, externalIssuer: principal.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, conversationId, ProductAuthorizationActions.Use);
 			if (!admitted || principal === null)
 				throw new Error("Conversation computer turn requires one currently authorized active participant");
 			const revision = conversation.service.activeRevision;
@@ -57,11 +58,11 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 			return { principal, service: conversation.service, revision };
 		})();
 		const runId = _Uuid("turn", pending.id);
-		const admissionCommand = { runId, siloId: command.siloId, conversationId: command.conversationId, agentServiceId: loaded.service.id, agentRevisionId: loaded.revision.id, agentIdentityId: command.agentIdentityId, profileRevisionId: command.profileRevisionId, requesterPrincipalId: loaded.principal.id, requesterIssuer: loaded.principal.issuer, requesterSubjectId: loaded.principal.subject, requesterAuthenticatedAt: pendingAuthor.authenticatedAt, requestIdempotencyKey: pending.id, messageInput: { mode: "pre_persisted_history" as const, messageId: pending.id, historyRevision: expectedRevision.toString(), orderedMessageIds: messages.map(message => message.id) }, computerId: command.computerId, leaseId: command.leaseId, leaseGeneration: command.generation, sandboxClaimId: command.sandboxClaimId };
+		const admissionCommand: ConversationComputerRunAdmissionCommand = { runId, computer: command.computer, agent: { agentServiceId: loaded.service.id, agentRevisionId: loaded.revision.id, profileRevisionId: command.profileRevisionId }, lease: command.lease, requesterPrincipalId: loaded.principal.id, requesterIssuer: loaded.principal.issuer, requesterSubjectId: loaded.principal.subject, requesterAuthenticatedAt: pendingAuthor.authenticatedAt, requestIdempotencyKey: pending.id, messageInput: { mode: "pre_persisted_history" as const, messageId: pending.id, historyRevision: expectedRevision.toString(), orderedMessageIds: messages.map(message => message.id) } };
 		const compiledInput = await this.runAdmission.admit(admissionCommand);
 		if (compiledInput.runId !== runId || compiledInput.attempt !== 1)
 			throw new Error("Conversation computer run admission returned input for another run attempt");
-		return { binding: { siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, leaseGeneration: command.generation, agentIdentityId: command.agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: 300, sandboxClaimId: command.sandboxClaimId };
+		return { binding: { siloId, conversationId, computerId, leaseGeneration: command.lease.leaseGeneration, agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: 300, lease: command.lease };
 	}
 
 	/** Encrypt and idempotently persist assistant text before history references it, moving the conversation to the top of every list. */
@@ -101,7 +102,7 @@ export class PrismaConversationComputerTurnUnitOfWork implements ConversationCom
 		return this._Run(repository => repository.resolve(siloId, computerId), Prisma.TransactionIsolationLevel.RepeatableRead);
 	}
 
-	public compile(command: Parameters<ConversationComputerPendingTurnCompiler["compile"]>[0])
+	public compile(command: ConversationComputerTurnCompileCommand)
 	{
 		return this._Run(repository => repository.compile(command), Prisma.TransactionIsolationLevel.RepeatableRead);
 	}

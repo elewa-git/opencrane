@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ConversationComputerLifecycleScheduler, _LifecycleEventId } from "../conversation-computer-lifecycle-scheduler";
 
 const _DEADLINE = new Date("2026-09-05T12:20:00.000Z");
-const _CANDIDATE = { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", state: ConversationComputerStates.Cooling, deadline: _DEADLINE };
+const _CANDIDATE = { computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1" }, profileRevisionId: "profile-1", state: ConversationComputerStates.Cooling, deadline: _DEADLINE };
 
 describe("ConversationComputerLifecycleScheduler", function _Suite()
 {

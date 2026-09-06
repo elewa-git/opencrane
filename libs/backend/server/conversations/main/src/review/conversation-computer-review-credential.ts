@@ -1,7 +1,8 @@
 import { createHmac } from "node:crypto";
 
 import type { ConversationPrivatePayloadKeyringDocument } from "../conversation-private-payload.types";
-import type { ConversationComputerReviewCredentialCoordinates, ConversationComputerReviewCredentialDeriver } from "./conversation-computer-review.types";
+import type { ConversationComputerLeaseCoordinates } from "../conversation-computers";
+import type { ConversationComputerReviewCredentialDeriver } from "./conversation-computer-review.types";
 
 /** Separates review credentials from every other use of the mounted keyring. */
 const _DOMAIN = "conversation-computer-review-credential";
@@ -54,13 +55,13 @@ export class KeyedConversationComputerReviewCredentialDeriver implements Convers
 	}
 
 	/** @inheritdoc */
-	public derive(coordinates: ConversationComputerReviewCredentialCoordinates): string
+	public derive(coordinates: ConversationComputerLeaseCoordinates): string
 	{
 		return this._Credential(this.keys[0]!, coordinates);
 	}
 
 	/** @inheritdoc */
-	public bearer(coordinates: ConversationComputerReviewCredentialCoordinates): string
+	public bearer(coordinates: ConversationComputerLeaseCoordinates): string
 	{
 		const credentials: string[] = [];
 		for (const key of this.keys)
@@ -69,10 +70,10 @@ export class KeyedConversationComputerReviewCredentialDeriver implements Convers
 	}
 
 	/** Computes the lease-bound HMAC under one key after checking the coordinates are complete. */
-	private _Credential(key: Buffer, coordinates: ConversationComputerReviewCredentialCoordinates): string
+	private _Credential(key: Buffer, coordinates: ConversationComputerLeaseCoordinates): string
 	{
-		if (!coordinates.siloId || !coordinates.computerId || !coordinates.leaseId || !Number.isSafeInteger(coordinates.generation) || coordinates.generation < 1)
+		if (!coordinates.siloId || !coordinates.computerId || !coordinates.lease.leaseId || !Number.isSafeInteger(coordinates.lease.leaseGeneration) || coordinates.lease.leaseGeneration < 1)
 			throw new Error("Conversation computer review credential requires complete lease coordinates");
-		return createHmac("sha256", key).update(JSON.stringify([_DOMAIN, coordinates.siloId, coordinates.computerId, String(coordinates.generation), coordinates.leaseId])).digest("hex");
+		return createHmac("sha256", key).update(JSON.stringify([_DOMAIN, coordinates.siloId, coordinates.computerId, String(coordinates.lease.leaseGeneration), coordinates.lease.leaseId])).digest("hex");
 	}
 }

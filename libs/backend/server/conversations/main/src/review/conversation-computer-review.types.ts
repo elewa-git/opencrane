@@ -2,6 +2,8 @@ import type { Request } from "express";
 import type { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import type { Logger } from "@opencrane/backend/observability";
 
+import type { ConversationComputerLeaseCoordinates } from "../conversation-computers";
+
 /**
  * Supplies the server-owned authorities needed to proxy human-review requests.
  *
@@ -68,21 +70,12 @@ export interface ConversationComputerReviewRoute
 	readonly serviceFQDN: string;
 }
 
-/** Lease coordinates that select exactly one review credential. */
-export interface ConversationComputerReviewCredentialCoordinates
-{
-	/** Silo fixed by trusted server configuration or the authenticated request host. */
-	readonly siloId: string;
-	/** Logical computer named on the Pod label. */
-	readonly computerId: string;
-	/** Lease generation that fences the credential. */
-	readonly generation: number;
-	/** Current lease name; it is public, so it never acts as the credential by itself. */
-	readonly leaseId: string;
-}
-
 /**
  * Derives the review gateway bearer from lease coordinates under server-only keyring keys.
+ *
+ * The coordinates are the silo (from server configuration or the authenticated host), the computer
+ * named on the Pod label, and the lease and generation that fence the credential; the lease id is
+ * public and never acts as the credential by itself.
  *
  * `derive` gives a Pod the one credential it stores, keyed with the current key. `bearer` gives the
  * server everything it may present to that Pod: the same credential under every key still in the
@@ -96,9 +89,9 @@ export interface ConversationComputerReviewCredentialCoordinates
 export interface ConversationComputerReviewCredentialDeriver
 {
 	/** Returns the same secret for the same lease under the current key and a different secret for any other lease. */
-	derive(coordinates: ConversationComputerReviewCredentialCoordinates): string;
+	derive(coordinates: ConversationComputerLeaseCoordinates): string;
 	/** Returns the comma-separated credentials for the lease under every keyring key, current first. */
-	bearer(coordinates: ConversationComputerReviewCredentialCoordinates): string;
+	bearer(coordinates: ConversationComputerLeaseCoordinates): string;
 }
 
 /**

@@ -49,7 +49,7 @@ function _Lease(overrides: Partial<ComputerLease> = {}): ComputerLease
 /** Builds the trusted coordinate tuple accepted by the history loader. */
 function _CurrentCommand(overrides: Partial<ConversationComputerCurrentCommand> = {}): ConversationComputerCurrentCommand
 {
-	return { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", ...overrides };
+	return { computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1" }, profileRevisionId: "profile-1", ...overrides };
 }
 
 /** Adds a trusted server clock when activation needs to reject an expired lease. */

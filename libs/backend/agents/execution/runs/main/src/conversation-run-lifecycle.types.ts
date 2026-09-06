@@ -1,8 +1,12 @@
+import type { LeaseScope } from "@opencrane/contracts";
+
 /**
  * Identifies the admitted attempt and computer lease that may advance a conversation run.
  *
  * The lifecycle authority checks every coordinate against the run's saved execution subject, so a
- * caller cannot advance a newer attempt or lease by presenting the run identifier alone.
+ * caller cannot advance a newer attempt or lease by presenting the run identifier alone. The saved
+ * subject stores the lease flat under `computerScope`; this command carries it as the `lease` bundle
+ * and the repository compares field by field.
  * Called by: `ConversationComputerTurnAuthorityService` at bootstrap and output milestones.
  */
 export interface ConversationRunLifecycleCommand
@@ -15,10 +19,8 @@ export interface ConversationRunLifecycleCommand
 	readonly attempt: number;
 	/** Conversation computer admitted for this attempt. */
 	readonly computerId: string;
-	/** Lease admitted for this attempt. */
-	readonly leaseId: string;
-	/** Lease generation admitted for this attempt. */
-	readonly leaseGeneration: number;
+	/** Lease and generation admitted for this attempt. */
+	readonly lease: LeaseScope;
 }
 
 /**

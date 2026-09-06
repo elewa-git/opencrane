@@ -2,6 +2,7 @@ import type { ConversationComputer, ConversationEntry } from "@opencrane/contrac
 
 import type { ConversationPrivatePayloadCipher } from "./conversation-private-payload.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
+import type { ConversationComputerCurrentCommand } from "./conversation-computers";
 
 /**
  * Reports whether participant message admission created history or recognized the same command.
@@ -73,8 +74,8 @@ export type ConversationCallerResolver = (request: import("express").Request) =>
 /** Loads the current checked logical computer from its KurrentDB stream. */
 export interface ConversationComputerReader
 {
-	/** Loads an exact computer projection coordinate tuple or returns null for a missing stream. */
-	load(command: { readonly siloId: string; readonly computerId: string; readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string }): Promise<{ readonly computer: ConversationComputer; readonly lease: import("@opencrane/contracts").ComputerLease | null } | null>;
+	/** Loads the computer named by the projection coordinates, or returns null for a missing stream. */
+	load(command: ConversationComputerCurrentCommand): Promise<{ readonly computer: ConversationComputer; readonly lease: import("@opencrane/contracts").ComputerLease | null } | null>;
 }
 
 /** Dependencies owned by the participant conversation HTTP adapter. */

@@ -137,7 +137,7 @@ describe("conversation computer turn integration", function _Suite() {
             modelAlias: "model-one",
             maximumBudgetUsd: 0.1,
             credentialLifetimeSeconds: 300,
-            sandboxClaimId: "computer-one-g1",
+            lease: { leaseId: "lease-one", leaseGeneration: 1, sandboxClaimId: "computer-one-g1" },
           }),
         assertCurrent: vi.fn(),
         admit: vi.fn(),

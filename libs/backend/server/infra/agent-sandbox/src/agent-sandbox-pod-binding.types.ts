@@ -1,3 +1,4 @@
+import type { ClaimedLeaseScope } from "@opencrane/contracts";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 /** Lease coordinates that a TokenReviewed Sandbox Pod must exactly match. */
@@ -5,12 +6,8 @@ export interface AgentSandboxPodBindingCommand
 {
 	/** Identifies the current logical computer. */
 	readonly computerId: string;
-	/** Fences the current realization. */
-	readonly generation: number;
-	/** Identifies the current computer lease. */
-	readonly leaseId: string;
-	/** Identifies the deterministic claim owned by the lease. */
-	readonly sandboxClaimId: string;
+	/** Names the lease, its generation and the SandboxClaim whose labels the Pod must carry. */
+	readonly lease: ClaimedLeaseScope;
 	/** Carries the identity returned by Kubernetes TokenReview. */
 	readonly workload: RuntimeWorkloadIdentity;
 }

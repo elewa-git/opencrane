@@ -22,7 +22,7 @@ describe("conversation computer private turn router", function _Suite()
 		const fixture = _App();
 		const response = await request(fixture.app).get("/bootstrap?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token");
 		expect(response.status).toBe(200);
-		expect(fixture.authority.bootstrap).toHaveBeenCalledWith({ computerId: "computer-one", generation: 2, leaseId: "lease-one", workload: fixture.workload });
+		expect(fixture.authority.bootstrap).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, workload: fixture.workload });
 	});
 
 	it("hands the review credential only to a TokenReviewed Pod with exact lease coordinates", async function _ReviewCredential()
@@ -31,7 +31,7 @@ describe("conversation computer private turn router", function _Suite()
 		const response = await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token");
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ reviewCredential: "keyed-review-secret" });
-		expect(fixture.authority.reviewCredential).toHaveBeenCalledWith({ computerId: "computer-one", generation: 2, leaseId: "lease-one", workload: fixture.workload });
+		expect(fixture.authority.reviewCredential).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, workload: fixture.workload });
 		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&leaseId=lease-one").set("authorization", "Bearer projected-token")).status).toBe(400);
 		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one")).status).toBe(401);
 		fixture.authority.reviewCredential.mockRejectedValue(new Error("not the bound Pod"));

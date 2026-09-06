@@ -45,7 +45,7 @@ export class ConversationComputerCheckpointAuthority
 		const checkpoint = current.computer.workspaceCheckpoint;
 		if (checkpoint === null)
 			return null;
-		if (checkpoint.format !== this.policy.format || current.lease.id !== command.leaseId || current.lease.generation !== command.generation)
+		if (checkpoint.format !== this.policy.format || current.lease.id !== command.lease.leaseId || current.lease.generation !== command.lease.leaseGeneration)
 			throw new Error("Conversation computer checkpoint restore fence changed");
 		const artifactId = _CheckpointArtifactId(current.computer.id);
 		const body = await this.reader.read({ siloId: current.computer.siloId, artifactId, artifactRevisionId: checkpoint.artifactRevisionId });

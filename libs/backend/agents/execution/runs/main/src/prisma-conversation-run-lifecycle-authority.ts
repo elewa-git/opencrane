@@ -47,7 +47,7 @@ class PrismaConversationRunLifecycleRepository implements ConversationRunLifecyc
 			if (run === null)
 				throw new Error("conversation run lifecycle requires the exact admitted attempt");
 			const subject = ___ExecutionSubjectSchema.safeParse(run.executionSubject);
-			if (!subject.success || subject.data.runScope.runId !== command.runId || subject.data.runScope.attempt !== command.attempt || subject.data.computerScope.computerId !== command.computerId || subject.data.computerScope.leaseId !== command.leaseId || subject.data.computerScope.leaseGeneration !== command.leaseGeneration)
+			if (!subject.success || subject.data.runScope.runId !== command.runId || subject.data.runScope.attempt !== command.attempt || subject.data.computerScope.computerId !== command.computerId || subject.data.computerScope.leaseId !== command.lease.leaseId || subject.data.computerScope.leaseGeneration !== command.lease.leaseGeneration)
 				throw new Error("conversation run lifecycle requires the admitted computer lease fence");
 			if (run.state === to)
 				return;

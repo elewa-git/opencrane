@@ -41,7 +41,7 @@ describe("ConversationComputerCheckpointAuthority", function _Suite()
 		const { authority, fence, reader, sandbox } = _Harness();
 		const checkpoint = { artifactRevisionId: _CheckpointRevisionId("computer-1", 2), digest: "sha256:47320987f9a49d5b00119b960f247a956773f57543982b8bfcb6da5bb3afd9ef", format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() };
 		fence.assertCurrent.mockResolvedValue({ computer: { ..._COMPUTER, workspaceCheckpoint: checkpoint }, lease: _LEASE });
-		const command = { siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-2", podUid: "pod-2" };
+		const command = { siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-2", leaseGeneration: 2 }, podUid: "pod-2" };
 		await expect(authority.restore(command)).resolves.toEqual({ outcome: "restored", artifactRevisionId: checkpoint.artifactRevisionId });
 		expect(fence.assertCurrent).toHaveBeenCalledWith(command);
 		expect(reader.read).toHaveBeenCalledWith({ siloId: "silo-1", artifactId: _CheckpointArtifactId("computer-1"), artifactRevisionId: checkpoint.artifactRevisionId });
@@ -53,7 +53,7 @@ describe("ConversationComputerCheckpointAuthority", function _Suite()
 		const { authority, fence, sandbox } = _Harness();
 		const checkpoint = { artifactRevisionId: "revision-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() };
 		fence.assertCurrent.mockResolvedValue({ computer: { ..._COMPUTER, workspaceCheckpoint: checkpoint }, lease: { ..._LEASE, id: "replacement-lease" } });
-		await expect(authority.restore({ siloId: "silo-1", computerId: "computer-1", generation: 2, leaseId: "lease-2", podUid: "pod-2" })).rejects.toThrow("fence changed");
+		await expect(authority.restore({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-2", leaseGeneration: 2 }, podUid: "pod-2" })).rejects.toThrow("fence changed");
 		expect(sandbox.restore).not.toHaveBeenCalled();
 	});
 });

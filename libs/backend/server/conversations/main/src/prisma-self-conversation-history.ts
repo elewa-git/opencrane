@@ -110,7 +110,7 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 	{
 		if (command.activation === ConversationMessageActivations.None)
 			return this.historyAuthority.append({ siloId: caller.siloId, conversationId, expectedRevision, entry });
-		const current = await this.dependencies.computerReader.load({ siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId!, profileRevisionId: projection.computerProfileRevisionId! });
+		const current = await this.dependencies.computerReader.load({ computer: { siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId! }, profileRevisionId: projection.computerProfileRevisionId! });
 		if (current === null || current.computer.leaseGeneration < 1)
 			throw new Error("Conversation computer activation requires a current checked computer generation");
 		const generation = current.lease?.state === ComputerLeaseStates.Released || current.lease?.state === ComputerLeaseStates.Lost ? current.computer.leaseGeneration + 1 : current.computer.leaseGeneration;
@@ -126,7 +126,7 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 	{
 		if (projection.mode !== ConversationMode.AgentSession)
 			return null;
-		const current = await this.dependencies.computerReader.load({ siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId!, profileRevisionId: projection.computerProfileRevisionId! });
+		const current = await this.dependencies.computerReader.load({ computer: { siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId! }, profileRevisionId: projection.computerProfileRevisionId! });
 		if (current === null)
 			throw new Error("Agent conversation computer history is unavailable");
 		return current.computer;

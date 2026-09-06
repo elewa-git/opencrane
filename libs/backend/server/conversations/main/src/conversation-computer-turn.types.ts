@@ -1,7 +1,8 @@
-import type { CompiledRunInput } from "@opencrane/contracts";
+import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { BoundConversationWriter } from "./bound-conversation-writer";
 import type { BoundConversationWriterBinding } from "./bound-conversation-writer.types";
+import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
 import type { ConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review.types";
 
 /** Coordinates a sandbox Pod must prove before receiving one pending turn. */
@@ -9,10 +10,8 @@ export interface ConversationComputerBootstrapCommand
 {
 	/** Identifies the logical computer fixed on the Pod label. */
 	readonly computerId: string;
-	/** Fences the current realization. */
-	readonly generation: number;
-	/** Identifies the sole current lease. */
-	readonly leaseId: string;
+	/** Names the lease and generation the Pod claims from its labels; the server checks both against current history. */
+	readonly lease: LeaseScope;
 	/** Carries only the TokenReviewed Pod identity. */
 	readonly workload: RuntimeWorkloadIdentity;
 }
@@ -81,13 +80,18 @@ export interface ConversationComputerTurnAuthority
 /** Server-resolved coordinates shared by a freshly compiled candidate and its frozen record. */
 export interface ConversationComputerTurnCoordinates
 {
+	/** Fixes the stream, run and agent author the bound writer may use for this turn. */
 	readonly binding: BoundConversationWriterBinding;
 	/** Pending human entry the turn answers; it also anchors the deterministic bootstrap identifier. */
 	readonly latestPendingEntryId: string;
+	/** Names the one model alias the attempt credential may call. */
 	readonly modelAlias: string;
+	/** Caps the attempt credential's spend in US dollars. */
 	readonly maximumBudgetUsd: number;
+	/** Bounds the attempt credential lifetime; the resolver shortens it to the remaining lease time. */
 	readonly credentialLifetimeSeconds: number;
-	readonly sandboxClaimId: string;
+	/** Names the lease, generation and SandboxClaim the turn was compiled for. */
+	readonly lease: ClaimedLeaseScope;
 }
 
 /** Server-resolved material used to freeze one pending computer turn; only the authority holds the compiled input. */
@@ -115,26 +119,39 @@ export interface ConversationComputerTurnCompileAnchor
 	readonly digest: string;
 }
 
-/** Durable turn record; it carries only coordinates and a digest, never compiled content or a raw LiteLLM credential. */
+/**
+ * Durable turn record; it carries only coordinates and a digest, never compiled content or a raw LiteLLM credential.
+ *
+ * The Kurrent event stores the lease flat (`generation`, `leaseId`, `sandboxClaimId`); the turn store
+ * maps between that persisted shape and the `lease` bundle here. The record is assignable to
+ * `ConversationComputerLeaseCoordinates`, so the active-turn stream can be derived from it directly.
+ */
 export interface FrozenConversationComputerTurn extends ConversationComputerTurnCoordinates
 {
+	/** Stable idempotency coordinate derived from the silo, lease and pending entry. */
 	readonly bootstrapId: string;
-	readonly computerId: string;
-	readonly generation: number;
-	readonly leaseId: string;
+	/** Identifies the silo fixed by server configuration when the turn was frozen. */
 	readonly siloId: string;
+	/** Identifies the logical computer the Pod named on its label. */
+	readonly computerId: string;
 	/** Recompile anchor checked against every fresh compile before the Pod receives input. */
 	readonly compile: ConversationComputerTurnCompileAnchor;
+	/** Source command of the accepted output, or null while the turn is still open. */
 	readonly outputSourceCommandId: string | null;
+	/** Receipt of the durable output, or null while the turn is still open. */
 	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
 }
 
 /** Durable material that lets a restarted worker finish an output without retaining plaintext. */
 export interface ConversationComputerTurnOutputReceipt
 {
+	/** UUID the Pod supplied with the output; it becomes the Kurrent event id. */
 	readonly sourceCommandId: string;
+	/** Identifies the text block that references the encrypted payload. */
 	readonly blockId: string;
+	/** References the encrypted payload row. */
 	readonly payloadRef: string;
+	/** Digest of the stored ciphertext, checked before the block is appended. */
 	readonly ciphertextDigest: string;
 }
 
@@ -153,16 +170,22 @@ export interface ConversationComputerTurnProjectionRepository
 	resolve(siloId: string, computerId: string): Promise<{ readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string } | null>;
 }
 
-/** Verifies the TokenReviewed Pod against the exact SandboxClaim and copied lease labels. */
-export interface ConversationComputerPodBindingVerifier
+/** Server-resolved computer, profile and lease a pending turn is compiled for. */
+export interface ConversationComputerTurnCompileCommand
 {
-	verify(command: { readonly computerId: string; readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly workload: RuntimeWorkloadIdentity }): Promise<boolean>;
+	/** Names the computer and the conversation and agent identity it belongs to. */
+	readonly computer: ComputerScope;
+	/** Identifies the immutable profile revision bound to the computer. */
+	readonly profileRevisionId: string;
+	/** Names the active lease, generation and SandboxClaim the Pod proved. */
+	readonly lease: ClaimedLeaseScope;
 }
 
 /** Compiles pending history and the service's current published revision for a new frozen turn. */
 export interface ConversationComputerPendingTurnCompiler
 {
-	compile(command: { readonly siloId: string; readonly computerId: string; readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string; readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string }): Promise<ConversationComputerTurnCandidate | null>;
+	/** Returns the compiled candidate, or null when no human entry is waiting for the agent. */
+	compile(command: ConversationComputerTurnCompileCommand): Promise<ConversationComputerTurnCandidate | null>;
 }
 
 /** Identifies the canonical Kurrent history already persisted before run admission. */
@@ -183,18 +206,12 @@ export interface ConversationComputerRunAdmissionCommand
 {
 	/** Stable logical run identifier derived from the pending immutable entry. */
 	readonly runId: string;
-	/** Product silo fixed by trusted server configuration. */
-	readonly siloId: string;
-	/** Conversation selected by the verified active computer projection. */
-	readonly conversationId: string;
-	/** Agent service bound immutably to the conversation. */
-	readonly agentServiceId: string;
-	/** Published agent revision observed in the participant-authorized transaction. */
-	readonly agentRevisionId: string;
-	/** Agent identity fixed by the active computer history. */
-	readonly agentIdentityId: string;
-	/** Profile revision fixed by the active computer history. */
-	readonly profileRevisionId: string;
+	/** Names the silo, conversation, computer and agent identity proven by the active computer projection. */
+	readonly computer: ComputerScope;
+	/** Names the bound agent service, the published revision observed in the participant-authorized transaction, and the computer profile. */
+	readonly agent: AgentScope;
+	/** Names the active lease, its generation and the SandboxClaim whose Pod binding passed the infrastructure verifier. */
+	readonly lease: ClaimedLeaseScope;
 	/** Principal stamped on the pending human entry and rechecked against current membership and Use authority. */
 	readonly requesterPrincipalId: string;
 	/** Issuer loaded from that exact durable Principal rather than accepted from the computer. */
@@ -207,14 +224,6 @@ export interface ConversationComputerRunAdmissionCommand
 	readonly requestIdempotencyKey: string;
 	/** Selects the already persisted Kurrent entry without asking run admission to write it again. */
 	readonly messageInput: ConversationComputerPrePersistedMessageInput;
-	/** Logical computer proven active by current Kurrent history. */
-	readonly computerId: string;
-	/** Active lease proven by current Kurrent history. */
-	readonly leaseId: string;
-	/** Lease generation copied from the verified current computer state. */
-	readonly leaseGeneration: number;
-	/** SandboxClaim whose Pod binding passed the infrastructure verifier. */
-	readonly sandboxClaimId: string;
 }
 
 /** Application-supplied boundary that atomically admits and compiles one immutable run input. */
@@ -227,18 +236,42 @@ export interface ConversationComputerRunAdmissionPort
 /** Owns idempotent Kurrent-backed turn freezing and output completion state. */
 export interface ConversationComputerTurnStore
 {
+	/** Creates the deterministic turn stream or returns the byte-equivalent frozen turn already stored. */
 	createOrRead(turn: FrozenConversationComputerTurn): Promise<FrozenConversationComputerTurn>;
+	/** Loads the frozen record and its output receipt, or null when no turn has this bootstrap id. */
 	load(bootstrapId: string): Promise<FrozenConversationComputerTurn | null>;
-	loadActive(command: Pick<ConversationComputerBootstrapCommand, "computerId" | "generation" | "leaseId"> & { readonly siloId: string }): Promise<FrozenConversationComputerTurn | null>;
+	/** Loads the unsettled turn on this lease, or null when the lease has no open turn. */
+	loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>;
+	/** Appends the output receipt, or recognizes the same receipt on an uncertain retry. */
 	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<"accepted" | "idempotent">;
+	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
 	settle(turn: FrozenConversationComputerTurn): Promise<void>;
+}
+
+/** Attempt-scoped model credential request, fenced to the computer and lease that will use it. */
+export interface ConversationComputerCredentialIssueCommand
+{
+	/** Binds the credential to one admitted bootstrap so a retry returns the same key. */
+	readonly bootstrapId: string;
+	/** Names the computer and conversation whose active-lease row must still exist. */
+	readonly computer: ComputerScope;
+	/** Names the lease the active-lease row must still carry. */
+	readonly lease: LeaseScope;
+	/** Provider-side alias under which the key is minted and later revoked. */
+	readonly keyAlias: string;
+	/** Sole model alias the key may call. */
+	readonly modelAlias: string;
+	/** Spend cap in US dollars for this attempt. */
+	readonly maxBudgetUsd: number;
+	/** Lifetime of the key in seconds; it never outlives the lease. */
+	readonly expirySeconds: number;
 }
 
 /** Mints a short-lived virtual key restricted to one model alias and attempt budget. */
 export interface ConversationComputerCredentialIssuer
 {
 	/** Atomically return the current credential or revoke it before installing a replacement. */
-	issueOrRotate(input: { readonly bootstrapId: string; readonly siloId: string; readonly conversationId: string; readonly computerId: string; readonly leaseId: string; readonly leaseGeneration: number; readonly keyAlias: string; readonly modelAlias: string; readonly maxBudgetUsd: number; readonly expirySeconds: number }): Promise<{ readonly key: string; readonly credentialDigest: string }>;
+	issueOrRotate(input: ConversationComputerCredentialIssueCommand): Promise<{ readonly key: string; readonly credentialDigest: string }>;
 	/** Revoke and forget the attempt credential after terminal output. */
 	revoke(bootstrapId: string): Promise<void>;
 }
@@ -270,11 +303,28 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly runLifecycle: ConversationComputerRunLifecycle;
 }
 
+/** Run, attempt and lease fence a run lifecycle transition must match against the saved execution subject. */
+export interface ConversationComputerRunLifecycleCommand
+{
+	/** Run whose lifecycle may advance. */
+	readonly runId: string;
+	/** Silo that owns the run. */
+	readonly siloId: string;
+	/** Attempt recorded in the run's execution subject. */
+	readonly attempt: number;
+	/** Computer admitted for this attempt. */
+	readonly computerId: string;
+	/** Lease and generation admitted for this attempt. */
+	readonly lease: LeaseScope;
+}
+
 /** Advances the exact admitted run after durable turn milestones. */
 export interface ConversationComputerRunLifecycle
 {
-	start(command: { readonly runId: string; readonly siloId: string; readonly attempt: number; readonly computerId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<void>;
-	complete(command: { readonly runId: string; readonly siloId: string; readonly attempt: number; readonly computerId: string; readonly leaseId: string; readonly leaseGeneration: number }): Promise<void>;
+	/** Records that bootstrap reached the admitted computer and the run may execute. */
+	start(command: ConversationComputerRunLifecycleCommand): Promise<void>;
+	/** Records success after the assistant output and its receipt are durable. */
+	complete(command: ConversationComputerRunLifecycleCommand): Promise<void>;
 }
 
 /** Mints and revokes raw provider-gateway keys behind encrypted retry custody. */

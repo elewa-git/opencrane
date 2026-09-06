@@ -113,6 +113,33 @@ browser polls the same authenticated API after the last observed immutable strea
 revoked participant loses both entry access and private payload resolution rather than receiving an
 empty successful page.
 
+## Glossary: the coordinate words and where each lives
+
+Every conversation-computer command carries the same handful of identifiers. The words below each
+have one meaning in this package, and each identifier lives in exactly one of the three bundles from
+`@opencrane/contracts` (`ComputerScope`, `LeaseScope`, `AgentScope`) or in a named command field.
+Persisted and wire shapes keep their own flat names (`generation` on Kurrent events and Pod labels,
+`computerScope` inside the stored execution subject) and are mapped at the boundary.
+
+| Word | One meaning | Bundle or field |
+|---|---|---|
+| **lease** | One sandbox realization of a logical computer. A computer has zero or one active lease; the lease id is a public label derived from the computer id and generation, never a secret. | `LeaseScope.leaseId` |
+| **generation** | The count of realizations a computer has had; it grows by one on every new claim and fences out a replaced or stale Pod. Always paired with the lease id. | `LeaseScope.leaseGeneration` (stored as `generation` on Kurrent events, Pod labels and SandboxClaim labels) |
+| **claim** | The Agent Sandbox `SandboxClaim` that realizes a lease, named `<computerId>-g<generation>`. Also: the row-level fence a credential transaction holds (`claimFence`). | `ClaimedLeaseScope.sandboxClaimId`; `claimFence` on the credential row |
+| **credential** | A secret handed to the bound Pod: the attempt-scoped LiteLLM key (`ConversationComputerCredentialIssueCommand`) or the derived review-gateway bearer (`ConversationComputerReviewCredentialGrant`). Never persisted in history. | Command fields, never a bundle |
+| **activation** | Waking a computer for one requested generation, from the silo activation queue through the SandboxClaim to an active lease. | `ConversationComputerActivationCommand` (flat, because it runs before the identity or lease exists) |
+| **admission** | The server-side decision that lets work start: run admission compiles the pending human entry into an immutable run input after rechecking the requester, computer, agent and lease. | `ConversationComputerRunAdmissionCommand` = `computer` + `agent` + `lease` + requester fields |
+| **fence** | Any comparison that stops a stale actor: the lease generation on every durable write, the active-lease row on PostgreSQL approvals, the claim fence on a credential row. `_AssertFencedRowCount` documents the row-count form once. | Field of whichever bundle is being compared |
+| **checkpoint** | The verified immutable workspace archive captured before a lease is released and restored into the next realization. | `ComputerWorkspaceCheckpoint`; restore is addressed by `siloId` + `computerId` + `LeaseScope` |
+| **receipt** | The durable record that an output was stored: the encrypted payload reference and source command id, replayed after a restart. | `ConversationComputerTurnOutputReceipt` |
+| **envelope** | The immutable turn handed to the Pod at bootstrap: compiled input plus the model credential. Also the Kurrent event metadata that repeats the lease coordinates. | `ConversationComputerBootstrap`; event `metadata` |
+
+The bundles themselves: `ComputerScope` (`siloId`, `conversationId`, `computerId`, `agentIdentityId`)
+says which computer; `LeaseScope` (`leaseId`, `leaseGeneration`, plus `sandboxClaimId` or `expiresAt`
+where a command needs them) says which realization; `AgentScope` (`agentServiceId`, `agentRevisionId`,
+`profileRevisionId`) says which service, revision and profile the turn runs under. Pod-facing paths
+that only know the silo, computer id and lease use `ConversationComputerLeaseCoordinates`.
+
 ## Public surface
 
 - `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, message,

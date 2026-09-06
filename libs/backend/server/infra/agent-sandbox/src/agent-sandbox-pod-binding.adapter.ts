@@ -15,11 +15,11 @@ export class AgentSandboxPodBindingAdapter implements AgentSandboxPodBinding
 	/** Return false for missing, duplicated, foreign, stale or malformed resources. */
 	public async verify(command: AgentSandboxPodBindingCommand): Promise<boolean>
 	{
-		const claim = await this.customApi.getNamespacedCustomObject({ group: _GROUP, version: _VERSION, namespace: command.workload.namespace, plural: _PLURAL, name: command.sandboxClaimId }) as { readonly metadata?: { readonly labels?: Readonly<Record<string, string>> }; readonly status?: { readonly sandbox?: { readonly name?: string } } };
+		const claim = await this.customApi.getNamespacedCustomObject({ group: _GROUP, version: _VERSION, namespace: command.workload.namespace, plural: _PLURAL, name: command.lease.sandboxClaimId }) as { readonly metadata?: { readonly labels?: Readonly<Record<string, string>> }; readonly status?: { readonly sandbox?: { readonly name?: string } } };
 		const labels = claim.metadata?.labels;
-		if (labels?.["opencrane.ai/computer-id"] !== command.computerId || labels["opencrane.ai/computer-generation"] !== String(command.generation) || labels["opencrane.ai/computer-lease-id"] !== command.leaseId || typeof claim.status?.sandbox?.name !== "string")
+		if (labels?.["opencrane.ai/computer-id"] !== command.computerId || labels["opencrane.ai/computer-generation"] !== String(command.lease.leaseGeneration) || labels["opencrane.ai/computer-lease-id"] !== command.lease.leaseId || typeof claim.status?.sandbox?.name !== "string")
 			return false;
-		const selector = [`opencrane.ai/computer-id=${command.computerId}`, `opencrane.ai/computer-generation=${command.generation}`, `opencrane.ai/computer-lease-id=${command.leaseId}`].join(",");
+		const selector = [`opencrane.ai/computer-id=${command.computerId}`, `opencrane.ai/computer-generation=${command.lease.leaseGeneration}`, `opencrane.ai/computer-lease-id=${command.lease.leaseId}`].join(",");
 		const sandboxName = claim.status.sandbox.name;
 		const pods = await this.coreApi.listNamespacedPod({ namespace: command.workload.namespace, labelSelector: selector });
 		const matches = pods.items.filter(function _ExactPod(pod): boolean
@@ -28,8 +28,8 @@ export class AgentSandboxPodBindingAdapter implements AgentSandboxPodBinding
 				&& pod.metadata.name === sandboxName
 				&& pod.spec?.serviceAccountName === command.workload.serviceAccountName
 				&& pod.metadata.labels?.["opencrane.ai/computer-id"] === command.computerId
-				&& pod.metadata.labels?.["opencrane.ai/computer-generation"] === String(command.generation)
-				&& pod.metadata.labels?.["opencrane.ai/computer-lease-id"] === command.leaseId;
+				&& pod.metadata.labels?.["opencrane.ai/computer-generation"] === String(command.lease.leaseGeneration)
+				&& pod.metadata.labels?.["opencrane.ai/computer-lease-id"] === command.lease.leaseId;
 		});
 		return matches.length === 1;
 	}

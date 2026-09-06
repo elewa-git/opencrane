@@ -1,4 +1,4 @@
-import type { ConversationComputerCredentialIssuer } from "../conversation-computer-turn.types";
+import type { ConversationComputerCredentialIssueCommand } from "../conversation-computer-turn.types";
 
 /** Encrypted attempt-key custody retained independently of provider cleanup availability. */
 export interface ConversationComputerCredentialCustody
@@ -23,9 +23,9 @@ export interface ConversationComputerCredentialCustody
 /** Transaction-bound operations used by the two-phase credential unit of work. */
 export interface ConversationComputerCredentialPersistenceRepository
 {
-	prepare(input: Parameters<ConversationComputerCredentialIssuer["issueOrRotate"]>[0]): Promise<{ readonly outcome: "claim"; readonly fence: string } | { readonly outcome: "alias_cleanup" | "custody" | "ready" | "expired"; readonly row: ConversationComputerCredentialCustody }>;
-	storeCustody(input: Parameters<ConversationComputerCredentialIssuer["issueOrRotate"]>[0], fence: string, encrypted: { readonly keyId: string; readonly nonce: Uint8Array; readonly authTag: Uint8Array; readonly ciphertext: Uint8Array; readonly ciphertextDigest: string }, credentialDigest: string): Promise<void>;
-	finalize(input: Parameters<ConversationComputerCredentialIssuer["issueOrRotate"]>[0], fence: string): Promise<void>;
+	prepare(input: ConversationComputerCredentialIssueCommand): Promise<{ readonly outcome: "claim"; readonly fence: string } | { readonly outcome: "alias_cleanup" | "custody" | "ready" | "expired"; readonly row: ConversationComputerCredentialCustody }>;
+	storeCustody(input: ConversationComputerCredentialIssueCommand, fence: string, encrypted: { readonly keyId: string; readonly nonce: Uint8Array; readonly authTag: Uint8Array; readonly ciphertext: Uint8Array; readonly ciphertextDigest: string }, credentialDigest: string): Promise<void>;
+	finalize(input: ConversationComputerCredentialIssueCommand, fence: string): Promise<void>;
 	markAliasCleanup(bootstrapId: string, fence: string): Promise<ConversationComputerCredentialCustody | null>;
 	forget(bootstrapId: string, fence: string): Promise<void>;
 	claimRevocation(bootstrapId: string): Promise<ConversationComputerCredentialCustody | null>;

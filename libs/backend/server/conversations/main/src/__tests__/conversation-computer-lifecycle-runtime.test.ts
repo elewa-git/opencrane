@@ -32,7 +32,7 @@ describe("HttpConversationComputerCheckpointSandbox", function _Suite()
 		for await (const chunk of await new HttpConversationComputerCheckpointSandbox(deriver).capture(_COMPUTER, _LEASE))
 			bytes.push(...chunk);
 		expect(bytes).toEqual([1, 2, 3]);
-		expect(deriver.bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", generation: 3, leaseId: "lease-abc" });
+		expect(deriver.bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-abc", leaseGeneration: 3 } });
 		const request = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
 		expect(request[0]).toBe("http://computer-1.sandboxes.svc.cluster.local:8090/v1/checkpoints/capture");
 		expect((request[1].headers as Record<string, string>).authorization).toBe("Bearer derived-review-secret,older-review-secret");

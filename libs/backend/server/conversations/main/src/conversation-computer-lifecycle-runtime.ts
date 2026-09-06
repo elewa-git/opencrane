@@ -8,7 +8,7 @@ import { _ConversationComputerIdleMilliseconds, _ConversationComputerRenewalDue,
 import type { ConversationComputerLifecycleCandidate } from "./conversation-computer-lifecycle-scheduler.types";
 import type { ConversationComputerCheckpointCurrent, ConversationComputerCheckpointFenceDependencies, ConversationComputerLifecycleLogger, ConversationComputerLifecycleProjection } from "./conversation-computer-lifecycle-runtime.types";
 import type { ConversationComputerIdlePolicy, ConversationComputerSandboxClaims } from "./conversation-computer-lifecycle.types";
-import type { ConversationComputerHistory, CurrentConversationComputer } from "./conversation-computers";
+import { _LeaseScopeOf, type ConversationComputerHistory, type CurrentConversationComputer } from "./conversation-computers";
 import type { ConversationComputerLifecycleScheduler } from "./conversation-computer-lifecycle-scheduler";
 import type { ConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review.types";
 
@@ -38,7 +38,7 @@ export class HttpConversationComputerCheckpointSandbox implements ConversationCo
 	/** Bind the bearer to the exact computer, generation and lease the Pod was admitted with, under every keyring key. */
 	private _Credential(computer: Parameters<ConversationComputerCheckpointSandbox["capture"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["capture"]>[1]): string
 	{
-		return this.credentials.bearer({ siloId: computer.siloId, computerId: computer.id, generation: lease.generation, leaseId: lease.id });
+		return this.credentials.bearer({ siloId: computer.siloId, computerId: computer.id, lease: _LeaseScopeOf(lease) });
 	}
 }
 
@@ -55,11 +55,11 @@ export class ConversationComputerCheckpointFenceAdapter
 		if (coordinates === null)
 			throw new Error("Conversation computer checkpoint projection is unavailable");
 		const current = await this.dependencies.history.load(coordinates);
-		if (current === null || current.lease === null || current.lease.state !== ComputerLeaseStates.Active || current.lease.id !== command.leaseId || current.lease.generation !== command.generation || current.lease.sandboxId === null)
+		if (current === null || current.lease === null || current.lease.state !== ComputerLeaseStates.Active || current.lease.id !== command.lease.leaseId || current.lease.generation !== command.lease.leaseGeneration || current.lease.sandboxId === null)
 			throw new Error("Conversation computer checkpoint requires the current lease generation");
 		const profile = this.dependencies.profile;
 		const workload = { namespace: profile.namespace, serviceAccountName: profile.serviceAccountName, podUid: command.podUid, subject: `system:serviceaccount:${profile.namespace}:${profile.serviceAccountName}` };
-		if (!await this.dependencies.pods.verify({ computerId: command.computerId, generation: command.generation, leaseId: command.leaseId, sandboxClaimId: current.lease.sandboxClaimId, workload }))
+		if (!await this.dependencies.pods.verify({ computerId: command.computerId, lease: { ...command.lease, sandboxClaimId: current.lease.sandboxClaimId }, workload }))
 			throw new Error("Conversation computer checkpoint Pod is not lease-bound");
 		return { computer: current.computer, lease: current.lease };
 	}
@@ -111,7 +111,7 @@ export class ConversationComputerLifecycleDueEnumerator
 		const claim = await this.claims.inspect({ namespace: this.namespace, claimId: lease.sandboxClaimId, computerId: current.computer.id, leaseId: lease.id, generation: lease.generation });
 		if (claim === null || _ConversationComputerRenewalDue(lease, claim.shutdownTime, this.policy, now))
 			return now;
-		const activity = await this.activity.lastActivity({ siloId: current.computer.siloId, computerId: current.computer.id, generation: lease.generation, leaseId: lease.id });
+		const activity = await this.activity.lastActivity({ siloId: current.computer.siloId, computerId: current.computer.id, lease: _LeaseScopeOf(lease) });
 		if (activity?.busy)
 			return expiresAt;
 		const delay = current.computer.state === ConversationComputerStates.Warm ? this.policy.staleAfterMilliseconds : this.policy.retireAfterMilliseconds;
