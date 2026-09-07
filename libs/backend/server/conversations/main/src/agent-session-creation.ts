@@ -7,6 +7,9 @@ import { PrismaAgentSessionProjection } from "./agent-session-projection";
 import { ConversationHistoryAuthority } from "./conversation-history-authority";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 
+/** Accepts UUID command identifiers before any creation authority or history write. */
+const _CREATE_COMMAND_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 /** Coordinates Kurrent-first session creation without owning either persistence boundary. */
 export class PrismaAgentSessionCreationUnitOfWork implements InitialConversationComputerResolver
 {
@@ -23,15 +26,23 @@ export class PrismaAgentSessionCreationUnitOfWork implements InitialConversation
 		this.history = new AgentSessionHistory(historyStore, conversationHistory);
 	}
 
-	/** Establishes Kurrent state before installing its authorized projection. */
-	public async resolve(caller: ConversationCaller, personalAgentRef: string): Promise<string | null>
+	/**
+	 * Creates a session for a new command, or recovers the same session after an uncertain response.
+	 * Called by: PrismaConversationMetadataUnitOfWork.create.
+	 * @param idempotencyKey UUID retained by the caller for every retry of this creation request.
+	 * @returns The session id, or null when the command or current creation authority is unavailable.
+	 * @throws When existing history conflicts with the requested agent or computer coordinates.
+	 */
+	public async resolve(caller: ConversationCaller, personalAgentRef: string, idempotencyKey: string): Promise<string | null>
 	{
+		if (!_CREATE_COMMAND_UUID.test(idempotencyKey))
+			return null;
 		// 1. Precheck mutable authority before creating immutable state.
 		const candidate = await this.projection.precheck(caller, personalAgentRef);
 		if (candidate === null)
 			return null;
 		// 2. Establish stable immutable coordinates and state.
-		const coordinates = _AgentSessionCoordinates(caller, candidate.agentServiceId);
+		const coordinates = _AgentSessionCoordinates(caller, candidate.agentServiceId, idempotencyKey);
 		await this.history.establish(caller, candidate, coordinates);
 		// 3. Recheck authority serializably and rebuild the projection.
 		return this.projection.project(caller, candidate, coordinates);

@@ -33,13 +33,14 @@ export interface AgentSessionCoordinates
 	readonly computerId: string;
 }
 
-/** Creates or rebuilds one deterministic personal agent-session projection. */
+/** Creates or recovers a personal session for a caller-scoped creation command. */
 export interface InitialConversationComputerResolver
 {
-  /** Returns the deterministic conversation id after Kurrent and projection authority agree. */
+  /** Returns the same conversation for retries of a UUID, including after its computer has run. */
   resolve(
     caller: ConversationCaller,
     personalAgentRef: string,
+    idempotencyKey: string,
   ): Promise<string | null>;
   /** Establishes immutable history for a direct or group conversation before projection writes. */
   createOrdinaryGenesis(

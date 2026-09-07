@@ -42,6 +42,8 @@ export class ConversationWorkspaceStore
 	private readonly _selectedParticipantRefs = signal<ReadonlySet<string>>(new Set());
 	/** Create command lifecycle. */
 	private readonly _creationState = signal(ConversationCreationStates.Idle);
+	/** Keeps the personal-session request unchanged after an uncertain create response. */
+	private _pendingCreation: CreateConversationCommand | null = null;
 	/** Whether a message command is active. */
 	private readonly _sending = signal(false);
 	/** Exact command retained after an ambiguous response so retry cannot duplicate the message. */
@@ -186,6 +188,10 @@ export class ConversationWorkspaceStore
 	/** Select the immutable mode for a conversation that does not exist yet. */
 	public selectCreationMode(mode: ConversationModes): void
 	{
+		if (this._creationState() === ConversationCreationStates.Creating)
+			return;
+		if (mode !== this._creationMode())
+			this._pendingCreation = null;
 		this._creationMode.set(mode);
 		this._selectedParticipantRefs.set(new Set());
 		this._creationState.set(ConversationCreationStates.Idle);
@@ -195,6 +201,8 @@ export class ConversationWorkspaceStore
 	/** Toggle one opaque participant coordinate without displaying its value. */
 	public toggleParticipant(participantRef: string): void
 	{
+		if (this._creationState() === ConversationCreationStates.Creating)
+			return;
 		const directory = this._directory();
 		const participant = directory?.participants.find(candidate => candidate.participantRef === participantRef && !candidate.isSelf);
 		if (participant === undefined)
@@ -208,7 +216,7 @@ export class ConversationWorkspaceStore
 		else this._selectedParticipantRefs.set(selected);
 	}
 
-	/** Create the exact selected immutable mode and adopt its returned snapshot. */
+	/** Create the selected conversation, retaining a personal-session command UUID until success. */
 	public async create(): Promise<ConversationWorkspaceNavigationIntent | null>
 	{
 		const command = this._CreateCommand();
@@ -220,6 +228,7 @@ export class ConversationWorkspaceStore
 		try
 		{
 			const detail = await this._gateway.create(command);
+			this._pendingCreation = null;
 			this._conversations.update(current => [detail, ...current.filter(candidate => candidate.id !== detail.id)]);
 			this._creationState.set(ConversationCreationStates.Idle);
 			if (generation !== this._generation)
@@ -471,7 +480,13 @@ export class ConversationWorkspaceStore
 		if (directory === null)
 			return null;
 		if (mode === ConversationModes.AgentSession && directory.personalAgent !== null)
-			return { mode, personalAgentRef: directory.personalAgent.personalAgentRef };
+		{
+			const personalAgentRef = directory.personalAgent.personalAgentRef;
+			if (this._pendingCreation?.mode === mode && this._pendingCreation.personalAgentRef === personalAgentRef)
+				return this._pendingCreation;
+			this._pendingCreation = { mode, personalAgentRef, idempotencyKey: globalThis.crypto.randomUUID() };
+			return this._pendingCreation;
+		}
 		if (mode === ConversationModes.Direct || mode === ConversationModes.Group)
 			return { mode, participantRefs: [...this._selectedParticipantRefs()] };
 		return null;

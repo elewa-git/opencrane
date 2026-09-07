@@ -9,6 +9,11 @@ stream transports. It creates conversations in exactly one immutable mode: `agen
 `direct`, or `group`. An agent session binds one agent service; direct and group conversations do
 not bind an agent and their ordinary messages never manufacture runs.
 
+Personal-session creation requires a client UUID. Retrying that command returns the same session,
+even after its computer has started; a new UUID creates another conversation and computer for the
+same personal assistant identity. Reusing a key with a different assistant is rejected. Recovering
+an existing projection preserves its lifecycle and current grants, including any revoked access.
+
 ```
  authenticated participant
           │ directory · list · create · history · message · archive · close

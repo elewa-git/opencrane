@@ -55,6 +55,11 @@ vi.mock(
 
 import { PrismaAgentSessionCreationUnitOfWork } from "../agent-session-creation";
 
+/** Identifies a creation request that retries must retain. */
+const _CREATE_KEY = "57de859d-1fb6-4782-aa0b-2b3d4dfd2292";
+/** Identifies a deliberate second session with the same personal assistant. */
+const _NEXT_CREATE_KEY = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
+
 /** Creates the minimum transaction surface needed to exercise Kurrent-first creation. */
 function _Prisma() {
   const transaction = {
@@ -143,6 +148,7 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
     const result = await coordinator.resolve(
       { siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" },
       "service-1",
+      _CREATE_KEY,
     );
 
     expect(result).toMatch(/^[0-9a-f-]{36}$/u);
@@ -188,6 +194,7 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
           principalId: "principal-1",
         },
         "service-1",
+        _CREATE_KEY,
       ),
     ).resolves.toBeNull();
     expect(_Mocks.identityAppend).not.toHaveBeenCalled();
@@ -217,7 +224,7 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
       subjectId: "subject-1",
       principalId: "principal-1",
     };
-    const first = await coordinator.resolve(caller, "service-1");
+    const first = await coordinator.resolve(caller, "service-1", _CREATE_KEY);
     const created =
       harness.transaction.conversation.create.mock.calls[0]![0].data;
     harness.transaction.conversation.findUnique.mockResolvedValue({
@@ -237,8 +244,57 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
       }),
     );
 
-    await expect(coordinator.resolve(caller, "service-1")).resolves.toBe(first);
+    _Mocks.computerLoad.mockResolvedValue({ computer: { state: ConversationComputerStates.Warm, leaseGeneration: 3 }, lease: { state: "active", generation: 3 } });
+
+    await expect(coordinator.resolve(caller, "service-1", _CREATE_KEY)).resolves.toBe(first);
     expect(_Mocks.identityAppend).toHaveBeenCalledTimes(1);
     expect(harness.transaction.conversation.create).toHaveBeenCalledTimes(1);
+    expect(_Mocks.reconcileParticipants).toHaveBeenCalledTimes(1);
+    expect(_Mocks.reconcileCreator).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates a separate conversation and computer after the former session is closed", async function _CreatesAfterClose()
+  {
+    const harness = _Prisma();
+    const coordinator = new PrismaAgentSessionCreationUnitOfWork(harness.prisma as never, { append: _Mocks.append, appendAtomic: _Mocks.appendAtomic, readHead: vi.fn(), readStream: vi.fn() } as never, [{ workloadProfile: "personal-default", profileRevisionId: `sha256:${"a".repeat(64)}` }]);
+    const caller = { siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" };
+    const first = await coordinator.resolve(caller, "service-1", _CREATE_KEY);
+    const former = { ...harness.transaction.conversation.create.mock.calls[0]![0].data, lifecycle: "Closed" };
+    harness.transaction.conversation.findUnique.mockImplementation(async function _Read(query) { return query.where.id === first ? former : null; });
+    _Mocks.identityLoad.mockResolvedValue({ identity: { state: "active" } });
+
+    const next = await coordinator.resolve(caller, "service-1", _NEXT_CREATE_KEY);
+
+    expect(next).not.toBe(first);
+    const created = harness.transaction.conversation.create.mock.calls[1]![0].data;
+    expect(created.computerId).not.toBe(former.computerId);
+    expect(created.computerAgentIdentityId).toBe(former.computerAgentIdentityId);
+    expect(former.lifecycle).toBe("Closed");
+    expect(_Mocks.identityAppend).toHaveBeenCalledTimes(1);
+    expect(_Mocks.appendAtomic.mock.calls[1]![0].appends[0].streamName).toBe(`conversation-${next}`);
+  });
+
+  it("rejects a creation key reused for a different personal assistant", async function _RejectsChangedTarget()
+  {
+    const harness = _Prisma();
+    const coordinator = new PrismaAgentSessionCreationUnitOfWork(harness.prisma as never, { append: _Mocks.append, appendAtomic: _Mocks.appendAtomic, readHead: vi.fn(), readStream: vi.fn() } as never, [{ workloadProfile: "personal-default", profileRevisionId: `sha256:${"a".repeat(64)}` }]);
+    const caller = { siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" };
+    const first = await coordinator.resolve(caller, "service-1", _CREATE_KEY);
+    harness.transaction.agentService.findFirst.mockResolvedValue({ id: "service-2", name: "Other assistant", workloadProfile: "personal-default", activeRevision: { personaRevisionId: "persona-1", state: "Published" } });
+    _Mocks.appendAtomic.mockRejectedValue(new WrongExpectedVersionError(undefined, { streamName: `conversation-${first}`, expected: -1n, current: 0n }));
+
+    await expect(coordinator.resolve(caller, "service-2", _CREATE_KEY)).rejects.toThrow("does not match the requested agent session");
+    expect(_Mocks.appendAtomic.mock.calls[1]![0].appends[0].streamName).toBe(`conversation-${first}`);
+    expect(harness.transaction.conversation.create).toHaveBeenCalledTimes(1);
+    expect(_Mocks.reconcileParticipants).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["", "not-a-uuid", "57de859d-1fb6-0782-aa0b-2b3d4dfd2292"])("rejects invalid creation key %s before accessing authority or history", async function _InvalidKey(key)
+  {
+    const harness = _Prisma();
+    const coordinator = new PrismaAgentSessionCreationUnitOfWork(harness.prisma as never, { append: _Mocks.append, appendAtomic: _Mocks.appendAtomic, readHead: vi.fn(), readStream: vi.fn() } as never, []);
+    await expect(coordinator.resolve({ siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" }, "service-1", key)).resolves.toBeNull();
+    expect(harness.prisma.$transaction).not.toHaveBeenCalled();
+    expect(_Mocks.appendAtomic).not.toHaveBeenCalled();
   });
 });

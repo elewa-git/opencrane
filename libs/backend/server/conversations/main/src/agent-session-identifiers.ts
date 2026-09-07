@@ -2,10 +2,15 @@ import { createHash } from "node:crypto";
 import type { AgentSessionCoordinates } from "./agent-session-creation.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 
-/** Derives every durable session coordinate from server-owned stable inputs. */
-export function _AgentSessionCoordinates(caller: ConversationCaller, agentServiceId: string): AgentSessionCoordinates
+/**
+ * Gives each creation command its own conversation and computer while reusing the personal identity.
+ * Called by: PrismaAgentSessionCreationUnitOfWork.resolve after validating the command UUID.
+ * The same key with a changed agent target addresses the same history, whose genesis rejects it.
+ * @see AgentSessionHistory.establish
+ */
+export function _AgentSessionCoordinates(caller: ConversationCaller, agentServiceId: string, idempotencyKey: string): AgentSessionCoordinates
 {
-	const conversationId = _DeterministicUuid("conversation", caller.siloId, caller.principalId, agentServiceId);
+	const conversationId = _DeterministicUuid("conversation", caller.siloId, caller.principalId, idempotencyKey.toLowerCase());
 	return { conversationId, agentIdentityId: _DeterministicUuid("agent-identity", caller.siloId, caller.principalId, agentServiceId), computerId: `computer-${_DeterministicUuid("conversation-computer", conversationId)}` };
 }
 

@@ -38,6 +38,8 @@ building errors and does not own the socket or live projection; the injected con
 port owns participant message delivery and streaming.
 The same generated-client adapter implements the narrow computer-review port without releasing sandbox
 network coordinates or lease credentials to the browser.
+Personal-session creation forwards the store's UUID unchanged, allowing the server to distinguish a
+retry from a request for another session.
 Completed migrated accounts with no bootstrap conversation produce `NotRecorded`, never an empty success
 transcript. The adapter requests archived conversation rows so the feature can keep them in a separate list.
 

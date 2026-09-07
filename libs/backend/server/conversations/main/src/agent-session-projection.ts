@@ -57,6 +57,8 @@ export class PrismaAgentSessionProjection
 			}
 			else if (existing.siloId !== caller.siloId || existing.mode !== ConversationMode.AgentSession || existing.agentServiceId !== candidate.agentServiceId || existing.computerId !== coordinates.computerId || existing.computerAgentIdentityId !== coordinates.agentIdentityId || existing.computerProfileRevisionId !== candidate.profileRevisionId)
 				throw new Error("Existing conversation projection conflicts with immutable history");
+			else
+				return coordinates.conversationId;
 			const now = new Date();
 			await authorization.reconcileParticipants(caller.siloId, coordinates.conversationId, [caller.subjectId], caller.principalId, now);
 			await authorization.reconcileCreator(caller.siloId, coordinates.conversationId, caller.principalId, now);

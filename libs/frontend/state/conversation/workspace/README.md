@@ -23,6 +23,9 @@ WebSocket events + messages ──► adapter ──► conversation/stream port
 `ConversationWorkspaceStore` owns conversation selection, metadata loading, history-poll recovery,
 creation choices, and conversation commands. Current computer lifecycle comes from the history response;
 the browser no longer reconstructs or controls a separate run lifecycle.
+The store keeps a personal-session creation UUID after a failed response so retry opens the same
+session. A successful response clears that command; the next creation receives a new UUID. Creation
+choices stay fixed while the request is in flight and become editable again after failure.
 
 ## Public surface
 

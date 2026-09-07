@@ -33,7 +33,7 @@ export class PrismaConversationMetadataUnitOfWork
         throw new Error("conversation directory unavailable");
       const rows = await transaction.orgMembership.findMany({
         where: { clusterTenant: caller.siloId, status: OrgMemberStatus.Active },
-        select: { id: true, subject: true },
+        select: { id: true, subject: true, displayName: true },
         orderBy: { id: "asc" },
       });
       const persona = await transaction.personaProfile.findUnique({
@@ -67,6 +67,7 @@ export class PrismaConversationMetadataUnitOfWork
       return {
         participants: rows.map((row) => ({
           participantRef: row.id,
+          displayName: row.displayName?.trim() || "Unnamed member",
           isSelf: row.subject === caller.subjectId,
         })),
         personalAgentStatus: _PersonalAgentStatus(available.length),
@@ -154,11 +155,14 @@ return null;
     const value = request as Record<string, unknown>;
     if (value["mode"] === "agent_session")
 {
+      if (Object.keys(value).some(key => !["mode", "personalAgentRef", "idempotencyKey"].includes(key)))
+        return null;
       const conversationId = await this.initialComputer.resolve(
         caller,
         typeof value["personalAgentRef"] === "string"
           ? value["personalAgentRef"]
           : "",
+        typeof value["idempotencyKey"] === "string" ? value["idempotencyKey"] : "",
       );
       return conversationId === null ? null : this.open(caller, conversationId);
     }

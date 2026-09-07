@@ -7,7 +7,7 @@ import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses,
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway";
 import { ConversationOnboardingHistoryStore } from "../conversation-onboarding-history.store";
 import { ConversationWorkspaceStore } from "../conversation-workspace.store";
-import { ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "../conversation-workspace.types";
+import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand } from "../conversation-workspace.types";
 
 /** Build one metadata-only Agent conversation; history arrives through the separate poller. */
 function _Detail(): ConversationWorkspaceDetail
@@ -29,7 +29,7 @@ class _Gateway implements ConversationWorkspaceGateway
 	/** Return metadata only; messages come from Kurrent history. */
 	public async open() { return _Detail(); }
 	/** Return the created metadata row. */
-	public async create() { return _Detail(); }
+	public readonly create = vi.fn<(command: CreateConversationCommand) => Promise<ConversationWorkspaceDetail>>().mockResolvedValue(_Detail());
 	/** Return an updated archive projection. */
 	public async archive() { return { ..._Detail(), archivedAt: "2026-09-05T00:01:00.000Z" }; }
 	/** Return a closed metadata projection. */
@@ -50,6 +50,48 @@ class _HistoryStream implements ConversationEventStream
 
 describe("ConversationWorkspaceStore", function _DescribeWorkspace()
 {
+	it("retries the same creation command after a lost response and starts a new command after success", async function _RetryCreation()
+	{
+		const gateway = new _Gateway();
+		const injector = Injector.create({ providers: [ConversationOnboardingHistoryStore, ConversationWorkspaceStore, { provide: DestroyRef, useValue: { onDestroy: vi.fn() } }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _HistoryStream }] });
+		const store = injector.get(ConversationWorkspaceStore);
+		await store.load();
+		await store.close();
+		expect(store.selected()?.lifecycle).toBe(ConversationLifecycles.Closed);
+		gateway.create.mockRejectedValueOnce(new Error("response lost")).mockResolvedValueOnce({ ..._Detail(), id: "new-session-1" }).mockResolvedValueOnce({ ..._Detail(), id: "new-session-2" });
+
+		await expect(store.create()).resolves.toBeNull();
+		const command = gateway.create.mock.calls[0]![0];
+		expect(command).toMatchObject({ mode: ConversationModes.AgentSession, personalAgentRef: "agent-1", idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/u) });
+		expect(store.creationState()).toBe(ConversationCreationStates.Failed);
+		expect(store.canCreate()).toBe(true);
+		await expect(store.create()).resolves.toEqual({ conversationId: "new-session-1" });
+		expect(gateway.create.mock.calls[1]![0]).toBe(command);
+		await expect(store.create()).resolves.toEqual({ conversationId: "new-session-2" });
+		expect(gateway.create.mock.calls[2]![0].idempotencyKey).not.toBe(command.idempotencyKey);
+		expect(store.conversations().map(item => item.id)).toContain("new-session-1");
+		expect(store.conversations().map(item => item.id)).toContain("new-session-2");
+	});
+
+	it("keeps the pending choice stable and rejects a second create while the first response is outstanding", async function _PendingCreation()
+	{
+		const gateway = new _Gateway();
+		let reject: (error: Error) => void = function _Unset() { throw new Error("create has not started"); };
+		gateway.create.mockImplementationOnce(function _Pending() { return new Promise(function _Wait(_resolve, rejectCreate) { reject = rejectCreate; }); });
+		const injector = Injector.create({ providers: [ConversationOnboardingHistoryStore, ConversationWorkspaceStore, { provide: DestroyRef, useValue: { onDestroy: vi.fn() } }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _HistoryStream }] });
+		const store = injector.get(ConversationWorkspaceStore);
+		await store.load();
+		const pending = store.create();
+		store.selectCreationMode(ConversationModes.Group);
+		expect(store.creationMode()).toBe(ConversationModes.AgentSession);
+		await expect(store.create()).resolves.toBeNull();
+		expect(gateway.create).toHaveBeenCalledTimes(1);
+		reject(new Error("response lost"));
+		await pending;
+		await store.create();
+		expect(gateway.create.mock.calls[1]![0]).toBe(gateway.create.mock.calls[0]![0]);
+	});
+
 	it("sends an Agent-session message through HTTP with start activation", async function _SendsKurrentMessage()
 	{
 		const gateway = new _Gateway();

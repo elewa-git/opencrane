@@ -24,6 +24,9 @@ Two halves:
   schemas keep runtime acceptance, strict request fields, and TypeScript
   models in one package.
 
+The personal-session create request requires an `idempotencyKey` UUID. Clients reuse it after an
+uncertain response and supply a new UUID to start another session with the same assistant.
+
 ```
  apps/opencrane server ....... emits OpenAPI 3.1 spec (dist/apps/opencrane/openapi.json)
         │  openapi-typescript

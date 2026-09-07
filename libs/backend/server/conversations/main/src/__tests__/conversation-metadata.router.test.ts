@@ -2,6 +2,8 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { _CreateConversationMetadataRouter } from "../conversation-metadata.router";
+import { PrismaConversationMetadataUnitOfWork } from "../prisma-conversation-metadata";
+import { PrismaAgentSessionCreationUnitOfWork } from "../agent-session-creation";
 
 /** Verified participant supplied by app composition rather than request data. */
 const _CALLER = { siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" } as const;
@@ -23,8 +25,34 @@ describe("_CreateConversationMetadataRouter", function _DescribeMetadataRouter()
 	it("keeps agent-session creation unavailable when its injected resolver cannot establish identity", async function _FailsClosed()
 	{
 		const authority = { directory: vi.fn(), list: vi.fn(), open: vi.fn(), create: vi.fn().mockResolvedValue(null), archive: vi.fn(), close: vi.fn() };
-		const response = await request(_App(authority)).post("/api/v1/me/conversations").send({ mode: "agent_session", personalAgentRef: "agent-1" });
+		const command = { mode: "agent_session", personalAgentRef: "agent-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292" };
+		const response = await request(_App(authority)).post("/api/v1/me/conversations").send(command);
 		expect(response.status).toBe(404);
-		expect(authority.create).toHaveBeenCalledWith(_CALLER, { mode: "agent_session", personalAgentRef: "agent-1" });
+		expect(authority.create).toHaveBeenCalledWith(_CALLER, command);
+	});
+
+	it("passes the caller and creation key through the metadata boundary without accepting identity fields", async function _CreationCoordinates()
+	{
+		const resolve = vi.fn().mockResolvedValue(null);
+		const authority = new PrismaConversationMetadataUnitOfWork({} as never, { resolve, createOrdinaryGenesis: vi.fn() });
+		const command = { mode: "agent_session", personalAgentRef: "agent-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292" };
+		await request(_App(authority)).post("/api/v1/me/conversations").send(command);
+		expect(resolve).toHaveBeenCalledWith(_CALLER, command.personalAgentRef, command.idempotencyKey);
+		resolve.mockClear();
+		const response = await request(_App(authority)).post("/api/v1/me/conversations").send({ ...command, principalId: "other-principal", conversationId: "other-conversation" });
+		expect(response.status).toBe(404);
+		expect(resolve).not.toHaveBeenCalled();
+	});
+
+	it.each([undefined, null, 42, {}])("rejects a missing or non-string session creation key before persistence", async function _MalformedCreate(idempotencyKey)
+	{
+		const prisma = { $transaction: vi.fn() };
+		const store = { append: vi.fn(), appendAtomic: vi.fn(), readHead: vi.fn(), readStream: vi.fn() };
+		const resolver = new PrismaAgentSessionCreationUnitOfWork(prisma as never, store, []);
+		const authority = new PrismaConversationMetadataUnitOfWork(prisma as never, resolver);
+		const response = await request(_App(authority)).post("/api/v1/me/conversations").send({ mode: "agent_session", personalAgentRef: "agent-1", idempotencyKey });
+		expect(response.status).toBe(404);
+		expect(prisma.$transaction).not.toHaveBeenCalled();
+		expect(store.appendAtomic).not.toHaveBeenCalled();
 	});
 });

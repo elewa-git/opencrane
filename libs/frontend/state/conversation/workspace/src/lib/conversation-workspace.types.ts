@@ -113,7 +113,7 @@ export interface ConversationDirectoryParticipant
 	readonly participantRef: string;
 	/** Whether this coordinate represents the signed-in participant. */
 	readonly isSelf: boolean;
-	/** Generic label that never infers a name from the opaque coordinate. */
+	/** Uses the server-selected member display name, or You for the signed-in participant. */
 	readonly label: string;
 }
 
@@ -167,9 +167,14 @@ export interface ConversationWorkspaceDetail extends ConversationSummary
 	readonly accessEndedPosition: string | null;
 }
 
-/** Immutable command for a new conversation. */
+/**
+ * Describes the selected participants or personal assistant for a new conversation.
+ * Agent-session retries retain their UUID until the server returns the created session. A new
+ * UUID starts a separate session with the same personal assistant.
+ * Called by: ConversationWorkspaceStore and OpenCraneConversationWorkspaceGateway.
+ */
 export type CreateConversationCommand =
-	| { readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string }
+	| { readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string; readonly idempotencyKey: string }
 	| { readonly mode: ConversationModes.Direct; readonly participantRefs: readonly string[] }
 	| { readonly mode: ConversationModes.Group; readonly participantRefs: readonly string[] };
 

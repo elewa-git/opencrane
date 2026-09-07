@@ -6882,6 +6882,11 @@ export interface operations {
                     /** @constant */
                     mode: "agent_session";
                     personalAgentRef: string;
+                    /**
+                     * Format: uuid
+                     * @description Reuse this UUID for retries of the same session creation; a new UUID starts a separate session.
+                     */
+                    idempotencyKey: string;
                 } | {
                     /** @enum {string} */
                     mode: "direct" | "group";

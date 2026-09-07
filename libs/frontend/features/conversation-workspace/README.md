@@ -9,6 +9,8 @@ to direct, group, and Agent-session conversations. Its thin page composes the ap
 asset, Activity, elicitation, and A2UI elements. A feature presenter derives browser-safe display
 models and delegates every command to the existing state stores. Its feature-local route coordinator
 owns index/selection URLs and sign-in recovery through the platform seam.
+The existing creation dialog disables its choices during submission. A failed request keeps the
+chosen assistant available for retry through the state store's retained creation command.
 
 The completed onboarding exchange appears as the selected **Welcome** row inside the same **My sessions**
 rail as ordinary conversations. It remains a separate read-only server projection, not a fourth conversation
