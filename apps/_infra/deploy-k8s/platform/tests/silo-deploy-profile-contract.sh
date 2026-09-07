@@ -297,8 +297,9 @@ if [[ "$1 $2" == "get crd" && "$*" == *jsonpath* ]]; then
   printf '%s' "${AGENT_SANDBOX_V1BETA1_STATE:-true:true}"
 fi
 if [[ "$1 $2 $3" == "get deployment agent-sandbox-controller" ]]; then
-  if [[ "$*" == *args* ]]; then
-    printf '%s\n' '--extensions'
+  if [[ "$*" == *'-o json' ]]; then
+    [[ "${AGENT_SANDBOX_READ_FAILURE:-false}" != true ]] || exit 1
+    cat "$AGENT_SANDBOX_DEPLOYMENT_FIXTURE"
   else
     printf '%s\n' 'registry.invalid/agent-sandbox-controller@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   fi
@@ -314,6 +315,12 @@ if [[ "$*" == *'go-template='* && "$*" != *"$MISSING_KURRENTDB_SECRET_KEY"* ]]; 
 fi
 EOF
 chmod +x "$wrapper_test_dir/bin/kubectl"
+
+export AGENT_SANDBOX_DEPLOYMENT_FIXTURE="$wrapper_test_dir/agent-sandbox-deployment.json"
+cat >"$wrapper_test_dir/agent-sandbox-ready.json" <<'EOF'
+{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"agent-sandbox-controller"},"spec":{"template":{"spec":{"containers":[{"name":"manager","image":"registry.invalid/agent-sandbox-controller@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","args":["--leader-elect=true","--extensions"]}]}}}}
+EOF
+cp "$wrapper_test_dir/agent-sandbox-ready.json" "$AGENT_SANDBOX_DEPLOYMENT_FIXTURE"
 
 testv5_required_args=(
   --kurrentdb-image-digest sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -357,6 +364,46 @@ testv5_forwarded_args="$(tr '\n' ' ' <"$wrapper_args_file")"
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].poolName=developer-pool'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].warmReplicas=1'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'* ]]
+
+# The actual wrapper accepts the exact argument in Deployment JSON, never substrings or scalar text.
+for mutation in \
+  'malformed-json' \
+  'del(.spec.template.spec.containers[0].args)' \
+  '.spec.template.spec.containers[0].args = []' \
+  '.spec.template.spec.containers[0].args = ["--extensions=false"]' \
+  '.spec.template.spec.containers[0].args = ["--extensions-extra"]' \
+  '.spec.template.spec.containers[0].args = "--extensions"' \
+  '.spec.template.spec.containers[0].args = ["--leader-elect=true\n--extensions"]'; do
+  if [[ "$mutation" == malformed-json ]]; then
+    printf '{invalid' >"$AGENT_SANDBOX_DEPLOYMENT_FIXTURE"
+  else
+    jq "$mutation" "$wrapper_test_dir/agent-sandbox-ready.json" >"$AGENT_SANDBOX_DEPLOYMENT_FIXTURE"
+  fi
+  rm -f "$wrapper_args_file"
+  if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY=absent-key \
+    bash "$wrapper_test_dir/deploy.sh" \
+      --base-domain dev.opencrane.ai --cluster-tenant testv5 \
+      --acme-email operator@example.com --first-user-email owner@example.com \
+      --oidc-issuer-url https://issuer.example.com/ --oidc-client-id test-client \
+      "${testv5_required_args[@]}" >/dev/null 2>"$wrapper_test_dir/extensions.error"; then
+    echo "testv5 accepted invalid Sandbox arguments: $mutation" >&2
+    exit 1
+  fi
+  grep -Fq 'requires the Agent Sandbox extensions reconciler' "$wrapper_test_dir/extensions.error"
+  [[ ! -e "$wrapper_args_file" ]] || { echo 'Invalid Sandbox arguments reached the deploy core.' >&2; exit 1; }
+done
+cp "$wrapper_test_dir/agent-sandbox-ready.json" "$AGENT_SANDBOX_DEPLOYMENT_FIXTURE"
+if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" AGENT_SANDBOX_READ_FAILURE=true \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai --cluster-tenant testv5 \
+    --acme-email operator@example.com --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ --oidc-client-id test-client \
+    "${testv5_required_args[@]}" >/dev/null 2>"$wrapper_test_dir/extensions-read.error"; then
+  echo 'testv5 ignored a failed Sandbox Deployment read.' >&2
+  exit 1
+fi
+grep -Fq 'could not read the Agent Sandbox controller Deployment' "$wrapper_test_dir/extensions-read.error"
+[[ ! -e "$wrapper_args_file" ]] || { echo 'A failed Sandbox read reached the deploy core.' >&2; exit 1; }
 
 testv5_immutable_error_file="$wrapper_test_dir/testv5-kurrentdb-immutable.error"
 if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY=absent-key KURRENTDB_SECRET_IMMUTABLE=false \

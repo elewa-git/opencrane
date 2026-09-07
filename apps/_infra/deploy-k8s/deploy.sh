@@ -145,6 +145,7 @@ EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
 [[ "$RELEASE" == "$EXPECTED_RELEASE" ]] || { err "--release must be '$EXPECTED_RELEASE' for ClusterTenant '$CLUSTER_TENANT'."; exit 1; }
 
 if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
+  command -v jq >/dev/null 2>&1 || { err "jq is required to validate the testv5 Agent Sandbox controller."; exit 1; }
   [[ "$KURRENTDB_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "testv5 requires --kurrentdb-image-digest with an immutable sha256 digest."; exit 1; }
   [[ "$KURRENTDB_TLS_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "testv5 requires --kurrentdb-tls-secret."; exit 1; }
   [[ "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "testv5 requires --kurrentdb-bootstrap-admin-secret."; exit 1; }
@@ -169,8 +170,8 @@ if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
   done
   AGENT_SANDBOX_IMAGE="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
   [[ "$AGENT_SANDBOX_IMAGE" == *@sha256:* ]] || { err "testv5 requires the Agent Sandbox controller to use an immutable image digest."; exit 1; }
-  AGENT_SANDBOX_ARGS="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o jsonpath='{range .spec.template.spec.containers[0].args[*]}{.}{"\\n"}{end}' 2>/dev/null)"
-  grep -Fx -- '--extensions' <<<"$AGENT_SANDBOX_ARGS" >/dev/null || { err "testv5 requires the Agent Sandbox extensions reconciler."; exit 1; }
+  AGENT_SANDBOX_DEPLOYMENT="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o json 2>/dev/null)" || { err "testv5 could not read the Agent Sandbox controller Deployment."; exit 1; }
+  jq -e '.spec.template.spec.containers[0].args | type == "array" and any(.[]; . == "--extensions")' >/dev/null 2>&1 <<<"$AGENT_SANDBOX_DEPLOYMENT" || { err "testv5 requires the Agent Sandbox extensions reconciler."; exit 1; }
   kubectl rollout status deployment/agent-sandbox-controller --namespace agent-sandbox-system --timeout=120s >/dev/null || { err "testv5 requires a Ready Agent Sandbox controller."; exit 1; }
   kubectl get sandboxwarmpools.extensions.agents.x-k8s.io --all-namespaces >/dev/null 2>&1 || { err "testv5 requires the Agent Sandbox extensions API to respond."; exit 1; }
   kubectl get runtimeclass gvisor >/dev/null 2>&1 || { err "testv5 requires the approved gvisor RuntimeClass."; exit 1; }

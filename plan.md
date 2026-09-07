@@ -151,8 +151,9 @@ Agent Sandbox controller, gVisor, and the non-default `opencrane-pd-snapshots` c
 SSD quota has only 10Gi remaining, while standard-disk quota has 4096Gi available. The new explicit
 standard-disk prerequisite action provides a non-default CSI `pd-standard` class compatible with
 snapshots; the existing legacy standard class cannot qualify CSI snapshots. Installation will select
-that class for PostgreSQL, artifacts, Cognee, KurrentDB and its archive. Its creation and both recovery
-modes still need live evidence.
+that class for PostgreSQL, artifacts, Cognee, KurrentDB and its archive. The class and namespace credentials are now provisioned with an unchanged class retry verified.
+Preflight exposed a controller-argument parsing bug before installation; repair and both recovery
+modes still need qualification.
 The required drill is one scheduled fileCopy backup, a full `latest` restore
 with measured RTO, an anonymous `/health/live` check on KurrentDB 26.1.1 with anonymous endpoint
 access disabled, and snapshot-mode qualification when a supported class exists. Cluster changes

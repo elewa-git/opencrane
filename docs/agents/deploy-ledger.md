@@ -526,3 +526,24 @@ Full run reports belong in the corresponding pull request or issue.
   class through the owning deploy action to fit available quota, and record that disk type with
   recovery timing. Installation, product authentication, provider registration and both drills remain
   pending; this setup entry establishes none of them.
+
+## 2026-09-07 · dev prerequisite and preflight · testv5 standard disks · bd85bdde36c33ee048cb912483851d96a986262c · PARTIAL
+
+- findings: infra: the explicit deploy action created `opencrane-pd-standard` at 19:01:19 UTC on
+  `gke_weownai-proto_europe-west1_opencrane-dev`. The non-default class uses
+  `pd.csi.storage.gke.io`, `pd-standard`, expansion, `WaitForFirstConsumer` and `Delete` policy.
+  An identical retry retained UID `668aaeac-aa1e-4b99-ac15-01ce1d34bf42` and resource version
+  `1788807679616239015`. Existing disks and default classes were unchanged.
+- findings: config: the deploy entrypoint's PostgreSQL and KurrentDB credential actions completed
+  successfully for `opencrane-testv5`. Its namespace now exists with dedicated PostgreSQL bootstrap
+  credentials and immutable KurrentDB TLS, service and bootstrap credentials. Generated test login
+  credentials are retained in the ignored private testv5 key directory, with directory mode 0700
+  and file mode 0600; no credential values belong in this ledger.
+- findings: script: preflight began at 19:03:26 UTC and exited before Helm installation because
+  the wrapper's JSONPath conversion produced literal newline escapes instead of controller
+  arguments. It reported a missing extensions reconciler although the live, Ready controller's
+  argument array was `["--leader-elect=true","--extensions"]`.
+- lesson: inspect the Deployment JSON argument array directly and test exact membership through
+  the public wrapper. A text-formatting failure must not trigger unnecessary controller changes.
+  The application images, public TLS endpoint, authenticated product and recovery remain unqualified
+  on testv5; no installation or restore command ran in this attempt.
