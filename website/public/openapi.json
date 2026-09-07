@@ -10638,11 +10638,17 @@
                             "type": "object",
                             "required": [
                               "participantRef",
+                              "displayName",
                               "isSelf"
                             ],
                             "properties": {
                               "participantRef": {
                                 "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Member display name, or a generic label when no name is available. Never a login subject or email fallback."
                               },
                               "isSelf": {
                                 "type": "boolean"
@@ -10778,16 +10784,24 @@
                 "oneOf": [
                   {
                     "type": "object",
+                    "additionalProperties": false,
                     "required": [
                       "mode",
-                      "personalAgentRef"
+                      "personalAgentRef",
+                      "idempotencyKey"
                     ],
                     "properties": {
                       "mode": {
                         "const": "agent_session"
                       },
                       "personalAgentRef": {
-                        "type": "string"
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "idempotencyKey": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Reuse this UUID for retries of the same session creation; a new UUID starts a separate session."
                       }
                     }
                   },

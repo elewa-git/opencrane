@@ -1,5 +1,5 @@
 import type { MessageEntry } from "@opencrane/contracts";
-import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
 import { ConversationSessionRailIconStates } from "../conversation-workspace-feature.types";
@@ -8,6 +8,12 @@ import { ConversationSessionRailIconStates } from "../conversation-workspace-fea
 function _Summary(): ConversationSummary
 {
 	return { id: "conversation-1", mode: ConversationModes.Direct, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["subject-secret", "other-secret"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-08-12T11:08:00.000Z" };
+}
+
+/** Builds the member directory already loaded for conversation creation. */
+function _Directory(): ConversationCreationDirectory
+{
+	return { participants: [{ participantRef: "subject-secret", isSelf: true, label: "You" }, { participantRef: "other-secret", isSelf: false, label: "Amina" }, { participantRef: "member-3", isSelf: false, label: "Kamau" }, { participantRef: "member-4", isSelf: false, label: "Amina" }, { participantRef: "member-5", isSelf: false, label: "Grace" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
 }
 
 /** Builds a participant message containing unsafe markup. */
@@ -21,9 +27,35 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 	it("uses generic participant labels without exposing opaque references", function _GenericLabels()
 	{
 		const summary = _ConversationSummaryPresentation(_Summary(), null);
-		expect(summary).toMatchObject({ title: "Direct conversation", participantLabel: "You and Participant 1" });
+		expect(summary).toMatchObject({ title: "Direct conversation", participantLabel: "2 participants" });
 		expect(JSON.stringify(summary)).not.toContain("subject-secret");
 		expect(JSON.stringify(summary)).not.toContain("other-secret");
+	});
+
+	it("uses the selected member's name for a direct chat", function _NamedDirect()
+	{
+		const summary = _ConversationSummaryPresentation(_Summary(), _Directory());
+		expect(summary).toMatchObject({ title: "Amina", participantLabel: "You and Amina" });
+		expect(JSON.stringify(summary)).not.toContain("other-secret");
+	});
+
+	it("names groups from other members and counts names beyond the first two", function _NamedGroup()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.Group, participantRefs: ["other-secret", "subject-secret", "member-3", "member-4", "member-5"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Amina, Kamau +2", participantLabel: "5 participants" });
+	});
+
+	it("keeps different members with the same display name in the group title", function _DuplicateNames()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.Group, participantRefs: ["subject-secret", "other-secret", "member-4"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Amina, Amina", participantLabel: "3 participants" });
+	});
+
+	it("uses generic text when a participant is absent from the current directory", function _MissingMember()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.Group, participantRefs: ["subject-secret", "other-secret", "removed-secret"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Amina, Participant", participantLabel: "3 participants" });
+		expect(JSON.stringify(summary)).not.toContain("removed-secret");
 	});
 
 	it("sanitizes message markup and keeps authorship generic", function _SafeMessage()
@@ -48,7 +80,7 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 	it("maps every chat type and lets closed status override its type", function _SemanticRailStates()
 	{
 		const direct = _ConversationSummaryPresentation(_Summary(), null);
-		const agent = _ConversationSummaryPresentation({ ..._Summary(), id: "agent", mode: ConversationModes.AgentSession }, "Nova");
+		const agent = _ConversationSummaryPresentation({ ..._Summary(), id: "agent", mode: ConversationModes.AgentSession }, _Directory());
 		const group = _ConversationSummaryPresentation({ ..._Summary(), id: "group", mode: ConversationModes.Group }, null);
 		const closed = _ConversationSummaryPresentation({ ..._Summary(), id: "closed", mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Closed }, null);
 

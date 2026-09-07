@@ -53,8 +53,8 @@ The package also owns the Zod response validators used by its transport adapter.
 ## Boundary
 
 Opaque participant references are command coordinates, never labels. The state supplies those privacy-safe
-references and a self marker without interpreting either one. The feature mapper turns the self marker into
-`You` and other entries into stable generic labels such as `Participant 1`. On proven access loss, selected
+references, a self marker, and server-selected member display names. The directory validator labels
+the signed-in member `You` and preserves other display names; it rejects extra login-subject and email fields. On proven access loss, selected
 history and drafts are cleared before the access-changed state becomes visible.
 
 The package owns no server authority. It cannot admit a message, start a computer, or decide whether a

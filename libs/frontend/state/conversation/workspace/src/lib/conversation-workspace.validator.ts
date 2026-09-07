@@ -50,17 +50,11 @@ const _Position = z.string().regex(/^(0|[1-9][0-9]*)$/u);
 const _NullableRequiredString = _RequiredString.nullable();
 
 /**
- * Shape of the creation directory: opaque participant coordinates, a self marker, and whether a
- * personal Agent can be picked.
- *
- * The server sends references and a flag, never names or login subjects, and this schema is `.strict()`
- * so a payload that carried an extra identifying field would be rejected rather than quietly passed on
- * to the browser. `personalAgentStatus` goes through `z.nativeEnum`, so a status this bundle does not
- * know is refused instead of being guessed at — see the `rejects unknown categorical values instead of
- * guessing` case in the adapter's conversation-workspace.dto.spec.ts.
+ * Accepts the member names selected by the server for conversation creation.
+ * Extra identity fields such as login subjects and email addresses remain rejected.
  */
 const _Directory = z.object({
-	participants: z.array(z.object({ participantRef: _RequiredString, isSelf: z.boolean() }).strict()),
+	participants: z.array(z.object({ participantRef: _RequiredString, displayName: _RequiredString, isSelf: z.boolean() }).strict()),
 	personalAgentStatus: z.nativeEnum(ConversationPersonalAgentStatuses),
 	personalAgent: z.object({ personalAgentRef: _RequiredString, displayName: _RequiredString }).strict().nullable()
 }).strict();
@@ -95,48 +89,18 @@ const _Summary = z.object({
 const _Detail = _Summary.extend({ visibleFromPosition: _Position, accessEndedPosition: _Position.nullable() }).strict();
 
 /**
- * Checks the creation directory and gives every entry a label the new-conversation form can display.
- *
- * Admits a list of opaque participant references each carrying a self marker, a personal Agent status
- * from {@link ConversationPersonalAgentStatuses}, and either one personal Agent or null. Rejects an
- * empty or blank reference, an unknown status, and any extra field, since the directory is the one
- * payload where a stray field would be identifying information about another participant.
- *
- * The labels are invented here rather than read from the server. A reference is a command coordinate,
- * not a name, and must never be shown as identity, so the signed-in participant becomes `You` and
- * everyone else becomes `Participant 1`, `Participant 2` and so on, numbered in the order the server
- * sent them. That order is stable between reads, so a given person keeps the same number.
- *
- * Called by: the `workspace/adapter` gateway's `directory()` method, through the
- * `_ConversationWorkspaceDirectory` alias in conversation-workspace.dto.ts.
- *
- * @param value - A decoded response body; assume nothing about it.
- * @returns A directory whose entries are safe to render as-is; the references stay in it because
- *   `create` has to send one back.
- * @throws ZodError when the payload does not match. Do not let it escape to a store: the adapter turns
- *   it into a `ConversationWorkspaceGatewayError` of kind `Recoverable`, which tells the participant to
- *   reconnect and keeps the rest of the screen intact.
- * @see ConversationCreationDirectory
+ * Validates the directory and prepares member names for the conversation picker and chat titles.
+ * The self marker supplies `You`; other labels come from the explicit displayName field.
+ * Opaque references remain command coordinates and never become display text.
+ * @throws ZodError when required fields are missing or unexpected identity fields are present.
  */
 export function _ParseConversationWorkspaceDirectory(value: unknown): ConversationCreationDirectory
 {
-	// 1. Reject the payload outright before anything reads a field from it, so no partly-checked
-	//    directory can be labelled and returned.
 	const parsed = _Directory.parse(value);
-
-	// 2. Number and label the entries. Only other participants take a number, so the counter is
-	//    incremented after the self check rather than per element — self is `You` and never `Participant 0`.
-	let participantNumber = 0;
 	const participants = parsed.participants.map(function _Participant(participant)
 	{
-		if (participant.isSelf)
-			return { ...participant, label: "You" };
-		participantNumber += 1;
-		return { ...participant, label: `Participant ${participantNumber}` };
+		return { participantRef: participant.participantRef, isSelf: participant.isSelf, label: participant.isSelf ? "You" : participant.displayName };
 	});
-
-	// 3. Return the checked directory with the labelled list swapped in, keeping the Agent status and
-	//    personal Agent the server decided; this package never chooses whether an Agent session is allowed.
 	return { ...parsed, participants };
 }
 

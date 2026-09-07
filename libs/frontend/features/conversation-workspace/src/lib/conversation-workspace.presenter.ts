@@ -132,8 +132,8 @@ export class ConversationWorkspacePresenter
 	/** Map safe rail rows. */
 	private _Summaries()
 	{
-		const agentName = this.store.directory()?.personalAgent?.displayName ?? null;
-		return this.store.conversations().map(summary => _ConversationSummaryPresentation(summary, agentName));
+		const directory = this.store.directory();
+		return this.store.conversations().map(summary => _ConversationSummaryPresentation(summary, directory));
 	}
 
 	/** Build one visual rail without turning onboarding into a fake Conversation. */

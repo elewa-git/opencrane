@@ -49,7 +49,9 @@ workspace does not reconstruct AG-UI frames or expose run, tool, or sandbox comm
   choices. Each session row is one line: its prefix glyph communicates completed onboarding, Agent,
   direct, group, or closed state while selection changes only the row background. Completed onboarding
   and active chats share one session list; archived chats retain their semantic glyph in a dimmed group.
-  No row shows opaque participant references.
+  Direct-chat titles use the other member’s display name. Group titles use the first two other
+  members’ names and count the remainder. These labels come from the existing conversation directory;
+  a missing member receives generic text. No row shows opaque participant references.
 
 ## Boundary
 

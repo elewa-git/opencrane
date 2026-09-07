@@ -7,32 +7,38 @@ import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentSta
 import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationMessageView, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 
 /**
- * Builds one shared workspace presentation from a conversation summary.
- *
- * Titles and participant labels are generated here rather than taken from the server, so neither the
- * header nor the rail can print an opaque participant reference. Only the Agent-session title uses a
- * real name, and only the personal Agent's own display name.
- *
- * The `archived` flag keeps the conversation in the rail and selects its active or archived section;
- * the mode and participant labels remain available to the selected conversation header.
- *
- * Called by: `ConversationWorkspacePresenter._Summaries`, once per conversation in the store's list.
- * @param summary - One conversation from the workspace list.
- * @param personalAgentName - The signed-in user's personal Agent display name, or `null` when the
- * directory has no personal Agent. An Agent-session row falls back to the generic "Agent session"
- * title when this is `null`, so the row still reads sensibly during incomplete Agent setup.
- * @returns A row safe to render directly.
+ * Uses the current directory to name conversations in both the rail and selected header.
+ * Missing members receive a generic label; membership references never become display text.
+ * Group titles show two names and the number of other people to keep the rail readable.
+ * @param directory The current member and personal-assistant directory, or null while unavailable.
  */
-export function _ConversationSummaryPresentation(summary: ConversationSummary, personalAgentName: string | null): ConversationSummaryPresentation
+export function _ConversationSummaryPresentation(summary: ConversationSummary, directory: ConversationCreationDirectory | null): ConversationSummaryPresentation
 {
 	const iconState = _ConversationSessionRailIconState(summary);
+	const peerLabels = _conversationPeerLabels(summary, directory);
 	switch (summary.mode)
 	{
-		case ConversationModes.AgentSession: return { id: summary.id, title: personalAgentName ?? "Agent session", modeLabel: "Agent session", participantLabel: "You and your Agent", iconState, archived: summary.archivedAt !== null };
-		case ConversationModes.Direct: return { id: summary.id, title: "Direct conversation", modeLabel: "Direct", participantLabel: "You and Participant 1", iconState, archived: summary.archivedAt !== null };
-		case ConversationModes.Group: return { id: summary.id, title: "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.AgentSession: return { id: summary.id, title: directory?.personalAgent?.displayName ?? "Agent session", modeLabel: "Agent session", participantLabel: "You and your Agent", iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.Direct: return { id: summary.id, title: peerLabels[0] ?? "Direct conversation", modeLabel: "Direct", participantLabel: peerLabels.length === 0 ? `${summary.participantRefs.length} participants` : `You and ${peerLabels[0]}`, iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.Group: return { id: summary.id, title: _compactParticipantNames(peerLabels) || "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
 		default: return _UnsupportedConversationMode(summary.mode);
 	}
+}
+
+/** Finds each other participant in conversation order, retaining a label for unavailable members. */
+function _conversationPeerLabels(summary: ConversationSummary, directory: ConversationCreationDirectory | null): readonly string[]
+{
+	if (directory === null)
+		return [];
+	const members = new Map(directory.participants.map(participant => [participant.participantRef, participant]));
+	return summary.participantRefs.filter(reference => !members.get(reference)?.isSelf).map(reference => members.get(reference)?.label ?? "Participant");
+}
+
+/** Limits the visible names without hiding how many other people belong to the conversation. */
+function _compactParticipantNames(labels: readonly string[]): string
+{
+	const names = labels.slice(0, 2).join(", ");
+	return labels.length > 2 ? `${names} +${labels.length - 2}` : names;
 }
 
 /**

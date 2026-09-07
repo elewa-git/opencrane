@@ -9,6 +9,10 @@ stream transports. It creates conversations in exactly one immutable mode: `agen
 `direct`, or `group`. An agent session binds one agent service; direct and group conversations do
 not bind an agent and their ordinary messages never manufacture runs.
 
+The creation directory lists active members in the current silo with their stored display names.
+Missing names use a generic label; login subjects and email addresses never become fallback names.
+The browser reuses this directory for participant selection and direct/group chat titles.
+
 Personal-session creation requires a client UUID. Retrying that command returns the same session,
 even after its computer has started; a new UUID creates another conversation and computer for the
 same personal assistant identity. Reusing a key with a different assistant is rejected. Recovering

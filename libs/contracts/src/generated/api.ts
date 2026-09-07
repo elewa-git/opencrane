@@ -6821,6 +6821,8 @@ export interface operations {
                         directory: {
                             participants: {
                                 participantRef: string;
+                                /** @description Member display name, or a generic label when no name is available. Never a login subject or email fallback. */
+                                displayName: string;
                                 isSelf: boolean;
                             }[];
                             /** @enum {string} */

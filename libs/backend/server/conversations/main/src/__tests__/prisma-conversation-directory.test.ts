@@ -1,4 +1,4 @@
-import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
+import { AgentRevisionState, AgentServiceKind, AgentServiceState, OrgMemberStatus, PersonaRevisionState, type Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { PrismaConversationMetadataUnitOfWork } from "../prisma-conversation-metadata";
@@ -30,7 +30,7 @@ function _Fixture()
 	const transaction = {
 		orgMembership: {
 			count: vi.fn().mockResolvedValue(1),
-			findMany: vi.fn().mockResolvedValue([1, 2].map(index => ({ id: `member-${index}`, subject: `user-${index}` }))),
+			findMany: vi.fn().mockResolvedValue([1, 2].map(index => ({ id: `member-${index}`, subject: `user-${index}`, displayName: `Member ${index}` }))),
 		},
 		personaProfile: {
 			findUnique: vi.fn(async function _Persona(query: Prisma.PersonaProfileFindUniqueArgs)
@@ -72,10 +72,25 @@ describe("caller-owned personal assistant directory", function _Suite()
 		for (const [index, caller] of callers.entries())
 		{
 			const directory = await authority.directory(caller);
-			expect(directory).toEqual({ participants: [{ participantRef: "member-1", isSelf: index === 0 }, { participantRef: "member-2", isSelf: index === 1 }], personalAgentStatus: "ready", personalAgent: { personalAgentRef: `agent-${index + 1}`, displayName: `Assistant ${index + 1}` } });
+			expect(directory).toEqual({ participants: [{ participantRef: "member-1", displayName: "Member 1", isSelf: index === 0 }, { participantRef: "member-2", displayName: "Member 2", isSelf: index === 1 }], personalAgentStatus: "ready", personalAgent: { personalAgentRef: `agent-${index + 1}`, displayName: `Assistant ${index + 1}` } });
 			expect(_authorization.listPrincipalEntitled).toHaveBeenLastCalledWith(expect.objectContaining({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.AgentService, id: `agent-${index + 1}` }] }));
 		}
 		expect(_authorization.reconcileManagedResourceGrants).not.toHaveBeenCalled();
+	});
+
+	it("selects active members in the caller's silo and releases names without raw identities", async function _MemberNames()
+	{
+		const { authority, callers, transaction } = _Fixture();
+		transaction.orgMembership.findMany.mockResolvedValue([
+			{ id: "member-1", subject: "user-1", displayName: " Amina " },
+			{ id: "member-2", subject: "private-subject", displayName: null, email: "private@example.test" },
+			{ id: "member-3", subject: "other-private-subject", displayName: "   " },
+		] as never);
+		const directory = await authority.directory(callers[0]!);
+		expect(transaction.orgMembership.findMany).toHaveBeenCalledWith({ where: { clusterTenant: "silo-1", status: OrgMemberStatus.Active }, select: { id: true, subject: true, displayName: true }, orderBy: { id: "asc" } });
+		expect(directory).toMatchObject({ participants: [{ participantRef: "member-1", displayName: "Amina", isSelf: true }, { participantRef: "member-2", displayName: "Unnamed member", isSelf: false }, { participantRef: "member-3", displayName: "Unnamed member", isSelf: false }] });
+		expect(JSON.stringify(directory)).not.toContain("private-subject");
+		expect(JSON.stringify(directory)).not.toContain("private@example.test");
 	});
 
 	it("keeps an administrator's readable foreign assistant out of personal selection", async function _BroaderRead()
