@@ -1,4 +1,5 @@
 import type { ConversationComputer, ConversationEntry } from "@opencrane/contracts";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { ConversationPrivatePayloadCipher } from "./conversation-private-payload.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
@@ -93,12 +94,25 @@ export interface ConversationComputerReader
 /** Dependencies owned by the participant conversation HTTP adapter. */
 export interface SelfConversationHistoryRouterDependencies
 {
+	/** Records unexpected failures without including private request or error content. */
+	readonly logger: Logger;
 	/** Applies participant authorization, payload persistence, and KurrentDB history operations. */
 	readonly authority: SelfConversationHistoryAuthority;
 	/** Resolves trusted identity from the authenticated server request. */
 	readonly resolveCaller: ConversationCallerResolver;
 	/** Enables the public event route when the app supplies its Kurrent subscription and shutdown signal. */
 	readonly events?: Omit<SelfConversationEventsDependencies, "authority" | "resolveCaller">;
+}
+
+/** Diagnostic fields that can leave the history HTTP adapter without exposing provider errors. */
+export interface SelfConversationHistoryDiagnosticError
+{
+	/** Identifies a known Prisma or JavaScript error class, or an unknown thrown value. */
+	readonly type: string;
+	/** Describes the failed boundary without copying an upstream message. */
+	readonly message: string;
+	/** Carries an integer protocol status, Prisma P-code, or recognized Node connection error. */
+	readonly code?: number | string;
 }
 
 /** Participant-facing history authority kept independent of Express. */

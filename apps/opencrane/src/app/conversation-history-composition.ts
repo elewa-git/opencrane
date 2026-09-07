@@ -77,7 +77,7 @@ export function _CreateConversationHistoryComposition(
   const router = _CreateConversationMetadataRouter(metadata, resolveCaller);
   router.use(_CreateGroupChildRouter(children, resolveCaller, _log));
   router.use(
-    _CreateSelfConversationHistoryRouter({ authority, resolveCaller, events: { historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),
+    _CreateSelfConversationHistoryRouter({ authority, resolveCaller, logger: _log, events: { historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),
   );
   return router;
 }

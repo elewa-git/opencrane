@@ -137,6 +137,12 @@ separately authorized plaintext in a payload-reference map. A `start` message co
 checked computer generation to the silo activation queue through one atomic KurrentDB append.
 `interrupt` remains denied until a distinct authority can prove and fence the execution it stops.
 
+Unexpected history reads and message posts return an opaque 503 and emit a warning in the
+`conversation.history.read` or `conversation.message.post` trace. Diagnostics include the trusted
+silo and principal, a known Prisma or JavaScript error class, and a recognized protocol or database error code.
+Messages, retry keys, URLs, cursors, upstream error text and database details are excluded. Expected
+access denials and message conflicts keep their existing 404 and 409 responses without warnings.
+
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also
 selects personal services from the caller's current approved persona before checking their current
