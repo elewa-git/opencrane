@@ -593,3 +593,37 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: distinguish fresh-install profile inputs from a repeat invocation. Validate the bootstrap
   before waiting for the server that depends on it. This attempt performed no bootstrap retry,
   successful public-health check, authenticated product journey or restore.
+
+## 2026-09-07 · dev repair · testv5 bootstrap ownership · 8747c67d6da67e9a6697663266b901c74afd641f · PARTIAL
+
+- CI: [Actions run 34157671053](https://github.com/elewa-git/opencrane/actions/runs/34157671053)
+  completed with 24 successful checks and two configured skips at this SHA. That result precedes
+  the subsequent bootstrap ownership repair and does not establish live application readiness.
+- timing: application repair ran from 20:00:47.575 to 20:04:02.965 UTC (195.391s). Helm revision 2
+  was applied at 20:03:20. The installer then exited 1 on the existing terminal bootstrap failure,
+  before entering the dependent server rollout wait, as intended.
+- findings: config: the live bootstrap policy now permits DNS to `169.254.20.10/32`. Readback
+  confirmed the first-owner and complete OIDC binding were unchanged. The private launcher now
+  supplies its values file only on fresh installation and preserves stored values on repeat runs.
+- findings: script: the explicit bootstrap retry ran from 20:05:34.231 to 20:05:36.153 UTC
+  (1.923s), refusing the Job before mutation. The guard required a release-instance label on parent
+  metadata, but the actual chart places that label on the Pod template. Both the bootstrap Job and
+  Ready KurrentDB StatefulSet have that layout. The Job's Helm release/namespace annotations and
+  component label were correct, and neither resource was deleting.
+- lesson: test recovery ownership against actual rendered resources, including Helm ownership
+  annotations, rather than a handwritten fixture with invented parent labels. Align the guard with
+  the emitted release identity while preserving foreign-resource denial. Public API readiness,
+  authenticated journeys and both recovery modes remain pending.
+
+## 2026-09-07 · dev proof · testv5 anonymous KurrentDB health · PASS
+
+- proof: at 20:11:31–32 UTC, unauthenticated requests returned `/health/live` 204, `/users` 401
+  and `/streams/opencrane-silo/0` 401. All curl commands exited 0 with the public CA and exact
+  service-hostname verification; no authentication header was supplied.
+- identity: the Ready Pod had zero restarts and reported version `26.1.1.3690` in its startup log.
+  Its image ID matched the pinned KurrentDB digest
+  `sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8`.
+  `INSECURE`, `ALLOW_ANONYMOUS_ENDPOINT_ACCESS` and `ALLOW_ANONYMOUS_STREAM_ACCESS` were all false.
+- boundary: the temporary local port-forward closed at 20:11:32.872 UTC. This read-only proof
+  establishes the required health/authentication behavior; application bootstrap, user journeys
+  and backup restoration are separate, still-pending results.

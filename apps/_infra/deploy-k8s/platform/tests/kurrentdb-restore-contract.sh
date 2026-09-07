@@ -67,7 +67,7 @@ wait_for_final_kurrentdb_bootstrap_job_if_present() { CALLS+=("wait-bootstrap-jo
 helm()
 {
   printf '%s\n' "$*" >"$TEST_DIRECTORY/helm-call"
-  printf -- '---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: other\n---\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: %s-kurrentdb-bootstrap\n  labels:\n    app.kubernetes.io/instance: %s\n    app.kubernetes.io/component: kurrentdb-bootstrap\n---\n' "$RELEASE" "$RELEASE"
+  printf -- '---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: other\n---\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: %s-kurrentdb-bootstrap\n  labels:\n    app.kubernetes.io/component: kurrentdb-bootstrap\nspec:\n  template:\n    metadata:\n      labels:\n        app.kubernetes.io/instance: %s\n---\n' "$RELEASE" "$RELEASE"
 }
 kubectl()
 {

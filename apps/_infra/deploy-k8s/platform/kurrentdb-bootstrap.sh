@@ -9,7 +9,7 @@ _kurrentdb_owned_bootstrap_job()
     and .metadata.name == $name and .metadata.namespace == $namespace
     and .metadata.annotations["meta.helm.sh/release-name"] == $release
     and .metadata.annotations["meta.helm.sh/release-namespace"] == $namespace
-    and .metadata.labels["app.kubernetes.io/instance"] == $release
+    and .spec.template.metadata.labels["app.kubernetes.io/instance"] == $release
     and .metadata.labels["app.kubernetes.io/component"] == "kurrentdb-bootstrap"
     and .metadata.deletionTimestamp == null
   ' >/dev/null
@@ -68,8 +68,12 @@ run_kurrentdb_bootstrap_retry()
   fi
   statefulset="$(kubectl get "statefulset/${RELEASE}-kurrentdb" -n "$NAMESPACE" -o json --request-timeout=30s)" || return $?
   if ! jq -e --arg release "$RELEASE" --arg namespace "$NAMESPACE" '
-    .kind == "StatefulSet" and .metadata.name == ($release + "-kurrentdb")
-    and .metadata.namespace == $namespace and .metadata.labels["app.kubernetes.io/instance"] == $release
+    .apiVersion == "apps/v1" and .kind == "StatefulSet" and .metadata.name == ($release + "-kurrentdb")
+    and .metadata.namespace == $namespace
+    and .metadata.annotations["meta.helm.sh/release-name"] == $release
+    and .metadata.annotations["meta.helm.sh/release-namespace"] == $namespace
+    and .metadata.labels["app.kubernetes.io/component"] == "kurrentdb"
+    and .spec.template.metadata.labels["app.kubernetes.io/instance"] == $release
     and .metadata.deletionTimestamp == null and (.status.readyReplicas // 0) > 0
   ' >/dev/null <<<"$statefulset"; then
     err "KurrentDB must be Ready before retrying bootstrap."

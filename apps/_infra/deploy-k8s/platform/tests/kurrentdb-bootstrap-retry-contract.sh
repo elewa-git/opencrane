@@ -3,53 +3,54 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 TEST_DIRECTORY="$(mktemp -d)"
-trap 'rm -rf "$TEST_DIRECTORY"' EXIT
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
+trap 'cleanup_current_chart_sources; rm -rf "$TEST_DIRECTORY"' EXIT
 RELEASE=opencrane-testv5
 NAMESPACE=opencrane-testv5
 TIMEOUT=20
 MODE=failed
 READY=1
 MANIFEST_MODE=valid
+STATEFULSET_MUTATION='.'
 log() { :; }
 err() { printf '%s\n' "$*" >&2; }
 wait_for_final_kurrentdb_bootstrap_job_if_present() { printf 'verified\n' >>"$TEST_DIRECTORY/calls"; }
 
-cat >"$TEST_DIRECTORY/release.yaml" <<'YAML'
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: unrelated
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: opencrane-testv5-kurrentdb-bootstrap
-  labels:
-    app.kubernetes.io/instance: opencrane-testv5
-    app.kubernetes.io/component: kurrentdb-bootstrap
-spec:
-  template:
-    spec:
-      containers:
-        - name: bootstrap
-          image: example.test/bootstrap@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-      restartPolicy: Never
-YAML
-jq -n --arg release "$RELEASE" --arg namespace "$NAMESPACE" '{
-  apiVersion: "batch/v1", kind: "Job", metadata: {
-    name: ($release + "-kurrentdb-bootstrap"), namespace: $namespace,
-    annotations: {"meta.helm.sh/release-name": $release, "meta.helm.sh/release-namespace": $namespace},
-    labels: {"app.kubernetes.io/instance": $release, "app.kubernetes.io/component": "kurrentdb-bootstrap"}
-  }, status: {conditions: [{type: "Failed", status: "True"}]}
-}' >"$TEST_DIRECTORY/job.json"
+# Start from the chart's actual labels; Helm supplies ownership annotations on live resources.
+prepare_current_chart_sources
+helm template "$RELEASE" "$(current_chart_sources_dir)" --namespace "$NAMESPACE" \
+  --set historyStore.kurrentdb.enabled=true \
+  --set historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls \
+  --set historyStore.kurrentdb.bootstrapAdmin.existingSecret=kurrentdb-bootstrap-admin \
+  --set historyStore.kurrentdb.bootstrapOps.existingSecret=kurrentdb-bootstrap-ops \
+  --set historyStore.kurrentdb.serviceCredential.existingSecret=kurrentdb-history-service \
+  --set historyStore.kurrentdb.bootstrap.image.repository=example.test/bootstrap \
+  --set historyStore.kurrentdb.bootstrap.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  >"$TEST_DIRECTORY/release.yaml"
+node -e '
+  const yaml = require(process.argv[1]);
+  const fs = require("node:fs");
+  const [directory, release, namespace] = process.argv.slice(2);
+  const resources = yaml.loadAll(fs.readFileSync(directory + "/release.yaml", "utf8"));
+  for (const [kind, suffix, file] of [["Job", "-kurrentdb-bootstrap", "job"], ["StatefulSet", "-kurrentdb", "statefulset"]]) {
+    const resource = resources.find(item => item?.kind === kind && item.metadata.name === release + suffix);
+    if (!resource) throw new Error("The chart did not emit " + kind);
+    resource.metadata.namespace = namespace;
+    resource.metadata.annotations = {"meta.helm.sh/release-name": release, "meta.helm.sh/release-namespace": namespace};
+    resource.status = kind === "Job" ? {conditions: [{type: "Failed", status: "True"}]} : {readyReplicas: 1};
+    fs.writeFileSync(directory + "/" + file + ".json", JSON.stringify(resource));
+  }
+' "$ROOT_DIR/node_modules/js-yaml" "$TEST_DIRECTORY" "$RELEASE" "$NAMESPACE"
 
 helm()
 {
   [[ "$*" == "get manifest $RELEASE -n $NAMESPACE" ]] || return 9
   case "$MANIFEST_MODE" in
     valid) cat "$TEST_DIRECTORY/release.yaml" ;;
-    foreign) sed 's/app.kubernetes.io\/instance: opencrane-testv5/app.kubernetes.io\/instance: foreign/' "$TEST_DIRECTORY/release.yaml" ;;
+    foreign) sed 's/app.kubernetes.io\/instance: .*/app.kubernetes.io\/instance: foreign/' "$TEST_DIRECTORY/release.yaml" ;;
     missing) printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: unrelated\n' ;;
     error) return 9 ;;
   esac
@@ -69,6 +70,8 @@ kubectl()
         active) jq '.status = {active: 1}' "$TEST_DIRECTORY/job.json" ;;
         complete) jq '.status.conditions[0].type = "Complete"' "$TEST_DIRECTORY/job.json" ;;
         foreign) jq '.metadata.annotations["meta.helm.sh/release-name"] = "foreign"' "$TEST_DIRECTORY/job.json" ;;
+        foreign-instance) jq '.spec.template.metadata.labels["app.kubernetes.io/instance"] = "foreign"' "$TEST_DIRECTORY/job.json" ;;
+        missing-instance) jq 'del(.spec.template.metadata.labels["app.kubernetes.io/instance"])' "$TEST_DIRECTORY/job.json" ;;
         deleting) jq '.metadata.deletionTimestamp = "2026-09-07T19:00:00Z"' "$TEST_DIRECTORY/job.json" ;;
         race)
           if (( count > 0 )); then jq '.status = {active: 1}' "$TEST_DIRECTORY/job.json";
@@ -78,7 +81,7 @@ kubectl()
       esac
       ;;
     get:statefulset/*)
-      jq -n --arg release "$RELEASE" --arg namespace "$NAMESPACE" --argjson ready "$READY" '{kind: "StatefulSet", metadata: {name: ($release + "-kurrentdb"), namespace: $namespace, labels: {"app.kubernetes.io/instance": $release}}, status: {readyReplicas: $ready}}'
+      jq --argjson ready "$READY" "$STATEFULSET_MUTATION | .status.readyReplicas = \$ready" "$TEST_DIRECTORY/statefulset.json"
       ;;
     annotate:--local)
       node -e 'const yaml = require(process.argv[1]); const doc = yaml.load(require("node:fs").readFileSync(0, "utf8")); if (!doc) process.exit(1); doc.metadata.annotations = {"meta.helm.sh/release-name": process.argv[2], "meta.helm.sh/release-namespace": process.argv[3]}; process.stdout.write(JSON.stringify(doc));' "$ROOT_DIR/node_modules/js-yaml" "$RELEASE" "$NAMESPACE"
@@ -106,7 +109,7 @@ for MODE in failed missing; do
     echo 'Bootstrap retry changed a ledger workload or credential.' >&2; exit 1
   fi
 done
-for MODE in active complete foreign deleting error race; do
+for MODE in active complete foreign foreign-instance missing-instance deleting error race; do
   reset_case
   if run_kurrentdb_bootstrap_retry >"$TEST_DIRECTORY/result" 2>&1; then
     echo "Bootstrap retry accepted forbidden case $MODE." >&2; exit 1
@@ -121,6 +124,24 @@ if run_kurrentdb_bootstrap_retry >"$TEST_DIRECTORY/result" 2>&1; then
 fi
 [[ ! -s "$TEST_DIRECTORY/mutations" ]]
 READY=1
+for STATEFULSET_MUTATION in \
+  '.apiVersion = "foreign/v1"' \
+  '.kind = "Deployment"' \
+  '.metadata.name = "foreign-kurrentdb"' \
+  '.metadata.namespace = "foreign"' \
+  '.metadata.annotations["meta.helm.sh/release-name"] = "foreign"' \
+  '.metadata.annotations["meta.helm.sh/release-namespace"] = "foreign"' \
+  '.metadata.labels["app.kubernetes.io/component"] = "foreign"' \
+  '.spec.template.metadata.labels["app.kubernetes.io/instance"] = "foreign"' \
+  'del(.spec.template.metadata.labels["app.kubernetes.io/instance"])' \
+  '.metadata.deletionTimestamp = "2026-09-07T19:00:00Z"'; do
+  reset_case
+  if run_kurrentdb_bootstrap_retry >"$TEST_DIRECTORY/result" 2>&1; then
+    echo "Bootstrap retry accepted a foreign or deleting ledger: $STATEFULSET_MUTATION" >&2; exit 1
+  fi
+  [[ ! -s "$TEST_DIRECTORY/mutations" ]] || exit 1
+done
+STATEFULSET_MUTATION='.'
 for MANIFEST_MODE in foreign missing error; do
   reset_case
   if run_kurrentdb_bootstrap_retry >"$TEST_DIRECTORY/result" 2>&1; then

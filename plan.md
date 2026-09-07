@@ -155,11 +155,13 @@ Cognee, KurrentDB and its archive now use that class. The class and namespace cr
 provisioned with an unchanged class retry verified.
 The controller-argument preflight repair passed. The first installation bound all volumes and
 reached KurrentDB readiness, but bootstrap DNS was blocked by the missing node-local resolver rule.
-DNS egress, failure propagation, actual server readiness and explicit bootstrap retry are repaired in
-source; the live retry, authenticated product journeys and both recovery modes remain pending.
-The required drill is one scheduled fileCopy backup, a full `latest` restore
-with measured RTO, an anonymous `/health/live` check on KurrentDB 26.1.1 with anonymous endpoint
-access disabled, and snapshot-mode qualification when a supported class exists. Cluster changes
+The DNS rule is now live and the installer correctly stops before dependent server waits. The
+bootstrap ownership guard now matches the actual chart's Pod-template labels, with rendered-resource
+regressions. The live retry, authenticated product journeys and both recovery modes remain pending.
+The anonymous KurrentDB health proof passed live: `/health/live` returned 204 while administration
+and silo-stream reads returned 401, with TLS verification and all anonymous/insecure flags false.
+The remaining drill is one scheduled fileCopy backup, a full `latest` restore with measured RTO,
+and snapshot-mode qualification using the provisioned class. Cluster changes
 use the authorized app-owned scripts. Record actual results in the
 [deploy ledger](docs/agents/deploy-ledger.md), not as assumed completion here.
 
