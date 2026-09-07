@@ -1200,6 +1200,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{conversationId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream participant-visible conversation updates
+         * @description Same-origin authenticated SSE on the public listener. History frames use event: history, id: nextPosition, and JSON data {entries,payloads,nextPosition,computer:null}; every bounded page rechecks current Conversation:Read authority. The exclusive Last-Event-ID revision overrides the initial afterPosition query on reconnect. Hidden entries advance the cursor without exposing their payload. event: unavailable carries a fixed conversation_unavailable or conversation_history_unavailable error and ends automatic replay. A normal bounded close is resumable. Limits per connection: 60 seconds, 30 seconds without new history, 10-second authority-refresh heartbeats, 512 KiB per frame, 2 MiB total, 128 history frames, and 5 seconds waiting for a slow browser. Each listener allows two concurrent streams and twelve starts per minute per authenticated silo/subject. Disconnect cancels upstream history and subscription work.
+         */
+        get: operations["streamMyConversationEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{conversationId}/history": {
         parameters: {
             query?: never;
@@ -6893,6 +6913,11 @@ export interface operations {
                     /** @enum {string} */
                     mode: "direct" | "group";
                     participantRefs: string[];
+                    /**
+                     * Format: uuid
+                     * @description Reuse this UUID for retries of the same creation request; a new UUID starts a separate conversation.
+                     */
+                    idempotencyKey: string;
                 };
             };
         };
@@ -7069,6 +7094,76 @@ export interface operations {
             };
             /** @description Conversation unavailable. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    streamMyConversationEvents: {
+        parameters: {
+            query?: {
+                /** @description Exclusive stream revision; defaults to zero. */
+                afterPosition?: string;
+            };
+            header?: {
+                /** @description Exclusive resume revision; overrides the original query cursor. */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded SSE history and terminal unavailable frames; keep-alive comments do not advance the cursor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Malformed or out-of-range stream revision. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Same-origin browser evidence required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation unavailable to the current participant. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subject or listener event budget exhausted; Retry-After is 60 seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description History unavailable before the stream opens. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

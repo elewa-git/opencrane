@@ -38,6 +38,13 @@ artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
 The `apps/_infra/deploy-k8s` umbrella chart composes the app-owned Helm units for one organisation.
 Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are external prerequisites.
 
+Browser conversation events use the existing OpenCrane public listener over same-origin SSE.
+The listener checks PostgreSQL participation and permissions, reads only the selected KurrentDB
+conversation stream, and closes upstream work when the browser disconnects. It does not expose
+KurrentDB or introduce a channel-proxy/target plane. Connection budgets are per listener process;
+adding replicas multiplies their aggregate capacity. See the
+[operator limits](../../website/operators/deployment-configuration.md#conversation-live-updates).
+
 ## Product authorization placement
 
 The central `AuthorizationAuthority` runs inside the OpenCrane API process and uses the same Prisma

@@ -1,11 +1,132 @@
-import { type KurrentDBClient } from "@kurrent/kurrentdb-client";
+import { KurrentDBClient } from "@kurrent/kurrentdb-client";
+import { ReadResp } from "@kurrent/kurrentdb-client/generated/kurrentdb/protocols/v1/streams_pb";
+import { StreamIdentifier, UUID } from "@kurrent/kurrentdb-client/generated/kurrentdb/protocols/v1/shared_pb";
+import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import { HistoryExpectedRevisions } from "../history-store.types";
 import { _KurrentHistoryStore } from "../kurrent-history-store";
 
+/** Builds the real protobuf input consumed by the installed SDK's subscription transform. */
+function _GrpcEvent(revision: number): ReadResp
+{
+	const event = new ReadResp.ReadEvent.RecordedEvent();
+	event.setId(new UUID().setString("31c1f1dc-0010-4f13-9c2f-d3841ffd6651"));
+	event.setStreamIdentifier(new StreamIdentifier().setStreamName(Buffer.from("conversation-1")));
+	event.setStreamRevision(String(revision));
+	event.setData(Buffer.from("{}"));
+	event.setCustomMetadata(Buffer.from("{}"));
+	event.getMetadataMap().set("content-type", "application/json");
+	event.getMetadataMap().set("type", "test");
+	event.getMetadataMap().set("created", "0");
+	return new ReadResp().setEvent(new ReadResp.ReadEvent().setEvent(event));
+}
+
 describe("_KurrentHistoryStore", function ()
 {
+	it("rejects an incomplete catch-up if transport ends before count or caughtUp", async function ()
+	{
+		const events = Object.assign(new PassThrough({ objectMode: true }), { unsubscribe: vi.fn().mockResolvedValue(undefined) });
+		const store = new _KurrentHistoryStore({ subscribeToStream: vi.fn().mockReturnValue(events) } as unknown as KurrentDBClient);
+		const pending = store.readStream({ streamName: "conversation-1", maxCount: 2 })[Symbol.asyncIterator]().next();
+		events.end();
+		await expect(pending).rejects.toThrow("ended before reaching its boundary");
+		expect(events.unsubscribe).toHaveBeenCalledOnce();
+	});
+
+	it("does not yield another already-buffered event after cancellation", async function ()
+	{
+		const events = Object.assign(new PassThrough({ objectMode: true }), { unsubscribe: vi.fn().mockResolvedValue(undefined) });
+		const store = new _KurrentHistoryStore({ subscribeToStream: vi.fn().mockReturnValue(events) } as unknown as KurrentDBClient);
+		const stop = new AbortController();
+		const iterator = store.readStream({ streamName: "conversation-1", maxCount: 2, signal: stop.signal })[Symbol.asyncIterator]();
+		const pending = iterator.next();
+		for (const revision of [0n, 1n])
+			events.write({ event: { streamId: "conversation-1", id: "entry-1", type: "test", data: {}, metadata: {}, revision, created: new Date() } });
+		expect((await pending).value?.revision).toBe(0n);
+		stop.abort();
+		await expect(iterator.next()).rejects.toThrow();
+		expect(events.unsubscribe).toHaveBeenCalledOnce();
+	});
+
+	it("retains every buffered event preceding the installed SDK caughtUp notification", async function ()
+	{
+		const grpc = Object.assign(new PassThrough({ objectMode: true }), { cancel: vi.fn(function _Cancel() { grpc.end(); }) });
+		const client = { subscribeToStream: KurrentDBClient.prototype.subscribeToStream.bind({ GRPCStreamCreator: function _Create() { return async function _Stream() { return grpc; }; } } as never) };
+		const store = new _KurrentHistoryStore(client as unknown as KurrentDBClient);
+		const received: bigint[] = [];
+		const collecting = (async function _Collect() { for await (const event of store.readStream({ streamName: "conversation-1", maxCount: 3 })) received.push(event.revision); })();
+		grpc.write(_GrpcEvent(0));
+		grpc.write(_GrpcEvent(1));
+		grpc.write(new ReadResp().setCaughtUp(new ReadResp.CaughtUp()));
+		await collecting;
+		expect(received).toEqual([0n, 1n]);
+		expect(grpc.cancel).toHaveBeenCalledOnce();
+	});
+
+	it("propagates the installed subscription's one-object backpressure to its producer", async function ()
+	{
+		const grpc = Object.assign(new PassThrough({ objectMode: true }), { cancel: vi.fn(function _Cancel() { grpc.end(); }) });
+		const subscription = KurrentDBClient.prototype.subscribeToStream.call({ GRPCStreamCreator: function _Create() { return async function _Stream() { return grpc; }; } } as never, "conversation-1", {}, { highWaterMark: 1 });
+		await Promise.resolve();
+		let accepted = 0;
+		for (; accepted < 100; accepted += 1)
+			if (!grpc.write(_GrpcEvent(accepted)))
+				break;
+		expect(accepted).toBeLessThan(64);
+		expect(subscription.readableLength).toBeLessThanOrEqual(1);
+		await subscription.unsubscribe();
+		subscription.destroy();
+		grpc.destroy();
+	});
+
+	it("uses the installed SDK caughtUp boundary and cancels its real subscription transport", async function ()
+	{
+		const grpc = Object.assign(new PassThrough({ objectMode: true }), { cancel: vi.fn(function _Cancel() { grpc.end(); }) });
+		const client = { subscribeToStream: KurrentDBClient.prototype.subscribeToStream.bind({ GRPCStreamCreator: function _Create() { return async function _Stream() { return grpc; }; } } as never) };
+		const store = new _KurrentHistoryStore(client as unknown as KurrentDBClient);
+		const iterator = store.readStream({ streamName: "conversation-1", fromRevision: 5n, maxCount: 1 })[Symbol.asyncIterator]();
+		const pending = iterator.next();
+		grpc.write(new ReadResp().setCaughtUp(new ReadResp.CaughtUp()));
+		expect(await pending).toEqual({ value: undefined, done: true });
+		expect(grpc.cancel).toHaveBeenCalledOnce();
+	});
+
+	it("stops a bounded read at maxCount even if catch-up has not finished", async function ()
+	{
+		const events = Object.assign(new PassThrough({ objectMode: true }), { unsubscribe: vi.fn().mockResolvedValue(undefined) });
+		const store = new _KurrentHistoryStore({ subscribeToStream: vi.fn().mockReturnValue(events) } as unknown as KurrentDBClient);
+		const pending = store.readStream({ streamName: "conversation-1", maxCount: 1 })[Symbol.asyncIterator]().next();
+		events.write({ event: { streamId: "conversation-1", id: "entry-1", type: "test", data: {}, metadata: {}, revision: 0n, created: new Date() } });
+		expect((await pending).value?.revision).toBe(0n);
+		expect(events.unsubscribe).toHaveBeenCalledOnce();
+		expect(events.destroyed).toBe(true);
+	});
+
+	it("cancels a pending finite read upstream when its consumer aborts", async function ()
+	{
+		const stream = Object.assign(new PassThrough({ objectMode: true }), { unsubscribe: vi.fn().mockResolvedValue(undefined) });
+		const subscribeToStream = vi.fn().mockReturnValue(stream);
+		const store = new _KurrentHistoryStore({ subscribeToStream } as unknown as KurrentDBClient);
+		const stop = new AbortController();
+		const pending = store.readStream({ streamName: "conversation-1", fromRevision: 5n, maxCount: 2, signal: stop.signal })[Symbol.asyncIterator]().next();
+		stop.abort();
+		await expect(pending).rejects.toThrow();
+		expect(subscribeToStream).toHaveBeenCalledWith("conversation-1", { fromRevision: 4n }, { highWaterMark: 1 });
+		expect(stream.unsubscribe).toHaveBeenCalledOnce();
+		expect(stream.destroyed).toBe(true);
+	});
+
+	it("does not open a finite read after cancellation", async function ()
+	{
+		const readStream = vi.fn();
+		const store = new _KurrentHistoryStore({ readStream } as unknown as KurrentDBClient);
+		const stop = new AbortController();
+		stop.abort();
+		await expect(store.readStream({ streamName: "conversation-1", signal: stop.signal })[Symbol.asyncIterator]().next()).rejects.toThrow();
+		expect(readStream).not.toHaveBeenCalled();
+	});
+
 	it("keeps a no-stream append conditional and returns Kurrent's committed revision", async function ()
 	{
 		const appendToStream = vi.fn().mockResolvedValue({ nextExpectedRevision: 4n });

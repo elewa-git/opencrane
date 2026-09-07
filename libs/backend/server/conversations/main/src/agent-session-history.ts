@@ -10,6 +10,9 @@ import { ConversationHistoryReader } from "./conversation-history-reader";
 import { ConversationComputerHistory } from "./conversation-computers";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 
+/** Limits genesis verification to ten seconds so a disconnected history read can be retried. */
+const _GENESIS_READ_TIMEOUT_MS = 10_000;
+
 /** Owns immutable identity, genesis, and logical-computer establishment. */
 export class AgentSessionHistory
 {
@@ -34,14 +37,22 @@ export class AgentSessionHistory
 		await this._ensureGenesisAndComputer(caller, candidate, coordinates);
 	}
 
-	/** Appends and verifies revision-zero history for an ordinary conversation. */
+	/** Creates or verifies ordinary genesis; a duplicate append cannot change its mode or creator. */
 	public async createOrdinaryGenesis(caller: ConversationCaller, conversationId: string, mode: "direct" | "group"): Promise<void>
 	{
 		const genesis = { schemaVersion: 1 as const, conversationId, siloId: caller.siloId, mode, agentServiceId: null, createdByPrincipalId: caller.principalId, createdAt: new Date().toISOString() };
 		const append = this.authority.genesisAppend(genesis, _DeterministicUuid("conversation-created", conversationId));
-		await this.store.append(append);
-		const history = await this.conversations.read({ siloId: caller.siloId, conversationId });
-		if (history.genesis.mode !== mode || history.genesis.agentServiceId !== null || history.genesis.createdByPrincipalId !== caller.principalId)
+		try
+		{
+			await this.store.append(append);
+		}
+		catch (error)
+		{
+			if (!(error instanceof WrongExpectedVersionError))
+				throw error;
+		}
+		const existingGenesis = await this.conversations.readGenesis({ siloId: caller.siloId, conversationId, maximumBytes: 65536, signal: AbortSignal.timeout(_GENESIS_READ_TIMEOUT_MS) });
+		if (existingGenesis.mode !== mode || existingGenesis.agentServiceId !== null || existingGenesis.createdByPrincipalId !== caller.principalId)
 			throw new Error("Conversation genesis does not match the ordinary creation request");
 	}
 

@@ -11,12 +11,21 @@ export class _KurrentHistoryStore implements HistoryStore
 	/** Reads a finite page from the requested stream. */
 	public async *readStream(request: HistoryReadRequest): AsyncIterable<HistoryRecordedEvent>
 	{
+		request.signal?.throwIfAborted();
+		if (request.maxCount !== undefined || request.signal !== undefined)
+		{
+			for (const event of await _ReadBounded(this.client, request))
+			{
+				request.signal?.throwIfAborted();
+				yield event;
+			}
+			return;
+		}
 		const events = this.client.readStream(request.streamName, { direction: FORWARDS, fromRevision: request.fromRevision ?? START });
 		for await (const resolved of events)
 		{
-			if (!resolved.event)
-				continue;
-			yield _MapRecordedEvent(resolved.event);
+			if (resolved.event)
+				yield _MapRecordedEvent(resolved.event);
 		}
 	}
 
@@ -74,7 +83,7 @@ export class _KurrentHistoryStore implements HistoryStore
 	{
 		// The client starts delivery after the revision it is given; the port promises delivery from it.
 		const fromRevision = request.fromRevision === undefined || request.fromRevision === 0n ? START : request.fromRevision - 1n;
-		const subscription = this.client.subscribeToStream(request.streamName, { fromRevision });
+		const subscription = this.client.subscribeToStream(request.streamName, { fromRevision }, { highWaterMark: 1 });
 		return { events: _MapSubscription(subscription), close: subscription.unsubscribe.bind(subscription) };
 	}
 
@@ -227,4 +236,66 @@ async function _ResolvePersistentDelivery(deliveries: Map<string, PersistentSubs
 function _IsRecord(value: unknown): value is Record<string, unknown>
 {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Reads one finite catch-up through the SDK's closeable subscription surface.
+ *
+ * The installed Rust-backed readStream iterator has no upstream cancellation API. The public
+ * subscription delivers data before caughtUp, so either maxCount or caughtUp closes this bounded
+ * read. Listeners precede data flow; the adapter's readable buffer holds at most one queued object.
+ */
+async function _ReadBounded(client: KurrentDBClient, request: HistoryReadRequest): Promise<readonly HistoryRecordedEvent[]>
+{
+	request.signal?.throwIfAborted();
+	if (!Number.isSafeInteger(request.maxCount) || request.maxCount! < 1)
+		throw new Error("Cancellable history reads require a positive maximum count");
+	const fromRevision = request.fromRevision === undefined || request.fromRevision === 0n ? START : request.fromRevision - 1n;
+	const subscription = client.subscribeToStream(request.streamName, { fromRevision }, { highWaterMark: 1 });
+	const events: HistoryRecordedEvent[] = [];
+	let settled = false;
+	let abort: (() => void) | undefined;
+	try
+	{
+		return await new Promise<readonly HistoryRecordedEvent[]>(function _Collect(resolve, reject)
+		{
+			function _Finish(error?: unknown): void
+			{
+				if (settled)
+					return;
+				settled = true;
+				subscription.pause();
+				if (error !== undefined)
+					reject(error);
+				else
+					resolve(events);
+			}
+			abort = function _Abort() { _Finish(request.signal?.reason ?? new Error("History read aborted")); };
+			subscription.once("caughtUp", function _CaughtUp() { _Finish(); });
+			subscription.once("end", function _Ended() { _Finish(new Error("History catch-up ended before reaching its boundary")); });
+			subscription.once("error", _Finish);
+			request.signal?.addEventListener("abort", abort, { once: true });
+			if (request.signal?.aborted)
+				abort();
+			subscription.on("data", function _Data(resolved: ResolvedEvent<EventType>)
+			{
+				if (settled || !resolved.event)
+					return;
+				try
+				{
+					events.push(_MapRecordedEvent(resolved.event));
+					if (events.length >= request.maxCount!)
+						_Finish();
+				}
+				catch (error) { _Finish(error); }
+			});
+		});
+	}
+	finally
+	{
+		if (abort !== undefined)
+			request.signal?.removeEventListener("abort", abort);
+		await subscription.unsubscribe();
+		subscription.destroy();
+	}
 }

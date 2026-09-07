@@ -89,6 +89,10 @@ export interface HistoryReadRequest
 	readonly streamName: string;
 	/** Starts at this stream revision, or at the first event when omitted. */
 	readonly fromRevision?: bigint;
+	/** Bounds a finite read without changing the default full-stream contract. */
+	readonly maxCount?: number;
+	/** Cancels a finite read when its consuming request ends. */
+	readonly signal?: AbortSignal;
 }
 
 /**

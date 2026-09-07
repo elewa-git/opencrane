@@ -1,10 +1,17 @@
-import { randomUUID } from "node:crypto";
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, ConversationLifecycle, ConversationMode, OrgMemberStatus, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
 import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+import { _DeterministicUuid } from "./agent-session-identifiers";
+import { _ParseOrdinaryConversationCreateCommand } from "./conversation-metadata.validator";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { PrismaConversationProductAuthorizationRepository } from "./db/conversation-product-authorization";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 import type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, ConversationReviewCoordinates, InitialConversationComputerResolver } from "./conversation-metadata.types";
+
+/** Converts Prisma's generated mode values into the public conversation contract. */
+const _CONVERSATION_MODES: Readonly<Record<ConversationMode, ConversationModes>> = { [ConversationMode.AgentSession]: ConversationModes.AgentSession, [ConversationMode.Direct]: ConversationModes.Direct, [ConversationMode.Group]: ConversationModes.Group };
+/** Converts persisted lifecycle values without inventing an unknown fallback state. */
+const _CONVERSATION_LIFECYCLES: Readonly<Record<ConversationLifecycle, ConversationLifecycles>> = { [ConversationLifecycle.Open]: ConversationLifecycles.Open, [ConversationLifecycle.Closed]: ConversationLifecycles.Closed };
 
 /** Projection-only PostgreSQL authority; participant entries never pass through this class. */
 export class PrismaConversationMetadataUnitOfWork
@@ -145,7 +152,12 @@ export class PrismaConversationMetadataUnitOfWork
 			return { computerId: row.computerId, agentIdentityId: row.computerAgentIdentityId, profileRevisionId: row.computerProfileRevisionId };
 		});
 	}
-  /** Creates direct/group projections atomically and leaves agent-session creation fail-closed. */
+  /**
+   * Creates a conversation for a caller-scoped UUID or returns its current committed projection.
+   * Ordinary member selection becomes fixed at the first PostgreSQL creation commit. Genesis alone
+   * has not accepted a member set. Retries never reconcile grants, reset participants, or reopen a chat.
+   * The serializable projection retries only proven rollbacks; history stays outside that retry loop.
+   */
   public async create(
     caller: ConversationCaller,
     request: unknown,
@@ -166,127 +178,50 @@ return null;
       );
       return conversationId === null ? null : this.open(caller, conversationId);
     }
-    if (
-      (value["mode"] !== "direct" && value["mode"] !== "group") ||
-      !Array.isArray(value["participantRefs"])
-    )
+    const command = _ParseOrdinaryConversationCreateCommand(request);
+    if (command === null)
       return null;
-    const requestedRefs = value["participantRefs"];
-    if (
-      requestedRefs.some((ref) => typeof ref !== "string") ||
-      new Set(requestedRefs).size !== requestedRefs.length ||
-      requestedRefs.length < 1 ||
-      (value["mode"] === "direct" && requestedRefs.length !== 1) ||
-      requestedRefs.length > 99
-    )
-      return null;
-    const prechecked = await this.prisma.$transaction(
-	      async function _Precheck(transaction)
-	      {
-        if (!(await _Active(transaction, caller)))
-return false;
-        const callerMembership = await transaction.orgMembership.findUnique({
-          where: {
-            clusterTenant_subject: {
-              clusterTenant: caller.siloId,
-              subject: caller.subjectId,
-            },
-          },
-          select: { id: true },
-        });
-        if (
-          callerMembership === null ||
-          requestedRefs.includes(callerMembership.id)
-        )
-          return false;
-        const authorization =
-          new PrismaConversationProductAuthorizationRepository(transaction);
-        return authorization.admit(
-          caller,
-          {
-            kind: ProductAuthorizationResourceKinds.ConversationCollection,
-            id: caller.siloId,
-          },
-          ProductAuthorizationActions.Create,
-          { mode: value["mode"] as "direct" | "group" },
-        );
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    const conversationId = _DeterministicUuid("conversation", caller.siloId, caller.principalId, command.idempotencyKey.toLowerCase());
+    const argumentsValue = { mode: command.mode, participantRefs: [...command.participantRefs].sort(), idempotencyKey: command.idempotencyKey.toLowerCase() };
+    // 1. Check all selected members and creation authority before immutable genesis is written.
+    const prechecked = await this.prisma.$transaction(async function _Precheck(transaction)
+    {
+      const subjects = await _OrdinarySubjects(transaction, caller, command.participantRefs);
+      if (subjects === null)
+        return false;
+      const authorization = new PrismaConversationProductAuthorizationRepository(transaction);
+      return authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ConversationCollection, id: caller.siloId }, ProductAuthorizationActions.Create, argumentsValue);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
     if (!prechecked)
-return null;
-    const conversationId = randomUUID();
-    await this.initialComputer.createOrdinaryGenesis(
-      caller,
-      conversationId,
-      value["mode"],
-    );
-    return this.prisma.$transaction(
-      async (transaction) => {
-        if (!(await _Active(transaction, caller)))
-return null;
-        const selected = await transaction.orgMembership.findMany({
-          where: {
-            id: { in: requestedRefs as string[] },
-            clusterTenant: caller.siloId,
-            status: OrgMemberStatus.Active,
-          },
-          select: { id: true, subject: true },
-        });
-        if (selected.length !== requestedRefs.length)
-return null;
-        const authorization =
-          new PrismaConversationProductAuthorizationRepository(transaction);
-        if (
-          !(await authorization.admit(
-            caller,
-            {
-              kind: ProductAuthorizationResourceKinds.ConversationCollection,
-              id: caller.siloId,
-            },
-            ProductAuthorizationActions.Create,
-            { mode: value["mode"] as "direct" | "group" },
-          ))
-        )
+      return null;
+    // 2. A repeated history write verifies the existing immutable mode and creator.
+    await this.initialComputer.createOrdinaryGenesis(caller, conversationId, command.mode);
+    // 3. Recheck mutable authority in each transaction attempt before accepting a member set.
+    return ___RunInPrismaUnitOfWork(this.prisma, async function _Project(transaction): Promise<ConversationMetadataDetail | null>
+    {
+      const subjects = await _OrdinarySubjects(transaction, caller, command.participantRefs);
+      if (subjects === null)
+        return null;
+      const authorization = new PrismaConversationProductAuthorizationRepository(transaction);
+      const admitted = await authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ConversationCollection, id: caller.siloId }, ProductAuthorizationActions.Create, argumentsValue);
+      if (!admitted)
+        return null;
+      const mode = command.mode === ConversationModes.Direct ? ConversationMode.Direct : ConversationMode.Group;
+      const existing = await transaction.conversation.findUnique({ where: { id: conversationId }, select: { siloId: true, mode: true, agentServiceId: true, participants: { select: { userId: true } } } });
+      if (existing !== null)
+      {
+        const existingSubjects = new Set(existing.participants.map(participant => participant.userId));
+        if (existing.siloId !== caller.siloId || existing.mode !== mode || existing.agentServiceId !== null || existingSubjects.size !== subjects.length || subjects.some(subject => !existingSubjects.has(subject)))
           return null;
-        const subjects = [
-          caller.subjectId,
-          ...selected.map((item) => item.subject),
-        ];
-        await transaction.conversation.create({
-          data: {
-            id: conversationId,
-            siloId: caller.siloId,
-            mode:
-              value["mode"] === "direct"
-                ? ConversationMode.Direct
-                : ConversationMode.Group,
-            participants: {
-              create: subjects.map((subject) => ({
-                userId: subject,
-                visibleFromPosition: 1n,
-                readThroughPosition: 0n,
-              })),
-            },
-          },
-        });
-        await authorization.reconcileParticipants(
-          caller.siloId,
-          conversationId,
-          subjects,
-          caller.principalId,
-          new Date(),
-        );
-        await authorization.reconcileCreator(
-          caller.siloId,
-          conversationId,
-          caller.principalId,
-          new Date(),
-        );
         return _Detail(transaction, caller, conversationId);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+      }
+      // 4. Only the insertion winner creates participant and creator grants in this transaction.
+      await transaction.conversation.create({ data: { id: conversationId, siloId: caller.siloId, mode, participants: { create: subjects.map(subject => ({ userId: subject, visibleFromPosition: 1n, readThroughPosition: 0n })) } } });
+      const now = new Date();
+      await authorization.reconcileParticipants(caller.siloId, conversationId, subjects, caller.principalId, now);
+      await authorization.reconcileCreator(caller.siloId, conversationId, caller.principalId, now);
+      return _Detail(transaction, caller, conversationId);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, attemptLimit: 3, operation: "ordinary conversation creation" });
   }
   /** Changes only this participant's archive projection. */
   public archive(
@@ -376,6 +311,17 @@ return null;
   }
 }
 
+/** Resolves active same-silo members and refuses a caller repeated in the requested peer list. */
+async function _OrdinarySubjects(transaction: Prisma.TransactionClient, caller: ConversationCaller, participantRefs: readonly string[]): Promise<readonly string[] | null>
+{
+  if (!await _Active(transaction, caller))
+    return null;
+  const members = await transaction.orgMembership.findMany({ where: { id: { in: [...participantRefs] }, clusterTenant: caller.siloId, status: OrgMemberStatus.Active }, select: { id: true, subject: true } });
+  if (members.length !== participantRefs.length || members.some(member => member.subject === caller.subjectId))
+    return null;
+  return [caller.subjectId, ...members.map(member => member.subject)];
+}
+
 /** Checks current silo membership. */
 async function _Active(
   transaction: Prisma.TransactionClient,
@@ -444,8 +390,8 @@ function _Summary(
 ): ConversationMetadataSummary {
   return {
     id: row.conversation.id,
-    mode: row.conversation.mode as ConversationModes,
-    lifecycle: row.conversation.lifecycle as ConversationLifecycles,
+    mode: _CONVERSATION_MODES[row.conversation.mode],
+    lifecycle: _CONVERSATION_LIFECYCLES[row.conversation.lifecycle],
     agentServiceId: row.conversation.agentServiceId,
     participantRefs: row.conversation.participants
       .map((item) => references.get(item.userId)!)
@@ -465,7 +411,7 @@ return "ready";
 return "unavailable";
   return "ambiguous";
 }
-/** Resolves participant subjects to opaque active membership references inside the read transaction. */
+/** Resolves existing same-silo membership references, retaining suspended peers and omitting deleted rows. */
 async function _MembershipReferences(
   transaction: Prisma.TransactionClient,
   siloId: string,
@@ -475,13 +421,8 @@ async function _MembershipReferences(
     where: {
       clusterTenant: siloId,
       subject: { in: [...new Set(subjects)] },
-      status: OrgMemberStatus.Active,
     },
     select: { id: true, subject: true },
   });
-  if (rows.length !== new Set(subjects).size)
-    throw new Error(
-      "conversation participant membership projection is unavailable",
-    );
   return new Map(rows.map((row) => [row.subject, row.id]));
 }

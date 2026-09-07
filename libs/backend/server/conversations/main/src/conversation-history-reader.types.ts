@@ -1,5 +1,18 @@
 import type { ConversationEntry } from "@opencrane/contracts";
 
+/** Bounds a revision-zero ownership read without loading participant entries. */
+export interface ConversationHistoryGenesisReadCommand
+{
+	/** Names the trusted silo whose genesis must match. */
+	readonly siloId: string;
+	/** Names the sole conversation whose stream may be checked. */
+	readonly conversationId: string;
+	/** Caps stored genesis content before validation. */
+	readonly maximumBytes: number;
+	/** Cancels the upstream ownership read when its caller ends. */
+	readonly signal?: AbortSignal;
+}
+
 /**
  * Identifies a finite read that an authorized conversation transport may make from a KurrentDB stream.
  *
@@ -15,6 +28,12 @@ export interface ConversationHistoryReadCommand
 	readonly conversationId: string;
 	/** Starts at this inclusive KurrentDB revision, or at the immutable first entry when omitted. */
 	readonly fromRevision?: bigint;
+	/** Limits the requested range while still validating the immutable genesis separately. */
+	readonly maxCount?: number;
+	/** Caps each stored entry before the reader retains it. */
+	readonly maximumBytes?: number;
+	/** Cancels both genesis and range reads when the browser disconnects. */
+	readonly signal?: AbortSignal;
 }
 
 /** Reports the derived stream coordinate and validated entries returned from it in stream order. */

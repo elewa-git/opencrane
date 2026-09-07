@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 
 import { ConversationMessageActivations, type ConversationMessageCommand, type SelfConversationHistoryRouterDependencies } from "./self-conversation-history.types";
+import { _CreateSelfConversationEventsHandler } from "./self-conversation-events";
 
 /** UUID syntax accepted for browser message retry keys. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11,6 +12,8 @@ const _POSITION_PATTERN = /^(0|[1-9][0-9]*)$/;
 export function _CreateSelfConversationHistoryRouter(dependencies: SelfConversationHistoryRouterDependencies): Router
 {
 	const router = Router();
+	if (dependencies.events !== undefined)
+		router.get("/:conversationId/events", _CreateSelfConversationEventsHandler({ ...dependencies.events, authority: dependencies.authority, resolveCaller: dependencies.resolveCaller }));
 	router.get("/:conversationId/history", function _Read(request, response) { void _HandleRead(request, response, dependencies); });
 	router.post("/:conversationId/messages", function _Post(request, response) { void _HandlePost(request, response, dependencies); });
 	return router;

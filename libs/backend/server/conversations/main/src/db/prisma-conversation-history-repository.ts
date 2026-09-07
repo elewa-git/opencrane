@@ -61,14 +61,16 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 		const membership = await this.transaction.orgMembership.findUnique({ where: { clusterTenant_subject: { clusterTenant: caller.siloId, subject: caller.subjectId } }, select: { displayName: true, status: true } });
 		if (membership === null || membership.status !== OrgMemberStatus.Active)
 			return null;
-		const conversation = await this.transaction.conversation.findFirst({ where: { id: conversationId, siloId: caller.siloId, ...(requireOpen ? { lifecycle: ConversationLifecycle.Open } : {}), participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, select: { mode: true, computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true } });
+		const conversation = await this.transaction.conversation.findFirst({ where: { id: conversationId, siloId: caller.siloId, ...(requireOpen ? { lifecycle: ConversationLifecycle.Open } : {}), participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, select: { mode: true, computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true, participants: { where: { userId: caller.subjectId, accessEndedPosition: null }, select: { visibleFromPosition: true } } } });
 		if (conversation === null || !await this.authorization.canAccess(caller, conversationId, action))
+			return null;
+		if (conversation.participants.length !== 1 || conversation.participants[0]!.visibleFromPosition < 0n)
 			return null;
 		if (conversation.mode === ConversationMode.AgentSession && (conversation.computerId === null || conversation.computerAgentIdentityId === null || conversation.computerProfileRevisionId === null))
 			throw new Error("Agent conversation projection requires complete computer coordinates");
 		if (conversation.mode !== ConversationMode.AgentSession && (conversation.computerId !== null || conversation.computerAgentIdentityId !== null || conversation.computerProfileRevisionId !== null))
 			throw new Error("Direct or group conversation projection cannot reference a computer");
-		return { authorName: membership.displayName?.trim() || "Participant", mode: conversation.mode, computerId: conversation.computerId, computerAgentIdentityId: conversation.computerAgentIdentityId, computerProfileRevisionId: conversation.computerProfileRevisionId };
+		return { authorName: membership.displayName?.trim() || "Participant", mode: conversation.mode, computerId: conversation.computerId, computerAgentIdentityId: conversation.computerAgentIdentityId, computerProfileRevisionId: conversation.computerProfileRevisionId, visibleFromPosition: conversation.participants[0]!.visibleFromPosition };
 	}
 }
 

@@ -9,8 +9,9 @@ baseline from remaining product work and live verification.
 |---|---|
 | Company membership and access | Sign-in, membership evidence, groups and central permission checks. The user interface does not yet expose every administrative operation. |
 | Personal-assistant setup | A resumable interview, reviewed persona and creation of the first personal assistant configuration. |
-| Durable conversations | Creation, posting and history reads, including ordinary direct/group messages and personal assistant conversations. History is stored in KurrentDB. Personal chats distinguish a new session from a retried creation command. |
+| Durable conversations | Creation, posting and history reads, including ordinary direct/group messages and personal assistant conversations. History is stored in KurrentDB. All three modes distinguish a new chat from a retried creation command. |
 | Recognizable chats | Member display names in the participant picker and direct/group chat titles, with generic text for missing names. |
+| Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. Initial history and computer refresh still use the existing replay path. |
 | Personal model turns | Approved persona instructions and conversation history reach a bounded model request; its assistant output is persisted against the admitted conversation computer. |
 | Computer inspection | Workspace files, diffs, bounded commands, screenshots and temporary localhost previews through the conversation workspace. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
@@ -22,8 +23,6 @@ current review work and its evidence.
 
 ## Still to complete
 
-- **Conversation continuity:** finish direct/group creation retries, bounded live updates and
-  recovery after access changes; qualify these with several people in one group.
 - **Useful work across tools:** connect the conversation model loop to governed tool execution,
   approvals and durable results, then prove a real business task from start to finish.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
@@ -41,7 +40,8 @@ do not publish an application.
 ## Still to prove live
 
 The current baseline needs one real installation to prove login, onboarding, personal conversation,
-model response, recovery and computer review together. Tool, memory and shared-work journeys need
+model response, ordinary groups, reconnect, access changes, recovery and computer review together.
+Tool, memory and shared-work journeys need
 their own live evidence as they become available. KurrentDB backup and restore also need a real
 drill and measured recovery time.
 

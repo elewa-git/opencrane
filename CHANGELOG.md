@@ -38,6 +38,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   into a new generation, and fences activation, model credentials, approvals, output, and review
   access to the exact current lease.
 
+- **People can follow live chat updates and resume from their last received position.** The workspace
+  consumes bounded browser events through the existing public API. Closing the connection cancels
+  upstream reads, and revoked access clears the selected history and draft.
+
 ### Changed
 
 - **Contributors get dependency-boundary failures before the expensive CI work begins.** CI avoids
@@ -58,6 +62,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 - **People can start distinct personal chats and retry creation safely.** A new command starts a
   separate conversation; retrying the same command returns its existing session without reopening
   closed work or expanding access.
+
+- **Direct and group chat creation also survives retries without duplicating conversations.** Current
+  access is rechecked, and a committed command cannot silently change its members or mode.
+
+- **A former member no longer makes the remaining participants' chat list fail.** Existing chats stay
+  readable under the caller's current permissions, and persisted modes and lifecycle states map to
+  the values the browser expects.
 
 - **People can recognize colleagues when starting and revisiting chats.** The picker and direct/group
   titles use member display names, with generic text when a name is unavailable.
@@ -81,6 +92,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   isolated builds, and published PreviewApps likewise remain outside 0.11.0.
 
 ### Security
+
+- **History reads enforce where each participant's visibility begins.** Both finite reads and live
+  events recheck that boundary before loading private payloads, including a change during the read.
 
 - **Personal conversation credentials remain scoped to the admitted turn and recover safely across
   partial failure.** LiteLLM keys are bounded by the immutable turn budget, checked against the exact

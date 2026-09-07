@@ -66,8 +66,12 @@ before clients receive them. Missing or mismatched identity, assignment, authori
 evidence produces a refusal, never partial authority.
 
 Conversation routes compose the server-owned KurrentDB history and private-payload authorities.
-They expose one authenticated, cursor-based history API for direct, group and agent-session
-conversations while this app keeps session, Prisma projection and listener ownership.
+They expose authenticated history reads, message submission and
+`GET /api/v1/me/conversations/:conversationId/events` on the existing public listener. The event
+route uses bounded SSE frames and exclusive KurrentDB revision cursors; it rechecks current
+participant access and join visibility before releasing private content. Disconnect and shutdown
+cancel stream work. This app keeps session, Prisma projection and listener ownership; no channel
+proxy workload or routing registry is involved.
 
 ## Public surface
 

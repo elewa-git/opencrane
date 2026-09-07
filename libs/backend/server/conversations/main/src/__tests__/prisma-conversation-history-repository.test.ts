@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationHistoryRepository } from "../db/prisma-conversation-history-repository";
+import { PrismaConversationProductAuthorizationRepository } from "../db/conversation-product-authorization";
+import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 
 const _CALLER = { principalId: "principal-1", subjectId: "user-1", siloId: "silo-1" };
 const _ENCRYPTED = { keyId: "key-1", nonce: new Uint8Array(12), authTag: new Uint8Array(16), ciphertext: new Uint8Array([1]), ciphertextDigest: `sha256:${"a".repeat(64)}` };
@@ -21,6 +23,22 @@ function _Harness(existing: ReturnType<typeof _Row> | null)
 
 describe("PrismaConversationHistoryRepository.createOrReadPayload", function _CreateOrReadPayloadSuite()
 {
+	it("loads exactly the current participant join bound after central Conversation Read authorization", async function ()
+	{
+		const canAccess = vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "canAccess").mockResolvedValue(true);
+		try
+		{
+			const transaction = { orgMembership: { findUnique: vi.fn().mockResolvedValue({ status: "Active", displayName: "Participant" }) }, conversation: { findFirst: vi.fn().mockResolvedValue({ mode: "Direct", computerId: null, computerAgentIdentityId: null, computerProfileRevisionId: null, participants: [{ visibleFromPosition: 5n }] }) } };
+			const repository = new PrismaConversationHistoryRepository(transaction as never);
+			expect((await repository.authorizeRead(_CALLER, "conversation-1"))?.visibleFromPosition).toBe(5n);
+			expect(canAccess).toHaveBeenCalledWith(_CALLER, "conversation-1", ProductAuthorizationActions.Read);
+			expect(transaction.conversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "conversation-1", siloId: "silo-1", participants: { some: { userId: "user-1", accessEndedPosition: null } } }, select: expect.objectContaining({ participants: { where: { userId: "user-1", accessEndedPosition: null }, select: { visibleFromPosition: true } } }) }));
+			canAccess.mockResolvedValue(false);
+			expect(await repository.authorizeRead(_CALLER, "conversation-1")).toBeNull();
+		}
+		finally { canAccess.mockRestore(); }
+	});
+
 	it("moves the conversation to the top of every list in the same transaction that stores a new payload", async function _BumpsOnCreate()
 	{
 		const harness = _Harness(null);

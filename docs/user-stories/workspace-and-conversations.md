@@ -7,8 +7,8 @@ and group chats. The conversation and its ordered timeline are server-authoritat
 the browser is a client, not the conversation ledger.
 
 Current status: the review branch has participant-scoped list, create, archive, close, HTTP message
-submission and KurrentDB history reads. The workspace refreshes history through HTTP; resumable
-browser events are being rebuilt in #827. Child agent sessions and attachments remain pending.
+submission and KurrentDB history reads. The workspace reads initial history through HTTP and follows
+resumable browser events implemented under #827. Child agent sessions and attachments remain pending.
 These are implementation states; complete live journeys are not yet qualified. The
 [active plan](../../plan.md) records current progress, and
 [ADR 0016](../adr/0016-conversation-history-and-computers.md) owns storage and computer lifecycle.
@@ -103,9 +103,10 @@ Acceptance criteria:
 - Reconnect does not duplicate or reorder events.
 - The interface distinguishes connected, reconnecting, caught up, and terminal states.
 
-Status: `in development` under #827. The target is bounded, resumable browser events from the same
-authorized KurrentDB history, with current access checks, cancellation on disconnect and explicit
-connection limits. HTTP history refresh remains the current workspace implementation.
+Status: `implemented in the review branch` under #827. The workspace uses bounded, resumable SSE
+from the same authorized KurrentDB history, with current access checks, cancellation on disconnect
+and explicit connection limits. Initial history and a 30-second computer refresh still use the
+existing HTTP replay path. The new stream needs live KurrentDB and multi-person journey proof.
 
 ## CON-06 — Act on agent-rendered UI safely
 

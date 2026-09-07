@@ -4,9 +4,10 @@ import { ConversationLifecycles, ConversationModes } from "@opencrane/models/con
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStreamUpdate, type ConversationHistoryProjection } from "@opencrane/state/conversation/stream";
 
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors";
+import { _CanCreateConversation, _ResolveConversationCreationCommand } from "./conversation-creation-command";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway";
 import { ConversationOnboardingHistoryStore } from "./conversation-onboarding-history.store";
-import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageCommand } from "./conversation-workspace.types";
+import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageCommand } from "./conversation-workspace.types";
 
 /** Component-scoped owner for workspace reads, live tailing, drafts, and commands. */
 @Injectable()
@@ -32,7 +33,7 @@ export class ConversationWorkspaceStore
 	private readonly _streamStatus = signal<ConversationEventStreamStatuses | null>(null);
 	/** Consecutive reconnect attempt adopted from the current stream. */
 	private readonly _reconnectAttempt = signal(0);
-	/** Whether a participant-requested replacement socket is still opening. */
+	/** Whether a participant-requested replacement connection is still opening. */
 	private readonly _manualReconnectPending = signal(false);
 	/** Controlled message draft. */
 	private readonly _draft = signal("");
@@ -42,7 +43,7 @@ export class ConversationWorkspaceStore
 	private readonly _selectedParticipantRefs = signal<ReadonlySet<string>>(new Set());
 	/** Create command lifecycle. */
 	private readonly _creationState = signal(ConversationCreationStates.Idle);
-	/** Keeps the personal-session request unchanged after an uncertain create response. */
+	/** Keeps the creation request unchanged after an uncertain response. */
 	private _pendingCreation: CreateConversationCommand | null = null;
 	/** Whether a message command is active. */
 	private readonly _sending = signal(false);
@@ -216,7 +217,7 @@ export class ConversationWorkspaceStore
 		else this._selectedParticipantRefs.set(selected);
 	}
 
-	/** Create the selected conversation, retaining a personal-session command UUID until success. */
+	/** Create the selected conversation, retaining its command UUID until success. */
 	public async create(): Promise<ConversationWorkspaceNavigationIntent | null>
 	{
 		const command = this._CreateCommand();
@@ -253,9 +254,9 @@ export class ConversationWorkspaceStore
 		const status = this._streamStatus();
 		if (selected === null || this._manualReconnectPending() || (status !== ConversationEventStreamStatuses.Reconnecting && status !== ConversationEventStreamStatuses.Failed))
 			return;
-		// 1. Fence late events from the failed socket before a replacement can publish its state.
+		// 1. Fence late events from the failed connection before a replacement can publish its state.
 		const generation = ++this._generation;
-		// 2. Abort the old socket and release an interrupted send; its retained idempotency key makes its retry safe.
+		// 2. Abort the old connection and release an interrupted send; its retained idempotency key makes its retry safe.
 		this._Abort();
 		this._sending.set(false);
 		// 3. Surface the new connection immediately and prevent duplicate button presses until it responds.
@@ -376,6 +377,11 @@ export class ConversationWorkspaceStore
 	{
 		if (generation !== this._generation)
 			return;
+		if (update.status === ConversationEventStreamStatuses.AccessChanged)
+		{
+			this._PurgeAccess();
+			return;
+		}
 		this._streamStatus.set(update.status);
 		this._reconnectAttempt.set(update.reconnectAttempt);
 		if (update.status !== ConversationEventStreamStatuses.Connecting)
@@ -406,7 +412,10 @@ export class ConversationWorkspaceStore
 	/** Purge every selected projection after access changes. */
 	private _PurgeAccess(): void
 	{
+		this._generation += 1;
 		this._Abort();
+		this._streamStatus.set(ConversationEventStreamStatuses.AccessChanged);
+		this._sending.set(false);
 		this._selected.set(null);
 		this._live.set(__CreateConversationHistoryProjection());
 		this.history.clearSelection();
@@ -460,14 +469,7 @@ export class ConversationWorkspaceStore
 	/** Whether the creation selection matches the fixed mode's cardinality. */
 	private _CanCreate(): boolean
 	{
-		const directory = this._directory();
-		if (directory === null || this._creationState() === ConversationCreationStates.Creating)
-			return false;
-		if (this._creationMode() === ConversationModes.AgentSession)
-			return directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ready && directory.personalAgent !== null;
-		if (this._creationMode() === ConversationModes.Direct)
-			return this._selectedParticipantRefs().size === 1;
-		return this._selectedParticipantRefs().size >= 1;
+		return this._creationState() !== ConversationCreationStates.Creating && _CanCreateConversation(this._creationMode(), this._directory(), this._selectedParticipantRefs());
 	}
 
 	/** Build the command only from choices supplied by the current directory. */
@@ -475,21 +477,8 @@ export class ConversationWorkspaceStore
 	{
 		if (!this._CanCreate())
 			return null;
-		const mode = this._creationMode();
-		const directory = this._directory();
-		if (directory === null)
-			return null;
-		if (mode === ConversationModes.AgentSession && directory.personalAgent !== null)
-		{
-			const personalAgentRef = directory.personalAgent.personalAgentRef;
-			if (this._pendingCreation?.mode === mode && this._pendingCreation.personalAgentRef === personalAgentRef)
-				return this._pendingCreation;
-			this._pendingCreation = { mode, personalAgentRef, idempotencyKey: globalThis.crypto.randomUUID() };
-			return this._pendingCreation;
-		}
-		if (mode === ConversationModes.Direct || mode === ConversationModes.Group)
-			return { mode, participantRefs: [...this._selectedParticipantRefs()] };
-		return null;
+		this._pendingCreation = _ResolveConversationCreationCommand(this._creationMode(), this._directory(), this._selectedParticipantRefs(), this._pendingCreation);
+		return this._pendingCreation;
 	}
 
 }

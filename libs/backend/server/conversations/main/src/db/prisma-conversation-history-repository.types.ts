@@ -14,6 +14,8 @@ export interface AuthorizedConversationProjection
 	readonly computerProfileRevisionId: string | null;
 	/** Immutable conversation mode used to validate computer and activation shape. */
 	readonly mode: "AgentSession" | "Direct" | "Group";
+	/** First immutable entry position visible under this participant's current membership. */
+	readonly visibleFromPosition: bigint;
 }
 
 /** Encrypted row shape returned without ever materializing plaintext in Prisma data. */

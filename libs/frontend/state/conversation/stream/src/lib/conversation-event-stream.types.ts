@@ -1,23 +1,25 @@
 import type { ConversationComputer, ConversationEntry } from "@opencrane/contracts";
 
 /**
- * Reports how the browser's finite conversation-history poller should preserve or stop its state.
+ * Reports how the browser's conversation-history connection should preserve or stop its state.
  *
  * Workspace state branches on these in-memory values. `Reconnecting` retains the last accepted
- * projection, while `Aborted` and `Failed` stop polling for different reasons; unknown values must
- * not be treated as a live connection.
+ * projection; `AccessChanged` requires its removal. `Aborted` and `Failed` stop the connection for
+ * different reasons. Unknown values must not be treated as a live connection.
  */
 export enum ConversationEventStreamStatuses
 {
 	/** The first authorized history read has not completed. */
 	Connecting = "connecting",
-	/** The latest authorized history read completed and another poll is scheduled. */
+	/** The authenticated event connection is open. */
 	Live = "live",
 	/** A temporary read failure is being retried without discarding accepted history. */
 	Reconnecting = "reconnecting",
-	/** The caller stopped the selected conversation poller. */
+	/** The caller stopped the selected conversation connection. */
 	Aborted = "aborted",
-	/** The bounded retry allowance ended and participant action is required. */
+	/** Current access ended; the workspace must discard its selected history and draft. */
+	AccessChanged = "access_changed",
+	/** Transport retries ended or history could not be validated; participant action is required. */
 	Failed = "failed",
 }
 
@@ -34,45 +36,43 @@ export interface ConversationHistoryProjection
 	readonly computer: ConversationComputer | null;
 }
 
-/** Carries one poller lifecycle update with the last fully accepted projection. */
+/** Carries one connection lifecycle update with the last fully accepted projection. */
 export interface ConversationEventStreamUpdate
 {
-	/** Current polling phase. */
+	/** Current connection phase. */
 	readonly status: ConversationEventStreamStatuses;
 	/** Last fully validated history projection. */
 	readonly state: ConversationHistoryProjection;
-	/** Consecutive failed reads since the latest successful read. */
+	/** Consecutive transport failures since accepted progress or a healthy server close. */
 	readonly reconnectAttempt: number;
-	/** Browser time of the latest successful history response. */
+	/** Browser time of the latest authenticated connection, history event, or heartbeat. */
 	readonly lastHeartbeatAt: number | null;
 	/** Fixed display-safe failure message set only for a terminal failure. */
 	readonly error?: string;
 }
 
-/** Supplies one selected conversation and its bounded polling lifecycle. */
+/** Supplies one selected conversation and its bounded connection lifecycle. */
 export interface StreamConversationEventsCommand
 {
 	/** Opaque conversation identifier authorized by the server session. */
 	readonly conversationId: string;
-	/** Stops polling when selection or page lifetime changes. */
+	/** Stops the connection when selection or page lifetime changes. */
 	readonly signal: AbortSignal;
-	/** Previously accepted state whose next position resumes the finite history read. */
+	/** Previously accepted state whose next position resumes history and event reads. */
 	readonly initialState?: ConversationHistoryProjection;
 	/** Receives every successful read and lifecycle change. */
 	readonly onUpdate?: (update: ConversationEventStreamUpdate) => void;
-	/** Consecutive failures allowed before polling stops. */
+	/** Consecutive failures allowed before reconnecting stops. */
 	readonly maximumReconnectAttempts?: number;
-	/** Delay between successful finite reads. */
-	readonly pollDelayMilliseconds?: number;
-	/** Delay before retrying a failed finite read. */
+	/** Initial retry delay; the adapter may apply backoff and a server-requested minimum. */
 	readonly reconnectDelayMilliseconds?: number;
 }
 
 /**
- * Polls finite, authorized history ranges without prescribing the browser transport.
+ * Follows authorized history without prescribing the browser transport.
  *
  * The implementation preserves the last fully validated projection across transient failures and
- * stops when the caller aborts or the retry allowance ends. This port grants no conversation access;
+ * stops when the caller aborts, access ends, or recovery requires participant action. This port grants no conversation access;
  * the production adapter uses the signed-in HTTP context supplied by its own boundary.
  *
  * Called by: `ConversationWorkspaceStore` through `CONVERSATION_WORKSPACE_EVENT_STREAM`.
@@ -80,10 +80,10 @@ export interface StreamConversationEventsCommand
 export interface ConversationEventStream
 {
 	/**
-	 * Polls until aborted or failed and reports each accepted projection through `onUpdate`.
+	 * Follows history until aborted or failed and reports each accepted projection through `onUpdate`.
 	 * @param command - Selects the conversation, prior cursor, abort signal, and retry policy.
-	 * @returns The last fully validated projection when the caller aborts.
-	 * @throws {Error} When the retry allowance ends before another authorized read succeeds.
+	 * @returns The last accepted projection on abort, or an empty projection after access ends.
+	 * @throws {Error} When transport retries end or an invalid response requires explicit recovery.
 	 */
 	stream(command: StreamConversationEventsCommand): Promise<ConversationHistoryProjection>;
 }

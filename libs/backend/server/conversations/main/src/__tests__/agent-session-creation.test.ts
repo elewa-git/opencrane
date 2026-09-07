@@ -10,6 +10,7 @@ const _Mocks = vi.hoisted(function _CreateMocks() {
     identityLoadActive: vi.fn(),
     identityAppend: vi.fn(),
     conversationRead: vi.fn(),
+    conversationReadGenesis: vi.fn(),
     computerLoad: vi.fn(),
     admit: vi.fn(),
     reconcileParticipants: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("../conversation-history-reader", function _MockConversationReader() {
   return {
     ConversationHistoryReader: class {
       public read = _Mocks.conversationRead;
+      public readGenesis = _Mocks.conversationReadGenesis;
     },
   };
 });
@@ -125,6 +127,49 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
         lease: null,
       };
     });
+  });
+
+  it("verifies ordinary genesis after a competing append without replaying all messages", async function _OrdinaryGenesisRetry()
+  {
+    const harness = _Prisma();
+    const resolver = new PrismaAgentSessionCreationUnitOfWork(harness.prisma as never, _Mocks as never, []);
+    _Mocks.append.mockRejectedValue(new WrongExpectedVersionError(undefined, { streamName: `conversation-${_CREATE_KEY}`, expected: -1n, current: 3n }));
+    _Mocks.conversationReadGenesis.mockResolvedValue({ mode: "group", agentServiceId: null, createdByPrincipalId: "principal-1" });
+    const caller = { siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" };
+    await expect(resolver.createOrdinaryGenesis(caller, _CREATE_KEY, "group")).resolves.toBeUndefined();
+    expect(_Mocks.conversationReadGenesis).toHaveBeenCalledWith({ siloId: "silo-1", conversationId: _CREATE_KEY, maximumBytes: 65536, signal: expect.any(AbortSignal) });
+    expect(_Mocks.conversationRead).not.toHaveBeenCalled();
+    await expect(resolver.createOrdinaryGenesis(caller, _CREATE_KEY, "direct")).rejects.toThrow("does not match");
+  });
+
+  it("bounds ordinary genesis verification and allows the same creation to retry after timeout", async function _GenesisTimeout()
+  {
+    const harness = _Prisma();
+    const resolver = new PrismaAgentSessionCreationUnitOfWork(harness.prisma as never, _Mocks as never, []);
+    const caller = { siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" };
+    const abort = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(abort.signal);
+    _Mocks.conversationReadGenesis.mockImplementationOnce(function _DisconnectedRead(command)
+    {
+      return new Promise(function _UntilAbort(_resolve, reject)
+      {
+        command.signal.addEventListener("abort", function _RejectRead() { reject(command.signal.reason); }, { once: true });
+      });
+    });
+    try
+    {
+      const failed = resolver.createOrdinaryGenesis(caller, _CREATE_KEY, "group");
+      await vi.waitFor(function _ReadStarted() { expect(timeout).toHaveBeenCalledWith(10_000); });
+      abort.abort(new DOMException("Genesis read timed out", "TimeoutError"));
+      await expect(failed).rejects.toThrow("Genesis read timed out");
+      _Mocks.conversationReadGenesis.mockResolvedValue({ mode: "group", agentServiceId: null, createdByPrincipalId: "principal-1" });
+      await expect(resolver.createOrdinaryGenesis(caller, _CREATE_KEY, "group")).resolves.toBeUndefined();
+      expect(_Mocks.conversationReadGenesis.mock.calls.map(([command]) => command.conversationId)).toEqual([_CREATE_KEY, _CREATE_KEY]);
+    }
+    finally
+    {
+      timeout.mockRestore();
+    }
   });
 
   it("atomically creates genesis and a DNS-safe cold generation-one computer before projection", async function _CreatesSession() {

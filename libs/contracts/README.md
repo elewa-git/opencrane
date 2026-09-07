@@ -75,6 +75,9 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   recognisable capability names and categorical availability, never internal topology or errors.
 - `ConversationHistoryResponse`, `ConversationEntry`, and the conversation-computer contracts — the
   immutable history and generation-fenced computer vocabulary shared by server and browser.
+- `___ConversationComputerSchema` validates the existing public computer shape, lease generation,
+  and checkpoint metadata without admitting private extensions. Readers still bind its conversation
+  coordinate to the authenticated request.
 - `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM envelope for lossy immediate-child terminal
   updates. It never exposes child context or sibling data.
 - `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying

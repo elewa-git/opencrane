@@ -17,9 +17,9 @@ older run-owned runtime and relational transcript descriptions in historical pla
 | Make development checks proportional to the change | Boundary failures run early (`975b80955`), specialist reviews are scoped (`c648801e3`), and rejected cross-run Nx cache transfers are removed (`a97c57bcd`). Measure subsequent CI. A tested local Stop-hook proposal awaits explicit approval; active hooks are unchanged. |
 | Explain the product and architecture consistently | Done in the review branch: README and website use the vision, current ownership, and built/pending status; website build passes. |
 | Complete onboarding-to-assistant continuity | Persona forwarding and caller-owned directory done (`825ceb3bc`), with regression tests. Complete live onboarding-to-answer proof remains pending. |
-| Make new personal sessions and ordinary group chats usable | Independent idempotent personal sessions and readable chat names are built (`6db91d08d`, `ddf20b629`). Direct/group creation retries, reconnect and journey proof remain pending. |
+| Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Multi-person live journey proof remains pending. |
 | Ask an assistant to work inside a group | Pending: explicit assistant selection, durable child chat, current independent permissions, and safe results delivered to the parent group. |
-| Rebuild channel event reads (#827) | Pending after the 0.11 baseline: participant-authorized Kurrent stream reads with resumable bounded delivery. |
+| Rebuild channel event reads (#827) | Implemented after the baseline work: bounded, cancellable participant reads and resumable same-origin SSE on the public listener, consumed by the workspace. Live Kurrent qualification is still required. |
 | Qualify backup and restore on testv5 | Blocked at live preflight: the dev cluster has no testv5 namespace or VolumeSnapshotClass. Record installation prerequisites and real recovery timing in the deploy ledger. |
 
 Completed implementation moves to `plan-done.md`; live evidence belongs in
@@ -70,10 +70,10 @@ live product acceptance remain separate evidence.
 | Journey | Remaining work | Acceptance |
 | --- | --- | --- |
 | Join and use a personal assistant | Qualify invite/sign-in, saved onboarding, approved settings, assistant selection and first answer together. | Two employees independently complete setup and receive answers influenced by their own approved settings. Refresh and retry preserve progress. |
-| Start and revisit chats | Qualify the built independent personal sessions and readable labels; finish reconnect and visible recovery. | A new request creates a new chat; retry creates none extra; closed chats remain closed; late responses cannot replace the selected chat. |
-| Talk as a group | Qualify group navigation; add creation-command idempotency for direct/group conversations. | Three employees exchange ordered messages and resume after reconnect; ordinary messages create no agent run. |
+| Start and revisit chats | Qualify independent sessions, readable labels, reconnect and visible recovery together. | A new request creates a new chat; retry creates none extra; closed chats remain closed; late responses cannot replace the selected chat. |
+| Talk as a group | Qualify group navigation, ordered delivery, creation retries and membership changes with real accounts. | Three employees exchange ordered messages and resume after reconnect; ordinary messages create no agent run. |
 | Ask an assistant in a group | Agree shared-assistant authority and child access; add explicit target selection, child origin binding, activation and safe parent deliveries. | One request creates one child chat; replies and follow-ups persist; revocation and guessed IDs reveal no private child content. |
-| Receive live conversation updates | Complete [#827](https://github.com/elewa-git/opencrane/issues/827): participant-authorized, bounded Kurrent reads and resumable browser events. | Disconnect cancels upstream work; a reconnect resumes by stream revision; access is rechecked before plaintext delivery. |
+| Receive live conversation updates | Qualify the implemented [#827](https://github.com/elewa-git/opencrane/issues/827) stream against live KurrentDB; measure the remaining initial-history and periodic computer replay cost. | Disconnect cancels upstream work; a reconnect resumes by stream revision; access is rechecked before plaintext delivery. |
 | Perform a useful external action | Connect model tool requests to existing server-owned tool admission, approvals, execution and durable results. | One real task succeeds with a chosen integration; denied/revoked/ambiguous actions never execute or claim success. |
 
 Group child chats and runtime delegation are distinct. [ADR 0012](docs/adr/0012-conversation-modes-and-agent-thread-authority.md)

@@ -33,6 +33,12 @@ never reads the global ledger, grants database administration, or supplies a Pos
 - `_KurrentHistoryStore` adapts the official KurrentDB gRPC client to that port.
 - `HistoryExpectedRevisions` names the missing-stream condition accepted by the port.
 
+`readStream` keeps its full finite-read behavior when no options are supplied. A bounded read names
+`maxCount` and may pass an `AbortSignal`. The installed SDK's Rust read iterator cannot cancel an
+in-flight request, so these bounded reads use its closeable catch-up subscription and finish at the
+requested count or `caughtUp`. Cancellation and normal completion both unsubscribe upstream.
+The adapter requests a one-object readable buffer; gRPC also has its own bounded transport buffers.
+
 Persistent consumers name an already-provisioned KurrentDB group. The adapter opens that group but
 does not create it, so its deployment owner must provision group settings before a consumer starts.
 Each delivery is at least once: a consumer acknowledges successful work, retries a transient

@@ -5,6 +5,8 @@ import { AesGcmConversationPrivatePayloadCipher, ConversationComputerHistory, Co
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { AgentSandboxReleaseProfileConfig } from "./config.types";
+import { _ProcessShutdownSignal } from "./process-shutdown";
+import { _log } from "./log";
 
 /** Composes participant history from the sole KurrentDB port and mounted payload keyring. */
 export function _CreateConversationHistoryComposition(
@@ -47,7 +49,7 @@ export function _CreateConversationHistoryComposition(
   const metadata = new PrismaConversationMetadataUnitOfWork(prisma, creation);
   const router = _CreateConversationMetadataRouter(metadata, resolveCaller);
   router.use(
-    _CreateSelfConversationHistoryRouter({ authority, resolveCaller }),
+    _CreateSelfConversationHistoryRouter({ authority, resolveCaller, events: { historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),
   );
   return router;
 }

@@ -1,7 +1,7 @@
 import { ___ConversationEntrySchema, type ConversationEntry } from "@opencrane/contracts";
 import { type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationHistoryGenesis, ConversationHistoryReadCommand, ConversationHistoryReadResult } from "./conversation-history-reader.types";
+import type { ConversationHistoryGenesis, ConversationHistoryGenesisReadCommand, ConversationHistoryReadCommand, ConversationHistoryReadResult } from "./conversation-history-reader.types";
 
 /** Names the sole versioned event that this reader exposes as a participant-visible entry. */
 const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
@@ -33,6 +33,8 @@ export class ConversationHistoryReader
 	 */
 	public async read(command: ConversationHistoryReadCommand): Promise<ConversationHistoryReadResult>
 	{
+		if (command.maxCount !== undefined)
+			return this._readPage(command);
 		// 1. Derive one stream before reading so caller-provided data cannot widen the history scope.
 		const streamName = _StreamName(command);
 		const request = { streamName };
@@ -64,6 +66,55 @@ export class ConversationHistoryReader
 		// 3. Return the finite ordered stream result without constructing a relational or projection fallback.
 		return { streamName, genesis, entries };
 	}
+
+	/** Reads only the validated revision-zero ownership record for creation retries and bounded history. */
+	public async readGenesis(command: ConversationHistoryGenesisReadCommand): Promise<ConversationHistoryGenesis>
+	{
+		command.signal?.throwIfAborted();
+		const streamName = _StreamName(command);
+		if (!Number.isSafeInteger(command.maximumBytes) || command.maximumBytes < 1)
+			throw new Error("Conversation genesis requires a positive byte limit");
+		let genesis: ConversationHistoryGenesis | null = null;
+		for await (const event of this.historyStore.readStream({ streamName, fromRevision: 0n, maxCount: 1, signal: command.signal }))
+		{
+			_AssertEventSize(event, command.maximumBytes!);
+			genesis = _ValidatedGenesis(event, command, streamName);
+		}
+		if (genesis === null)
+			throw new Error("Conversation history read requires an immutable genesis event");
+		command.signal?.throwIfAborted();
+		return genesis;
+	}
+
+	/** Checks immutable ownership once, then validates only the bounded requested revision range. */
+	private async _readPage(command: ConversationHistoryReadCommand): Promise<ConversationHistoryReadResult>
+	{
+		const streamName = _StreamName(command);
+		if (!Number.isSafeInteger(command.maxCount) || command.maxCount! < 1 || !Number.isSafeInteger(command.maximumBytes) || command.maximumBytes! < 1)
+			throw new Error("Conversation history page requires positive count and byte limits");
+		const genesis = await this.readGenesis({ siloId: command.siloId, conversationId: command.conversationId, maximumBytes: command.maximumBytes!, signal: command.signal });
+		const fromRevision = command.fromRevision === undefined || command.fromRevision === 0n ? 1n : command.fromRevision;
+		const entries: ConversationEntry[] = [];
+		let expectedRevision = fromRevision;
+		for await (const event of this.historyStore.readStream({ streamName, fromRevision, maxCount: command.maxCount, signal: command.signal }))
+		{
+			command.signal?.throwIfAborted();
+			_AssertEventSize(event, command.maximumBytes!);
+			entries.push(_ValidatedEntry(event, command, streamName, expectedRevision));
+			expectedRevision += 1n;
+			if (entries.length >= command.maxCount!)
+				break;
+		}
+		command.signal?.throwIfAborted();
+		return { streamName, genesis, entries };
+	}
+}
+
+/** Rejects oversized stored content before a bounded reader accumulates it. */
+function _AssertEventSize(event: HistoryRecordedEvent, maximumBytes: number): void
+{
+	if (Buffer.byteLength(JSON.stringify({ data: event.data, metadata: event.metadata }), "utf8") > maximumBytes)
+		throw new Error("Conversation history event exceeds its byte limit");
 }
 
 /** Validates revision zero before any participant-visible entry can be exposed. */

@@ -24,6 +24,15 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 		expect(post).toHaveBeenCalledWith("/me/conversations", { body: command });
 	});
 
+	it.each([ConversationModes.Direct, ConversationModes.Group] as const)("preserves the %s creation UUID and member references in the generated request", async function _CreatesOrdinary(mode)
+	{
+		const conversation = { id: "conversation-1", mode, lifecycle: "open", agentServiceId: null, participantRefs: ["membership-1", "membership-2"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null };
+		const post = vi.fn().mockResolvedValue({ data: { conversation } });
+		const command = { mode, participantRefs: ["membership-2"], idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292" } as const;
+		await _Gateway(post).create(command);
+		expect(post).toHaveBeenCalledWith("/me/conversations", { body: command });
+	});
+
 	it("submits participant text with its explicit computer activation", async function _SubmitsHistoryMessage()
 	{
 		const post = vi.fn().mockResolvedValue({ data: { outcome: "appended", position: "1" } });

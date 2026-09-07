@@ -8,8 +8,8 @@ participants, assets, elicitation, or access decisions.
 
 | Package | Responsibility |
 |---------|----------------|
-| [`stream`](./stream/README.md) | Transport-neutral Kurrent history polling port and connection states. |
-| [`adapter`](./adapter/README.md) | Signed-in HTTP implementation of finite history polling. |
+| [`stream`](./stream/README.md) | Transport-neutral history port, response validation, and connection states. |
+| [`adapter`](./adapter/README.md) | Signed-in initial history, server event delivery, and periodic computer refresh. |
 | [`assets`](./assets/README.md) | Upload, retry, and safe attachment lifecycle state. |
 | [`elicitation`](./elicitation/README.md) | Recoverable question and approval state plus Activity mapping. |
 | [`render`](./render/README.md) | Vendored conversation render view-models. |

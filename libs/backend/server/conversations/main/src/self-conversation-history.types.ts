@@ -3,6 +3,18 @@ import type { ConversationComputer, ConversationEntry } from "@opencrane/contrac
 import type { ConversationPrivatePayloadCipher } from "./conversation-private-payload.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 import type { ConversationComputerCurrentCommand } from "./conversation-computers";
+import type { SelfConversationEventsDependencies } from "./self-conversation-events.types";
+
+/** Bounds a browser event catch-up without changing ordinary full-history reads. */
+export interface SelfConversationHistoryReadOptions
+{
+	/** Limits the number of scanned entries, including entries hidden from this participant. */
+	readonly maxCount: number;
+	/** Caps each stored event and the resulting participant response. */
+	readonly maximumBytes: number;
+	/** Ends KurrentDB reads when the transport ends. */
+	readonly signal: AbortSignal;
+}
 
 /**
  * Reports whether participant message admission created history or recognized the same command.
@@ -85,13 +97,15 @@ export interface SelfConversationHistoryRouterDependencies
 	readonly authority: SelfConversationHistoryAuthority;
 	/** Resolves trusted identity from the authenticated server request. */
 	readonly resolveCaller: ConversationCallerResolver;
+	/** Enables the public event route when the app supplies its Kurrent subscription and shutdown signal. */
+	readonly events?: Omit<SelfConversationEventsDependencies, "authority" | "resolveCaller">;
 }
 
 /** Participant-facing history authority kept independent of Express. */
 export interface SelfConversationHistoryAuthority
 {
 	/** Reads one exclusive-cursor page after current access is rechecked. */
-	read(caller: ConversationCaller, conversationId: string, afterPosition?: bigint): Promise<SelfConversationHistoryResult | null>;
+	read(caller: ConversationCaller, conversationId: string, afterPosition?: bigint, options?: SelfConversationHistoryReadOptions): Promise<SelfConversationHistoryResult | null>;
 	/** Encrypts and appends one participant text message after current access is rechecked. */
 	postMessage(caller: ConversationCaller, conversationId: string, command: ConversationMessageCommand): Promise<ConversationMessageAdmissionResult | null>;
 }

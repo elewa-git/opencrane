@@ -5,7 +5,7 @@
 ## What it owns
 
 This package owns the browser state for the normal conversation screen. It loads conversation metadata,
-then polls immutable Kurrent history through the shared history port. It keeps direct, group, and Agent
+then follows immutable Kurrent history through the shared history port. It keeps direct, group, and Agent
 session modes separate and immutable, holds controlled drafts, and owns list, open, create, authenticated
 HTTP message submission, archive, and close command state. It also reads the completed onboarding
 exchange as a separate read-only projection; that projection never receives a conversation mode or stream.
@@ -20,12 +20,18 @@ WebSocket events + messages ──► adapter ──► conversation/stream port
 
 **In this flow:** the generated HTTP adapter · the shared event stream · the conversation workspace feature
 
-`ConversationWorkspaceStore` owns conversation selection, metadata loading, history-poll recovery,
+`ConversationWorkspaceStore` owns conversation selection, metadata loading, history-connection recovery,
 creation choices, and conversation commands. Current computer lifecycle comes from the history response;
 the browser no longer reconstructs or controls a separate run lifecycle.
-The store keeps a personal-session creation UUID after a failed response so retry opens the same
-session. A successful response clears that command; the next creation receives a new UUID. Creation
+The store keeps a creation UUID after a failed response so retry opens the same conversation
+in every mode. A changed member set receives a new command UUID. A successful response clears that command; the next creation receives a new UUID. Creation
 choices stay fixed while the request is in flight and become editable again after failure.
+The package-local creation-command helper compares selections and builds commands; the store owns
+the pending command's lifetime and clears it only after success or an explicit mode change.
+
+Current-access loss from the event stream purges the selected history and draft and fences any late
+updates from that connection. The transport adapter owns initial history, new-event delivery, and
+periodic computer refresh; the workspace does not open a second polling loop.
 
 ## Public surface
 
@@ -36,7 +42,7 @@ The package also owns the Zod response validators used by its transport adapter.
   projection and participant message submission; this package does not define a second transport contract.
 - `ConversationWorkspaceStore` owns ordinary list, selection, snapshot-tail state, immutable creation mode,
   drafts, conversation commands, reconnect attempts, and a guarded manual reconnect. It preserves the
-  draft and accepted live projection while fencing late updates from the replaced socket.
+  draft and accepted live projection while fencing late updates from the replaced connection.
 - Conversation summaries retain the server's decimal `readThroughPosition`, and messages retain
   `completedAt`; strict validation accepts both response fields without giving browser state authority
   to advance the participant coordinate or complete a message.
@@ -59,7 +65,7 @@ history and drafts are cleared before the access-changed state becomes visible.
 
 The package owns no server authority. It cannot admit a message, start a computer, or decide whether a
 retry is safe. Those decisions stay behind signed-in APIs.
-The onboarding transcript is disabled by construction: selecting it aborts any conversation history poll,
+The onboarding transcript is disabled by construction: selecting it aborts any conversation history connection,
 clears the draft, and offers only the existing create-conversation command for continuing work.
 
 ## Dependency direction

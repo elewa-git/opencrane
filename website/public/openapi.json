@@ -10807,9 +10807,11 @@
                   },
                   {
                     "type": "object",
+                    "additionalProperties": false,
                     "required": [
                       "mode",
-                      "participantRefs"
+                      "participantRefs",
+                      "idempotencyKey"
                     ],
                     "properties": {
                       "mode": {
@@ -10826,6 +10828,11 @@
                         },
                         "minItems": 1,
                         "maxItems": 99
+                      },
+                      "idempotencyKey": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Reuse this UUID for retries of the same creation request; a new UUID starts a separate conversation."
                       }
                     }
                   }
@@ -11264,6 +11271,78 @@
           },
           "404": {
             "description": "Conversation unavailable."
+          }
+        }
+      }
+    },
+    "/me/conversations/{conversationId}/events": {
+      "get": {
+        "operationId": "streamMyConversationEvents",
+        "summary": "Stream participant-visible conversation updates",
+        "description": "Same-origin authenticated SSE on the public listener. History frames use event: history, id: nextPosition, and JSON data {entries,payloads,nextPosition,computer:null}; every bounded page rechecks current Conversation:Read authority. The exclusive Last-Event-ID revision overrides the initial afterPosition query on reconnect. Hidden entries advance the cursor without exposing their payload. event: unavailable carries a fixed conversation_unavailable or conversation_history_unavailable error and ends automatic replay. A normal bounded close is resumable. Limits per connection: 60 seconds, 30 seconds without new history, 10-second authority-refresh heartbeats, 512 KiB per frame, 2 MiB total, 128 history frames, and 5 seconds waiting for a slow browser. Each listener allows two concurrent streams and twelve starts per minute per authenticated silo/subject. Disconnect cancels upstream history and subscription work.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterPosition",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,19})$",
+              "maxLength": 20
+            },
+            "description": "Exclusive stream revision; defaults to zero."
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,19})$",
+              "maxLength": 20
+            },
+            "description": "Exclusive resume revision; overrides the original query cursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded SSE history and terminal unavailable frames; keep-alive comments do not advance the cursor.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or out-of-range stream revision."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Same-origin browser evidence required."
+          },
+          "404": {
+            "description": "Conversation unavailable to the current participant."
+          },
+          "429": {
+            "description": "Subject or listener event budget exhausted; Retry-After is 60 seconds."
+          },
+          "503": {
+            "description": "History unavailable before the stream opens."
           }
         }
       }

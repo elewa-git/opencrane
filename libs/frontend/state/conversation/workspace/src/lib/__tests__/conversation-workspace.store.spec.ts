@@ -92,6 +92,30 @@ describe("ConversationWorkspaceStore", function _DescribeWorkspace()
 		expect(gateway.create.mock.calls[1]![0]).toBe(gateway.create.mock.calls[0]![0]);
 	});
 
+	it.each([ConversationModes.Direct, ConversationModes.Group] as const)("retains the %s command for retry and changes its UUID for a different member set", async function _OrdinaryCreation(mode)
+	{
+		const gateway = new _Gateway();
+		vi.spyOn(gateway, "directory").mockResolvedValue({ participants: [{ participantRef: "participant-1", isSelf: true, label: "You" }, { participantRef: "participant-2", isSelf: false, label: "Amina" }, { participantRef: "participant-3", isSelf: false, label: "Kamau" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Agent" } });
+		const injector = Injector.create({ providers: [ConversationOnboardingHistoryStore, ConversationWorkspaceStore, { provide: DestroyRef, useValue: { onDestroy: vi.fn() } }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _HistoryStream }] });
+		const store = injector.get(ConversationWorkspaceStore);
+		await store.load();
+		store.selectCreationMode(mode);
+		store.toggleParticipant("participant-2");
+		gateway.create.mockRejectedValueOnce(new Error("lost response")).mockRejectedValueOnce(new Error("still unavailable"));
+		await store.create();
+		const first = gateway.create.mock.calls[0]![0];
+		expect(first).toMatchObject({ mode, participantRefs: ["participant-2"], idempotencyKey: expect.any(String) });
+		await store.create();
+		expect(gateway.create.mock.calls[1]![0]).toBe(first);
+		store.toggleParticipant("participant-2");
+		store.toggleParticipant("participant-3");
+		await store.create();
+		expect(gateway.create.mock.calls[2]![0]).toMatchObject({ participantRefs: ["participant-3"] });
+		expect(gateway.create.mock.calls[2]![0].idempotencyKey).not.toBe(first.idempotencyKey);
+		await store.create();
+		expect(gateway.create.mock.calls[3]![0].idempotencyKey).not.toBe(gateway.create.mock.calls[2]![0].idempotencyKey);
+	});
+
 	it("sends an Agent-session message through HTTP with start activation", async function _SendsKurrentMessage()
 	{
 		const gateway = new _Gateway();

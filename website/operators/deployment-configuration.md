@@ -62,6 +62,26 @@ this installation machinery from live qualification.
 
 Source: [`deploy.sh`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/deploy.sh).
 
+## Conversation live updates
+
+The existing public API serves same-origin browser events. Keep the ordinary authenticated API
+route available; there is no additional channel service, public KurrentDB endpoint or routing
+registry to deploy. The response asks proxies to avoid buffering so new messages can arrive
+promptly.
+
+Each connection ends after 60 seconds, or 30 seconds without a new stream revision, including
+cursor-only updates for entries hidden from that participant. A heartbeat runs
+every 10 seconds; the browser reconnects using its last revision. A connection sends at most
+128 history frames or 2 MiB, with a 512 KiB frame limit. A larger backlog resumes on another
+connection.
+
+One listener process admits at most two simultaneous streams and twelve starts per minute for
+each authenticated silo/subject, plus 128 simultaneous streams across that process. An overloaded
+client receives HTTP 429 and a retry delay. These are process-local limits: adding replicas
+multiplies aggregate capacity. They are fixed application defaults, not additional chart inputs.
+Current membership and conversation permissions are rechecked during delivery; a saved cursor
+cannot grant access or select a different stream.
+
 ## Umbrella inputs
 
 These are the public configuration roots owned by the silo umbrella chart.

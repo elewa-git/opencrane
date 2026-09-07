@@ -19,3 +19,14 @@ export interface ConversationReviewCoordinates
 }
 /** Metadata authority exposed to the authenticated browser router. */
 export interface ConversationMetadataAuthority { directory(caller: ConversationCaller): Promise<unknown>; list(caller: ConversationCaller, includeArchived: boolean): Promise<readonly ConversationMetadataSummary[]>; open(caller: ConversationCaller, conversationId: string): Promise<ConversationMetadataDetail | null>; reviewCoordinates(caller: ConversationCaller, conversationId: string, action?: ProductAuthorizationActions): Promise<ConversationReviewCoordinates | null>; create(caller: ConversationCaller, request: unknown): Promise<ConversationMetadataDetail | null>; archive(caller: ConversationCaller, conversationId: string, archived: boolean): Promise<ConversationMetadataDetail | null>; close(caller: ConversationCaller, conversationId: string): Promise<ConversationMetadataDetail | null>; }
+
+/** Describes the member set requested by a retryable ordinary-conversation creation command. */
+export interface OrdinaryConversationCreateCommand
+{
+	/** Fixes whether the conversation has one peer or a group of peers. */
+	readonly mode: ConversationModes.Direct | ConversationModes.Group;
+	/** Lists the other members; order does not change the request. */
+	readonly participantRefs: readonly string[];
+	/** Identifies one creation command for the signed-in principal and silo. */
+	readonly idempotencyKey: string;
+}

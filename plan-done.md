@@ -7,11 +7,26 @@
 
 ## 2026-09-07 — first delivery-speed and personal-assistant repairs
 
+The subsequent conversation-continuity slice implements ordinary creation retries, enum conversion
+and resilient metadata reads after another member leaves. It also rebuilds #827 on bounded public
+SSE, adds cancellable Kurrent catch-up through the installed SDK's supported subscription surface,
+and enforces the participant's current first-visible position before private payload loading.
+The browser preserves computer state, respects retry delays, purges revoked content and drafts,
+and rejects late updates from an old selection. Initial history and the 30-second computer refresh
+still use the existing full replay path; this cost is not claimed as solved.
+
+Focused backend, browser, schema and race tests pass. Independent review found and resolved the
+join-boundary and pending-send purge issues. A real Kurrent bounded-read test is added to CI; local
+unit/protocol proof is not live qualification. No database schema, compatibility route, new channel
+service or second Pod owner was added. Group assistant child chats remain pending their authority
+decision and implementation.
+
 Personal-session commands now distinguish a new chat from a retry (`6db91d08d`); matching retries
 preserve the existing lifecycle and grants. The slice passed 169 backend tests and the relevant
 frontend tests and lints. Member display names now reach conversation selection and direct/group
 titles (`ddf20b629`), with 42 focused tests and four lint targets passing. Generated API artifacts
-include both contract changes. Ordinary direct/group creation retries remain an active track.
+include both contract changes. Ordinary direct/group creation retries are completed in the
+subsequent slice above.
 
 Development guidance now scopes specialist reviews to changed responsibilities (`c648801e3`).
 Active Stop hooks are unchanged; their separately tested optimization still awaits explicit approval.

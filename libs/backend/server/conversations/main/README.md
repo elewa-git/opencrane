@@ -12,8 +12,20 @@ not bind an agent and their ordinary messages never manufacture runs.
 The creation directory lists active members in the current silo with their stored display names.
 Missing names use a generic label; login subjects and email addresses never become fallback names.
 The browser reuses this directory for participant selection and direct/group chat titles.
+Existing conversations retain opaque references for suspended peers while still requiring the caller's
+current membership, participation, and Read permission. A physically deleted membership is omitted
+from those references, so the displayed participant count covers only resolvable memberships.
+Metadata converts every generated Prisma mode and lifecycle into the public lowercase values.
 
-Personal-session creation requires a client UUID. Retrying that command returns the same session,
+Every conversation creation requires a client UUID. Ordinary direct/group requests keep one
+conversation identity across retries. The first PostgreSQL creation commit fixes the member set; a
+genesis-only failure has not accepted members. Competing changed member sets cannot both succeed.
+Retries return the current projection without reopening the conversation, changing participant
+positions, or reconciling grants. The serializable transaction retries only proven rollbacks.
+Genesis verification reads only the first history record with a ten-second timeout. A timeout leaves
+the same command safe to retry and cannot make existing messages part of creation verification.
+
+Personal-session creation requires the same client UUID contract. Retrying that command returns the same session,
 even after its computer has started; a new UUID creates another conversation and computer for the
 same personal assistant identity. Reusing a key with a different assistant is rejected. Recovering
 an existing projection preserves its lifecycle and current grants, including any revoked access.
@@ -110,16 +122,15 @@ revocation. `ConversationParticipant` remains a lifecycle and projection coordin
 forms still require current participation so visible timeline bounds, archive state, unread state,
 and ended access cannot be bypassed by authorization alone.
 
-Participant artifact blocks are delegated to the conversation-assets attachment port inside that
-same ordinary-message or run-admission transaction. Any foreign, unchecked, reused, or oversized
-asset rolls the message back instead of leaving a dangling transcript reference.
+The participant message endpoint currently accepts text only. Conversation asset upload and
+scanning have their own boundary; attaching an uploaded asset to an ordinary message is pending.
 
 Archive and close are deliberately different. Archive is reversible and affects only one
 participant's list. Close is permanent, applies to the conversation, and makes it read-only. Each
 participant separately records the first visible position, the last read position, and an optional
 access-ended position; reads are clipped to those bounds and writes require continuing access.
 The server rechecks organisation membership and participant bounds on every history page. The
-browser polls the same authenticated API after the last observed immutable stream position. A
+browser event route resumes after the last observed immutable stream position. A
 revoked participant loses both entry access and private payload resolution rather than receiving an
 empty successful page.
 
@@ -180,6 +191,17 @@ that only know the silo, computer id and lease use `ConversationComputerLeaseCoo
   lifecycle cleanup clears the exact row before recording release or deleting the SandboxClaim.
 - `_CreateSelfConversationHistoryRouter` exposes exclusive-cursor KurrentDB reads and encrypted
   participant message admission without a relational transcript fallback.
+- Its optional public `GET /me/conversations/:conversationId/events` route streams authorized history
+  pages over same-origin server-sent events (SSE). Each page rechecks current Read permission and the participant's
+  `visibleFromPosition`; private payloads are resolved only after those checks. `Last-Event-ID`
+  resumes after an immutable stream revision, including cursor progress over hidden entries.
+  Disconnect closes both catch-up reads and the wakeup subscription. The existing full-history
+  response keeps its finite full-scan behavior; this event transport does not make that API paged.
+- Event connections last at most 60 seconds, close after 30 seconds without new history, and refresh
+  authority every 10 seconds while quiet. A connection allows 128 history frames, 512 KiB per frame,
+  2 MiB in total, and five seconds of socket backpressure. Each listener process permits two active
+  streams and twelve starts per minute per authenticated silo/subject; replicas enforce their own
+  limits. Terminal `unavailable` frames carry fixed error codes and stop automatic replay.
 - `PrismaSelfConversationHistoryUnitOfWork` joins current PostgreSQL authorization and encrypted private
   payload persistence to checked KurrentDB operations.
 - `PrismaConversationComputerTurnUnitOfWork` rechecks the pending human author's current authority

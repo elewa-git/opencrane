@@ -31,6 +31,7 @@ export * from "./agent-controller-identity.types";
 export * from "./agent-identity.types";
 export * from "./agent-capability-grant.types";
 export * from "./conversation-computer.types";
+export * from "./conversation-computer.validator";
 export type * from "./conversation-computer-scope.types";
 export * from "./conversation-entry.types";
 export * from "./conversation-entry.validator";

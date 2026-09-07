@@ -10,7 +10,7 @@ import { ConversationHistoryReader } from "./conversation-history-reader";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 import { PrismaConversationHistoryRepository } from "./db/prisma-conversation-history-repository";
 import type { AuthorizedConversationProjection, StoredConversationPrivatePayload } from "./db/prisma-conversation-history-repository.types";
-import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, type ConversationMessageAdmissionResult, type ConversationMessageCommand, type PrismaSelfConversationHistoryDependencies, type SelfConversationHistoryAuthority, type SelfConversationHistoryResult } from "./self-conversation-history.types";
+import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, type ConversationMessageAdmissionResult, type ConversationMessageCommand, type PrismaSelfConversationHistoryDependencies, type SelfConversationHistoryAuthority, type SelfConversationHistoryReadOptions, type SelfConversationHistoryResult } from "./self-conversation-history.types";
 
 /** Limits checked-append retries without silently dropping a contending participant message. */
 const _APPEND_ATTEMPTS = 4;
@@ -35,30 +35,40 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 	}
 
 	/** Rechecks participant access around one KurrentDB read and decrypts only referenced visible payloads. */
-	public async read(caller: ConversationCaller, conversationId: string, afterPosition?: bigint): Promise<SelfConversationHistoryResult | null>
+	public async read(caller: ConversationCaller, conversationId: string, afterPosition?: bigint, options?: SelfConversationHistoryReadOptions): Promise<SelfConversationHistoryResult | null>
 	{
+		options?.signal.throwIfAborted();
 		// 1. Check current membership and participant authority before accessing immutable history.
 		const projection = await this._transaction(function _Authorize(repository) { return repository.authorizeRead(caller, conversationId); });
 		if (projection === null)
 			return null;
+		options?.signal.throwIfAborted();
 		// 2. Read from the position after the exclusive browser cursor and filter subset visibility.
-		const fromRevision = afterPosition === undefined ? undefined : afterPosition + 1n;
-		const history = await this.historyReader.read(fromRevision === undefined ? { siloId: caller.siloId, conversationId } : { siloId: caller.siloId, conversationId, fromRevision });
-		const entries = history.entries.filter(function _Visible(entry) { return _MaySee(entry, caller.subjectId); });
-		const payloadRefs = _PayloadRefs(entries);
+		const requestedRevision = afterPosition === undefined ? 0n : afterPosition + 1n;
+		const fromRevision = requestedRevision < projection.visibleFromPosition ? projection.visibleFromPosition : requestedRevision;
+		const history = await this.historyReader.read({ siloId: caller.siloId, conversationId, fromRevision, ...options });
+		const visible = history.entries.filter(function _Visible(entry) { return BigInt(entry.position) >= projection.visibleFromPosition && _MaySee(entry, caller.subjectId); });
 		// 3. Recheck access while loading ciphertext so revocation cannot turn an old authorization into plaintext access.
 		const stored = await this._transaction(async function _ReadPayloads(repository)
 		{
-			if (await repository.authorizeRead(caller, conversationId) === null)
+			const current = await repository.authorizeRead(caller, conversationId);
+			if (current === null)
 				return null;
-			return repository.readPayloads(caller, conversationId, payloadRefs);
+			const entries = visible.filter(function _CurrentBoundary(entry) { return BigInt(entry.position) >= current.visibleFromPosition; });
+			const payloadRefs = _PayloadRefs(entries);
+			return { entries, payloadRefs, ciphertext: await repository.readPayloads(caller, conversationId, payloadRefs) };
 		});
 		if (stored === null)
 			return null;
-		const payloads = this._decrypt(payloadRefs, stored);
-		const computer = await this._computer(caller, conversationId, projection);
-		const nextPosition = entries.at(-1)?.position ?? afterPosition?.toString() ?? "0";
-		return { entries, payloads, nextPosition, computer };
+		options?.signal.throwIfAborted();
+		const entries = stored.entries;
+		const payloads = this._decrypt(stored.payloadRefs, stored.ciphertext);
+		const computer = options === undefined ? await this._computer(caller, conversationId, projection) : null;
+		const nextPosition = (options === undefined ? entries : history.entries).at(-1)?.position ?? afterPosition?.toString() ?? "0";
+		const result = { entries, payloads, nextPosition, computer };
+		if (options !== undefined && Buffer.byteLength(JSON.stringify(result), "utf8") > options.maximumBytes)
+			throw new Error("Conversation history page exceeds its byte limit");
+		return result;
 	}
 
 	/** Encrypts a participant message and appends its opaque reference at a checked KurrentDB head. */

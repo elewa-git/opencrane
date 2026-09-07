@@ -356,6 +356,19 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 		expect(delivered.id).toBe(events[1]?.id);
 	});
 
+	it("reads one bounded inclusive catch-up and completes an empty page after its head", async function ()
+	{
+		const streamName = _stream("bounded-history");
+		const events = [_event("opencrane.test.v1", { number: 0 }), _event("opencrane.test.v1", { number: 1 }), _event("opencrane.test.v1", { number: 2 })];
+		await store.append({ streamName, expectedRevision: HistoryExpectedRevisions.NoStream, events });
+		const page: bigint[] = [];
+		for await (const event of store.readStream({ streamName, fromRevision: 1n, maxCount: 1, signal: AbortSignal.timeout(5_000) }))
+			page.push(event.revision);
+		expect(page).toEqual([1n]);
+		const empty = await store.readStream({ streamName, fromRevision: 3n, maxCount: 1, signal: AbortSignal.timeout(5_000) })[Symbol.asyncIterator]().next();
+		expect(empty.done).toBe(true);
+	});
+
 	describe("persistent activation consumer group", function ()
 	{
 		const queueStream = _stream("computer-activations");

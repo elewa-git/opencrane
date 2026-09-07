@@ -64,6 +64,38 @@ async function *_Events(events: readonly HistoryRecordedEvent[]): AsyncIterable<
 
 describe("ConversationHistoryReader", function ()
 {
+	it("reads ownership alone without opening a participant-entry range", async function ()
+	{
+		const readStream = vi.fn().mockReturnValueOnce(_Events([_Genesis()]));
+		const genesis = await new ConversationHistoryReader({ readStream }).readGenesis({ siloId: "silo-1", conversationId: "conversation-1", maximumBytes: 4096 });
+		expect(genesis.conversationId).toBe("conversation-1");
+		expect(readStream).toHaveBeenCalledOnce();
+		expect(readStream).toHaveBeenCalledWith({ streamName: "conversation-conversation-1", fromRevision: 0n, maxCount: 1, signal: undefined });
+	});
+
+	it("checks genesis separately and reads only the bounded contiguous requested range", async function ()
+	{
+		const stop = new AbortController();
+		const readStream = vi.fn().mockReturnValueOnce(_Events([_Genesis()])).mockReturnValueOnce(_Events([_Event(5n)]));
+		const result = await new ConversationHistoryReader({ readStream }).read(_Command({ fromRevision: 5n, maxCount: 1, maximumBytes: 4096, signal: stop.signal }));
+		expect(readStream.mock.calls).toEqual([[{ streamName: "conversation-conversation-1", fromRevision: 0n, maxCount: 1, signal: stop.signal }], [{ streamName: "conversation-conversation-1", fromRevision: 5n, maxCount: 1, signal: stop.signal }]]);
+		expect(result.entries.map(entry => entry.position)).toEqual(["5"]);
+	});
+
+	it("rejects foreign genesis, a gap at the resume revision, and oversized bounded entries", async function ()
+	{
+		const command = _Command({ fromRevision: 5n, maxCount: 1, maximumBytes: 4096 });
+		const foreign = { ..._Genesis(), metadata: { siloId: "other", conversationId: "conversation-1" } };
+		const foreignRead = vi.fn().mockReturnValueOnce(_Events([foreign]));
+		await expect(new ConversationHistoryReader({ readStream: foreignRead }).read(command)).rejects.toThrow("different coordinates");
+		expect(foreignRead).toHaveBeenCalledOnce();
+		const gapRead = vi.fn().mockReturnValueOnce(_Events([_Genesis()])).mockReturnValueOnce(_Events([_Event(6n)]));
+		await expect(new ConversationHistoryReader({ readStream: gapRead }).read(command)).rejects.toThrow("noncontiguous");
+		const large = { ..._Event(5n), metadata: { ..._Event(5n).metadata, large: "x".repeat(5000) } };
+		const oversizedRead = vi.fn().mockReturnValueOnce(_Events([_Genesis()])).mockReturnValueOnce(_Events([large]));
+		await expect(new ConversationHistoryReader({ readStream: oversizedRead }).read(command)).rejects.toThrow("byte limit");
+	});
+
 	it("requests only the derived conversation stream and returns entries from the first position in stream order", async function ()
 	{
 		const readStream = vi.fn().mockReturnValue(_Events([_Genesis(), _Event(1n), _Event(2n, _SECOND_ENTRY_ID)]));
