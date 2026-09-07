@@ -59,6 +59,7 @@
 #
 # KurrentDB restore: --kurrentdb-restore-list prints the scheduled backups of this silo and exits.
 # KurrentDB bootstrap: --kurrentdb-bootstrap-retry retries a failed or missing bootstrap Job and exits.
+# --kurrentdb-bootstrap-prepare-update removes a completed bootstrap Job before a normal deploy changes its template.
 # --kurrentdb-restore BACKUP_ID (or `latest`) scales KurrentDB to zero, restores the data volume
 # from that backup with the same image and scripts the backup CronJob uses, scales it back up,
 # re-runs the bootstrap verification Job, and exits without touching any other release step. It
@@ -286,6 +287,7 @@ KURRENTDB_RESTORE_BACKUP_ID=""
 KURRENTDB_RESTORE_CONFIRM_SERVING="0"
 KURRENTDB_RESTORE_LIST="0"
 KURRENTDB_BOOTSTRAP_RETRY="0"
+KURRENTDB_BOOTSTRAP_PREPARE_UPDATE="0"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[k8s-deploy]\033[0m $1"; }
@@ -336,12 +338,17 @@ while [[ $# -gt 0 ]]; do
     --kurrentdb-restore-confirm-serving) KURRENTDB_RESTORE_CONFIRM_SERVING="1"; shift ;;
     --kurrentdb-restore-list)            KURRENTDB_RESTORE_LIST="1"; shift ;;
     --kurrentdb-bootstrap-retry)         KURRENTDB_BOOTSTRAP_RETRY="1"; shift ;;
+    --kurrentdb-bootstrap-prepare-update) KURRENTDB_BOOTSTRAP_PREPARE_UPDATE="1"; shift ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
 if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" && ( -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
   err "--kurrentdb-bootstrap-retry cannot be combined with restore or preflight actions."
+  exit 1
+fi
+if [[ "$KURRENTDB_BOOTSTRAP_PREPARE_UPDATE" == "1" && ( "$KURRENTDB_BOOTSTRAP_RETRY" == "1" || -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
+  err "--kurrentdb-bootstrap-prepare-update cannot be combined with retry, restore or preflight actions."
   exit 1
 fi
 for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
@@ -429,6 +436,10 @@ wait_for_final_kurrentdb_bootstrap_job_if_present()
 # so a silo with a broken ledger never has to wait on registry access to recover its history.
 if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" ]]; then
   run_kurrentdb_bootstrap_retry || exit $?
+  exit 0
+fi
+if [[ "$KURRENTDB_BOOTSTRAP_PREPARE_UPDATE" == "1" ]]; then
+  run_kurrentdb_bootstrap_prepare_update || exit $?
   exit 0
 fi
 if [[ "$KURRENTDB_RESTORE_LIST" == "1" ]]; then

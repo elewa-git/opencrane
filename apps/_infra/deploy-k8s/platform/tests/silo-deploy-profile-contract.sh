@@ -300,52 +300,60 @@ grep -Fq -- 'kubectl logs "job/$job_name"' "$DEPLOY_CORE"
     fi
   done
 
-  # Run the entrypoint's parser and retry dispatch so mixed actions cannot reach the cluster.
-  retry_parser="$(sed -n '/^while \[\[ \$# -gt 0 \]\]; do$/,/^for c in kubectl helm jq;/p' "$DEPLOY_CORE" | sed '$d')"
+  # Run the entrypoint's parser and dispatch so mixed actions cannot reach the cluster.
+  maintenance_parser="$(sed -n '/^while \[\[ \$# -gt 0 \]\]; do$/,/^for c in kubectl helm jq;/p' "$DEPLOY_CORE" | sed '$d')"
   retry_dispatch="$(sed -n '/^if \[\[ "\$KURRENTDB_BOOTSTRAP_RETRY" == "1" \]\]; then$/,/^fi$/p' "$DEPLOY_CORE")"
-  [[ -n "$retry_parser" && -n "$retry_dispatch" ]] || exit 1
+  prepare_dispatch="$(sed -n '/^if \[\[ "\$KURRENTDB_BOOTSTRAP_PREPARE_UPDATE" == "1" \]\]; then$/,/^fi$/p' "$DEPLOY_CORE")"
+  [[ -n "$maintenance_parser" && -n "$retry_dispatch" && -n "$prepare_dispatch" ]] || exit 1
   retry_guard_line="$(grep -nF 'cannot be combined with restore or preflight actions' "$DEPLOY_CORE" | cut -d: -f1)"
+  prepare_guard_line="$(grep -nF 'cannot be combined with retry, restore or preflight actions' "$DEPLOY_CORE" | cut -d: -f1)"
   cluster_access_line="$(grep -nF 'kubectl cluster-info' "$DEPLOY_CORE" | cut -d: -f1)"
-  (( retry_guard_line < cluster_access_line )) || exit 1
-  for retry_case in success failure preflight environment-preflight restore restore-list restore-confirm; do
-    : >"$bootstrap_wait_test_dir/retry-calls"
-    retry_exit=0
-    expected_status=1
-    case "$retry_case" in
-      success) expected_status=0 ;;
-      failure) retry_exit=29; expected_status=29 ;;
-    esac
-    if (
-      KURRENTDB_BOOTSTRAP_RETRY=0
-      KURRENTDB_RESTORE_BACKUP_ID=""
-      KURRENTDB_RESTORE_LIST=0
-      KURRENTDB_RESTORE_CONFIRM_SERVING=0
-      PREFLIGHT=0
-      set -- --kurrentdb-bootstrap-retry
-      case "$retry_case" in
-        preflight) set -- "$@" --preflight ;;
-        environment-preflight) PREFLIGHT=1 ;;
-        restore) set -- "$@" --kurrentdb-restore latest ;;
-        restore-list) set -- "$@" --kurrentdb-restore-list ;;
-        restore-confirm) set -- "$@" --kurrentdb-restore-confirm-serving ;;
+  (( retry_guard_line < cluster_access_line && prepare_guard_line < cluster_access_line )) || exit 1
+  for maintenance_action in retry prepare-update; do
+    for maintenance_case in success failure other-action preflight environment-preflight restore restore-list restore-confirm; do
+      : >"$bootstrap_wait_test_dir/maintenance-calls"
+      maintenance_exit=0
+      expected_status=1
+      case "$maintenance_case" in
+        success) expected_status=0 ;;
+        failure) maintenance_exit=29; expected_status=29 ;;
       esac
-      run_kurrentdb_bootstrap_retry() { printf 'retry\n' >>"$bootstrap_wait_test_dir/retry-calls"; return "$retry_exit"; }
-      kubectl() { printf 'cluster\n' >>"$bootstrap_wait_test_dir/retry-calls"; return 99; }
-      eval "$retry_parser"
-      eval "$retry_dispatch"
-      printf 'fallthrough\n' >>"$bootstrap_wait_test_dir/retry-calls"
-    ) >"$bootstrap_wait_test_dir/retry-output" 2>&1; then
-      retry_status=0
-    else
-      retry_status=$?
-    fi
-    [[ "$retry_status" == "$expected_status" ]] || exit 1
-    if [[ "$retry_case" == success || "$retry_case" == failure ]]; then
-      [[ "$(cat "$bootstrap_wait_test_dir/retry-calls")" == retry ]] || exit 1
-    else
-      [[ ! -s "$bootstrap_wait_test_dir/retry-calls" ]] || exit 1
-      grep -Fq 'cannot be combined with restore or preflight actions' "$bootstrap_wait_test_dir/retry-output" || exit 1
-    fi
+      if (
+        KURRENTDB_BOOTSTRAP_RETRY=0
+        KURRENTDB_BOOTSTRAP_PREPARE_UPDATE=0
+        KURRENTDB_RESTORE_BACKUP_ID=""
+        KURRENTDB_RESTORE_LIST=0
+        KURRENTDB_RESTORE_CONFIRM_SERVING=0
+        PREFLIGHT=0
+        set -- "--kurrentdb-bootstrap-$maintenance_action"
+        case "$maintenance_case" in
+          other-action) set -- "$@" --kurrentdb-bootstrap-retry --kurrentdb-bootstrap-prepare-update ;;
+          preflight) set -- "$@" --preflight ;;
+          environment-preflight) PREFLIGHT=1 ;;
+          restore) set -- "$@" --kurrentdb-restore latest ;;
+          restore-list) set -- "$@" --kurrentdb-restore-list ;;
+          restore-confirm) set -- "$@" --kurrentdb-restore-confirm-serving ;;
+        esac
+        run_kurrentdb_bootstrap_retry() { printf 'retry\n' >>"$bootstrap_wait_test_dir/maintenance-calls"; return "$maintenance_exit"; }
+        run_kurrentdb_bootstrap_prepare_update() { printf 'prepare-update\n' >>"$bootstrap_wait_test_dir/maintenance-calls"; return "$maintenance_exit"; }
+        kubectl() { printf 'cluster\n' >>"$bootstrap_wait_test_dir/maintenance-calls"; return 99; }
+        eval "$maintenance_parser"
+        eval "$retry_dispatch"
+        eval "$prepare_dispatch"
+        printf 'fallthrough\n' >>"$bootstrap_wait_test_dir/maintenance-calls"
+      ) >"$bootstrap_wait_test_dir/maintenance-output" 2>&1; then
+        maintenance_status=0
+      else
+        maintenance_status=$?
+      fi
+      [[ "$maintenance_status" == "$expected_status" ]] || exit 1
+      if [[ "$maintenance_case" == success || "$maintenance_case" == failure ]]; then
+        [[ "$(cat "$bootstrap_wait_test_dir/maintenance-calls")" == "$maintenance_action" ]] || exit 1
+      else
+        [[ ! -s "$bootstrap_wait_test_dir/maintenance-calls" ]] || exit 1
+        grep -Fq 'cannot be combined with' "$bootstrap_wait_test_dir/maintenance-output" || exit 1
+      fi
+    done
   done
 )
 

@@ -116,6 +116,47 @@ policy, and leaves conversation data and volumes in place. It cannot be combined
 restore flags. After it succeeds, rerun the normal deployment verification and confirm public health
 and an authenticated conversation before recording the silo as usable.
 
+## Update a completed history bootstrap
+
+Kubernetes keeps a Job's Pod template immutable. If an application update changes the KurrentDB
+bootstrap image, resources or mounts, first prepare the completed Job for replacement. Then run
+the normal deployment with the intended published build and bootstrap configuration:
+
+```bash
+OPENCRANE_CHART_DIR="$PWD/apps/_infra/deploy-k8s" \
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --release-version 0.11.0 --cluster-tenant "$OPENCRANE_CLUSTER_TENANT" \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE" \
+  --kurrentdb-bootstrap-prepare-update
+
+apps/_infra/deploy-k8s/deploy.sh \
+  --release-version 0.11.0 \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE" \
+  --base-domain "$OPENCRANE_BASE_DOMAIN" \
+  --cluster-tenant "$OPENCRANE_CLUSTER_TENANT" \
+  --acme-email "$OPENCRANE_ACME_EMAIL" \
+  --first-user-email "$OPENCRANE_FIRST_USER_EMAIL" \
+  --image-tag "$OPENCRANE_BUILD_TAG" \
+  --opencrane-ui-digest "$OPENCRANE_UI_DIGEST" \
+  --cognee-digest "$OPENCRANE_COGNEE_DIGEST" \
+  --postgres-credentials-secret "$OPENCRANE_POSTGRES_SECRET" \
+  --litellm-postgres-credentials-secret "$OPENCRANE_LITELLM_POSTGRES_SECRET" \
+  --postgres-admin-credentials-secret "$OPENCRANE_POSTGRES_ADMIN_SECRET"
+```
+
+Use the intended current Kubernetes context, matching namespace and release, and the same first-owner
+and OIDC coordinates as the installed silo. Set the bootstrap image or other changes through the
+[conversation execution profile](#conversation-execution-profile) inputs. The second command keeps
+existing release values and creates the desired bootstrap Job, then waits for verification and the
+server to become Ready.
+
+Preparation removes a completed, inactive release-owned Job and its finished Pods. It leaves history
+volumes and credentials in place, requires KurrentDB to be Ready, and refuses a running, failed,
+foreign or deleting Job. An absent Job needs no action. Kubernetes checks the observed Job UID and
+resource version during deletion, so a concurrent change or replacement makes preparation fail;
+inspect the Job before retrying. This action cannot be combined with retry, restore or preflight
+flags. Use [failed-bootstrap recovery](#retry-failed-history-bootstrap) when verification failed.
+
 ## GKE storage and snapshot prerequisites
 
 For a fresh installation that needs standard Persistent Disks, prepare a non-default storage class:

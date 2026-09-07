@@ -20,7 +20,7 @@ cluster does not match the assumptions needed to do that job safely.
 | `gke-snapshot-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-snapshot-class` prerequisite action. It creates or verifies one owned GKE Persistent Disk snapshot class without changing the cluster default or an existing foreign class. |
 | `gke-standard-storage-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-standard-storage-class` action. It creates or verifies one non-default class for expandable standard Persistent Disks through the installed GKE storage driver. |
 | `kurrentdb-restore.sh` | Restores the KurrentDB data volume from one scheduled backup when `k8s-deploy.sh` runs with `--kurrentdb-restore`. It refuses a serving ledger without explicit confirmation, keeps a pre-restore safety copy, reuses the backup CronJob's own image and scripts, and re-runs the bootstrap verification Job afterwards. `--kurrentdb-restore-list` prints the available backups. |
-| `kurrentdb-bootstrap.sh` | Implements `--kurrentdb-bootstrap-retry` for a failed or missing release-owned bootstrap Job once KurrentDB is Ready. It reuses the installed Helm manifest and verifies existing credentials and stream policy. The restore helper shares the same Job recreation. |
+| `kurrentdb-bootstrap.sh` | Retries a failed or missing release-owned bootstrap Job from the installed Helm manifest with `--kurrentdb-bootstrap-retry`. Before an application update changes the bootstrap Pod template, `--kurrentdb-bootstrap-prepare-update` removes a completed, inactive Job so the next normal deployment can create it again. Both actions require KurrentDB to be Ready; the restore helper shares the retry's manifest extraction and Job recreation. |
 | `qualified-release-image-policy.sh` | Keeps first-party services on one reviewed build, resolves exact digests for workflow runtimes and workers, enables those completed planes, and verifies every image before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
 | `network-policy-cni.sh` | Recognises only exact known NetworkPolicy-enforcing CNI DaemonSet names. The deploy preflight treats a missing match as fatal for multi-tenant topology and advisory for a single silo. |
@@ -98,6 +98,23 @@ upgrade contracts return at MVP (see
 
 Operational backup and restore configuration remains available in the PostgreSQL chart, but it is
 not a condition for deployment.
+
+## Bootstrap image and configuration updates
+
+Kubernetes does not allow an existing Job's Pod template to change. Before changing the KurrentDB
+bootstrap image, resources or mounts on an installed silo, run `k8s-deploy.sh` with that silo's
+release, namespace, tenant and release version plus `--kurrentdb-bootstrap-prepare-update`.
+Then run the normal silo deployment with the intended published images and configuration. Helm
+creates the new verification Job, and deployment waits for bootstrap and server readiness.
+
+Preparation checks the live Job and installed Helm manifest, then removes a completed, inactive
+Job using its observed UID and resource version as atomic deletion preconditions. It refuses a
+running, failed, foreign or deleting Job and requires the release's KurrentDB StatefulSet to be
+Ready. An absent Job is already prepared. A concurrent change fails the action; inspect the Job
+before retrying. This removes verification metadata and its finished Pods, leaving history volumes
+and credentials in place. Failed bootstrap still uses `--kurrentdb-bootstrap-retry`. Preparation
+cannot be combined with retry, restore or preflight actions. See the
+[operator example](../../../../website/operators/deployment-configuration.md#update-a-completed-history-bootstrap).
 
 ## OIDC upgrades
 
