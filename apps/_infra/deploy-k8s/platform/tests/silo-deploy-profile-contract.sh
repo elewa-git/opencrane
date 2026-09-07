@@ -9,7 +9,9 @@ KURRENTDB_SECRET_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/provision-kur
 COGNEE_POLICY="$ROOT_DIR/apps/_infra/cognee/deploy/image-policy.sh"
 
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
-ensure_umbrella_chart_dependencies
+trap cleanup_current_chart_sources EXIT
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
 
 grep -Fq -- '--acme-email' "$DEPLOY_SCRIPT"
 grep -Fq -- '--first-user-email' "$DEPLOY_SCRIPT"
@@ -155,7 +157,7 @@ helm_args=(
   --set-literal 'clustertenantManager.cognee.image.digest='
   --set-literal 'clustertenantManager.cognee.image.tag=latest')
 append_authoritative_cognee_image_helm_args
-cognee_deployment="$(helm template opencrane-silo "$ROOT_DIR/apps/_infra/deploy-k8s" \
+cognee_deployment="$(helm template opencrane-silo "$CHART_DIR" \
   "${helm_args[@]}" --show-only templates/app-rollups.yaml \
   | awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-silo-cognee/ { print }')"
 [[ -n "$cognee_deployment" ]]
@@ -178,7 +180,7 @@ helm_args=(
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')
 append_authoritative_cognee_image_helm_args
-local_cognee_deployment="$(helm template opencrane-silo "$ROOT_DIR/apps/_infra/deploy-k8s" \
+local_cognee_deployment="$(helm template opencrane-silo "$CHART_DIR" \
   "${helm_args[@]}" --show-only templates/app-rollups.yaml \
   | awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-silo-cognee/ { print }')"
 grep -Fq 'image: "opencrane/cognee:develop-smoke"' <<<"$local_cognee_deployment"
@@ -195,7 +197,7 @@ for _empty_helm_arg in "${empty_helm_args[@]-}"; do
 done
 
 wrapper_test_dir="$(mktemp -d)"
-trap 'rm -rf "$wrapper_test_dir"' EXIT
+trap 'cleanup_current_chart_sources; rm -rf "$wrapper_test_dir"' EXIT
 mkdir -p "$wrapper_test_dir/platform" "$wrapper_test_dir/bin"
 cp "$DEPLOY_SCRIPT" "$wrapper_test_dir/deploy.sh"
 cat >"$wrapper_test_dir/platform/k8s-deploy.sh" <<'EOF'

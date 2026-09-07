@@ -8,7 +8,9 @@ FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finaliz
 
 source "$POLICY"
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
-ensure_umbrella_chart_dependencies
+trap cleanup_current_chart_sources EXIT
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
 
 IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
 CP_TAG="sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -29,7 +31,7 @@ helm_args=(
   --set-literal 'clustertenantManager.image.tag=stale-server')
 append_authoritative_qualified_release_image_helm_args
 
-rendered="$(helm template opencrane-testv4 "$ROOT_DIR/apps/_infra/deploy-k8s" \
+rendered="$(helm template opencrane-testv4 "$CHART_DIR" \
   "${helm_args[@]}" --show-only templates/app-rollups.yaml)"
 
 _deployment()
@@ -51,7 +53,7 @@ grep -Fq 'namespace: opencrane-testv4-artifacts' <<<"$artifact_deployment"
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-artifact-service:${IMAGE_TAG}\"" <<<"$artifact_deployment"
 
 preflight_calls_file="$(mktemp)"
-trap 'rm -f "$preflight_calls_file"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$preflight_calls_file"' EXIT
 ALLOW_TAG_FLOAT=0
 log()
 {
@@ -126,7 +128,7 @@ source "$FINALIZATION"
 NAMESPACE=opencrane-testv4
 TIMEOUT=37
 rollout_calls_file="$(mktemp)"
-trap 'rm -f "$preflight_calls_file" "$rollout_calls_file"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$preflight_calls_file" "$rollout_calls_file"' EXIT
 kubectl()
 {
   printf '%s\n' "$*" >>"$rollout_calls_file"

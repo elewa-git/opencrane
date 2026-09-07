@@ -6,8 +6,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_CORE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/kurrentdb-restore.sh"
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 TEST_DIRECTORY="$(mktemp -d)"
-trap 'rm -rf "$TEST_DIRECTORY"' EXIT
+trap 'cleanup_current_chart_sources; rm -rf "$TEST_DIRECTORY"' EXIT
 
 # The deploy engine must source the helper, accept the flags, and run the restore before image
 # resolution so a silo with a broken ledger never waits on registry access.
@@ -26,9 +27,9 @@ bootstrap_wait_definition="$(grep -n '^wait_for_final_kurrentdb_bootstrap_job_if
 (( bootstrap_wait_definition < restore_line ))
 
 # Render the real backup CronJob once so the mocked kubectl hands the helper the chart's own template.
-source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
-ensure_umbrella_chart_dependencies
-helm template opencrane-testv5 "$ROOT_DIR/apps/_infra/deploy-k8s" \
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
+helm template opencrane-testv5 "$CHART_DIR" \
   --set historyStore.kurrentdb.enabled=true \
   --set historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --set historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls \

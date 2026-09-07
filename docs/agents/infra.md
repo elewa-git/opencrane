@@ -16,6 +16,9 @@ The workspace uses npm workspaces and Nx.
 Use focused project tasks while editing and the affected graph at a slice gate. Helm or deployment
 changes also require the matching contract scripts under `apps/*/tests` or
 `apps/_infra/deploy-k8s/platform/tests`.
+Umbrella Helm contracts use `prepare_current_chart_sources` and clean up their disposable chart
+tree on exit. They must not depend on or rebuild the checkout's generated `charts/` directory:
+Nx runs these contracts concurrently, and a shared dependency build can invalidate another render.
 
 ### Remote heavyweight validation
 

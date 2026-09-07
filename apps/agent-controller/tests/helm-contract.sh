@@ -2,10 +2,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+source "$ROOT/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 MANIFEST="$(mktemp)"
-trap 'rm -f "$MANIFEST"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST"' EXIT
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
 
-helm template oc "$ROOT/apps/_infra/deploy-k8s" \
+helm template oc "$CHART_DIR" \
   --set agentController.enabled=true \
   --set agentController.image.digest="sha256:$(printf 'a%.0s' {1..64})" \
   --set agentController.skillAuthoringValidation.image.digest="sha256:$(printf 'b%.0s' {1..64})" \

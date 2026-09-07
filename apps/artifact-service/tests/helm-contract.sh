@@ -2,11 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-CHART="$ROOT_DIR/apps/_infra/deploy-k8s"
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 OUTPUT="$(mktemp)"
-trap 'rm -f "$OUTPUT"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$OUTPUT"' EXIT
 
-helm dependency build "$CHART" >/dev/null
+prepare_current_chart_sources
+CHART="$(current_chart_sources_dir)"
 helm template opencrane "$CHART" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' >"$OUTPUT"

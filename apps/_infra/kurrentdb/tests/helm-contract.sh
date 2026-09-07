@@ -2,10 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-CHART_DIR="$ROOT_DIR/apps/_infra/deploy-k8s"
 
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
-ensure_umbrella_chart_dependencies
+trap cleanup_current_chart_sources EXIT
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
 
 VALUES=(
   --set historyStore.kurrentdb.enabled=true
