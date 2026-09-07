@@ -23,7 +23,15 @@ class _Response extends EventEmitter
 	json(value: unknown) { this.body = value; this.end(); return this; }
 	flushHeaders() { this.headersSent = true; }
 	write(frame: string) { this.frames.push(frame); return !this.backpressure; }
-	end() { if (!this.writableEnded) { this.writableEnded = true; this.emit("close"); } return this; }
+	end()
+	{
+		if (!this.writableEnded)
+		{
+			this.writableEnded = true;
+			this.emit("close");
+		}
+		return this;
+	}
 }
 
 function _Page(position: string, payloads: Record<string, string> = {})
