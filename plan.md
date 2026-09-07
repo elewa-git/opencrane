@@ -18,8 +18,8 @@ older run-owned runtime and relational transcript descriptions in historical pla
 | Explain the product and architecture consistently | Done in the review branch: README and website use the vision, current ownership, and built/pending status; website build passes. |
 | Complete onboarding-to-assistant continuity | Persona forwarding and caller-owned directory done (`825ceb3bc`), with regression tests. Complete live onboarding-to-answer proof remains pending. |
 | Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Multi-person live journey proof remains pending. |
-| Ask an assistant to work inside a group | Pending: explicit assistant selection, durable child chat, current independent permissions, and safe results delivered to the parent group. |
-| Rebuild channel event reads (#827) | Implemented after the baseline work: bounded, cancellable participant reads and resumable same-origin SSE on the public listener, consumed by the workspace. Live Kurrent qualification is still required. |
+| Ask an assistant to work inside a group | In progress: a shared company assistant opens a child chat for the group's current participants; people review results before sharing them back. Creation, current service authority, independent child access and UI completion are being implemented together. |
+| Rebuild channel event reads (#827) | Implemented and qualified against real KurrentDB in CI at `cbdb742d4`: bounded, cancellable participant reads and resumable same-origin SSE on the public listener, consumed by the workspace. The deployed multi-user journey remains to be proven. |
 | Qualify backup and restore on testv5 | Blocked at live preflight: the dev cluster has no testv5 namespace or VolumeSnapshotClass. Record installation prerequisites and real recovery timing in the deploy ledger. |
 
 Completed implementation moves to `plan-done.md`; live evidence belongs in
@@ -138,6 +138,10 @@ Measure fresh-install readiness against the existing target of ready Pods within
 silo. Record the result during deployment qualification; it is not a gate on ordinary source edits.
 
 Live testv5 work currently needs an installation configuration and namespace-local credentials.
+The repeated preflight found no saved or live testv5 identity configuration. The remaining operator
+inputs are the OIDC issuer, client ID, secure client-secret reference, first-owner email and ACME
+contact email. PostgreSQL and KurrentDB credentials must be generated for the new namespace through
+the app-owned deployment flow; credentials from another silo are not testv5 installation inputs.
 The dev cluster has a ready pinned Agent Sandbox controller and gVisor, but no testv5 namespace or
 VolumeSnapshotClass. The required drill is one scheduled fileCopy backup, a full `latest` restore
 with measured RTO, an anonymous `/health/live` check on KurrentDB 26.1.1 with anonymous endpoint
