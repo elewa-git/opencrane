@@ -1,20 +1,22 @@
-import { StreamNotFoundError } from "@kurrent/kurrentdb-client";
+import { PassThrough } from "node:stream";
+
+import { AccessDeniedError, StreamDeletedError, StreamNotFoundError, UnavailableError } from "@kurrent/kurrentdb-client";
 import { describe, expect, it, vi } from "vitest";
 
 import { HistoryExpectedRevisions } from "../history-store.types";
 import { _KurrentHistoryStore } from "../kurrent-history-store";
 
-/** Builds the client's stream-not-found error without a gRPC status object, keeping only its identity. */
-function _StreamNotFound(): StreamNotFoundError
-{
-	return Object.assign(Object.create(StreamNotFoundError.prototype) as StreamNotFoundError, { message: "stream not found" });
-}
-
-/** Builds a client double whose readStream fails the way the real client reports an unwritten stream. */
-function _MissingStreamClient()
+/** Reports the same failure through the client's finite iterator and catch-up subscription. */
+function _FailingStreamClient(error: Error = new StreamNotFoundError(undefined, "unwritten-stream"))
 {
 	return {
-		readStream: vi.fn(function _ReadStream() { return { async *[Symbol.asyncIterator]() { throw _StreamNotFound(); } }; }),
+		readStream: vi.fn(function _ReadStream() { return { async *[Symbol.asyncIterator]() { throw error; } }; }),
+		subscribeToStream: vi.fn(function _Subscribe()
+		{
+			const events = Object.assign(new PassThrough({ objectMode: true }), { unsubscribe: vi.fn().mockResolvedValue(undefined) });
+			queueMicrotask(function _Fail() { events.emit("error", error); });
+			return events;
+		}),
 	};
 }
 
@@ -30,8 +32,46 @@ describe("_KurrentHistoryStore wire shape", function _Suite()
 {
 	it("reports a stream the client has never written as a null head", async function _MissingHead()
 	{
-		const store = new _KurrentHistoryStore(_MissingStreamClient() as never);
+		const store = new _KurrentHistoryStore(_FailingStreamClient() as never);
 		await expect(store.readHead("computer-activations-silo-1")).resolves.toEqual({ streamName: "computer-activations-silo-1", revision: null });
+	});
+
+	it("finishes a never-written stream read without yielding an event", async function _MissingStream()
+	{
+		const store = new _KurrentHistoryStore(_FailingStreamClient() as never);
+		await expect(store.readStream({ streamName: "opencrane-silo" })[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+	});
+
+	it("finishes and closes a never-written bounded stream read", async function _MissingBoundedStream()
+	{
+		const client = _FailingStreamClient();
+		const store = new _KurrentHistoryStore(client as never);
+		await expect(store.readStream({ streamName: "unwritten-stream", maxCount: 1 })[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+		const subscription = client.subscribeToStream.mock.results[0]!.value;
+		expect(subscription.unsubscribe).toHaveBeenCalledOnce();
+		expect(subscription.destroyed).toBe(true);
+	});
+
+	it.each([
+		new AccessDeniedError(undefined, "access denied"),
+		new UnavailableError(undefined, "transport unavailable"),
+		StreamDeletedError.fromStreamName("deleted-stream"),
+		Object.assign(new Error("lookalike missing-stream failure"), { name: "StreamNotFoundError" }),
+	])("preserves %s on finite and bounded reads", async function _OtherReadFailure(error)
+	{
+		const store = new _KurrentHistoryStore(_FailingStreamClient(error) as never);
+		await expect(store.readStream({ streamName: "failed-stream" })[Symbol.asyncIterator]().next()).rejects.toBe(error);
+		await expect(store.readStream({ streamName: "failed-stream", maxCount: 1 })[Symbol.asyncIterator]().next()).rejects.toBe(error);
+	});
+
+	it("preserves cancellation even when its reason is a missing-stream error", async function _CancelledMissingRead()
+	{
+		const stop = new AbortController();
+		const reason = new StreamNotFoundError(undefined, "cancellation-reason");
+		const store = new _KurrentHistoryStore(_FailingStreamClient() as never);
+		const pending = store.readStream({ streamName: "unwritten-stream", maxCount: 1, signal: stop.signal })[Symbol.asyncIterator]().next();
+		stop.abort(reason);
+		await expect(pending).rejects.toBe(reason);
 	});
 
 	it("flattens metadata to strings and drops empty fields on both append paths", async function _FlatMetadata()

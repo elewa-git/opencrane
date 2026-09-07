@@ -17,9 +17,9 @@ function _readMountedCredential(path: string, name: string): string
 }
 
 /** Builds a TLS-verifying KurrentDB connection string so the client verifies the mounted CA. */
-function _createConnectionString(config: OpenCraneHistoryStoreConfig, username: string, password: string): string
+function _createConnectionString(config: OpenCraneHistoryStoreConfig): string
 {
-	return `kurrentdb://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${config.endpoint}?tlsCAFile=${encodeURIComponent(config.caCertificatePath)}&tlsVerifyCert=true&connectionName=opencrane-history`;
+	return `kurrentdb://${config.endpoint}?tlsCAFile=${encodeURIComponent(config.caCertificatePath)}&tlsVerifyCert=true&connectionName=opencrane-history`;
 }
 
 /**
@@ -31,6 +31,7 @@ function _createConnectionString(config: OpenCraneHistoryStoreConfig, username: 
  *
  * Called by: `_Main` in `apps/opencrane/src/index.ts`.
  * @see `docs/adr/0016-conversation-history-and-computers.md` for the history and deployment decision.
+ * @see https://github.com/kurrent-io/KurrentDB-Client-Rust/blob/a7798f94e8fb1f1f41d983cdd23057c28d8591d2/kurrentdb/src/grpc.rs#L484 — the native client copies URL credentials without decoding them.
  * @throws When either mounted service credential is empty or the deployment did not mount the fixed service identity.
  */
 export function _CreateHistoryStoreComposition(config: OpenCraneHistoryStoreConfig): OpenCraneHistoryStoreComposition
@@ -39,8 +40,10 @@ export function _CreateHistoryStoreComposition(config: OpenCraneHistoryStoreConf
 	if (username !== "opencrane-history")
 		throw new Error("OPENCRANE_HISTORY_STORE_USERNAME_PATH must contain the fixed opencrane-history service identity");
 	const password = _readMountedCredential(config.passwordPath, "OPENCRANE_HISTORY_STORE_PASSWORD_PATH");
-	const connectionString = _createConnectionString(config, username, password);
+	const connectionString = _createConnectionString(config);
 	const client = KurrentDBClient.connectionString(connectionString);
+	// The native transport preserves URL-encoded password characters; the provider sends their raw bytes.
+	client.setCredentialsProvider(function _historyStoreCredentials() { return { username, password }; });
 	const historyStore = new _KurrentHistoryStore(client);
 	return { close: async function _CloseHistoryStore() { await client.dispose(); }, historyStore };
 }

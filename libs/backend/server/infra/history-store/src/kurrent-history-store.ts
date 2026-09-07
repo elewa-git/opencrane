@@ -8,24 +8,35 @@ export class _KurrentHistoryStore implements HistoryStore
 	/** Connects the adapter to one silo-local KurrentDB client. */
 	public constructor(private readonly client: KurrentDBClient) {}
 
-	/** Reads a finite page from the requested stream. */
+	/** Reads a finite page, yielding no events when the stream has not been created. */
 	public async *readStream(request: HistoryReadRequest): AsyncIterable<HistoryRecordedEvent>
 	{
 		request.signal?.throwIfAborted();
-		if (request.maxCount !== undefined || request.signal !== undefined)
+		try
 		{
-			for (const event of await _ReadBounded(this.client, request))
+			if (request.maxCount !== undefined || request.signal !== undefined)
 			{
-				request.signal?.throwIfAborted();
-				yield event;
+				for (const event of await _ReadBounded(this.client, request))
+				{
+					request.signal?.throwIfAborted();
+					yield event;
+				}
+				return;
 			}
-			return;
+			const events = this.client.readStream(request.streamName, { direction: FORWARDS, fromRevision: request.fromRevision ?? START });
+			for await (const resolved of events)
+			{
+				if (resolved.event)
+					yield _MapRecordedEvent(resolved.event);
+			}
 		}
-		const events = this.client.readStream(request.streamName, { direction: FORWARDS, fromRevision: request.fromRevision ?? START });
-		for await (const resolved of events)
+		catch (error)
 		{
-			if (resolved.event)
-				yield _MapRecordedEvent(resolved.event);
+			// Cancellation must still reject when its reason is itself a StreamNotFoundError.
+			request.signal?.throwIfAborted();
+			// First reads of silo, identity, and active-turn streams precede their NoStream append.
+			if (!(error instanceof StreamNotFoundError))
+				throw error;
 		}
 	}
 

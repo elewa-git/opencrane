@@ -450,3 +450,19 @@ Full run reports belong in the corresponding pull request or issue.
   resolve, not a missing operator decision. Only that class was created. Testv5 still needs its
   identity configuration and fresh installation; no scheduled backup, restore, measured RTO,
   cloud snapshot readiness, or authenticated user journey is established by this prerequisite.
+
+## 2026-09-07 · CI fresh install · native history authentication · 08e3d27450c777e5b6dbee0308a29139087e5b83 · FAILED
+
+- findings: codebase: [qualification run 34121485088](https://github.com/elewa-git/opencrane/actions/runs/34121485088)
+  brought KurrentDB to readiness and completed bootstrap in 44 seconds, including current ACL
+  verification and the authenticated service probe. Server startup then received `AccessDeniedError`
+  on the silo sentinel read. The pinned native client retains percent encoding in URL credentials,
+  so generated password characters such as `+` and `/` reached authentication as `%2B` and `%2F`.
+- friction: the fresh-install step spent 19m08s before returning the failure. A local TLS probe
+  using the actual installed client reproduced the incorrect password bytes without Docker.
+- lesson: supply raw credentials through the SDK provider and keep them out of the URL. The
+  regression observes the real native request over verified TLS. The subsequent first-read path
+  also needs the history port's empty result for never-written streams: normalize that SDK error
+  while preserving authentication, transport, deletion, malformed-event and cancellation failures.
+  PR CI on this SHA passed all 24 jobs plus two configured skips; full qualification still blocked
+  publication. No testv5 recovery or authenticated user journey has run.

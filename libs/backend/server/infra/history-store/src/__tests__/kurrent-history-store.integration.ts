@@ -205,6 +205,23 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 		expect(head).toEqual({ streamName, revision: null });
 	});
 
+	it("reads a never-written stream as empty before its first no-stream append", async function ()
+	{
+		const streamName = _stream("silo-sentinel");
+		expect(await _collect(store.readStream({ streamName }))).toEqual([]);
+		const receipt = await store.append({ streamName, expectedRevision: HistoryExpectedRevisions.NoStream, events: [_event("opencrane.silo.v1", { siloId: "silo-1" })] });
+		expect(receipt.revision).toBe(0n);
+		expect(await _collect(store.readStream({ streamName }))).toHaveLength(1);
+	});
+
+	it("finishes a bounded read of a never-written stream without creating it", async function ()
+	{
+		const streamName = _stream("missing-conversation");
+		const events = await _collect(store.readStream({ streamName, maxCount: 1, signal: AbortSignal.timeout(5_000) }));
+		expect(events).toEqual([]);
+		expect(await _streamExists(client, streamName)).toBe(false);
+	});
+
 	it("raises WrongExpectedVersionError naming the stream when a writer's expected head is stale", async function ()
 	{
 		const streamName = _stream("conversation");

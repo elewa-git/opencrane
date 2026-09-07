@@ -135,7 +135,10 @@ export interface HistoryPersistentRecordedEvent extends HistoryRecordedEvent
  */
 export interface HistoryStore
 {
-	/** Reads events in one stream from the requested revision. */
+	/**
+	 * Reads events from the requested revision, yielding none when the stream has not been created.
+	 * Authentication, transport, deleted-stream, malformed-event, and cancellation failures propagate.
+	 */
 	readStream(request: HistoryReadRequest): AsyncIterable<HistoryRecordedEvent>;
 	/** Reads the latest revision without exposing a global ledger cursor. */
 	readHead(streamName: string): Promise<HistoryStreamHead>;

@@ -33,7 +33,10 @@ never reads the global ledger, grants database administration, or supplies a Pos
 - `_KurrentHistoryStore` adapts the official KurrentDB gRPC client to that port.
 - `HistoryExpectedRevisions` names the missing-stream condition accepted by the port.
 
-`readStream` keeps its full finite-read behavior when no options are supplied. A bounded read names
+`readStream` yields no events for a stream that has not been created, allowing a caller to make its
+first append with `NoStream`. Authentication, transport, deleted-stream, malformed-event, and
+cancellation failures remain errors. It keeps its full finite-read behavior when no options are
+supplied. A bounded read names
 `maxCount` and may pass an `AbortSignal`. The installed SDK's Rust read iterator cannot cancel an
 in-flight request, so these bounded reads use its closeable catch-up subscription and finish at the
 requested count or `caughtUp`. Cancellation and normal completion both unsubscribe upstream.

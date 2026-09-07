@@ -217,6 +217,9 @@ Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) compose
 The bundle keeps npm packages external, so this app's production dependencies must include its
 runtime clients, including KurrentDB. A dependency declared only at the workspace root is absent
 from the production image's workspace-scoped install.
+The history client verifies the mounted CA and supplies its mounted service credential through
+the SDK credential provider. Passwords stay out of the connection URL: the native transport
+otherwise preserves percent-encoded password characters and rejects valid generated credentials.
 
 ### Conversation-computer activation consumer
 
