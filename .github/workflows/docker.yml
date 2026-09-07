@@ -189,6 +189,9 @@ jobs:
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      - name: Enforce monorepo dependency boundaries
+        run: npm run lint:boundaries
+
       - name: Install Helm for topology render validation
         uses: azure/setup-helm@v5
         with:
@@ -293,15 +296,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          key: nx-test-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
           restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            nx-test-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-
 
       - name: Build, test, and lint affected projects
         run: npx nx affected -t build test lint
-
-      - name: Enforce monorepo dependency boundaries
-        run: npm run lint:boundaries
 
   # The PostgreSQL-bound proofs run beside the main test job instead of serially inside it:
   # database generation, the target baseline, the SQL authority suites, and the migration
@@ -465,9 +465,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          key: nx-api-contract-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
           restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            nx-api-contract-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-
 
       - name: Verify API reference and generated client
         run: |
@@ -525,9 +525,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          key: nx-storybook-visual-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
           restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            nx-storybook-visual-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-
 
       # The browser binaries change only with the lockfile, so they restore from cache instead
       # of downloading each run. On a cache hit the apt-driven install-deps is skipped entirely:
