@@ -66,7 +66,8 @@ Use the single command template in
 The script delegates to `apps/_infra/deploy-k8s/platform/k8s-deploy.sh` and installs the
 `opencrane-silo` umbrella chart. It does not install a second management plane. The three
 PostgreSQL bootstrap Secrets must already exist in the target namespace and use distinct
-credentials.
+credentials. The explicit [credential preparation actions](/operators/deployment-configuration#prepare-database-credentials)
+create them and the KurrentDB trust inputs for a fresh silo through the same deploy entrypoint.
 
 KurrentDB and Agent Sandbox are disabled in generic chart defaults. The current wrapper enables
 and validates them for `testv5`; other organisation names need an explicitly reviewed values profile

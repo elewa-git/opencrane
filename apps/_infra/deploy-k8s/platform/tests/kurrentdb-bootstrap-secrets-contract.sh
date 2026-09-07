@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Proves reruns accept one valid immutable KurrentDB authority set and reject corrupt trust or credentials.
+# Proves explicit deploy actions validate bootstrap credentials and reject invalid arguments before Kubernetes calls.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
-HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/provision-kurrentdb-bootstrap-secrets.sh"
+DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 TEST_DIRECTORY="$(mktemp -d)"
 trap 'rm -rf "$TEST_DIRECTORY"' EXIT
 FIXTURES="$TEST_DIRECTORY/fixtures"
@@ -31,6 +31,7 @@ printf 'cGFzc3dvcmQ=' >"$FIXTURES/opencrane-testv5-kurrentdb-history-service.pas
 cat >"$TEST_DIRECTORY/bin/kubectl" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "$*" >>"$BOOTSTRAP_KUBECTL_CALLS"
 if [[ "$1" == create && "$2" == namespace ]]; then printf 'kind: Namespace\n'; exit 0; fi
 if [[ "$1" == apply ]]; then cat >/dev/null; exit 0; fi
 [[ "$1" == get && "$2" == secret ]] || exit 1
@@ -41,8 +42,21 @@ if [[ "$arguments" == *"{.type}"* ]]; then
   case "$secret" in
     *-tls) printf kubernetes.io/tls ;;
     *-history-service) printf kubernetes.io/basic-auth ;;
+    *-postgres-bootstrap) printf kubernetes.io/basic-auth ;;
     *) printf Opaque ;;
   esac
+  exit 0
+fi
+if [[ "$secret" == *-postgres-bootstrap ]]; then
+  if [[ "$arguments" == *"{.data.username}"* ]]; then
+    case "$secret" in
+      *-opencrane-postgres-bootstrap) printf opencrane ;;
+      *-litellm-postgres-bootstrap) printf litellm ;;
+      *-admin-postgres-bootstrap) printf opencrane_database_admin ;;
+    esac | base64 | tr -d '\n'
+  elif [[ "$arguments" == *"{.data.password}"* ]]; then
+    printf cGFzc3dvcmQ=
+  fi
   exit 0
 fi
 for key in tls.crt tls.key ca.crt username password; do
@@ -56,12 +70,50 @@ exit 0
 MOCK
 chmod +x "$TEST_DIRECTORY/bin/kubectl"
 
-PATH="$TEST_DIRECTORY/bin:$PATH" KURRENTDB_FIXTURES="$FIXTURES" bash "$HELPER" \
+export PATH="$TEST_DIRECTORY/bin:$PATH"
+export KURRENTDB_FIXTURES="$FIXTURES"
+export BOOTSTRAP_KUBECTL_CALLS="$TEST_DIRECTORY/kubectl.calls"
+# Invalid input must stop in the selected helper, before namespace creation or secret reads.
+_expect_invalid_arguments() {
+  : >"$BOOTSTRAP_KUBECTL_CALLS"
+  if bash "$DEPLOY_SCRIPT" "$@" >/dev/null 2>"$TEST_DIRECTORY/arguments.error"; then
+    echo "Bootstrap action accepted invalid arguments: $*" >&2
+    exit 1
+  fi
+  if [[ -s "$BOOTSTRAP_KUBECTL_CALLS" ]]; then
+    echo "Bootstrap action called Kubernetes with invalid arguments: $*" >&2
+    exit 1
+  fi
+}
+for action in --provision-postgres-bootstrap-secrets --provision-kurrentdb-bootstrap-secrets; do
+  _expect_invalid_arguments "$action"
+  _expect_invalid_arguments "$action" --namespace opencrane-testv5
+  _expect_invalid_arguments "$action" --release opencrane-testv5
+  _expect_invalid_arguments "$action" --namespace
+  _expect_invalid_arguments "$action" --namespace opencrane-testv5 --release
+  _expect_invalid_arguments "$action" --namespace '' --release opencrane-testv5
+  _expect_invalid_arguments "$action" --namespace opencrane-testv5 --release ''
+  _expect_invalid_arguments "$action" --namespace opencrane-testv5 --release opencrane-testv5 --unknown
+  bash "$DEPLOY_SCRIPT" "$action" --help >/dev/null
+  [[ ! -s "$BOOTSTRAP_KUBECTL_CALLS" ]] || { echo 'Bootstrap help called Kubernetes.' >&2; exit 1; }
+done
+
+bash "$DEPLOY_SCRIPT" --provision-postgres-bootstrap-secrets \
+  --namespace opencrane-testv5 --release opencrane-testv5 >/dev/null
+for authority in opencrane litellm admin; do
+  grep -Fq "get secret opencrane-testv5-$authority-postgres-bootstrap -n opencrane-testv5" "$BOOTSTRAP_KUBECTL_CALLS"
+done
+if grep -Fq 'create secret' "$BOOTSTRAP_KUBECTL_CALLS"; then
+  echo 'PostgreSQL bootstrap rerun tried to replace existing credentials.' >&2
+  exit 1
+fi
+
+bash "$DEPLOY_SCRIPT" --provision-kurrentdb-bootstrap-secrets \
   --namespace opencrane-testv5 --release opencrane-testv5 >/dev/null
 
 openssl genrsa -out "$TEST_DIRECTORY/wrong.key" 2048 >/dev/null 2>&1
 base64 <"$TEST_DIRECTORY/wrong.key" | tr -d '\n' >"$FIXTURES/opencrane-testv5-kurrentdb-tls.tls.key"
-if PATH="$TEST_DIRECTORY/bin:$PATH" KURRENTDB_FIXTURES="$FIXTURES" bash "$HELPER" \
+if bash "$DEPLOY_SCRIPT" --provision-kurrentdb-bootstrap-secrets \
   --namespace opencrane-testv5 --release opencrane-testv5 >/dev/null 2>"$TEST_DIRECTORY/mismatch.error"; then
   echo 'KurrentDB provisioner accepted a mismatched TLS private key.' >&2
   exit 1
@@ -70,7 +122,7 @@ grep -Fq 'certificate and private key do not match' "$TEST_DIRECTORY/mismatch.er
 
 base64 <"$TEST_DIRECTORY/tls.key" | tr -d '\n' >"$FIXTURES/opencrane-testv5-kurrentdb-tls.tls.key"
 : >"$FIXTURES/opencrane-testv5-kurrentdb-bootstrap.password"
-if PATH="$TEST_DIRECTORY/bin:$PATH" KURRENTDB_FIXTURES="$FIXTURES" bash "$HELPER" \
+if bash "$DEPLOY_SCRIPT" --provision-kurrentdb-bootstrap-secrets \
   --namespace opencrane-testv5 --release opencrane-testv5 >/dev/null 2>"$TEST_DIRECTORY/password.error"; then
   echo 'KurrentDB provisioner accepted an empty administrator password.' >&2
   exit 1
@@ -83,10 +135,10 @@ openssl x509 -req -days 2 -sha256 -in "$TEST_DIRECTORY/tls.csr" -CA "$TEST_DIREC
   -out "$TEST_DIRECTORY/client.crt" >/dev/null 2>&1
 base64 <"$TEST_DIRECTORY/client.crt" | tr -d '\n' >"$FIXTURES/opencrane-testv5-kurrentdb-tls.tls.crt"
 printf 'cGFzc3dvcmQ=' >"$FIXTURES/opencrane-testv5-kurrentdb-bootstrap.password"
-if PATH="$TEST_DIRECTORY/bin:$PATH" KURRENTDB_FIXTURES="$FIXTURES" bash "$HELPER" \
+if bash "$DEPLOY_SCRIPT" --provision-kurrentdb-bootstrap-secrets \
   --namespace opencrane-testv5 --release opencrane-testv5 >/dev/null 2>"$TEST_DIRECTORY/purpose.error"; then
   echo 'KurrentDB provisioner accepted a client-only certificate for its TLS server.' >&2
   exit 1
 fi
 grep -Fq 'is not a server certificate signed by its CA' "$TEST_DIRECTORY/purpose.error"
-echo 'KurrentDB bootstrap Secrets contract: PASS'
+echo 'PostgreSQL and KurrentDB bootstrap Secrets entrypoint contract: PASS'

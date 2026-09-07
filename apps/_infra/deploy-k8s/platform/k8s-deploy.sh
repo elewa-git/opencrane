@@ -44,6 +44,14 @@
 # Creates or validates one OpenCrane-owned, non-default GKE Persistent Disk snapshot class with
 # Delete retention. It exits before any silo, chart, image, database, or identity setup.
 #
+# Fresh-install credentials (each action must come first and uses the current kubectl context):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-postgres-bootstrap-secrets \
+#     --namespace NAMESPACE --release RELEASE
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-kurrentdb-bootstrap-secrets \
+#     --namespace NAMESPACE --release RELEASE
+# These explicit actions create missing namespace-local credentials or validate existing ones.
+# They exit before ordinary install validation and never rotate existing credentials.
+#
 # KurrentDB restore: --kurrentdb-restore-list prints the scheduled backups of this silo and exits.
 # --kurrentdb-restore BACKUP_ID (or `latest`) scales KurrentDB to zero, restores the data volume
 # from that backup with the same image and scripts the backup CronJob uses, scales it back up,
@@ -98,12 +106,22 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "${1:-}" == "--provision-gke-snapshot-class" ]]; then
-  source "$SCRIPT_DIR/gke-snapshot-class.sh"
-  shift
-  provision_gke_snapshot_class "$@"
-  exit $?
-fi
+case "${1:-}" in
+  --provision-gke-snapshot-class)
+    source "$SCRIPT_DIR/gke-snapshot-class.sh"
+    shift
+    provision_gke_snapshot_class "$@"
+    exit $?
+    ;;
+  --provision-postgres-bootstrap-secrets)
+    shift
+    exec bash "$SCRIPT_DIR/provision-postgres-bootstrap-secrets.sh" "$@"
+    ;;
+  --provision-kurrentdb-bootstrap-secrets)
+    shift
+    exec bash "$SCRIPT_DIR/provision-kurrentdb-bootstrap-secrets.sh" "$@"
+    ;;
+esac
 POST_DEPLOY_VERIFY="$SCRIPT_DIR/post-deploy-verify.sh"
 if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
   echo "[k8s-deploy] Post-deploy verifier is missing at '$POST_DEPLOY_VERIFY'." >&2

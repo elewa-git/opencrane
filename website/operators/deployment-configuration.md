@@ -8,6 +8,26 @@ platform configuration API.
 > [DNS configuration](/operators/dns-config) for public hosts, and
 > [Telemetry and logging](/operators/telemetry-logging) for trace collection.
 
+## Prepare database credentials
+
+For a fresh silo, choose its namespace and release name, confirm the intended Kubernetes context,
+then generate its PostgreSQL and KurrentDB credentials through the deploy entrypoint:
+
+```bash
+set -euo pipefail
+test "$(kubectl config current-context)" = "$OPENCRANE_KUBERNETES_CONTEXT"
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-postgres-bootstrap-secrets \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE"
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-kurrentdb-bootstrap-secrets \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE"
+```
+
+Each action comes first, creates the namespace if needed, and exits after credential preparation.
+Retries validate existing credentials without rotating them. PostgreSQL gets separate application,
+LiteLLM and administrator credentials; KurrentDB also gets immutable TLS trust and service
+credentials. Pass their generated Secret names into the install profile. Ordinary installation
+validates these inputs and does not invoke either provisioning action automatically.
+
 ## Use the deploy entrypoint
 
 Use the app-owned deploy command. Populate these variables from your target configuration and

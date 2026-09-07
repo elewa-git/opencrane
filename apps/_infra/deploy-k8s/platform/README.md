@@ -15,6 +15,7 @@ cluster does not match the assumptions needed to do that job safely.
 | `Chart.yaml`, `templates/` | Gives all workloads the same naming, access-control, database, identity, and monitoring conventions. The parent release reuses these Helm helpers; they do not install anything on their own. |
 | `k8s-deploy.sh` | Installs or upgrades a silo from reviewed application images. It checks the live database first, applies the matching database and application changes, restarts services when their connection details change, and waits until the intended workloads are actually ready. An optional verification step also checks pods, DNS, and public health. |
 | `invitation-signing-secret.sh` | Keeps invitation links valid across routine upgrades. It creates the silo's signing key once, checks that the saved key is usable, and reuses it instead of silently rotating it. |
+| `provision-postgres-bootstrap-secrets.sh` | Implements the explicit `k8s-deploy.sh --provision-postgres-bootstrap-secrets` action. It creates a fresh silo's application, LiteLLM, and database-administrator credentials and validates existing credentials on reruns. |
 | `provision-kurrentdb-bootstrap-secrets.sh` | Creates one fresh silo's immutable KurrentDB TLS, administrator, operations, and history-service Secrets. Reruns validate the existing trust and credentials without rotating them. |
 | `gke-snapshot-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-snapshot-class` prerequisite action. It creates or verifies one owned GKE Persistent Disk snapshot class without changing the cluster default or an existing foreign class. |
 | `kurrentdb-restore.sh` | Restores the KurrentDB data volume from one scheduled backup when `k8s-deploy.sh` runs with `--kurrentdb-restore`. It refuses a serving ledger without explicit confirmation, keeps a pre-restore safety copy, reuses the backup CronJob's own image and scripts, and re-runs the bootstrap verification Job afterwards. `--kurrentdb-restore-list` prints the available backups. |
@@ -70,7 +71,23 @@ belong in sibling `apps/_infra/<service>` projects.
 
 ## Database deployment
 
-Every invocation supplies `--release-version`; the engine reads the PostgreSQL operand image from
+Prepare a fresh silo's database credentials through the deploy entrypoint, using the intended
+current kubectl context:
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-postgres-bootstrap-secrets \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE"
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-kurrentdb-bootstrap-secrets \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE"
+```
+
+Each action must be the first argument. It creates the namespace if needed and generates missing
+credentials for that release; a retry validates existing credentials without rotating them.
+KurrentDB also gets an immutable certificate authority, server certificate, and service credentials.
+These actions exit before image, chart, or identity validation. An ordinary installation requires
+the prepared Secrets and never invokes either provisioning action automatically.
+
+Every install invocation supplies `--release-version`; the engine reads the PostgreSQL operand image from
 that `releases/<version>.json` manifest. The schema is created once, by CNPG `initdb` from the
 app-owned target baseline (the baseline publisher prepends the `pg_cron` prerequisite). There is no
 version-to-version migration path pre-1.0: a dev silo that needs a newer schema is rebuilt, and

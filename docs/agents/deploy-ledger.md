@@ -466,3 +466,36 @@ Full run reports belong in the corresponding pull request or issue.
   while preserving authentication, transport, deletion, malformed-event and cancellation failures.
   PR CI on this SHA passed all 24 jobs plus two configured skips; full qualification still blocked
   publication. No testv5 recovery or authenticated user journey has run.
+
+## 2026-09-07 · CI fresh install · conversation workspace · 574673d5f52f2d92dfb823c90259283c17470a2c · LIVE
+
+- findings: [full qualification and publication run 34125652718](https://github.com/elewa-git/opencrane/actions/runs/34125652718)
+  passed all 25 selected jobs, including all 13 image publications; one configured job was skipped.
+  Source checks, fresh PostgreSQL authority proofs, real KurrentDB proofs, five image smokes, API
+  synchronization and the k3d installation passed without validation overrides. Storybook affected
+  detection ran but selected no component execution in this manual run. The separate
+  [PR run 34125286532](https://github.com/elewa-git/opencrane/actions/runs/34125286532) passed 24 jobs,
+  including its browser checks, with two configured skips; its complete rollup had 31 successful
+  checks and two skips.
+- images: registry inspection verified all 13 `sha-574673d5f52f2d92dfb823c90259283c17470a2c`
+  tags, immutable Linux/amd64 manifests and matching OCI revision labels. The smoke built separate
+  images from that same source before publication; deployment of the published digests remains
+  testv5 work. The full qualification/publication run took 13m26s.
+- timing: the k3d smoke step ran from 13:09:24 to 13:18:41 UTC (9m17s). Installation began at
+  13:15:44.873; KurrentDB rollout completed at 13:17:40.475, bootstrap completion was observed at
+  13:17:44.936 and server availability at 13:18:05.482. The application became available about
+  2m21s after installation began. These are disposable CI measurements, not testv5 recovery timing
+  or a controlled before/after benchmark.
+- proof: with TLS verification and anonymous endpoint/stream access disabled, the smoke asserted
+  anonymous `/health/live` returned 200/204, anonymous administration and sentinel reads returned
+  401/403, and the history service identity read the sentinel with 200. Individual status codes
+  were not printed; the final successful assertion sequence establishes those allowed results.
+  Storage qualification expanded a CSI-backed PVC from 64Mi to 128Mi. Agent Sandbox used the
+  explicit runc profile. This run did not qualify gVisor, an authenticated assistant turn, scheduled
+  KurrentDB backups, snapshot creation/restoration, or either recovery mode on testv5.
+- follow-up: preparation of the cloud drill caught invalid uppercase timestamps in both scheduled
+  and safety VolumeSnapshot names. `1867e416f` corrects those two naming paths; the rendered backup
+  script and actual restore safety manifest pass name-validation regressions. The deploy entrypoint
+  also exposes the existing namespace credential helpers as explicit actions, preserving ordinary
+  install validation and credential reuse. These later script/chart changes have separate focused
+  contract and independent-review evidence; they are not part of this CI installation's source SHA.

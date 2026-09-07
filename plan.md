@@ -14,7 +14,7 @@ older run-owned runtime and relational transcript descriptions in historical pla
 | Work | State and next proof |
 | --- | --- |
 | Repair #772's obsolete stack ancestry | Done: identical patch rebased as `46ce3204e`, PR targets `develop`, live stack checker passes. |
-| Make development checks proportional to the change | Boundary failures run early (`975b80955`), specialist reviews are scoped (`c648801e3`), rejected cross-run Nx cache transfers are removed (`a97c57bcd`), and Helm contracts use isolated chart fixtures (`874181a01`). Fresh-install failures and timing are recorded in the deploy ledger; the repaired 0.11 smoke needs CI qualification. A tested local Stop-hook proposal awaits explicit approval; active hooks are unchanged. |
+| Make development checks proportional to the change | Boundary failures run early (`975b80955`), specialist reviews are scoped (`c648801e3`), rejected cross-run Nx cache transfers are removed (`a97c57bcd`), and Helm contracts use isolated chart fixtures (`874181a01`). The repaired fresh install passed at `574673d5f`; failures, proof limits and measured timing are in the deploy ledger. A tested local Stop-hook proposal awaits explicit approval; active hooks are unchanged. |
 | Explain the product and architecture consistently | Done in the review branch: README and website use the vision, current ownership, and built/pending status; website build passes. |
 | Complete onboarding-to-assistant continuity | Persona forwarding and caller-owned directory done (`825ceb3bc`), with regression tests. Complete live onboarding-to-answer proof remains pending. |
 | Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Multi-person live journey proof remains pending. |
@@ -142,6 +142,10 @@ Measure fresh-install readiness against the existing target of ready Pods within
 silo. Record the result during deployment qualification; it is not a gate on ordinary source edits.
 
 Live testv5 work currently needs an installation configuration and namespace-local credentials.
+The deploy entrypoint now exposes explicit PostgreSQL and KurrentDB credential-preparation actions;
+they reuse the existing generators and verify existing credentials without rotation. Normal install
+validation remains separate. Snapshot resource names are corrected and covered by emitted-manifest
+tests; cloud snapshot creation and recovery still need the live drill.
 The repeated preflight found no saved or live testv5 identity configuration. The remaining operator
 inputs are the OIDC issuer, client ID, secure client-secret reference, first-owner email and ACME
 contact email. PostgreSQL and KurrentDB credentials must be generated for the new namespace through
