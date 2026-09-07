@@ -105,7 +105,7 @@ data:
     set -eu
     namespace="{{ .Release.Namespace }}"
     selector="app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=kurrentdb-backup,opencrane.ai/kurrentdb-backup-kind=scheduled"
-    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    stamp="$(date -u +%Y%m%dt%H%M%Sz)"
     name="{{ $serviceName }}-$stamp"
     kubectl create -f - <<EOF
     apiVersion: snapshot.storage.k8s.io/v1

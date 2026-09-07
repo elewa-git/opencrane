@@ -94,7 +94,7 @@ kubectl()
     *"annotate --local -f -"*) printf '%s\n' "$arguments" >"$TEST_DIRECTORY/annotate-call"; cat ;;
     *"create -f -"*) cat >"$TEST_DIRECTORY/created-$created" ;;
     *"create -f "*) cp "$manifest_file" "$TEST_DIRECTORY/created-$created" ;;
-    *"get volumesnapshot -n"*readyToUse==true*) printf '%s-kurrentdb-20260901T020000Z\n%s-kurrentdb-20260902T020000Z\n' "$RELEASE" "$RELEASE" ;;
+    *"get volumesnapshot -n"*readyToUse==true*) printf '%s-kurrentdb-20260901t020000z\n%s-kurrentdb-20260902t020000z\n' "$RELEASE" "$RELEASE" ;;
     *"volumesnapshot/"*readyToUse*) printf 'true' ;;
     *"volumesnapshot/"*volumeSnapshotClassName*) printf 'csi-snapshots' ;;
     *"pvc/data-${RELEASE}-kurrentdb-0"*storageClassName*) printf 'standard-rwo' ;;
@@ -180,6 +180,14 @@ safety="$TEST_DIRECTORY/created-1"
 claim="$TEST_DIRECTORY/created-2"
 grep -Fq 'kind: VolumeSnapshot' "$safety"
 grep -Fq "name: ${RELEASE}-kurrentdb-prerestore-" "$safety"
+node - "$ROOT_DIR/node_modules/js-yaml" "$safety" <<'NODE'
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const yaml = require(process.argv[2]);
+const name = yaml.load(fs.readFileSync(process.argv[3], "utf8")).metadata.name;
+assert.ok(name.length <= 253);
+assert.match(name, /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/);
+NODE
 grep -Fq 'opencrane.ai/kurrentdb-backup-kind: pre-restore' "$safety"
 grep -Fq 'volumeSnapshotClassName: csi-snapshots' "$safety"
 grep -Fq "persistentVolumeClaimName: data-${RELEASE}-kurrentdb-0" "$safety"
@@ -187,7 +195,7 @@ grep -Fq 'kind: PersistentVolumeClaim' "$claim"
 grep -Fq "name: data-${RELEASE}-kurrentdb-0" "$claim"
 grep -Fq 'storageClassName: standard-rwo' "$claim"
 grep -Fq 'storage: 20Gi' "$claim"
-grep -Fq "name: ${RELEASE}-kurrentdb-20260902T020000Z" "$claim"
+grep -Fq "name: ${RELEASE}-kurrentdb-20260902t020000z" "$claim"
 grep -Fq 'kind: VolumeSnapshot' "$claim"
 grep -Fq "name: ${RELEASE}-kurrentdb-bootstrap" "$TEST_DIRECTORY/created-3"
 calls="$(printf '%s\n' "${CALLS[@]}")"

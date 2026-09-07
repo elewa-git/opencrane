@@ -129,7 +129,7 @@ _kurrentdb_restore_from_volume_snapshot()
 
   # The node is stopped, so this safety snapshot is fully consistent. It is kept until an operator
   # deletes it; the scheduled pruning never touches it.
-  safety_name="${KURRENTDB_STATEFULSET}-prerestore-$(date -u +%Y%m%dT%H%M%SZ)"
+  safety_name="${KURRENTDB_STATEFULSET}-prerestore-$(date -u +%Y%m%dt%H%M%Sz)"
   log "Taking pre-restore safety snapshot '$safety_name' of '$KURRENTDB_DATA_CLAIM'…"
   kubectl create -f - <<EOF >/dev/null
 apiVersion: snapshot.storage.k8s.io/v1

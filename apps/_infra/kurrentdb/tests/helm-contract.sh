@@ -255,6 +255,34 @@ SNAPSHOT_VALUES=(
   --set-string 'historyStore.kurrentdb.backup.volumeSnapshot.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
 )
 snapshot_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" "${SNAPSHOT_VALUES[@]}")"
+# Execute the rendered backup script with a local API stub to validate the actual snapshot name.
+printf '%s\n' "$snapshot_rendered" | node -e '
+  const assert = require("node:assert/strict");
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { execFileSync } = require("node:child_process");
+  const yaml = require(process.argv[1]);
+  const resources = yaml.loadAll(fs.readFileSync(0, "utf8"));
+  const script = resources.find(function _IsBackupConfiguration(resource) {
+    return resource?.kind === "ConfigMap" && resource.metadata.name === "opencrane-testv5-kurrentdb-backup";
+  }).data["backup.sh"];
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kurrentdb-snapshot-name-"));
+  try {
+    const manifest = path.join(directory, "snapshot.yaml");
+    fs.writeFileSync(path.join(directory, "kubectl"), `#!/bin/sh\nset -eu\ncase "$1" in\n  create) cat > "$SNAPSHOT_MANIFEST" ;;\n  wait|get) ;;\n  *) exit 1 ;;\nesac\n`, { mode: 0o700 });
+    execFileSync("/bin/sh", ["-c", script.replaceAll("/tmp/snapshots", path.join(directory, "snapshots"))], {
+      env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, SNAPSHOT_MANIFEST: manifest }
+    });
+    const snapshot = yaml.load(fs.readFileSync(manifest, "utf8"));
+    assert.equal(snapshot.kind, "VolumeSnapshot");
+    assert.ok(snapshot.metadata.name.length <= 253);
+    assert.match(snapshot.metadata.name, /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/);
+    assert.equal(snapshot.spec.source.persistentVolumeClaimName, "data-opencrane-testv5-kurrentdb-0");
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+' "$ROOT_DIR/node_modules/js-yaml"
 grep -Fq 'opencrane.ai/kurrentdb-backup-mode: volumeSnapshot' <<<"$snapshot_rendered"
 grep -Fq 'image: "registry.invalid/kubectl@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"' <<<"$snapshot_rendered"
 grep -Fq 'volumeSnapshotClassName: csi-snapshots' <<<"$snapshot_rendered"
