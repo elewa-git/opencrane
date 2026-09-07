@@ -434,3 +434,19 @@ Full run reports belong in the corresponding pull request or issue.
   matching ACL is nested in the response. The final service probe requests JSON explicitly, and
   subscription retries inspect `/info` instead of consuming activation messages. No testv5 drill
   or user journey has run.
+
+## 2026-09-07 · dev prerequisite · GKE PD snapshot class · 74599200d6d46bbab5ca982d5e42cb375fe317d3 · LIVE
+
+- findings: infra: the deploy entrypoint created `opencrane-pd-snapshots` at 12:19:36 UTC on
+  `gke_weownai-proto_europe-west1_opencrane-dev`. The class uses `pd.csi.storage.gke.io` with
+  `Delete` policy and no default-class annotation. Its ownership labels are
+  `app.kubernetes.io/managed-by=opencrane-prerequisite-bootstrap` and
+  `opencrane.ai/prerequisite=gke-pd-snapshot-class`.
+- command: `apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-gke-snapshot-class opencrane-pd-snapshots --context gke_weownai-proto_europe-west1_opencrane-dev --storage-class standard-rwo`.
+  The identical action then reported an existing valid class. Readback at 12:20:36 UTC retained
+  UID `06a3c519-d969-4755-9980-50c3722898c4`, resource version `1788783576490431004`, and generation 1.
+  Both actions exited successfully; the retry changed no resource.
+- lesson: the missing snapshot class was a provisioning gap that the authorized script could
+  resolve, not a missing operator decision. Only that class was created. Testv5 still needs its
+  identity configuration and fresh installation; no scheduled backup, restore, measured RTO,
+  cloud snapshot readiness, or authenticated user journey is established by this prerequisite.

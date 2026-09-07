@@ -20,7 +20,7 @@ older run-owned runtime and relational transcript descriptions in historical pla
 | Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Multi-person live journey proof remains pending. |
 | Ask an assistant to work inside a group | Implementation complete (see [plan-done.md](plan-done.md)): explicit company assistant selection, a fixed shared child audience, durable creation, Back to group and reviewed human-authored sharing. Current CI evidence is recorded on [#826](https://github.com/elewa-git/opencrane/pull/826); live journey proof remains pending. |
 | Rebuild channel event reads (#827) | Implemented and qualified against real KurrentDB in CI at `cbdb742d4`: bounded, cancellable participant reads and resumable same-origin SSE on the public listener, consumed by the workspace. The deployed multi-user journey remains to be proven. |
-| Qualify backup and restore on testv5 | Blocked at live preflight: testv5 identity configuration is missing, and the dev cluster has no testv5 namespace or VolumeSnapshotClass. Record installation prerequisites and real recovery timing in the deploy ledger. |
+| Qualify backup and restore on testv5 | The GKE snapshot class is provisioned and an unchanged retry is verified. Fresh installation still needs testv5 identity configuration; no testv5 namespace or measured recovery drill exists. Record real recovery timing in the deploy ledger. |
 
 Completed implementation moves to `plan-done.md`; live evidence belongs in
 [`docs/agents/deploy-ledger.md`](docs/agents/deploy-ledger.md). A green test, a pushed change, a
@@ -146,8 +146,10 @@ The repeated preflight found no saved or live testv5 identity configuration. The
 inputs are the OIDC issuer, client ID, secure client-secret reference, first-owner email and ACME
 contact email. PostgreSQL and KurrentDB credentials must be generated for the new namespace through
 the app-owned deployment flow; credentials from another silo are not testv5 installation inputs.
-The dev cluster has a ready pinned Agent Sandbox controller and gVisor, but no testv5 namespace or
-VolumeSnapshotClass. The required drill is one scheduled fileCopy backup, a full `latest` restore
+The dev cluster has a ready pinned Agent Sandbox controller, gVisor, and the non-default
+`opencrane-pd-snapshots` class, provisioned through the deploy entrypoint at `74599200d`. A repeated
+action verified the same resource without changing it. The testv5 namespace remains absent.
+The required drill is one scheduled fileCopy backup, a full `latest` restore
 with measured RTO, an anonymous `/health/live` check on KurrentDB 26.1.1 with anonymous endpoint
 access disabled, and snapshot-mode qualification when a supported class exists. Cluster changes
 use the authorized app-owned scripts. Record actual results in the
