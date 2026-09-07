@@ -23,8 +23,10 @@ describe("LiteLLM model registration response", function _Suite()
 		vi.unstubAllGlobals();
 		for (const key of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"])
 		{
-			if (_SAVED_ENVIRONMENT[key] === undefined) delete process.env[key];
-			else process.env[key] = _SAVED_ENVIRONMENT[key];
+			if (_SAVED_ENVIRONMENT[key] === undefined)
+				delete process.env[key];
+			else
+				process.env[key] = _SAVED_ENVIRONMENT[key];
 		}
 	});
 
@@ -57,7 +59,45 @@ describe("LiteLLM model registration response", function _Suite()
 
 		await expect(_RegisterLiteLlmModel({ ..._INPUT, deploymentId: "command-deployment" })).resolves.toBe("command-deployment");
 		expect(fetchMock).toHaveBeenCalledOnce();
-		expect(fetchMock.mock.calls[0][0]).toBe("http://litellm.svc/model/info");
+		expect(fetchMock.mock.calls[0][0]).toBe("http://litellm.svc/v2/model/info");
+	});
+
+	it("creates the first deployment from an empty v2 catalogue and reuses it on retry", async function _FirstModel()
+	{
+		const entry = { model_name: "openai/test", model_info: { id: "command-deployment", mode: "chat" }, litellm_params: { model: "openai/test" } };
+		let created = false;
+		const fetchMock = vi.fn(async function _Fetch(url: string, request?: RequestInit): Promise<Response>
+		{
+			if (url === "http://litellm.svc/v2/model/info")
+				return new Response(JSON.stringify({ data: created ? [entry] : [] }), { status: 200 });
+			if (url === "http://litellm.svc/model/new" && request?.method === "POST")
+			{
+				expect(JSON.parse(request.body as string).model_info.id).toBe("command-deployment");
+				created = true;
+				return new Response(JSON.stringify({ model_info: { id: "command-deployment" } }), { status: 200 });
+			}
+			return new Response(JSON.stringify({ detail: { error: "LLM Model List not loaded in" } }), { status: 500 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const input = { ..._INPUT, deploymentId: "command-deployment", requireLiveRegistration: true };
+
+		await expect(_RegisterLiteLlmModel(input)).resolves.toBe("command-deployment");
+		await expect(_RegisterLiteLlmModel(input)).resolves.toBe("command-deployment");
+		expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
+			"http://litellm.svc/v2/model/info",
+			"http://litellm.svc/model/new",
+			"http://litellm.svc/v2/model/info",
+		]);
+	});
+
+	it("does not create a deployment when the v2 catalogue is unavailable", async function _UnavailableCatalogue()
+	{
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: { error: "Database unavailable" } }), { status: 500 }));
+		vi.stubGlobal("fetch", fetchMock);
+
+		await expect(_RegisterLiteLlmModel({ ..._INPUT, requireLiveRegistration: true })).rejects.toThrow("model inventory returned HTTP 500");
+		expect(fetchMock).toHaveBeenCalledOnce();
+		expect(fetchMock.mock.calls[0][0]).toBe("http://litellm.svc/v2/model/info");
 	});
 
 	it("uses the admitted command id as LiteLLM's deterministic deployment id", async function _UsesDeterministicId()

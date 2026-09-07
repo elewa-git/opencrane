@@ -290,7 +290,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		const inventory: Array<Record<string, unknown>> = [];
 		const fetchMock = vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
 		{
-			if (url.endsWith("/model/info"))
+			if (url.endsWith("/v2/model/info"))
 				return new Response(JSON.stringify({ data: inventory }), { status: 200 });
 			if (url.includes("/credentials/"))
 				return new Response("", { status: 404 });
@@ -360,7 +360,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		let deployment: Record<string, unknown> | null = null;
 		const fetchMock = vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
 		{
-			if (url.endsWith("/model/info"))
+			if (url.endsWith("/v2/model/info"))
 				return new Response(JSON.stringify({ data: deployment === null ? [] : [deployment] }), { status: 200 });
 			if (url.endsWith("/model/new"))
 			{

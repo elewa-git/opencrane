@@ -42,7 +42,9 @@ off-policy-evaluation (OPE) and savings helpers are likewise pure estimators use
 shadow mode, whether a cheaper candidate model would hold quality before it ever routes live
 traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is data, tuned as providers ship models.
 
-Model registration reads LiteLLM inventory before creating anything. A durable provider command
+Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.0 proxy's
+`/v2/model/info` route returns an empty catalogue on a fresh installation, allowing its first model
+to be registered. Failed requests and malformed inventory remain errors. A durable provider command
 supplies a deterministic deployment identifier; the inventory entry must match that identifier plus
 the admitted upstream model, API base, credential reference, and mode. An absent match permits
 `POST /model/new`; a mismatch or ambiguous public name fails without accepting out-of-band state.

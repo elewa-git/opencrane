@@ -658,3 +658,33 @@ Full run reports belong in the corresponding pull request or issue.
   being diagnosed before or within payload persistence, separately from the missing-model barrier.
 - boundary: no completed assistant answer, reviewed child-chat return, authenticated browser reload,
   or data-bearing backup restore is established by this run. Both recovery drills remain pending.
+
+## 2026-09-07 · dev repair · testv5 provider and message diagnosis · ea0ba66c32a3891012a4474607c69d85e0831aef · PARTIAL
+
+- CI: [Actions run 34161718885](https://github.com/elewa-git/opencrane/actions/runs/34161718885)
+  passed 25 jobs with one configured skip and published all 13 deployable images. Daemon-free
+  manifest inspection verified their Linux amd64 image revision labels against this SHA.
+- timing: the owning install command with verification ran from 21:24:35.461 to 21:28:29.007 UTC
+  (233.547s), exiting 0. The server became Ready at 21:28:01 and public TLS health returned 200
+  at 21:28:26.681. At 21:29:12, all 11 Pods were Ready without restarts; seven running application
+  image IDs matched the publication receipt. This measures repair, not fresh installation.
+- inputs: the immutable first-owner/OIDC binding and the existing conversation were retained.
+  The completed bootstrap Job retained its previously qualified utility image, explicitly pinned
+  independently of application images; its Pod template was not patched. The PostgreSQL operand
+  retained the current release manifest's image. Neither is evidence that the new images ran.
+- identity: all three dedicated users repeated normal password-verified OIDC admission by 21:30:30.
+  All three had approved personas and saved guided answers; the two colleagues had also passed
+  fresh-read resume and duplicate-answer checks. Completion still needs a usable default model.
+- findings: codebase: the credential response repair now reaches a successful LiteLLM credential
+  creation. The next read fails because `/model/info` returns 500 before any model exists. At
+  21:50:38.187, an authenticated read of the pinned proxy's `/v2/model/info` returned 200 with an
+  empty `data` array. The adapter repair uses that endpoint and preserves failures for unavailable
+  or malformed inventory; no error response is interpreted as an empty catalogue.
+- findings: codebase: the group's message still returned 503 at 21:31:05 and persisted no payload.
+  Source diagnosis found Conversation Use, an effect action, passed to the authority's read-only
+  entitlement listing. Repair must separate pure eligibility decisions from effect admission and
+  record message admission alongside encrypted payload persistence in the same transaction.
+- boundary: personal answers, ordinary group messages, company-assistant child answers, reviewed
+  sharing and data-bearing restores remain unproven. Browser login stopped before password entry;
+  the automatic approval reviewer rejected placing the fixture password on the system clipboard.
+  No password was copied, and the authenticated API evidence does not establish browser completion.
