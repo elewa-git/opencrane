@@ -62,6 +62,34 @@ this installation machinery from live qualification.
 
 Source: [`deploy.sh`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/deploy.sh).
 
+## GKE snapshot prerequisite
+
+Before selecting KurrentDB `volumeSnapshot` backups, prepare one snapshot class through the deploy
+entrypoint. This separate action needs the existing GKE Persistent Disk driver and snapshot API;
+it does not install a silo or require identity-provider credentials.
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-gke-snapshot-class opencrane-pd-snapshots \
+  --context "$OPENCRANE_KUBERNETES_CONTEXT" \
+  --storage-class standard-rwo
+```
+
+The action flag comes first. The current context must match the explicit target, and the selected
+StorageClass must use `pd.csi.storage.gke.io`. The action creates one OpenCrane-owned, non-default
+class with `Delete` policy, or verifies an existing exact match. It refuses foreign classes,
+different drivers or retention settings, and default-class annotations without changing them.
+`Delete` lets scheduled retention remove the cloud snapshot when its Kubernetes object is pruned;
+the separately labelled pre-restore safety snapshots remain outside scheduled pruning.
+
+In the silo values profile, set `historyStore.kurrentdb.backup.mode` to `volumeSnapshot` and
+`historyStore.kurrentdb.backup.volumeSnapshot.className` to `opencrane-pd-snapshots`. Supply the
+snapshot Job's published image repository and immutable digest under
+`historyStore.kurrentdb.backup.volumeSnapshot.image`. Provision the ledger's data volume through
+the same CSI driver, such as `standard-rwo`. The deploy engine supplies the bounded Kubernetes API
+network paths. Class creation alone does not prove a backup or restore: complete the
+[recovery drill](/operators/runbook) before recording it as qualified.
+
 ## Conversation live updates
 
 The existing public API serves same-origin browser events. Keep the ordinary authenticated API

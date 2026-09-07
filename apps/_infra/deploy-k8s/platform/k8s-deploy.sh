@@ -38,6 +38,12 @@
 #                            [--kurrentdb-restore-list]
 #                            [--kurrentdb-restore BACKUP_ID [--kurrentdb-restore-confirm-serving]]
 #
+# Snapshot prerequisite (a separate action; this flag must come first):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-gke-snapshot-class NAME \
+#     --context CONTEXT --storage-class SC
+# Creates or validates one OpenCrane-owned, non-default GKE Persistent Disk snapshot class with
+# Delete retention. It exits before any silo, chart, image, database, or identity setup.
+#
 # KurrentDB restore: --kurrentdb-restore-list prints the scheduled backups of this silo and exits.
 # --kurrentdb-restore BACKUP_ID (or `latest`) scales KurrentDB to zero, restores the data volume
 # from that backup with the same image and scripts the backup CronJob uses, scales it back up,
@@ -92,6 +98,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "${1:-}" == "--provision-gke-snapshot-class" ]]; then
+  source "$SCRIPT_DIR/gke-snapshot-class.sh"
+  shift
+  provision_gke_snapshot_class "$@"
+  exit $?
+fi
 POST_DEPLOY_VERIFY="$SCRIPT_DIR/post-deploy-verify.sh"
 if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
   echo "[k8s-deploy] Post-deploy verifier is missing at '$POST_DEPLOY_VERIFY'." >&2

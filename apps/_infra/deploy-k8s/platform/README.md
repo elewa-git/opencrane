@@ -16,6 +16,7 @@ cluster does not match the assumptions needed to do that job safely.
 | `k8s-deploy.sh` | Installs or upgrades a silo from reviewed application images. It checks the live database first, applies the matching database and application changes, restarts services when their connection details change, and waits until the intended workloads are actually ready. An optional verification step also checks pods, DNS, and public health. |
 | `invitation-signing-secret.sh` | Keeps invitation links valid across routine upgrades. It creates the silo's signing key once, checks that the saved key is usable, and reuses it instead of silently rotating it. |
 | `provision-kurrentdb-bootstrap-secrets.sh` | Creates one fresh silo's immutable KurrentDB TLS, administrator, operations, and history-service Secrets. Reruns validate the existing trust and credentials without rotating them. |
+| `gke-snapshot-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-snapshot-class` prerequisite action. It creates or verifies one owned GKE Persistent Disk snapshot class without changing the cluster default or an existing foreign class. |
 | `kurrentdb-restore.sh` | Restores the KurrentDB data volume from one scheduled backup when `k8s-deploy.sh` runs with `--kurrentdb-restore`. It refuses a serving ledger without explicit confirmation, keeps a pre-restore safety copy, reuses the backup CronJob's own image and scripts, and re-runs the bootstrap verification Job afterwards. `--kurrentdb-restore-list` prints the available backups. |
 | `qualified-release-image-policy.sh` | Keeps first-party services on one reviewed build, resolves exact digests for workflow runtimes and workers, enables those completed planes, and verifies every image before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
@@ -131,6 +132,26 @@ managed `kube-system` namespace. It never installs
 external-dns or DNS credentials and it does not create a cluster-wide certificate issuer. Each silo
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
 ingress Service reports the reserved address.
+
+For KurrentDB volume snapshots on an existing GKE Persistent Disk driver, run this separate action
+through the deploy entrypoint before installing the silo:
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-gke-snapshot-class opencrane-pd-snapshots \
+  --context "$OPENCRANE_KUBERNETES_CONTEXT" \
+  --storage-class standard-rwo
+```
+
+The action requires the current context to match, the complete `snapshot.storage.k8s.io/v1` API,
+and a StorageClass using the installed `pd.csi.storage.gke.io` driver. It creates one named,
+non-default class with `Delete` policy, so scheduled retention removes the underlying snapshots
+when it deletes their Kubernetes objects. A retry verifies the existing OpenCrane ownership and
+policy; a foreign class, changed parameters, or default-class annotation is refused. It never
+installs a driver, changes another resource, or starts a silo, and requires no identity credentials.
+Select this name with `historyStore.kurrentdb.backup.volumeSnapshot.className` in the silo profile;
+the backup still needs `mode: volumeSnapshot` and its qualified kubectl image. Creating the class
+does not prove cloud snapshot permissions, readiness, or recovery; those require the live drill.
 
 The short-lived PostgreSQL privilege proof uses ordinary GKE Autopilot scheduling. Its single Job
 runs one PostgreSQL client container for each logical database, which means two containers in the
