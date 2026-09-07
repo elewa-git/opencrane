@@ -25,8 +25,12 @@ subagents and autonomous delivery to the parent remain later work.
 Focused backend and browser checks, fresh-database authority tests and independent review support
 the implementation. Review repairs cover late-join retry, transient identity-history failure, shorter refreshed
 membership deadlines, and explicit shared-chat audience wording.
-The backend is committed in `951430524`; the UI and documentation complete the same review
-branch. Integration CI and live multi-person qualification for this wave remain pending. The earlier green CI at `cbdb742d4` covers onboarding, ordinary conversation continuity and
+The backend is committed in `951430524`; the UI and documentation in `2f4cc355e`. CI on that
+combined source passed affected build/test/lint, database authority, KurrentDB, API contracts and
+all five image smoke checks. Its 107 browser interaction/accessibility tests passed; the only
+failure was four missing Linux screenshot baselines, subsequently inspected from CI captures. Current integration results are recorded on [#826](https://github.com/elewa-git/opencrane/pull/826);
+live multi-person qualification remains pending. The earlier green CI at `cbdb742d4` covers
+onboarding, ordinary conversation continuity and
 #827, including its real Kurrent bounded-read test; it is not evidence for this later group wave.
 Testv5 still lacks installation identity configuration. The tested Stop-hook proposal remains
 unapplied pending explicit approval. No deployment or MVP completion is claimed.
