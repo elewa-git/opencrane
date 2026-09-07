@@ -512,6 +512,10 @@ spec:
           podSelector:
             matchLabels:
               k8s-app: kube-dns
+        {{- range $history.dnsResolverCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
       ports:
         - protocol: UDP
           port: 53

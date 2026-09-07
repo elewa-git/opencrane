@@ -547,3 +547,32 @@ Full run reports belong in the corresponding pull request or issue.
   the public wrapper. A text-formatting failure must not trigger unnecessary controller changes.
   The application images, public TLS endpoint, authenticated product and recovery remain unqualified
   on testv5; no installation or restore command ran in this attempt.
+
+## 2026-09-07 · dev fresh install · testv5 bootstrap DNS failure · 219e701879a94304e9b4f3d7cf5134b2bad52c95 · PARTIAL
+
+- timing: preflight passed in 49.114s at 19:11:13 UTC. Installation ran from 19:11:41.513 to
+  19:25:53.866 UTC (852.349s), using the qualified `574673d5f` application images. PostgreSQL
+  privileges completed in 26s; all requested standard-disk PVCs bound. Application resources were
+  admitted at 19:14:50–53. KurrentDB became Ready at 19:17:08, with zero restarts. ACME completed
+  and public TLS validated. Public health remained HTTP 503; all-Pods-Ready and the five-minute
+  readiness target were not achieved.
+- findings: chart: the bootstrap Pod started at 19:15:56 after a 59.775s image-pull wait, of which
+  downloading took 2.177s. Scoped Cloud Logging recovered repeated DNS-resolution failures for the
+  private KurrentDB service from 19:16:08 through 19:20:49. The cluster uses node-local resolver
+  `169.254.20.10` with GKE DNS cache and `ADVANCED_DATAPATH`; the bootstrap NetworkPolicy allowed
+  only the `kube-dns` Pod selector. Bootstrap reached `FailureTarget` at 19:20:21 and `Failed` at
+  19:20:53 because of its 330-second deadline. Its Pod was deleted by the Job controller. The
+  server could not read its silo stream and restarted with `AccessDeniedError`.
+- findings: script: the installer waited only for Job completion, then lost the failed command's
+  status after its `if` block. Interrupting that local wait produced exit 0 and an installed message
+  despite failed bootstrap and public HTTP 503. The final workload list also omitted the actual
+  `opencrane-server` Deployment. Repairs add terminal-failure detection, correct failure propagation,
+  the server readiness wait and an explicit release-owned bootstrap retry.
+- findings: recovery: the first scheduled file-copy attempt refused the uninitialised data volume
+  because `writer.chk` was absent. Its automatic retry succeeded at 19:17:08; the next scheduled
+  Job succeeded at 19:20:12. These pre-fixture backups establish no product-data recovery or RTO.
+  KurrentDB's three insecure/anonymous flags are false and anonymous HTTPS probes succeed; direct
+  response-code verification, product login, AI registration and both recovery drills remain pending.
+- lesson: configure exact resolver host CIDRs for the restricted bootstrap and snapshot Jobs. Treat
+  terminal bootstrap failure as failed installation immediately, retain cloud logs when deadline
+  handling removes the Pod, and retry the same release's verification Job after applying the repair.

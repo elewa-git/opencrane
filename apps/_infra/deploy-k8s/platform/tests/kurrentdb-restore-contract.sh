@@ -67,7 +67,7 @@ wait_for_final_kurrentdb_bootstrap_job_if_present() { CALLS+=("wait-bootstrap-jo
 helm()
 {
   printf '%s\n' "$*" >"$TEST_DIRECTORY/helm-call"
-  printf -- '---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: other\n---\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: %s-kurrentdb-bootstrap\n---\n' "$RELEASE"
+  printf -- '---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: other\n---\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: %s-kurrentdb-bootstrap\n  labels:\n    app.kubernetes.io/instance: %s\n    app.kubernetes.io/component: kurrentdb-bootstrap\n---\n' "$RELEASE" "$RELEASE"
 }
 kubectl()
 {
@@ -91,7 +91,10 @@ kubectl()
     *"cronjob/${RELEASE}-kurrentdb-backup"*"-o json"*) cat "$TEST_DIRECTORY/cronjob.json" ;;
     *"statefulset/${RELEASE}-kurrentdb"*readyReplicas*) printf '%s' "$READY_REPLICAS" ;;
     *"statefulset/${RELEASE}-kurrentdb"*".spec.replicas"*) printf '1' ;;
-    *"annotate --local -f -"*) printf '%s\n' "$arguments" >"$TEST_DIRECTORY/annotate-call"; cat ;;
+    *"annotate --local -f -"*)
+      printf '%s\n' "$arguments" >"$TEST_DIRECTORY/annotate-call"
+      node -e 'const yaml = require(process.argv[1]); const doc = yaml.load(require("node:fs").readFileSync(0, "utf8")); doc.metadata.annotations = {"meta.helm.sh/release-name": process.argv[2], "meta.helm.sh/release-namespace": process.argv[3]}; process.stdout.write(JSON.stringify(doc));' "$ROOT_DIR/node_modules/js-yaml" "$RELEASE" "$NAMESPACE"
+      ;;
     *"create -f -"*) cat >"$TEST_DIRECTORY/created-$created" ;;
     *"create -f "*) cp "$manifest_file" "$TEST_DIRECTORY/created-$created" ;;
     *"get volumesnapshot -n"*readyToUse==true*) printf '%s-kurrentdb-20260901t020000z\n%s-kurrentdb-20260902t020000z\n' "$RELEASE" "$RELEASE" ;;
@@ -106,6 +109,7 @@ kubectl()
 
 # shellcheck source=../kurrentdb-restore.sh
 source "$HELPER"
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/kurrentdb-bootstrap.sh"
 
 # 1. A serving ledger is never restored over without the explicit confirmation flag.
 if run_kurrentdb_restore 20260901T020000Z 0 2>"$TEST_DIRECTORY/refused.error"; then
@@ -154,11 +158,8 @@ grep -Fq "get manifest $RELEASE -n $NAMESPACE" "$TEST_DIRECTORY/helm-call"
 grep -Fq "meta.helm.sh/release-name=$RELEASE" "$TEST_DIRECTORY/annotate-call"
 grep -Fq "meta.helm.sh/release-namespace=$NAMESPACE" "$TEST_DIRECTORY/annotate-call"
 bootstrap_job="$TEST_DIRECTORY/created-2"
-grep -Fq "name: ${RELEASE}-kurrentdb-bootstrap" "$bootstrap_job"
-if grep -Fq 'name: other' "$bootstrap_job"; then
-  echo 'bootstrap re-run re-created resources other than the bootstrap Job' >&2
-  exit 1
-fi
+[[ "$(jq -r '.metadata.name' "$bootstrap_job")" == "${RELEASE}-kurrentdb-bootstrap" ]]
+[[ "$(jq -r '.metadata.namespace' "$bootstrap_job")" == "$NAMESPACE" ]]
 
 # 3. Listing never touches the ReadWriteOnce data volume the running database holds.
 CALLS=()
@@ -197,7 +198,7 @@ grep -Fq 'storageClassName: standard-rwo' "$claim"
 grep -Fq 'storage: 20Gi' "$claim"
 grep -Fq "name: ${RELEASE}-kurrentdb-20260902t020000z" "$claim"
 grep -Fq 'kind: VolumeSnapshot' "$claim"
-grep -Fq "name: ${RELEASE}-kurrentdb-bootstrap" "$TEST_DIRECTORY/created-3"
+[[ "$(jq -r '.metadata.name' "$TEST_DIRECTORY/created-3")" == "${RELEASE}-kurrentdb-bootstrap" ]]
 calls="$(printf '%s\n' "${CALLS[@]}")"
 safety_wait="$(grep -nF "volumesnapshot/${RELEASE}-kurrentdb-prerestore-" <<<"$calls" | grep -F 'wait --for=' | cut -d: -f1 | head -n 1)"
 claim_deleted="$(grep -nF "delete pvc/data-${RELEASE}-kurrentdb-0" <<<"$calls" | cut -d: -f1)"

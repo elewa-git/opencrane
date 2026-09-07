@@ -210,17 +210,6 @@ run_kurrentdb_restore()
   # The bootstrap Job is idempotent: it verifies the service user, the exact ACL, and the activation
   # subscription against the restored ledger and fails loudly when the restored state disagrees.
   log "Re-running the KurrentDB bootstrap verification Job…"
-  local bootstrap_manifest
-  bootstrap_manifest="$(mktemp)"
-  # A Job's pod template is immutable, so the release's own manifest is deleted and re-created. The
-  # Helm ownership annotations are restored so the next upgrade still recognises the Job as its own.
-  helm get manifest "$RELEASE" -n "$NAMESPACE" \
-    | awk 'BEGIN { RS="---" } /kind: Job/ && /name: '"${RELEASE}"'-kurrentdb-bootstrap/ { print "---"; print }' \
-    | kubectl annotate --local -f - "meta.helm.sh/release-name=$RELEASE" "meta.helm.sh/release-namespace=$NAMESPACE" --overwrite -o yaml \
-    >"$bootstrap_manifest" || { rm -f "$bootstrap_manifest"; return 1; }
-  kubectl delete -f "$bootstrap_manifest" -n "$NAMESPACE" --ignore-not-found --wait=true --timeout="${TIMEOUT}s" >/dev/null || { rm -f "$bootstrap_manifest"; return 1; }
-  kubectl create -f "$bootstrap_manifest" -n "$NAMESPACE" >/dev/null || { rm -f "$bootstrap_manifest"; return 1; }
-  rm -f "$bootstrap_manifest"
-  wait_for_final_kurrentdb_bootstrap_job_if_present || return $?
+  _rerun_kurrentdb_bootstrap || return $?
   log "KurrentDB restore from '$backup_id' complete."
 }

@@ -80,7 +80,38 @@ storing `v1beta1`, a ready controller with extensions enabled and an approved `g
 The [runbook](/operators/runbook) covers recovery; [development status](/guide/status) distinguishes
 this installation machinery from live qualification.
 
+When the cluster uses a node-local DNS resolver, set `historyStore.kurrentdb.dnsResolverCidrs`
+to the resolver addresses used by its Pods, each as an IPv4 `/32` or IPv6 `/128` host CIDR.
+Bootstrap and snapshot Jobs then allow UDP and TCP port 53 to those exact addresses alongside
+the ordinary `kube-dns` Pod selector. The default list is empty; the `opencrane-dev` values
+profile supplies its verified node-local resolver. This does not add network access to the
+KurrentDB node or file-copy backups.
+
 Source: [`deploy.sh`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/deploy.sh).
+
+## Retry failed history bootstrap
+
+A failed KurrentDB bootstrap prevents the server from using conversation history. The installer
+now stops on terminal bootstrap failure and requires the actual OpenCrane server to become Ready.
+Inspect the failed Job and its logs, then apply the repaired configuration through the normal silo
+deployment command. An existing failed Job remains failed after a configuration update.
+
+Once KurrentDB is Ready and the repair is applied, retry that release's bootstrap:
+
+```bash
+OPENCRANE_CHART_DIR="$PWD/apps/_infra/deploy-k8s" \
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --release-version 0.11.0 --cluster-tenant testv5 \
+  --namespace opencrane-testv5 --release opencrane-testv5 \
+  --kurrentdb-bootstrap-retry
+```
+
+Use the intended current Kubernetes context and substitute the target silo's coordinates. This
+explicit action recreates only the failed or missing bootstrap Job from the installed Helm manifest.
+It refuses a running, completed, foreign or deleting Job, verifies existing credentials and stream
+policy, and leaves conversation data and volumes in place. It cannot be combined with preflight or
+restore flags. After it succeeds, rerun the normal deployment verification and confirm public health
+and an authenticated conversation before recording the silo as usable.
 
 ## GKE storage and snapshot prerequisites
 

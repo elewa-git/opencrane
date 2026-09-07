@@ -8,6 +8,47 @@ trap cleanup_current_chart_sources EXIT
 prepare_current_chart_sources
 CHART_DIR="$(current_chart_sources_dir)"
 
+# Inspect actual policies so configured resolver hosts cannot broaden other ports or Job modes.
+_assert_dns_policies()
+{
+  node -e '
+    const assert = require("node:assert/strict");
+    const yaml = require(process.argv[1]);
+    const resources = yaml.loadAll(require("node:fs").readFileSync(0, "utf8"));
+    const resolverCidrs = JSON.parse(process.argv[2]);
+    const snapshot = process.argv[3] === "volumeSnapshot";
+    function _Policy(name) {
+      const resource = resources.find(function _FindPolicy(candidate) {
+        return candidate?.kind === "NetworkPolicy" && candidate.metadata.name === name;
+      });
+      assert.ok(resource, `Missing NetworkPolicy ${name}`);
+      return resource.spec;
+    }
+    assert.deepEqual(_Policy("opencrane-testv5-kurrentdb").egress, []);
+    const names = ["opencrane-testv5-kurrentdb-bootstrap"];
+    if (snapshot) names.push("opencrane-testv5-kurrentdb-backup");
+    else assert.deepEqual(_Policy("opencrane-testv5-kurrentdb-backup").egress, []);
+    for (const name of names) {
+      const egress = _Policy(name).egress;
+      const dns = egress.filter(function _UsesDns(rule) {
+        return rule.ports.some(function _IsDnsPort(port) { return port.port === 53; });
+      });
+      assert.equal(dns.length, 1);
+      assert.deepEqual(dns[0], {
+        to: [{
+          namespaceSelector: { matchLabels: { "kubernetes.io/metadata.name": "kube-system" } },
+          podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+        }, ...resolverCidrs.map(function _ResolverPeer(cidr) { return { ipBlock: { cidr } }; })],
+        ports: [{ protocol: "UDP", port: 53 }, { protocol: "TCP", port: 53 }],
+      });
+      for (const rule of egress) assert.ok(rule.to.length > 0, "No destination-free egress rule is permitted");
+      for (const rule of egress.filter(function _IsNotDns(candidate) { return candidate !== dns[0]; })) {
+        for (const peer of rule.to) assert.ok(!resolverCidrs.includes(peer.ipBlock?.cidr), "Resolver addresses must stay on DNS ports");
+      }
+    }
+  ' "$ROOT_DIR/node_modules/js-yaml" "$1" "$2"
+}
+
 VALUES=(
   --set historyStore.kurrentdb.enabled=true
   --set historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -30,6 +71,20 @@ VALUES=(
 )
 
 rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}")"
+printf '%s\n' "$rendered" | _assert_dns_policies '[]' fileCopy
+DNS_VALUES=(
+  --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/opencrane-dev.yaml"
+  --set-string 'historyStore.kurrentdb.dnsResolverCidrs[1]=fd00::a/128'
+)
+dns_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" "${DNS_VALUES[@]}")"
+printf '%s\n' "$dns_rendered" | _assert_dns_policies '["169.254.20.10/32","fd00::a/128"]' fileCopy
+for invalid_resolver in 0.0.0.0/0 169.254.20.0/24 ::/0 fd00::/32 resolver.example.com; do
+  if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" \
+    --set-string "historyStore.kurrentdb.dnsResolverCidrs[0]=$invalid_resolver" >/dev/null 2>&1; then
+    echo "KurrentDB accepted a DNS resolver without an exact host prefix: $invalid_resolver" >&2
+    exit 1
+  fi
+done
 printf '%s\n' "$rendered" | node -e '
   const yaml = require(process.argv[1]);
   const fs = require("node:fs");
@@ -254,7 +309,8 @@ SNAPSHOT_VALUES=(
   --set-string 'historyStore.kurrentdb.backup.volumeSnapshot.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'historyStore.kurrentdb.backup.volumeSnapshot.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
 )
-snapshot_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" "${SNAPSHOT_VALUES[@]}")"
+snapshot_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" "${SNAPSHOT_VALUES[@]}" "${DNS_VALUES[@]}")"
+printf '%s\n' "$snapshot_rendered" | _assert_dns_policies '["169.254.20.10/32","fd00::a/128"]' volumeSnapshot
 # Execute the rendered backup script with a local API stub to validate the actual snapshot name.
 printf '%s\n' "$snapshot_rendered" | node -e '
   const assert = require("node:assert/strict");

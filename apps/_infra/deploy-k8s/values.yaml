@@ -109,6 +109,9 @@ sharedPlatform:
 historyStore:
   kurrentdb:
     enabled: false
+    # -- Exact DNS resolver hosts (/32 IPv4 or /128 IPv6) for bootstrap and snapshot Jobs.
+    # Add cluster or node-local resolver addresses when the CNI cannot match kube-dns Pods.
+    dnsResolverCidrs: []
     image:
       repository: docker.kurrent.io/kurrent-latest/kurrentdb
       digest: ""

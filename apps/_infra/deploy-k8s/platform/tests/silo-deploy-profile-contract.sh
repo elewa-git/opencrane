@@ -140,9 +140,185 @@ grep -Fq -- 'wait_for_final_deployment_if_present "${RELEASE}-cognee"' "$DEPLOY_
 grep -Fq -- '_verify_cognee_rollout' "$DEPLOY_CORE"
 grep -Fq -- 'wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb"' "$DEPLOY_CORE"
 grep -Fq -- 'wait_for_final_kurrentdb_bootstrap_job_if_present' "$DEPLOY_CORE"
-grep -Fq -- 'kubectl wait --for=condition=complete "job/$job_name"' "$DEPLOY_CORE"
 grep -Fq -- 'kubectl describe "job/$job_name"' "$DEPLOY_CORE"
 grep -Fq -- 'kubectl logs "job/$job_name"' "$DEPLOY_CORE"
+
+# Exercise the installer's actual wait function with Job responses and a clock advanced by sleep.
+(
+  bootstrap_wait_test_dir="$(mktemp -d)"
+  trap 'rm -rf "$bootstrap_wait_test_dir"' EXIT
+  eval "$(sed -n '/^wait_for_final_kurrentdb_bootstrap_job_if_present()$/,/^}/p' "$DEPLOY_CORE")"
+  RELEASE=opencrane-testv5
+  NAMESPACE=opencrane-testv5
+  TIMEOUT=7
+  unset SECONDS
+  err() { printf '%s\n' "$*" >&2; }
+  sleep()
+  {
+    printf '%s\n' "$1" >>"$bootstrap_wait_test_dir/sleeps"
+    SECONDS=$((SECONDS + $1))
+  }
+  kubectl()
+  {
+    printf '%s\n' "$*" >>"$bootstrap_wait_test_dir/calls"
+    if [[ "$*" != *' -o json '* ]]; then return 0; fi
+    local read_count
+    read_count="$(cat "$bootstrap_wait_test_dir/reads")"
+    read_count=$((read_count + 1))
+    printf '%s' "$read_count" >"$bootstrap_wait_test_dir/reads"
+    case "$bootstrap_wait_case" in
+      missing) return 0 ;;
+      read-error) return 23 ;;
+      later-read-error) if (( read_count > 1 )); then return 23; fi ;;
+      disappears) if (( read_count > 1 )); then return 0; fi ;;
+      malformed) printf '{invalid'; return 0 ;;
+      wrong-object) printf '{}'; return 0 ;;
+    esac
+    local condition=""
+    case "$bootstrap_wait_case" in
+      complete) condition=Complete ;;
+      failed) condition=Failed ;;
+      failure-target) condition=FailureTarget ;;
+      running-complete) if (( read_count > 1 )); then condition=Complete; fi ;;
+      running-failed) if (( read_count > 1 )); then condition=Failed; fi ;;
+    esac
+    jq -nc --arg condition "$condition" '{apiVersion:"batch/v1", kind:"Job", status:{failed:1,
+      conditions: ([{type:"Failed",status:"False"}] +
+        (if $condition == "" then [] else [{type:$condition,status:"True"}] end))}}'
+  }
+  for bootstrap_wait_case in missing complete failed failure-target running-complete running-failed running read-error later-read-error disappears malformed wrong-object; do
+    printf '0' >"$bootstrap_wait_test_dir/reads"
+    : >"$bootstrap_wait_test_dir/calls"
+    : >"$bootstrap_wait_test_dir/sleeps"
+    SECONDS=0
+    if wait_for_final_kurrentdb_bootstrap_job_if_present >"$bootstrap_wait_test_dir/output" 2>&1; then
+      bootstrap_wait_status=0
+    else
+      bootstrap_wait_status=$?
+    fi
+    expected_status=1
+    expected_reads=1
+    expected_sleeps=0
+    case "$bootstrap_wait_case" in
+      missing|complete) expected_status=0 ;;
+      running-complete) expected_status=0; expected_reads=2; expected_sleeps=1 ;;
+      running-failed|disappears) expected_reads=2; expected_sleeps=1 ;;
+      read-error) expected_status=23 ;;
+      later-read-error) expected_status=23; expected_reads=2; expected_sleeps=1 ;;
+      running) expected_reads=4; expected_sleeps=4 ;;
+    esac
+    if [[ "$bootstrap_wait_status" != "$expected_status" || "$(cat "$bootstrap_wait_test_dir/reads")" != "$expected_reads" || "$(wc -l <"$bootstrap_wait_test_dir/sleeps" | tr -d ' ')" != "$expected_sleeps" ]]; then
+      echo "KurrentDB bootstrap wait returned an incorrect result or timing for $bootstrap_wait_case." >&2
+      cat "$bootstrap_wait_test_dir/output" "$bootstrap_wait_test_dir/calls" >&2
+      exit 1
+    fi
+    if [[ "$bootstrap_wait_case" == failed || "$bootstrap_wait_case" == failure-target || "$bootstrap_wait_case" == running-failed ]]; then
+      grep -Fq 'reported terminal failure' "$bootstrap_wait_test_dir/output" || exit 1
+      grep -Fq 'logs job/opencrane-testv5-kurrentdb-bootstrap' "$bootstrap_wait_test_dir/calls" || exit 1
+    fi
+    if [[ "$bootstrap_wait_case" == running ]]; then
+      [[ "$(tr '\n' ' ' <"$bootstrap_wait_test_dir/sleeps")" == '2 2 2 1 ' ]] || exit 1
+      grep -Fq -- '--request-timeout=1s' "$bootstrap_wait_test_dir/calls" || exit 1
+    fi
+  done
+
+  # The server starts using history after bootstrap. A failed rollout must stop finalization.
+  source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finalization.sh"
+  final_wait_calls="$(sed -n '/^wait_for_final_kurrentdb_bootstrap_job_if_present || exit /,/^_post_deploy_verify || exit /p' "$DEPLOY_CORE")"
+  [[ -n "$final_wait_calls" ]] || exit 1
+  wait_for_final_kurrentdb_bootstrap_job_if_present()
+  {
+    printf '%s\n' bootstrap >>"$bootstrap_wait_test_dir/final-calls"
+    return "$bootstrap_exit"
+  }
+  kubectl()
+  {
+    printf '%s\n' "$*" >>"$bootstrap_wait_test_dir/final-calls"
+    case "$1 $2" in
+      'get deployment/opencrane-testv5-opencrane-server') printf '%s\n' deployment.apps/opencrane-testv5-opencrane-server ;;
+      'rollout status') return "$server_exit" ;;
+      *) echo "Unexpected finalization command: $*" >&2; return 99 ;;
+    esac
+  }
+  _wait_for_release_certificate() { printf '%s\n' certificate >>"$bootstrap_wait_test_dir/final-calls"; }
+  _post_deploy_verify() { printf '%s\n' verify >>"$bootstrap_wait_test_dir/final-calls"; }
+  for final_wait_case in success bootstrap-failure server-failure; do
+    : >"$bootstrap_wait_test_dir/final-calls"
+    bootstrap_exit=0
+    server_exit=0
+    expected_status=0
+    case "$final_wait_case" in
+      bootstrap-failure) bootstrap_exit=17; expected_status=17 ;;
+      server-failure) server_exit=47; expected_status=47 ;;
+    esac
+    if (eval "$final_wait_calls") >"$bootstrap_wait_test_dir/final-output" 2>&1; then
+      final_wait_status=0
+    else
+      final_wait_status=$?
+    fi
+    [[ "$final_wait_status" == "$expected_status" ]] || exit 1
+    [[ "$(head -n 1 "$bootstrap_wait_test_dir/final-calls")" == bootstrap ]] || exit 1
+    if [[ "$final_wait_case" == bootstrap-failure ]]; then
+      [[ "$(wc -l <"$bootstrap_wait_test_dir/final-calls" | tr -d ' ')" == 1 ]] || exit 1
+    else
+      grep -Fq 'rollout status deployment/opencrane-testv5-opencrane-server -n opencrane-testv5 --timeout=7s' "$bootstrap_wait_test_dir/final-calls" || exit 1
+    fi
+    if [[ "$final_wait_case" == success ]]; then
+      [[ "$(tail -n 1 "$bootstrap_wait_test_dir/final-calls")" == verify ]] || exit 1
+    elif grep -Fxq verify "$bootstrap_wait_test_dir/final-calls"; then
+      echo 'A failed bootstrap or server rollout reached advisory verification.' >&2
+      exit 1
+    fi
+  done
+
+  # Run the entrypoint's parser and retry dispatch so mixed actions cannot reach the cluster.
+  retry_parser="$(sed -n '/^while \[\[ \$# -gt 0 \]\]; do$/,/^for c in kubectl helm jq;/p' "$DEPLOY_CORE" | sed '$d')"
+  retry_dispatch="$(sed -n '/^if \[\[ "\$KURRENTDB_BOOTSTRAP_RETRY" == "1" \]\]; then$/,/^fi$/p' "$DEPLOY_CORE")"
+  [[ -n "$retry_parser" && -n "$retry_dispatch" ]] || exit 1
+  retry_guard_line="$(grep -nF 'cannot be combined with restore or preflight actions' "$DEPLOY_CORE" | cut -d: -f1)"
+  cluster_access_line="$(grep -nF 'kubectl cluster-info' "$DEPLOY_CORE" | cut -d: -f1)"
+  (( retry_guard_line < cluster_access_line )) || exit 1
+  for retry_case in success failure preflight environment-preflight restore restore-list restore-confirm; do
+    : >"$bootstrap_wait_test_dir/retry-calls"
+    retry_exit=0
+    expected_status=1
+    case "$retry_case" in
+      success) expected_status=0 ;;
+      failure) retry_exit=29; expected_status=29 ;;
+    esac
+    if (
+      KURRENTDB_BOOTSTRAP_RETRY=0
+      KURRENTDB_RESTORE_BACKUP_ID=""
+      KURRENTDB_RESTORE_LIST=0
+      KURRENTDB_RESTORE_CONFIRM_SERVING=0
+      PREFLIGHT=0
+      set -- --kurrentdb-bootstrap-retry
+      case "$retry_case" in
+        preflight) set -- "$@" --preflight ;;
+        environment-preflight) PREFLIGHT=1 ;;
+        restore) set -- "$@" --kurrentdb-restore latest ;;
+        restore-list) set -- "$@" --kurrentdb-restore-list ;;
+        restore-confirm) set -- "$@" --kurrentdb-restore-confirm-serving ;;
+      esac
+      run_kurrentdb_bootstrap_retry() { printf 'retry\n' >>"$bootstrap_wait_test_dir/retry-calls"; return "$retry_exit"; }
+      kubectl() { printf 'cluster\n' >>"$bootstrap_wait_test_dir/retry-calls"; return 99; }
+      eval "$retry_parser"
+      eval "$retry_dispatch"
+      printf 'fallthrough\n' >>"$bootstrap_wait_test_dir/retry-calls"
+    ) >"$bootstrap_wait_test_dir/retry-output" 2>&1; then
+      retry_status=0
+    else
+      retry_status=$?
+    fi
+    [[ "$retry_status" == "$expected_status" ]] || exit 1
+    if [[ "$retry_case" == success || "$retry_case" == failure ]]; then
+      [[ "$(cat "$bootstrap_wait_test_dir/retry-calls")" == retry ]] || exit 1
+    else
+      [[ ! -s "$bootstrap_wait_test_dir/retry-calls" ]] || exit 1
+      grep -Fq 'cannot be combined with restore or preflight actions' "$bootstrap_wait_test_dir/retry-output" || exit 1
+    fi
+  done
+)
 
 # Even an operator override assembled through normal Helm passthrough loses to the digest that the
 # deployer verified. This renders the actual chart to prove Helm receives the authority tuple last.

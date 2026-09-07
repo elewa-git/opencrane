@@ -72,6 +72,14 @@
           "type": "object",
           "required": ["bootstrapOps", "serviceCredential", "bootstrap", "probes", "podDisruptionBudget", "backup"],
           "properties": {
+            "dnsResolverCidrs": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/32$|^[0-9a-fA-F:]*:[0-9a-fA-F:]*/128$"
+              }
+            },
             "bootstrapOps": {
               "type": "object",
               "required": ["existingSecret"],

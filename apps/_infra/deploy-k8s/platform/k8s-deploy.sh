@@ -58,6 +58,7 @@
 # They exit before ordinary install validation and never rotate existing credentials.
 #
 # KurrentDB restore: --kurrentdb-restore-list prints the scheduled backups of this silo and exits.
+# KurrentDB bootstrap: --kurrentdb-bootstrap-retry retries a failed or missing bootstrap Job and exits.
 # --kurrentdb-restore BACKUP_ID (or `latest`) scales KurrentDB to zero, restores the data volume
 # from that backup with the same image and scripts the backup CronJob uses, scales it back up,
 # re-runs the bootstrap verification Job, and exits without touching any other release step. It
@@ -159,6 +160,7 @@ source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/postgres-release.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
 source "$SCRIPT_DIR/kurrentdb-restore.sh"
+source "$SCRIPT_DIR/kurrentdb-bootstrap.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -279,10 +281,11 @@ VERIFY_INSECURE="${OPENCRANE_VERIFY_INSECURE:-0}"
 POSTGRES_RELEASE=""
 RELEASE_VERSION="${OPENCRANE_RELEASE_VERSION:-}"
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
-# KurrentDB restore inputs (see the usage header). Both exit before any other release step.
+# KurrentDB recovery actions exit before ordinary installation.
 KURRENTDB_RESTORE_BACKUP_ID=""
 KURRENTDB_RESTORE_CONFIRM_SERVING="0"
 KURRENTDB_RESTORE_LIST="0"
+KURRENTDB_BOOTSTRAP_RETRY="0"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[k8s-deploy]\033[0m $1"; }
@@ -332,10 +335,15 @@ while [[ $# -gt 0 ]]; do
     --kurrentdb-restore)                 KURRENTDB_RESTORE_BACKUP_ID="$2"; shift 2 ;;
     --kurrentdb-restore-confirm-serving) KURRENTDB_RESTORE_CONFIRM_SERVING="1"; shift ;;
     --kurrentdb-restore-list)            KURRENTDB_RESTORE_LIST="1"; shift ;;
+    --kurrentdb-bootstrap-retry)         KURRENTDB_BOOTSTRAP_RETRY="1"; shift ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
+if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" && ( -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
+  err "--kurrentdb-bootstrap-retry cannot be combined with restore or preflight actions."
+  exit 1
+fi
 for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
@@ -367,33 +375,62 @@ KUBERNETES_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
 wait_for_final_kurrentdb_bootstrap_job_if_present()
 {
   local job_name="${RELEASE}-kurrentdb-bootstrap"
-  local job_resource
-  local command_status
-  if job_resource="$(kubectl get "job/$job_name" -n "$NAMESPACE" --ignore-not-found -o name)"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    err "Unable to inventory final KurrentDB bootstrap Job '$job_name'."
-    return "$command_status"
-  fi
-  if [[ -z "$job_resource" ]]; then
-    return 0
-  fi
-  if kubectl wait --for=condition=complete "job/$job_name" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-    return 0
-  fi
-  command_status=$?
-  err "KurrentDB bootstrap Job '$job_name' did not complete successfully."
-  kubectl get "job/$job_name" -n "$NAMESPACE" -o wide >&2 || true
-  kubectl describe "job/$job_name" -n "$NAMESPACE" >&2 || true
-  kubectl logs "job/$job_name" -n "$NAMESPACE" --all-containers=true >&2 || true
-  return "$command_status"
+  local deadline=$((SECONDS + TIMEOUT)) seen_job=0
+  local job_resource job_state command_status remaining request_timeout pause_seconds
+  # A failed Job cannot become Complete. Poll both outcomes so its deadline does not consume
+  # the installer's longer timeout; a Job still running retains the configured wait budget.
+  while (( SECONDS < deadline )); do
+    remaining=$((deadline - SECONDS))
+    if (( remaining <= 0 )); then break; fi
+    request_timeout="$remaining"
+    if (( request_timeout > 30 )); then request_timeout=30; fi
+    if job_resource="$(kubectl get "job/$job_name" -n "$NAMESPACE" --ignore-not-found -o json --request-timeout="${request_timeout}s")"; then
+      command_status=0
+    else
+      command_status=$?
+      err "Unable to inventory final KurrentDB bootstrap Job '$job_name'."
+      return "$command_status"
+    fi
+    if [[ -z "$job_resource" ]]; then
+      if (( seen_job == 0 )); then return 0; fi
+      err "KurrentDB bootstrap Job '$job_name' disappeared before completing."
+      return 1
+    fi
+    seen_job=1
+    if ! job_state="$(jq -er '
+      if .apiVersion != "batch/v1" or .kind != "Job" then error("Expected a batch/v1 Job") else . end
+      | [.status.conditions[]? | select(.status == "True") | .type]
+      | if index("Failed") != null or index("FailureTarget") != null then "failed"
+        elif index("Complete") != null then "complete"
+        else "running" end
+    ' <<<"$job_resource")"; then
+      err "Unable to read final KurrentDB bootstrap Job '$job_name' conditions."
+      return 1
+    fi
+    if [[ "$job_state" == complete ]]; then return 0; fi
+    if [[ "$job_state" == failed ]]; then
+      err "KurrentDB bootstrap Job '$job_name' reported terminal failure."
+      break
+    fi
+    remaining=$((deadline - SECONDS))
+    if (( remaining <= 0 )); then break; fi
+    pause_seconds=2
+    if (( remaining < pause_seconds )); then pause_seconds="$remaining"; fi
+    sleep "$pause_seconds"
+  done
+  err "KurrentDB bootstrap Job '$job_name' did not complete successfully within its wait."
+  kubectl get "job/$job_name" -n "$NAMESPACE" -o wide --request-timeout=10s >&2 || true
+  kubectl describe "job/$job_name" -n "$NAMESPACE" --request-timeout=10s >&2 || true
+  kubectl logs "job/$job_name" -n "$NAMESPACE" --all-containers=true --pod-running-timeout=1s --request-timeout=10s >&2 || true
+  return 1
 }
 
-# The KurrentDB restore paths run once the target silo is known and exit before image resolution,
+# KurrentDB recovery runs once the target silo is known and exits before image resolution,
 # so a silo with a broken ledger never has to wait on registry access to recover its history.
+if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" ]]; then
+  run_kurrentdb_bootstrap_retry || exit $?
+  exit 0
+fi
 if [[ "$KURRENTDB_RESTORE_LIST" == "1" ]]; then
   list_kurrentdb_backups || exit $?
   exit 0
@@ -1116,6 +1153,7 @@ wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb" || exit $?
 wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-opencrane-server" || exit $?
 
 _wait_for_release_certificate || exit $?
 _post_deploy_verify || exit $?

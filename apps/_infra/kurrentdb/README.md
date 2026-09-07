@@ -130,6 +130,13 @@ image digests: `tls.existingSecret`, `bootstrapAdmin.existingSecret`,
 required by the named template. The deploy entrypoint verifies that the referenced Secrets exist,
 are immutable, and contain their required keys before it renders this workload.
 
+`historyStore.kurrentdb.dnsResolverCidrs` adds exact resolver hosts (`/32` for IPv4 or `/128` for
+IPv6) beside the `kube-system`/`kube-dns` Pod selector. Bootstrap and snapshot Jobs may reach those
+addresses only on UDP and TCP port 53. Configure the resolver addresses used by the target Pods
+when node-local DNS or the cluster network prevents the selector from matching. The default list
+is empty; the `opencrane-dev` profile supplies that cluster's node-local resolver. The KurrentDB
+node and file-copy Jobs retain their empty egress policies.
+
 The bootstrap image also runs `fileCopy` backups and restores, so it must additionally contain
 `cp`, `find`, `sed`, `sort`, `du`, `df`, `awk`, `date`, `wc`, `head`, `tail`, and `xargs` (any
 BusyBox or Alpine base provides them). `backup.mode=volumeSnapshot` instead needs an

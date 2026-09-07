@@ -31,6 +31,7 @@ for contract in \
   agent-sandbox-contract.sh \
   cluster-tenant-crd-policy-contract.sh \
   kurrentdb-bootstrap-secrets-contract.sh \
+  kurrentdb-bootstrap-retry-contract.sh \
   kurrentdb-restore-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
