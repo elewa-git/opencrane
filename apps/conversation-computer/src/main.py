@@ -132,18 +132,21 @@ def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> None:
     endpoint = credential.get("endpoint")
     key = credential.get("key")
     model = credential.get("model")
+    instructions = compiled.get("instructions")
     messages = compiled.get("messages")
     route = compiled.get("model")
     budget = compiled.get("budget")
     if not isinstance(endpoint, str) or not isinstance(key, str) or not isinstance(model, str) or not isinstance(messages, list) or not isinstance(route, dict) or not isinstance(budget, dict):
         raise RuntimeError("bootstrap contains an invalid model route")
+    if not isinstance(instructions, str):
+        raise RuntimeError("compiled input contains invalid instructions")
     max_model_turns = budget.get("maxModelTurns")
     if not isinstance(max_model_turns, int) or isinstance(max_model_turns, bool) or max_model_turns < 1:
         raise RuntimeError("compiled budget does not admit a model turn")
     output_limit = route.get("maxOutputTokens")
     completion_limit = budget.get("maxCompletionTokens")
     limits = [limit for limit in (output_limit, completion_limit) if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0]
-    request = {"model": model, "messages": messages}
+    request = {"model": model, "messages": [{"role": "system", "content": instructions}, *messages]}
     if limits:
         request["max_tokens"] = min(limits)
     model_response = _json_request(f"{endpoint.rstrip('/')}/v1/chat/completions", key, request)

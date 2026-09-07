@@ -23,7 +23,8 @@ The process refuses readiness unless it receives the computer id, lease id, comp
 private server endpoint. It re-reads a short-lived, audience-bound projected token for every exchange.
 The server returns immutable compiled input and an attempt-scoped LiteLLM route only after binding the
 Pod to the current lease. The process checks that the compiled budget admits its single model call
-and sends LiteLLM the lower of the frozen per-response and total-token ceilings. Output returns
+and sends the compiled persona and context instructions as a system message before the conversation
+history. It sends LiteLLM the lower of the frozen per-response and total-token ceilings. Output returns
 through the server-owned conversation writer.
 
 ## Public surface

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ConversationLifecycle, ConversationMode, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRevisionState, AgentServiceKind, AgentServiceState, ConversationLifecycle, ConversationMode, OrgMemberStatus, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
 import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { PrismaConversationProductAuthorizationRepository } from "./db/conversation-product-authorization";
@@ -15,9 +15,20 @@ export class PrismaConversationMetadataUnitOfWork
     private readonly prisma: PrismaClient,
     private readonly initialComputer: InitialConversationComputerResolver,
   ) {}
-  /** Returns opaque active membership references and no fabricated personal-agent mapping. */
-  public directory(caller: ConversationCaller): Promise<unknown> {
-    return this._read(async function _Directory(transaction) {
+  /**
+   * Returns member references and the caller's readable personal assistant for conversation creation.
+   * The caller's current approved persona selects candidates before authorization, so another
+   * member's private assistant cannot hide or replace their own.
+   * Called by: _CreateConversationMetadataRouter.
+   * @param caller The signed-in identity resolved by the server for the selected silo.
+   * @returns A ready assistant, or an unavailable or ambiguous state without an assistant reference.
+   * @throws When the caller no longer has active organisation membership.
+   * @see PrismaConversationProductAuthorizationRepository.canReadResources
+   */
+  public directory(caller: ConversationCaller): Promise<unknown>
+  {
+    return this._read(async function _Directory(transaction)
+    {
       if (!(await _Active(transaction, caller)))
         throw new Error("conversation directory unavailable");
       const rows = await transaction.orgMembership.findMany({
@@ -25,15 +36,24 @@ export class PrismaConversationMetadataUnitOfWork
         select: { id: true, subject: true },
         orderBy: { id: "asc" },
       });
-      const agents = await transaction.agentService.findMany({
-        where: {
-          siloId: caller.siloId,
-          kind: "Personal",
-          state: "Active",
-          activeRevisionId: { not: null },
-        },
-        select: { id: true, name: true },
+      const persona = await transaction.personaProfile.findUnique({
+        where: { siloId_userId: { siloId: caller.siloId, userId: caller.subjectId } },
+        select: { activeRevision: { select: { id: true, state: true, approvedAt: true } } },
       });
+      const revision = persona?.activeRevision;
+      const agents = revision?.state === PersonaRevisionState.Approved && revision.approvedAt !== null
+        ? await transaction.agentService.findMany({
+            where: {
+              siloId: caller.siloId,
+              kind: AgentServiceKind.Personal,
+              state: AgentServiceState.Active,
+              activeRevisionId: { not: null },
+              activeRevision: { is: { siloId: caller.siloId, state: AgentRevisionState.Published, personaRevisionId: revision.id } },
+            },
+            select: { id: true, name: true },
+            orderBy: { id: "asc" },
+            take: 2,
+          }) : [];
       const authorization =
         new PrismaConversationProductAuthorizationRepository(transaction);
       const allReadable = await authorization.canReadResources(

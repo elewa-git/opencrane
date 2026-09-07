@@ -81,9 +81,10 @@ checked computer generation to the silo activation queue through one atomic Kurr
 
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also
-projects the caller's active personal Agent only when exactly one service matches their approved
-persona; no match is unavailable and more than one match is ambiguous, so the server never silently
-chooses an Agent.
+selects personal services from the caller's current approved persona before checking their current
+read permission. Another member's private assistant cannot make the caller's assistant unavailable
+or ambiguous. Exactly one authorised match returns the assistant; no match is unavailable and more
+than one match is ambiguous, so the server never silently chooses an Agent.
 
 The directory and create transaction also use the central product catalogue. Selected membership
 references require exact `OrganizationMembership/Read`; an agent target requires
