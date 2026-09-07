@@ -292,14 +292,6 @@ jobs:
       - name: Prove the workflow boundary classifier
         run: npm run test:workflow-boundary
 
-      - name: Restore the Nx computation cache
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-test-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nx-test-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-
-
       - name: Build, test, and lint affected projects
         run: npx nx affected -t build test lint
 
@@ -461,14 +453,6 @@ jobs:
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Restore the Nx computation cache
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-api-contract-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nx-api-contract-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-
-
       - name: Verify API reference and generated client
         run: |
           npx nx run opencrane:build
@@ -519,15 +503,6 @@ jobs:
           else
             echo "required=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Restore the Nx computation cache
-        if: steps.storybook-regression.outputs.required == 'true'
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-storybook-visual-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nx-storybook-visual-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}-
 
       # The browser binaries change only with the lockfile, so they restore from cache instead
       # of downloading each run. On a cache hit the apt-driven install-deps is skipped entirely:
