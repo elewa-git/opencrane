@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissionExistingVerifier, type RunAdmissionResult, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
 import type { ConversationComputerRunAdmissionCommand } from "@opencrane/backend/server/conversations";
-import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
-import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { _CreateConversationRunAdmission } from "../run-admission-composition";

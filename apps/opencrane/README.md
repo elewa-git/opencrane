@@ -44,8 +44,8 @@ Startup proceeds in five visible stages:
    rechecks Kurrent identity, lease and message history plus every immutable compiler input; it never
    substitutes request identity, relational conversation history, or a partial PostgreSQL authority;
 4. build the public and internal Express applications; and
-5. start the registered workflow and bounded background workers, then open both listeners and attach
-   the signed-in conversation WebSocket under one coordinated shutdown path.
+5. start the registered workflow and bounded background workers, then open both listeners under one
+   coordinated shutdown path. Signed-in conversation updates use the public SSE route.
 
 The route registry is deliberately a catalogue rather than a second application layer:
 
@@ -214,6 +214,9 @@ are:
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.
+The bundle keeps npm packages external, so this app's production dependencies must include its
+runtime clients, including KurrentDB. A dependency declared only at the workspace root is absent
+from the production image's workspace-scoped install.
 
 ### Conversation-computer activation consumer
 

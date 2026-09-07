@@ -386,3 +386,16 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: establish the fresh-install inputs and supported script path first, then record a real
   scheduled backup, restore, health probe, and measured RTO. Keep snapshot qualification pending
   until a suitable VolumeSnapshotClass is available through the authorized infrastructure path.
+
+## 2026-09-07 · CI fresh install · conversation workspace · 0a4a7c98d83d8e1a59e4e6307924ae4a35be00bd · FAILED
+
+- findings: codebase: [qualification run 34112859323](https://github.com/elewa-git/opencrane/actions/runs/34112859323)
+  passed the source, SQL, KurrentDB and image-build checks, then failed its k3d fresh install.
+  The server crashed because its production workspace install omitted `@kurrent/kurrentdb-client`.
+  Cognee recovered from the unavailable HuggingFace tokenizer and reached Ready; it was not a
+  second deployment blocker. Publication was skipped, so this run produced no candidate images.
+- friction: the client was declared at the repository root, which made builds and source tests pass
+  while leaving it out of the server's production dependency manifest.
+- lesson: declare the KurrentDB client in the server workspace and extend the existing Docker import
+  check so image construction catches this failure before a cluster rollout. Qualify the repaired
+  SHA before publication. This throwaway CI run supplies no testv5 recovery or authenticated-journey proof.

@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspace=apps/open
 # Shared conversation contracts keep these packages external in the compiled server bundle.
 # Resolve their public runtime entrypoints now so a production image cannot build without them.
 RUN node --input-type=module --eval \
-    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8'), import('@ag-ui/core'), import('@noble/hashes/sha2.js'), import('@opentelemetry/core'), import('openid-client')])"
+    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8'), import('@ag-ui/core'), import('@kurrent/kurrentdb-client'), import('@noble/hashes/sha2.js'), import('@opentelemetry/core'), import('openid-client')])"
 
 COPY --from=build /generated-prisma /tmp/generated-prisma
 # Retrieve the generated Prisma client for the runtime stage
