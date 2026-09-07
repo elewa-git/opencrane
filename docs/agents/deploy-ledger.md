@@ -415,3 +415,22 @@ Full run reports belong in the corresponding pull request or issue.
   image from its app-owned Dockerfile, and uses immutable images in a disposable registry. It must
   prove anonymous health, denied anonymous data reads and authenticated service reads in CI before
   publication. Its explicit runc profile supplies no gVisor, backup/restore, or user-journey proof.
+
+## 2026-09-07 · CI fresh install · TLS ledger startup · 12de455f86a72f4e24d8f3c3909a3b5753d01d14 · FAILED
+
+- findings: chart: [qualification run 34118015985](https://github.com/elewa-git/opencrane/actions/runs/34118015985)
+  passed the other selected qualification jobs, then failed its fresh install. KurrentDB loaded the
+  server certificate from its trusted-root directory and rejected it because it was not self-signed.
+  The server could not connect to the crashing ledger. Publication remained blocked.
+- friction: the fresh-install step spent 17m51s before returning the certificate error. Render checks
+  had verified that TLS inputs existed without checking what the trusted-root directory contained.
+- lesson: project only `ca.crt` into the trusted-root mount and keep the node certificate and key
+  in their own mount. Parse the rendered StatefulSet in the Helm contract to guard this boundary,
+  then qualify the repaired SHA before publication. Preflight against KurrentDB 26.1.1 also showed
+  that bootstrap's HTTP stream routes require `KURRENTDB_ENABLE_ATOM_PUB_OVER_HTTP=true`, which
+  defaults to false; enable it while retaining TLS, authentication, and the existing private network
+  boundary. Bootstrap now reads the latest settings event as JSON instead of searching an HTTP feed
+  whose embedded data is a string, and its contract rejects changed permissions even when an older
+  matching ACL is nested in the response. The final service probe requests JSON explicitly, and
+  subscription retries inspect `/info` instead of consuming activation messages. No testv5 drill
+  or user journey has run.

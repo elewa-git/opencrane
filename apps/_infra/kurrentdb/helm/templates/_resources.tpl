@@ -134,10 +134,9 @@ data:
     fi
 
     existing_settings="$(mktemp)"
-    existing_settings_status="$(curl --silent --show-error --output "$existing_settings" --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" --header 'Accept: application/vnd.kurrent.atom+json' "$endpoint/streams/%24settings?embed=body")"
+    existing_settings_status="$(curl --silent --show-error --output "$existing_settings" --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" --header 'Accept: application/json' "$endpoint/streams/%24settings/head")"
     if [ "$existing_settings_status" != "200" ] || ! jq -e '
-      .. | objects | select(
-        .["$userStreamAcl"] == {
+      .["$userStreamAcl"] == {
           "$r": ["$admins", "opencrane-history"],
           "$w": ["$admins", "opencrane-history"],
           "$d": "$admins",
@@ -150,7 +149,6 @@ data:
           "$mr": "$admins",
           "$mw": "$admins"
         }
-      )
     ' "$existing_settings" >/dev/null; then
       rm -f "$existing_settings"
       echo "The existing KurrentDB default ACL is not exactly the HistoryStore ACL." >&2
@@ -164,7 +162,7 @@ data:
     activation_group="conversation-computer-activation"
     subscription_url="$endpoint/subscriptions/$activation_stream/$activation_group"
     subscription_body="$(mktemp)"
-    subscription_status="$(curl --silent --show-error --output "$subscription_body" --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" "$subscription_url")"
+    subscription_status="$(curl --silent --show-error --output "$subscription_body" --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "admin:$admin_password" "$subscription_url/info")"
     case "$subscription_status" in
       200)
         ;;
@@ -202,7 +200,7 @@ data:
     esac
     rm -f "$subscription_body"
 
-    service_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "$history_username:$history_password" "$endpoint/streams/opencrane-history-bootstrap-probe")"
+    service_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert /var/run/opencrane/kurrentdb-tls/ca.crt --user "$history_username:$history_password" --header 'Accept: application/json' "$endpoint/streams/opencrane-history-bootstrap-probe")"
     if [ "$service_status" != "200" ] && [ "$service_status" != "404" ]; then
       echo "The KurrentDB service credential cannot read the default HistoryStore stream boundary." >&2
       exit 1
@@ -346,6 +344,8 @@ spec:
               value: "false"
             - name: KURRENTDB_ENABLE_TRUSTED_AUTH
               value: "false"
+            - name: KURRENTDB_ENABLE_ATOM_PUB_OVER_HTTP
+              value: "true"
             - name: KURRENTDB_NODE_PORT
               value: {{ $history.service.port | quote }}
             - name: KURRENTDB_CERTIFICATE_FILE
@@ -353,7 +353,7 @@ spec:
             - name: KURRENTDB_CERTIFICATE_PRIVATE_KEY_FILE
               value: /var/run/opencrane/kurrentdb/tls.key
             - name: KURRENTDB_TRUSTED_ROOT_CERTIFICATES_PATH
-              value: /var/run/opencrane/kurrentdb
+              value: /var/run/opencrane/kurrentdb-roots
             - name: KURRENTDB_DEFAULT_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -391,6 +391,9 @@ spec:
             - name: kurrentdb-tls
               mountPath: /var/run/opencrane/kurrentdb
               readOnly: true
+            - name: kurrentdb-roots
+              mountPath: /var/run/opencrane/kurrentdb-roots
+              readOnly: true
             - name: data
               mountPath: /var/lib/kurrentdb
       volumes:
@@ -398,6 +401,18 @@ spec:
           secret:
             secretName: {{ $history.tls.existingSecret }}
             defaultMode: 0440
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: kurrentdb-roots
+          secret:
+            secretName: {{ $history.tls.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: ca.crt
+                path: ca.crt
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -54,6 +54,8 @@ The chart creates no credentials. An installer supplies immutable, release-local
 `opencrane-history` username/password. KurrentDB mounts TLS and receives its administrator and
 operations credentials; the bootstrap Job receives TLS, administrator, and service inputs; the application server
 must receive only the CA and service username/password through its separate app chart.
+The node mounts its certificate and private key separately from the CA-only trusted-root directory;
+KurrentDB rejects a non-self-signed server certificate if it appears among the trusted roots.
 
 The installer supplies the immutable digest of the bootstrap image built from `deploy/Dockerfile`.
 It contains `/bin/sh`, `curl`, `jq`, `mktemp`, `tr`, and `grep`; it has no Kubernetes API permission and may
@@ -63,6 +65,10 @@ assuming that the KurrentDB image contains administration tools.
 KurrentDB runs with TLS, internal authentication, both default passwords supplied, anonymous stream
 and endpoint access disabled, and trusted authentication disabled. Its NetworkPolicy admits only
 the release-local server and its bootstrap Job on port 2113 and permits no KurrentDB egress.
+The authenticated HTTP stream API is enabled so bootstrap can install and verify the default ACL.
+Verification reads the latest settings event as JSON and rejects different permissions; an older
+matching event in the stream cannot conceal a changed current ACL.
+Bootstrap inspects subscription metadata without consuming queued activation messages.
 
 The backup Job holds no KurrentDB credential. In `fileCopy` mode it runs as the database identity
 on the database node, reads the data volume read-only, writes the archive PVC, and has no network

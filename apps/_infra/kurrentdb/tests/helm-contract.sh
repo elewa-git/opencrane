@@ -33,12 +33,91 @@ rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}")"
 printf '%s\n' "$rendered" | node -e '
   const yaml = require(process.argv[1]);
   const fs = require("node:fs");
+  const assert = require("node:assert/strict");
   const resources = yaml.loadAll(fs.readFileSync(0, "utf8"));
   for (const kind of ["ServiceAccount", "Service", "StatefulSet"]) {
     if (!resources.some(function _OwnsKurrentResource(resource) {
       return resource?.kind === kind && resource.metadata?.name === "opencrane-testv5-kurrentdb";
     })) throw new Error(`The KurrentDB render is missing its ${kind}`);
   }
+  const pod = resources.find(function _IsKurrentStatefulSet(resource) {
+    return resource?.kind === "StatefulSet" && resource.metadata?.name === "opencrane-testv5-kurrentdb";
+  }).spec.template.spec;
+  const container = pod.containers.find(function _IsKurrentContainer(candidate) {
+    return candidate.name === "kurrentdb";
+  });
+  const environment = Object.fromEntries(container.env.map(function _ReadEnvironment(entry) {
+    return [entry.name, entry.value];
+  }));
+  // Bootstrap installs stream ACLs through the authenticated HTTP stream API.
+  assert.equal(environment.KURRENTDB_ENABLE_ATOM_PUB_OVER_HTTP, "true");
+  for (const variable of ["KURRENTDB_INSECURE", "KURRENTDB_ALLOW_ANONYMOUS_STREAM_ACCESS",
+    "KURRENTDB_ALLOW_ANONYMOUS_ENDPOINT_ACCESS", "KURRENTDB_ENABLE_TRUSTED_AUTH"]) {
+    assert.equal(environment[variable], "false");
+  }
+  const rootMount = container.volumeMounts.find(function _ContainsTrustedRoots(mount) {
+    return mount.mountPath === environment.KURRENTDB_TRUSTED_ROOT_CERTIFICATES_PATH;
+  });
+  assert.ok(rootMount, "KurrentDB must mount its trusted-root directory");
+  assert.equal(rootMount.readOnly, true);
+  const rootSecret = pod.volumes.find(function _SuppliesTrustedRoots(volume) {
+    return volume.name === rootMount.name;
+  }).secret;
+  // KurrentDB rejects a server certificate when its trusted-root loader encounters it.
+  assert.equal(rootSecret.secretName, "kurrentdb-tls");
+  assert.deepEqual(rootSecret.items, [{ key: "ca.crt", path: "ca.crt" }]);
+  for (const [variable, key] of [
+    ["KURRENTDB_CERTIFICATE_FILE", "tls.crt"],
+    ["KURRENTDB_CERTIFICATE_PRIVATE_KEY_FILE", "tls.key"],
+  ]) {
+    const mount = container.volumeMounts.find(function _ContainsNodeCertificate(candidate) {
+      return environment[variable] === `${candidate.mountPath}/${key}`;
+    });
+    assert.ok(mount, `KurrentDB must mount ${key}`);
+    assert.notEqual(mount.name, rootMount.name, "Node credentials must stay outside the trusted roots");
+    assert.equal(mount.readOnly, true);
+    const secret = pod.volumes.find(function _SuppliesNodeCertificate(volume) {
+      return volume.name === mount.name;
+    }).secret;
+    assert.equal(secret.secretName, "kurrentdb-tls");
+    assert.ok(secret.items.some(function _ProjectsNodeCredential(item) {
+      return item.key === key && item.path === key;
+    }));
+  }
+  const bootstrap = resources.find(function _IsKurrentBootstrapScript(resource) {
+    return resource?.kind === "ConfigMap" && resource.metadata?.name === "opencrane-testv5-kurrentdb-bootstrap";
+  }).data["bootstrap.sh"];
+  assert.ok(bootstrap.includes("$endpoint/streams/%24settings/head"), "Bootstrap must read the current ACL event");
+  assert.ok(bootstrap.includes("Accept: application/json"), "Bootstrap must request the event data as JSON");
+  const quote = String.fromCharCode(39);
+  assert.ok(bootstrap.includes(`--user "$history_username:$history_password" --header ${quote}Accept: application/json${quote}`),
+    "The service probe must request a supported stream representation");
+  assert.ok(bootstrap.includes(`"$subscription_url/info"`), "Bootstrap must inspect a subscription without consuming messages");
+  assert.equal(/^\s*subscription_status=.*"\$subscription_url"/m.test(bootstrap), false);
+  const queryStart = bootstrap.indexOf(`! jq -e ${quote}`) + `! jq -e ${quote}`.length;
+  const queryEnd = bootstrap.indexOf(quote, queryStart);
+  assert.ok(queryStart >= `! jq -e ${quote}`.length && queryEnd > queryStart);
+  const aclQuery = bootstrap.slice(queryStart, queryEnd);
+  const { spawnSync } = require("node:child_process");
+  function _AcceptsCurrentAcl(document) {
+    const result = spawnSync("jq", ["-e", aclQuery], { input: JSON.stringify(document), encoding: "utf8" });
+    if (result.error) throw result.error;
+    assert.ok(result.status === 0 || result.status === 1, result.stderr);
+    return result.status === 0;
+  }
+  const adminAcl = { $r: "$admins", $w: "$admins", $d: "$admins", $mr: "$admins", $mw: "$admins" };
+  const expected = {
+    $userStreamAcl: { ...adminAcl, $r: ["$admins", "opencrane-history"], $w: ["$admins", "opencrane-history"] },
+    $systemStreamAcl: adminAcl,
+  };
+  assert.equal(_AcceptsCurrentAcl(expected), true);
+  const widened = { ...expected, $userStreamAcl: { ...expected.$userStreamAcl, $r: "$all" } };
+  assert.equal(_AcceptsCurrentAcl(widened), false);
+  assert.equal(_AcceptsCurrentAcl({ ...widened, previous: expected }), false,
+    "A historical matching ACL must not conceal different current permissions");
+  assert.equal(_AcceptsCurrentAcl({ entries: [{ data: JSON.stringify(expected) }] }), false,
+    "An HTTP feed is not the current settings event");
+  assert.equal(_AcceptsCurrentAcl({}), false);
 ' "$ROOT_DIR/node_modules/js-yaml"
 grep -Fq 'kind: StatefulSet' <<<"$rendered"
 grep -Fq 'name: opencrane-testv5-kurrentdb' <<<"$rendered"
