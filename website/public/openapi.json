@@ -10567,6 +10567,342 @@
         }
       }
     },
+    "/me/conversations/{conversationId}/children": {
+      "get": {
+        "operationId": "listMyGroupConversationChildren",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Currently visible shared child requests.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "children"
+                  ],
+                  "properties": {
+                    "children": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "conversationId",
+                          "parentConversationId",
+                          "parentMessageId",
+                          "parentMessagePosition",
+                          "state",
+                          "agentName"
+                        ],
+                        "properties": {
+                          "conversationId": {
+                            "type": "string"
+                          },
+                          "parentConversationId": {
+                            "type": "string"
+                          },
+                          "parentMessageId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "parentMessagePosition": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,19}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "ready",
+                              "unavailable"
+                            ]
+                          },
+                          "agentName": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed command."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "404": {
+            "description": "Conversation or selected source unavailable."
+          },
+          "409": {
+            "description": "The retry key already names a different command."
+          },
+          "503": {
+            "description": "Conversation dependency unavailable."
+          }
+        }
+      },
+      "post": {
+        "operationId": "createMyGroupConversationChild",
+        "summary": "Ask the company assistant about one own group message",
+        "description": "Admits an idempotent shared child for a caller-owned conversation-audience text message. Every admitted recipient must already see the originating revision. Requires current parent Delegate, conversation creation and selected service Invoke. The child begins pending and becomes ready only after cold history and its activation are durable.",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "parentMessageId",
+                  "parentMessagePosition",
+                  "agentServiceId",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "parentMessageId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "parentMessagePosition": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,19}$"
+                  },
+                  "agentServiceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Child creation admitted or its original request recovered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "child"
+                  ],
+                  "properties": {
+                    "child": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "conversationId",
+                        "parentConversationId",
+                        "parentMessageId",
+                        "parentMessagePosition",
+                        "state",
+                        "agentName"
+                      ],
+                      "properties": {
+                        "conversationId": {
+                          "type": "string"
+                        },
+                        "parentConversationId": {
+                          "type": "string"
+                        },
+                        "parentMessageId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "parentMessagePosition": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]{0,19}$"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "ready",
+                            "unavailable"
+                          ]
+                        },
+                        "agentName": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed command."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "404": {
+            "description": "Conversation or selected source unavailable."
+          },
+          "409": {
+            "description": "The retry key already names a different command."
+          },
+          "503": {
+            "description": "Conversation dependency unavailable."
+          }
+        }
+      }
+    },
+    "/me/conversations/{conversationId}/share": {
+      "post": {
+        "operationId": "shareMyGroupConversationChildResult",
+        "summary": "Share reviewed assistant text back to its parent group",
+        "description": "Posts as the sharing human after current parent and child access checks. The verified child source becomes causation and the originating group message becomes the reply target. A retry key binds the source and exact reviewed text; this route grants no runtime parent writer.",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sourceEntryId",
+                  "sourcePosition",
+                  "text",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "sourceEntryId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "sourcePosition": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,19}$"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 65536,
+                    "description": "Human-reviewed text, limited to 65536 UTF-8 bytes."
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same reviewed share was already accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "position"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "idempotent"
+                      ]
+                    },
+                    "position": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Reviewed text accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "position"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "accepted"
+                      ]
+                    },
+                    "position": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed command."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "404": {
+            "description": "Conversation or selected source unavailable."
+          },
+          "409": {
+            "description": "The retry key already names a different command."
+          },
+          "503": {
+            "description": "Conversation dependency unavailable."
+          }
+        }
+      }
+    },
     "/conversation-computers/activations/parked:replay": {
       "post": {
         "operationId": "replayParkedConversationComputerActivations",
@@ -10629,9 +10965,29 @@
                       "required": [
                         "participants",
                         "personalAgentStatus",
-                        "personalAgent"
+                        "personalAgent",
+                        "companyAssistants"
                       ],
                       "properties": {
+                        "companyAssistants": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "agentServiceId",
+                              "displayName"
+                            ],
+                            "properties": {
+                              "agentServiceId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
                         "participants": {
                           "type": "array",
                           "items": {
@@ -10866,7 +11222,8 @@
                         "readThroughPosition",
                         "updatedAt",
                         "visibleFromPosition",
-                        "accessEndedPosition"
+                        "accessEndedPosition",
+                        "parent"
                       ],
                       "properties": {
                         "id": {
@@ -10920,6 +11277,40 @@
                           "type": [
                             "string",
                             "null"
+                          ]
+                        },
+                        "parent": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "requestId",
+                                "parentConversationId",
+                                "parentMessageId",
+                                "parentMessagePosition"
+                              ],
+                              "properties": {
+                                "requestId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentConversationId": {
+                                  "type": "string"
+                                },
+                                "parentMessageId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentMessagePosition": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,19}$"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
                           ]
                         }
                       }
@@ -10973,7 +11364,8 @@
                         "readThroughPosition",
                         "updatedAt",
                         "visibleFromPosition",
-                        "accessEndedPosition"
+                        "accessEndedPosition",
+                        "parent"
                       ],
                       "properties": {
                         "id": {
@@ -11027,6 +11419,40 @@
                           "type": [
                             "string",
                             "null"
+                          ]
+                        },
+                        "parent": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "requestId",
+                                "parentConversationId",
+                                "parentMessageId",
+                                "parentMessagePosition"
+                              ],
+                              "properties": {
+                                "requestId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentConversationId": {
+                                  "type": "string"
+                                },
+                                "parentMessageId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentMessagePosition": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,19}$"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
                           ]
                         }
                       }
@@ -11099,7 +11525,8 @@
                         "readThroughPosition",
                         "updatedAt",
                         "visibleFromPosition",
-                        "accessEndedPosition"
+                        "accessEndedPosition",
+                        "parent"
                       ],
                       "properties": {
                         "id": {
@@ -11153,6 +11580,40 @@
                           "type": [
                             "string",
                             "null"
+                          ]
+                        },
+                        "parent": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "requestId",
+                                "parentConversationId",
+                                "parentMessageId",
+                                "parentMessagePosition"
+                              ],
+                              "properties": {
+                                "requestId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentConversationId": {
+                                  "type": "string"
+                                },
+                                "parentMessageId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentMessagePosition": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,19}$"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
                           ]
                         }
                       }
@@ -11206,7 +11667,8 @@
                         "readThroughPosition",
                         "updatedAt",
                         "visibleFromPosition",
-                        "accessEndedPosition"
+                        "accessEndedPosition",
+                        "parent"
                       ],
                       "properties": {
                         "id": {
@@ -11260,6 +11722,40 @@
                           "type": [
                             "string",
                             "null"
+                          ]
+                        },
+                        "parent": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "requestId",
+                                "parentConversationId",
+                                "parentMessageId",
+                                "parentMessagePosition"
+                              ],
+                              "properties": {
+                                "requestId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentConversationId": {
+                                  "type": "string"
+                                },
+                                "parentMessageId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "parentMessagePosition": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,19}$"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
                           ]
                         }
                       }
@@ -12234,6 +12730,144 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/organization/company-assistant": {
+      "post": {
+        "operationId": "provisionCompanyAssistant",
+        "summary": "Provision the company's first shared assistant",
+        "tags": [
+          "Organization assistants"
+        ],
+        "description": "Requires current Organization Administer and selected Model Use. Select current human Principal IDs explicitly. Once a company assistant exists, this call returns created:false and leaves its name, policy, grants and lifecycle unchanged. Retrying can finish identity establishment after a committed setup; it cannot revive a suspended or revoked identity.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "modelDefinitionId",
+                  "invokerPrincipalIds"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  },
+                  "modelDefinitionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  },
+                  "invokerPrincipalIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "^\\S(?:.*\\S)?$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing company assistant returned; replacement choices were not applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "created",
+                    "assistant"
+                  ],
+                  "properties": {
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "assistant": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "agentServiceId",
+                        "displayName"
+                      ],
+                      "properties": {
+                        "agentServiceId": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Company assistant created and identity established.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "created",
+                    "assistant"
+                  ],
+                  "properties": {
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "assistant": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "agentServiceId",
+                        "displayName"
+                      ],
+                      "properties": {
+                        "agentServiceId": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid setup choices."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Setup authority or selected member unavailable."
+          },
+          "503": {
+            "description": "Setup dependency unavailable; the same request may be retried."
           }
         }
       }

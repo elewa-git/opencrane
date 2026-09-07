@@ -30,8 +30,9 @@ After installation, verify sign-in, onboarding, a personal conversation and a re
 Then check that the conversation remains available after refresh and that its computer can be
 inspected. Record the outcomes separately from installation health.
 
-Shared-agent scheduling, group `@agent` conversations and agent-driven tool work are still product
-work; they are not additional setup steps that unlock a complete feature today.
+To evaluate shared work, [set up the company assistant](/guide/first-agent), grant selected
+employees access, and try [a request from a group](/guide/child-runs). Scheduling and agent-driven
+tool work remain product work.
 
 ## Use the API
 

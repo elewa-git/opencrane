@@ -29,8 +29,9 @@ its workspace recoverable. Live recovery testing remains part of qualification.
 ## Working with other people
 
 The conversation model also supports direct and group messages. Ordinary messages between people
-do not ask an assistant to run. Opening an assistant conversation from a group's `@agent` message
-is still planned, as is [delegation between assistants](/guide/child-runs).
+do not ask an assistant to run. You can explicitly [ask the company assistant](/guide/child-runs)
+from one of your group messages, continue in a linked chat, and review a result before sharing it back.
+Delegation between assistants remains planned.
 
 A shared agent is intended for a repeatable company task with its own access. Its scheduled and
 triggered execution is not yet part of the current working product. Read

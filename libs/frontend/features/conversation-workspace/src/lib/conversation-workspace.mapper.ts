@@ -18,7 +18,14 @@ export function _ConversationSummaryPresentation(summary: ConversationSummary, d
 	const peerLabels = _conversationPeerLabels(summary, directory);
 	switch (summary.mode)
 	{
-		case ConversationModes.AgentSession: return { id: summary.id, title: directory?.personalAgent?.displayName ?? "Agent session", modeLabel: "Agent session", participantLabel: "You and your Agent", iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.AgentSession:
+		{
+			const companyAssistant = directory?.companyAssistants.find(assistant => assistant.agentServiceId === summary.agentServiceId);
+			const personalName = directory?.personalAgent?.personalAgentRef === summary.agentServiceId ? directory.personalAgent.displayName : null;
+			if (personalName !== null)
+				return { id: summary.id, title: personalName, modeLabel: "Agent session", participantLabel: "You and your Agent", iconState, archived: summary.archivedAt !== null };
+			return { id: summary.id, title: companyAssistant?.displayName ?? "Assistant conversation", modeLabel: "Company assistant", participantLabel: `Shared assistant chat · ${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
+		}
 		case ConversationModes.Direct: return { id: summary.id, title: peerLabels[0] ?? "Direct conversation", modeLabel: "Direct", participantLabel: peerLabels.length === 0 ? `${summary.participantRefs.length} participants` : `You and ${peerLabels[0]}`, iconState, archived: summary.archivedAt !== null };
 		case ConversationModes.Group: return { id: summary.id, title: _compactParticipantNames(peerLabels) || "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
 		default: return _UnsupportedConversationMode(summary.mode);

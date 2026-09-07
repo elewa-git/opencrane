@@ -15,9 +15,42 @@ function _Gateway(post: ReturnType<typeof vi.fn>, get: ReturnType<typeof vi.fn> 
 
 describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGateway()
 {
+	it("binds a child request to the selected parent and preserves its retry command and abort signal", async function _ChildRequest()
+	{
+		const command = { parentMessageId: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", parentMessagePosition: "2", agentServiceId: "company", idempotencyKey: "c26f4e78-56ee-4ed2-a8be-06f13ef98164" };
+		const child = { conversationId: "child", parentConversationId: "group", parentMessageId: command.parentMessageId, parentMessagePosition: "2", state: "pending", agentName: "Research" };
+		const signal = new AbortController().signal;
+		const post = vi.fn().mockResolvedValue({ data: { child }, response: { status: 202 } });
+		await expect(_Gateway(post).createChild("group", command, signal)).resolves.toEqual(child);
+		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/children", { params: { path: { conversationId: "group" } }, body: command, signal });
+		post.mockResolvedValueOnce({ data: { child: { ...child, parentConversationId: "other" } } });
+		await expect(_Gateway(post).createChild("group", command, signal)).rejects.toThrow("invalid conversation response");
+	});
+
+	it("rejects malformed or foreign child lists and keeps server error text out of failures", async function _ChildrenBoundary()
+	{
+		const signal = new AbortController().signal;
+		const get = vi.fn().mockResolvedValueOnce({ data: { children: [], secret: "unsafe" } }).mockResolvedValueOnce({ error: { message: "database secret" }, response: { status: 404 } });
+		const gateway = _Gateway(vi.fn(), get);
+		await expect(gateway.listChildren("group", signal)).rejects.toThrow("invalid conversation response");
+		await expect(gateway.listChildren("group", signal)).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+	});
+
+	it("posts the reviewed share unchanged and validates both accepted and idempotent acknowledgements", async function _ReviewedShare()
+	{
+		const signal = new AbortController().signal;
+		const command = { sourceEntryId: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", sourcePosition: "4", text: "My reviewed result", idempotencyKey: "c26f4e78-56ee-4ed2-a8be-06f13ef98164" };
+		const post = vi.fn().mockResolvedValueOnce({ data: { outcome: "accepted", position: "5" } }).mockResolvedValueOnce({ data: { outcome: "idempotent", position: "5" } }).mockResolvedValueOnce({ data: { outcome: "accepted", position: "-1" } });
+		const gateway = _Gateway(post);
+		await gateway.shareChild("child", command, signal);
+		await gateway.shareChild("child", command, signal);
+		expect(post).toHaveBeenNthCalledWith(1, "/me/conversations/{conversationId}/share", { params: { path: { conversationId: "child" } }, body: command, signal });
+		await expect(gateway.shareChild("child", command, signal)).rejects.toThrow("invalid conversation response");
+	});
+
 	it("preserves the caller's session creation key in the generated API body", async function _CreatesSession()
 	{
-		const conversation = { id: "conversation-1", mode: "agent_session", lifecycle: "open", agentServiceId: "agent-1", participantRefs: ["membership-1"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null };
+		const conversation = { id: "conversation-1", mode: "agent_session", lifecycle: "open", agentServiceId: "agent-1", participantRefs: ["membership-1"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "1", parent: null, accessEndedPosition: null };
 		const post = vi.fn().mockResolvedValue({ data: { conversation } });
 		const command = { mode: ConversationModes.AgentSession, personalAgentRef: "agent-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292" } as const;
 		await _Gateway(post).create(command);
@@ -26,7 +59,7 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 
 	it.each([ConversationModes.Direct, ConversationModes.Group] as const)("preserves the %s creation UUID and member references in the generated request", async function _CreatesOrdinary(mode)
 	{
-		const conversation = { id: "conversation-1", mode, lifecycle: "open", agentServiceId: null, participantRefs: ["membership-1", "membership-2"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null };
+		const conversation = { id: "conversation-1", mode, lifecycle: "open", agentServiceId: null, participantRefs: ["membership-1", "membership-2"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "1", parent: null, accessEndedPosition: null };
 		const post = vi.fn().mockResolvedValue({ data: { conversation } });
 		const command = { mode, participantRefs: ["membership-2"], idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292" } as const;
 		await _Gateway(post).create(command);

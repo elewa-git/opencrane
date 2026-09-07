@@ -149,12 +149,10 @@ export class ConversationWorkspaceStore
 		this._manualReconnectPending.set(false);
 		try
 		{
-			const summary = this._conversations().find(candidate => candidate.id === conversationId);
-			if (summary === undefined)
-				throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
-			const detail: ConversationWorkspaceDetail = { ...summary, visibleFromPosition: "0", accessEndedPosition: null };
+			const detail = await this._gateway.open(conversationId);
 			if (generation !== this._generation)
 				return;
+			this._conversations.update(current => [detail, ...current.filter(candidate => candidate.id !== detail.id)]);
 			this._selected.set(detail);
 			this._draft.set("");
 			this._pendingMessage = null;

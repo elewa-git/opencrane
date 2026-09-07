@@ -32,9 +32,9 @@ different implementation states.
 ## Current development status
 
 OpenCrane is **pre-MVP**. The 0.11 review baseline implements durable conversations, bounded personal
-model turns, and inspection and recovery of conversation workspaces. These implementations are not
+model turns, company-assistant chats linked to a group, and inspection and recovery of conversation workspaces. These implementations are not
 yet proof of a complete live customer journey. Agent-driven tool use, personal-memory workflows,
-shared scheduled work and group `@agent` conversations still need product completion.
+shared scheduled work and delegation between assistants still need product completion.
 
 See [what is built and what remains](https://opencrane.ai/guide/status) for the current distinction,
 [CHANGELOG.md](CHANGELOG.md) for capability changes, and [plan.md](plan.md) for active work.

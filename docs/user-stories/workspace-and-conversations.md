@@ -8,7 +8,7 @@ the browser is a client, not the conversation ledger.
 
 Current status: the review branch has participant-scoped list, create, archive, close, HTTP message
 submission and KurrentDB history reads. The workspace reads initial history through HTTP and follows
-resumable browser events implemented under #827. Child agent sessions and attachments remain pending.
+resumable browser events implemented under #827. Group child chats and reviewed text sharing are implemented; attachments remain pending.
 These are implementation states; complete live journeys are not yet qualified. The
 [active plan](../../plan.md) records current progress, and
 [ADR 0016](../adr/0016-conversation-history-and-computers.md) owns storage and computer lifecycle.
@@ -166,7 +166,7 @@ list. Independent onboarding archiving and full access-changed purge proof remai
 
 ## CON-09 — Open a child agent session from a group
 
-**As a** group participant, **I want** an explicit `@agent` message to open a child agent session
+**As a** group participant, **I want** to ask the company assistant from my group message and open a linked agent chat
 **so that** governed agent work stays separate while useful outcomes can return to the group.
 
 Acceptance criteria:
@@ -180,4 +180,8 @@ Acceptance criteria:
   questions, approvals, results, failures, and finalized assets; they cannot mutate parent history.
 - Later questions inside the child create serial follow-up runs.
 
-Status: `API blocked`; child-conversation admission and upward delivery do not exist.
+Status: implemented in the review branch for one company assistant, an own conversation-visible
+source message, a fixed shared audience, cold-start recovery, child navigation and human-reviewed
+text sharing. Model follow-ups reuse ordinary assistant turns. Tests cover retries, source privacy,
+revocation and late browser responses. Live multi-person qualification remains pending. Automatic
+status/approval/asset deliveries and recursive agent delegation remain later capabilities.

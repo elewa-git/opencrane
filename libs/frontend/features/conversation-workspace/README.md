@@ -28,9 +28,23 @@ when it closes. Direct and group conversations can expose Files but never adopt 
  shared live stream ───────┘                       └── typed intent ─┘
 ```
 
-KurrentDB history remains canonical while finite polling adds immutable messages and current logical
-computer state. Resolved private payload text comes only from the authorized history response. The
+KurrentDB history remains canonical while the shared SSE adapter adds immutable messages and current
+logical computer state. Resolved private payload text comes only from the authorized history response. The
 workspace does not reconstruct AG-UI frames or expose run, tool, or sandbox commands.
+
+A person can select their own posted group message and choose **Ask company assistant**. The picker
+uses the server's permitted company-assistant directory; an empty directory explains that an
+administrator must provision an assistant and grant access. It never substitutes the personal agent.
+A child request shows Preparing, a link to the ready conversation, or Unavailable. The ready child
+opens in this workspace with **Back to group**. A completed assistant response offers an editable
+review and **Share as my message**, so the group receives the human's confirmed text.
+
+The feature-local request, message-action, and share components compose the existing ChoiceCardGroup
+and PrimeNG controls. The separate group-child store owns reads, retry UUIDs, reviewed drafts, and
+selection/abort fences; the presenter maps eligible sources using the verified session subject and
+server-stamped message author. The page owns composition and existing navigation intents. Storybook
+covers the choice, empty, pending, retry, ready-child, and accepted-share states, including a narrow
+request dialog. None of these presentation hints replace server source or permission checks.
 
 ## Public surface
 
@@ -44,7 +58,7 @@ workspace does not reconstruct AG-UI frames or expose run, tool, or sandbox comm
 - `ConversationWorkspaceContextPanelComponent` composes closable Activity and Files presentation without
   owning state or navigation.
 - `ConversationWorkspaceConnectionStatusComponent` places stream recovery status beside a reconnect
-  intent. It displays only presenter-provided copy and never opens a socket itself.
+  intent. It displays only presenter-provided copy and never opens a history connection itself.
 - The feature-local list and create controls render privacy-safe rows and immutable conversation mode
   choices. Each session row is one line: its prefix glyph communicates completed onboarding, Agent,
   direct, group, or closed state while selection changes only the row background. Completed onboarding
@@ -55,9 +69,9 @@ workspace does not reconstruct AG-UI frames or expose run, tool, or sandbox comm
 
 ## Boundary
 
-This feature does not call HTTP, open or persist conversation sockets, authorize participants, or decide
+This feature does not call HTTP, open or persist conversation connections, authorize participants, or decide
 whether a message creates an Agent run. Those rules remain in the backend and typed state ports. Its
-connection bar emits a reconnect intent; the workspace store owns the replacement socket and preserves
+connection bar emits a reconnect intent; the workspace store owns the replacement history connection and preserves
 the draft and accepted live projection. It never treats a display role as identity and never renders
 secrets. A2UI returned by an Agent remains unavailable in this phase because its actions have no
 server-owned capability or audit path.

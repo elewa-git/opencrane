@@ -1,7 +1,9 @@
 import { Injectable, inject } from "@angular/core";
 
+import type { GroupChildCreateCommand, GroupChildShareCommand, GroupChildView } from "@opencrane/models/conversations";
+
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
+import { _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationComputerBrowserPage, _ConversationComputerBrowserTargets, _ConversationComputerCommandResult, _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
@@ -31,6 +33,36 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 {
 	/** Generated client whose requests carry the browser session cookie; it supplies the caller's identity. */
 	private readonly _api = inject(ControlPlaneApiService);
+
+	/** Reads currently visible children and rejects a response for another parent. */
+	public async listChildren(parentConversationId: string, signal: AbortSignal): Promise<readonly GroupChildView[]>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/children", { params: { path: { conversationId: parentConversationId } }, signal });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ParseConversationGroupChildren(result.data, parentConversationId); }
+		catch { throw _InvalidResponse(); }
+	}
+
+	/** Admits the selected message and company assistant with the store-owned retry key. */
+	public async createChild(parentConversationId: string, command: GroupChildCreateCommand, signal: AbortSignal): Promise<GroupChildView>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/children", { params: { path: { conversationId: parentConversationId } }, body: command, signal });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ParseConversationGroupChild(result.data, parentConversationId, command.parentMessageId, command.parentMessagePosition); }
+		catch { throw _InvalidResponse(); }
+	}
+
+	/** Shares the reviewed text as the signed-in human without inventing an assistant-authored message. */
+	public async shareChild(childConversationId: string, command: GroupChildShareCommand, signal: AbortSignal): Promise<void>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/share", { params: { path: { conversationId: childConversationId } }, body: command, signal });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { _ParseConversationGroupShare(result.data); }
+		catch { throw _InvalidResponse(); }
+	}
 
 	/** @inheritdoc */
 	public async directory(): Promise<ConversationCreationDirectory>
@@ -86,7 +118,13 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		const result = await this._api.client.GET("/me/conversations/{conversationId}", { params: { path: { conversationId } } });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
-		try { return _ConversationDetail(result.data.conversation); }
+		try
+		{
+			const detail = _ConversationDetail(result.data.conversation);
+			if (detail.id !== conversationId)
+				throw _InvalidResponse();
+			return detail;
+		}
 		catch { throw _InvalidResponse(); }
 	}
 

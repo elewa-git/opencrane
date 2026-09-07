@@ -1,34 +1,55 @@
-# Shared agents
+# Set up the company assistant
 
-A **shared agent**, called a managed agent in the API, is intended to carry out a defined company
-task. Examples include preparing a weekly sales report or triaging incoming support tickets.
+A company assistant helps colleagues in a [chat linked to their group](/guide/child-runs).
+It has its own identity and model permission. It does not inherit the administrator's private
+assistant, memory or tools.
 
-::: info Planned execution
-The 0.11 baseline retains agent definitions and configuration, but does not expose supported
-managed-agent scheduling, run-now, retry or cancellation. Defining an agent does not make shared
-automation available. See [development status](/guide/status).
+::: info Current scope
+The 0.11 review baseline supports one explicitly provisioned company assistant per organisation,
+with text answers and follow-up questions. Setup currently uses the authenticated administrator
+API. Scheduling, automatic triggers, tools and delegation between assistants remain future work.
 :::
 
-## Decide what the task needs
+## Choose who can use it
 
-Describe the outcome first:
+The administrator selects a name, an existing model definition and the exact current employee
+principals who may use the assistant. The administrator needs permission to administer the
+organisation and use that model. Employees receive permission to discover, read and invoke the
+assistant; the assistant receives its own permission to use the selected model.
 
-- What should the agent produce, and for whom?
-- Which tools and company information does it need?
-- Should a person approve any action?
-- What spending limit and schedule would suit the task?
+The deployment supplies the computer profile and execution limits. The first company assistant
+uses one model turn per request, with ceilings of 32,000 completion tokens and two minutes. Those per-request
+limits are separate from company spending controls.
 
-A shared agent will have its own permissions. Creating or using it must not silently give it the
-creator's personal conversations, memory or tools.
+## Create it through the API
 
-## Definitions and configuration
+Use your authenticated browser session to send this command to
+`POST /api/v1/organization/company-assistant`. The identifiers below are placeholders for your
+installation's model definition and explicitly selected employee Principals.
 
-Administrator APIs provide agent definitions and revisions: named versions of instructions,
-models, limits and permitted resources. Use the [API reference](/reference/api) for the current
-management surface.
+```json
+{
+  "name": "Company assistant",
+  "modelDefinitionId": "your-model-definition-id",
+  "invokerPrincipalIds": ["employee-principal-id", "another-employee-principal-id"]
+}
+```
 
-The execution journey remains future work. This guide does not provide a schedule or run command
-for an unavailable runtime path.
+A successful creation returns `201` with the assistant's identifier and display name. If a network
+failure interrupts setup, repeat the same request. The server recovers the existing identity;
+it does not create another assistant. A `200` response means the existing configuration was
+retained, so different values in a retried body do not rename it or change its grants.
 
-> See also: [Personal assistants](/guide/persona) · [Company groups](/guide/organize) ·
-> [Tools](/guide/tools) · [Access controls](/guide/permissions)
+A suspended or retired assistant is never reopened by repeating setup. Manage access through the
+company's existing permission controls. Check the [API reference](/reference/api) for the exact
+request schema and failure responses.
+
+## Try it with colleagues
+
+An allowed employee opens a group, writes a request and chooses **Ask company assistant**. Check
+that the child chat produces an answer, survives refresh, and allows a person to review and share
+a result back. Include an employee without permission in your access tests. These complete
+journeys still need live qualification for the current review baseline.
+
+> See also: [Ask an assistant in a group](/guide/child-runs) ·
+> [Personal-assistant setup](/guide/persona) · [Access controls](/guide/permissions)

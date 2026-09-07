@@ -1,0 +1,4 @@
+:host { position: absolute; }
+.group-share { display: grid; gap: var(--oc-space-3); max-inline-size: var(--oc-journey-compact-width); }
+.group-share p { margin: 0; }
+.group-share textarea { inline-size: 100%; resize: vertical; }

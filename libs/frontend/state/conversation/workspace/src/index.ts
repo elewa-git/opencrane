@@ -21,3 +21,9 @@ export { ConversationCreationStates, ConversationOnboardingHistoryStatuses, Conv
 export { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 export { ConversationEventStreamStatuses } from "@opencrane/state/conversation/stream";
 export type { ConversationComputerBrowserTarget, ConversationComputerCommandResult, ConversationComputerReviewGateway, ConversationCreationDirectory, ConversationDirectoryParticipant, ConversationOnboardingHistory, ConversationOnboardingHistoryEntry, ConversationOnboardingHistoryProjection, ConversationPersonalAgent, ConversationSummary, ConversationWorkspaceDetail, ConversationWorkspaceGateway, ConversationWorkspaceNavigationIntent, CreateConversationCommand, SubmitConversationMessageCommand } from "./lib/conversation-workspace.types";
+
+export { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY } from "./lib/conversation-workspace.gateway";
+export { ConversationGroupChildStore } from "./lib/conversation-group-child.store";
+export { ConversationGroupCommandStates } from "./lib/conversation-group-child.types";
+export type { ConversationCompanyAssistant, ConversationGroupSource, ConversationGroupChildGateway } from "./lib/conversation-group-child.types";
+export { _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare } from "./lib/conversation-group-response.validator";

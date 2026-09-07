@@ -18,9 +18,9 @@ older run-owned runtime and relational transcript descriptions in historical pla
 | Explain the product and architecture consistently | Done in the review branch: README and website use the vision, current ownership, and built/pending status; website build passes. |
 | Complete onboarding-to-assistant continuity | Persona forwarding and caller-owned directory done (`825ceb3bc`), with regression tests. Complete live onboarding-to-answer proof remains pending. |
 | Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Multi-person live journey proof remains pending. |
-| Ask an assistant to work inside a group | In progress: a shared company assistant opens a child chat for the group's current participants; people review results before sharing them back. Creation, current service authority, independent child access and UI completion are being implemented together. |
+| Ask an assistant to work inside a group | Implementation complete (see [plan-done.md](plan-done.md)): explicit company assistant selection, a fixed shared child audience, durable creation, Back to group and reviewed human-authored sharing. This wave awaits integration CI and live journey proof. |
 | Rebuild channel event reads (#827) | Implemented and qualified against real KurrentDB in CI at `cbdb742d4`: bounded, cancellable participant reads and resumable same-origin SSE on the public listener, consumed by the workspace. The deployed multi-user journey remains to be proven. |
-| Qualify backup and restore on testv5 | Blocked at live preflight: the dev cluster has no testv5 namespace or VolumeSnapshotClass. Record installation prerequisites and real recovery timing in the deploy ledger. |
+| Qualify backup and restore on testv5 | Blocked at live preflight: testv5 identity configuration is missing, and the dev cluster has no testv5 namespace or VolumeSnapshotClass. Record installation prerequisites and real recovery timing in the deploy ledger. |
 
 Completed implementation moves to `plan-done.md`; live evidence belongs in
 [`docs/agents/deploy-ledger.md`](docs/agents/deploy-ledger.md). A green test, a pushed change, a
@@ -72,16 +72,20 @@ live product acceptance remain separate evidence.
 | Join and use a personal assistant | Qualify invite/sign-in, saved onboarding, approved settings, assistant selection and first answer together. | Two employees independently complete setup and receive answers influenced by their own approved settings. Refresh and retry preserve progress. |
 | Start and revisit chats | Qualify independent sessions, readable labels, reconnect and visible recovery together. | A new request creates a new chat; retry creates none extra; closed chats remain closed; late responses cannot replace the selected chat. |
 | Talk as a group | Qualify group navigation, ordered delivery, creation retries and membership changes with real accounts. | Three employees exchange ordered messages and resume after reconnect; ordinary messages create no agent run. |
-| Ask an assistant in a group | Agree shared-assistant authority and child access; add explicit target selection, child origin binding, activation and safe parent deliveries. | One request creates one child chat; replies and follow-ups persist; revocation and guessed IDs reveal no private child content. |
+| Ask an assistant in a group | Qualify the implemented operator setup API, company assistant selection, durable child recovery, Back to group and reviewed sharing together. Integration CI for this wave is pending. | One request creates one child with its admitted audience; a late join does not change retries; answers use the company's model authority; reviewed results post as the human; revocation and guessed IDs reveal no private content. |
 | Receive live conversation updates | Qualify the implemented [#827](https://github.com/elewa-git/opencrane/issues/827) stream against live KurrentDB; measure the remaining initial-history and periodic computer replay cost. | Disconnect cancels upstream work; a reconnect resumes by stream revision; access is rechecked before plaintext delivery. |
 | Perform a useful external action | Connect model tool requests to existing server-owned tool admission, approvals, execution and durable results. | One real task succeeds with a chosen integration; denied/revoked/ambiguous actions never execute or claim success. |
 
 Group child chats and runtime delegation are distinct. [ADR 0012](docs/adr/0012-conversation-modes-and-agent-thread-authority.md)
-requires a durable child conversation with independent access and history. Runtime subagents
+requires a durable child conversation with independent access and history. The implemented human
+request records its command and fixed audience with a recovery task, establishes cold history under
+ADR 0016, then projects the child and commits its first message with activation. Only completed
+creation becomes Ready. The company assistant uses its own managed identity and model permission;
+the human requester's current membership and invocation permission remain separate requirements.
+Runtime subagents
 ([#320](https://github.com/elewa-git/opencrane/issues/320)) require explicit parent-run delegation,
-budget, cancellation and result ownership. They must not silently inherit a person's private tools
-or memory. The old requirement for immediate atomic first-run creation must be reconciled with
-ADR 0016's durable cold-computer activation before that group implementation begins.
+budget, cancellation and result ownership and remain later work. Neither journey may silently
+inherit a person's private tools or memory.
 
 ## Complete the remaining product capabilities
 

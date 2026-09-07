@@ -6,7 +6,7 @@ import { _ParseConversationWorkspaceDirectory } from "../conversation-workspace.
 /** Builds the server's named creation-directory response. */
 function _Directory()
 {
-	return { participants: [{ participantRef: "self-secret", isSelf: true, displayName: "Jente" }, { participantRef: "other-secret", isSelf: false, displayName: " Amina " }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
+	return { companyAssistants: [], participants: [{ participantRef: "self-secret", isSelf: true, displayName: "Jente" }, { participantRef: "other-secret", isSelf: false, displayName: " Amina " }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
 }
 
 describe("conversation member display names", function _Suite()

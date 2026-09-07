@@ -11,8 +11,9 @@ baseline from remaining product work and live verification.
 | Personal-assistant setup | A resumable interview, reviewed persona and creation of the first personal assistant configuration. |
 | Durable conversations | Creation, posting and history reads, including ordinary direct/group messages and personal assistant conversations. History is stored in KurrentDB. All three modes distinguish a new chat from a retried creation command. |
 | Recognizable chats | Member display names in the participant picker and direct/group chat titles, with generic text for missing names. |
-| Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. Initial history and computer refresh still use the existing replay path. |
+| Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. The event stream supplies message history and live changes; computer inspection refreshes separately. |
 | Personal model turns | Approved persona instructions and conversation history reach a bounded model request; its assistant output is persisted against the admitted conversation computer. |
+| Company assistant in groups | Explicit assistant selection on an own group message, recoverable child creation, fixed audience, current parent and child access checks, follow-up answers, and human-reviewed sharing back. Administrator setup uses the API. |
 | Computer inspection | Workspace files, diffs, bounded commands, screenshots and temporary localhost previews through the conversation workspace. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
 | History operations | A backup schedule, restore command and health checks. Backup/restore evidence currently covers chart rendering and a simulated restore script. |
@@ -27,8 +28,8 @@ current review work and its evidence.
   approvals and durable results, then prove a real business task from start to finish.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
   across conversations.
-- **Shared work:** restore supported managed-agent scheduling and triggered execution, and build
-  group `@agent` conversations and delegation.
+- **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete
+  delegation between assistants.
 - **Inputs and outputs:** complete the user journeys for attachments, generated files and their
   recovery across refresh, retry and conversation closure.
 - **Administration:** complete the product surfaces for permissions, activity and cost without
@@ -40,7 +41,8 @@ do not publish an application.
 ## Still to prove live
 
 The current baseline needs one real installation to prove login, onboarding, personal conversation,
-model response, ordinary groups, reconnect, access changes, recovery and computer review together.
+model response, ordinary groups, company-assistant child chats, reviewed sharing, reconnect, access
+changes, recovery and computer review together.
 Tool, memory and shared-work journeys need
 their own live evidence as they become available. KurrentDB backup and restore also need a real
 drill and measured recovery time.

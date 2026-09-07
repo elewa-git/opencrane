@@ -1,6 +1,8 @@
-import { InjectionToken } from "@angular/core";
+import { InjectionToken, type Signal } from "@angular/core";
 
 import type { ConversationEventStream } from "@opencrane/state/conversation/stream";
+
+import type { ConversationGroupChildGateway } from "./conversation-group-child.types";
 
 import type { ConversationComputerReviewGateway, ConversationWorkspaceGateway } from "./conversation-workspace.types";
 
@@ -88,3 +90,9 @@ export const CONVERSATION_COMPUTER_REVIEW_GATEWAY = new InjectionToken<Conversat
  * @see OpenCraneConversationEventStream — the implementation the web app provides for this token.
  */
 export const CONVERSATION_WORKSPACE_EVENT_STREAM = new InjectionToken<ConversationEventStream>("CONVERSATION_WORKSPACE_EVENT_STREAM");
+
+/** Binds company-assistant requests and reviewed human shares to the authenticated workspace adapter. */
+export const CONVERSATION_GROUP_CHILD_GATEWAY = new InjectionToken<ConversationGroupChildGateway>("CONVERSATION_GROUP_CHILD_GATEWAY");
+
+/** Supplies the host's verified current subject for own-message controls; it grants no command authority. */
+export const CONVERSATION_CURRENT_SUBJECT = new InjectionToken<Signal<string | null>>("CONVERSATION_CURRENT_SUBJECT");

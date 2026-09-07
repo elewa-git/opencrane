@@ -4,7 +4,9 @@ import { ConversationComputerStates } from "@opencrane/contracts";
 import { ConversationComposerStates, ConversationStatusTones, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
-import { ConversationComputerReviewStore, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, ConversationComputerReviewStore, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+
+import { _GroupRequestSource, _GroupShareSource } from "./conversation-group.mapper";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
 import type { ConversationOnboardingContinuationPresentation, ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
@@ -23,6 +25,10 @@ export class ConversationWorkspacePresenter
 {
 	/** Component-scoped conversation orchestration. */
 	protected readonly store = inject(ConversationWorkspaceStore);
+	/** Owns company-assistant requests and reviewed human shares for this selection. */
+	protected readonly groupStore = inject(ConversationGroupChildStore);
+	/** Supplies the verified subject solely for presenting own-message actions. */
+	private readonly _subject = inject(CONVERSATION_CURRENT_SUBJECT);
 	/** Existing asset state scoped to the selected conversation. */
 	protected readonly assetsStore = inject(ConversationAssetsStore);
 	/** Component-scoped active-computer review state. */
@@ -89,6 +95,20 @@ export class ConversationWorkspacePresenter
 	protected hideCreate(): void { this.creating.set(false); }
 	/** Select one conversation from the feature-local rail. */
 	protected async open(conversationId: string): Promise<void> { await this.store.open(conversationId); }
+	/** Opens the explicit company assistant picker for an eligible own message. */
+	protected askAssistant(messageId: string): void
+	{
+		const source = this.messages().find(entry => entry.message.id === messageId)?.requestSource;
+		if (source != null)
+			this.groupStore.ask(source);
+	}
+	/** Opens editable text review for a completed assistant response in the selected child. */
+	protected reviewGroupShare(messageId: string): void
+	{
+		const source = this.messages().find(entry => entry.message.id === messageId)?.shareSource;
+		if (source != null)
+			this.groupStore.reviewShare(source);
+	}
 	/** Keep ordinary message input controlled by the conversation store. */
 	protected updateDraft(value: string): void { this.store.updateDraft(value); }
 	/** Submit ordinary participant text through the authenticated history command. */
@@ -110,6 +130,7 @@ export class ConversationWorkspacePresenter
 	private _OpenComposedState(): void
 	{
 		const selected = this.store.selected();
+		this.groupStore.select(selected);
 		if (selected === null)
 		{
 			this._composedConversationId = null;
@@ -211,7 +232,15 @@ export class ConversationWorkspacePresenter
 		const selected = this.store.selected();
 		if (selected === null)
 			return [];
-		return _ConversationEntryViews(this.store.live().entries, this.store.live().payloads);
+		const history = this.store.live();
+		const entries = new Map(history.entries.map(entry => [entry.id, entry]));
+		const subject = this._subject() ?? undefined;
+		const children = this.groupStore.children();
+		return _ConversationEntryViews(history.entries, history.payloads).map(function _GroupActions(view)
+		{
+			const entry = entries.get(view.message.id)!;
+			return { ...view, requestSource: _GroupRequestSource(entry, history.payloads, selected, subject), shareSource: _GroupShareSource(entry, history.payloads, selected), children: children.filter(child => child.parentMessageId === entry.id) };
+		});
 	}
 
 	/** Merge durable and browser-private asset transfers without retaining File bytes here. */

@@ -1,4 +1,6 @@
-import type { ConversationLifecycles, ConversationModes, MessageRoles } from "@opencrane/models/conversations";
+import type { ConversationLifecycles, ConversationModes, GroupChildOrigin, MessageRoles } from "@opencrane/models/conversations";
+
+import type { ConversationCompanyAssistant } from "./conversation-group-child.types";
 
 /** Route-level states rendered by the conversation workspace. */
 export enum ConversationWorkspaceRouteStates
@@ -129,6 +131,8 @@ export interface ConversationPersonalAgent
 /** Privacy-safe choices accepted by the new-conversation form. */
 export interface ConversationCreationDirectory
 {
+	/** Lists company assistants the caller may invoke from a group message. */
+	readonly companyAssistants: readonly ConversationCompanyAssistant[];
 	/** Human creation choices in stable server order. */
 	readonly participants: readonly ConversationDirectoryParticipant[];
 	/** Whether an Agent session can be created. */
@@ -161,6 +165,8 @@ export interface ConversationSummary
 /** Authorized bounded snapshot for one selected conversation. */
 export interface ConversationWorkspaceDetail extends ConversationSummary
 {
+	/** Preserves the origin of a company-assistant child, or null for an ordinary conversation. */
+	readonly parent: GroupChildOrigin | null;
 	/** First timeline position this participant may see. */
 	readonly visibleFromPosition: string;
 	/** Final visible position after removal, or null while access remains active. */

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, input, output, signal, untracked } from "@angular/core";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import type { ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
-import { ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { ConversationGroupChildStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { ConversationSessionRailItemKinds, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
 import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
@@ -23,7 +23,7 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {
 	/** Optional app-owned route selection adopted after the workspace list loads. */
@@ -66,6 +66,22 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 		await this.open(conversationId);
 		if (this.store.selected()?.id === conversationId)
 			this.conversationSelected.emit(conversationId);
+	}
+
+	/** Opens a child only after its server-confirmed creation is ready. */
+	protected async openChild(conversationId: string): Promise<void>
+	{
+		const selected = this.groupStore.childToOpen(conversationId);
+		if (selected !== null)
+			await this.openConversation(selected);
+	}
+
+	/** Opens the selected child's immediate group through normal authorized navigation. */
+	protected async backToGroup(): Promise<void>
+	{
+		const parent = this.store.selected()?.parent;
+		if (parent != null)
+			await this.openConversation(parent.parentConversationId);
 	}
 
 	/** Delegate one visually unified rail selection to its real server-backed source. */

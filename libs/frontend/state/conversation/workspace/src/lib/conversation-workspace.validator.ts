@@ -21,7 +21,7 @@
 // the matching schema admits it.
 import { z } from "zod";
 
-import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import { ___GroupChildOriginSchema, ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 
 import { ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail } from "./conversation-workspace.types";
 
@@ -54,6 +54,7 @@ const _NullableRequiredString = _RequiredString.nullable();
  * Extra identity fields such as login subjects and email addresses remain rejected.
  */
 const _Directory = z.object({
+	companyAssistants: z.array(z.object({ agentServiceId: _RequiredString, displayName: _RequiredString }).strict()),
 	participants: z.array(z.object({ participantRef: _RequiredString, displayName: _RequiredString, isSelf: z.boolean() }).strict()),
 	personalAgentStatus: z.nativeEnum(ConversationPersonalAgentStatuses),
 	personalAgent: z.object({ personalAgentRef: _RequiredString, displayName: _RequiredString }).strict().nullable()
@@ -86,7 +87,7 @@ const _Summary = z.object({
  * the last one — non-null only after the participant was removed, which is how the store knows to stop
  * accepting new messages while still showing the history.
  */
-const _Detail = _Summary.extend({ visibleFromPosition: _Position, accessEndedPosition: _Position.nullable() }).strict();
+const _Detail = _Summary.extend({ visibleFromPosition: _Position, accessEndedPosition: _Position.nullable(), parent: ___GroupChildOriginSchema.nullable() }).strict().refine(value => value.parent === null || (value.mode === ConversationModes.AgentSession && value.parent.parentConversationId !== value.id));
 
 /**
  * Validates the directory and prepares member names for the conversation picker and chat titles.

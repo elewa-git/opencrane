@@ -13,7 +13,23 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+The group-assistant journey is implemented in the current development wave; integration CI and
+live qualification are pending.
+
 ### Added
+
+- **Group members can choose a company assistant to work on one of their own messages.** Work opens
+  in a shared child chat with a fixed audience of people allowed to read the selected message.
+  Pending, Ready and Unavailable states make durable creation and recovery visible; retries preserve
+  the original audience even when somebody joins the group later.
+
+- **People can review an assistant's answer before returning it to the group.** The child has a
+  Back to group link, and members can edit the answer and share it as their own message, linked to
+  the original request. Retrying that share cannot silently change the reviewed text or post it twice.
+
+- **Operators can provision a company's first shared assistant through the API.**
+  `POST /api/v1/organization/company-assistant` selects its model and the people allowed to invoke
+  it. Setup retries preserve the existing assistant and do not restore revoked grants.
 
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
@@ -92,6 +108,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   isolated builds, and published PreviewApps likewise remain outside 0.11.0.
 
 ### Security
+
+- **Company assistants execute with their own model authority and a separately checked human
+  requester.** Current membership, service permission, and parent and child access are checked at
+  the relevant reads and effects. Shared work inherits no person's private tools, persona or memory.
 
 - **History reads enforce where each participant's visibility begins.** Both finite reads and live
   events recheck that boundary before loading private payloads, including a change during the read.

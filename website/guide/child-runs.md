@@ -1,35 +1,47 @@
-# Delegating work between assistants
+# Ask an assistant in a group
 
-The product vision includes **delegation**: an assistant asks a specialist agent to handle part of
-a task and brings the result back to the original conversation.
+Keep the discussion with your colleagues in a group chat. When a request needs assistant work,
+open a linked chat with the company assistant, follow its answer there, and review what you want
+to bring back to the group.
 
-::: info Planned
-Agent-to-agent delegation and group `@agent` child conversations are not complete in the 0.11
-product. Existing run-tree contracts are infrastructure for that work, not an available user
-journey. See [development status](/guide/status).
+::: info Development baseline
+This flow is implemented in the 0.11 review branch. Complete testing with real employees on a
+fresh installation remains part of [live qualification](/guide/status). An administrator must
+first [set up the company assistant](/guide/first-agent) and permit you to use it.
 :::
 
-## Two different experiences
+## Start work from a message
 
-**An assistant delegates part of your task.** You keep working in the original conversation while a
-specialist handles a bounded piece of work. The intended result is returned with enough context to
-understand what was done.
+1. Write your request in the group.
+2. Choose **Ask company assistant** on your own message and select the available assistant.
+3. Submit the request. **Pending** means the assistant chat is being prepared; use **Open** when
+   it is ready. Retrying the same request does not create another chat.
+4. Continue the discussion with the assistant in that chat. **Back to group** returns to the
+   conversation that requested the work.
 
-**A group asks an assistant to help.** An `@agent` message is intended to open a separate assistant
-conversation linked to the group. The group and assistant conversation keep their own history and
-participants. Ordinary group messages already have a different purpose: communication between
-people, without starting assistant work.
+The child chat starts with the selected request. It does not receive the group's complete history
+or anyone's personal assistant configuration. Its audience is fixed to the group's current
+participants when work is requested. Everyone included must be allowed to read that request;
+a message from before somebody joined cannot be copied into a child shared with that person.
 
-These are separate product capabilities. Implementing one does not establish the other.
+If creation becomes unavailable, the interface says so. It does not imply that the assistant
+completed the work. A new request is a separate operation from retrying an existing one.
 
-## What the completed product must make clear
+## Review and share a result
 
-- Which task was delegated and which agent is handling it.
-- Which information was shared and which actions are permitted.
-- Whether a decision is needed, the work failed or a result is ready.
-- Where to find the result in the conversation that requested it.
+Choose **Share result to group** on a result in the assistant chat. Review and edit the text before
+submitting it. The message is posted as you, with a link to its origin; the assistant cannot
+silently post to the parent as a colleague.
 
-Delegation must not silently broaden access or expose private conversation history.
+The parent and child keep separate histories. Access to the parent alone does not grant access
+to the child. Losing current access prevents later child reads and removes private content from
+the selected browser view. Joining the group later does not add someone to an existing child.
 
-> See also: [How OpenCrane works](/guide/how-it-works) · [Shared agents](/guide/first-agent) ·
+## Delegation between assistants
+
+An assistant autonomously assigning work to another assistant is a later capability. It needs
+its own limits, cancellation and result ownership. The group flow above starts with a person's
+explicit request and uses one company assistant; it does not provide recursive agent delegation.
+
+> See also: [Company assistant](/guide/first-agent) · [Personal assistants](/guide/persona) ·
 > [Access controls](/guide/permissions) · [Architecture](/advanced/architecture)

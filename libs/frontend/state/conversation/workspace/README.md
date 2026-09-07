@@ -12,7 +12,7 @@ exchange as a separate read-only projection; that projection never receives a co
 
 ```
 generated API ──► workspace/adapter ──► gateway port ──► workspace stores  ◄── HERE
-WebSocket events + messages ──► adapter ──► conversation/stream port ─────┘
+SSE history events ──► adapter ──► conversation/stream port ─────┘
                                                         │ safe state
                                                         ▼
                                                conversation-workspace feature
@@ -21,7 +21,7 @@ WebSocket events + messages ──► adapter ──► conversation/stream port
 **In this flow:** the generated HTTP adapter · the shared event stream · the conversation workspace feature
 
 `ConversationWorkspaceStore` owns conversation selection, metadata loading, history-connection recovery,
-creation choices, and conversation commands. Current computer lifecycle comes from the history response;
+creation choices, and conversation commands. Current computer lifecycle comes from the history stream;
 the browser no longer reconstructs or controls a separate run lifecycle.
 The store keeps a creation UUID after a failed response so retry opens the same conversation
 in every mode. A changed member set receives a new command UUID. A successful response clears that command; the next creation receives a new UUID. Creation
@@ -30,16 +30,25 @@ The package-local creation-command helper compares selections and builds command
 the pending command's lifetime and clears it only after success or an explicit mode change.
 
 Current-access loss from the event stream purges the selected history and draft and fences any late
-updates from that connection. The transport adapter owns initial history, new-event delivery, and
-periodic computer refresh; the workspace does not open a second polling loop.
+updates from that connection. The event adapter owns history and computer delivery; the workspace reads metadata when a chat opens,
+so newly created children and direct links do not depend on an already-loaded list.
+
+`ConversationGroupChildStore` owns requests made from an existing group message and the editable
+review before a human shares an assistant result. It retains UUIDs for unchanged retries, locks
+input while submitting, and aborts and purges request/share state when selection or access changes.
+Pending creation is refreshed every five seconds for at most one minute; the participant can then
+refresh explicitly. Ready means the child can open, not that the assistant finished its work.
 
 ## Public surface
 
 The package also owns the Zod response validators used by its transport adapter. Keeping runtime acceptance beside the workspace models means HTTP code only authenticates and transports data; it does not rebuild the domain shape.
 
 - `ConversationWorkspaceGateway` is the participant-scoped read and command port.
-- `CONVERSATION_WORKSPACE_EVENT_STREAM` binds the existing `ConversationEventStream` port for both live
-  projection and participant message submission; this package does not define a second transport contract.
+- `ConversationGroupChildStore` and `CONVERSATION_GROUP_CHILD_GATEWAY` own explicit company-assistant
+  requests, current child lists, and reviewed human shares. Shared child model validators and strict
+  response-envelope validators reject foreign source/parent coordinates before state adoption.
+- `CONVERSATION_WORKSPACE_EVENT_STREAM` binds the existing `ConversationEventStream` port for live
+  projection; this package does not define a second transport contract.
 - `ConversationWorkspaceStore` owns ordinary list, selection, snapshot-tail state, immutable creation mode,
   drafts, conversation commands, reconnect attempts, and a guarded manual reconnect. It preserves the
   draft and accepted live projection while fencing late updates from the replaced connection.
@@ -48,13 +57,13 @@ The package also owns the Zod response validators used by its transport adapter.
   to advance the participant coordinate or complete a message.
 - `ConversationOnboardingHistoryStore` keeps the optional transcript read and selection independent from
   ordinary snapshot, stream, draft, and run state.
-- `ConversationRunStore` owns run status and exact-attempt run commands.
 - `ConversationComputerReviewStore` owns file, diff, command, browser, screenshot, and localhost
   preview requests, purges output on selection changes, and rejects late results.
 - `ConversationOnboardingHistoryStatuses` distinguishes a completed transcript, unfinished onboarding,
   migrated accounts without recorded history, and a temporary read failure without blocking normal chats.
-- Exported enums and view models are transport-neutral and contain no login subjects, emails, roles, or
-  memory identity.
+- Command and view models are transport-neutral and contain no login subjects, emails, roles, or
+  memory identity. `CONVERSATION_CURRENT_SUBJECT` is a separate host-supplied signal used only to
+  present actions for the current person's messages; it never supplies command identity.
 
 ## Boundary
 

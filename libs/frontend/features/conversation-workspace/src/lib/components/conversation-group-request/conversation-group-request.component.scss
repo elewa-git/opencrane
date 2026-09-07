@@ -1,0 +1,4 @@
+:host { position: absolute; }
+.group-request { display: grid; gap: var(--oc-space-3); max-inline-size: var(--oc-journey-compact-width); }
+.group-request p { margin: 0; }
+.group-request blockquote { margin: 0; padding: var(--oc-space-3); border-inline-start: 1px solid var(--oc-border-strong); background: var(--oc-surface-subtle); white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: var(--oc-journey-compact-width); overflow: auto; }

@@ -12,7 +12,7 @@ import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, Conv
 /** Build one metadata-only Agent conversation; history arrives through the separate poller. */
 function _Detail(): ConversationWorkspaceDetail
 {
-	return { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: ["participant-1"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "0", accessEndedPosition: null };
+	return { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: ["participant-1"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "0", parent: null, accessEndedPosition: null };
 }
 
 /** Minimal generated API port for one selected conversation. */
@@ -21,7 +21,7 @@ class _Gateway implements ConversationWorkspaceGateway
 	/** Captures the exact Kurrent message command sent by the store. */
 	public readonly send = vi.fn().mockResolvedValue(undefined);
 	/** Return one privacy-safe creation directory. */
-	public async directory() { return { participants: [{ participantRef: "participant-1", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Agent" } }; }
+	public async directory() { return { companyAssistants: [], participants: [{ participantRef: "participant-1", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Agent" } }; }
 	/** Return one selectable conversation metadata row. */
 	public async list() { return [_Detail()]; }
 	/** Report that no separate onboarding transcript exists. */
@@ -95,7 +95,7 @@ describe("ConversationWorkspaceStore", function _DescribeWorkspace()
 	it.each([ConversationModes.Direct, ConversationModes.Group] as const)("retains the %s command for retry and changes its UUID for a different member set", async function _OrdinaryCreation(mode)
 	{
 		const gateway = new _Gateway();
-		vi.spyOn(gateway, "directory").mockResolvedValue({ participants: [{ participantRef: "participant-1", isSelf: true, label: "You" }, { participantRef: "participant-2", isSelf: false, label: "Amina" }, { participantRef: "participant-3", isSelf: false, label: "Kamau" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Agent" } });
+		vi.spyOn(gateway, "directory").mockResolvedValue({ companyAssistants: [], participants: [{ participantRef: "participant-1", isSelf: true, label: "You" }, { participantRef: "participant-2", isSelf: false, label: "Amina" }, { participantRef: "participant-3", isSelf: false, label: "Kamau" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Agent" } });
 		const injector = Injector.create({ providers: [ConversationOnboardingHistoryStore, ConversationWorkspaceStore, { provide: DestroyRef, useValue: { onDestroy: vi.fn() } }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _HistoryStream }] });
 		const store = injector.get(ConversationWorkspaceStore);
 		await store.load();

@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-09-07 — shared company assistant implementation; qualification pending
+
+Group members can select one of their own text messages, choose the company assistant and work in
+a shared child chat. The admitted audience stays fixed; a later group join neither gains earlier
+content nor invalidates a retry. Pending, Ready and Unavailable states expose durable recovery.
+Members can return through Back to group, review or edit a completed answer, and share it as their
+own message linked to the original request. A share retry is bound to the exact reviewed text.
+
+Operators provision the first company assistant through
+`POST /api/v1/organization/company-assistant`, selecting a model and explicit human invokers.
+The assistant uses its stable managed identity and independent model permission. The human's current
+membership and invocation permission, and continuing parent and child access, remain separate
+requirements. No private tools, persona or memory are inherited. Creation commits an immutable
+request and recovery task, establishes Kurrent history and a cold computer, then creates the read
+projection and atomically activates the first message before reporting Ready. Runtime-created
+subagents and autonomous delivery to the parent remain later work.
+
+Focused backend and browser checks, fresh-database authority tests and independent review support
+the implementation. Review repairs cover late-join retry, transient identity-history failure, shorter refreshed
+membership deadlines, and explicit shared-chat audience wording.
+The backend is committed in `951430524`; the UI and documentation complete the same review
+branch. Integration CI and live multi-person qualification for this wave remain pending. The earlier green CI at `cbdb742d4` covers onboarding, ordinary conversation continuity and
+#827, including its real Kurrent bounded-read test; it is not evidence for this later group wave.
+Testv5 still lacks installation identity configuration. The tested Stop-hook proposal remains
+unapplied pending explicit approval. No deployment or MVP completion is claimed.
+
 ## 2026-09-07 — first delivery-speed and personal-assistant repairs
 
 The subsequent conversation-continuity slice implements ordinary creation retries, enum conversion
@@ -16,10 +42,10 @@ and rejects late updates from an old selection. Initial history and the 30-secon
 still use the existing full replay path; this cost is not claimed as solved.
 
 Focused backend, browser, schema and race tests pass. Independent review found and resolved the
-join-boundary and pending-send purge issues. A real Kurrent bounded-read test is added to CI; local
-unit/protocol proof is not live qualification. No database schema, compatibility route, new channel
-service or second Pod owner was added. Group assistant child chats remain pending their authority
-decision and implementation.
+join-boundary and pending-send purge issues. The real Kurrent bounded-read test passed in CI at
+`cbdb742d4`; this is not deployed journey qualification. This continuity slice added no database
+schema, compatibility route, channel service or second Pod owner. The subsequent group assistant
+implementation is recorded above.
 
 Personal-session commands now distinguish a new chat from a retry (`6db91d08d`); matching retries
 preserve the existing lifecycle and grants. The slice passed 169 backend tests and the relevant

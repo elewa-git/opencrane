@@ -1,17 +1,18 @@
 import { Router } from "@angular/router";
 import { type Decorator, type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
+import { expect, within } from "storybook/test";
 
 import type { MessageEntry } from "@opencrane/contracts";
 import { ConversationModes, ConversationLifecycles } from "@opencrane/models/conversations";
 import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationHistoryProjection, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
-import { CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
 import { ConversationWorkspaceRouteComponent } from "../conversation-workspace-route/conversation-workspace-route.component";
 
 /** Privacy-safe directory used by the routed workspace contracts. */
-const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "The Commander" } };
+const _DIRECTORY: ConversationCreationDirectory = { companyAssistants: [], participants: [{ participantRef: "self", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "The Commander" } };
 
 /** Product-realistic text that must overflow only the transcript region. */
 const _LONG_CONTENT = `# Project review\n\n${"The proposal keeps the agreed constraints and records the next decision clearly. ".repeat(32)}`;
@@ -20,7 +21,7 @@ const _LONG_CONTENT = `# Project review\n\n${"The proposal keeps the agreed cons
 const _OVERFLOW_CONTENT = `${_LONG_CONTENT}\n\n${"The transcript owns overflow while the routed shell stays fixed to the viewport. ".repeat(32)}`;
 
 /** Authorized conversation selected by the routed shell story. */
-const _DETAIL: ConversationWorkspaceDetail = { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: ["self"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T19:30:00.000Z", visibleFromPosition: "0", accessEndedPosition: null };
+const _DETAIL: ConversationWorkspaceDetail = { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: ["self"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T19:30:00.000Z", visibleFromPosition: "0", parent: null, accessEndedPosition: null };
 
 /** Immutable assistant entry whose private payload supplies the long transcript. */
 const _ENTRY: MessageEntry = { schemaVersion: 1, id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", conversationId: _DETAIL.id, position: "1", author: { kind: "agent", agentIdentityId: "agent-identity-1", agentServiceId: "agent-1", name: "The Commander", avatarArtifactRevisionId: null }, provenance: "agent-authored", visibility: { audience: "conversation" }, runId: "run-1", causationId: "run-1", correlationId: "conversation-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", occurredAt: "2026-09-05T19:30:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:story" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
@@ -71,9 +72,9 @@ const _ROUTER = { navigate: async function _Navigate() { return true; } };
 const _PLATFORM = { isDesktop: false, bindFolder: async function _BindFolder() { throw new Error("Story command unavailable."); }, openAuthenticationWindow: function _OpenAuthenticationWindow() { return null; } };
 
 /** Supplies explicit test-only ports around the real routed workspace shell. */
-function _Providers(history: ConversationHistoryProjection): Decorator
+function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY): Decorator
 {
-	return moduleMetadata({ providers: [{ provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: _WORKSPACE_GATEWAY }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
+	return moduleMetadata({ providers: [{ provide: CONVERSATION_CURRENT_SUBJECT, useValue: function _Subject() { return "self"; } }, { provide: CONVERSATION_GROUP_CHILD_GATEWAY, useValue: {} }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: workspace }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
 }
 
 /** Defines the routed workspace viewport contracts without replacing its production stores. */
@@ -90,3 +91,16 @@ export const IntermediateLongContent: Story = { tags: ["visual-test"], decorator
 
 /** Wide desktop width keeps rail, transcript, composer, and context panel in one viewport. */
 export const WideLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(_HISTORY)] };
+
+/** Makes the already-shared child audience visible independently of the human's later result share. */
+export const SharedCompanyChild: Story = { decorators: [_Providers({ ..._HISTORY, entries: [{ ..._ENTRY, author: { kind: "agent", agentIdentityId: "managed-company", agentServiceId: "company", name: "Company assistant", avatarArtifactRevisionId: null } }], payloads: { "payload-1": "Proposal A costs less. Proposal B gives us an earlier delivery date. Confirm both dates before choosing." } }, {
+	..._WORKSPACE_GATEWAY,
+	directory: async function _Directory() { return { ..._DIRECTORY, companyAssistants: [{ agentServiceId: "company", displayName: "Company assistant" }], participants: [..._DIRECTORY.participants, { participantRef: "peer-1", isSelf: false, label: "Amina" }, { participantRef: "peer-2", isSelf: false, label: "Kamau" }] }; },
+	list: async function _List() { return [{ ..._DETAIL, agentServiceId: "company", participantRefs: ["self", "peer-1", "peer-2"] }]; },
+	open: async function _Open() { return { ..._DETAIL, agentServiceId: "company", participantRefs: ["self", "peer-1", "peer-2"], parent: { requestId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", parentConversationId: "group-1", parentMessageId: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", parentMessagePosition: "2" } }; }
+})], parameters: { docs: { description: { story: "The child header states that three people share this assistant chat. Back to group is navigation; result sharing later posts selected text. The fixture owns no membership or history authority." } } }, play: async function _SharedAudience({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(await canvas.findByText("Shared assistant chat · 3 participants")).toBeVisible();
+	expect(canvas.getByRole("button", { name: "Back to group" })).toBeVisible();
+} };

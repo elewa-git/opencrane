@@ -68,6 +68,7 @@
             }
             <header class="conversation-workspace__header">
               <div>
+                @if (selected.parent !== null) { <p-button label="Back to group" icon="pi pi-arrow-left" severity="secondary" [text]="true" (onClick)="backToGroup()" /> }
                 <small>{{ selectedSummary()?.modeLabel }}</small>
                 <h1>{{ selectedSummary()?.title }}</h1>
                 <p>{{ selectedSummary()?.participantLabel }}</p>
@@ -130,10 +131,13 @@
                     conversation-message-rich-card
                     [presentation]="entry.richText"
                 /></wo-conversation-message>
+                @if (entry.requestSource !== null || entry.shareSource !== null || entry.children.length > 0) { <wo-conversation-group-message-actions [canAsk]="entry.requestSource !== null" [canShare]="entry.shareSource !== null" [children]="entry.children" (askRequested)="askAssistant(entry.message.id)" (shareRequested)="reviewGroupShare(entry.message.id)" (childRequested)="openChild($event)" /> }
               </div>
             }
           </section>
           <footer class="conversation-workspace__composer">
+            @if (groupStore.error(); as groupError) { <p-message severity="error" [text]="groupError" /> }
+            @if (selected.mode === modes.Group && (groupStore.children().length > 0 || groupStore.error() !== null)) { <p-button label="Refresh assistant requests" severity="secondary" [text]="true" [loading]="groupStore.loading()" (onClick)="groupStore.refresh()" /> }
             @if (computerStatus(); as status) {
               <p-message severity="info" [text]="status.label" />
             }
@@ -207,6 +211,8 @@
       }
     }
   }
+  <wo-conversation-group-request [source]="groupStore.requestSource()" [assistants]="store.directory()?.companyAssistants ?? []" [selectedId]="groupStore.agentServiceId()" [state]="groupStore.requestState()" [error]="groupStore.requestError()" (assistantSelected)="groupStore.chooseAssistant($event)" (submitted)="groupStore.create()" (dismissed)="groupStore.dismissRequest()" />
+  <wo-conversation-group-share [visible]="groupStore.shareSource() !== null" [text]="groupStore.shareText()" [state]="groupStore.shareState()" [error]="groupStore.shareError()" (textChanged)="groupStore.editShare($event)" (submitted)="groupStore.share()" (dismissed)="groupStore.dismissShare()" (groupRequested)="backToGroup()" />
   <wo-conversation-create
     [visible]="creating()"
     [directory]="store.directory()"

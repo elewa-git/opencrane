@@ -1,6 +1,7 @@
-import type { Provider } from "@angular/core";
+import { computed, inject, type Provider, type Signal } from "@angular/core";
 
-import { CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
+import { SessionStore } from "@opencrane/state/core";
+import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
 import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace/adapter";
 import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from "@opencrane/state/conversation/assets";
@@ -16,7 +17,7 @@ import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from 
  * `docs/agents/app-source-allowlist.json` classifies this file as `browser-composition` for exactly
  * that reason. Adding an adapter import to the feature instead of here would break that direction.
  *
- * The metadata gateway, Kurrent-history poller, and asset gateway remain separate ports so a host can
+ * The metadata gateway, Kurrent-history stream, and asset gateway remain separate ports so a host can
  * replace transport without moving authority into the feature.
  *
  * A desktop or test host that wanted different transports would call its own version of this
@@ -34,13 +35,22 @@ import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from 
 export function provideConversationWorkspaceComposition(): Provider[]
 {
 	return [
+		{ provide: CONVERSATION_CURRENT_SUBJECT, useFactory: _conversationSubject },
 		OpenCraneConversationEventStream,
 		OpenCraneConversationWorkspaceGateway,
 		{ provide: CONVERSATION_WORKSPACE_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
+		{ provide: CONVERSATION_GROUP_CHILD_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 		{ provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
-		// The poller remains shared by direct, group, and Agent-session conversations so every mode
+		// The stream remains shared by direct, group, and Agent-session conversations so every mode
 		// resumes immutable history from the same server-owned position contract.
 		{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useExisting: OpenCraneConversationEventStream },
 		{ provide: CONVERSATION_ASSETS_GATEWAY, useClass: OpenCraneConversationAssetsGateway }
 	];
+}
+
+/** Projects the authenticated host session for presentation without moving session ownership into the chat feature. */
+function _conversationSubject(): Signal<string | null>
+{
+	const session = inject(SessionStore);
+	return computed(function _Subject() { return session.user()?.sub ?? null; });
 }

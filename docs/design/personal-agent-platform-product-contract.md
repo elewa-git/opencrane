@@ -60,8 +60,10 @@ and failures become canonical events before clients rely on them.
 
 Conversation close is monotonic; participant archive and unread position remain separate visibility
 coordinates. The group-assistant target is one durable child agent session per authorized, idempotent
-request, with recoverable first-turn activation. This flow remains unimplemented; its assistant
-authority and durable creation sequence must be settled before implementation.
+request, with recoverable first-turn activation. The first implementation selects the company
+assistant explicitly on an own group message, freezes the shared audience, and requires a person
+to review text before sharing it back. The assistant has its own authority; both the parent and
+child require current access. Autonomous delegation and other typed delivery kinds remain future work.
 [ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the mode,
 parent/child, delivery, and non-disclosure requirements.
 [ADR 0016](../adr/0016-conversation-history-and-computers.md) supersedes its immediate atomic

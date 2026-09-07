@@ -5,6 +5,7 @@ import { ConversationLifecycles, ConversationModes } from "@opencrane/models/con
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway";
+import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "../conversation-workspace-gateway.errors";
 import { ConversationOnboardingHistoryStore } from "../conversation-onboarding-history.store";
 import { ConversationWorkspaceStore } from "../conversation-workspace.store";
 import { ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates } from "../conversation-workspace.types";
@@ -15,8 +16,9 @@ function _Workspace()
 	const commands: StreamConversationEventsCommand[] = [];
 	const detail = { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: [], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z" };
 	const gateway = {
+		open: vi.fn().mockImplementation(async function _Open(id: string) { return { ...detail, id, visibleFromPosition: "0", accessEndedPosition: null, parent: null }; }),
 		send: vi.fn().mockResolvedValue(undefined),
-		directory: vi.fn().mockResolvedValue({ participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Assistant" } }),
+		directory: vi.fn().mockResolvedValue({ companyAssistants: [], participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Assistant" } }),
 		list: vi.fn().mockResolvedValue([detail, { ...detail, id: "conversation-2" }]),
 		onboardingHistory: vi.fn().mockResolvedValue({ status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null })
 	};
@@ -37,6 +39,34 @@ function _Live(command: StreamConversationEventsCommand): void
 
 describe("conversation stream access changes", function _DescribeAccess()
 {
+	it("opens a new child absent from the list using its authoritative origin and visibility", async function _ChildDeepLink()
+	{
+		const { store, gateway } = _Workspace();
+		await store.load();
+		gateway.open.mockResolvedValueOnce({ id: "new-child", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "company", participantRefs: [], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-07T00:00:00.000Z", visibleFromPosition: "7", accessEndedPosition: null, parent: { requestId: "request", parentConversationId: "group", parentMessageId: "message", parentMessagePosition: "3" } });
+		await store.open("new-child");
+		expect(gateway.open).toHaveBeenLastCalledWith("new-child");
+		expect(store.selected()).toMatchObject({ id: "new-child", visibleFromPosition: "7", parent: { parentConversationId: "group" } });
+		expect(store.conversations().some(item => item.id === "new-child")).toBe(true);
+	});
+
+	it("does not restore a late metadata read after another selection was denied", async function _LateMetadata()
+	{
+		const { store, gateway } = _Workspace();
+		await store.load();
+		const detail = store.selected()!;
+		let finish!: (value: typeof detail) => void;
+		gateway.open.mockImplementationOnce(function _Pending() { return new Promise(function _Wait(resolve) { finish = resolve; }); });
+		const pending = store.open("late-child");
+		gateway.open.mockRejectedValueOnce(new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "unavailable"));
+		await store.open("revoked-child");
+		finish({ ...detail, id: "late-child" });
+		await pending;
+		expect(store.selected()).toBeNull();
+		expect(store.conversations().some(item => item.id === "late-child")).toBe(false);
+		expect(store.live()).toEqual(__CreateConversationHistoryProjection());
+	});
+
 	it("purges the selected history and draft, then rejects late updates from the revoked stream", async function _PurgeRevoked()
 	{
 		const { store, commands, gateway } = _Workspace();

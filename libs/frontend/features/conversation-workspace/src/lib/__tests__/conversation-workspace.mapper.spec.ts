@@ -13,7 +13,7 @@ function _Summary(): ConversationSummary
 /** Builds the member directory already loaded for conversation creation. */
 function _Directory(): ConversationCreationDirectory
 {
-	return { participants: [{ participantRef: "subject-secret", isSelf: true, label: "You" }, { participantRef: "other-secret", isSelf: false, label: "Amina" }, { participantRef: "member-3", isSelf: false, label: "Kamau" }, { participantRef: "member-4", isSelf: false, label: "Amina" }, { participantRef: "member-5", isSelf: false, label: "Grace" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
+	return { companyAssistants: [], participants: [{ participantRef: "subject-secret", isSelf: true, label: "You" }, { participantRef: "other-secret", isSelf: false, label: "Amina" }, { participantRef: "member-3", isSelf: false, label: "Kamau" }, { participantRef: "member-4", isSelf: false, label: "Amina" }, { participantRef: "member-5", isSelf: false, label: "Grace" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
 }
 
 /** Builds a participant message containing unsafe markup. */
@@ -37,6 +37,20 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 		const summary = _ConversationSummaryPresentation(_Summary(), _Directory());
 		expect(summary).toMatchObject({ title: "Amina", participantLabel: "You and Amina" });
 		expect(JSON.stringify(summary)).not.toContain("other-secret");
+	});
+
+	it("makes a company assistant chat's shared participant audience explicit", function _SharedAssistantAudience()
+	{
+		const directory = { ..._Directory(), companyAssistants: [{ agentServiceId: "company", displayName: "Company assistant" }] };
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.AgentSession, agentServiceId: "company", participantRefs: ["subject-secret", "other-secret", "member-3"] }, directory);
+		expect(summary).toMatchObject({ title: "Company assistant", participantLabel: "Shared assistant chat · 3 participants" });
+		expect(JSON.stringify(summary)).not.toContain("subject-secret");
+	});
+
+	it("preserves the personal assistant's private participant label", function _PersonalAssistantAudience()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.AgentSession, agentServiceId: "agent-1", participantRefs: ["subject-secret"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Nova", participantLabel: "You and your Agent" });
 	});
 
 	it("names groups from other members and counts names beyond the first two", function _NamedGroup()
@@ -89,7 +103,7 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 
 	it("uses only the generic directory self label in the rail footer", function _SafeRailIdentity()
 	{
-		const identity = _ConversationRailIdentityPresentation({ participants: [{ participantRef: "opaque-secret", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const identity = _ConversationRailIdentityPresentation({ companyAssistants: [], participants: [{ participantRef: "opaque-secret", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 
 		expect(identity).toEqual({ name: "You", detail: "Private workspace", initials: "Y" });
 		expect(JSON.stringify(identity)).not.toContain("opaque-secret");
@@ -99,12 +113,12 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 	{
 		const self = { participantRef: "subject-secret", isSelf: true, label: "You" } as const;
 		const participants = [self, { participantRef: "other-secret", isSelf: false, label: "Participant 1" }] as const;
-		const ready = _ConversationOnboardingContinuationPresentation({ participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-secret", displayName: "Nova" } });
+		const ready = _ConversationOnboardingContinuationPresentation({ companyAssistants: [], participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-secret", displayName: "Nova" } });
 		const unavailable = _ConversationOnboardingContinuationPresentation({ participants, personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 		const ambiguous = _ConversationOnboardingContinuationPresentation({ participants, personalAgentStatus: ConversationPersonalAgentStatuses.Ambiguous, personalAgent: null });
-		const withoutDestination = _ConversationOnboardingContinuationPresentation({ participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const withoutDestination = _ConversationOnboardingContinuationPresentation({ companyAssistants: [], participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 		const unknown = _ConversationOnboardingContinuationPresentation(null);
-		const withoutMembership = _ConversationOnboardingContinuationPresentation({ participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const withoutMembership = _ConversationOnboardingContinuationPresentation({ companyAssistants: [], participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 
 		expect(ready.capabilityNote).toContain("continue with your Agent");
 		expect(unavailable.capabilityNote).toContain("Direct and group sessions are available");

@@ -79,6 +79,37 @@ Checkpoint and restore preserve the computer's workspace across cooling and repl
 Conversation history does not depend on the Pod or browser surviving. Ordinary direct and group
 messages do not activate an assistant computer.
 
+## Shared work from a group
+
+A group remains a conversation between people. Selecting **Ask company assistant** creates one
+linked assistant conversation from an explicitly chosen, caller-authored group request.
+
+```text
+Group message
+    │ explicit request, selected company assistant, fixed audience
+    ▼
+PostgreSQL admission + durable creation task
+    │ recoverable, idempotent work across the two stores
+    ▼
+Kurrent child history + cold computer → activation → bounded model answer
+    │ a participant reviews and edits the result
+    ▼
+New parent message, authored by the person who shares it
+```
+
+The transaction saves the immutable command and its workflow task together. A worker creates the
+child history and computer, then the current product projections and first request. Retries reuse
+the same identifiers; no transaction is claimed across PostgreSQL, KurrentDB and Kubernetes.
+
+The company assistant has an Internal Principal and a managed identity. It uses its own published
+revision and model grant. The human requester supplies separate, current membership and Invoke
+evidence. Personal configuration, private memory and tools are not copied to the company assistant.
+
+The child's audience is frozen at admission. Current membership and both parent and child access
+are checked before metadata, plaintext or execution is released. Rejoining the parent cannot
+reveal a request from before the participant's join boundary. Returning text to the group is an
+explicit human write bound to the source child; there is no generic upward-delivery engine.
+
 ## Isolation and external actions
 
 Each organisation has its own installation boundary. Identity, database, storage and network
@@ -87,7 +118,7 @@ additional tools or read another person's private work just because it shares in
 
 Tool execution is a separate governed service. The intended model loop proposes actions for the
 server to check and execute; that loop is not yet connected in the current personal-conversation
-runtime. Shared-agent scheduling and group `@agent` child conversations are also unfinished.
+runtime. Shared-agent scheduling and autonomous delegation between assistants are also unfinished.
 
 ## Baseline and evidence
 
