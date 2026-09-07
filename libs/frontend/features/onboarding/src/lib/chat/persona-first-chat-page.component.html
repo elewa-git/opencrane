@@ -1,10 +1,10 @@
 @if (preparing()) {
-	<wo-journey-shell title="Preparing your first conversation" description="OpenCrane is resolving the exact approved persona and reviewed bootstrap source." [layout]="layouts.Compact" [busy]="true">
+	<wo-journey-shell title="Preparing your first conversation" description="Loading your assistant and your saved setup progress." [layout]="layouts.Compact" [busy]="true">
 		<div class="wo-onboarding__loading" role="status"><p-progressspinner ariaLabel="Loading first conversation" /></div>
 	</wo-journey-shell>
 } @else if (chat.error() && !chat.hasValue()) {
-	<wo-journey-shell title="We could not resume your first conversation" description="No answer or completion has been inferred in the browser." [layout]="layouts.Compact">
-		<p-message journey-status severity="error" [closable]="false">The onboarding authority is unavailable. Your last durable position is unchanged.</p-message>
+	<wo-journey-shell title="We could not resume your first conversation" description="Your saved answers are still available when the connection returns." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">We could not load your setup progress. Retry to continue where you left off.</p-message>
 		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
 	</wo-journey-shell>
 } @else if (view(); as presentation) {
@@ -16,14 +16,14 @@
 		[state]="presentationState()"
 		[draftAnswer]="draftAnswer()"
 		[statusMessage]="actionError() ?? undefined"
-		completionMessage="OpenCrane validated all three answers and concluded onboarding on the server."
+		completionMessage="Your setup is complete. You can start a conversation with your assistant."
 		(draftAnswerChange)="updateDraft($event)"
 		(answerSubmitted)="submitAnswer($event)"
 		(retryRequested)="retry()"
 	/>
 } @else {
-	<wo-journey-shell title="First-conversation evidence is incomplete" description="OpenCrane did not return the exact persona and reviewed source required to continue." [layout]="layouts.Compact">
-		<p-message journey-status severity="error" [closable]="false">No local conversation was created. Retry the authoritative onboarding state.</p-message>
+	<wo-journey-shell title="Your first conversation could not be loaded" description="We could not load the assistant settings needed to continue." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">Retry to load your saved setup progress.</p-message>
 		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
 	</wo-journey-shell>
 }

@@ -1,7 +1,7 @@
 @let state = snapshot();
 @if (approvalIntent()) {
 	<p-dialog header="Approve persona" [modal]="true" [closable]="false" [visible]="true" (visibleChange)="approvalVisibilityChanged($event)">
-		<p>Activate {{ state.result?.displayName }} with the exact compiled instructions shown here for future admitted runs? Existing run snapshots will not change.</p>
+		<p>Use these settings for {{ state.result?.displayName }}? They will guide future replies. Work already started keeps its current settings.</p>
 		<ng-template #footer>
 			<p-button label="Keep reviewing" severity="secondary" [text]="true" (onClick)="closeApproval()" />
 			<p-button label="Approve persona" icon="pi pi-check" (onClick)="confirmApproval()" />
@@ -13,23 +13,23 @@
 		@if (actionError(); as error) {
 			<p-message journey-status severity="error" [closable]="false">{{ error }}</p-message>
 		} @else if (state.personaRevisionId === null) {
-			<p-message journey-status severity="info" [closable]="false">Your completed evidence is ready. Prepare the immutable draft before reviewing its exact instructions.</p-message>
+			<p-message journey-status severity="info" [closable]="false">Your answers are saved. Prepare your assistant’s settings to review them.</p-message>
 		} @else if (result.instructionPreview === null) {
-			<p-message journey-status severity="error" [closable]="false">The immutable instruction preview is unavailable. Approval is blocked until the exact material can be reviewed.</p-message>
+			<p-message journey-status severity="error" [closable]="false">We could not load your assistant’s instructions. Reload them before approving.</p-message>
 		} @else {
-			<p-message journey-status severity="info" [closable]="false">Nothing becomes active until you approve this exact immutable revision.</p-message>
+			<p-message journey-status severity="info" [closable]="false">Review the instructions below. Your assistant will use them only after you approve.</p-message>
 		}
 		<wo-persona-result-evidence [result]="result" [questions]="state.questions" />
-		<p-button journey-actions label="Sort again" severity="secondary" [text]="true" [disabled]="busy()" (onClick)="restartRequested.emit()" />
+		<p-button journey-actions label="Start again" severity="secondary" [text]="true" [disabled]="busy()" (onClick)="restartRequested.emit()" />
 		@if (state.personaRevisionId === null) {
-			<p-button journey-actions label="Prepare persona review" icon="pi pi-arrow-right" iconPos="right" [loading]="busy()" (onClick)="draftRequested.emit()" />
+			<p-button journey-actions label="Review assistant settings" icon="pi pi-arrow-right" iconPos="right" [loading]="busy()" (onClick)="draftRequested.emit()" />
 		} @else {
 			<p-button journey-actions label="Approve persona" icon="pi pi-check" [loading]="busy()" [disabled]="result.instructionPreview === null" (onClick)="requestApproval()" />
 		}
 	</wo-journey-shell>
 } @else {
-	<wo-journey-shell title="Your persona review is not available" description="OpenCrane did not return the evidence required to display or approve a persona." [layout]="layouts.Compact">
-		<p-message journey-status severity="error" [closable]="false">The current durable state is incomplete. No persona has been activated from this page.</p-message>
+	<wo-journey-shell title="Your persona review is not available" description="We could not load your assistant’s settings." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">Your settings have not been activated. Retry to continue.</p-message>
 		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retryRequested.emit()" />
 	</wo-journey-shell>
 }

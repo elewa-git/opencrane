@@ -43,6 +43,10 @@ Only a server-confirmed `Completed` state navigates to `/chats`. The normal work
 saved bootstrap coordinate and transcript from the same signed-in authority; this feature never
 invents or copies an onboarding conversation into an ordinary chat mode.
 
+The review and recovery screens explain saved answers, assistant settings, and future replies in
+product language. Approval still applies to the exact server-provided revision; simplified copy
+does not change the authority, confirmation, or retry behavior.
+
 ## Public surface
 
 - `ONBOARDING_ROUTES` — lazy `/onboarding` shell and `/onboarding/chat` route mounted by
