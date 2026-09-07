@@ -53,6 +53,9 @@ the ordinary exact boundary-matching rules.
 ## Public surface
 
 - `AuthorizationAuthority` decides one typed action or batch-filters a lifecycle-eligible catalogue.
+- `decidePrincipal` checks current eligibility across stored personal and Group boundaries without
+  recording evidence. An allowed result cannot replace `admitPrincipal` for a concrete mutation or
+  effect. Catalogue filtering still accepts Read-class rules only, and admission rejects Read rules.
 - `PrismaAuthorizationAuthority` binds that port to the caller's existing Prisma transaction.
 - `___RunSerializableAuthorizationTransaction` gives database-only product UnitOfWorks one bounded
   P2034-only retry policy for authorization reads, protected writes, and audit evidence. Its

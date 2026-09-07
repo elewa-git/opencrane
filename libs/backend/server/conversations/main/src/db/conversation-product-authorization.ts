@@ -21,11 +21,18 @@ export class PrismaConversationProductAuthorizationRepository implements Convers
 
 	constructor(transaction: Prisma.TransactionClient) { this.transaction = transaction; this.authority = new PrismaAuthorizationAuthority(transaction); this.managedGrants = new PrismaManagedAuthorizationGrantRepository(transaction); }
 
-	/** Decides an exact conversation action inside the owning domain transaction. */
+	/** Filters an exact conversation through the Read-class catalogue guard. */
 	async canAccess(caller: ConversationCaller, conversationId: string, action: ProductAuthorizationActions): Promise<boolean>
 	{
 		const entitled = await this.authority.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, resources: [{ kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }], action, nowEpochMs: Date.now() });
 		return entitled.length === 1;
+	}
+
+	/** Checks current eligibility without admitting a write or effect; callers must record concrete operations separately. */
+	async isCurrentlyEligible(caller: ConversationCaller, conversationId: string, action: ProductAuthorizationActions): Promise<boolean>
+	{
+		const decision = await this.authority.decidePrincipal({ siloId: caller.siloId, principalId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, action, nowEpochMs: Date.now() });
+		return decision.outcome === AuthorizationDecisionOutcomes.Allow;
 	}
 
 	/** Records an exact conversation or collection mutation/effect before its protected write. */

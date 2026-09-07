@@ -6,7 +6,10 @@ import type { ConversationCaller } from "../types/conversation-caller.types";
 /** Transaction-scoped product checks and grant projections used by conversation repositories. */
 export interface ConversationProductAuthorizationRepository
 {
+	/** Applies the Read-class catalogue guard; effect actions require separate admission. */
 	canAccess(caller: ConversationCaller, conversationId: string, action: ProductAuthorizationActions): Promise<boolean>;
+	/** Checks current eligibility without recording permission for a protected operation. */
+	isCurrentlyEligible(caller: ConversationCaller, conversationId: string, action: ProductAuthorizationActions): Promise<boolean>;
 	admit(caller: ConversationCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<boolean>;
 	entitledIds(caller: ConversationCaller, conversationIds: readonly string[], action: ProductAuthorizationActions): Promise<ReadonlySet<string>>;
 	canReadResources(caller: ConversationCaller, resources: readonly ProductAuthorizationResourceLocator[]): Promise<boolean>;

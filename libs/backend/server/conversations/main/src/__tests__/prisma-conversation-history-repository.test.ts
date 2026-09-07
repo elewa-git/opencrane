@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationHistoryRepository } from "../db/prisma-conversation-history-repository";
 import { PrismaConversationProductAuthorizationRepository } from "../db/conversation-product-authorization";
+import { _ConversationAuthorizationFixture } from "./conversation-authorization.fixtures";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 
 const _CALLER = { principalId: "principal-1", subjectId: "user-1", siloId: "silo-1" };
@@ -62,7 +63,8 @@ describe("PrismaConversationHistoryRepository.createOrReadPayload", function _Cr
 		const authorization = vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "canAccess").mockImplementation(async (_caller, conversationId) => conversationId !== "parent");
 		try
 		{
-			const transaction = { orgMembership: { findUnique: vi.fn().mockResolvedValue({ status: "Active", displayName: "Human" }) }, conversationChildRequest: { findUnique: vi.fn().mockResolvedValue({ siloId: "silo-1", state: "Ready", parentConversationId: "parent", parentMessagePosition: 5n, participantSubjectIds: ["user-1"] }) }, conversation: { findFirst: vi.fn().mockResolvedValue({ id: "conversation-1", mode: "AgentSession", computerId: "computer", computerAgentIdentityId: "identity", computerProfileRevisionId: "profile", participants: [{ visibleFromPosition: 1n }] }) } };
+			const grantFixture = _ConversationAuthorizationFixture();
+			const transaction = { ...grantFixture, orgMembership: { ...grantFixture.orgMembership, findUnique: vi.fn().mockResolvedValue({ status: "Active", displayName: "Human" }) }, conversationChildRequest: { findUnique: vi.fn().mockResolvedValue({ siloId: "silo-1", state: "Ready", parentConversationId: "parent", parentMessagePosition: 5n, participantSubjectIds: ["user-1"] }) }, conversation: { findFirst: vi.fn().mockResolvedValue({ id: "conversation-1", mode: "AgentSession", computerId: "computer", computerAgentIdentityId: "identity", computerProfileRevisionId: "profile", participants: [{ visibleFromPosition: 1n }] }) } };
 			const repository = new PrismaConversationHistoryRepository(transaction as never);
 			expect(await repository.authorizeRead(_CALLER, "conversation-1")).toBeNull();
 			expect(await repository.authorizeWrite(_CALLER, "conversation-1")).toBeNull();

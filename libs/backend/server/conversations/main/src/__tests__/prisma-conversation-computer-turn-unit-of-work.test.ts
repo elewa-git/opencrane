@@ -3,7 +3,7 @@ import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/histo
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationComputerTurnUnitOfWork } from "../db/prisma-conversation-computer-turn-unit-of-work";
-import { PrismaConversationProductAuthorizationRepository } from "../db/conversation-product-authorization";
+import { _ConversationAuthorizationFixture } from "./conversation-authorization.fixtures";
 
 const _COMMAND = {
   computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" },
@@ -101,7 +101,9 @@ function _Harness(
   admission = { admit: vi.fn().mockResolvedValue({ compiledInput: _CompiledInput(), authorityExpiresAt: "2099-01-01T00:00:00.000Z" }) },
   existingPayload: object | null = null,
 ) {
+  const authorization = _ConversationAuthorizationFixture();
   const transaction = {
+    ...authorization,
     conversationChildRequest: { findUnique: vi.fn().mockResolvedValue(null) },
     conversation: {
       update: vi.fn().mockResolvedValue({ id: "conversation-1" }),
@@ -127,8 +129,9 @@ function _Harness(
           },
         }),
     },
-    orgMembership: { findMany: vi.fn().mockResolvedValue(memberships) },
+    orgMembership: { ...authorization.orgMembership, findMany: vi.fn().mockResolvedValue(memberships) },
     principal: {
+      ...authorization.principal,
       findFirst: vi
         .fn()
         .mockResolvedValue({
@@ -240,11 +243,8 @@ afterEach(function _RestoreSpies() {
 
 describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversationComputerTurnUnitOfWorkSuite() {
   it("denies compilation after membership or current Use authority is revoked", async function _RevokedAuthority() {
-    vi.spyOn(
-      PrismaConversationProductAuthorizationRepository.prototype,
-      "canAccess",
-    ).mockResolvedValue(false);
     const revoked = _Harness();
+    revoked.transaction.authorizationGrant.findMany.mockResolvedValue([]);
     await expect(revoked.authority.compile(_COMMAND)).rejects.toThrow(
       "currently authorized active participant",
     );
@@ -255,7 +255,6 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
   });
 
   it("refuses a pending child before durable run admission even when ordinary Use is allowed", async function () {
-    vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "canAccess").mockResolvedValue(true);
     const harness = _Harness();
     harness.transaction.conversationChildRequest.findUnique.mockResolvedValue({ siloId: "silo-1", state: "Pending", participantSubjectIds: ["user-1"] });
     await expect(harness.authority.compile(_COMMAND)).rejects.toThrow("currently authorized active participant");
@@ -263,12 +262,9 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
   });
 
   it("passes only server-resolved participant and lease coordinates into run admission", async function _AdmitsRun() {
-    vi.spyOn(
-      PrismaConversationProductAuthorizationRepository.prototype,
-      "canAccess",
-    ).mockResolvedValue(true);
     const harness = _Harness();
     const candidate = await harness.authority.compile(_COMMAND);
+    expect(harness.transaction.auditDecision.create).not.toHaveBeenCalled();
     expect(candidate?.compiledInput).toMatchObject({
       runId: "96c97e9c-839f-481c-80bc-f2cdd6e4603b",
       attempt: 1,
@@ -294,10 +290,6 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
   });
 
   it("fails closed when the application-owned admission port rejects the run", async function _AdmissionDenied() {
-    vi.spyOn(
-      PrismaConversationProductAuthorizationRepository.prototype,
-      "canAccess",
-    ).mockResolvedValue(true);
     const admission = {
       admit: vi.fn().mockRejectedValue(new Error("run admission denied")),
     };
@@ -330,10 +322,6 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
   });
 
   it("rejects compiled input for another run attempt", async function _MismatchedCompiledInput() {
-    vi.spyOn(
-      PrismaConversationProductAuthorizationRepository.prototype,
-      "canAccess",
-    ).mockResolvedValue(true);
     const admission = {
       admit: vi.fn().mockResolvedValue({ compiledInput: { ..._CompiledInput(), attempt: 2 }, authorityExpiresAt: "2099-01-01T00:00:00.000Z" }),
     };
@@ -343,7 +331,6 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
   });
   it("caps fresh credentials to the remaining frozen run and membership authority", async function () {
     const now = Date.parse("2026-09-07T00:00:00.000Z"); vi.spyOn(Date, "now").mockReturnValue(now);
-    vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "canAccess").mockResolvedValue(true);
     const expiresAt = new Date(now + 31_500).toISOString();
     const admission = { admit: vi.fn().mockResolvedValue({ compiledInput: _CompiledInput(), authorityExpiresAt: expiresAt }) };
     const candidate = await _Harness(undefined, admission).authority.compile(_COMMAND);

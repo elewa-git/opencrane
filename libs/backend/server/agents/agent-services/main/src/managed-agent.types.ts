@@ -27,6 +27,19 @@ export interface ManagedAgentConversationCandidate
 	readonly profileRevisionId: string;
 }
 
+/** Current candidate facts shared by directory eligibility and recorded child-creation admission. */
+export interface CurrentManagedAgentConversation
+{
+	/** Active service, identity and profile already checked against their current authorities. */
+	readonly candidate: ManagedAgentConversationCandidate;
+	/** Model whose Use permission belongs to the company's Principal. */
+	readonly modelDefinitionId: string;
+	/** Current verified human membership revision to bind into a recorded invocation. */
+	readonly membershipRevision: number;
+	/** Trusted time used by both membership verification and permission decisions. */
+	readonly nowEpochMs: number;
+}
+
 /** Supplies deployment-owned history, membership verification and published computer profiles. */
 export interface ManagedAgentConversationDependencies
 {

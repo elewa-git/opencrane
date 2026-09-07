@@ -1,5 +1,6 @@
 import type { ConversationPrivatePayloadCoordinates, EncryptedConversationPrivatePayload } from "../conversation-private-payload.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
+import type { ConversationMessageCommand } from "../self-conversation-history.types";
 
 /** Current authorized projection coordinates required around one KurrentDB history operation. */
 export interface AuthorizedConversationProjection
@@ -27,13 +28,33 @@ export interface StoredConversationPrivatePayload extends EncryptedConversationP
 	readonly idempotencyKey: string;
 }
 
+/** Encrypted message intent whose retry and activation coordinates are recorded with Use admission. */
+export interface ConversationMessagePayloadAdmissionCommand extends Pick<ConversationMessageCommand, "idempotencyKey" | "activation">
+{
+	/** Newly generated payload reference, used only if no stored retry row wins. */
+	readonly payloadRef: string;
+	/** Ciphertext created before the transaction; plaintext must never enter repository arguments. */
+	readonly payload: EncryptedConversationPrivatePayload;
+}
+
+/** Current projection and winning payload admitted together in the message transaction. */
+export interface AdmittedConversationMessagePayload
+{
+	/** Participant and computer facts checked in the transaction that records admission. */
+	readonly projection: AuthorizedConversationProjection;
+	/** Existing retry row or the ciphertext created by this transaction. */
+	readonly payload: StoredConversationPrivatePayload;
+}
+
 /** Transaction-scoped projection and encrypted-payload persistence boundary. */
 export interface ConversationHistoryRepository
 {
 	/** Rechecks membership, participation, lifecycle, and product authorization for a read. */
 	authorizeRead(caller: ConversationCaller, conversationId: string): Promise<AuthorizedConversationProjection | null>;
-	/** Rechecks write access and returns current immutable-mode projection facts. */
+	/** Rechecks current eligibility without recording a write or effect admission. */
 	authorizeWrite(caller: ConversationCaller, conversationId: string): Promise<AuthorizedConversationProjection | null>;
+	/** Records Use for the winning payload before creating ciphertext and list ordering in the caller's Serializable transaction. The caller must compare retry plaintext before committing. */
+	admitMessagePayload(caller: ConversationCaller, conversationId: string, command: ConversationMessagePayloadAdmissionCommand): Promise<AdmittedConversationMessagePayload | null>;
 	/** Creates an encrypted payload or returns the exact winning retry row. */
 	createOrReadPayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string, payloadRef: string, payload: EncryptedConversationPrivatePayload): Promise<{ readonly created: boolean; readonly payload: StoredConversationPrivatePayload }>;
 	/** Loads only encrypted payloads owned by one currently authorized conversation. */

@@ -77,7 +77,7 @@ export class PrismaGroupChildAccessRepository implements GroupChildAccessPort<Pr
 		if (child !== null)
 		{
 			const authorization = this.authorization;
-			if (child.lifecycle !== ConversationLifecycle.Open || !child.participants.some(participant => participant.userId === caller.subjectId && participant.visibleFromPosition <= 1n) || !await authorization.canAccess(caller, request.childConversationId, ProductAuthorizationActions.Read) || !await authorization.canAccess(caller, request.childConversationId, ProductAuthorizationActions.Use))
+			if (child.lifecycle !== ConversationLifecycle.Open || !child.participants.some(participant => participant.userId === caller.subjectId && participant.visibleFromPosition <= 1n) || !await authorization.canAccess(caller, request.childConversationId, ProductAuthorizationActions.Read) || !await authorization.isCurrentlyEligible(caller, request.childConversationId, ProductAuthorizationActions.Use))
 				return false;
 		}
 		const candidate = await agents.resolve(this.transaction, caller, request.agentServiceId);

@@ -9,6 +9,20 @@ stream transports. It creates conversations in exactly one immutable mode: `agen
 `direct`, or `group`. An agent session binds one agent service; direct and group conversations do
 not bind an agent and their ordinary messages never manufacture runs.
 
+Sending a human message rechecks current membership, participation, lifecycle, child access and
+Conversation Use inside the Serializable transaction that stores its ciphertext. That transaction
+records Use against the winning payload reference, ciphertext digest, retry UUID and activation,
+then updates conversation ordering. A changed-text retry rolls back its admission before commit;
+plaintext stays outside repository arguments and SQL. KurrentDB receives the opaque reference after
+commit. Stream-conflict retries and computer-turn compilation use pure current-eligibility checks;
+new runs still pass through their existing recorded admission.
+
+Interactive computer review commands, browser actions, screenshots and previews still need their
+own concrete effect-admission binding. Their `reviewCoordinates` path retains the Read-class guard
+and fails closed when asked for Use; this message repair does not enable them through an eligibility
+check. Human-reviewed group-child text sharing uses its separate recorded admission and remains
+available through that existing path.
+
 The creation directory lists active members in the current silo with their stored display names.
 Missing names use a generic label; login subjects and email addresses never become fallback names.
 The browser reuses this directory for participant selection and direct/group chat titles.

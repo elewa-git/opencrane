@@ -6,8 +6,8 @@ import { AesGcmConversationPrivatePayloadCipher } from "../conversation-private-
 import { PrismaGroupChildAccessRepository } from "../db/prisma-group-child-access-repository";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 
-const _authorization = vi.hoisted(() => ({ canAccess: vi.fn(), admit: vi.fn(), reconcileParticipants: vi.fn(), reconcileCreator: vi.fn() }));
-vi.mock("../db/conversation-product-authorization", () => ({ PrismaConversationProductAuthorizationRepository: class { canAccess = _authorization.canAccess; admit = _authorization.admit; reconcileParticipants = _authorization.reconcileParticipants; reconcileCreator = _authorization.reconcileCreator; } }));
+const _authorization = vi.hoisted(() => ({ canAccess: vi.fn(), isCurrentlyEligible: vi.fn(), admit: vi.fn(), reconcileParticipants: vi.fn(), reconcileCreator: vi.fn() }));
+vi.mock("../db/conversation-product-authorization", () => ({ PrismaConversationProductAuthorizationRepository: class { canAccess = _authorization.canAccess; isCurrentlyEligible = _authorization.isCurrentlyEligible; admit = _authorization.admit; reconcileParticipants = _authorization.reconcileParticipants; reconcileCreator = _authorization.reconcileCreator; } }));
 const _CALLER: ConversationCaller = { siloId: "silo", principalId: "principal", subjectId: "subject", externalIssuer: "https://issuer.test", verifiedAuthenticationAt: "2026-09-07T00:00:00.000Z" };
 const _KEY = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 const _SOURCE = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
@@ -57,7 +57,7 @@ function _Fixture()
 
 describe("shared group child lifecycle", () =>
 {
-	beforeEach(() => { vi.clearAllMocks(); _authorization.canAccess.mockResolvedValue(true); _authorization.admit.mockResolvedValue(true); });
+	beforeEach(() => { vi.clearAllMocks(); _authorization.canAccess.mockResolvedValue(true); _authorization.isCurrentlyEligible.mockResolvedValue(true); _authorization.admit.mockResolvedValue(true); });
 	it("commits one immutable command with its workflow and recovers a lost response without another request", async () =>
 	{
 		const f = _Fixture();

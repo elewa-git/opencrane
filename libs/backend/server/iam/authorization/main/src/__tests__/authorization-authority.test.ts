@@ -82,6 +82,35 @@ describe("central authorization authority", function _Suite()
 		expect(recorder.record).toHaveBeenCalledWith(expect.any(Object), result);
 	});
 
+	it("checks current Group eligibility for Use without recording and preserves explicit admission", async function _PurePrincipalEligibility()
+	{
+		const repository = _Repository();
+		const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Conversation, ProductAuthorizationActions.Use)!;
+		vi.mocked(repository.resolvePrincipalSubjects).mockResolvedValue([{ kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, { kind: AuthorizationSubjectKinds.Group, groupId: "group-1" }]);
+		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-use", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Group, groupId: "group-1" }, boundary: { kind: AuthorizationBoundaryKinds.Group, groupId: "group-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: "conversation-1" }, effect: AuthorizationGrantEffects.Allow, priority: 10, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn() };
+		const authority = new __AuthorizationAuthority(repository, recorder);
+		const command = { siloId: "silo-1", principalId: "principal-1", resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: "conversation-1" }, action: ProductAuthorizationActions.Use, nowEpochMs: 1 };
+		await expect(authority.decidePrincipal(command)).resolves.toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow, grantIds: ["grant-use"] });
+		expect(recorder.record).not.toHaveBeenCalled();
+		await expect(authority.listPrincipalEntitled({ ...command, resources: [command.resource] })).rejects.toThrow("requires a Read-class rule");
+		await authority.admitPrincipal({ ...command, actorKind: "user", actorId: "principal-1", argumentsDigest: `sha256:${"a".repeat(64)}` });
+		expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ boundary: { kind: AuthorizationBoundaryKinds.Group, groupId: "group-1" } }), expect.objectContaining({ grantIds: ["grant-use"], evidence: expect.any(Object) }));
+		vi.mocked(repository.listSubjectGrants).mockResolvedValue([]);
+		await expect(authority.decidePrincipal(command)).resolves.toMatchObject({ outcome: AuthorizationDecisionOutcomes.Deny });
+		expect(recorder.record).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps Read decisions pure and rejects recording them as mutation admission", async function _ReadAdmissionGuard()
+	{
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn() };
+		const authority = new __AuthorizationAuthority(_Repository(), recorder);
+		const command = { siloId: "silo-1", principalId: "principal-1", resource: { kind: ProductAuthorizationResourceKinds.Skill, id: "skill-allowed" }, action: ProductAuthorizationActions.Discover, nowEpochMs: 1 };
+		await expect(authority.decidePrincipal(command)).resolves.toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow });
+		await expect(authority.admitPrincipal({ ...command, actorKind: "user", actorId: "principal-1", argumentsDigest: `sha256:${"a".repeat(64)}` })).rejects.toThrow("requires an allowed mutation or effect");
+		expect(recorder.record).not.toHaveBeenCalled();
+	});
+
 	it("does not record a denied mutation", async function _DeniedMutation()
 	{
 		const repository = _Repository();

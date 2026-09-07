@@ -42,7 +42,10 @@ until those capabilities have a supported company policy.
 - `PrismaManagedExecutionEvidenceRepository` and `ManagedExecutionEvidenceAuthority` independently
   admit the human's invocation and the company Principal's model use.
 - `PrismaManagedAgentConversationResolver` resolves a ready company assistant and filters the
-  discovery list through current Discover, Read and Invoke permissions.
+  discovery list through current human Discover, Read and Invoke permissions plus the company's
+  own Model Use permission. Listing checks eligibility without recording mutation or effect
+  admissions. Child creation separately records human Invoke and company Model Use decisions after
+  the same current service, identity, profile and membership checks.
 - `PrismaCompanyAssistantProvisioningUnitOfWork` and `_CreateCompanyAssistantProvisioningRouter`
   provide explicit administrator setup, including checked identity establishment after commit.
 

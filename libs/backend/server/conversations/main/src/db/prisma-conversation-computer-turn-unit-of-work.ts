@@ -50,7 +50,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 			const principal = await this.prisma.principal.findFirst({ where: { id: pendingAuthor.principalId, siloId, issuer: pendingAuthor.issuer, subject: pendingAuthor.participantId }, select: { id: true, issuer: true, subject: true } });
 			const isActiveMember = memberships.some(membership => membership.subject === pendingAuthor.participantId);
 			const authorization = new PrismaConversationProductAuthorizationRepository(this.prisma);
-			const admitted = principal !== null && isActiveMember && await authorization.canAccess({ siloId, principalId: principal.id, subjectId: principal.subject, externalIssuer: principal.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, conversationId, ProductAuthorizationActions.Use);
+			const admitted = principal !== null && isActiveMember && await authorization.isCurrentlyEligible({ siloId, principalId: principal.id, subjectId: principal.subject, externalIssuer: principal.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, conversationId, ProductAuthorizationActions.Use);
 			if (!admitted || principal === null || !await new PrismaGroupChildAccessRepository(this.prisma).mayAccess({ siloId, principalId: pendingAuthor.principalId, subjectId: pendingAuthor.participantId, externalIssuer: pendingAuthor.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, conversationId))
 				throw new Error("Conversation computer turn requires one currently authorized active participant");
 			const revision = conversation.service.activeRevision;

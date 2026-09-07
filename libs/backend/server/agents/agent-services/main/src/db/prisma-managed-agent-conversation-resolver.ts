@@ -5,7 +5,7 @@ import { PrismaAuthorizationAuthority, __DigestCanonicalJson } from "@opencrane/
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { __CompanyAssistantServiceId, __ManagedAgentIdentityId } from "../managed-agent-identity";
-import type { ManagedAgentConversationCandidate, ManagedAgentConversationDependencies } from "../managed-agent.types";
+import type { CurrentManagedAgentConversation, ManagedAgentConversationCandidate, ManagedAgentConversationDependencies } from "../managed-agent.types";
 import { PrismaManagedExecutionEvidenceRepository } from "./prisma-managed-execution-evidence-repository";
 
 /** Resolves an already provisioned company assistant without creating identity or execution grants. */
@@ -17,14 +17,22 @@ export class PrismaManagedAgentConversationResolver
 	/** Lists the explicitly provisioned company assistant only when this caller may both read and invoke it. */
 	public async list(caller: { readonly siloId: string; readonly principalId: string }): Promise<readonly ManagedAgentConversationCandidate[]>
 	{
-		const candidate = await this.resolve(caller, __CompanyAssistantServiceId(caller.siloId));
-		if (candidate === null)
+		const current = await this._loadCandidate(caller, __CompanyAssistantServiceId(caller.siloId));
+		if (current === null)
 			return [];
+		const { candidate, modelDefinitionId, nowEpochMs } = current;
 		const authorization = new PrismaAuthorizationAuthority(this.transaction);
-		for (const action of [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read])
+		const service = { kind: ProductAuthorizationResourceKinds.AgentService, id: candidate.agentServiceId };
+		const commands = [
+			{ principalId: caller.principalId, resource: service, action: ProductAuthorizationActions.Invoke },
+			{ principalId: candidate.principalId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: modelDefinitionId }, action: ProductAuthorizationActions.Use },
+			{ principalId: caller.principalId, resource: service, action: ProductAuthorizationActions.Discover },
+			{ principalId: caller.principalId, resource: service, action: ProductAuthorizationActions.Read },
+		];
+		for (const command of commands)
 		{
-			const decision = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: candidate.agentServiceId }, action, argumentsDigest: __DigestCanonicalJson({ agentServiceId: candidate.agentServiceId }), nowEpochMs: this.dependencies.nowEpochMs?.() ?? Date.now() });
-			if (decision.outcome !== AuthorizationDecisionOutcomes.Allow || decision.evidence === null)
+			const decision = await authorization.decidePrincipal({ ...command, siloId: caller.siloId, nowEpochMs });
+			if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
 				return [];
 		}
 		return [candidate];
@@ -39,6 +47,24 @@ export class PrismaManagedAgentConversationResolver
 	 * @see ManagedAgentConversationCandidate
 	 */
 	public async resolve(caller: { readonly siloId: string; readonly principalId: string }, agentServiceId: string): Promise<ManagedAgentConversationCandidate | null>
+	{
+		const current = await this._loadCandidate(caller, agentServiceId);
+		if (current === null)
+			return null;
+		const { candidate, modelDefinitionId, membershipRevision, nowEpochMs } = current;
+		const authorization = new PrismaAuthorizationAuthority(this.transaction);
+		const argumentsDigest = __DigestCanonicalJson({ agentServiceId, agentRevisionId: candidate.agentRevisionId, agentIdentityId: candidate.agentIdentityId });
+		const decision = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision, nowEpochMs });
+		if (decision.outcome !== AuthorizationDecisionOutcomes.Allow || decision.evidence === null)
+			return null;
+		const model = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: candidate.principalId, actorKind: "workload", actorId: candidate.agentIdentityId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: modelDefinitionId }, action: ProductAuthorizationActions.Use, argumentsDigest, nowEpochMs });
+		if (model.outcome !== AuthorizationDecisionOutcomes.Allow || model.evidence === null)
+			return null;
+		return candidate;
+	}
+
+	/** Shares current service, identity, profile and human membership checks without admitting an operation. */
+	private async _loadCandidate(caller: { readonly siloId: string; readonly principalId: string }, agentServiceId: string): Promise<CurrentManagedAgentConversation | null>
 	{
 		const repository = new PrismaManagedExecutionEvidenceRepository(this.transaction, this.dependencies.membershipConfig);
 		const service = await repository.loadCurrent(caller.siloId, agentServiceId);
@@ -55,12 +81,7 @@ export class PrismaManagedAgentConversationResolver
 		const membership = await repository.verifyRequesterMembership(caller.siloId, caller.principalId, nowEpochMs);
 		if (membership === null)
 			return null;
-		const decision = await new PrismaAuthorizationAuthority(this.transaction).admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest: __DigestCanonicalJson({ agentServiceId, agentRevisionId: service.agentRevisionId, agentIdentityId }), membershipRevision: membership.revision, nowEpochMs });
-		if (decision.outcome !== AuthorizationDecisionOutcomes.Allow || decision.evidence === null)
-			return null;
-		const model = await new PrismaAuthorizationAuthority(this.transaction).admitPrincipal({ siloId: caller.siloId, principalId: service.principalId, actorKind: "workload", actorId: agentIdentityId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: service.modelDefinitionId }, action: ProductAuthorizationActions.Use, argumentsDigest: __DigestCanonicalJson({ agentServiceId, agentRevisionId: service.agentRevisionId, agentIdentityId }), nowEpochMs });
-		if (model.outcome !== AuthorizationDecisionOutcomes.Allow || model.evidence === null)
-			return null;
-		return { agentServiceId, agentRevisionId: service.agentRevisionId, agentIdentityId, principalId: service.principalId, name: service.name, workloadProfile: service.workloadProfile, profileRevisionId: profiles[0]!.profileRevisionId };
+		const candidate = { agentServiceId, agentRevisionId: service.agentRevisionId, agentIdentityId, principalId: service.principalId, name: service.name, workloadProfile: service.workloadProfile, profileRevisionId: profiles[0]!.profileRevisionId };
+		return { candidate, modelDefinitionId: service.modelDefinitionId, membershipRevision: membership.revision, nowEpochMs };
 	}
 }

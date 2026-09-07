@@ -71,27 +71,31 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 		return result;
 	}
 
-	/** Encrypts a participant message and appends its opaque reference at a checked KurrentDB head. */
+	/** Commits current Use admission and encrypted payload together, then appends the opaque reference at a checked KurrentDB head. */
 	public async postMessage(caller: ConversationCaller, conversationId: string, command: ConversationMessageCommand): Promise<ConversationMessageAdmissionResult | null>
 	{
-		// 1. Recheck current membership, participant state, lifecycle, and product Use authority.
-		const projection = await this._transaction(function _Authorize(repository) { return repository.authorizeWrite(caller, conversationId); });
-		if (projection === null)
-			return null;
-		if (projection.mode !== ConversationMode.AgentSession && command.activation !== "none")
-			throw new Error("Direct and group conversation messages cannot activate a computer");
-		if (command.activation === ConversationMessageActivations.Interrupt)
-			throw new Error("Conversation computer interrupt authority is unavailable");
-		// 2. Encrypt before persistence, then let the serializable payload transaction select the winning retry row.
+		// 1. Keep plaintext outside repository arguments and reject missing identity before persistence.
+		if (caller.externalIssuer === undefined || caller.verifiedAuthenticationAt === undefined)
+			throw new Error("Conversation message admission requires verified requester evidence");
 		const payloadRef = randomUUID();
 		const coordinates = { siloId: caller.siloId, conversationId, payloadRef, authorSubject: caller.subjectId };
-		const encrypted = this.dependencies.cipher.encrypt(command.text, coordinates);
-		const stored = await this._transaction(function _Store(repository) { return repository.createOrReadPayload(caller, conversationId, command.idempotencyKey, payloadRef, encrypted); }, Prisma.TransactionIsolationLevel.Serializable);
-		const priorText = this.dependencies.cipher.decrypt(stored.payload, stored.payload.coordinates);
-		if (!_SameText(priorText, command.text))
-			throw new Error("Conversation message idempotency key was already used for different text");
+		const cipher = this.dependencies.cipher;
+		const payload = cipher.encrypt(command.text, coordinates);
+		// 2. A retry mismatch must roll back its admission along with any payload or ordering writes.
+		const stored = await this._transaction(async function _AdmitMessage(repository)
+		{
+			const admitted = await repository.admitMessagePayload(caller, conversationId, { idempotencyKey: command.idempotencyKey, activation: command.activation, payloadRef, payload });
+			if (admitted === null)
+				return null;
+			const priorText = cipher.decrypt(admitted.payload, admitted.payload.coordinates);
+			if (!_SameText(priorText, command.text))
+				throw new Error("Conversation message idempotency key was already used for different text");
+			return admitted;
+		}, Prisma.TransactionIsolationLevel.Serializable);
+		if (stored === null)
+			return null;
 		// 3. Append at a freshly observed head, retrying only checked conflicts from other valid writers.
-		return this._append(caller, conversationId, command, projection, stored.payload);
+		return this._append(caller, conversationId, command, stored.projection, stored.payload);
 	}
 
 	/** Appends or finds the one immutable entry identified by the browser UUID. */
