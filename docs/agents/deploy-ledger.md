@@ -576,3 +576,20 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: configure exact resolver host CIDRs for the restricted bootstrap and snapshot Jobs. Treat
   terminal bootstrap failure as failed installation immediately, retain cloud logs when deadline
   handling removes the Pod, and retry the same release's verification Job after applying the repair.
+
+## 2026-09-07 · dev repair · testv5 repeat-install inputs · a925aa61e17822d276a4dc443d05287f85fadfd4 · PARTIAL
+
+- timing: preflight passed from 19:51:53.779 to 19:53:01.034 UTC (67.254s). The repair command
+  ran from 19:53:33.774 to 19:55:41.958 UTC (128.184s), exiting 1 before application Helm apply.
+  PostgreSQL reconciliation and privileges passed with existing credentials retained.
+- findings: config: the test launcher repeated its fresh-install `--values` file. The standalone
+  first-owner guard rejected it because that input could replace the immutable issuer binding.
+  The DNS repair therefore did not land; the bootstrap policy still lacked `169.254.20.10/32`.
+  Existing-release recovery must retain stored values and supply the specific DNS change through
+  the supported `--set-string` input, with the same first-owner and OIDC coordinates.
+- findings: script: inspection also found the existing-release credential-consumer rollout waiting
+  for the server before the final bootstrap check. Moving the bootstrap check immediately after
+  successful Helm apply makes terminal failure visible before this dependent rollout wait.
+- lesson: distinguish fresh-install profile inputs from a repeat invocation. Validate the bootstrap
+  before waiting for the server that depends on it. This attempt performed no bootstrap retry,
+  successful public-health check, authenticated product journey or restore.

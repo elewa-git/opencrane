@@ -150,8 +150,9 @@ Snapshot resource names have emitted-manifest regression coverage. The dev clust
 Agent Sandbox controller, gVisor, and the non-default `opencrane-pd-snapshots` class.
 SSD quota has only 10Gi remaining, while standard-disk quota has 4096Gi available. The new explicit
 standard-disk prerequisite action provides a non-default CSI `pd-standard` class compatible with
-snapshots; the existing legacy standard class cannot qualify CSI snapshots. Installation will select
-that class for PostgreSQL, artifacts, Cognee, KurrentDB and its archive. The class and namespace credentials are now provisioned with an unchanged class retry verified.
+snapshots; the existing legacy standard class cannot qualify CSI snapshots. PostgreSQL, artifacts,
+Cognee, KurrentDB and its archive now use that class. The class and namespace credentials are
+provisioned with an unchanged class retry verified.
 The controller-argument preflight repair passed. The first installation bound all volumes and
 reached KurrentDB readiness, but bootstrap DNS was blocked by the missing node-local resolver rule.
 DNS egress, failure propagation, actual server readiness and explicit bootstrap retry are repaired in

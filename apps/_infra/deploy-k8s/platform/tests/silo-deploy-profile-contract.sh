@@ -222,10 +222,27 @@ grep -Fq -- 'kubectl logs "job/$job_name"' "$DEPLOY_CORE"
     fi
   done
 
-  # The server starts using history after bootstrap. A failed rollout must stop finalization.
+  # Bootstrap must finish before an existing release waits for its database consumers.
   source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finalization.sh"
-  final_wait_calls="$(sed -n '/^wait_for_final_kurrentdb_bootstrap_job_if_present || exit /,/^_post_deploy_verify || exit /p' "$DEPLOY_CORE")"
+  bootstrap_gate="$(grep -Fx 'wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?' "$DEPLOY_CORE")"
+  consumer_roll="$(sed -n '/^if \[\[ "\$RELEASE_PREEXISTED" == "1" \]\]; then$/,/^fi$/p' "$DEPLOY_CORE")"
+  server_finalization="$(sed -n '/^wait_for_final_deployment_if_present "${RELEASE}-opencrane-server" || exit /,/^_post_deploy_verify || exit /p' "$DEPLOY_CORE")"
+  bootstrap_gate_line="$(grep -nFx 'wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?' "$DEPLOY_CORE" | cut -d: -f1)"
+  consumer_roll_line="$(grep -nF '  roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT"' "$DEPLOY_CORE" | cut -d: -f1)"
+  server_gate_line="$(grep -nF 'wait_for_final_deployment_if_present "${RELEASE}-opencrane-server" || exit $?' "$DEPLOY_CORE" | cut -d: -f1)"
+  (( bootstrap_gate_line < consumer_roll_line && consumer_roll_line < server_gate_line )) || exit 1
+  [[ -n "$bootstrap_gate" && -n "$consumer_roll" && -n "$server_finalization" ]] || exit 1
+  final_wait_calls="$(printf '%s\n' "$bootstrap_gate" "$consumer_roll" "$server_finalization")"
   [[ -n "$final_wait_calls" ]] || exit 1
+  POSTGRES_APP_SECRET=fixture-postgres
+  LITELLM_POSTGRES_APP_SECRET=fixture-litellm
+  POSTGRES_ADMIN_APP_SECRET=fixture-admin
+  compute_database_connection_checksum() { printf 'fixture-checksum'; }
+  roll_database_consumers_for_finalization()
+  {
+    printf 'consumers\n' >>"$bootstrap_wait_test_dir/final-calls"
+    return "$consumer_exit"
+  }
   wait_for_final_kurrentdb_bootstrap_job_if_present()
   {
     printf '%s\n' bootstrap >>"$bootstrap_wait_test_dir/final-calls"
@@ -242,13 +259,17 @@ grep -Fq -- 'kubectl logs "job/$job_name"' "$DEPLOY_CORE"
   }
   _wait_for_release_certificate() { printf '%s\n' certificate >>"$bootstrap_wait_test_dir/final-calls"; }
   _post_deploy_verify() { printf '%s\n' verify >>"$bootstrap_wait_test_dir/final-calls"; }
-  for final_wait_case in success bootstrap-failure server-failure; do
+  for final_wait_case in success fresh-success bootstrap-failure consumer-failure server-failure; do
     : >"$bootstrap_wait_test_dir/final-calls"
+    RELEASE_PREEXISTED=1
     bootstrap_exit=0
+    consumer_exit=0
     server_exit=0
     expected_status=0
     case "$final_wait_case" in
+      fresh-success) RELEASE_PREEXISTED=0 ;;
       bootstrap-failure) bootstrap_exit=17; expected_status=17 ;;
+      consumer-failure) consumer_exit=31; expected_status=31 ;;
       server-failure) server_exit=47; expected_status=47 ;;
     esac
     if (eval "$final_wait_calls") >"$bootstrap_wait_test_dir/final-output" 2>&1; then
@@ -260,13 +281,21 @@ grep -Fq -- 'kubectl logs "job/$job_name"' "$DEPLOY_CORE"
     [[ "$(head -n 1 "$bootstrap_wait_test_dir/final-calls")" == bootstrap ]] || exit 1
     if [[ "$final_wait_case" == bootstrap-failure ]]; then
       [[ "$(wc -l <"$bootstrap_wait_test_dir/final-calls" | tr -d ' ')" == 1 ]] || exit 1
+    elif [[ "$final_wait_case" == consumer-failure ]]; then
+      [[ "$(cat "$bootstrap_wait_test_dir/final-calls")" == $'bootstrap\nconsumers' ]] || exit 1
     else
       grep -Fq 'rollout status deployment/opencrane-testv5-opencrane-server -n opencrane-testv5 --timeout=7s' "$bootstrap_wait_test_dir/final-calls" || exit 1
     fi
-    if [[ "$final_wait_case" == success ]]; then
+    if [[ "$final_wait_case" == success || "$final_wait_case" == fresh-success ]]; then
       [[ "$(tail -n 1 "$bootstrap_wait_test_dir/final-calls")" == verify ]] || exit 1
     elif grep -Fxq verify "$bootstrap_wait_test_dir/final-calls"; then
       echo 'A failed bootstrap or server rollout reached advisory verification.' >&2
+      exit 1
+    fi
+    if [[ "$final_wait_case" == success ]]; then
+      [[ "$(sed -n '2p' "$bootstrap_wait_test_dir/final-calls")" == consumers ]] || exit 1
+    elif [[ "$final_wait_case" == fresh-success ]] && grep -Fxq consumers "$bootstrap_wait_test_dir/final-calls"; then
+      echo 'A fresh installation unexpectedly rolled database consumers.' >&2
       exit 1
     fi
   done

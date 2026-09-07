@@ -52,8 +52,11 @@ apps/_infra/deploy-k8s/deploy.sh \
 
 The build tag must identify a published `sha-*` build. Image digests must be exact `sha256:`
 references; named database Secrets must already exist and use distinct credentials. Use a values
-overlay for repeatable environment choices. The deploy engine layers it over chart defaults and
-preserves existing release overrides on ordinary application updates.
+overlay for the fresh installation. On later application updates, omit `--values`: the deploy
+engine preserves the release's existing overrides. Supply individual configuration changes with
+the supported flags or `--set-string`. Once a standalone first owner is configured, the installer
+rejects `--values` and `--reset-values` to preserve its immutable email, issuer and silo binding.
+Continue supplying the same first-owner and OIDC coordinates.
 
 ## Conversation execution profile
 

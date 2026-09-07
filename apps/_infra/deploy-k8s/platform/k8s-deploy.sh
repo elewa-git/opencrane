@@ -1116,6 +1116,7 @@ fi
 append_authoritative_qualified_release_image_helm_args
 append_authoritative_cognee_image_helm_args
 helm "${helm_args[@]}" || exit $?
+wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?
 # The database consumers load their connection Secrets at startup, and Helm does not roll pods
 # when only a Secret published outside the chart changed. Stamping the Secret checksum onto the
 # pod templates rolls the consumers exactly when the credentials changed, instead of restarting
@@ -1152,7 +1153,6 @@ _verify_cognee_rollout || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb" || exit $?
-wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-opencrane-server" || exit $?
 
 _wait_for_release_certificate || exit $?
