@@ -200,34 +200,10 @@ reviewer must confirm ownership and categorical reuse before reporting the style
 
 ## Inline Step Comments
 
-Every function with 3 or more sequential steps must have a numbered inline comment before each step.
-
-- The comment must explain what the step does.
-- The comment must explain why the step is necessary.
-- The comment must not just restate the method name.
-
-```typescript
-// WRONG — no comments, reader must infer intent from method names alone
-async function provision(tenant: Tenant): Promise<void>
-{
-	await createServiceAccount(tenant);
-	await createBucket(tenant);
-	await createDeployment(tenant);
-}
-
-// CORRECT — each step is explained with context
-async function provision(tenant: Tenant): Promise<void>
-{
-	// 1. ServiceAccount — grants the pod a GCP identity for Workload Identity.
-	await createServiceAccount(tenant);
-
-	// 2. BucketClaim — requests a per-tenant GCS bucket via Crossplane.
-	await createBucket(tenant);
-
-	// 3. Deployment — runs the tenant gateway with its durable state volume.
-	await createDeployment(tenant);
-}
-```
+Use numbered step comments when ordering protects a non-obvious invariant, such as checking
+permission before writing or fencing an attempt before dispatch. Explain that dependency in plain
+English. Do not number obvious statements or repeat method names merely because a function has
+three steps.
 
 ## JSDoc Documentation
 
@@ -362,17 +338,18 @@ const _MCP_PROTOCOL_VERSION = "2025-06-18";
  */
 ```
 
-### Exported types, classes and methods get heavy JSDoc
+### Documentation depth follows consequence
 
-A one-line label is not documentation. **Prioritise rich JSDoc on exported methods, classes, and
-types** — these are what another engineer meets first, and hovering one must be enough to use it
-correctly without opening the implementation. Give context, not a restatement of the name:
+Document the contract a caller needs. Ordinary exports usually need one to three sentences;
+security, consent, transaction boundaries, persisted states, and externally implemented ports need
+more detail. Do not repeat a subsystem explanation on every export. Give context where it changes
+how a caller must use the declaration:
 
 - **What it does**, in plain words.
 - **Why it exists / when you hit it** — the situation that produces this, and what a caller must do
   differently for each outcome. This is the part that is usually missing.
-- **Who calls it** — a `Called by:` line naming the real callers for an exported function or port.
-  Grep for them; never guess. It is the fastest way for a reader to find the flow this sits in.
+- **Who calls it**, when that explains an otherwise unclear contract. Add `Called by:` only for
+  verified callers that help the reader; obvious local callers do not need a redundant list.
 - **The tags**: `@param`, `@returns`, `@throws`, `@see`, `@implements`, `@deprecated`. Use
   `@throws` whenever the function can throw, and `@returns` to spell out what each outcome means —
   not just its type, which the signature already gives.

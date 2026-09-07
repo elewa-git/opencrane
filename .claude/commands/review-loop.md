@@ -1,97 +1,41 @@
 ---
-description: Cost-tiered independent review — free mechanical gates, parallel single-dimension haiku finders, adversarial verification of every candidate, merged severity-first report.
-argument-hint: "[files / git range — default: working tree vs HEAD]"
+description: Review one explicit change with relevant mechanical evidence and proportionate independent review.
+argument-hint: "<base SHA> <head SHA> [owned files and overlay scope]"
 ---
 
-You are orchestrating the OpenCrane review pipeline. The design principle: **spend the
-cheapest resource that can do each job** — a shell script for mechanics, haiku for
-single-concern finding and refuting, sonnet only to confirm the findings that matter
-most. Satisfies the review gate in `docs/agents/workflow.md` § Mandatory Independent
-Review.
+Review the caller's explicit change: **$ARGUMENTS**. Follow `AGENTS.md` and the risk policy in
+`.claude/review-policy.md`. Never default to `git diff HEAD`: it hides committed work.
 
-Scope from the caller: **$ARGUMENTS** (if empty, review the working tree vs `HEAD`).
+## Establish scope and evidence
 
-## Tier 0 — free (no model)
+Require immutable base/head SHAs. Inspect their diff plus staged, unstaged, and untracked source
+as separate overlays. Resolve a missing base before review. For a PR checkpoint, use the live
+ancestry evidence required by `docs/agents/workflow.md`; local review does not prove remote ancestry.
 
-1. Determine the diff: `git diff --stat HEAD` (or the caller's range/files). If there
-   are no reviewable changes, say so and stop.
-2. Run `scripts/agent-style-check.sh` and `npm run check:module-growth` (pass the same
-   range/files if the caller named any). Keep their output verbatim. Do NOT spend agent
-   time rediscovering mechanics. Module-growth warnings route the cited files into the
-   maintainability finder; they are not findings without modeled verification.
+Use supplied mechanical and test results when they cover the same source. Run missing relevant
+style, module-growth, ownership, and boundary checks once. Module size identifies a review candidate;
+it is not a defect without an ownership, ordering, dependency, or testability problem.
 
-## Tier 1 — cheap finders (haiku)
+## Independent review
 
-**Small-diff short-circuit:** if the diff is under ~80 changed lines, spawn ONE
-`review` agent covering all dimensions (no `DIMENSION:` line) and skip to Tier 2.
+Default to one `review` agent covering correctness, security, maintainability, and residue for the
+selected slice. Fan out dimensions only when independent risk areas justify parallel reviewers,
+not because the diff exceeds a line-count threshold. Pass the same exact scope and evidence to each.
+An ordinary residue check does not require a second reaper; use that specialist when a replacement
+needs a survivor/drop decision.
 
-Otherwise fan out FOUR `review` agents **in a single message** (they are independent),
-each prompt containing:
+Deduplicate findings. Require a concrete trigger, code evidence, impact, and smallest fix direction.
+Use `review-verifier` for disputed findings or consequential claims whose evidence is uncertain.
+Do not automatically dispatch another model for every Medium/Low suggestion. Refuted claims are
+dropped; uncertainty is reported plainly. Resolve Critical/High findings before the slice closes.
 
-- `DIMENSION: correctness` / `DIMENSION: security` / `DIMENSION: maintainability` /
-  `DIMENSION: residue`
-- The scope (files or git range) and any context you have (what the change is meant to
-  do, what is intentionally gated off or mock-only — this prevents false positives).
-- "Skip step 3 of your procedure (the mechanical scripts) — the orchestrator already ran them."
+## Documentation and completion
 
-Skip the `security` finder when the diff plainly touches no auth/route/token/secret/
-RBAC/network surface, and the `residue` finder when the change adds no replacement for
-an existing mechanism (pure addition). Say in the report which finders you skipped and
-why — never skip silently.
+The implementer documents the change, and the reviewer checks that it is understandable. Call the
+`comments` specialist after code settles for consequential contracts, unresolved documentation
+findings, or an explicit request. Reuse green build/test evidence after proven comments-only edits;
+run syntax/lint/doctest checks that can actually change.
 
-Run the `maintainability` finder for every non-trivial production-code diff, especially
-transactions, repository adapters, domain construction, persistence writes, and
-orchestration changes. It may be skipped for documentation-only, generated, type-only,
-test-only, or demonstrably mechanical diffs; record that reason. Maintainability
-findings must cite a concrete cohesion, ownership, duplication, invariant-documentation,
-or core-path test problem. Function length or line length alone is not a finding.
-Never skip it for a file reported by the language-neutral module-growth checker.
-
-**Direct-replacement override:** never skip the residue finder for replacement or deletion work,
-even when the diff looks purely additive. New code must be checked for superseded imports,
-compatibility/fallback residue, and old wiring that should have been removed in the same slice. The
-dedicated `reaper` gate remains mandatory; this finder does not replace it.
-
-## Tier 2 — adversarial verification
-
-1. Collect all candidate findings. Dedupe: same `file:line` + same defect = one
-   candidate (keep the highest severity).
-2. If there are zero candidates, skip to Tier 3 — do not spawn verifiers for nothing.
-3. For each candidate spawn a `review-verifier` agent — all of them **in one message**.
-   Model tiering:
-   - candidate severity **Critical or High** → `model: sonnet` (a wrong high-severity
-     claim is the most expensive mistake in either direction);
-   - **Medium or Low** → default (haiku).
-   Each verifier prompt: the single claim, its `file:line`, the finder's reasoning, and
-   the caller context.
-4. Apply verdicts: REFUTED → drop (keep a one-line note). UNCERTAIN → move to *Open
-   questions*. CONFIRMED → keep, with the verifier's severity adjustment.
-
-## Tier 3 — merged report
-
-Produce one report, sections in order:
-
-1. **Findings** — Critical, High, Medium, Low; only CONFIRMED items; each with
-   `file:line`, defect, why it matters, fix direction. Style-script ERROR lines go
-   under Low as a compact block (verbatim), WARN lines only if a finder confirmed them.
-2. **Open questions / assumptions** — UNCERTAIN verdicts and finder questions.
-3. **Refuted candidates** — one line each: the claim and why it died (this is signal
-   about finder quality, and prevents the same false positive resurfacing next run).
-4. **Residual risks / testing gaps.**
-5. **Summary** — one paragraph: verdict on the change, plus which tiers/finders ran
-   and which were skipped.
-
-If the review gate invoked this pipeline, resolve every Critical and High finding
-(fix or justify) before ending the turn — same rule as a direct `review` delegation.
-
-## Tier 4 — documentation gate
-
-Once the findings above are resolved and no further code changes are pending, delegate to the
-`comments` subagent with the same diff range **and** the plan slice, issue, or PR body behind the
-change. It owns whether the next reader can learn *why* the code is the way it is, which no tier
-above asks about.
-
-Run it last, never in parallel with the finders: it may only document a why it can point at, and
-comments written while review fixes are still landing describe code that no longer exists. Answer its
-**ASK** list in your report rather than leaving the questions open — an unexplained why is a finding
-about the change, not a gap in the agent.
+Return one severity-first report with actionable findings, uncertainty, relevant validation gaps,
+and the reviewed base/head and overlays. Re-review only source changed by a fix and affected
+invariants; do not repeat completed baseline review without new evidence.

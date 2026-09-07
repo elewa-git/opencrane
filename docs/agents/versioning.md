@@ -29,11 +29,13 @@ with the chart — and nothing more.
 
 ## Making a schema change
 
-1. Edit `apps/opencrane/prisma/bootstrap/target-baseline.sql` (rules in
-   [`prisma.md`](./prisma.md)).
-2. Update `database.baselineSha256` in the current `releases/<version>.json`.
-3. Rebuild any live dev silo that needs the new schema, or have an agent apply the SQL to that silo
-   directly.
+1. Edit the owned Prisma schema and regenerate the clean target baseline with
+   `apps/opencrane/prisma/bootstrap/regenerate-target-baseline.mjs` (rules in
+   [`prisma.md`](./prisma.md)). Update the authority verification markers when the contract changes.
+2. Update `database.baselineSha256` in the current `releases/<version>.json` and run the SQL authority
+   suites against a fresh database through `scripts/run-postgres-authority-tests.sh`.
+3. Rebuild an authorized dev silo through the app-owned installation scripts when it needs the new
+   schema. Never apply ad hoc SQL to advance an existing silo to a different baseline.
 
 Historical `releases/*.json` files are kept only because `teardown.sh` reads them to retire silos
 installed from them.

@@ -17,8 +17,9 @@ fresh context — do not assume the author's intent was correct.
    the three-dot diff alone does not prove mergeability.
 2. **Dimension.** If the prompt contains `DIMENSION: <name>`, review ONLY that
    dimension's checklist below. Otherwise cover all four.
-3. **Mechanical gates are scripts, not judgments.** Run `scripts/agent-style-check.sh`,
-   `npm run check:prisma-boundaries`, and `npm run check:module-growth` (all scope themselves to the diff). Copy style
+3. **Mechanical gates are scripts, not judgments.** Reuse supplied green results covering the
+   exact source scope. Run missing relevant `scripts/agent-style-check.sh`,
+   `npm run check:prisma-boundaries`, and `npm run check:module-growth` checks once. Copy style
    ERROR lines into your findings as **Low** severity
    (verbatim, one line each). Confirm each WARN line at the cited location before
    including it. **Do not hunt for mechanical style issues beyond the script's output.**
@@ -81,9 +82,9 @@ fresh context — do not assume the author's intent was correct.
     index, identity/user table) with only ephemeral pod storage loses everything on
     restart. A stateful container needs a volume — flag a Deployment/pod writing durable
     state with no PVC/mount.
-  - *In-place upgrade safety.* A chart change to an immutable/API-defaulted field
+  - *Installation retry safety.* When an authorized installation retry changes an immutable/API-defaulted field
     (Deployment `strategy`/`selector`, PVC spec, Service `clusterIP`) must transition
-    cleanly on an ALREADY-LIVE object, not just render — e.g. RollingUpdate→Recreate must
+    cleanly on objects already created by that installation, not just render — e.g. RollingUpdate→Recreate must
     `rollingUpdate: null` or the live upgrade is rejected. Prefer a change that avoids the
     transition (tune `maxSurge:0` instead of switching to Recreate) over one that needs it.
   - *Reconcile, not one-shot.* Provisioning a dependency at boot fire-and-forget (a single
@@ -118,8 +119,9 @@ fresh context — do not assume the author's intent was correct.
     **Grep before flagging** — keep the term when it names a real field, enum member, state, or
     standard (`fence`, `Reconciling`, `ProviderIdempotency`, RFC 8785 canonicalization,
     `Materialization`). The fix is then the sentence around the term, not the term.
-  - An exported type, class, or method whose JSDoc is a one-line label: no `Called by:`, no
-    `@param`/`@returns`/`@throws`, and no statement of what a caller must do differently per outcome.
+  - An exported contract whose documentation omits a consequential outcome or restriction.
+    Require parameter, return, or error guidance when it changes what a caller must do; do not
+    require redundant tags or caller lists on an obvious local helper.
   - A `Called by:` line or `@see` symbol that does not exist — verify by grep; a wrong pointer is
     worse than none. Likewise a `@see` URL for an external spec that names the wrong revision.
   - **An enum documented without its state meaning.** Enums usually encode state, so require: what

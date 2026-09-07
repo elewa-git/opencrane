@@ -1,7 +1,7 @@
 ---
 name: reaper
 description: >
-  Deletion reviewer — run before and after every rewrite/refactor implementation slice.
+  Deletion reviewer for replacements needing a survivor/drop decision; ordinary residue belongs to the integrated reviewer.
   Finds what the change made IRRELEVANT: superseded code paths, now-unreferenced
   symbols/exports, orphaned config options/env vars/chart values/schema fields, stale
   tests and test helpers, dead docs/comments, and duplicate features the change

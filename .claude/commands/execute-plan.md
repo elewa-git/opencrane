@@ -41,9 +41,16 @@ rule set (coding conventions, IAM-first policy, planning discipline, commit form
 
 ## Architecture and deletion preflight
 
-Before building the dependency DAG:
+Classify the selected slice once. Use an architecture preflight and post-diff check when it adds or
+moves a deployable/library, changes a trust or responsibility boundary, or has a demonstrated
+module-cohesion problem. Use reaper pre/post only when replacing a mechanism requires an explicit
+survivor/drop decision. Ordinary fixes use the implementer and integrated reviewer for residue and
+cohesion. A file count or a roadmap label alone does not require specialist dispatch.
 
-1. Delegate the target to the `architecture` agent. For every proposed cluster workload require the
+Apply each requirement to its relevant scope:
+
+1. For a structural, trust, or demonstrated cohesion change, delegate to `architecture`.
+   For every proposed cluster workload require the
    inventory `workload/kind -> image/entrypoint -> apps/<root> -> NX project -> deployment wiring ->
    libs -> KSA/RBAC -> network boundary -> state/PVC`.
    Any pod-bearing workload in the OpenCrane release without an `apps/<name>` or deployment-only
@@ -64,7 +71,7 @@ Before building the dependency DAG:
    never import apps; frontend never imports backend implementations; models are the bottom layer;
    cross-project imports use public barrels. The initial structure gate replaces the current
    layer-shaped scope tags before other target packages rely on them.
-6. Delegate `PRE-SLICE DIRECT-REPLACEMENT` to the `reaper`. Remove `DROP` work from the
+6. For a replacement, delegate `PRE-SLICE DIRECT-REPLACEMENT` to the `reaper`. Remove `DROP` work from the
    implementation scope except for same-slice deletion; do not repair or refactor code that the
    target architecture retires.
 
@@ -90,7 +97,7 @@ blocker; do not hide it behind an interface.
 - Treat unresolved architecture-checkpoint questions in `plan.md` as **blockers** —
   do not guess hidden product decisions.
 - Do not mark items complete in `plan.md` without code **and** validation evidence.
-- **Commit at every gate** (see Commit cadence) — do not leave finished, green slices uncommitted.
+- **Commit each validated, reviewed slice** (see Commit cadence) — do not leave finished, green slices uncommitted.
 - Never commit to the default branch (branch first), and **never push or open a PR unless explicitly asked**.
 - Never rewrite shared history.
 - Never revert unrelated user changes.
@@ -107,16 +114,14 @@ blocker; do not hide it behind an interface.
 - Every replacement slice carries the superseded code, tests, exports, config, deployment wiring,
   and docs it can safely delete in the same slice. Version control preserves history.
 
-## Commit cadence (commit at every gate)
+## Commit cadence
 
-- A *gate* is any checkpoint the work clears: the per-slice/per-wave **build + test** gate and the
-  **independent review** gate. Commit *during* (when a slice's gate goes green) and *after* (once review
-  passes) so each commit is a coherent, green, bisectable checkpoint.
-- On a feature branch only — if on the default branch, branch first.
-- Messages follow `AGENTS.md` → Commit Messages (gitmoji + imperative subject under 72 chars).
-  **Do not add a Claude / AI co-author trailer** (`Co-Authored-By: Claude …`) — the commit is authored
-  solely by the configured git user.
-- Committing is local. Pushing / opening a PR is a separate, outward-facing action — only on explicit request.
+Commit each coherent slice after its relevant validation and required review. Include ordinary
+comments and package documentation in that commit. Do not create an extra commit merely to mark
+another specialist handoff. Push as each slice lands when the user has authorized pushing.
+
+Use a feature branch, a gitmoji imperative subject under 72 characters, and the configured git
+author. Never add an AI co-author trailer or stage unrelated files.
 
 ## SHA-bound long-running checkpoints
 
@@ -141,65 +146,36 @@ blocker; do not hide it behind an interface.
 
 ## Procedure
 
-1. Read `plan.md` once, then read the selected entry, linked implementation issue, and controlling
-   design/ADR completely. Extract only accepted, unblocked acceptance criteria.
-2. Run the architecture and reaper preflight above. Build the deployable/dependency ledger and the
-   survivor/drop classification; stop on any BLOCK.
-3. Read `docs/agents/versioning.md`. Note database-schema and PostgreSQL-operand impact in the wave
-   ledger. A schema change updates `target-baseline.sql` and the current release manifest's
-   baseline digest; pre-1.0 there are no per-app version stamps or version-to-version transitions.
-4. Pick the smallest high-impact slice, build its dependency DAG/wave, state the direct target in
-   one sentence, record `WAVE_BASE=$(git rev-parse HEAD)`, then implement it without compatibility
-   scaffolding. Also record the intended integration target (`origin/main` or the explicitly chosen
-   protected feature integration branch) and its fetched SHA.
-5. Implement the selected slice(s), including tests and any required docs/config
-   updates, following AGENTS.md conventions as you write — not as a cleanup pass. When a slice
-   changes a package's public surface, boundary, invariant, owned models, or config, update that
-   package's `README.md` in the same slice; when it adds a package, create the README from
-   `docs/agents/README-TEMPLATE.md` and add it to the parent index (see `docs/agents/package-docs.md`).
-6. **Reap before validation or commit.** Delegate `POST-SLICE DIRECT-REPLACEMENT`, apply every
-   proven DELETE/REWRITE and resolve every `FORBIDDEN-REPLACEMENT` item. Run the resulting
-   diff through `architecture` and resolve every BLOCK.
-7. Run `scripts/agent-style-check.sh`, `npm run check:release-versioning`,
-   the relevant NX project build/test/lint targets, and any
-   manifest-rendering ownership/security checks. Use `npm run build|test -w <package>` or
-   `npx nx run <project>:<target>` for a slice, then `npm run lint:boundaries` and
-   `npx nx affected -t build test lint --base="$WAVE_BASE"` at the wave gate. Omitting `--head`
-   includes the wave's uncommitted changes without revalidating all accumulated green history. One
-   cycle per gate.
-8. If a blocker is hit, record it in plan.md and move to the next unblocked item.
-9. Update the `plan.md` checklist/state to reflect exactly what changed this cycle.
-10. **Commit each slice only after reaper PASS, architecture PASS, and validation are green** —
-   feature branch only, gitmoji +
-   imperative subject, **no Claude/AI co-author trailer** (see Commit cadence).
-11. **Delegate a review pass to the `review` subagent** with the exact `WAVE_BASE` and current
-   `HEAD` SHAs plus separate staged, unstaged, and untracked manifests. Never default to
-   `git diff HEAD` after committing: that hides the slice being reviewed. Resolve Critical/High
-   findings. If review fixes change replacement/deletion boundaries, rerun reaper and architecture,
-   revalidate, commit the resolution as a separate checkpoint, and review the refreshed explicit
-   range again. Do not push or open a PR unless explicitly asked.
-12. **Delegate the documentation gate to the `comments` subagent** once review has concluded and no
-   further code changes are pending — it runs last because `reaper` has by then deleted what the
-   slice superseded and review fixes have stopped moving the code. Give it the same explicit
-   `WAVE_BASE...HEAD` range **and** the plan slice or issue behind the work: it may only document a
-   *why* it can point at, so without the decision record it can only return questions. Apply its
-   writes, answer its **ASK** list in your output rather than leaving the questions open, and commit
-   the comment changes as their own checkpoint. A long ASK list is the gate working.
+1. Read the selected plan entry and controlling issue/ADR. State the user-visible outcome and
+   acceptance criteria; record the immutable `WAVE_BASE` and intended integration SHA.
+2. Classify structural, replacement, security, schema, and user-interface impact. Run only the
+   applicable preflights above; resolve concrete BLOCK findings before dependent implementation.
+3. Implement the smallest useful slice. Keep package documentation and tests with the code. Schema
+   changes follow `docs/agents/versioning.md`; no compatibility or transition scaffolding is added.
+4. Apply the applicable reaper and architecture post-diff findings. The integrated reviewer covers
+   ordinary residue and cohesion when no separate specialist is needed.
+5. Run relevant focused Nx tasks and changed guard contracts. At the wave gate run
+   `npm run lint:boundaries` and the affected targets against `WAVE_BASE`. Reuse green evidence for
+   unchanged code. Mechanical scripts, render checks, and authority proofs follow the changed
+   responsibility; they are not an unconditional whole-repository checklist.
+6. When policy requires independent review, delegate one integrated `review` pass with exact
+   `WAVE_BASE` and head SHAs and separate staged, unstaged, and untracked overlays. Supply validation
+   evidence so it need not be rerun. Use parallel dimensions only for large independent risk areas.
+   Resolve Critical/High findings; verify disputed or consequential findings separately.
+7. Document the decisions in the owning code and package README. Call `comments` after code settles
+   only for consequential contracts, unresolved documentation findings, or explicit documentation
+   work. Comments-only changes need their relevant syntax/lint/doc checks, not another full test wave.
+8. Update `plan.md` with implemented, validated, and blocked facts. Commit the coherent slice and
+   push when authorized. Refresh live ancestry at PR/push/rebase checkpoints; the installed Stop
+   hook remains an additional check until its separate change is approved. If a blocker needs
+   unavailable input, record it and continue independent accepted work.
 
 At the final replacement phase, run `WHOLE-REPO-DECOMMISSION` against the entire repository; a
 diff-local clean result is insufficient.
 
-## Output (return in this order)
+## Output
 
-1. **Implemented items** — one bullet per completed item with acceptance criterion met
-2. **Architecture gate** — deployable inventory, library boundaries, PASS/BLOCK
-3. **Reaper gate** — preflight classification and post-slice deletions
-4. **Validation** — build, test, lint, boundary, and relevant render/security evidence
-5. **plan.md updates** — exactly which items changed state
-6. **Blockers** — items skipped and why (BLOCKED annotation, missing decision/tooling, etc.)
-7. **Review findings summary** — from the review subagent, with resolution status
-8. **Documentation gate** — from the `comments` subagent: what it documented, and every unanswered
-   **ASK** with your answer, since an unexplained why is a finding about the change itself
-9. **Commits** — the gate commits made this cycle (branch + subject line per commit)
-
-If fully blocked: **Blocker**, **Evidence**, **Proposed unblocking options**, **Minimal fallback slice**.
+Report the delivered user capability, the relevant validation and independent-review result, the
+pushed commit/PR, and any remaining blocker. Name specialist verdicts only for specialists that
+were needed. Distinguish source implementation, CI qualification, deployment, and live journey
+proof; do not repeat unchanged historical evidence.

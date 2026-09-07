@@ -139,48 +139,39 @@ The [self-review compliance table](./typescript.md#self-review-before-finishing)
 is not sufficient on its own. A policy-driven `Stop` gate decides — per change — whether an
 independent review is required before the turn can end. When the gate asks for review you must:
 
-1. Delegate to the **`@review` subagent** against the changed files — or, for a
-   multi-file or risky diff, run the **`/review-loop` skill** (parallel single-dimension
-   finders + a `review-verifier` per candidate finding); either satisfies the gate.
+1. Delegate one integrated **`@review`** pass against the explicit change scope, or use
+   **`/review-loop`** to coordinate independent risk areas and verify disputed findings.
+   Both satisfy the same review requirement.
 2. Resolve every **Critical** and **High** finding it returns — fix it, or justify in
    your response why it is not applicable.
-3. Delegate to the **`@comments` subagent** once review has concluded and the code has stopped
-   moving (see [Documentation gate](#documentation-gate) below).
-4. Only then finish the turn.
+3. Document the change in its owning code and package README. Use `@comments` after code settles
+   for consequential contracts, unresolved documentation findings, or explicit documentation work.
+4. Finish the coherent slice once the relevant checks and required review pass.
 
-## Documentation gate
+## Scope-based specialist review
 
-Review asks whether the code is right. It does not ask whether the next reader can learn why the
-code is the way it is, and that is the part that rots first. The **`@comments` subagent** owns it,
-and it runs as the last gate of a turn — after `review` has concluded and after `reaper` has removed
-whatever the slice superseded.
+Default to one integrated independent reviewer when the risk policy requires it. Use architecture
+pre/post for new or moved deployables/libraries, trust or responsibility changes, or a demonstrated
+module-cohesion problem. Use reaper pre/post when replacing a mechanism requires a survivor/drop
+classification. Ordinary residue and maintainability belong in the integrated review. Fan out
+review dimensions only when independent risk areas justify it; use a separate verifier for disputed
+or uncertain consequential findings rather than every suggestion.
 
-The ordering is the point. Running it earlier wastes the work: `reaper` deletes code, and review
-fixes move code, so comments written before either are stale before the turn ends.
+The implementer owns ordinary documentation. A comments specialist works from the complete diff,
+including removals, plus the controlling issue or decision. Every explanation needs evidence; an
+unresolved reason is reported rather than invented. Documentation depth follows consequence.
+After proving comments-only edits, reuse existing build/test evidence and run only syntax, lint,
+doctest, or generated-document checks that can be affected.
 
-Hand it the **decision record**, not just the final tree — the diff range including removals, and
-the plan slice, issue, or PR body behind the change. A refactor routinely deletes the comment that
-held the reason, and an agent given only `git show HEAD` cannot recover it; it can then only infer
-intent, which means guessing. The agent's standing rule is evidence or a question, so give it the
-evidence.
-
-Expect an **ASK** list and treat it as the gate working. A why that nobody can reconstruct is a real
-finding about the change, and answering it in your response is cheaper than leaving a confident wrong
-comment in the tree. A PASS with no ASKs on a large slice usually means something was guessed.
-
-`scripts/agent-style-check.sh` covers only the mechanics — that a JSDoc block exists at all. A file
-where every export carries a one-line label passes that script and fails this gate; see
-[Comment Language](./typescript.md#comment-language) for the standard being applied.
-
-A change to a package's public surface, boundary, invariant, owned Prisma models, or config that
-does **not** update that package's `README.md` in the same change is an incomplete change — the
-review gate treats a stale or missing package README as a finding. See
-[`package-docs.md`](./package-docs.md) for the standard.
+Update a package README in the same slice when its public surface, boundary, invariant, models, or
+configuration changes. See [`package-docs.md`](./package-docs.md). Pass reviewers the exact source
+scope and already completed validation; rerun checks only after relevant source changes or failures.
 
 Run `scripts/agent-style-check.sh`, `npm run check:prisma-boundaries -- --diff <base-ref>`,
 `npm run check:module-growth`, `npm run check:release-versioning`, and
 `npm run check:pr-stack-integrity -- --current-branch <branch>`
-before delegating. The first checks TypeScript mechanics and invokes
+when relevant to the changed responsibility, before delegating. Reuse recorded results for the same
+source scope. The first checks TypeScript mechanics and invokes
 the same diff-scoped Prisma ownership floor; the explicit Prisma command is useful when reporting
 that gate separately; the final command produces language-neutral architecture candidates.
 The Prisma gate authorizes exact adapter class/path/contract tuples, delegate ownership, transaction
