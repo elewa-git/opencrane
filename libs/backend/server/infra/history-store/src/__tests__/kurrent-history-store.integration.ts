@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { KurrentDBClient, PersistentSubscriptionMaximumSubscribersReachedError, ROUND_ROBIN, StreamNotFoundError, WrongExpectedVersionError, persistentSubscriptionToStreamSettingsFromDefaults } from "@kurrent/kurrentdb-client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { HistoryExpectedRevisions, type HistoryEvent, type HistoryPersistentRecordedEvent, type HistoryRecordedEvent } from "../history-store.types";
 import { _KurrentHistoryStore } from "../kurrent-history-store";
@@ -371,14 +371,16 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 
 	describe("persistent activation consumer group", function ()
 	{
-		const queueStream = _stream("computer-activations");
+		let queueStream: string;
 
-		beforeAll(async function _provisionGroup()
+		beforeEach(async function _provisionGroup()
 		{
+			// Acknowledgement and close do not exclude later redelivery, so each proof owns its queue.
+			queueStream = _stream("computer-activations");
 			await client.createPersistentSubscriptionToStream(queueStream, _ACTIVATION_GROUP, _activationGroupSettings());
 		});
 
-		afterAll(async function _removeGroup()
+		afterEach(async function _removeGroup()
 		{
 			await client.deletePersistentSubscriptionToStream(queueStream, _ACTIVATION_GROUP);
 		});
@@ -406,7 +408,7 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 		it("parks a poison activation and replays the parked queue back into live delivery", async function ()
 		{
 			const poison = _event("opencrane.computer.activation-requested.v1", { computerId: "computer-2", generation: 1 });
-			await store.append({ streamName: queueStream, expectedRevision: 0n, events: [poison] });
+			await store.append({ streamName: queueStream, expectedRevision: HistoryExpectedRevisions.NoStream, events: [poison] });
 			const consumer = await store.subscribePersistent({ streamName: queueStream, groupName: _ACTIVATION_GROUP });
 			const iterator = consumer.events[Symbol.asyncIterator]();
 
@@ -448,14 +450,7 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 			const refusal = _within(rivalIterator.next(), "the second consumer was neither admitted nor refused");
 			await expect(refusal).rejects.toBeInstanceOf(PersistentSubscriptionMaximumSubscribersReachedError);
 			await holder.close();
-			// A delivery left over from an earlier group test may reach the holder before the close lands;
-			// acknowledge anything it received and read on until the iteration reports its end.
-			let holderEnded = await _within(holderWaiting, "the first consumer did not end after close");
-			while (!holderEnded.done)
-			{
-				await holder.acknowledge(holderEnded.value);
-				holderEnded = await _within(holderIterator.next(), "the first consumer did not end after close");
-			}
+			const holderEnded = await _within(holderWaiting, "the first consumer did not end after close");
 			await _eventually(async function _released()
 			{
 				const info = await client.getPersistentSubscriptionToStreamInfo(queueStream, _ACTIVATION_GROUP);
@@ -466,7 +461,7 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 			const successor = await store.subscribePersistent({ streamName: queueStream, groupName: _ACTIVATION_GROUP });
 			const successorIterator = successor.events[Symbol.asyncIterator]();
 			const activation = _event("opencrane.computer.activation-requested.v1", { computerId: "computer-3", generation: 1 });
-			await store.append({ streamName: queueStream, expectedRevision: 1n, events: [activation] });
+			await store.append({ streamName: queueStream, expectedRevision: HistoryExpectedRevisions.NoStream, events: [activation] });
 			const delivered: HistoryPersistentRecordedEvent = await _next(successorIterator, "the successor consumer never received the new activation");
 			await successor.acknowledge(delivered);
 			await successor.close();
