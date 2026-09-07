@@ -109,6 +109,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 		|| run.attempt !== command.attempt || run.conversationId === null
 		|| runSubject.data.runScope.runId !== command.runId || runSubject.data.runScope.attempt !== command.attempt
 		|| Date.parse(runSubject.data.membership.trustedUntil) <= command.now.getTime()
+		|| Date.parse(runSubject.data.requester.membership.trustedUntil) <= command.now.getTime()
 		|| __DigestCanonicalJson(runSubject.data as unknown as JsonValue) !== __DigestCanonicalJson(invocationSubject.data as unknown as JsonValue))
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	const assignedPrincipal = await _ResolveAssignedPrincipal(transaction, run.siloId, run.principalId);
@@ -116,7 +117,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	// The lease row is read only for its expiry, which caps the approval deadline; the trigger validates the lease itself when the row is created.
 	const activeLease = await transaction.conversationComputerActiveLease.findUnique({ where: { computerId: runSubject.data.computerScope.computerId }, select: { expiresAt: true } });
-	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), Date.parse(runSubject.data.membership.trustedUntil), activeLease?.expiresAt.getTime() ?? Number.POSITIVE_INFINITY));
+	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), Date.parse(runSubject.data.membership.trustedUntil), Date.parse(runSubject.data.requester.membership.trustedUntil), activeLease?.expiresAt.getTime() ?? Number.POSITIVE_INFINITY));
 	if (expiresAt.getTime() <= command.now.getTime())
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	if (invocation === null || invocation.runId !== command.runId || invocation.attempt !== command.attempt || invocation.toolRevisionId !== command.toolRevisionId || invocation.argumentsDigest !== command.argumentsDigest || invocation.state !== ToolInvocationStates.AwaitingApproval)

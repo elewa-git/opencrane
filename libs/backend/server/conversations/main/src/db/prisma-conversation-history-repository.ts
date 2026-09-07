@@ -1,3 +1,4 @@
+import { PrismaGroupChildAccessRepository } from "./prisma-group-child-access-repository";
 import { ConversationLifecycle, ConversationMode, OrgMemberStatus, type Prisma } from "@prisma/client";
 
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
@@ -62,7 +63,7 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 		if (membership === null || membership.status !== OrgMemberStatus.Active)
 			return null;
 		const conversation = await this.transaction.conversation.findFirst({ where: { id: conversationId, siloId: caller.siloId, ...(requireOpen ? { lifecycle: ConversationLifecycle.Open } : {}), participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, select: { mode: true, computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true, participants: { where: { userId: caller.subjectId, accessEndedPosition: null }, select: { visibleFromPosition: true } } } });
-		if (conversation === null || !await this.authorization.canAccess(caller, conversationId, action))
+		if (conversation === null || !await this.authorization.canAccess(caller, conversationId, action) || !await new PrismaGroupChildAccessRepository(this.transaction).mayAccess(caller, conversationId))
 			return null;
 		if (conversation.participants.length !== 1 || conversation.participants[0]!.visibleFromPosition < 0n)
 			return null;

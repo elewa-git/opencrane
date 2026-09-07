@@ -28,7 +28,7 @@ describe("PrismaConversationHistoryRepository.createOrReadPayload", function _Cr
 		const canAccess = vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "canAccess").mockResolvedValue(true);
 		try
 		{
-			const transaction = { orgMembership: { findUnique: vi.fn().mockResolvedValue({ status: "Active", displayName: "Participant" }) }, conversation: { findFirst: vi.fn().mockResolvedValue({ mode: "Direct", computerId: null, computerAgentIdentityId: null, computerProfileRevisionId: null, participants: [{ visibleFromPosition: 5n }] }) } };
+			const transaction = { conversationChildRequest: { findUnique: vi.fn().mockResolvedValue(null) }, orgMembership: { findUnique: vi.fn().mockResolvedValue({ status: "Active", displayName: "Participant" }) }, conversation: { findFirst: vi.fn().mockResolvedValue({ mode: "Direct", computerId: null, computerAgentIdentityId: null, computerProfileRevisionId: null, participants: [{ visibleFromPosition: 5n }] }) } };
 			const repository = new PrismaConversationHistoryRepository(transaction as never);
 			expect((await repository.authorizeRead(_CALLER, "conversation-1"))?.visibleFromPosition).toBe(5n);
 			expect(canAccess).toHaveBeenCalledWith(_CALLER, "conversation-1", ProductAuthorizationActions.Read);
@@ -57,4 +57,18 @@ describe("PrismaConversationHistoryRepository.createOrReadPayload", function _Cr
 		expect(harness.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
 		expect(harness.transaction.conversation.update).not.toHaveBeenCalled();
 	});
+	it("denies an otherwise authorized child when its current parent grant ends", async function ()
+	{
+		const authorization = vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "canAccess").mockImplementation(async (_caller, conversationId) => conversationId !== "parent");
+		try
+		{
+			const transaction = { orgMembership: { findUnique: vi.fn().mockResolvedValue({ status: "Active", displayName: "Human" }) }, conversationChildRequest: { findUnique: vi.fn().mockResolvedValue({ siloId: "silo-1", state: "Ready", parentConversationId: "parent", parentMessagePosition: 5n, participantSubjectIds: ["user-1"] }) }, conversation: { findFirst: vi.fn().mockResolvedValue({ id: "conversation-1", mode: "AgentSession", computerId: "computer", computerAgentIdentityId: "identity", computerProfileRevisionId: "profile", participants: [{ visibleFromPosition: 1n }] }) } };
+			const repository = new PrismaConversationHistoryRepository(transaction as never);
+			expect(await repository.authorizeRead(_CALLER, "conversation-1")).toBeNull();
+			expect(await repository.authorizeWrite(_CALLER, "conversation-1")).toBeNull();
+			expect(transaction.conversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "parent", participants: { some: { userId: "user-1", accessEndedPosition: null, visibleFromPosition: { lte: 5n } } } }) }));
+		}
+		finally { authorization.mockRestore(); }
+	});
+
 });

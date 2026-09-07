@@ -2,6 +2,7 @@ import { ___ConversationEntrySchema, type ConversationEntry } from "@opencrane/c
 import { type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationHistoryGenesis, ConversationHistoryGenesisReadCommand, ConversationHistoryReadCommand, ConversationHistoryReadResult } from "./conversation-history-reader.types";
+import { _ParseGroupChildOrigin } from "./group-child.validator";
 
 /** Names the sole versioned event that this reader exposes as a participant-visible entry. */
 const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
@@ -132,6 +133,8 @@ function _ValidatedGenesis(event: HistoryRecordedEvent, command: ConversationHis
 		throw new Error("Conversation history read received invalid genesis coordinates");
 	if ((genesis.mode === "agent_session") !== _Identifier(genesis.agentServiceId ?? ""))
 		throw new Error("Conversation history read received an invalid genesis service binding");
+	if (genesis.origin !== undefined && (genesis.mode !== "agent_session" || _ParseGroupChildOrigin(genesis.origin, genesis.conversationId) === null))
+		throw new Error("Conversation history read received an invalid child origin");
 	return genesis;
 }
 

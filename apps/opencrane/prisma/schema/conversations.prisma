@@ -33,6 +33,7 @@ model Conversation {
   elicitationRequests           ElicitationRequest[]
   assets                        ConversationAsset[]
   activeComputerLease           ConversationComputerActiveLease?
+  childRequests                 ConversationChildRequest[]
   service                       AgentService?                   @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
@@ -42,6 +43,45 @@ model Conversation {
   @@index([siloId, mode, lifecycle, updatedAt])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
+}
+
+/// Records whether an admitted group request still needs its child conversation or has finished.
+enum ConversationChildRequestState {
+  Pending     @map("pending")
+  Ready       @map("ready")
+  Unavailable @map("unavailable")
+}
+
+/// Keeps the accepted group command while a workflow creates its KurrentDB history and computer.
+/// The request stores identity and audience coordinates; encrypted messages stay in their own store.
+model ConversationChildRequest {
+  id                       String                        @id
+  siloId                   String                        @map("silo_id")
+  idempotencyKey           String                        @map("idempotency_key")
+  parentConversationId     String                        @map("parent_conversation_id")
+  parentMessageId          String                        @map("parent_message_id")
+  parentMessagePosition    BigInt                        @map("parent_message_position")
+  childConversationId      String                        @unique @map("child_conversation_id")
+  computerId               String                        @unique @map("computer_id")
+  requestedByPrincipalId   String                        @map("requested_by_principal_id")
+  requesterSubjectId       String                        @map("requester_subject_id")
+  requesterIssuer          String                        @map("requester_issuer")
+  requesterAuthenticatedAt DateTime                      @map("requester_authenticated_at")
+  agentServiceId           String                        @map("agent_service_id")
+  agentRevisionId          String                        @map("agent_revision_id")
+  agentIdentityId          String                        @map("agent_identity_id")
+  agentPrincipalId         String                        @map("agent_principal_id")
+  agentName                String                        @map("agent_name")
+  profileRevisionId        String                        @map("profile_revision_id")
+  participantSubjectIds    Json                          @map("participant_subject_ids")
+  commandDigest            String                        @map("command_digest")
+  state                    ConversationChildRequestState @default(Pending)
+  createdAt                DateTime                      @default(now()) @map("created_at")
+  parent                   Conversation                  @relation(fields: [parentConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([siloId, requestedByPrincipalId, idempotencyKey])
+  @@index([parentConversationId, state])
+  @@map("conversation_child_requests")
 }
 
 /// Rebuildable projection of the one active Agent Sandbox lease for a conversation computer.

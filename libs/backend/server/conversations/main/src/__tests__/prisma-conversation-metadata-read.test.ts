@@ -32,6 +32,7 @@ function _Fixture(mode: ConversationMode = ConversationMode.Group, lifecycle: Co
 		return where.userId === _CALLER.subjectId && where.accessEndedPosition === control.accessEndedPosition && where.conversation.siloId === _CALLER.siloId ? [participant] : [];
 	}
 	const transaction = {
+		conversationChildRequest: { findUnique: vi.fn().mockResolvedValue(null) },
 		orgMembership: {
 			count: vi.fn(async function _Active({ where }: any)
 			{

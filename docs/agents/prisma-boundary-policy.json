@@ -493,6 +493,10 @@
 					{
 						"adapter": "PrismaConversationProductAuthorizationRepository",
 						"importPath": "./conversation-product-authorization"
+					},
+					{
+						"adapter": "PrismaGroupChildAccessRepository",
+						"importPath": "./prisma-group-child-access-repository"
 					}
 				]
 			},
@@ -519,6 +523,10 @@
 					{
 						"adapter": "PrismaConversationProductAuthorizationRepository",
 						"importPath": "./conversation-product-authorization"
+					},
+					{
+						"adapter": "PrismaGroupChildAccessRepository",
+						"importPath": "./prisma-group-child-access-repository"
 					}
 				]
 			},
@@ -938,7 +946,12 @@
 				"adapter": "PrismaKurrentConversationPromptMessageRepository",
 				"contract": "ConversationPromptMessageSource",
 				"contractImportPath": "@opencrane/backend/agents/execution/inputs",
-				"constructs": []
+				"constructs": [
+					{
+						"adapter": "PrismaConversationHistoryRepository",
+						"importPath": "./prisma-conversation-history-repository"
+					}
+				]
 			},
 			{
 				"path": "libs/backend/agents/execution/inputs/main/src/prisma-prompt-compiler-repository.ts",
@@ -965,6 +978,77 @@
 				"contract": "BudgetPolicySource",
 				"contractImportPath": "./session-assembly.types",
 				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/inputs/main/src/prisma-conversation-execution-subject-authority.ts",
+				"adapter": "PrismaConversationExecutionSubjectAuthority",
+				"contract": "ExecutionSubjectAuthority",
+				"contractImportPath": "./session-assembly.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence-repository.ts",
+				"adapter": "PrismaManagedExecutionEvidenceRepository",
+				"contract": "ManagedExecutionEvidenceRepository",
+				"contractImportPath": "../managed-agent.types",
+				"constructs": [
+					{
+						"adapter": "PrismaFleetMembershipAuthorityRepository",
+						"importPath": "@opencrane/backend/server/iam/membership"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-company-assistant-provisioning.ts",
+				"adapter": "PrismaCompanyAssistantProvisioningRepository",
+				"contract": "CompanyAssistantProvisioningRepository",
+				"contractImportPath": "../company-assistant-provisioning.types",
+				"constructs": [
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaManagedAuthorizationGrantRepository",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaAgentRevisionWriterRepository",
+						"importPath": "./prisma-agent-revision-writer"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-group-child-access-repository.ts",
+				"adapter": "PrismaGroupChildAccessRepository",
+				"contract": "GroupChildAccessPort",
+				"contractImportPath": "../group-child.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationProductAuthorizationRepository",
+						"importPath": "./conversation-product-authorization"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-group-child-request-repository.ts",
+				"adapter": "PrismaGroupChildRequestRepository",
+				"contract": "GroupChildRequestRepository",
+				"contractImportPath": "./group-child-request-repository.types",
+				"constructs": [
+					{
+						"adapter": "PrismaGroupChildAccessRepository",
+						"importPath": "./prisma-group-child-access-repository"
+					},
+					{
+						"adapter": "PrismaConversationProductAuthorizationRepository",
+						"importPath": "./conversation-product-authorization"
+					},
+					{
+						"adapter": "PrismaConversationHistoryRepository",
+						"importPath": "./prisma-conversation-history-repository"
+					}
+				]
 			}
 		],
 		"unitsOfWork": [
@@ -1671,6 +1755,42 @@
 				"contract": "PrismaUnitOfWorkRunner",
 				"contractImportPath": "./prisma-unit-of-work.types",
 				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/agent-services/main/src/db/prisma-company-assistant-provisioning-unit-of-work.ts",
+				"adapter": "PrismaCompanyAssistantProvisioningUnitOfWork",
+				"contract": "CompanyAssistantProvisioningAuthority",
+				"contractImportPath": "../company-assistant-provisioning.types",
+				"constructs": [
+					{
+						"adapter": "PrismaCompanyAssistantProvisioningRepository",
+						"importPath": "./prisma-company-assistant-provisioning"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/prisma-group-child-lifecycle.ts",
+				"adapter": "PrismaGroupChildLifecycleUnitOfWork",
+				"contract": "GroupChildLifecyclePort",
+				"contractImportPath": "./group-child.types",
+				"constructs": [
+					{
+						"adapter": "PrismaGroupChildRequestRepository",
+						"importPath": "./db/prisma-group-child-request-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/prisma-group-child-share.ts",
+				"adapter": "PrismaGroupChildShareUnitOfWork",
+				"contract": "GroupChildSharePort",
+				"contractImportPath": "./group-child.types",
+				"constructs": [
+					{
+						"adapter": "PrismaGroupChildRequestRepository",
+						"importPath": "./db/prisma-group-child-request-repository"
+					}
+				]
 			}
 		],
 		"compositions": [
@@ -1715,7 +1835,10 @@
 			"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 			"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 			"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts",
-			"libs/backend/server/iam/authorization/main/src/deferred-tool-approval.ts"
+			"libs/backend/server/iam/authorization/main/src/deferred-tool-approval.ts",
+			"libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-conversation-resolver.ts",
+			"apps/opencrane/src/app/company-assistant-composition.ts",
+			"libs/backend/server/conversations/main/src/prisma-group-child-authority.ts"
 		]
 	},
 	"rawProcedureCalls": [

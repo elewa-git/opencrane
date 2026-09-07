@@ -20,9 +20,28 @@ export interface ExecutionSubjectIdentityEvidence
 	readonly verifiedAt: string;
 }
 
-/** Records current fleet-membership evidence for the principal that executes one run. */
-export interface ExecutionSubjectMembershipEvidence
+/**
+ * Selects the membership evidence that admission and runtime authorities must verify.
+ * The values are stored in execution subjects on runs and input snapshots and sent across package
+ * boundaries. Renaming a value changes the persisted and wire contracts; validators reject unknown
+ * kinds. Neither kind is a lifecycle state or grants current access from saved evidence alone.
+ */
+export enum ExecutionSubjectMembershipKinds
 {
+	/** A human Principal belongs through a currently verified, signed fleet membership assertion. */
+	Fleet = "fleet",
+	/** An internal Principal belongs through its currently active managed AgentService. */
+	Managed = "managed",
+}
+
+/** Carries the membership evidence appropriate to the executing Principal. */
+export type ExecutionSubjectMembershipEvidence = ExecutionSubjectFleetMembershipEvidence | ExecutionSubjectManagedMembershipEvidence;
+
+/** Records signed fleet membership for a human requester or a personal assistant's Principal. */
+export interface ExecutionSubjectFleetMembershipEvidence
+{
+	/** Selects verification against the fleet membership authority. */
+	readonly kind: ExecutionSubjectMembershipKinds.Fleet;
 	/** Identifies the principal whose current membership was verified. */
 	readonly principalId: string;
 	/** Identifies the silo in which the membership is valid. */
@@ -36,6 +55,27 @@ export interface ExecutionSubjectMembershipEvidence
 	/** Identifies the authority evidence that verified the membership assertion. */
 	readonly decisionEvidenceId: string;
 	/** Records when the signed membership assertion expires. */
+	readonly trustedUntil: string;
+}
+
+/** Binds an internal Principal to the managed service admitted for a run; current checks still apply. */
+export interface ExecutionSubjectManagedMembershipEvidence
+{
+	/** Selects verification against the current managed service and internal Principal. */
+	readonly kind: ExecutionSubjectMembershipKinds.Managed;
+	/** Identifies the internal Principal whose own grants constrain execution. */
+	readonly principalId: string;
+	/** Identifies the silo that owns the service and Principal. */
+	readonly siloId: SiloId;
+	/** Identifies the managed service that realizes this Principal. */
+	readonly agentServiceId: AgentServiceId;
+	/** Identifies the published revision admitted for the run. */
+	readonly agentRevisionId: AgentRevisionId;
+	/** Stores the digest of the admitted published revision. */
+	readonly agentRevisionDigest: string;
+	/** Identifies the execution Principal's recorded authority decision. */
+	readonly decisionEvidenceId: string;
+	/** Bounds the evidence lifetime without extending current permissions. */
 	readonly trustedUntil: string;
 }
 
@@ -95,6 +135,8 @@ export interface ExecutionSubjectRequesterProvenance
 	readonly requestIdempotencyKey: string;
 	/** Records when the server authenticated the requester. */
 	readonly authenticatedAt: string;
+	/** Preserves the requester's independently verified membership, separate from the assistant's authority. */
+	readonly membership: ExecutionSubjectFleetMembershipEvidence;
 }
 
 /** Records the separate authority decision that admitted one requested execution. */
@@ -111,8 +153,8 @@ export interface ExecutionSubjectAdmissionEvidence
 /**
  * Binds the one AgentIdentity and Principal that may exercise an admitted run on one computer.
  *
- * The subject does not branch between people and services. Current identity, membership, and
- * capability evidence bind its principal, run, computer lease, requester, and admission decision
+ * Current identity, the Principal's membership kind, and capability evidence bind its principal,
+ * run, computer lease, requester, and admission decision
  * before a runtime receives it. The requester may equal the authorizing principal, but the two
  * fields never imply one another.
  */

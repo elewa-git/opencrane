@@ -72,7 +72,7 @@ describe("caller-owned personal assistant directory", function _Suite()
 		for (const [index, caller] of callers.entries())
 		{
 			const directory = await authority.directory(caller);
-			expect(directory).toEqual({ participants: [{ participantRef: "member-1", displayName: "Member 1", isSelf: index === 0 }, { participantRef: "member-2", displayName: "Member 2", isSelf: index === 1 }], personalAgentStatus: "ready", personalAgent: { personalAgentRef: `agent-${index + 1}`, displayName: `Assistant ${index + 1}` } });
+			expect(directory).toEqual({ participants: [{ participantRef: "member-1", displayName: "Member 1", isSelf: index === 0 }, { participantRef: "member-2", displayName: "Member 2", isSelf: index === 1 }], companyAssistants: [], personalAgentStatus: "ready", personalAgent: { personalAgentRef: `agent-${index + 1}`, displayName: `Assistant ${index + 1}` } });
 			expect(_authorization.listPrincipalEntitled).toHaveBeenLastCalledWith(expect.objectContaining({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.AgentService, id: `agent-${index + 1}` }] }));
 		}
 		expect(_authorization.reconcileManagedResourceGrants).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ describe("caller-owned personal assistant directory", function _Suite()
 	{
 		const { authority, callers } = _Fixture();
 		_authorization.listPrincipalEntitled.mockImplementation(async function _AllRead(command: { resources: readonly ProductAuthorizationResourceLocator[] }) { return command.resources; });
-		await expect(authority.directory(callers[0]!)).resolves.toMatchObject({ personalAgentStatus: "ready", personalAgent: { personalAgentRef: "agent-1" } });
+		await expect(authority.directory(callers[0]!)).resolves.toMatchObject({ companyAssistants: [], personalAgentStatus: "ready", personalAgent: { personalAgentRef: "agent-1" } });
 	});
 
 	it("hides the caller's assistant after its read permission is revoked", async function _RevokedRead()

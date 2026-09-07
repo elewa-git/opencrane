@@ -4,6 +4,7 @@ import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from 
 
 import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult } from "./conversation-history-authority.types";
 import type { ConversationHistoryGenesis } from "./conversation-history-reader.types";
+import { _ParseGroupChildOrigin } from "./group-child.validator";
 
 /** Recognizes event identifiers that can also serve as the entry idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -32,6 +33,8 @@ export class ConversationHistoryAuthority
 			throw new Error("Conversation genesis requires valid immutable coordinates");
 		if ((genesis.mode === "agent_session") !== _Identifier(genesis.agentServiceId ?? ""))
 			throw new Error("Conversation genesis requires an exact service binding");
+		if (genesis.origin !== undefined && (genesis.mode !== "agent_session" || _ParseGroupChildOrigin(genesis.origin, genesis.conversationId) === null))
+			throw new Error("Conversation genesis requires a valid child origin");
 		return { streamName: `conversation-${genesis.conversationId}`, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: eventId, type: "opencrane.conversation-created.v1", data: { genesis }, metadata: { siloId: genesis.siloId, conversationId: genesis.conversationId, causationId: eventId, correlationId: eventId, idempotencyKey: eventId } }] };
 	}
 

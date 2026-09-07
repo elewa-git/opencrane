@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { ConversationMode, type Prisma } from "@prisma/client";
 
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
@@ -60,7 +60,10 @@ export class PrismaConversationProductAuthorizationRepository implements Convers
 				throw new Error("conversation participant Principal projection is unavailable or ambiguous");
 		}
 		const resource = { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId } as const;
-		const actions = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Use] as const;
+		const conversation = await this.transaction.conversation.findUnique({ where: { id: conversationId }, select: { siloId: true, mode: true } });
+		if (conversation === null || conversation.siloId !== siloId)
+			throw new Error("Conversation participant grants require a same-silo projection");
+		const actions = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Use, ...(conversation.mode === ConversationMode.Group ? [ProductAuthorizationActions.Delegate] : [])];
 		const grants = principals.flatMap(principal => actions.map(action => _Grant(principal.id, createdByPrincipalId, resource, action)));
 		await this.managedGrants.reconcileManagedResourceGrants({ siloId, managerId: CONVERSATION_PARTICIPANT_GRANT_MANAGER_ID, resource, grants, now });
 	}

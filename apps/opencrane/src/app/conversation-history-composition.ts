@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 
 import type { PrismaClient } from "@prisma/client";
-import { AesGcmConversationPrivatePayloadCipher, ConversationComputerHistory, ConversationHistoryAuthority, PrismaAgentSessionCreationUnitOfWork, PrismaConversationMetadataUnitOfWork, PrismaSelfConversationHistoryUnitOfWork, _CreateConversationMetadataRouter, _CreateSelfConversationHistoryRouter, type ConversationPrivatePayloadKeyringDocument } from "@opencrane/backend/server/conversations";
+import { AesGcmConversationPrivatePayloadCipher, ConversationComputerHistory, ConversationHistoryAuthority, GROUP_CHILD_TASK, PrismaGroupChildAuthority, _CreateGroupChildRouter, PrismaAgentSessionCreationUnitOfWork, PrismaConversationMetadataUnitOfWork, PrismaSelfConversationHistoryUnitOfWork, _CreateConversationMetadataRouter, _CreateSelfConversationHistoryRouter, type GroupChildTaskInput, type ConversationPrivatePayloadKeyringDocument } from "@opencrane/backend/server/conversations";
+import { PrismaManagedAgentConversationResolver } from "@opencrane/backend/server/agents/agent-services";
+import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
+import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { AgentSandboxReleaseProfileConfig } from "./config.types";
@@ -14,6 +19,7 @@ export function _CreateConversationHistoryComposition(
   historyStore: HistoryStore,
   keyringPath: string,
   releaseProfile: AgentSandboxReleaseProfileConfig,
+  workflows: IWorkflowEngine,
 ) {
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(
     _ReadConversationPrivatePayloadKeyring(keyringPath),
@@ -46,8 +52,30 @@ export function _CreateConversationHistoryComposition(
       },
     ],
   );
-  const metadata = new PrismaConversationMetadataUnitOfWork(prisma, creation);
+  const managedDependencies = {
+    identityHistory: new AgentIdentityHistory(historyStore),
+    membershipConfig: _CreateFleetMembershipEvidenceConfig(),
+    profiles: [{ workloadProfile: releaseProfile.profileName, profileRevisionId: releaseProfile.profileRevisionId }],
+  };
+  const metadata = new PrismaConversationMetadataUnitOfWork(prisma, creation, function _ListCompanyAssistants(caller)
+  {
+    return ___RunInPrismaUnitOfWork(prisma, function _ReadDirectory(transaction)
+    {
+      return new PrismaManagedAgentConversationResolver(transaction, managedDependencies).list(caller);
+    }, { isolationLevel: "ReadCommitted", operation: "company assistant directory" });
+  });
+  const children = new PrismaGroupChildAuthority(prisma, historyStore, cipher, {
+    resolve: function _ResolveManagedAssistant(transaction, caller, agentServiceId)
+    {
+      return new PrismaManagedAgentConversationResolver(transaction, managedDependencies).resolve(caller, agentServiceId);
+    },
+  }, workflows, authority);
+  workflows.register({ ...GROUP_CHILD_TASK, run: function _ResumeGroupChild(context, input: GroupChildTaskInput)
+  {
+    return children.run(input, context.attempt);
+  } });
   const router = _CreateConversationMetadataRouter(metadata, resolveCaller);
+  router.use(_CreateGroupChildRouter(children, resolveCaller, _log));
   router.use(
     _CreateSelfConversationHistoryRouter({ authority, resolveCaller, events: { historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),
   );

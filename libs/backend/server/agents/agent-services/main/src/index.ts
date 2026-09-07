@@ -1,4 +1,18 @@
 export { PrismaAgentRevisionModelSelectionRepository } from "./db/prisma-agent-revision-model-selection";
+export { PrismaCompanyAssistantProvisioningRepository, CompanyAssistantProvisioningDenied } from "./db/prisma-company-assistant-provisioning";
+export { PrismaCompanyAssistantProvisioningUnitOfWork } from "./db/prisma-company-assistant-provisioning-unit-of-work";
+export { _CreateCompanyAssistantProvisioningRouter } from "./company-assistant-provisioning.router";
+export { _CompanyAssistantOpenapiPaths } from "./openapi";
+export type { CompanyAssistantProvisioningAuthority, CompanyAssistantProvisioningCaller, CompanyAssistantProvisioningCallerResolver } from "./company-assistant-provisioning.types";
+export { __EnsureCompanyAssistantIdentity } from "./company-assistant-identity";
+export type { CompanyAssistantProvisioningCommand, CompanyAssistantProvisioningPolicy, CompanyAssistantProvisioningResult } from "./company-assistant-provisioning.types";
+export { PrismaManagedExecutionEvidenceRepository } from "./db/prisma-managed-execution-evidence-repository";
+export { ManagedExecutionEvidenceAuthority } from "./managed-execution-evidence";
+export { ManagedExecutionEvidenceDenialReasons } from "./managed-execution-evidence.types";
+export type { ManagedExecutionEvidence, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceAuthorityPort, ManagedExecutionEvidenceResult } from "./managed-execution-evidence.types";
+export { PrismaManagedAgentConversationResolver } from "./db/prisma-managed-agent-conversation-resolver";
+export { __CompanyAssistantServiceId, __ManagedAgentIdentityId } from "./managed-agent-identity";
+export type { ManagedAgentRevisionEvidence, ManagedAgentConversationCandidate, ManagedAgentConversationDependencies, ManagedExecutionEvidenceRepository } from "./managed-agent.types";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types";
 export { PrismaAgentRevisionPersonaSelectionRepository } from "./db/prisma-agent-revision-persona-selection";
 export { PrismaRuntimeAgentEffectEligibilityAuthority } from "./db/prisma-runtime-agent-effect-eligibility";

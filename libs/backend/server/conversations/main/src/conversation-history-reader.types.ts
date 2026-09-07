@@ -1,4 +1,5 @@
 import type { ConversationEntry } from "@opencrane/contracts";
+import type { GroupChildOrigin } from "./group-child.types";
 
 /** Bounds a revision-zero ownership read without loading participant entries. */
 export interface ConversationHistoryGenesisReadCommand
@@ -50,6 +51,8 @@ export interface ConversationHistoryReadResult
 /** Immutable coordinates established by the first event in every conversation stream. */
 export interface ConversationHistoryGenesis
 {
+	/** Binds a group-created child to one immutable parent message; ordinary sessions omit this field. */
+	readonly origin?: GroupChildOrigin;
 	/** Names the persisted genesis shape. */
 	readonly schemaVersion: 1;
 	/** Identifies the conversation whose stream this event creates. */

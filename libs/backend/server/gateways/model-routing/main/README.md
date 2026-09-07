@@ -76,9 +76,18 @@ derived from their governed Global resource, so a late first POST cannot create 
   shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the per-provider default model catalogue.
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a
   single agent-run attempt (fails hard; the master key never leaves the control plane), with its
-  request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`.
+  request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`. Issuance requires an
+  absolute `notAfter` bound, leaves ten seconds for the mint request and checks the provider's
+  returned expiry before handoff. Missing, expired or excessive expiry triggers alias cleanup.
+  The key has a one-time budget and never resets its spending allowance within the attempt.
 - `_RevokeAttemptLiteLlmKeyByAlias` — reconcile an uncertain mint from its durable attempt alias when
   encrypted custody could not retain the raw key.
+
+The pinned LiteLLM v1.81.0-stable implementation creates `expires` from a UTC clock and serializes
+it as an ISO timestamp. The adapter checks that evidence instead of storing a locally guessed
+expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.0-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
+Already issued keys still have a bounded validity window; OpenCrane does not proxy every model
+request to repeat the PostgreSQL permission check.
 
 ## Boundary
 

@@ -36,12 +36,12 @@ describe("ActiveConversationComputerTurnCandidateResolver", function _ActiveConv
 	it("bounds the credential lifetime to the remaining lease", async function _BoundCredentialLifetime()
 	{
 		vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-05T00:00:00.000Z"));
-		const candidate = { binding: {}, compiledInput: {}, latestPendingEntryId: "entry-1", modelAlias: "model-1", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" } };
+		const candidate = { binding: {}, compiledInput: {}, latestPendingEntryId: "entry-1", modelAlias: "model-1", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: "2026-09-05T00:05:00.000Z", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" } };
 		const computers = { load: vi.fn().mockResolvedValue({ computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { id: "lease-1", generation: 1, state: ComputerLeaseStates.Active, sandboxId: "sandbox-1", expiresAt: "2026-09-05T00:00:45.000Z" } }) };
 		const projections = { resolve: vi.fn().mockResolvedValue({ conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" }) };
 		const compiler = { compile: vi.fn().mockResolvedValue(candidate) };
 		const resolver = new ActiveConversationComputerTurnCandidateResolver("silo-1", projections, computers as never, { verify: vi.fn().mockResolvedValue(true) }, compiler as never);
-		expect((await resolver.resolve(_COMMAND))?.credentialLifetimeSeconds).toBe(45);
+		expect(await resolver.resolve(_COMMAND)).toMatchObject({ credentialLifetimeSeconds: 45, credentialExpiresAt: "2026-09-05T00:00:45.000Z" });
 		expect(projections.resolve).toHaveBeenCalledWith("silo-1", "computer-1");
 		expect(computers.load).toHaveBeenCalledWith({ computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1" }, profileRevisionId: "profile-1" });
 		expect(compiler.compile).toHaveBeenCalledWith({ computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1" }, profileRevisionId: "profile-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" } });

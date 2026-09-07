@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { MessageEntry } from "@opencrane/contracts";
 
+import { PrismaConversationHistoryRepository } from "../db/prisma-conversation-history-repository";
 import { ConversationHistoryReader } from "../conversation-history-reader";
 import { PrismaKurrentConversationPromptMessageRepository } from "../db/prisma-kurrent-conversation-prompt-message-repository";
 import { KurrentConversationHistoryAdmissionReader } from "../kurrent-conversation-history-admission-reader";
@@ -30,7 +31,7 @@ describe("Kurrent run-input adapters", function _KurrentRunInputAdaptersSuite()
 		const message = _Message("message-1", "1");
 		vi.spyOn(ConversationHistoryReader.prototype, "read").mockResolvedValue({ streamName: "conversation-conversation-1", genesis: {} as never, entries: [message] });
 		const payload = { id: "payload-message-1", siloId: "silo-1", conversationId: "conversation-1", authorSubject: "subject-1", keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("cipher"), ciphertextDigest: "sha256:message-1" };
-		const prisma = { conversationPrivatePayload: { findMany: vi.fn().mockResolvedValue([payload]) } };
+		const prisma = { conversationChildRequest: { findUnique: vi.fn().mockResolvedValue(null) }, conversationPrivatePayload: { findMany: vi.fn().mockResolvedValue([payload]) } };
 		const cipher = { decrypt: vi.fn().mockReturnValue("hello") };
 		const source = new PrismaKurrentConversationPromptMessageRepository(prisma as never, {} as never, cipher as never, "silo-1", "conversation-1", "1");
 
@@ -43,4 +44,31 @@ describe("Kurrent run-input adapters", function _KurrentRunInputAdaptersSuite()
 		prisma.conversationPrivatePayload.findMany.mockResolvedValueOnce([{ ...payload, ciphertextDigest: "sha256:other" }]);
 		await expect(source.load(["message-1"])).rejects.toThrow(/does not match canonical history/);
 	});
+	it("refuses child prompt decryption when the separate requester is absent", async function ()
+	{
+		const prisma = { conversationChildRequest: { findUnique: vi.fn().mockResolvedValue({ id: "request" }) }, conversationPrivatePayload: { findMany: vi.fn() } };
+		const cipher = { decrypt: vi.fn() };
+		const source = new PrismaKurrentConversationPromptMessageRepository(prisma as never, {} as never, cipher as never, "silo-1", "conversation-1", "1");
+		await expect(source.load(["message-1"])).rejects.toThrow("current parent and child authority");
+		expect(prisma.conversationPrivatePayload.findMany).not.toHaveBeenCalled();
+		expect(cipher.decrypt).not.toHaveBeenCalled();
+	});
+
+	it("rechecks the requester at child prompt decryption instead of borrowing company identity", async function ()
+	{
+		const authorize = vi.spyOn(PrismaConversationHistoryRepository.prototype, "authorizeRead").mockResolvedValue(null);
+		try
+		{
+			const prisma = { conversationChildRequest: { findUnique: vi.fn().mockResolvedValue({ id: "request" }) }, conversationPrivatePayload: { findMany: vi.fn() } };
+			const cipher = { decrypt: vi.fn() };
+			const caller = { siloId: "silo-1", principalId: "human-principal", subjectId: "human-subject" };
+			const source = new PrismaKurrentConversationPromptMessageRepository(prisma as never, {} as never, cipher as never, "silo-1", "conversation-1", "1", caller);
+			await expect(source.load(["message-1"])).rejects.toThrow("current parent and child authority");
+			expect(authorize).toHaveBeenCalledWith(caller, "conversation-1");
+			expect(prisma.conversationPrivatePayload.findMany).not.toHaveBeenCalled();
+			expect(cipher.decrypt).not.toHaveBeenCalled();
+		}
+		finally { authorize.mockRestore(); }
+	});
+
 });

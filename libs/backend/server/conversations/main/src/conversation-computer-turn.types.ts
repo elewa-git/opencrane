@@ -89,7 +89,7 @@ export interface ConversationComputerTurnCoordinates
 	readonly modelAlias: string;
 	/** Caps the attempt credential's spend in US dollars. */
 	readonly maximumBudgetUsd: number;
-	/** Bounds the attempt credential lifetime; the resolver shortens it to the remaining lease time. */
+	/** Caps each credential issuance; fresh authority and lease expiry can shorten it further. */
 	readonly credentialLifetimeSeconds: number;
 	/** Names the lease, generation and SandboxClaim the turn was compiled for. */
 	readonly lease: ClaimedLeaseScope;
@@ -100,6 +100,8 @@ export interface ConversationComputerTurnCandidate extends ConversationComputerT
 {
 	/** Compiled from the admitted run input snapshot; it never enters an immutable event. */
 	readonly compiledInput: CompiledRunInput;
+	/** Absolute limit recomputed from the frozen run authority and shortened to its current lease. */
+	readonly credentialExpiresAt: string;
 }
 
 /**
@@ -213,7 +215,7 @@ export interface ConversationComputerRunAdmissionCommand extends PersonalConvers
 export interface ConversationComputerRunAdmissionPort
 {
 	/** Admit only the server-resolved command; rejection must fail instead of producing an untracked turn. */
-	admit(command: ConversationComputerRunAdmissionCommand): Promise<CompiledRunInput>;
+	admit(command: ConversationComputerRunAdmissionCommand): Promise<{ readonly compiledInput: CompiledRunInput; readonly authorityExpiresAt: string }>;
 }
 
 /** Owns idempotent Kurrent-backed turn freezing and output completion state. */
@@ -246,8 +248,10 @@ export interface ConversationComputerCredentialIssueCommand
 	readonly modelAlias: string;
 	/** Spend cap in US dollars for this attempt. */
 	readonly maxBudgetUsd: number;
-	/** Lifetime of the key in seconds; it never outlives the lease. */
+	/** Maximum requested lifetime in seconds, also bounded by the absolute notAfter limit. */
 	readonly expirySeconds: number;
+	/** Absolute authority and lease limit; retries cannot restart this clock. */
+	readonly notAfter: string;
 }
 
 /** Mints a short-lived virtual key restricted to one model alias and attempt budget. */
@@ -313,7 +317,7 @@ export interface ConversationComputerRunLifecycle
 /** Mints and revokes raw provider-gateway keys behind encrypted retry custody. */
 export interface ConversationComputerRawCredentialAuthority
 {
-	issue(input: { readonly keyAlias: string; readonly modelAlias: string; readonly maxBudgetUsd: number; readonly expirySeconds: number }): Promise<{ readonly key: string }>;
+	issue(input: { readonly keyAlias: string; readonly modelAlias: string; readonly maxBudgetUsd: number; readonly expirySeconds: number; readonly notAfter: string }): Promise<{ readonly key: string; readonly expiresAt: string }>;
 	revoke(input: { readonly keyAlias: string; readonly key: string }): Promise<void>;
 	revokeByAlias(input: { readonly keyAlias: string }): Promise<void>;
 }

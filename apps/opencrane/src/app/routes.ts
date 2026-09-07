@@ -36,6 +36,7 @@ import { _log } from "./log";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition";
 import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-composition";
 import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
+import { _CreateCompanyAssistantComposition } from "./company-assistant-composition";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
@@ -56,7 +57,7 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
-	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined || agentSandboxReleaseProfile === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
+	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined || agentSandboxReleaseProfile === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, mcpWorkflows.execution);
 	const unavailableInitialComputer = { resolve: async function _Unavailable() { return null; }, createOrdinaryGenesis: async function _UnavailableGenesis() { throw new Error("review composition cannot create conversations"); } };
 	const computerReviewAuthority = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataUnitOfWork(prisma, unavailableInitialComputer), new ConversationComputerHistory(historyStore), KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversationPrivatePayloadKeyringPath)));
 	const computerReview = computerReviewAuthority === null || agentSandboxReleaseProfile === undefined ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace, logger: _log }, _ResolveRequestPrincipal);
@@ -69,6 +70,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{ method: "use", path: "/api/v1/resource-shares", handler: _CreateRateLimitedResourceSharesRouter(prisma) },
 	];
 	const agentRoutes: readonly RouteMount[] = [
+		..._OptionalRoute("/api/v1/organization/company-assistant", historyStore === undefined || agentSandboxReleaseProfile === undefined ? null : _CreateCompanyAssistantComposition(prisma, historyStore, agentSandboxReleaseProfile)),
 		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/skills", handler: __CreateSkillAuthoringValidationSubmissionRouter({ resolveCaller: _ResolveSkillAuthoringValidationCaller, authority: new PrismaSkillAuthoringValidationSubmissionUnitOfWork(prisma, mcpWorkflows.execution), logger: _log }) },
 	];

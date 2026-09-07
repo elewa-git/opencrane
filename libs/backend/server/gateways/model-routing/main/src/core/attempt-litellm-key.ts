@@ -20,8 +20,8 @@ const _MAX_EXPIRY_SECONDS = 86_400;
  * Mint one short-lived, alias- and budget-bound LiteLLM virtual key for a single run attempt.
  *
  * Like the BYOK `/credentials` client, this calls LiteLLM's `/key/generate`
- * with the master key as the bearer and returns the minted virtual key for the Job builder to
- * project as a group-readable Secret. Unlike the best-effort credential upsert, issuance fails hard:
+ * with the master key as the bearer and returns the minted virtual key to encrypted credential
+ * custody for the current conversation computer. Unlike the best-effort credential upsert, issuance fails hard:
  * a missing endpoint or master key, a rejected alias, an unbounded budget or expiry, or any non-OK
  * LiteLLM response throws, because a run cannot proceed without its own scoped key. The master key
  * and upstream provider secrets never leave the control plane.
@@ -105,7 +105,15 @@ export async function _RevokeAttemptLiteLlmKeyByAlias(input: AttemptLiteLlmKeyAl
 /** Perform the live `/key/generate` mint, binding the single model, budget, and expiry to the key. */
 async function _mintLive(endpoint: string, masterKey: string, input: AttemptLiteLlmKeyRequest): Promise<AttemptLiteLlmKey>
 {
-  const response = await fetch(`${endpoint}/key/generate`, {
+	const authorityDeadline = Date.parse(input.notAfter);
+	if (!Number.isFinite(authorityDeadline))
+		throw new Error("attempt LiteLLM key requires an absolute authority deadline");
+	const deadline = Math.min(authorityDeadline, Date.now() + input.expirySeconds * 1000);
+	// Leave time for the provider to mint the key, then verify its actual expiry before returning it.
+	const expirySeconds = Math.floor((deadline - Date.now() - _LITELLM_HTTP_TIMEOUT_MS) / 1000);
+	if (expirySeconds < 1)
+		throw new Error("attempt LiteLLM key authority expires before bounded issuance can finish");
+	const response = await fetch(`${endpoint}/key/generate`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -115,8 +123,8 @@ async function _mintLive(endpoint: string, masterKey: string, input: AttemptLite
 		models: [input.modelAlias],
       key_alias: input.keyAlias,
       max_budget: input.maxBudgetUsd,
-      budget_duration: `${input.expirySeconds}s`,
-      duration: `${input.expirySeconds}s`,
+      budget_duration: null,
+      duration: `${expirySeconds}s`,
       metadata: { opencrane_scope: "agent-runtime-attempt", opencrane_key_alias: input.keyAlias },
     }),
     signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
@@ -128,16 +136,30 @@ async function _mintLive(endpoint: string, masterKey: string, input: AttemptLite
     throw new Error(`litellm attempt key mint returned status ${response.status}`);
   }
 
-	const key = ___ParseAndValidateJson(await response.text(), "LiteLLM attempt key response", _MintedKey);
-
-  _log.info({ keyAlias: input.keyAlias, modelAlias: input.modelAlias }, "litellm attempt key minted");
-  return { key, keyAlias: input.keyAlias, modelAlias: input.modelAlias, expirySeconds: input.expirySeconds };
+	let value: Pick<AttemptLiteLlmKey, "key" | "expiresAt">;
+	let expiresAt: number;
+	try
+	{
+		value = ___ParseAndValidateJson(await response.text(), "LiteLLM attempt key response", _MintedKey);
+		expiresAt = Date.parse(value.expiresAt);
+		if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || expiresAt > deadline)
+			throw new Error("litellm attempt key expiry exceeds current authority");
+	}
+	catch (error)
+	{
+		await _RevokeAttemptLiteLlmKeyByAlias({ keyAlias: input.keyAlias });
+		throw error;
+	}
+	_log.info({ keyAlias: input.keyAlias, modelAlias: input.modelAlias }, "litellm attempt key minted");
+	return { key: value.key, keyAlias: input.keyAlias, modelAlias: input.modelAlias, expirySeconds, expiresAt: new Date(expiresAt).toISOString() };
 }
 
 /** Validate the non-empty virtual key returned by LiteLLM. */
-function _MintedKey(value: unknown): string
+function _MintedKey(value: unknown): Pick<AttemptLiteLlmKey, "key" | "expiresAt">
 {
 	if (typeof value !== "object" || value === null || Array.isArray(value) || !("key" in value) || typeof value.key !== "string" || value.key.length === 0)
 		throw new Error("litellm attempt key mint returned no key");
-	return value.key;
+	if (!("expires" in value) || typeof value.expires !== "string" || !/(?:Z|[+-]\d{2}:\d{2})$/.test(value.expires))
+		throw new Error("litellm attempt key mint returned no explicit expiry");
+	return { key: value.key, expiresAt: value.expires };
 }

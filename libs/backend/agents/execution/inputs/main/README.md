@@ -61,6 +61,28 @@ caller input.
 
 ## Public surface
 
+`PrismaConversationExecutionSubjectAuthority` selects personal or managed admission from the
+current active service and published revision inside the admission transaction. It invokes exactly
+one handler; a refused personal identity is never retried as managed.
+
+`ManagedConversationExecutionSubjectAuthority` binds the company's own stable Principal and checked
+identity to the active computer lease. The human requester retains separate signed membership and
+current Invoke permission. The company Principal needs current Use on its model; the human needs
+current Use on the conversation. No personal persona, memory or tool assignment enters the initial
+company revision. An explicit no-personal-memory policy returns an empty preference list without
+opening the personal-memory repository.
+
+The production conversation computer repeats this authority check during bootstrap and before
+output, including retries that return an existing run snapshot. Current service state, revision,
+identity, signed human membership and required grants must still admit the operation. The frozen
+snapshot supplies evidence and input limits; it cannot restore removed access.
+
+`__RunInputAuthorityExpiresAt` bounds model credentials by the earliest original execution-evidence
+expiry, requester-evidence expiry and absolute budget deadline. It verifies run/attempt binding and
+the compiled deadline against the snapshot. Assembly returns the currently checked subject separately
+from the unchanged snapshot. A retry intersects both subjects' trust deadlines: shorter current
+evidence reduces credential validity, while refreshed evidence never extends the original ceiling.
+
 - `__AssembleRunInputSnapshot(command, authorities)` — the end-to-end assembly: validate → load all
   sources inside the admission transaction → compile, digest, and persist.
 - `ExecutionSubjectAuthority` — injects one current AgentIdentity, Principal, membership,

@@ -13,7 +13,7 @@ import { _CreateConversationComputerLifecycleComposition } from "./app/conversat
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
-import { _CreatePersonalConversationRunAdmission } from "./app/run-admission-composition";
+import { _CreateProductionConversationRunAdmission } from "./app/run-admission-composition";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients";
 import { _StartProcessLifecycle } from "./app/lifecycle";
 import { _log } from "./app/log";
@@ -57,7 +57,7 @@ async function _Main(): Promise<void>
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
-	const conversationRunAdmission = _CreatePersonalConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, config.runAdmission);
+	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, config.runAdmission);
 	const conversationComputerTurn = _CreateConversationComputerTurnComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, conversationRunAdmission);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, mcpRuntime, workflows.execution, conversationComputerTurn, conversationComputerLifecycle.router);
 	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.

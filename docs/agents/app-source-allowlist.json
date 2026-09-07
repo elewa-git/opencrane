@@ -10,6 +10,7 @@
     "apps/opencrane/src/infra/projection"
   ],
   "allowedFiles": [
+	{ "path": "apps/opencrane/src/app/company-assistant-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/prisma.config.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/scripts/emit-openapi.mts", "owner": "apps/opencrane", "classification": "build-entrypoint" },
     { "path": "apps/opencrane/src/app/background-workers.ts", "owner": "apps/opencrane", "classification": "process-composition" },

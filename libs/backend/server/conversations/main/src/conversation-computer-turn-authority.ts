@@ -52,7 +52,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const keyAlias = `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`;
 		const snapshotBudget = candidate.compiledInput.budget.maxCostUsdMicros;
 		const maxBudgetUsd = snapshotBudget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, snapshotBudget / 1_000_000);
-		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, computer: _ComputerScope(turn), lease: turn.lease, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: turn.credentialLifetimeSeconds });
+		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, computer: _ComputerScope(turn), lease: turn.lease, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: candidate.credentialExpiresAt });
 		return { bootstrapId: turn.bootstrapId, compiledInput: candidate.compiledInput, modelCredential: { endpoint: this.dependencies.endpoint, key: credential.key, model: turn.modelAlias }, outcome: "ready" };
 	}
 

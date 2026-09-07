@@ -1,3 +1,4 @@
+import { ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
 import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -31,11 +32,11 @@ function _ExecutionSubject(): ExecutionSubject
 		agentIdentityId: "identity-1",
 		principalId: "user-1",
 		identity: { agentIdentityId: "identity-1", principalId: "user-1", siloId: "silo-1", headRevision: "7", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: new Date(1_000).toISOString() },
-		membership: { principalId: "user-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: "sha256:membership-7", decisionEvidenceId: "membership-decision-1", trustedUntil: new Date(6_000).toISOString() },
+		membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "user-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: "sha256:membership-7", decisionEvidenceId: "membership-decision-1", trustedUntil: new Date(6_000).toISOString() },
 		capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: new Date(1_000).toISOString() },
 		runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" },
 		computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
-		requester: { siloId: "silo-1", requesterPrincipalId: "user-1", requestIdempotencyKey: "request-1", authenticatedAt: new Date(1_000).toISOString() },
+		requester: { siloId: "silo-1", requesterPrincipalId: "user-1", requestIdempotencyKey: "request-1", authenticatedAt: new Date(1_000).toISOString(), membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "user-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: "sha256:membership-7", decisionEvidenceId: "membership-decision-1", trustedUntil: new Date(6_000).toISOString() } },
 		admission: { authorizingPrincipalId: "user-1", decisionEvidenceId: "admission-decision-1", admittedAt: new Date(1_000).toISOString() },
 	};
 }

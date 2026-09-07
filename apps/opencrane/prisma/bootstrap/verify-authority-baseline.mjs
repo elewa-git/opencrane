@@ -113,6 +113,9 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"computer_agent_identity_id" IS NOT NULL AND btrim("computer_agent_identity_id") <> \'\'',
 	'ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_encryption_check"',
 	'CREATE TRIGGER "conversation_private_payloads_immutable"',
+	'CREATE TRIGGER "conversation_child_requests_immutable_command"',
+	'CREATE FUNCTION "enforce_conversation_child_request"()',
+	'ConversationChildRequest command and audience are immutable',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'CREATE UNIQUE INDEX "model_definitions_litellm_model_id_key" ON "model_definitions"("litellm_model_id")',

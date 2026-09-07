@@ -26,8 +26,8 @@ export interface ConversationRunInputCompilerRepositoryFactory
 	compile(command: ConversationComputerRunAdmissionCommand, snapshot: RunInputSnapshot): Promise<CompiledRunInput>;
 }
 
-/** Concrete personal authorities shared by application run-admission composition. */
-export interface PersonalConversationRunAuthorities
+/** Concrete conversation authorities shared by application run-admission composition. */
+export interface ConversationRunAuthorities
 {
 	/** Creates the execution subject bound to one verified computer command. */
 	readonly executionSubjects: ConversationRunExecutionSubjectAuthorityFactory;

@@ -26,7 +26,6 @@ export * from "./public-health.types";
 export * from "./skill-authoring-validation-bootstrap-reference";
 export * from "./run-input-snapshot.types";
 export * from "./execution-subject.validator";
-export type * from "./execution-subject.validator.types";
 export * from "./agent-controller-identity.types";
 export * from "./agent-identity.types";
 export * from "./agent-capability-grant.types";
@@ -39,3 +38,6 @@ export * from "./conversation-entry.validator";
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
 export type * from "./tenant-models.types";
 export * from "./third-party-source.types";
+
+/** Distinguishes independent human membership evidence from company execution authority. */
+export { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";

@@ -1,3 +1,4 @@
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AgentRunState, ElicitationPurpose, ElicitationRequestState, ExternalActionClaimKind, PersonalMemoryPermissionReceiptState, Prisma, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,11 +85,11 @@ function _MemoryExecutionSubject(): RunInputSnapshot["executionSubject"]
 		agentIdentityId: "identity-1",
 		principalId: "user-1",
 		identity: { agentIdentityId: "identity-1", principalId: "user-1", siloId: "silo-1", headRevision: "7", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: NOW.toISOString() },
-		membership: { principalId: "user-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: new Date("2026-08-11T12:00:00.000Z").toISOString() },
+		membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "user-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: new Date("2026-08-11T12:00:00.000Z").toISOString() },
 		capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: NOW.toISOString() },
 		runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1" },
 		computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
-		requester: { siloId: "silo-1", requesterPrincipalId: "user-1", requestIdempotencyKey: "request-1", authenticatedAt: NOW.toISOString() },
+		requester: { membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "user-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: new Date("2026-08-11T12:00:00.000Z").toISOString() }, siloId: "silo-1", requesterPrincipalId: "user-1", requestIdempotencyKey: "request-1", authenticatedAt: NOW.toISOString() },
 		admission: { authorizingPrincipalId: "user-1", decisionEvidenceId: "admission-decision-1", admittedAt: NOW.toISOString() },
 	};
 }

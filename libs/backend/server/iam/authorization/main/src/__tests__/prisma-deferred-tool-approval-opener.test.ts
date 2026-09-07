@@ -1,3 +1,4 @@
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -13,11 +14,11 @@ import { __DigestCanonicalJson } from "../canonical-json-digest";
 const EXECUTION_SUBJECT = {
 	schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1",
 	identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-evidence", verifiedAt: "2026-07-28T23:00:00.000Z" },
-	membership: { principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-07-29T00:01:30.000Z" },
+	membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-07-29T00:01:30.000Z" },
 	capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-evidence", decidedAt: "2026-07-28T23:00:00.000Z" },
 	runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" },
 	computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-2", leaseGeneration: 2 },
-	requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-28T23:00:00.000Z" },
+	requester: { membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-07-29T00:01:30.000Z" }, siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-28T23:00:00.000Z" },
 	admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-evidence", admittedAt: "2026-07-28T23:00:00.000Z" },
 } as const;
 

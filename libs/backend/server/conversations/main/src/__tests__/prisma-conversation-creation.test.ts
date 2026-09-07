@@ -32,6 +32,7 @@ function _Fixture()
 	const members = [1, 2, 3].map(index => ({ id: `member-${index}`, subject: `user-${index}`, status: OrgMemberStatus.Active as OrgMemberStatus }));
 	const control = { active: true, loseResponse: false };
 	const transaction = {
+		conversationChildRequest: { findUnique: vi.fn().mockResolvedValue(null) },
 		orgMembership: {
 			count: vi.fn(async function _CurrentMember() { return control.active ? 1 : 0; }),
 			findMany: vi.fn(async function _Members({ where }: any)

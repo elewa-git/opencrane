@@ -44,6 +44,9 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   elicitation, and execution for the built-in personal-memory recall tool.
 - `AgentRunStates` is the documented string-backed run lifecycle vocabulary used by runtime
   admission instead of repeated categorical literals.
+- `ExecutionSubjectMembershipKinds` distinguishes signed human Fleet membership from current managed
+  service authority. `ExecutionSubject` always carries the requester's separate human membership
+  evidence; the model does not perform the current authority checks itself.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
   `AgentRevisionDiff` result types.
 - `__Is…TransitionAllowed` — the guard functions over the service, revision, and run transition tables.

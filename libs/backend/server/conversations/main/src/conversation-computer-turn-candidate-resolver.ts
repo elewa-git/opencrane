@@ -22,10 +22,11 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 		const candidate = await this.compiler.compile({ computer: { siloId: this.siloId, computerId: command.computerId, conversationId: projection.conversationId, agentIdentityId: projection.agentIdentityId }, profileRevisionId: projection.profileRevisionId, lease });
 		if (candidate === null)
 			return null;
-		const remainingLeaseSeconds = Math.floor((Date.parse(current.lease.expiresAt) - Date.now()) / 1_000);
-		if (remainingLeaseSeconds < 1)
+		const expiresAt = Math.min(Date.parse(current.lease.expiresAt), Date.parse(candidate.credentialExpiresAt));
+		const remainingLeaseSeconds = Math.floor((expiresAt - Date.now()) / 1_000);
+		if (!Number.isFinite(expiresAt) || remainingLeaseSeconds < 1)
 			throw new Error("Conversation computer bootstrap requires enough remaining lease time");
-		return { ...candidate, credentialLifetimeSeconds: Math.min(candidate.credentialLifetimeSeconds, remainingLeaseSeconds) };
+		return { ...candidate, credentialLifetimeSeconds: Math.min(candidate.credentialLifetimeSeconds, remainingLeaseSeconds), credentialExpiresAt: new Date(expiresAt).toISOString() };
 	}
 
 	/** Load the projection and current history, then require the exact active lease and its bound Pod. */

@@ -1,4 +1,5 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 
 import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator";
 import { __ProposePersonalConfigurationChange } from "../proposal/personal-configuration-proposal";
@@ -76,7 +77,9 @@ function _proposalCommand(candidate: PersonalUpgradeSessionCandidate, snapshot: 
 function _IsPersonalUpgradeSessionSubjectBound(snapshot: RunInputSnapshot): boolean
 {
 	const subject = snapshot.executionSubject;
-	return subject.siloId === snapshot.siloId
+	return subject.membership.kind === ExecutionSubjectMembershipKinds.Fleet
+		&& subject.requester.requesterPrincipalId === subject.principalId
+		&& subject.siloId === snapshot.siloId
 		&& subject.principalId.trim().length > 0
 		&& subject.identity.agentIdentityId === subject.agentIdentityId
 		&& subject.identity.principalId === subject.principalId

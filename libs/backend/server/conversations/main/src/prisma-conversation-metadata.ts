@@ -1,3 +1,4 @@
+import { PrismaGroupChildAccessRepository } from "./db/prisma-group-child-access-repository";
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, ConversationLifecycle, ConversationMode, OrgMemberStatus, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
 import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
@@ -6,7 +7,7 @@ import { _ParseOrdinaryConversationCreateCommand } from "./conversation-metadata
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { PrismaConversationProductAuthorizationRepository } from "./db/conversation-product-authorization";
 import type { ConversationCaller } from "./types/conversation-caller.types";
-import type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, ConversationReviewCoordinates, InitialConversationComputerResolver } from "./conversation-metadata.types";
+import type { CompanyAssistantDirectory, ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, ConversationReviewCoordinates, InitialConversationComputerResolver } from "./conversation-metadata.types";
 
 /** Converts Prisma's generated mode values into the public conversation contract. */
 const _CONVERSATION_MODES: Readonly<Record<ConversationMode, ConversationModes>> = { [ConversationMode.AgentSession]: ConversationModes.AgentSession, [ConversationMode.Direct]: ConversationModes.Direct, [ConversationMode.Group]: ConversationModes.Group };
@@ -21,6 +22,7 @@ export class PrismaConversationMetadataUnitOfWork
   public constructor(
     private readonly prisma: PrismaClient,
     private readonly initialComputer: InitialConversationComputerResolver,
+    private readonly companyAssistants: CompanyAssistantDirectory = async () => [],
   ) {}
   /**
    * Returns member references and the caller's readable personal assistant for conversation creation.
@@ -34,6 +36,7 @@ export class PrismaConversationMetadataUnitOfWork
    */
   public directory(caller: ConversationCaller): Promise<unknown>
   {
+    const companyAssistants = this.companyAssistants;
     return this._read(async function _Directory(transaction)
     {
       if (!(await _Active(transaction, caller)))
@@ -72,6 +75,7 @@ export class PrismaConversationMetadataUnitOfWork
       );
       const available = allReadable ? agents : [];
       return {
+        companyAssistants: (await companyAssistants(caller)).map(agent => ({ agentServiceId: agent.agentServiceId, displayName: agent.name })),
         participants: rows.map((row) => ({
           participantRef: row.id,
           displayName: row.displayName?.trim() || "Unnamed member",
@@ -121,8 +125,12 @@ export class PrismaConversationMetadataUnitOfWork
           row.conversation.participants.map((item) => item.userId),
         ),
       );
+      const visible = new Set<string>();
+      for (const row of rows)
+        if (ids.has(row.conversationId) && await new PrismaGroupChildAccessRepository(transaction).mayAccess(caller, row.conversationId))
+          visible.add(row.conversationId);
       return rows
-        .filter((row) => ids.has(row.conversationId))
+        .filter((row) => visible.has(row.conversationId))
         .map((row) => _Summary(row, references));
     });
   }
@@ -147,7 +155,7 @@ export class PrismaConversationMetadataUnitOfWork
 			if (row === null || row.computerId === null || row.computerAgentIdentityId === null || row.computerProfileRevisionId === null)
 				return null;
 			const authorization = new PrismaConversationProductAuthorizationRepository(transaction);
-			if (!await authorization.canAccess(caller, conversationId, action))
+			if (!await authorization.canAccess(caller, conversationId, action) || !await new PrismaGroupChildAccessRepository(transaction).mayAccess(caller, conversationId))
 				return null;
 			return { computerId: row.computerId, agentIdentityId: row.computerAgentIdentityId, profileRevisionId: row.computerProfileRevisionId };
 		});
@@ -269,6 +277,7 @@ return null;
           new PrismaConversationProductAuthorizationRepository(transaction);
         if (
           !(await _Active(transaction, caller)) ||
+          !(await new PrismaGroupChildAccessRepository(transaction).mayAccess(caller, conversationId)) ||
           !(await authorization.admit(
             caller,
             {
@@ -343,7 +352,7 @@ async function _Detail(
   caller: ConversationCaller,
   conversationId: string,
 ): Promise<ConversationMetadataDetail | null> {
-  if (!(await _Active(transaction, caller)))
+  if (!(await _Active(transaction, caller)) || !await new PrismaGroupChildAccessRepository(transaction).mayAccess(caller, conversationId))
 return null;
   const row = await transaction.conversationParticipant.findFirst({
     where: {
@@ -370,6 +379,7 @@ return null;
     ..._Summary(row, references),
     visibleFromPosition: row.visibleFromPosition.toString(),
     accessEndedPosition: row.accessEndedPosition?.toString() ?? null,
+    parent: await new PrismaGroupChildAccessRepository(transaction).origin(caller, conversationId),
   };
 }
 /** Maps one participant projection to the preserved frontend summary contract. */

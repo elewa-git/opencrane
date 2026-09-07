@@ -24,8 +24,9 @@ Two halves:
   schemas keep runtime acceptance, strict request fields, and TypeScript
   models in one package.
 
-The personal-session create request requires an `idempotencyKey` UUID. Clients reuse it after an
-uncertain response and supply a new UUID to start another session with the same assistant.
+Personal-session, ordinary chat, group-child and reviewed-share requests require an `idempotencyKey` UUID. Clients reuse it after an
+uncertain response and supply a new UUID for a new command. Group-child responses identify their
+parent request and Pending, Ready or Unavailable state; parent metadata never grants child access.
 
 ```
  apps/opencrane server ....... emits OpenAPI 3.1 spec (dist/apps/opencrane/openapi.json)
@@ -52,11 +53,11 @@ boundaries and never enter the snapshot or conversation computer. The compiled m
 route also freezes the model registry's generated-output allowlist; the executor
 cannot infer image-generation authority from a prompt or provider response. The compiled budget
 preserves the admitted model-turn limit alongside token, cost, tool, and wall-clock ceilings.
-Identity is
-explicitly tagged: a user run
-pins a human's signed fleet membership, while a managed run pins the derived service principal, its
-signed membership, and the exact approved non-personal scopes. A service record cannot be read as a
-user record by accident.
+Identity evidence is explicitly tagged. A personal run pins the human's signed Fleet membership.
+A company run pins its own Internal Principal, active service and exact published revision. Both
+carry the human requester's independently verified Fleet membership. The strict schema rejects
+mixed kinds, missing requester evidence and principal/silo/revision substitutions; current database
+and identity checks still run at admission. A stored snapshot never grants current permission.
 
 `PROMPT_COMPILER_VERSION` is the single version pin shared by revision authoring, admission, and
 the deterministic compiler. A revision that names another version is not admissible, preventing a

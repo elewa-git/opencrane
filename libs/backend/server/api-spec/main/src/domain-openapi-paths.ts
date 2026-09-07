@@ -2,6 +2,7 @@ import { _ElicitationOpenapiPaths } from "@opencrane/backend/agents/execution/el
 import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
 import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
 import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
+import { _CompanyAssistantOpenapiPaths } from "@opencrane/backend/server/agents/agent-services";
 import { _PersonalArtifactsOpenapiPaths } from "@opencrane/backend/server/agents/artifacts";
 import { _ConversationAssetsOpenapiPaths } from "@opencrane/backend/server/conversation-assets";
 import { _SelfConversationHistoryOpenapiPaths } from "@opencrane/backend/server/conversations";
@@ -47,4 +48,5 @@ export const _DomainOpenapiPaths = {
 	..._OrganizationMembersOpenapiPaths,
 	..._SelfConversationHistoryOpenapiPaths,
 	..._SelfRunStatusOpenapiPaths,
+	..._CompanyAssistantOpenapiPaths,
 };

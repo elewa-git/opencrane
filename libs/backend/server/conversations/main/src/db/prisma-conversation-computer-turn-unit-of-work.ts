@@ -1,3 +1,4 @@
+import { PrismaGroupChildAccessRepository } from "./prisma-group-child-access-repository";
 import { createHash } from "node:crypto";
 import { AgentRevisionState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
@@ -50,7 +51,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 			const isActiveMember = memberships.some(membership => membership.subject === pendingAuthor.participantId);
 			const authorization = new PrismaConversationProductAuthorizationRepository(this.prisma);
 			const admitted = principal !== null && isActiveMember && await authorization.canAccess({ siloId, principalId: principal.id, subjectId: principal.subject, externalIssuer: principal.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, conversationId, ProductAuthorizationActions.Use);
-			if (!admitted || principal === null)
+			if (!admitted || principal === null || !await new PrismaGroupChildAccessRepository(this.prisma).mayAccess({ siloId, principalId: pendingAuthor.principalId, subjectId: pendingAuthor.participantId, externalIssuer: pendingAuthor.issuer, verifiedAuthenticationAt: pendingAuthor.authenticatedAt }, conversationId))
 				throw new Error("Conversation computer turn requires one currently authorized active participant");
 			const revision = conversation.service.activeRevision;
 			if (revision.state !== AgentRevisionState.Published || revision.publishedAt === null)
@@ -59,10 +60,15 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 		})();
 		const runId = _Uuid("turn", pending.id);
 		const admissionCommand: ConversationComputerRunAdmissionCommand = { runId, computer: command.computer, agent: { agentServiceId: loaded.service.id, agentRevisionId: loaded.revision.id, profileRevisionId: command.profileRevisionId }, lease: command.lease, requesterPrincipalId: loaded.principal.id, requesterIssuer: loaded.principal.issuer, requesterSubjectId: loaded.principal.subject, requesterAuthenticatedAt: pendingAuthor.authenticatedAt, requestIdempotencyKey: pending.id, messageInput: { mode: "pre_persisted_history" as const, messageId: pending.id, historyRevision: expectedRevision.toString(), orderedMessageIds: messages.map(message => message.id) } };
-		const compiledInput = await this.runAdmission.admit(admissionCommand);
+		const admitted = await this.runAdmission.admit(admissionCommand);
+		const compiledInput = admitted.compiledInput;
+		const authorityExpiresAt = Date.parse(admitted.authorityExpiresAt);
+		const remainingAuthoritySeconds = Math.floor((authorityExpiresAt - Date.now()) / 1_000);
+		if (!Number.isFinite(authorityExpiresAt) || remainingAuthoritySeconds < 1)
+			throw new Error("Conversation computer turn requires unexpired run and membership authority");
 		if (compiledInput.runId !== runId || compiledInput.attempt !== 1)
 			throw new Error("Conversation computer run admission returned input for another run attempt");
-		return { binding: { siloId, conversationId, computerId, leaseGeneration: command.lease.leaseGeneration, agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: 300, lease: command.lease };
+		return { binding: { siloId, conversationId, computerId, leaseGeneration: command.lease.leaseGeneration, agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: Math.min(300, remainingAuthoritySeconds), credentialExpiresAt: new Date(authorityExpiresAt).toISOString(), lease: command.lease };
 	}
 
 	/** Encrypt and idempotently persist assistant text before history references it, moving the conversation to the top of every list. */

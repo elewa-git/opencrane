@@ -1,3 +1,4 @@
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AgentRunState, ApprovalRequestState, ExternalActionRecoveryMode, OrgMemberStatus, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,11 +21,11 @@ import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.ty
 const EXECUTION_SUBJECT = {
 	schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1",
 	identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-evidence", verifiedAt: "2026-07-21T08:00:00.000Z" },
-	membership: { principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-07-21T09:30:00.000Z" },
+	membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-07-21T09:30:00.000Z" },
 	capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-evidence", decidedAt: "2026-07-21T08:00:00.000Z" },
 	runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "svc-1", agentRevisionId: "rev-1" },
 	computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-2", leaseGeneration: 2 },
-	requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-21T08:00:00.000Z" },
+	requester: { membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-07-21T09:30:00.000Z" }, siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-21T08:00:00.000Z" },
 	admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-evidence", admittedAt: "2026-07-21T08:00:00.000Z" },
 } as const;
 
@@ -304,6 +305,33 @@ describe("defer tool request authority", function _deferSuite()
 		expect(transaction.conversationComputerActiveLease.findUnique).toHaveBeenCalledTimes(1);
 		expect(transaction.conversationComputerActiveLease.findUnique).toHaveBeenCalledWith({ where: { computerId: "computer-1" }, select: { expiresAt: true } });
 		expect(_managedGrantMocks.reconcile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ siloId: "silo-1", managerId: "deferred-tool-approval-assignee", resource: { kind: "approval-request", id: "approval-9" }, grants: [expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:read" }), createdByPrincipalId: "principal-1" }), expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:decide" }), createdByPrincipalId: "principal-1" })] }));
+	});
+
+	it.each(["2026-07-21T08:59:59.000Z", "2026-07-21T09:10:00.000Z"])("bounds approval by the independent requester evidence ending at %s", async function _RequesterExpiry(trustedUntil)
+	{
+		const subject = { ...EXECUTION_SUBJECT, requester: { ...EXECUTION_SUBJECT.requester, membership: { ...EXECUTION_SUBJECT.requester.membership, trustedUntil } } };
+		const create = vi.fn().mockResolvedValue({ id: "approval-9" });
+		const pause = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = {
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ ...RUN, executionSubject: subject }), updateMany: pause },
+			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
+			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
+			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation({ authorizationExecutionSubject: subject })) },
+		} as unknown as Prisma.TransactionClient;
+		const result = await __DeferToolRequest(transaction, _deferCommand());
+		if (Date.parse(trustedUntil) <= NOW.getTime())
+		{
+			expect(result).toEqual({ outcome: "unavailable" });
+			expect(pause).not.toHaveBeenCalled();
+			expect(create).not.toHaveBeenCalled();
+		}
+		else
+		{
+			expect(result).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
+			expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ expiresAt: new Date(trustedUntil) }) }));
+		}
 	});
 
 	it("adds a second pending request without changing an already-waiting run", async function _batches()

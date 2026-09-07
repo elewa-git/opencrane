@@ -4,6 +4,8 @@ import type { CompiledMessage, ConversationAuthor, MessageEntry } from "@opencra
 import type { ConversationPromptMessageRead, ConversationPromptMessageSource } from "@opencrane/backend/agents/execution/inputs";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
+import type { ConversationCaller } from "../types/conversation-caller.types";
+import { PrismaConversationHistoryRepository } from "./prisma-conversation-history-repository";
 import { ConversationHistoryReader } from "../conversation-history-reader";
 import type { ConversationPrivatePayloadCipher } from "../conversation-private-payload.types";
 
@@ -11,11 +13,14 @@ import type { ConversationPrivatePayloadCipher } from "../conversation-private-p
 export class PrismaKurrentConversationPromptMessageRepository implements ConversationPromptMessageSource
 {
 	/** Create one command-bound source that cannot read another conversation or history revision. */
-	constructor(private readonly _prisma: Prisma.TransactionClient, private readonly _history: Pick<HistoryStore, "readStream">, private readonly _cipher: ConversationPrivatePayloadCipher, private readonly _siloId: string, private readonly _conversationId: string, private readonly _historyRevision: string) {}
+	constructor(private readonly _prisma: Prisma.TransactionClient, private readonly _history: Pick<HistoryStore, "readStream">, private readonly _cipher: ConversationPrivatePayloadCipher, private readonly _siloId: string, private readonly _conversationId: string, private readonly _historyRevision: string, private readonly _requester?: ConversationCaller) {}
 
 	/** Load and decrypt the requested messages only when every history and payload binding matches exactly. */
 	async load(messageIds: readonly string[]): Promise<readonly ConversationPromptMessageRead[]>
 	{
+		const child = await this._prisma.conversationChildRequest.findUnique({ where: { childConversationId: this._conversationId }, select: { id: true } });
+		if (child !== null && (this._requester === undefined || this._requester.siloId !== this._siloId || await new PrismaConversationHistoryRepository(this._prisma).authorizeRead(this._requester, this._conversationId) === null))
+			throw new Error("Conversation child prompt requires current parent and child authority");
 		const reader = new ConversationHistoryReader(this._history);
 		const history = await reader.read({ siloId: this._siloId, conversationId: this._conversationId });
 		if ((history.entries.at(-1)?.position ?? "0") !== this._historyRevision)

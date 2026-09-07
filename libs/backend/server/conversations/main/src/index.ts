@@ -63,3 +63,9 @@ export { _ConversationComputerReviewAuthority } from "./review/conversation-comp
 export { KeyedConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review-credential";
 export { _CreateConversationComputerReviewRouter } from "./review/conversation-computer-review.router";
 export type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewCredentialDeriver, ConversationComputerReviewPrincipalResolver, ConversationComputerReviewRoute, ConversationComputerReviewRouterOptions } from "./review/conversation-computer-review.types";
+
+export { PrismaGroupChildAuthority } from "./prisma-group-child-authority";
+export { GROUP_CHILD_TASK } from "./group-child-task";
+export { _CreateGroupChildRouter } from "./group-child.router";
+export type { GroupChildAgentCandidate, GroupChildAgentResolver, GroupChildAuthority, GroupChildTaskInput } from "./group-child.types";
+export type { CompanyAssistantDirectory } from "./conversation-metadata.types";

@@ -10,3 +10,8 @@ export * from "./prompt-compiler";
 export * from "./prompt-compiler.types";
 export * from "./session-assembly";
 export * from "./session-assembly-result.types";
+export { ManagedConversationExecutionSubjectAuthority } from "./managed-conversation-execution-subject-authority";
+export { PrismaConversationExecutionSubjectAuthority } from "./prisma-conversation-execution-subject-authority";
+export { __RunInputAuthorityExpiresAt } from "./run-input-authority-expiry";
+export type { ExecutionSubjectAuthority } from "./session-assembly.types";
+export type { ManagedConversationExecutionSubjectDependencies } from "./managed-conversation-execution-subject-authority.types";

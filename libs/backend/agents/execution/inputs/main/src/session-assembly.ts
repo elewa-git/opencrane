@@ -52,6 +52,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// 1. Reject a command with blank or missing ids first, so no authority read can match rows outside this run.
 	if (!_isCommandValid(command))
 		return { outcome: "denied", reason: "invalid_command" };
+	const checked: { subject: ExecutionSubject | null } = { subject: null };
 
 	// 2. Resolve a duplicate before compilation, or hold the service lock while every input is
 	// revalidated. `prepare` runs first inside that same transaction when the caller passed one, so a
@@ -65,6 +66,8 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (!_IsExecutionSubjectBound(command, authority, current.value) || !_SameExistingSubject(snapshot.executionSubject, current.value))
 			return { outcome: "denied", reason: "identity_unavailable" } as const;
 		const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, transaction);
+		if (conversation.outcome !== "denied")
+			checked.subject = current.value;
 		return conversation.outcome === "denied" ? conversation : { outcome: "verified" } as const;
 	}, async function _compileWithinAdmission(transaction)
 	{
@@ -120,11 +123,14 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (budget.outcome === "denied")
 			return budget;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
+		checked.subject = executionSubject.value;
 		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
 	}, commit, prepare);
 	if (admitted.outcome === "denied")
 		return { outcome: "denied", reason: _publicReason(admitted.reason) };
-	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot };
+	if (checked.subject === null)
+		throw new Error("Run admission returned without current execution authority");
+	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot, currentExecutionSubject: checked.subject };
 }
 
 /** Ensures a duplicate keeps the same immutable identity and computer while accepting refreshed evidence. */

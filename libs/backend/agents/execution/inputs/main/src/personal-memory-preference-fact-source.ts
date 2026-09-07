@@ -8,11 +8,11 @@ import type { PreferenceFactInput, PreferenceFactSource, SessionAssemblyCommand,
  * Freezes the ids of the user's consented preference facts, chosen from the verified run identity.
  *
  * Ids only — preference text never reaches the snapshot or Postgres, so the run carries a pointer
- * to what the user agreed to rather than a copy of it. Refuses managed runs and non-user
- * identities, so a personal preference can never reach a managed run.
+ * to what the user agreed to rather than a copy of it. A run whose policy forbids personal memory
+ * receives no preference facts and never opens the personal-memory repository.
  *
  * Constructed by: `__CreatePrismaPersonalSessionAssemblyAuthorities`
- * (prisma-session-assembly-authorities.ts). Managed admission substitutes an inline empty source.
+ * (prisma-session-assembly-authorities.ts) for both personal and managed admission.
  *
  * @implements PreferenceFactSource
  */
@@ -31,6 +31,8 @@ export class PersonalMemoryPreferenceFactSource implements PreferenceFactSource
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>
 	{
 		// 1. An explicit policy, not identity kind inference, governs access to personal preference facts.
+		if (run.executionPolicy.personalMemory === RunExecutionPersonalMemoryPolicies.None)
+			return { outcome: "loaded", value: [] };
 		if (run.executionPolicy.personalMemory !== RunExecutionPersonalMemoryPolicies.Allowed)
 		{
 			return { outcome: "denied", reason: "memory_scope_unavailable" };

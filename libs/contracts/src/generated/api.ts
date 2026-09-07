@@ -1100,6 +1100,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{conversationId}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMyGroupConversationChildren"];
+        put?: never;
+        /**
+         * Ask the company assistant about one own group message
+         * @description Admits an idempotent shared child for a caller-owned conversation-audience text message. Every admitted recipient must already see the originating revision. Requires current parent Delegate, conversation creation and selected service Invoke. The child begins pending and becomes ready only after cold history and its activation are durable.
+         */
+        post: operations["createMyGroupConversationChild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Share reviewed assistant text back to its parent group
+         * @description Posts as the sharing human after current parent and child access checks. The verified child source becomes causation and the originating group message becomes the reply target. A retry key binds the source and exact reviewed text; this route grants no runtime parent writer.
+         */
+        post: operations["shareMyGroupConversationChildResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversation-computers/activations/parked:replay": {
         parameters: {
             query?: never;
@@ -1430,6 +1470,26 @@ export interface paths {
         get: operations["getMyRunStatus"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/company-assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Provision the company's first shared assistant
+         * @description Requires current Organization Administer and selected Model Use. Select current human Principal IDs explicitly. Once a company assistant exists, this call returns created:false and leaves its name, policy, grants and lifecycle unchanged. Retrying can finish identity establishment after a committed setup; it cannot revive a suspended or revoked identity.
+         */
+        post: operations["provisionCompanyAssistant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6778,6 +6838,239 @@ export interface operations {
             };
         };
     };
+    listMyGroupConversationChildren: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Currently visible shared child requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        children: {
+                            conversationId: string;
+                            parentConversationId: string;
+                            /** Format: uuid */
+                            parentMessageId: string;
+                            parentMessagePosition: string;
+                            /** @enum {string} */
+                            state: "pending" | "ready" | "unavailable";
+                            agentName: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Malformed command. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation or selected source unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The retry key already names a different command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createMyGroupConversationChild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    parentMessageId: string;
+                    parentMessagePosition: string;
+                    agentServiceId: string;
+                    /** Format: uuid */
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Child creation admitted or its original request recovered. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        child: {
+                            conversationId: string;
+                            parentConversationId: string;
+                            /** Format: uuid */
+                            parentMessageId: string;
+                            parentMessagePosition: string;
+                            /** @enum {string} */
+                            state: "pending" | "ready" | "unavailable";
+                            agentName: string;
+                        };
+                    };
+                };
+            };
+            /** @description Malformed command. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation or selected source unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The retry key already names a different command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    shareMyGroupConversationChildResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    sourceEntryId: string;
+                    sourcePosition: string;
+                    /** @description Human-reviewed text, limited to 65536 UTF-8 bytes. */
+                    text: string;
+                    /** Format: uuid */
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The same reviewed share was already accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "idempotent";
+                        position: string;
+                    };
+                };
+            };
+            /** @description Reviewed text accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted";
+                        position: string;
+                    };
+                };
+            };
+            /** @description Malformed command. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation or selected source unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The retry key already names a different command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     replayParkedConversationComputerActivations: {
         parameters: {
             query?: never;
@@ -6839,6 +7132,10 @@ export interface operations {
                 content: {
                     "application/json": {
                         directory: {
+                            companyAssistants: {
+                                agentServiceId: string;
+                                displayName: string;
+                            }[];
                             participants: {
                                 participantRef: string;
                                 /** @description Member display name, or a generic label when no name is available. Never a login subject or email fallback. */
@@ -6944,6 +7241,14 @@ export interface operations {
                             updatedAt: string;
                             visibleFromPosition: string;
                             accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
                         };
                     };
                 };
@@ -6990,6 +7295,14 @@ export interface operations {
                             updatedAt: string;
                             visibleFromPosition: string;
                             accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
                         };
                     };
                 };
@@ -7042,6 +7355,14 @@ export interface operations {
                             updatedAt: string;
                             visibleFromPosition: string;
                             accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
                         };
                     };
                 };
@@ -7088,6 +7409,14 @@ export interface operations {
                             updatedAt: string;
                             visibleFromPosition: string;
                             accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
                         };
                     };
                 };
@@ -7742,6 +8071,83 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    provisionCompanyAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    modelDefinitionId: string;
+                    invokerPrincipalIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Existing company assistant returned; replacement choices were not applied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        created: boolean;
+                        assistant: {
+                            agentServiceId: string;
+                            displayName: string;
+                        };
+                    };
+                };
+            };
+            /** @description Company assistant created and identity established. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        created: boolean;
+                        assistant: {
+                            agentServiceId: string;
+                            displayName: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid setup choices. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Setup authority or selected member unavailable. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Setup dependency unavailable; the same request may be retried. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

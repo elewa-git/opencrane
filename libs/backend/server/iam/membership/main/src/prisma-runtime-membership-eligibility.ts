@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
 
 import { __VerifyCurrentFleetMembershipEvidence } from "./membership-authority";
 import type { FleetMembershipEvidenceConfig } from "./membership-authority.types";
@@ -30,7 +31,8 @@ export class PrismaRuntimeMembershipEligibilityAuthority implements RuntimeMembe
 	async isEligible(command: RuntimeMembershipEligibilityCommand): Promise<boolean>
 	{
 		const subject = command.executionSubject;
-		if (subject.siloId !== command.siloId
+		if (subject.membership.kind !== ExecutionSubjectMembershipKinds.Fleet
+			|| subject.siloId !== command.siloId
 			|| subject.principalId !== subject.identity.principalId
 			|| subject.principalId !== subject.membership.principalId
 			|| subject.membership.siloId !== command.siloId

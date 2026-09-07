@@ -86,6 +86,9 @@ CREATE TYPE "ConversationMode" AS ENUM ('agent_session', 'direct', 'group');
 CREATE TYPE "ConversationLifecycle" AS ENUM ('open', 'closed');
 
 -- CreateEnum
+CREATE TYPE "ConversationChildRequestState" AS ENUM ('pending', 'ready', 'unavailable');
+
+-- CreateEnum
 CREATE TYPE "ElicitationRequestState" AS ENUM ('requested', 'answered', 'declined', 'expired', 'cancelled');
 
 -- CreateEnum
@@ -674,6 +677,34 @@ CREATE TABLE "conversations" (
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_child_requests" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "parent_conversation_id" TEXT NOT NULL,
+    "parent_message_id" TEXT NOT NULL,
+    "parent_message_position" BIGINT NOT NULL,
+    "child_conversation_id" TEXT NOT NULL,
+    "computer_id" TEXT NOT NULL,
+    "requested_by_principal_id" TEXT NOT NULL,
+    "requester_subject_id" TEXT NOT NULL,
+    "requester_issuer" TEXT NOT NULL,
+    "requester_authenticated_at" TIMESTAMP(3) NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "agent_revision_id" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "agent_principal_id" TEXT NOT NULL,
+    "agent_name" TEXT NOT NULL,
+    "profile_revision_id" TEXT NOT NULL,
+    "participant_subject_ids" JSONB NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "state" "ConversationChildRequestState" NOT NULL DEFAULT 'pending',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_child_requests_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2137,6 +2168,18 @@ CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "
 CREATE UNIQUE INDEX "conversations_silo_id_computer_id_key" ON "conversations"("silo_id", "computer_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_child_requests_child_conversation_id_key" ON "conversation_child_requests"("child_conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_child_requests_computer_id_key" ON "conversation_child_requests"("computer_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_child_requests_parent_conversation_id_state_idx" ON "conversation_child_requests"("parent_conversation_id", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_child_requests_silo_id_requested_by_principal__key" ON "conversation_child_requests"("silo_id", "requested_by_principal_id", "idempotency_key");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "conversation_computer_active_leases_conversation_id_key" ON "conversation_computer_active_leases"("conversation_id");
 
 -- CreateIndex
@@ -2847,6 +2890,9 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lea
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_child_requests" ADD CONSTRAINT "conversation_child_requests_parent_conversation_id_silo_id_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_conversation_id_silo_i_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -4031,6 +4077,94 @@ BEGIN
     RAISE EXCEPTION 'AuditDecision rows are append-only';
 END;
 $$;
+-- An accepted group command cannot change its assistant, source message, or audience during recovery.
+CREATE FUNCTION "enforce_conversation_child_request"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    subject_count INTEGER;
+    unique_subject_count INTEGER;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ConversationChildRequest commands cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF (to_jsonb(NEW) - 'state') IS DISTINCT FROM (to_jsonb(OLD) - 'state') THEN
+            RAISE EXCEPTION 'ConversationChildRequest command and audience are immutable';
+        END IF;
+        IF NEW."state" = OLD."state" THEN RETURN NEW; END IF;
+        IF OLD."state" <> 'pending' OR NEW."state" NOT IN ('ready', 'unavailable') THEN
+            RAISE EXCEPTION 'ConversationChildRequest may finish creation only once';
+        END IF;
+        IF NEW."state" = 'unavailable' THEN RETURN NEW; END IF;
+    ELSE
+        IF NEW."state" <> 'pending' OR NEW."parent_conversation_id" = NEW."child_conversation_id"
+            OR NEW."parent_message_position" < 1
+            OR NEW."command_digest" !~ '^sha256:[0-9a-f]{64}$'
+            OR jsonb_typeof(NEW."participant_subject_ids") IS DISTINCT FROM 'array' THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires a pending command and a distinct child';
+        END IF;
+        SELECT count(*), count(DISTINCT value) INTO subject_count, unique_subject_count
+        FROM jsonb_array_elements(NEW."participant_subject_ids");
+        IF subject_count < 1 OR subject_count > 100 OR subject_count <> unique_subject_count
+            OR EXISTS (SELECT 1 FROM jsonb_array_elements(NEW."participant_subject_ids")
+                WHERE jsonb_typeof(value) <> 'string' OR btrim(value #>> '{}') = '')
+            OR NOT (NEW."participant_subject_ids" ? NEW."requester_subject_id") THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires unique participant subjects including its requester';
+        END IF;
+        PERFORM 1 FROM "principals"
+        WHERE "id" = NEW."requested_by_principal_id" AND "silo_id" = NEW."silo_id"
+            AND "provenance" = 'external' AND "issuer" = NEW."requester_issuer"
+            AND "subject" = NEW."requester_subject_id"
+        FOR UPDATE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires its authenticated external Principal';
+        END IF;
+        PERFORM 1 FROM "agent_services" AS service
+        JOIN "principals" AS principal ON principal."id" = service."principal_id" AND principal."silo_id" = service."silo_id"
+        JOIN "agent_revisions" AS revision ON revision."id" = service."active_revision_id" AND revision."agent_service_id" = service."id" AND revision."silo_id" = service."silo_id"
+        WHERE service."id" = NEW."agent_service_id" AND service."silo_id" = NEW."silo_id"
+            AND service."kind" = 'managed' AND service."state" = 'active'
+            AND principal."id" = NEW."agent_principal_id" AND principal."provenance" = 'internal'
+            AND revision."id" = NEW."agent_revision_id" AND revision."state" = 'published'
+        FOR UPDATE OF service, principal, revision;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires the active managed service and its published revision';
+        END IF;
+    END IF;
+    PERFORM 1 FROM "conversations"
+    WHERE "id" = NEW."parent_conversation_id" AND "silo_id" = NEW."silo_id" AND "mode" = 'group' AND "lifecycle" = 'open'
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'ConversationChildRequest requires its current open parent group';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(NEW."participant_subject_ids") AS audience(subject)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM "conversation_participants" AS participant
+            JOIN "org_memberships" AS membership ON membership."subject" = participant."user_id" AND membership."cluster_tenant" = NEW."silo_id"
+            WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."user_id" = audience.subject
+                AND participant."access_ended_position" IS NULL AND participant."visible_from_position" <= NEW."parent_message_position"
+                AND membership."status" = 'active'
+        )
+    ) THEN
+        RAISE EXCEPTION 'ConversationChildRequest audience requires current parent membership and source visibility';
+    END IF;
+    IF NEW."state" = 'ready' THEN
+        PERFORM 1 FROM "conversations"
+        WHERE "id" = NEW."child_conversation_id" AND "silo_id" = NEW."silo_id"
+            AND "mode" = 'agent_session' AND "agent_service_id" = NEW."agent_service_id"
+            AND "computer_id" = NEW."computer_id" AND "computer_agent_identity_id" = NEW."agent_identity_id"
+            AND "computer_profile_revision_id" = NEW."profile_revision_id";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ConversationChildRequest becomes ready only with its matching child projection';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "conversation_child_requests_immutable_command"
+    BEFORE INSERT OR UPDATE OR DELETE ON "conversation_child_requests"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_child_request"();
+
 CREATE FUNCTION "enforce_conversation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN

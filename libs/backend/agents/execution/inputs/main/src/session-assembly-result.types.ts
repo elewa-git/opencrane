@@ -1,4 +1,5 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 import { RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 
 /**
@@ -115,6 +116,9 @@ export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittab
  * must stay apart. On `denied`, nothing was written and `reason` says what to do next; see
  * {@link SessionAssemblyRefusalReason}.
  *
+ * `currentExecutionSubject` is this call's checked evidence, including refreshed trust deadlines.
+ * It is returned separately so retries cannot mutate the original snapshot or lose a shorter
+ * current credential ceiling. It must not replace the snapshot used for prompt compilation.
  * Returned by {@link __AssembleRunInputSnapshot} to the OpenCrane conversation admission owner.
  */
-export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };
+export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot; readonly currentExecutionSubject: ExecutionSubject } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };

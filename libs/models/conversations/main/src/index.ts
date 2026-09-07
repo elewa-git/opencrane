@@ -3,6 +3,8 @@ export * from "./conversation-command.types";
 export * from "./conversation-invariants";
 export * from "./conversation.types";
 export * from "./conversation.validator";
+export * from "./group-child.types";
+export * from "./group-child.validator";
 export * from "./identifiers.types";
 export * from "./message.types";
 export * from "./message.validator";

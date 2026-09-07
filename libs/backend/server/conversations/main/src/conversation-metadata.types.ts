@@ -1,4 +1,4 @@
-import type { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import type { GroupChildOrigin, ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 import type { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 export type { InitialConversationComputerResolver } from "./agent-session-creation.types";
@@ -6,7 +6,7 @@ export type { InitialConversationComputerResolver } from "./agent-session-creati
 /** Projection-only conversation list row consumed by the workspace metadata adapter. */
 export interface ConversationMetadataSummary { readonly id: string; readonly mode: ConversationModes; readonly lifecycle: ConversationLifecycles; readonly agentServiceId: string | null; readonly participantRefs: readonly string[]; readonly archivedAt: string | null; readonly readThroughPosition: string; readonly updatedAt: string; }
 /** Projection detail; immutable entries are loaded only from the separate history endpoint. */
-export interface ConversationMetadataDetail extends ConversationMetadataSummary { readonly visibleFromPosition: string; readonly accessEndedPosition: string | null; }
+export interface ConversationMetadataDetail extends ConversationMetadataSummary { readonly visibleFromPosition: string; readonly accessEndedPosition: string | null; readonly parent: GroupChildOrigin | null; }
 /** Exact history coordinates released only for current participant review access. */
 export interface ConversationReviewCoordinates
 {
@@ -30,3 +30,6 @@ export interface OrdinaryConversationCreateCommand
 	/** Identifies one creation command for the signed-in principal and silo. */
 	readonly idempotencyKey: string;
 }
+
+/** Lists only company assistants whose current service and invocation authority are ready. */
+export type CompanyAssistantDirectory = (caller: ConversationCaller) => Promise<readonly { readonly agentServiceId: string; readonly name: string }[]>;

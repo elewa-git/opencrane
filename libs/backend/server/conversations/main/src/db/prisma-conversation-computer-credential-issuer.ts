@@ -24,7 +24,7 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 			throw new Error("Conversation computer credential retry changed its frozen coordinates");
 		if (existing !== null && _HasCustody(existing))
 		{
-			if (existing.state === "revoking" || existing.expiresAt.getTime() <= Date.now())
+			if (existing.state === "revoking" || existing.expiresAt.getTime() <= Date.now() || existing.expiresAt.getTime() > Date.parse(input.notAfter))
 				return { outcome: "expired", row: existing };
 			return { outcome: existing.state === "ready" ? "ready" : "custody", row: existing };
 		}
@@ -53,10 +53,10 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	}
 
 	/** Commit encrypted provider-key custody before caller-visible finalization. */
-	public async storeCustody(input: _Input, fence: string, encrypted: ReturnType<ConversationPrivatePayloadCipher["encrypt"]>, credentialDigest: string): Promise<void>
+	public async storeCustody(input: _Input, fence: string, encrypted: ReturnType<ConversationPrivatePayloadCipher["encrypt"]>, credentialDigest: string, expiresAt: string): Promise<void>
 	{
 		this._AssertSilo(input);
-		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, state: "pending", claimFence: fence }, data: { state: "custodied", keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest, credentialDigest, expiresAt: new Date(Date.now() + input.expirySeconds * 1_000) } }), 1, "Conversation computer credential lost custody before persistence");
+		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, state: "pending", claimFence: fence }, data: { state: "custodied", keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest, credentialDigest, expiresAt: new Date(expiresAt) } }), 1, "Conversation computer credential lost custody before persistence");
 	}
 
 	/** Promote exact committed custody to ready state. */
@@ -64,7 +64,7 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	{
 		this._AssertSilo(input);
 		await this._TouchActiveLease(input, "Conversation computer credential finalization requires the current active lease");
-		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: "custodied", claimFence: fence, expiresAt: { gt: new Date() } }, data: { state: "ready" } }), 1, "Conversation computer credential custody could not be finalized");
+		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: "custodied", claimFence: fence, expiresAt: { gt: new Date(), lte: new Date(input.notAfter) } }, data: { state: "ready" } }), 1, "Conversation computer credential custody could not be finalized");
 	}
 
 	/** Mark a pre-custody mint for deterministic alias cleanup on every later retry. */
@@ -97,7 +97,7 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	private async _TouchActiveLease(input: _Input, reason: string): Promise<void>
 	{
 		const { siloId, conversationId, computerId } = input.computer;
-		const touched = await this.prisma.conversationComputerActiveLease.updateMany({ where: { siloId, conversationId, computerId, leaseId: input.lease.leaseId, leaseGeneration: input.lease.leaseGeneration, expiresAt: { gt: new Date() } }, data: { updatedAt: new Date() } });
+		const touched = await this.prisma.conversationComputerActiveLease.updateMany({ where: { siloId, conversationId, computerId, leaseId: input.lease.leaseId, leaseGeneration: input.lease.leaseGeneration, expiresAt: { gte: new Date(input.notAfter), gt: new Date() } }, data: { updatedAt: new Date() } });
 		_AssertFencedRowCount(touched, 1, reason);
 	}
 
@@ -114,8 +114,9 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 	public constructor(private readonly prisma: PrismaClient, private readonly cipher: ConversationPrivatePayloadCipher, private readonly raw: ConversationComputerRawCredentialAuthority, private readonly siloId: string) {}
 
 	/** Issue only after encrypted custody commits, then finalize in a separate transaction. */
-	public async issueOrRotate(input: _Input): Promise<{ readonly key: string; readonly credentialDigest: string }>
+	public async issueOrRotate(command: _Input): Promise<{ readonly key: string; readonly credentialDigest: string }>
 	{
+		const input = _BoundInput(command);
 		const prepared = await this._Run(repository => repository.prepare(input));
 		if (prepared.outcome === "ready")
 			return this._Unwrap(prepared.row);
@@ -137,10 +138,13 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 		}
 		if (prepared.outcome !== "claim")
 			throw new Error("Conversation computer credential preparation returned an invalid outcome");
-		const minted = await this.raw.issue(input);
+		const minted = await this.raw.issue(_BoundInput(input));
+		const expiresAt = minted.expiresAt;
 		let encrypted: ReturnType<ConversationPrivatePayloadCipher["encrypt"]>;
 		try
 		{
+			if (!Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now() || Date.parse(expiresAt) > Date.parse(input.notAfter))
+				throw new Error("Conversation computer provider key exceeds its current authority expiry");
 			encrypted = this.cipher.encrypt(minted.key, _Coordinates(input.computer.siloId, input.computer.conversationId, input.bootstrapId));
 		}
 		catch (error)
@@ -151,14 +155,14 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 		const credentialDigest = `sha256:${createHash("sha256").update(minted.key).digest("hex")}`;
 		try
 		{
-			await this._Run(repository => repository.storeCustody(input, prepared.fence, encrypted, credentialDigest));
+			await this._Run(repository => repository.storeCustody(input, prepared.fence, encrypted, credentialDigest, expiresAt));
 		}
 		catch (error)
 		{
 			await this._RetainAliasCleanup(input.bootstrapId, prepared.fence, input.keyAlias, minted.key);
 			throw error;
 		}
-		const custody: _Custody = { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: "custodied", claimFence: prepared.fence, claimExpiresAt: new Date(0), expiresAt: new Date(Date.now() + input.expirySeconds * 1_000), keyId: encrypted.keyId, nonce: encrypted.nonce, authTag: encrypted.authTag, ciphertext: encrypted.ciphertext, ciphertextDigest: encrypted.ciphertextDigest, credentialDigest };
+		const custody: _Custody = { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: "custodied", claimFence: prepared.fence, claimExpiresAt: new Date(0), expiresAt: new Date(expiresAt), keyId: encrypted.keyId, nonce: encrypted.nonce, authTag: encrypted.authTag, ciphertext: encrypted.ciphertext, ciphertextDigest: encrypted.ciphertextDigest, credentialDigest };
 		await this._FinalizeOrRetain(input, custody);
 		return { key: minted.key, credentialDigest };
 	}
@@ -250,4 +254,15 @@ function _HasCustody(row: _Custody): row is _Custody & { readonly keyId: string;
 function _Coordinates(siloId: string, conversationId: string, bootstrapId: string)
 {
 	return { siloId, conversationId, payloadRef: bootstrapId, authorSubject: "conversation-computer" };
+}
+
+/** Shortens each attempt to the remaining absolute admission bound before provider work begins. */
+function _BoundInput(input: _Input): _Input
+{
+	const now = Date.now();
+	const remaining = Math.floor((Date.parse(input.notAfter) - now) / 1_000);
+	if (!Number.isSafeInteger(input.expirySeconds) || input.expirySeconds < 1 || !Number.isFinite(remaining) || remaining < 1)
+		throw new Error("Conversation computer credential requires unexpired authority");
+	const expirySeconds = Math.min(input.expirySeconds, remaining);
+	return { ...input, expirySeconds, notAfter: new Date(now + expirySeconds * 1_000).toISOString() };
 }

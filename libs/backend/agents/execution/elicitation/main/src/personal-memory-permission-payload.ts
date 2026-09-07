@@ -1,6 +1,6 @@
 import { __DigestCanonicalJson, ToolInvocationStates, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import type { PersonalMemoryPermissionPayload, PersonalMemoryPermissionReceiptCoordinates } from "./personal-memory-permission-payload.types";
@@ -229,7 +229,9 @@ export function _InvocationExecutionPrincipalId(invocation: ToolInvocationRecord
 function _IsPersonalMemorySubjectBound(snapshot: RunInputSnapshot): boolean
 {
 	const subject = snapshot.executionSubject;
-	return subject.siloId === snapshot.siloId
+	return subject.membership.kind === ExecutionSubjectMembershipKinds.Fleet
+		&& subject.requester.requesterPrincipalId === subject.principalId
+		&& subject.siloId === snapshot.siloId
 		&& subject.principalId.trim().length > 0
 		&& subject.identity.agentIdentityId === subject.agentIdentityId
 		&& subject.identity.principalId === subject.principalId

@@ -24,7 +24,7 @@ export interface ConversationComputerCredentialCustody
 export interface ConversationComputerCredentialPersistenceRepository
 {
 	prepare(input: ConversationComputerCredentialIssueCommand): Promise<{ readonly outcome: "claim"; readonly fence: string } | { readonly outcome: "alias_cleanup" | "custody" | "ready" | "expired"; readonly row: ConversationComputerCredentialCustody }>;
-	storeCustody(input: ConversationComputerCredentialIssueCommand, fence: string, encrypted: { readonly keyId: string; readonly nonce: Uint8Array; readonly authTag: Uint8Array; readonly ciphertext: Uint8Array; readonly ciphertextDigest: string }, credentialDigest: string): Promise<void>;
+	storeCustody(input: ConversationComputerCredentialIssueCommand, fence: string, encrypted: { readonly keyId: string; readonly nonce: Uint8Array; readonly authTag: Uint8Array; readonly ciphertext: Uint8Array; readonly ciphertextDigest: string }, credentialDigest: string, expiresAt: string): Promise<void>;
 	finalize(input: ConversationComputerCredentialIssueCommand, fence: string): Promise<void>;
 	markAliasCleanup(bootstrapId: string, fence: string): Promise<ConversationComputerCredentialCustody | null>;
 	forget(bootstrapId: string, fence: string): Promise<void>;

@@ -1,7 +1,6 @@
-import type { ExecutionSubject } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { z } from "zod";
 
-import type { ExecutionSubjectVerificationContext } from "./execution-subject.validator.types";
 
 /** Validates one bounded opaque identifier. */
 function _IsIdentifier(value: unknown): value is string
@@ -30,15 +29,20 @@ const _InstantSchema = z.string().datetime({ offset: true });
 /** Shared schema for positive safe integer revisions and generations. */
 const _PositiveIntegerSchema = z.number().int().positive().safe();
 
-/** Shared schema for zero-based Kurrent stream revisions. */
-const _NonNegativeIntegerSchema = z.number().int().nonnegative().safe();
-
 /** Shared schema for an exact nonnegative Kurrent stream revision serialized in canonical decimal. */
 const _KurrentRevisionSchema = z.string().regex(/^(0|[1-9][0-9]*)$/u);
 
 /** Verifies that all duplicated evidence and scope coordinates bind to one trusted subject. */
 function _ValidateSubjectBindings(subject: ExecutionSubject, context: z.RefinementCtx): void
 {
+	if (subject.requester.membership.principalId !== subject.requester.requesterPrincipalId || subject.requester.membership.siloId !== subject.siloId)
+	{
+		context.addIssue({ code: z.ZodIssueCode.custom, path: ["requester", "membership"], message: "requester membership must bind the authenticated requester and silo" });
+	}
+	if (subject.membership.kind === ExecutionSubjectMembershipKinds.Managed && (subject.membership.agentServiceId !== subject.runScope.agentServiceId || subject.membership.agentRevisionId !== subject.runScope.agentRevisionId))
+	{
+		context.addIssue({ code: z.ZodIssueCode.custom, path: ["membership"], message: "managed membership must bind the admitted service and revision" });
+	}
 	if (subject.identity.agentIdentityId !== subject.agentIdentityId)
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["identity", "agentIdentityId"], message: "identity evidence must bind the execution subject identity" });
@@ -57,69 +61,27 @@ function _ValidateSubjectBindings(subject: ExecutionSubject, context: z.Refineme
 	}
 }
 
-/** Verifies that one structurally valid subject still matches the current authority snapshot. */
-function _ValidateCurrentAuthority(subject: ExecutionSubject, current: ExecutionSubjectVerificationContext): boolean
-{
-	return subject.siloId === current.siloId
-		&& subject.agentIdentityId === current.agentIdentityId
-		&& subject.principalId === current.principalId
-		&& subject.identity.headRevision === current.identityHeadRevision
-		&& subject.identity.headDigest === current.identityHeadDigest
-		&& subject.identity.decisionEvidenceId === current.identityDecisionEvidenceId
-		&& subject.identity.verifiedAt === current.identityVerifiedAt
-		&& subject.membership.revision === current.membershipRevision
-		&& subject.membership.assertionId === current.membershipAssertionId
-		&& subject.membership.payloadDigest === current.membershipPayloadDigest
-		&& subject.membership.decisionEvidenceId === current.membershipDecisionEvidenceId
-		&& subject.membership.trustedUntil === current.membershipTrustedUntil
-		&& subject.capability.capabilitySetDigest === current.capabilitySetDigest
-		&& subject.capability.effectiveContractDigest === current.effectiveContractDigest
-		&& subject.capability.decisionEvidenceId === current.capabilityDecisionEvidenceId
-		&& subject.capability.decidedAt === current.capabilityDecidedAt
-		&& subject.runScope.runId === current.runId
-		&& subject.runScope.attempt === current.attempt
-		&& subject.runScope.agentServiceId === current.agentServiceId
-		&& subject.runScope.agentRevisionId === current.agentRevisionId
-		&& subject.computerScope.computerId === current.computerId
-		&& subject.computerScope.leaseId === current.computerLeaseId
-		&& subject.computerScope.leaseGeneration === current.computerLeaseGeneration
-		&& subject.requester.requesterPrincipalId === current.requesterPrincipalId
-		&& subject.requester.requestIdempotencyKey === current.requestIdempotencyKey
-		&& subject.requester.authenticatedAt === current.requesterAuthenticatedAt
-		&& subject.admission.authorizingPrincipalId === current.authorizingPrincipalId
-		&& subject.admission.decisionEvidenceId === current.admissionDecisionEvidenceId
-		&& subject.admission.admittedAt === current.admissionAdmittedAt
-		&& Date.parse(subject.membership.trustedUntil) > current.nowEpochMilliseconds;
-}
+/** Validates signed human membership evidence; its signature and current status are checked by the authority. */
+const _FleetMembershipSchema = z.object({ kind: z.literal(ExecutionSubjectMembershipKinds.Fleet), principalId: _PrincipalIdentifierSchema, siloId: _IdentifierSchema, revision: _PositiveIntegerSchema, assertionId: _IdentifierSchema, payloadDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, trustedUntil: _InstantSchema }).strict();
 
-/** Strict wire schema for one evidence-bound execution subject. */
+/** Validates a managed Principal binding; current service state and grants are checked by the authority. */
+const _ManagedMembershipSchema = z.object({ kind: z.literal(ExecutionSubjectMembershipKinds.Managed), principalId: _PrincipalIdentifierSchema, siloId: _IdentifierSchema, agentServiceId: _IdentifierSchema, agentRevisionId: _IdentifierSchema, agentRevisionDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, trustedUntil: _InstantSchema }).strict();
+
+/**
+ * Validates execution-subject structure and matching coordinates, rejecting unknown fields.
+ * Parsing does not verify signatures, expiry, or current authority. Admission and runtime
+ * authorities must check current identity, membership, grants and lease state before using it.
+ */
 export const ___ExecutionSubjectSchema: z.ZodType<ExecutionSubject> = z.object({
 	schemaVersion: z.literal(1),
 	siloId: _IdentifierSchema,
 	agentIdentityId: _IdentifierSchema,
 	principalId: _PrincipalIdentifierSchema,
 	identity: z.object({ agentIdentityId: _IdentifierSchema, principalId: _PrincipalIdentifierSchema, siloId: _IdentifierSchema, headRevision: _KurrentRevisionSchema, headDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, verifiedAt: _InstantSchema }).strict(),
-	membership: z.object({ principalId: _PrincipalIdentifierSchema, siloId: _IdentifierSchema, revision: _PositiveIntegerSchema, assertionId: _IdentifierSchema, payloadDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, trustedUntil: _InstantSchema }).strict(),
+	membership: z.discriminatedUnion("kind", [_FleetMembershipSchema, _ManagedMembershipSchema]),
 	capability: z.object({ agentIdentityId: _IdentifierSchema, computerId: _IdentifierSchema, capabilitySetDigest: _DigestSchema, effectiveContractDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, decidedAt: _InstantSchema }).strict(),
 	runScope: z.object({ siloId: _IdentifierSchema, runId: _IdentifierSchema, attempt: _PositiveIntegerSchema, agentServiceId: _IdentifierSchema, agentRevisionId: _IdentifierSchema }).strict(),
 	computerScope: z.object({ siloId: _IdentifierSchema, computerId: _IdentifierSchema, leaseId: _IdentifierSchema, leaseGeneration: _PositiveIntegerSchema }).strict(),
-	requester: z.object({ siloId: _IdentifierSchema, requesterPrincipalId: _PrincipalIdentifierSchema, requestIdempotencyKey: _IdentifierSchema, authenticatedAt: _InstantSchema }).strict(),
+	requester: z.object({ siloId: _IdentifierSchema, requesterPrincipalId: _PrincipalIdentifierSchema, requestIdempotencyKey: _IdentifierSchema, authenticatedAt: _InstantSchema, membership: _FleetMembershipSchema }).strict(),
 	admission: z.object({ authorizingPrincipalId: _PrincipalIdentifierSchema, decisionEvidenceId: _IdentifierSchema, admittedAt: _InstantSchema }).strict(),
 }).strict().superRefine(_ValidateSubjectBindings) as z.ZodType<ExecutionSubject>;
-
-/**
- * Parses an execution subject only when it still binds the current authority snapshot.
- *
- * Runtime dispatch calls this for both the assignment and frozen snapshot before it sends work to a
- * computer. The caller obtains `current` from the same trusted authority read that admits or
- * resumes work; this parser never turns requester provenance into authorization on its own.
- *
- * Called by: `_ExecutionSubjectFromRows` in `prisma-runtime-dispatch-repository.ts`.
- */
-export function ___ParseExecutionSubject(value: unknown, current: ExecutionSubjectVerificationContext): ExecutionSubject | null
-{
-	const parsed = ___ExecutionSubjectSchema.safeParse(value);
-	if (!parsed.success)
-		return null;
-	return _ValidateCurrentAuthority(parsed.data, current) ? parsed.data : null;
-}

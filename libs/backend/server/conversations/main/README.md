@@ -30,6 +30,35 @@ even after its computer has started; a new UUID creates another conversation and
 same personal assistant identity. Reusing a key with a different assistant is rejected. Recovering
 an existing projection preserves its lifecycle and current grants, including any revoked access.
 
+A group member can select one of their own text messages and ask the company assistant to work on
+it in a shared child conversation. The source must be visible to every current group member; a
+private message or a message older than a member's joining point cannot silently become shared.
+The child keeps the admitted audience and the company's managed identity. It inherits no member's
+personal tools, persona or memory. The parent group remains an ordinary conversation without its
+own agent identity. Retrying an admitted request after somebody joins preserves that original
+audience and rechecks the caller's current source and child access.
+
+Creation returns a pending request. PostgreSQL stores only the immutable command, source coordinates,
+selected service and audience, together with its durable recovery task. The worker establishes the
+child's Kurrent history and cold computer before creating its read projection. It then encrypts a
+copy of the selected text and commits the child message together with its activation request.
+Only that completed sequence makes the child ready. Retries verify the same origin, preserve
+existing grants and ciphertext, and do not reactivate the same message. Revoked authority closes the
+request; exhausted dependency retries report unavailable. The list returns the latest 100 admitted requests. A new run still requires an active,
+Pod-bound lease and the selected company's current execution authority.
+
+Child lists, breadcrumbs, history, event streams and prompt decryption require continuing access to
+both child and parent. Rejoining the group does not expose a request before the new joining point.
+The directory offers only company assistants whose current identity and invocation permission are
+ready. Group participants receive the central Delegate capability; direct and personal sessions do
+not gain that capability from this participant policy.
+
+Returning a result is a separate human action. The member reviews or edits a completed assistant
+answer, then shares that text as their own group message. The server verifies the child source,
+links the parent reply to the original request and binds the retry UUID to the exact reviewed text.
+It encrypts a new parent payload instead of copying private child references. The assistant receives
+no automatic writer to the parent group.
+
 ```
  authenticated participant
           │ directory · list · create · history · message · archive · close
@@ -63,6 +92,15 @@ server-resolved coordinates. That port owns durable run assembly and returns the
 input. A denial fails bootstrap closed; the conversation package never creates an execution subject
 or treats computer-supplied coordinates as authority.
 
+Every bootstrap, including a retry of a stored turn, recomputes the remaining original run deadline
+and execution/requester membership expiry, then shortens that bound to the current lease. Key
+issuance uses this absolute limit and a maximum five-minute lifetime. Encrypted custody records the
+provider's reported expiry, and a reused key beyond the refreshed bound is revoked before a new key
+is handed out. A key without a valid, sufficiently short reported expiry is rejected and revoked.
+Grant revocation closes the next bootstrap, output and participant read; an already issued provider
+key can remain usable until its verified expiry or explicit revocation. There is no separate live
+permission check on every model request.
+
 Attempt-key issuance uses the configured silo authority independently of the Kubernetes namespace.
 It commits encrypted custody before a separate ready-state promotion. If promotion and immediate
 provider cleanup both fail, the custodied row remains decryptable for a later cleanup or retry.
@@ -80,8 +118,7 @@ metadata before one append. It accepts only opaque participant-entry references,
 requested audience through a current visibility policy, rejects an attestation from the computer,
 enforces a byte and rate budget, rechecks the active lease before each physical append, and cannot
 read history, select a different stream, or append a second distinct entry. A response-lost retry
-reuses the originally stamped source command and entry bytes. It remains uncomposed until the direct KurrentDB
-conversation-authority replacement can delete the relational writer in the same slice.
+reuses the originally stamped source command and entry bytes. The conversation-computer turn composition supplies this writer only after current lease and run admission.
 
 `ConversationComputerHistory` owns the separate deterministic KurrentDB stream for the logical
 computer itself. It accepts complete, closed computer and lease snapshots only through the narrow
@@ -111,9 +148,10 @@ The directory and create transaction also use the central product catalogue. Sel
 references require exact `OrganizationMembership/Read`; an agent target requires
 `AgentService/Read` and admitted `AgentService/Invoke`, while the approved persona requires admitted
 `Persona/Use`. The create itself consumes the silo's typed `ConversationCollection/Create` grant.
-The same transaction writes participant grants for Discover, Read, Edit and Use, plus Delete only
+The same transaction writes participant grants for Discover, Read, Edit and Use, plus Delegate for
+groups and Delete only
 for the new conversation's creator. Existing conversations without trustworthy creator provenance
-remain fail-closed for Delete after migration.
+remain fail-closed for Delete.
 
 Every conversation read and mutation evaluates the caller's current Principal plus direct stored
 Group memberships through `AuthorizationAuthority`. A direct Principal grant and an inherited Group
@@ -162,6 +200,11 @@ where a command needs them) says which realization; `AgentScope` (`agentServiceI
 that only know the silo, computer id and lease use `ConversationComputerLeaseCoordinates`.
 
 ## Public surface
+
+`PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose the explicit
+shared group-child journey and its durable recovery worker. The public routes are
+`POST/GET /me/conversations/{conversationId}/children` and
+`POST /me/conversations/{conversationId}/share`; ordinary detail adds a nullable `parent` origin.
 
 - `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, message,
   history, archive, and close API over Prisma and KurrentDB. All

@@ -4,9 +4,9 @@
 
 ## What it owns
 
-This package owns immutable `AgentService` revisions and the narrow transaction-bound operations
-used by personal-agent onboarding and configuration. It does not expose an HTTP management API,
-schedule agents, or admit managed run-now requests in the 0.11.0 baseline.
+This package owns immutable `AgentService` revisions, personal-assistant configuration, and explicit
+setup of one company assistant per silo. The company assistant can be selected for a group child
+conversation once its published revision, identity, model permission and the caller's access are ready.
 
 A personal service is created during onboarding with one published revision. Later persona or model
 selection changes append and publish another immutable revision rather than editing history. The
@@ -17,6 +17,16 @@ The package also owns personal execution evidence. Admission proves that the per
 active, its requested revision is still published and active, current signed membership realizes the
 requester, and the central authority permits invocation and every frozen revision boundary. The
 result is immutable decision evidence for one run; it is not a reusable grant.
+
+A company assistant acts through its own stable Internal Principal. Its evidence binds the current
+service, published revision and model-use decision. The requesting human has separate signed fleet
+membership evidence and must currently be allowed to invoke the service. Internal Principals do not
+need a fabricated fleet membership assertion: PostgreSQL service authority and checked identity
+history supply their current binding. Neither evidence form grants access by itself.
+
+The first company revision has no persona, skills, tools, memory or knowledge-boundary assignments.
+Its deployment-owned profile and budget use a selected model. Admission rejects extended revisions
+until those capabilities have a supported company policy.
 
 ## Public surface
 
@@ -29,21 +39,45 @@ result is immutable decision evidence for one run; it is not a reusable grant.
 - `PrismaRuntimeAgentEffectEligibilityAuthority` rechecks the active service and revision before an
   external runtime effect.
 - `__ExecutionCapabilityEvidence` canonicalizes the immutable personal execution evidence digest.
+- `PrismaManagedExecutionEvidenceRepository` and `ManagedExecutionEvidenceAuthority` independently
+  admit the human's invocation and the company Principal's model use.
+- `PrismaManagedAgentConversationResolver` resolves a ready company assistant and filters the
+  discovery list through current Discover, Read and Invoke permissions.
+- `PrismaCompanyAssistantProvisioningUnitOfWork` and `_CreateCompanyAssistantProvisioningRouter`
+  provide explicit administrator setup, including checked identity establishment after commit.
 
-The app supplies transaction-scoped dependencies. This package never opens a second cross-domain
-transaction and never exposes Prisma delegates to callers.
+The app supplies transaction-scoped dependencies for admission and revision changes. Company setup
+owns its Serializable transaction and retries up to three unique-create or serialization conflicts.
+It establishes identity history only after PostgreSQL commits; no Prisma delegates reach callers.
+
+## Company assistant setup
+
+An authenticated operator calls `POST /api/v1/organization/company-assistant` with `name`,
+`modelDefinitionId`, and explicit `invokerPrincipalIds`. These are current local human Principal IDs,
+not email addresses or membership-directory references. This is an operator API; there is no company
+assistant management screen in this slice. The caller needs Organization Administer and selected
+Model Use. Every selected invoker must be a current active member of the same silo.
+
+The first committed setup grants selected humans Discover, Read and Invoke on that exact assistant;
+the assistant's own Principal receives Use on the selected model. It creates no silo-wide grant.
+The response returns `created: true` and the public assistant reference after identity establishment.
+An existing assistant returns `created: false`: changed choices are not applied, revoked grants are
+not restored, and paused or retired services are not revived. A failed identity append can be retried
+from the committed service and first revision; suspended or revoked identities remain unavailable.
 
 ## Data and persistence
 
 The package uses `AgentService`, `AgentRevision`, revision boundary attachments, skill assignments,
-and MCP tool assignments from `apps/opencrane/prisma/schema/agent-services.prisma`. It owns no
-scheduling table in the 0.11.0 baseline.
+and MCP tool assignments from `apps/opencrane/prisma/schema/agent-services.prisma`. Company setup
+also creates one Internal Principal and exact managed authorization grants. Its stable managed
+identity is stored through `AgentIdentityHistory`, rather than a parallel relational identity record.
 
 ## Dependency direction
 
 Tagged `scope:agent-services`, this package may depend on shared agent models, audit, authentication,
-authorization, membership, and shared utilities. It does not depend on an app, scheduling worker, or
-the execution-runs package.
+authorization, membership, checked IAM identity history, the history-store append contract, and
+shared utilities. IAM identity and history-store do not depend back on this package. It does not
+depend on an app, scheduling worker, or the execution-runs package.
 
 ## See also
 

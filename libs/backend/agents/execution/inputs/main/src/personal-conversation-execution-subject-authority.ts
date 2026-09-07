@@ -1,6 +1,6 @@
 import type { PersonalExecutionEvidenceTransaction } from "@opencrane/backend/server/agents/agent-services";
 import { PersonalExecutionEvidenceDenialReasons } from "@opencrane/backend/server/agents/agent-services";
-import type { ExecutionSubject } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 
 import type { ExecutionSubjectAuthority, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 import type { PersonalConversationExecutionSubjectCoordinates, PersonalConversationExecutionSubjectDependencies } from "./personal-conversation-execution-subject-authority.types";
@@ -59,17 +59,18 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 			return { outcome: "denied", reason: "identity_unavailable" };
 
 		// The stored execution subject keeps `computerScope` flat with `leaseId` and `leaseGeneration`: PostgreSQL triggers read that shape.
+		const membership = { kind: ExecutionSubjectMembershipKinds.Fleet as const, principalId: coordinates.requesterPrincipalId, siloId: command.siloId, revision: value.membership.revision, assertionId: value.membership.assertionId, payloadDigest: value.membership.payloadDigest, decisionEvidenceId: value.membership.assertionId, trustedUntil: value.membership.trustedUntil };
 		return { outcome: "loaded", value: {
 			schemaVersion: 1,
 			siloId: command.siloId,
 			agentIdentityId: computer.agentIdentityId,
 			principalId: coordinates.requesterPrincipalId,
 			identity: { agentIdentityId: computer.agentIdentityId, principalId: coordinates.requesterPrincipalId, siloId: command.siloId, headRevision: currentIdentity.revision.toString(10), headDigest: currentIdentity.headDigest, decisionEvidenceId: currentIdentity.headEventId, verifiedAt: transaction.admittedAt },
-			membership: { principalId: coordinates.requesterPrincipalId, siloId: command.siloId, revision: value.membership.revision, assertionId: value.membership.assertionId, payloadDigest: value.membership.payloadDigest, decisionEvidenceId: value.membership.assertionId, trustedUntil: value.membership.trustedUntil },
+			membership,
 			capability: { agentIdentityId: computer.agentIdentityId, computerId: computer.computerId, capabilitySetDigest: value.capability.effectiveBoundaryAttachmentDigest, effectiveContractDigest: value.capability.effectiveContractDigest, decisionEvidenceId: value.admissionDecisionDigest, decidedAt: transaction.admittedAt },
 			runScope: { siloId: command.siloId, runId: command.runId, attempt: 1, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId },
 			computerScope: { siloId: command.siloId, computerId: computer.computerId, leaseId: lease.leaseId, leaseGeneration: lease.leaseGeneration },
-			requester: { siloId: command.siloId, requesterPrincipalId: coordinates.requesterPrincipalId, requestIdempotencyKey: command.requestIdempotencyKey, authenticatedAt: command.requester.authenticatedAt },
+			requester: { siloId: command.siloId, requesterPrincipalId: coordinates.requesterPrincipalId, requestIdempotencyKey: command.requestIdempotencyKey, authenticatedAt: command.requester.authenticatedAt, membership },
 			admission: { authorizingPrincipalId: coordinates.requesterPrincipalId, decisionEvidenceId: value.admissionDecisionDigest, admittedAt: transaction.admittedAt },
 		} };
 	}

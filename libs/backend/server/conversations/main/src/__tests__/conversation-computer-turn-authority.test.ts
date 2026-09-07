@@ -60,6 +60,7 @@ function _Harness() {
           modelAlias: "testv5-default",
           maximumBudgetUsd: 0.1,
           credentialLifetimeSeconds: 300,
+          credentialExpiresAt: "2099-01-01T00:00:00.000Z",
           lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
         }),
       assertCurrent: vi.fn().mockResolvedValue(undefined),
@@ -243,6 +244,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       modelAlias: "testv5-default",
       maximumBudgetUsd: 0.1,
       credentialLifetimeSeconds: 300,
+          credentialExpiresAt: "2099-01-01T00:00:00.000Z",
       lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
     });
     await expect(authority.bootstrap(command)).rejects.toThrow(
@@ -265,4 +267,14 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     ).rejects.toThrow(/stale lease/);
     expect(dependencies.credentials.issueOrRotate).not.toHaveBeenCalled();
   });
+  it("uses the fresh absolute authority bound when a stored bootstrap retries", async function () {
+    const { authority, dependencies } = _Harness();
+    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD };
+    await authority.bootstrap(command);
+    const candidate = await dependencies.candidates.resolve(command);
+    dependencies.candidates.resolve.mockResolvedValue({ ...candidate, credentialLifetimeSeconds: 20, credentialExpiresAt: "2026-09-07T00:00:20.000Z" });
+    await authority.bootstrap(command);
+    expect(dependencies.credentials.issueOrRotate).toHaveBeenLastCalledWith(expect.objectContaining({ expirySeconds: 20, notAfter: "2026-09-07T00:00:20.000Z" }));
+  });
+
 });

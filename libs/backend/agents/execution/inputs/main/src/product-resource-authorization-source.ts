@@ -1,5 +1,5 @@
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
-import type { ExecutionSubject } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { ApprovedPersonaInput, MemoryScopeInput, ProductResourceAuthorizationSource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput } from "./session-assembly.types";
@@ -21,7 +21,8 @@ export class TransactionBoundProductResourceAuthorizationSource implements Produ
 		const conversation = await this.verifyExisting(command, executionSubject, transaction);
 		if (conversation.outcome === "denied")
 			return conversation;
-		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind: "workload", actorId: executionSubject.agentIdentityId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision: executionSubject.membership.revision, nowEpochMs: transaction.admittedAtEpochMs })));
+		const membershipRevision = executionSubject.membership.kind === ExecutionSubjectMembershipKinds.Fleet ? executionSubject.membership.revision : undefined;
+		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind: "workload", actorId: executionSubject.agentIdentityId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision, nowEpochMs: transaction.admittedAtEpochMs })));
 		return admissions.length === resources.length ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
 	}
 
@@ -33,7 +34,8 @@ export class TransactionBoundProductResourceAuthorizationSource implements Produ
 		if (transaction.authorization === undefined)
 			return { outcome: "denied", reason: "product_authorization_unavailable" };
 		const argumentsDigest = ___DigestCanonicalJson({ runId: command.runId, attempt: 1, siloId: command.siloId, agentServiceId: command.agentServiceId, agentRevisionId: executionSubject.runScope.agentRevisionId, conversationId: command.conversationId, requestIdempotencyKey: command.requestIdempotencyKey } as JsonValue);
-		const conversation = await transaction.authorization.admitPrincipal({ siloId: command.siloId, principalId: executionSubject.principalId, actorKind: "user", actorId: executionSubject.principalId, action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: command.conversationId }, argumentsDigest, membershipRevision: executionSubject.membership.revision, nowEpochMs: transaction.admittedAtEpochMs });
+		const requester = executionSubject.requester;
+		const conversation = await transaction.authorization.admitPrincipal({ siloId: command.siloId, principalId: requester.requesterPrincipalId, actorKind: "user", actorId: requester.requesterPrincipalId, action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: command.conversationId }, argumentsDigest, membershipRevision: requester.membership.revision, nowEpochMs: transaction.admittedAtEpochMs });
 		return conversation.outcome === AuthorizationDecisionOutcomes.Allow && conversation.evidence !== null ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
 	}
 }
