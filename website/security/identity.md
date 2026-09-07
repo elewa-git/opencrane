@@ -17,7 +17,7 @@ An agent acts through its resolved **AgentIdentity** and current Principal, neve
 who clicked run. A proxied identity is constrained by its current delegation ceiling; a constructed
 managed identity has its own Principal and grants. Neither may pick up a different Principal's
 direct grants or derive execution authority from the requester. See
-[the personal/managed distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
+[the product concepts](/guide/introduction#the-five-parts-of-the-product).
 
 ## Workload identity
 

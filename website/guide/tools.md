@@ -1,44 +1,32 @@
-# Manage tools with MCP
+# Connect company tools
 
-A **tool** lets an agent reach into another system — send a message, update a record, search a
-calendar. OpenCrane uses the Model Context Protocol (MCP) to register those integrations, and
-keeps the approval decision and the record of every call outside the runtime that proposes it: a
-compromised or misbehaving agent run cannot widen its own tool access.
+A **tool** lets an assistant ask for an action in another system, such as searching customer
+records or updating a ticket. OpenCrane uses the Model Context Protocol (MCP) to describe these
+integrations.
 
-Both kinds of agent use the same tool machinery — your personal assistant can only use the tools
-granted to *you*; a managed agent can only use the tools its published revision was configured
-with.
-
-## Govern a tool
-
-Use the authenticated `/api/v1/mcp` surface to browse, install and govern MCP definitions. The
-public API does not expose a separate unsiloed registry or credential inventory. Retrieve current
-payloads through the [API reference](/reference/api).
-
-## Grant it
-
-A registration is not a grant. Allow the required tool revision for both the acting subject
-and the agent service. New runs freeze the resulting capability set.
-
-## Execute safely
-
-The runtime proposes a tool call. OpenCrane validates the run proof and arguments, opens an
-approval when required and saves the invocation before work starts. After approval OpenCrane issues
-one claim for the exact admitted OCI MCP image. A dedicated executor Job saves the checked result
-before the runtime can continue.
-
-::: info
-The uploaded MCP server receives no OpenCrane token, Service or ingress. A fixed companion owns the
-short-lived workload token and accepts only MCP `2026-07-28` over Pod-local networking.
+::: info Current scope
+The catalogue, immutable package import and governed MCP execution services are implemented.
+The 0.11 personal-conversation model loop does not yet invoke them. Installing a tool does not
+make it usable from assistant chat. See [development status](/guide/status).
 :::
 
-::: tip
-Revoking a grant changes future decisions. It does not rewrite the evidence of an action that
-an earlier run already completed.
-:::
+## Prepare an integration
 
-## Going deeper
+Administrators use the authenticated `/api/v1/mcp` surface to browse, install and manage MCP
+definitions. Consult the [API reference](/reference/api) for current payloads and the
+[OCI MCP guide](/integrators/oci-mcp-runtime) for the supported package format.
 
-See the [OCI MCP runtime deep dive](/integrators/oci-mcp-runtime),
-[governed packages and container images](/integrators/governed-packages), and the
-[central authorization authority](/integrators/authorization-authority).
+Decide which tools are needed, who may use them, and which actions require approval. Registration
+alone does not grant access.
+
+## The intended action journey
+
+When the conversation integration is complete, an assistant will propose a tool call. OpenCrane
+will check its permissions, request approval when required, execute the admitted action and return
+a recorded result. The assistant will not approve its own action.
+
+Revocation changes later permission decisions. It does not erase a record of an action that
+already completed.
+
+> See also: [Access controls](/guide/permissions) · [Review activity](/guide/audit) ·
+> [Governed packages](/integrators/governed-packages)

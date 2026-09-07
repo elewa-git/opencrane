@@ -1,23 +1,29 @@
 # Review activity
 
-Every run — your personal assistant's or a managed agent's — leaves a full trail: who or what
-triggered it, exactly what it was allowed to use, every action it took along the way, and how it
-ended. You can always answer "what did this agent do, and who let it" without guessing.
+OpenCrane records **who requested work, which access decision allowed it and what outcome was
+saved**. The goal is to let an authorised reviewer understand an action without reconstructing
+it from a temporary computer's logs.
 
-## What to inspect
+## What is available
 
-- agent service and immutable revision;
-- organisation and delegated subject;
-- run state, attempt and terminal reason;
-- frozen input and capability digests;
-- approval requests, authorization decision evidence and ToolInvocations;
-- token use, cost and cancellation evidence; and
-- ordered conversation events where the caller is authorised to replay them.
+The backend exposes an authenticated `/api/v1/audit` surface. Use the
+[API reference](/reference/api) for filters and pagination. The current UI does not provide a
+complete audit view.
 
-Use the authenticated `/api/v1/audit` surface. Retrieve current filters and pagination from
-the [API reference](/reference/api); the current UI does not expose an audit view.
+Conversation history and computer lifecycle evidence are also stored. The presence of these
+records does not mean every planned tool, approval or shared-agent journey is complete.
 
-::: tip
-Search by run id first. Pod names are replaceable execution details and do not identify the
-durable product record.
-:::
+## What a useful review should answer
+
+- Who asked for the work?
+- Which assistant and company resources were involved?
+- Was a person's decision required?
+- Did the action complete, fail or remain waiting?
+- Where is the resulting conversation or file?
+
+The full product experience for reviewing these answers remains part of
+[development status](/guide/status). Technical event identifiers and permission evidence belong
+in the [authorisation reference](/integrators/authorization-authority).
+
+> See also: [Access controls](/guide/permissions) · [Tools](/guide/tools) ·
+> [Architecture](/advanced/architecture)

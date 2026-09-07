@@ -10,26 +10,57 @@ platform configuration API.
 
 ## Use the deploy entrypoint
 
-Start with the silo deploy command. It supplies the release-scoped database secrets, host, and OIDC
-settings rather than asking you to repeat those values in a file.
+Use the app-owned deploy command. Populate these variables from your target configuration and
+published build output; the example does not invent a usable image digest or credential. Supply
+`OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and the confidential-client secret through your approved secret
+process before running it. The first-owner email must match a verified sign-in email.
 
 ```bash
 apps/_infra/deploy-k8s/deploy.sh \
-  --base-domain opencrane.example.com \
-  --cluster-tenant acme \
-  --acme-email operator@example.com \
-  --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
+  --base-domain "$OPENCRANE_BASE_DOMAIN" \
+  --cluster-tenant "$OPENCRANE_CLUSTER_TENANT" \
+  --acme-email "$OPENCRANE_ACME_EMAIL" \
+  --first-user-email "$OPENCRANE_FIRST_USER_EMAIL" \
+  --image-tag "$OPENCRANE_BUILD_TAG" \
+  --opencrane-ui-digest "$OPENCRANE_UI_DIGEST" \
+  --cognee-digest "$OPENCRANE_COGNEE_DIGEST" \
+  --postgres-credentials-secret "$OPENCRANE_POSTGRES_SECRET" \
+  --litellm-postgres-credentials-secret "$OPENCRANE_LITELLM_POSTGRES_SECRET" \
+  --postgres-admin-credentials-secret "$OPENCRANE_POSTGRES_ADMIN_SECRET" \
+  --values "$OPENCRANE_VALUES_FILE"
 ```
 
-Use a values overlay for a repeatable environment choice. The deploy engine layers it over the chart
-defaults and preserves existing release overrides on upgrades.
+The build tag must identify a published `sha-*` build. Image digests must be exact `sha256:`
+references; named database Secrets must already exist and use distinct credentials. Use a values
+overlay for repeatable environment choices. The deploy engine layers it over chart defaults and
+preserves existing release overrides on ordinary application updates.
 
-```bash
-apps/_infra/deploy-k8s/deploy.sh ... \
-  --values apps/_infra/deploy-k8s/platform/values/gcp-extras.yaml
-```
+## Conversation execution profile
+
+Generic defaults disable `historyStore.kurrentdb` and `agentSandbox`. The current wrapper enables
+and checks the conversation profile for the named `testv5` target. Other tenant names require an
+explicitly reviewed values profile and the same prerequisites; do not rename a real tenant to
+select development defaults.
+
+For `testv5`, the wrapper reads these additional environment variables (equivalent CLI flags are
+listed in the source). Store the non-secret configuration in your environment profile and supply
+only Secret names here:
+
+| Inputs | Variables |
+|---|---|
+| History image | `OPENCRANE_KURRENTDB_IMAGE_DIGEST` |
+| History Secrets | `OPENCRANE_KURRENTDB_TLS_SECRET`, `OPENCRANE_KURRENTDB_BOOTSTRAP_ADMIN_SECRET`, `OPENCRANE_KURRENTDB_BOOTSTRAP_OPS_SECRET`, `OPENCRANE_KURRENTDB_SERVICE_CREDENTIAL_SECRET` |
+| Bootstrap image | `OPENCRANE_KURRENTDB_BOOTSTRAP_IMAGE_REPOSITORY`, `OPENCRANE_KURRENTDB_BOOTSTRAP_IMAGE_DIGEST`, `OPENCRANE_KURRENTDB_BOOTSTRAP_IMAGE_PULL_POLICY` |
+| Bootstrap resources | `OPENCRANE_KURRENTDB_BOOTSTRAP_CPU_REQUEST`, `OPENCRANE_KURRENTDB_BOOTSTRAP_MEMORY_REQUEST`, `OPENCRANE_KURRENTDB_BOOTSTRAP_CPU_LIMIT`, `OPENCRANE_KURRENTDB_BOOTSTRAP_MEMORY_LIMIT` |
+| Bootstrap timing | `OPENCRANE_KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS`, `OPENCRANE_KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT`, `OPENCRANE_KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS` |
+| Computer image | `OPENCRANE_AGENT_SANDBOX_IMAGE_DIGEST`, `OPENCRANE_AGENT_SANDBOX_IMAGE_PULL_POLICY`; `OPENCRANE_AGENT_SANDBOX_IMAGE_REPOSITORY` may override the default repository |
+
+The target must already have immutable history Secrets, all four Agent Sandbox CRDs serving and
+storing `v1beta1`, a ready controller with extensions enabled and an approved `gvisor` RuntimeClass.
+The [runbook](/operators/runbook) covers recovery; [development status](/guide/status) distinguishes
+this installation machinery from live qualification.
+
+Source: [`deploy.sh`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/deploy.sh).
 
 ## Umbrella inputs
 

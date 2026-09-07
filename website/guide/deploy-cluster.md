@@ -18,23 +18,16 @@ admission features required by the silo chart.
 
 ## Deploy one organisation silo
 
-```bash
-export OIDC_ISSUER_URL=https://identity.example.com
-export OIDC_CLIENT_ID=<organisation-client-id>
+Use the [deployment configuration](/operators/deployment-configuration#use-the-deploy-entrypoint)
+for the app-owned command and its required identity, first-owner and immutable-image inputs.
+The chart composes the server, UI and supporting services. Cluster-wide controllers remain
+external prerequisites. Create the three PostgreSQL bootstrap Secrets in the target namespace
+before running the script; each must hold distinct credentials.
 
-apps/_infra/deploy-k8s/deploy.sh \
-  --base-domain opencrane.example.com \
-  --cluster-tenant acme \
-  --acme-email operator@example.com \
-  --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
-```
-
-The `opencrane-silo` chart composes the trusted control plane, supporting services,
-agent controller, KurrentDB, an Agent Sandbox computer profile and separate restricted worker namespaces. Cluster-wide controllers remain
-external prerequisites. Create the three named PostgreSQL bootstrap Secrets in the target
-namespace before running the script; each must hold distinct credentials.
+The [conversation execution profile](/operators/deployment-configuration#conversation-execution-profile)
+also enables KurrentDB and Agent Sandbox. These are disabled in generic defaults. The current
+wrapper supplies their checked configuration for `testv5`; another tenant needs an explicitly
+reviewed profile. A successful base installation does not prove that conversation execution works.
 
 Point `<cluster-tenant>.<base-domain>` at the ingress address before deploying. The entrypoint
 uses Let's Encrypt HTTP-01 to obtain the browser-trusted certificate.

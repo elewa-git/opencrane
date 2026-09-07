@@ -40,10 +40,26 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Changed
 
+- **Contributors get dependency-boundary failures before the expensive CI work begins.** Build,
+  API and component jobs keep independent task caches, and implementation guidance assigns
+  specialist reviews according to the changed responsibility.
+
+- **People can understand the product and its development status from the README and website.**
+  The guides distinguish implemented conversation capabilities, remaining MVP work and live
+  qualification, with a single current architecture overview.
+
 - **Operators deploy conversation execution through Agent Sandbox instead of prestarted warm-runtime
   pools.** The 0.11 composition uses release-pinned sandbox profiles, generation-bound claims, and
   durable activation delivery; KurrentDB owns canonical computer history while PostgreSQL retains
   only rebuildable transaction projections.
+
+### Fixed
+
+- **Personal assistants use the preferences people approved during setup.** The runtime now sends
+  the compiled instructions with conversation history to the model instead of dropping them.
+
+- **Employees can find their own personal assistant when colleagues have private assistants too.**
+  The directory selects the caller's assistant before checking its current read permission.
 
 ### Removed
 

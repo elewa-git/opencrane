@@ -370,3 +370,19 @@ Full run reports belong in the corresponding pull request or issue.
   latest` end to end and record the measured RTO, (3) create a `VolumeSnapshotClass` on the dev
   cluster and repeat the drill in `volumeSnapshot` mode, and (4) verify that the restored node
   accepts the copied secondary-index files or document disabling secondary indexing.
+
+## 2026-09-07 · live preflight · testv5 recovery drill · f1a01fbf5 · PARTIAL
+
+- findings: infra: the active context is `gke_weownai-proto_europe-west1_opencrane-dev`.
+  A live namespace inventory contains testv3, testv4, testlynn, and testjos, but no testv5.
+  `kubectl get volumesnapshotclasses.snapshot.storage.k8s.io` returns no classes. No backup or
+  restore has run, so RTO remains unmeasured and anonymous KurrentDB health remains unproven.
+- findings: infra: the Agent Sandbox controller has one available replica, uses the immutable
+  `sha256:ba381b4e0c86cca597d5c5a31860e38d30ec1c45e0a7a8328bb2799c87d059c0` image, and enables
+  the extensions reconciler. This confirms only that prerequisite, not a working conversation.
+- friction: the handoff describes a testv5 drill but the target silo has not been installed on
+  this context. The install requires its own identity configuration and namespace-local bootstrap
+  credentials before a scheduled backup can exist.
+- lesson: establish the fresh-install inputs and supported script path first, then record a real
+  scheduled backup, restore, health probe, and measured RTO. Keep snapshot qualification pending
+  until a suitable VolumeSnapshotClass is available through the authorized infrastructure path.

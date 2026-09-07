@@ -1,55 +1,35 @@
-# Connect organisational knowledge
+# Company knowledge and personal memory
 
-OpenCrane has the authority and schema foundations for governed semantic memory, but the live
-product does not yet ingest knowledge into Cognee or return Cognee recall results to an agent. The
-current administrator API manages a third-party source inventory; it is not a memory-ingestion API.
+**Company knowledge** gives an assistant information it may use for work. **Personal memory** is
+useful context it retains about one person's preferences or ongoing tasks between conversations.
 
-::: tip Current boundary
-Personal dataset identity is bound to the verified silo, organisation and subject at admission.
-That binding is live, but fact retrieval is not. Managed agents currently receive a memory policy
-with scope `none`; organisation, department and project recall remain target capabilities.
+::: info Still being completed
+OpenCrane has memory metadata, permission and gateway foundations, but the current personal
+conversation path does not provide a complete remember, recall, correct and forget journey.
+Shared organisation-memory workflows also remain product work. See [development status](/guide/status).
 :::
 
-## Manage the source inventory
+## Keep the two purposes separate
 
-The authenticated `/api/v1/third-party-sources` API can list, create, update and delete source
-records and their discovered-item metadata. Supported inventory kinds include MCP registries,
-Anthropic Skills, Git repositories and manual uploads. The current UI does not expose this
-administration surface.
+Company knowledge might include product information or approved internal documentation.
+Personal memory might include a person's preferred answer format or the context of their work.
 
-An inventory record describes where knowledge may come from and its observed status. Creating one
-does not ingest its content into Cognee, create a semantic-memory dataset, or make it available in a
-run.
+Neither should become available just because it was uploaded or mentioned. The completed product
+must make clear who can use the information, what was retained and how to change or remove it.
 
-## Memory foundations
+## Source inventory
 
-OpenCrane's memory catalogue models dataset identity, lifecycle, consent, sensitivity, provenance
-and fact digests without duplicating fact text. A personal run can freeze the gateway-native dataset
-coordinates selected from verified identity. The repository also contains an authenticated memory
-gateway client and content-free catalogue commands, but neither the recall client nor a memory
-writer is composed into the production server path.
+Administrators can manage source records through the authenticated
+`/api/v1/third-party-sources` API. These records describe potential sources and discovered-item
+metadata; they do not by themselves ingest content or make it available to an assistant.
 
-## During a run
+Use the [API reference](/reference/api) for the current management contract.
 
-The runtime cannot select an arbitrary personal dataset. A personal agent may propose the
-approval-required `memory_recall` action. OpenCrane verifies the exact participant permission and
-one-use receipt, then stops with `safe_delivery_required` before calling Cognee. No recalled fact
-content reaches the model. Managed agents receive no memory-recall scope, and memory writes remain
-fail closed.
+## What remains
 
-::: info Current memory-recall status
-Run admission freezes only verified dataset coordinates, not a query, fact references or fact text.
-These coordinates constrain a future read; they do not mean a read happened.
-:::
+The product needs complete user journeys for adding useful context, recalling it in a later
+conversation, inspecting what was remembered, and correcting or forgetting it. A healthy memory
+service or saved source record does not demonstrate those outcomes.
 
-::: warning
-Do not treat a healthy source-inventory record, a frozen dataset coordinate or an approved
-permission request as proof that content was ingested or recalled.
-:::
-
-## Going deeper
-
-See [Memory write, manage and read](/integrators/retrieval-memory) for the current and target
-memory loop, provenance, return boundaries and failure behaviour. See
-[Long-term memory, Cognee and dreaming](/integrators/long-term-memory-cognee) for personal versus
-organisation datasets, RBAC and governed consolidation.
+> See also: [Personal-assistant setup](/guide/persona) · [Access controls](/guide/permissions) ·
+> [Memory architecture](/integrators/retrieval-memory)

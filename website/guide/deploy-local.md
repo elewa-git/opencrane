@@ -14,25 +14,15 @@ for evaluation and single-node environments where control-plane downtime is acce
 
 ## Install the silo
 
-Use the same app-owned entrypoint as a production cluster:
+Use the [deployment configuration](/operators/deployment-configuration#use-the-deploy-entrypoint)
+for the current command and required first-owner, image and credential inputs. Keep environment
+choices in a reviewed values profile. The same app-owned script installs the local instance.
 
-```bash
-export OIDC_ISSUER_URL=https://identity.example.com
-export OIDC_CLIENT_ID=<organisation-client-id>
-
-apps/_infra/deploy-k8s/deploy.sh \
-  --base-domain <your-domain> \
-  --cluster-tenant <org-name> \
-  --acme-email operator@example.com \
-  --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
-```
-
-The chart installs trusted services, KurrentDB, one release-owned Agent Sandbox computer profile,
-and restricted worker Job namespaces. Create the three PostgreSQL bootstrap Secrets in the target
-namespace first, using distinct credentials. The testv5 profile also requires the immutable KurrentDB
-Secrets and image digests, an extensions-enabled Agent Sandbox controller and a `gvisor` RuntimeClass.
+Conversation execution additionally needs the
+[history and sandbox profile](/operators/deployment-configuration#conversation-execution-profile).
+Those services are disabled in generic chart defaults; installing the web application alone does
+not produce a working assistant. The current `testv5` wrapper supplies that profile only after its
+specific inputs and prerequisites pass validation.
 
 Point the public host at the ingress address before installing so Let's Encrypt HTTP-01 can issue the
 browser-trusted certificate. Add `--verify` when you want an advisory check of pod readiness,

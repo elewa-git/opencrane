@@ -1,99 +1,100 @@
 # Architecture
 
-OpenCrane is a **durable authority with replaceable execution**. The system is organised
-around organisation silos, immutable conversation history and governed execution.
+OpenCrane separates the **saved company workspace** from the computers that execute assistant work.
+This page maps the current 0.11 owners; [the introduction](/guide/introduction) explains the product
+without implementation detail.
 
-## Control and execution
+> See also: [Conversation computers](/integrators/agent-runtime) (execution and review) ·
+> [Central authorisation](/integrators/authorization-authority) (permission checks) ·
+> [Development status](/guide/status) (implementation and qualification)
 
-```text
-                    ┌─────────────────────────────────────┐
-                    │ OpenCrane control plane                │
-                    │ identity · policy · history · audit    │
-                    └─────────────────┬──────────────────┘
-                                    │ authorised desired state
-                    ┌─────────────────▼──────────────────┐
-                    │ KurrentDB + computer authority      │
-                    │ stream + generation-fenced lease    │
-                    └─────────────────┬──────────────────┘
-                                    │ one checked SandboxClaim
-                    ┌─────────────────▼──────────────────┐
-                    │ conversation computer               │
-                    │ leased Pod, no durable authority    │
-                    └─────────────────┬──────────────────┘
-                                    │ candidates
-                    ┌───────────────▼──────────────────┐
-                    │ governed external-action custody │
-                    └──────────────────────────────────┘
-```
-
-The server appends participant-visible history before it activates a computer. It records one
-generation-bound lease and creates a checked Agent Sandbox claim; the external controller may only
-realise the release-owned Pod profile. The computer receives one frozen pending turn and may propose
-an output, but it cannot append history, choose another identity or approve external actions itself.
-
-## Durable conversation model
+## The current system
 
 ```text
-KurrentDB conversation stream
-├── immutable participant-visible entries
-├── private-payload references and ciphertext digests
-├── membership conditions and safe logs
-└── logical ConversationComputer
-    ├── resolved AgentIdentity
-    ├── admitted profile revision
-    └── zero or one generation-fenced live lease
+                       ┌────────────────────────────┐
+                       │ Web workspace              │
+                       │ conversations and review   │
+                       └──────────────┬─────────────┘
+                                      │ authenticated requests
+                       ┌──────────────▼─────────────┐
+                       │ OpenCrane server           │
+                       │ checks access, admits work │
+                       │ and saves accepted results │
+                       └──────────────┬─────────────┘
+                                      │
+           ┌──────────────────────────┼──────────────────────────┐
+           │                          │                          │
+┌──────────▼───────────┐  ┌───────────▼────────────┐  ┌──────────▼───────────┐
+│ PostgreSQL           │  │ KurrentDB              │  │ Shared services     │
+│ membership, grants   │  │ conversation/computer  │  │ models, tools,      │
+│ and product records  │  │ history and activation │  │ memory and files    │
+└──────────────────────┘  └───────────┬────────────┘  └──────────────────────┘
+                                      │ server admits a claim
+                         ┌────────────▼────────────┐
+                         │ Agent Sandbox           │
+                         │ starts/replaces compute │
+                         └────────────┬────────────┘
+                                      │
+                         ┌────────────▼────────────┐
+                         │ Conversation computer   │
+                         │ model turn, workspace   │
+                         │ and private review      │
+                         └─────────────────────────┘
 ```
 
-PostgreSQL retains rebuildable conversation projections and remains authoritative for current
-memberships, grants and deny rules. Separate AgentRun workers still own scheduled, triggered and
-child-run execution; their lifecycle is not the conversation-computer Pod lifecycle.
+The arrows show responsibility and coordination. The server consumes the activation queue and
+authorises a claim before Agent Sandbox creates compute; KurrentDB does not make permission
+decisions. The conversation computer calls the model through LiteLLM and returns proposed output
+to the server.
 
-## Personal and managed are separate authorities, not a flag
+## What each part owns
 
-The architecture treats *personal* and *managed* as two distinct admission and identity paths that
-happen to share execution governance, not as one code path with a boolean on
-it:
+| Part | Current owner and responsibility |
+|---|---|
+| Web workspace | `apps/opencrane-ui` and `libs/frontend`: conversations, input, history and computer review. |
+| Product server | `apps/opencrane` composes the backend libraries. They check current access, admit work and persist protected changes. |
+| PostgreSQL | Current memberships, groups, grants, agent configuration, transactional product records and rebuildable conversation directory/read projections. Private message payloads are stored separately from immutable history. |
+| KurrentDB | Ordered `conversation-{id}` history, computer lifecycle evidence and durable activation delivery. History entries reference encrypted message payloads. |
+| Conversation compute | `apps/conversation-computer` performs bounded model work and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
+| Models | LiteLLM routes requests to configured providers and brokers scoped model credentials. Providers may be external to the organisation. |
+| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. Connecting them to the conversation model loop remains product work. |
+| Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Complete personal-memory journeys remain unfinished. |
+| Files | The artifact catalogue, `apps/artifact-service`, scanner and preprocessor own stored files, validation and processing. Computer workspace checkpoints use ArtifactStore. |
 
-- **Personal admission** resolves the conversation's AgentIdentity and current Principal, then
-  records the authenticated person only as requester provenance.
-- **Managed admission** resolves its constructed AgentIdentity and own Principal, verifies current
-  membership, and intersects the active revision's exact knowledge and tool attachments with
-  effective grants — it never resolves a human caller as execution authority.
+Source paths are relative to the repository root. The
+[repository map](https://github.com/elewa-git/opencrane/blob/main/README.md#repository-map)
+links the applications and libraries.
 
-A personal run always carries an approved `PersonaRevision`; a managed run never does — its
-published revision is already its complete instruction set. Both share authorization and audit
-conventions, so "what ran and under what authority"
-is answered the same way regardless of which path admitted it.
+## One conversation, recoverable compute
 
-## Isolation
+Every conversation has ordered history. An assistant conversation also has one logical computer.
+Its temporary Pod may be idle, active or absent. A lease identifies the one currently admitted
+computer generation, so a replaced Pod cannot continue submitting work as its successor.
 
-One `ClusterTenant` represents one customer organisation. There is no Kubernetes user resource and
-no standing per-user runtime. A conversation computer is bound to its conversation, AgentIdentity,
-profile revision, lease and generation. AgentRun workers keep their separate admitted execution
-subjects; neither path can borrow the other's authority.
+The server checks current membership and grants in PostgreSQL before protected operations.
+KurrentDB records history and lifecycle evidence. A historical permission decision is not current
+permission.
 
-## Shared services
+Checkpoint and restore preserve the computer's workspace across cooling and replacement.
+Conversation history does not depend on the Pod or browser surviving. Ordinary direct and group
+messages do not activate an assistant computer.
 
-Model routing (via LiteLLM), OCI MCP execution, skill publication, content-addressed
-artifacts and organisation memory (via the memory gateway, backed by Cognee) are control-plane
-services. They expose narrow, authenticated boundaries and do not become alternate run or policy
-authorities. A frozen run snapshot is a maximum; the control plane rechecks current authorization
-before admitting the next external effect.
+## Isolation and external actions
 
-## Module structure
+Each organisation has its own installation boundary. Identity, database, storage and network
+controls restrict access within and across those boundaries. An assistant cannot grant itself
+additional tools or read another person's private work just because it shares infrastructure.
 
-Server-side capabilities are organised as focused, independently buildable libraries rather than
-one large backend package — tenancy, IAM (identity, membership, grants, groups, policies,
-authorization, audit), knowledge, gateways (MCP, model routing, providers, integrations), agent
-definitions and scheduling, personal configuration/memory/personas, execution (admission, inputs,
-runs), skills and artifacts each own their routes, types and Prisma schema slice. An
-`@nx/enforce-module-boundaries` lint rule keeps imports flowing in one direction — a capability may
-depend on its own scope, `scope:shared`, and explicitly approved peers, never a silent cross-domain
-shortcut. See [`docs/agents/monorepo.md`](https://github.com/elewa-git/opencrane/blob/main/docs/agents/monorepo.md)
-for the full placement and dependency rules.
+Tool execution is a separate governed service. The intended model loop proposes actions for the
+server to check and execute; that loop is not yet connected in the current personal-conversation
+runtime. Shared-agent scheduling and group `@agent` child conversations are also unfinished.
 
-→ [Conversation computers](/integrators/agent-runtime) ·
-[Central authorization authority](/integrators/authorization-authority) ·
-[Governed packages and container images](/integrators/governed-packages) ·
-[Organisation boundary](/operators/organisation-boundary) ·
-[Running multiple instances](/advanced/multi-instance)
+## Baseline and evidence
+
+[ADR 0016](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0016-conversation-history-and-computers.md)
+is the architecture of record for 0.11. It supersedes the run-owned warm-Pod lifecycle and
+PostgreSQL transcript. OpenCrane does not add another Kubernetes Pod controller beside Agent Sandbox.
+
+Implemented recovery and backup machinery still needs the live drills listed in
+[development status](/guide/status). Operator inputs and procedures belong in
+[deployment configuration](/operators/deployment-configuration) and the [runbook](/operators/runbook).

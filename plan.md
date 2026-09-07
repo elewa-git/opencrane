@@ -1,5 +1,31 @@
 # OpenCrane — Active Plan
 
+## Delivery focus — 2026-09-07
+
+OpenCrane gives people and teams assistants that can work with company knowledge and tools,
+while the company controls access, data, and spending. MVP means an employee can join, set up an
+assistant, get useful work done, and collaborate in a group without understanding the runtime.
+
+The current review surface is [#826](https://github.com/elewa-git/opencrane/pull/826), based on
+`develop`. Its 0.11 conversation history and computer baseline is implemented; it is not yet a
+live-qualified MVP. [ADR 0016](docs/adr/0016-conversation-history-and-computers.md) supersedes the
+older run-owned runtime and relational transcript descriptions in the historical phases below.
+
+| Work | State and next proof |
+| --- | --- |
+| Repair #772's obsolete stack ancestry | Done: identical patch rebased as `46ce3204e`, PR targets `develop`, live stack checker passes. |
+| Make development checks proportional to the change | CI ordering and independent job caches done (`975b80955`); instruction simplification reviewed. A tested local Stop-hook proposal awaits explicit approval; active hooks are unchanged. |
+| Explain the product and architecture consistently | Done in the review branch: README and website use the vision, current ownership, and built/pending status; website build passes. |
+| Complete onboarding-to-assistant continuity | Persona forwarding and caller-owned directory done (`825ceb3bc`), with regression tests. Complete live onboarding-to-answer proof remains pending. |
+| Make new personal sessions and ordinary group chats usable | Pending: independent idempotent session creation, readable participant names, conversation navigation, and journey proof. |
+| Ask an assistant to work inside a group | Pending: explicit assistant selection, durable child chat, current independent permissions, and safe results delivered to the parent group. |
+| Rebuild channel event reads (#827) | Pending after the 0.11 baseline: participant-authorized Kurrent stream reads with resumable bounded delivery. |
+| Qualify backup and restore on testv5 | Blocked at live preflight: the dev cluster has no testv5 namespace or VolumeSnapshotClass. Record installation prerequisites and real recovery timing in the deploy ledger. |
+
+Completed implementation moves to `plan-done.md`; live evidence belongs in
+[`docs/agents/deploy-ledger.md`](docs/agents/deploy-ledger.md). A green test, a pushed change, a
+deployed image, and a proven user journey are separate facts.
+
 > **Rebased 2026-07-18: direct personal-agent product refactor.** OpenCrane is still being built;
 > there is no production estate to preserve or transition. Implementation detail lives in linked
 > GitHub issues; this file is the sequencing index. Completed history lives in `plan-done.md` and

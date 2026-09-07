@@ -105,7 +105,6 @@ Every run logs the image it resolved per component, and says so explicitly when 
 or moves off one. Read those lines before concluding that an upgrade shipped new code.
 :::
 
-- **The tenant's openclaw version pin lives in `values.yaml`, not in code defaults.**
 - **Watch the queue, not only the jobs.** The organisation has a fixed number of concurrent
   runners; a workflow storm (or a hung job) can queue runs for 30+ minutes. If a run seems stuck
   before any job has started, that is queue starvation, not a slow job.

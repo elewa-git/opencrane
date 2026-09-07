@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-09-07 — first delivery-speed and personal-assistant repairs
+
+People's approved persona instructions now reach the model, and each employee's assistant remains
+discoverable when colleagues have private assistants. Commit `825ceb3bc` includes regression tests:
+six directory cases, twelve runtime tests and fifteen review-surface dependency tests pass; the
+conversation typecheck, scoped style/Prisma checks and dependency-boundary lint pass.
+
+Commit `975b80955` moves boundary lint before expensive CI preparation/builds and separates the
+build, API and Storybook Nx caches. Independent review found no change to job dependencies or
+required qualification. CI timing improvements still require measurement on subsequent runs.
+
+The README and website now explain the company-assistant vision, current architecture owners,
+implemented capabilities and remaining MVP work. The website build passes with no dead links.
+These records establish source implementation and validation, not a completed live customer journey.
+Live testv5 recovery remains pending; see the 2026-09-07 preflight in the deployment ledger.
+
 ## Executive Summary (History)
 
 **Current state**: Phase 1 baseline is now complete for go-live smoke validation. Core operator/API/UI, Helm deployments, Docker CI publish workflow, and k3d end-to-end reconciliation tests are in place and passing.
@@ -1390,4 +1406,3 @@ The 0.11.0 cutover slice removed the PostgreSQL transcript that ADR 0016 replace
 - [x] **Retired run-owned wiring is gone.** The dead `conversation-replay` internal mount, the
   `RunProofKey` audit columns, the `ws` root dependency, the run-event SQL suite, and every
   authority proof that inserted relational run events were deleted.
-
