@@ -29,7 +29,17 @@ VALUES=(
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
 )
 
-rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --show-only templates/app-rollups.yaml)"
+rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}")"
+printf '%s\n' "$rendered" | node -e '
+  const yaml = require(process.argv[1]);
+  const fs = require("node:fs");
+  const resources = yaml.loadAll(fs.readFileSync(0, "utf8"));
+  for (const kind of ["ServiceAccount", "Service", "StatefulSet"]) {
+    if (!resources.some(function _OwnsKurrentResource(resource) {
+      return resource?.kind === kind && resource.metadata?.name === "opencrane-testv5-kurrentdb";
+    })) throw new Error(`The KurrentDB render is missing its ${kind}`);
+  }
+' "$ROOT_DIR/node_modules/js-yaml"
 grep -Fq 'kind: StatefulSet' <<<"$rendered"
 grep -Fq 'name: opencrane-testv5-kurrentdb' <<<"$rendered"
 grep -Fq 'kind: Job' <<<"$rendered"
@@ -165,7 +175,7 @@ SNAPSHOT_VALUES=(
   --set-string 'historyStore.kurrentdb.backup.volumeSnapshot.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'historyStore.kurrentdb.backup.volumeSnapshot.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
 )
-snapshot_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" "${SNAPSHOT_VALUES[@]}" --show-only templates/app-rollups.yaml)"
+snapshot_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" "${SNAPSHOT_VALUES[@]}")"
 grep -Fq 'opencrane.ai/kurrentdb-backup-mode: volumeSnapshot' <<<"$snapshot_rendered"
 grep -Fq 'image: "registry.invalid/kubectl@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"' <<<"$snapshot_rendered"
 grep -Fq 'volumeSnapshotClassName: csi-snapshots' <<<"$snapshot_rendered"
@@ -196,7 +206,7 @@ if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set historyStore
   echo "values schema accepted an unknown backup mode" >&2
   exit 1
 fi
-disabled_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set historyStore.kurrentdb.backup.enabled=false --show-only templates/app-rollups.yaml)"
+disabled_rendered="$(helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set historyStore.kurrentdb.backup.enabled=false)"
 if grep -Fq 'kind: CronJob' <<<"$disabled_rendered"; then
   echo "backup.enabled=false still rendered the backup CronJob" >&2
   exit 1

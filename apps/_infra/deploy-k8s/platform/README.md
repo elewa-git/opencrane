@@ -35,16 +35,32 @@ cluster does not match the assumptions needed to do that job safely.
 
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
-digest of the last validated image set. Its sequential image lane overlaps cluster and controller
-preparation, then imports the complete image inventory in one k3d transfer. A pull request bypasses
-that cluster only when one positive proof binds its exact base SHA to a completed successful push or
+digest of the last validated image set. Its concurrent image lane overlaps cluster and controller
+preparation, then imports the tag-based service images in one k3d transfer. The KurrentDB bootstrap
+and conversation-computer images go into a disposable registry bound to loopback; their stored
+manifest digests become the exact references used inside k3d. Nothing is published to a public
+registry. A pull request bypasses that cluster only when one positive proof binds its exact base SHA to a completed successful push or
 manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
 for `develop` and reviewed feature-stack bases; unknown or unavailable evidence fails closed to
-k3d. Both tiers install pinned cert-manager and
-CloudNativePG and fail on workload, database, Certificate, or TLS health. Ordinary pull requests use
+k3d. Both tiers install pinned cert-manager, CloudNativePG, and the Agent Sandbox controller with its
+extensions. They generate immutable, release-local KurrentDB credentials and certificates through
+`provision-kurrentdb-bootstrap-secrets.sh`, then install the pinned KurrentDB 26.1.1 ledger and its
+bootstrap Job. The server must start with its real HistoryStore connection and computer profile.
+The smoke requires a ready KurrentDB StatefulSet, a completed user/ACL/subscription bootstrap, and a
+server-authenticated read of its silo sentinel. It verifies the KurrentDB certificate against the
+generated CA, accepts credential-free `/health/live`, and rejects anonymous administration and
+ledger reads while anonymous endpoint and stream access remain disabled.
+
+The Sandbox template uses an explicitly named `opencrane-smoke-runc` RuntimeClass and zero warm
+replicas. The controller and configured profile must exist, but the smoke creates no computer claim
+or assistant turn. This is a fresh service-readiness proof, not gVisor isolation, real OpenID Connect
+login, onboarding, or model-output qualification. CI supplies no real identity provider or model
+credentials. Public ingress uses a self-signed certificate and skips public trust-chain validation;
+the internal KurrentDB check does verify its own CA and hostname. Ordinary pull requests use
 fast local-path storage; `develop`, explicit k3d dispatches, and storage-sensitive changes install
-the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUSTER=1` for local
-diagnosis. Backup/restore and production storage, DNS, and transport remain separate live
+the pinned expandable hostpath CSI driver and exercise expansion. `KEEP_CLUSTER=1` retains the
+disposable cluster and its private registry for diagnosis in an authorised environment. Backup/restore
+and production storage, DNS, and transport remain separate live
 qualifications.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;

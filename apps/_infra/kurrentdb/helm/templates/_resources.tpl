@@ -25,6 +25,7 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
     app.kubernetes.io/component: kurrentdb
 automountServiceAccountToken: false
+---
 apiVersion: v1
 kind: Service
 metadata:

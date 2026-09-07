@@ -1,6 +1,8 @@
 const DEVELOP_SMOKE_IMAGES = [
 	"artifact-service",
 	"cognee",
+	"conversation-computer",
+	"kurrentdb",
 	"memory-gateway",
 	"opencrane",
 	"opencrane-ui",

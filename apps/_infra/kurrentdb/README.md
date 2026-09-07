@@ -44,6 +44,9 @@ includes it when `historyStore.kurrentdb.backup.enabled` is true.
 either unpinned image, an unknown backup mode, or a snapshot backup without its class, image, or
 exact API endpoints.
 
+`deploy/Dockerfile` — builds the non-root bootstrap and file-copy backup image with `curl`, `jq`,
+and the Alpine shell utilities. The chart supplies its scripts and read-only credentials at runtime.
+
 ## Boundary
 
 The chart creates no credentials. An installer supplies immutable, release-local Secrets: TLS
@@ -52,8 +55,8 @@ The chart creates no credentials. An installer supplies immutable, release-local
 operations credentials; the bootstrap Job receives TLS, administrator, and service inputs; the application server
 must receive only the CA and service username/password through its separate app chart.
 
-The bootstrap image is an operator-supplied, digest-pinned purpose-built artifact. It must contain
-`/bin/sh`, `curl`, `jq`, `mktemp`, `tr`, and `grep`; it has no Kubernetes API permission and may
+The installer supplies the immutable digest of the bootstrap image built from `deploy/Dockerfile`.
+It contains `/bin/sh`, `curl`, `jq`, `mktemp`, `tr`, and `grep`; it has no Kubernetes API permission and may
 egress only to DNS and this KurrentDB instance. The chart refuses missing digests rather than
 assuming that the KurrentDB image contains administration tools.
 
@@ -128,6 +131,11 @@ operator-supplied, digest-pinned image with `sh`, `kubectl`, `date`, `wc`, and `
 `VolumeSnapshotClass` name; `k8s-deploy.sh` adds the Kubernetes API endpoint values for its
 NetworkPolicy. `backup.archive.persistence.size` must hold `retention.keepLast` full copies of the
 data volume plus one pre-restore safety copy.
+
+The disposable k3d smoke builds this image and the conversation computer from the selected source
+or exact validated baseline, then serves their digests from a loopback-bound registry. It installs
+the real TLS ledger, runs bootstrap, and verifies a scoped service read plus anonymous-read refusal.
+That check does not exercise scheduled backups, restoration, or a complete assistant turn.
 
 ## See also
 

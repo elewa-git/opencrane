@@ -399,3 +399,19 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: declare the KurrentDB client in the server workspace and extend the existing Docker import
   check so image construction catches this failure before a cluster rollout. Qualify the repaired
   SHA before publication. This throwaway CI run supplies no testv5 recovery or authenticated-journey proof.
+
+## 2026-09-07 · CI fresh install · current-silo qualification · 54970839a6e6dda3e29aa546c0796691465ab45d · FAILED
+
+- findings: config: [qualification run 34115181543](https://github.com/elewa-git/opencrane/actions/runs/34115181543)
+  reached server configuration after the client packaging repair, then failed because the old smoke
+  profile enabled neither required KurrentDB configuration nor an Agent Sandbox profile. script:
+  the parallel source job also exposed an agent-controller Helm contract that depended on another
+  test populating the checkout's generated chart directory. Publication remained blocked.
+- friction: the fresh-install step spent 16m41s before reporting the missing history configuration;
+  the full run took 19m35s. PR source checks on this SHA passed independently, illustrating why their
+  success does not establish installation readiness.
+- lesson: isolate chart fixtures (`874181a01`) and render the exact smoke profile in local contracts.
+  The repaired smoke installs TLS KurrentDB and the pinned Sandbox controller, builds the bootstrap
+  image from its app-owned Dockerfile, and uses immutable images in a disposable registry. It must
+  prove anonymous health, denied anonymous data reads and authenticated service reads in CI before
+  publication. Its explicit runc profile supplies no gVisor, backup/restore, or user-journey proof.

@@ -34,6 +34,35 @@ artifactService:
   persistence:
     size: 1Gi
 
+historyStore:
+  kurrentdb:
+    enabled: true
+    image:
+      # CI uses the same 26.1.1 amd64 OCI manifest; the vendor's tag also serves a legacy manifest.
+      digest: sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8
+    persistence:
+      size: 1Gi
+    backup:
+      # This disposable readiness check does not qualify backup or restore.
+      enabled: false
+
+agentSandbox:
+  enabled: true
+  runtimeClassName: opencrane-smoke-runc
+  profiles:
+    - name: developer
+      poolName: developer-pool
+      warmReplicas: 0
+      image:
+        pullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
 ingress:
   className: traefik
 

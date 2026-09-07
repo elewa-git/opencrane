@@ -196,6 +196,50 @@ for _empty_helm_arg in "${empty_helm_args[@]-}"; do
   fi
 done
 
+smoke_rendered="$(helm template opencrane-smoke "$CHART_DIR" \
+  --namespace opencrane-develop-smoke \
+  --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --set-string historyStore.kurrentdb.tls.existingSecret=smoke-kurrent-tls \
+  --set-string historyStore.kurrentdb.bootstrapAdmin.existingSecret=smoke-kurrent-admin \
+  --set-string historyStore.kurrentdb.bootstrapOps.existingSecret=smoke-kurrent-ops \
+  --set-string historyStore.kurrentdb.serviceCredential.existingSecret=smoke-kurrent-service \
+  --set-string historyStore.kurrentdb.bootstrap.image.repository=registry.invalid/kurrent-bootstrap \
+  --set-string historyStore.kurrentdb.bootstrap.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set-string agentSandbox.namespace=opencrane-develop-smoke \
+  --set-string agentSandbox.serviceAccountName=smoke-agent-sandbox \
+  --set-string 'agentSandbox.profiles[0].image.repository=registry.invalid/conversation-computer' \
+  --set-string 'agentSandbox.profiles[0].image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')"
+printf '%s\n' "$smoke_rendered" | node -e '
+  const assert = require("node:assert/strict");
+  const resources = require(process.argv[1]).loadAll(require("node:fs").readFileSync(0, "utf8"));
+  function resource(kind, name) {
+    const match = resources.find(function _FindResource(item) { return item?.kind === kind && item.metadata?.name === name; });
+    assert.ok(match, `The smoke profile is missing ${kind}/${name}`);
+    return match;
+  }
+  resource("ServiceAccount", "opencrane-smoke-kurrentdb");
+  resource("Service", "opencrane-smoke-kurrentdb");
+  resource("Job", "opencrane-smoke-kurrentdb-bootstrap");
+  const database = resource("StatefulSet", "opencrane-smoke-kurrentdb").spec.template.spec.containers[0];
+  assert.equal(database.image, "docker.kurrent.io/kurrent-latest/kurrentdb@sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8");
+  for (const name of ["KURRENTDB_INSECURE", "KURRENTDB_ALLOW_ANONYMOUS_ENDPOINT_ACCESS", "KURRENTDB_ALLOW_ANONYMOUS_STREAM_ACCESS"]) {
+    assert.equal(database.env.find(function _FindFlag(item) { return item.name === name; })?.value, "false");
+  }
+  for (const probe of [database.readinessProbe, database.livenessProbe]) {
+    assert.equal(probe.httpGet.path, "/health/live");
+    assert.equal(probe.httpGet.scheme, "HTTPS");
+    assert.deepEqual(probe.httpGet.httpHeaders ?? [], []);
+  }
+  assert.equal(resource("SandboxTemplate", "opencrane-smoke-developer-template").spec.podTemplate.spec.runtimeClassName, "opencrane-smoke-runc");
+  assert.equal(resource("SandboxWarmPool", "developer-pool").spec.replicas, 0);
+  const server = resource("Deployment", "opencrane-smoke-opencrane-server").spec.template.spec.containers[0];
+  for (const name of ["OPENCRANE_HISTORY_STORE_ENDPOINT", "OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH", "OPENCRANE_HISTORY_STORE_USERNAME_PATH", "OPENCRANE_HISTORY_STORE_PASSWORD_PATH", "OPENCRANE_COMPUTER_PROFILE_REVISION_ID", "OPENCRANE_COMPUTER_NAMESPACE"]) {
+    assert.ok(server.env.find(function _FindInput(item) { return item.name === name; })?.value, `The smoke server requires ${name}`);
+  }
+' "$ROOT_DIR/node_modules/js-yaml"
+
 wrapper_test_dir="$(mktemp -d)"
 trap 'cleanup_current_chart_sources; rm -rf "$wrapper_test_dir"' EXIT
 mkdir -p "$wrapper_test_dir/platform" "$wrapper_test_dir/bin"

@@ -20,7 +20,9 @@
 {{- if hasKey $seenProfiles $profile.name -}}{{- fail "Agent Sandbox profile names must be unique" -}}{{- end -}}
 {{- $_ := set $seenProfiles $profile.name true -}}
 {{- if empty $profile.poolName -}}{{- fail "every Agent Sandbox profile requires a poolName" -}}{{- end -}}
-{{- if or (not (kindIs "int64" $profile.warmReplicas)) (lt $profile.warmReplicas 0) (gt $profile.warmReplicas 10) -}}{{- fail "every Agent Sandbox profile requires warmReplicas between zero and ten" -}}{{- end -}}
+{{- if not (or (kindIs "int64" $profile.warmReplicas) (kindIs "float64" $profile.warmReplicas)) -}}{{- fail "every Agent Sandbox profile requires integer warmReplicas between zero and ten" -}}{{- end -}}
+{{- $warmReplicas := float64 $profile.warmReplicas -}}
+{{- if or (lt $warmReplicas 0.0) (gt $warmReplicas 10.0) (ne $warmReplicas (floor $warmReplicas)) -}}{{- fail "every Agent Sandbox profile requires integer warmReplicas between zero and ten" -}}{{- end -}}
 {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.poolName) -}}{{- fail "every Agent Sandbox poolName must be a DNS label" -}}{{- end -}}
 {{- if hasKey $seenPools $profile.poolName -}}{{- fail "Agent Sandbox pool names must be unique" -}}{{- end -}}
 {{- $_ := set $seenPools $profile.poolName true -}}

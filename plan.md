@@ -14,7 +14,7 @@ older run-owned runtime and relational transcript descriptions in historical pla
 | Work | State and next proof |
 | --- | --- |
 | Repair #772's obsolete stack ancestry | Done: identical patch rebased as `46ce3204e`, PR targets `develop`, live stack checker passes. |
-| Make development checks proportional to the change | Boundary failures run early (`975b80955`), specialist reviews are scoped (`c648801e3`), and rejected cross-run Nx cache transfers are removed (`a97c57bcd`). Measure subsequent CI. A tested local Stop-hook proposal awaits explicit approval; active hooks are unchanged. |
+| Make development checks proportional to the change | Boundary failures run early (`975b80955`), specialist reviews are scoped (`c648801e3`), rejected cross-run Nx cache transfers are removed (`a97c57bcd`), and Helm contracts use isolated chart fixtures (`874181a01`). Fresh-install failures and timing are recorded in the deploy ledger; the repaired 0.11 smoke needs CI qualification. A tested local Stop-hook proposal awaits explicit approval; active hooks are unchanged. |
 | Explain the product and architecture consistently | Done in the review branch: README and website use the vision, current ownership, and built/pending status; website build passes. |
 | Complete onboarding-to-assistant continuity | Persona forwarding and caller-owned directory done (`825ceb3bc`), with regression tests. Complete live onboarding-to-answer proof remains pending. |
 | Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Multi-person live journey proof remains pending. |

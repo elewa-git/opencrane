@@ -68,6 +68,8 @@ test("selects the complete current-silo image set from app-owned container metad
 		["opencrane", "opencrane-server", "apps/opencrane/deploy/Dockerfile"],
 		["opencrane-ui", "opencrane-ui", "apps/opencrane-ui/deploy/Dockerfile"],
 		["cognee", "opencrane-cognee", "apps/_infra/cognee/deploy/Dockerfile"],
+		["conversation-computer", "opencrane-conversation-computer", "apps/conversation-computer/deploy/Dockerfile"],
+		["kurrentdb", "opencrane-kurrentdb-bootstrap", "apps/_infra/kurrentdb/deploy/Dockerfile"],
 		["memory-gateway", "opencrane-memory-gateway", "apps/memory-gateway/deploy/Dockerfile"],
 		["artifact-service", "opencrane-artifact-service", "apps/artifact-service/deploy/Dockerfile"],
 	].map(function _Project([name, image, dockerfile]) {
@@ -76,6 +78,8 @@ test("selects the complete current-silo image set from app-owned container metad
 	assert.deepEqual(selectDevelopSmokeImages(projects), [
 		{ project: "artifact-service", image: "opencrane-artifact-service", dockerfile: "apps/artifact-service/deploy/Dockerfile" },
 		{ project: "cognee", image: "opencrane-cognee", dockerfile: "apps/_infra/cognee/deploy/Dockerfile" },
+		{ project: "conversation-computer", image: "opencrane-conversation-computer", dockerfile: "apps/conversation-computer/deploy/Dockerfile" },
+		{ project: "kurrentdb", image: "opencrane-kurrentdb-bootstrap", dockerfile: "apps/_infra/kurrentdb/deploy/Dockerfile" },
 		{ project: "memory-gateway", image: "opencrane-memory-gateway", dockerfile: "apps/memory-gateway/deploy/Dockerfile" },
 		{ project: "opencrane", image: "opencrane-server", dockerfile: "apps/opencrane/deploy/Dockerfile" },
 		{ project: "opencrane-ui", image: "opencrane-ui", dockerfile: "apps/opencrane-ui/deploy/Dockerfile" },
@@ -89,8 +93,8 @@ test("selects the complete current-silo image set from app-owned container metad
 test("uses Nx affected container owners to select current-silo rebuilds", function _SelectsDevelopSmokeProjects()
 {
 	assert.deepEqual(
-		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "memory-gateway", "opencrane-ui"]),
-		["cognee", "memory-gateway", "opencrane-ui"],
+		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "memory-gateway", "opencrane-ui", "conversation-computer", "kurrentdb"]),
+		["cognee", "conversation-computer", "kurrentdb", "memory-gateway", "opencrane-ui"],
 	);
 });
 
@@ -107,7 +111,7 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 	assert.deepEqual(selectForcedContainerProjects("all", ["skill-authoring", "opencrane", "skill-authoring"]), ["opencrane", "skill-authoring"]);
 	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
-	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "cognee", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
+	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "cognee", "conversation-computer", "kurrentdb", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
 	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
 	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);
 	assert.equal(selectForcedContainerProjects(""), null);

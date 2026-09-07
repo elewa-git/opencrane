@@ -116,6 +116,34 @@ if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agen
   exit 1
 fi
 
+# Values files decode numbers differently from --set. Both paths must accept only whole counts.
+NUMERIC_VALUES=()
+for ((index=0; index<${#VALUES[@]}; index++)); do
+  if [[ "${VALUES[$index]}" == "--set" && "${VALUES[$((index + 1))]}" == 'agentSandbox.profiles[0].warmReplicas=1' ]]; then
+    index=$((index + 1))
+    continue
+  fi
+  NUMERIC_VALUES+=("${VALUES[$index]}")
+done
+numeric_profile="$CHART_DIR/numeric-profile-test.yaml"
+for replicas in 0 10 1.0; do
+  printf 'agentSandbox:\n  profiles:\n    - warmReplicas: %s\n' "$replicas" >"$numeric_profile"
+  numeric_rendered="$(helm template opencrane-testv5 "$CHART_DIR" --values "$numeric_profile" "${NUMERIC_VALUES[@]}" --show-only templates/app-rollups.yaml)"
+  numeric_pool="$(awk 'BEGIN { RS="---" } /kind: SandboxWarmPool/ { print }' <<<"$numeric_rendered")"
+  grep -Fq "replicas: ${replicas%.*}" <<<"$numeric_pool"
+done
+for replicas in '"1"' 0.5 true -1 11 null; do
+  printf 'agentSandbox:\n  profiles:\n    - warmReplicas: %s\n' "$replicas" >"$numeric_profile"
+  if helm template opencrane-testv5 "$CHART_DIR" --values "$numeric_profile" "${NUMERIC_VALUES[@]}" >/dev/null 2>&1; then
+    echo "Agent Sandbox accepted invalid YAML warmReplicas: $replicas" >&2
+    exit 1
+  fi
+done
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].warmReplicas=1' >/dev/null 2>&1; then
+  echo "Agent Sandbox accepted a string warmReplicas through --set-string" >&2
+  exit 1
+fi
+
 disabled="$(helm template opencrane-testv5 "$CHART_DIR" --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' --show-only templates/app-rollups.yaml)"
 if grep -Eq 'kind: (SandboxTemplate|SandboxWarmPool|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding)' <<<"$disabled"; then
   echo "Disabled Agent Sandbox rendered profile or admission resources" >&2
