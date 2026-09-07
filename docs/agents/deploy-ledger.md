@@ -627,3 +627,34 @@ Full run reports belong in the corresponding pull request or issue.
 - boundary: the temporary local port-forward closed at 20:11:32.872 UTC. This read-only proof
   establishes the required health/authentication behavior; application bootstrap, user journeys
   and backup restoration are separate, still-pending results.
+
+## 2026-09-07 · dev recovery · testv5 installation and identity · 98767e5fc440e9a9e6c42fcfebf791fc21b70df1 · LIVE with product proof pending
+
+- timing: the explicit release-owned bootstrap retry succeeded from 20:16:56.386 to
+  20:17:13.038 UTC (16.651s). Job `c656a943-081b-43d3-af78-b0cdba4241bf` completed at 20:17:10.
+  Normal installation verification then succeeded from 20:18:29.474 to 20:23:26.508 UTC
+  (297.034s). Helm revision 3 was applied at 20:21:02. The first verified public TLS `/healthz`
+  response was 200 at 20:21:26.784. These are repair timings, not a successful fresh-install
+  measurement against the five-minute target.
+- proof: independent readback at 20:24:54 found all 11 Pods Ready with zero restarts across the
+  application, artifacts and scanning namespaces. Running image references matched the qualified
+  `574673d5f52f2d92dfb823c90259283c17470a2c` build. The first-owner and OIDC bindings were retained.
+- identity: the dedicated owner completed password-verified OIDC and the normal OpenCrane PKCE
+  callback at 20:23:05. Two dedicated colleagues then completed the same login and accepted
+  owner-created invitations. Each colleague was denied onboarding before acceptance and admitted
+  afterward; both Active Member roles were confirmed by 20:25:49. No real user's identity or
+  credentials were changed. This proves authenticated API admission; browser onboarding remains
+  a separate acceptance check.
+- findings: codebase: initial provider registration remained pending after LiteLLM 1.81.0 returned
+  an embedded string-code 404 from credential PATCH under HTTP 200. The adapter treated transport
+  success as mutation success and skipped creation. Repair `585d23dc2` requires explicit success,
+  creates only after confirmed absence, and retains uncertainty for malformed responses. Independent
+  review passed with 186 focused tests and both package lint checks. That application repair is
+  pushed but is not yet published or deployed.
+- findings: product: the owner approved a persona and resumed the guided answers, but onboarding
+  completion awaits a configured default model. A three-person group was created; its first human
+  message returned 503. At 20:40:41 the normal history service identity could read its genesis and
+  bounded stream, while its encrypted-payload count remained zero. The message failure is therefore
+  being diagnosed before or within payload persistence, separately from the missing-model barrier.
+- boundary: no completed assistant answer, reviewed child-chat return, authenticated browser reload,
+  or data-bearing backup restore is established by this run. Both recovery drills remain pending.
