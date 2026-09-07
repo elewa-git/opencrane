@@ -44,6 +44,11 @@
 # Creates or validates one OpenCrane-owned, non-default GKE Persistent Disk snapshot class with
 # Delete retention. It exits before any silo, chart, image, database, or identity setup.
 #
+# Standard-disk prerequisite (a separate action; this flag must come first):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-gke-standard-storage-class NAME \
+#     --context CONTEXT
+# Creates or validates one owned, non-default expandable GKE pd-standard storage class.
+#
 # Fresh-install credentials (each action must come first and uses the current kubectl context):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-postgres-bootstrap-secrets \
 #     --namespace NAMESPACE --release RELEASE
@@ -107,6 +112,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 case "${1:-}" in
+  --provision-gke-standard-storage-class)
+    source "$SCRIPT_DIR/gke-standard-storage-class.sh"
+    shift
+    provision_gke_standard_storage_class "$@"
+    exit $?
+    ;;
   --provision-gke-snapshot-class)
     source "$SCRIPT_DIR/gke-snapshot-class.sh"
     shift

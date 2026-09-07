@@ -13,6 +13,7 @@ for contract in \
   bootstrap-prerequisites-contract.sh \
   bootstrap-prerequisites-render-contract.sh \
   gke-snapshot-class-contract.sh \
+  gke-standard-storage-class-contract.sh \
   current-chart-sources-contract.sh \
   provision-contract.sh \
   preflight-cni-contract.sh \

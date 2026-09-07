@@ -82,7 +82,34 @@ this installation machinery from live qualification.
 
 Source: [`deploy.sh`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/deploy.sh).
 
-## GKE snapshot prerequisite
+## GKE storage and snapshot prerequisites
+
+For a fresh installation that needs standard Persistent Disks, prepare a non-default storage class:
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-gke-standard-storage-class opencrane-pd-standard \
+  --context "$OPENCRANE_KUBERNETES_CONTEXT"
+```
+
+The action requires the current context to match and the GKE Persistent Disk driver to exist. It
+creates or verifies one OpenCrane-owned class using `pd.csi.storage.gke.io` and `type: pd-standard`.
+Volumes allow expansion and wait for their first consuming Pod before binding; deleting a volume
+claim reclaims its disk through the `Delete` policy. Foreign, changed, default, or deleting classes
+are refused without modification. No existing disk, claim, or cluster default changes.
+
+Select the class for new KurrentDB volumes in the silo values profile:
+
+```yaml
+historyStore:
+  kurrentdb:
+    persistence:
+      storageClassName: opencrane-pd-standard
+    backup:
+      archive:
+        persistence:
+          storageClassName: opencrane-pd-standard
+```
 
 Before selecting KurrentDB `volumeSnapshot` backups, prepare one snapshot class through the deploy
 entrypoint. This separate action needs the existing GKE Persistent Disk driver and snapshot API;
@@ -106,7 +133,8 @@ In the silo values profile, set `historyStore.kurrentdb.backup.mode` to `volumeS
 `historyStore.kurrentdb.backup.volumeSnapshot.className` to `opencrane-pd-snapshots`. Supply the
 snapshot Job's published image repository and immutable digest under
 `historyStore.kurrentdb.backup.volumeSnapshot.image`. Provision the ledger's data volume through
-the same CSI driver, such as `standard-rwo`. The deploy engine supplies the bounded Kubernetes API
+the same CSI driver, such as `standard-rwo` or the `opencrane-pd-standard` class above. For the latter,
+pass `--storage-class opencrane-pd-standard` when preparing the snapshot class. The deploy engine supplies the bounded Kubernetes API
 network paths. Class creation alone does not prove a backup or restore: complete the
 [recovery drill](/operators/runbook) before recording it as qualified.
 

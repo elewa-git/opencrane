@@ -499,3 +499,30 @@ Full run reports belong in the corresponding pull request or issue.
   also exposes the existing namespace credential helpers as explicit actions, preserving ordinary
   install validation and credential reuse. These later script/chart changes have separate focused
   contract and independent-review evidence; they are not part of this CI installation's source SHA.
+
+## 2026-09-07 · live setup · testv5 identity, DNS and provider · a74c3caf2 · PARTIAL
+
+- findings: config: the user supplied the ignored repository credentials for Zitadel and OpenAI.
+  Their validity was checked without printing or committing values. Zitadel has a dedicated
+  `OpenCrane testv5` confidential web client, authorization-code flow with `client_secret_post`,
+  exact callback `https://testv5.dev.opencrane.ai/api/v1/auth/callback` and logout origin.
+  App-local hosted Login V2 was enabled at 18:58:30 UTC; its other OIDC fields and both sibling
+  applications were unchanged. Three reserved-address test identities have private generated
+  passwords and administrator-verified fixture email claims. No notification email was sent,
+  existing human credentials changed, or instance-wide login policy modified.
+- findings: infra: Cloud DNS change 38 completed at 18:47:09.896 UTC in `opencrane-ai-zone`,
+  project `weownai-proto`. It added only `testv5.dev.opencrane.ai A 35.205.225.244`, TTL 300.
+  All four authoritative nameservers and public/local recursive resolvers returned that address.
+  The wildcard and sibling records were unchanged.
+- findings: provider: a direct OpenAI request to `gpt-4.1-nano-2025-04-14` returned HTTP 200 and
+  the expected marker in 2.806s, using 25 input and 5 output tokens. This establishes the key and
+  upstream model only; no provider registration or assistant turn through OpenCrane is proven.
+- findings: infra: the 18:42–18:46 UTC preflight reverified shared controllers, Sandbox v1beta1
+  CRDs, gVisor, published images and the snapshot class. No testv5 namespace existed. Regional
+  SSD usage was 1190/1200Gi, while standard-disk usage was 0/4096Gi. The existing `standard`
+  class uses the legacy in-tree provisioner; it cannot supply the required CSI snapshot proof.
+- lesson: identity inputs were already available in ignored `keys/` dotfiles. Inspect authorized
+  local secret sources before reporting missing operator input. Use a non-default CSI standard-disk
+  class through the owning deploy action to fit available quota, and record that disk type with
+  recovery timing. Installation, product authentication, provider registration and both drills remain
+  pending; this setup entry establishes none of them.

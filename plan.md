@@ -20,7 +20,7 @@ older run-owned runtime and relational transcript descriptions in historical pla
 | Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Multi-person live journey proof remains pending. |
 | Ask an assistant to work inside a group | Implementation complete (see [plan-done.md](plan-done.md)): explicit company assistant selection, a fixed shared child audience, durable creation, Back to group and reviewed human-authored sharing. Current CI evidence is recorded on [#826](https://github.com/elewa-git/opencrane/pull/826); live journey proof remains pending. |
 | Rebuild channel event reads (#827) | Implemented and qualified against real KurrentDB in CI at `cbdb742d4`: bounded, cancellable participant reads and resumable same-origin SSE on the public listener, consumed by the workspace. The deployed multi-user journey remains to be proven. |
-| Qualify backup and restore on testv5 | The GKE snapshot class is provisioned and an unchanged retry is verified. Fresh installation still needs testv5 identity configuration; no testv5 namespace or measured recovery drill exists. Record real recovery timing in the deploy ledger. |
+| Qualify backup and restore on testv5 | The GKE snapshot class is provisioned and an unchanged retry is verified. Testv5 DNS, a dedicated Zitadel client and test identities are configured; the supplied AI key passed a direct request. Installation and measured recovery remain pending. Record real recovery timing in the deploy ledger. |
 
 Completed implementation moves to `plan-done.md`; live evidence belongs in
 [`docs/agents/deploy-ledger.md`](docs/agents/deploy-ledger.md). A green test, a pushed change, a
@@ -141,18 +141,18 @@ journeys may be labelled MVP-ready. See [#162](https://github.com/elewa-git/open
 Measure fresh-install readiness against the existing target of ready Pods within five minutes per
 silo. Record the result during deployment qualification; it is not a gate on ordinary source edits.
 
-Live testv5 work currently needs an installation configuration and namespace-local credentials.
-The deploy entrypoint now exposes explicit PostgreSQL and KurrentDB credential-preparation actions;
-they reuse the existing generators and verify existing credentials without rotation. Normal install
-validation remains separate. Snapshot resource names are corrected and covered by emitted-manifest
-tests; cloud snapshot creation and recovery still need the live drill.
-The repeated preflight found no saved or live testv5 identity configuration. The remaining operator
-inputs are the OIDC issuer, client ID, secure client-secret reference, first-owner email and ACME
-contact email. PostgreSQL and KurrentDB credentials must be generated for the new namespace through
-the app-owned deployment flow; credentials from another silo are not testv5 installation inputs.
-The dev cluster has a ready pinned Agent Sandbox controller, gVisor, and the non-default
-`opencrane-pd-snapshots` class, provisioned through the deploy entrypoint at `74599200d`. A repeated
-action verified the same resource without changing it. The testv5 namespace remains absent.
+Testv5 now has a dedicated confidential Zitadel client, three isolated test identities, a secure
+client-secret source, first-owner and ACME inputs. Its exact DNS record points to the current ingress.
+The supplied OpenAI key passed a small direct model request; registration through the authenticated
+product and real assistant answers remain pending. No existing human credentials were changed.
+The deploy entrypoint exposes PostgreSQL and KurrentDB credential preparation for the fresh silo.
+Snapshot resource names have emitted-manifest regression coverage. The dev cluster has a ready pinned
+Agent Sandbox controller, gVisor, and the non-default `opencrane-pd-snapshots` class.
+SSD quota has only 10Gi remaining, while standard-disk quota has 4096Gi available. The new explicit
+standard-disk prerequisite action provides a non-default CSI `pd-standard` class compatible with
+snapshots; the existing legacy standard class cannot qualify CSI snapshots. Installation will select
+that class for PostgreSQL, artifacts, Cognee, KurrentDB and its archive. Its creation and both recovery
+modes still need live evidence.
 The required drill is one scheduled fileCopy backup, a full `latest` restore
 with measured RTO, an anonymous `/health/live` check on KurrentDB 26.1.1 with anonymous endpoint
 access disabled, and snapshot-mode qualification when a supported class exists. Cluster changes

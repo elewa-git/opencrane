@@ -18,6 +18,7 @@ cluster does not match the assumptions needed to do that job safely.
 | `provision-postgres-bootstrap-secrets.sh` | Implements the explicit `k8s-deploy.sh --provision-postgres-bootstrap-secrets` action. It creates a fresh silo's application, LiteLLM, and database-administrator credentials and validates existing credentials on reruns. |
 | `provision-kurrentdb-bootstrap-secrets.sh` | Creates one fresh silo's immutable KurrentDB TLS, administrator, operations, and history-service Secrets. Reruns validate the existing trust and credentials without rotating them. |
 | `gke-snapshot-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-snapshot-class` prerequisite action. It creates or verifies one owned GKE Persistent Disk snapshot class without changing the cluster default or an existing foreign class. |
+| `gke-standard-storage-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-standard-storage-class` action. It creates or verifies one non-default class for expandable standard Persistent Disks through the installed GKE storage driver. |
 | `kurrentdb-restore.sh` | Restores the KurrentDB data volume from one scheduled backup when `k8s-deploy.sh` runs with `--kurrentdb-restore`. It refuses a serving ledger without explicit confirmation, keeps a pre-restore safety copy, reuses the backup CronJob's own image and scripts, and re-runs the bootstrap verification Job afterwards. `--kurrentdb-restore-list` prints the available backups. |
 | `qualified-release-image-policy.sh` | Keeps first-party services on one reviewed build, resolves exact digests for workflow runtimes and workers, enables those completed planes, and verifies every image before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
@@ -150,6 +151,22 @@ external-dns or DNS credentials and it does not create a cluster-wide certificat
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
 ingress Service reports the reserved address.
 
+When a fresh silo needs standard Persistent Disks, create an explicit storage class through the
+installed GKE driver:
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-gke-standard-storage-class opencrane-pd-standard \
+  --context "$OPENCRANE_KUBERNETES_CONTEXT"
+```
+
+The action checks the current context and creates or verifies one owned, non-default class with
+`pd.csi.storage.gke.io`, `type: pd-standard`, expansion enabled, `WaitForFirstConsumer` binding,
+and `Delete` reclamation. It refuses foreign, changed, default, or deleting classes. Select
+`opencrane-pd-standard` in `historyStore.kurrentdb.persistence.storageClassName` and
+`historyStore.kurrentdb.backup.archive.persistence.storageClassName` for new data and file-copy
+backup volumes. It never changes existing claims, disks, or other storage classes.
+
 For KurrentDB volume snapshots on an existing GKE Persistent Disk driver, run this separate action
 through the deploy entrypoint before installing the silo:
 
@@ -169,6 +186,8 @@ installs a driver, changes another resource, or starts a silo, and requires no i
 Select this name with `historyStore.kurrentdb.backup.volumeSnapshot.className` in the silo profile;
 the backup still needs `mode: volumeSnapshot` and its qualified kubectl image. Creating the class
 does not prove cloud snapshot permissions, readiness, or recovery; those require the live drill.
+Use `--storage-class opencrane-pd-standard` when selecting the standard-disk class above; the same
+snapshot class works with either storage class because both use the GKE Persistent Disk driver.
 
 The short-lived PostgreSQL privilege proof uses ordinary GKE Autopilot scheduling. Its single Job
 runs one PostgreSQL client container for each logical database, which means two containers in the
