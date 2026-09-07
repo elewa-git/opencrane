@@ -74,6 +74,8 @@ The package uses `AgentService`, `AgentRevision`, revision boundary attachments,
 and MCP tool assignments from `apps/opencrane/prisma/schema/agent-services.prisma`. Company setup
 also creates one Internal Principal and exact managed authorization grants. Its stable managed
 identity is stored through `AgentIdentityHistory`, rather than a parallel relational identity record.
+The Principal uses the database's reserved `urn:opencrane:agent-service` issuer, the service ID as
+its subject, and no email. The baseline rejects any other issuer for an Internal Principal.
 
 ## Dependency direction
 

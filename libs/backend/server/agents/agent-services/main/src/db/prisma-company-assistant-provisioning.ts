@@ -53,7 +53,7 @@ export class PrismaCompanyAssistantProvisioningRepository implements CompanyAssi
 		await this._Admit(caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: command.modelDefinitionId }, ProductAuthorizationActions.Use, argumentsDigest, now);
 		const principalId = randomUUID();
 		const revisionId = randomUUID();
-		await this.transaction.principal.create({ data: { id: principalId, siloId: caller.siloId, issuer: "opencrane:managed-agent", subject: serviceId, provenance: PrincipalProvenance.Internal, displayName: command.name, createdAt: now } });
+		await this.transaction.principal.create({ data: { id: principalId, siloId: caller.siloId, issuer: "urn:opencrane:agent-service", subject: serviceId, provenance: PrincipalProvenance.Internal, email: null, displayName: command.name, createdAt: now } });
 		await this.transaction.agentService.create({ data: { id: serviceId, siloId: caller.siloId, kind: AgentServiceKind.Managed, name: command.name, principalId, workloadProfile: this.policy.workloadProfile, state: AgentServiceState.Draft, createdAt: now } });
 		await new PrismaAgentRevisionWriterRepository(this.transaction).createDraft({ agentRevisionId: revisionId, siloId: caller.siloId, agentServiceId: serviceId, revision: 1, parentRevisionId: null, sourceRevisionId: null, content: { promptPolicyVersion: this.policy.promptPolicyVersion, personaRevisionId: null, modelDefinitionId: command.modelDefinitionId, budget: this.policy.budget, skills: [], mcpToolRevisionIds: [], boundaryAttachments: [] }, changeMessage: "Administrator provisioned the company assistant", authoredBy: caller.principalId, createdAt: now });
 		const service = { kind: ProductAuthorizationResourceKinds.AgentService, id: serviceId };

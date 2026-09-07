@@ -688,3 +688,46 @@ Full run reports belong in the corresponding pull request or issue.
   sharing and data-bearing restores remain unproven. Browser login stopped before password entry;
   the automatic approval reviewer rejected placing the fixture password on the system clipboard.
   No password was copied, and the authenticated API evidence does not establish browser completion.
+
+
+## 2026-09-07 · dev acceptance · testv5 provider and human group · cf8b5f44759f19a01d03e9d3534e7a8b2aab3811 · PARTIAL
+
+- outcome: employees can authenticate through the dedicated Zitadel client and exchange durable
+  messages in an ordinary group. The supplied AI provider is configured through protected product
+  APIs, with one tenant model selected. Personal and company assistant execution remain unqualified.
+- CI: [Actions run 34166048987](https://github.com/elewa-git/opencrane/actions/runs/34166048987)
+  passed 25 jobs with two configured skips and published all 13 deployable images. All Linux amd64
+  manifests carry this exact source revision. Image-smoke qualification reused the unchanged chart's
+  successful k3d evidence from run 34161718885; it did not run another current-silo k3d installation.
+  Build/test/lint took 129 seconds, fresh-database checks 51 seconds and KurrentDB proofs 60 seconds.
+- deployment: the owning install command with verification ran from 22:24:29.157 to 22:28:54.238 UTC
+  (265.081 seconds), exiting 0 at Helm revision 5. The server became Ready at 22:28:05; public TLS
+  health returned 200 at 22:28:26.009. At 22:29:34.405, all 11 Pods were Ready with zero restarts,
+  and seven running application image IDs matched the publication receipt. This is repair timing.
+- retained inputs: the first-owner/OIDC binding is unchanged. The completed bootstrap Job keeps
+  its separately qualified utility digest `sha256:5e702899c3a504ea69df94250a8889b02d3108c5357c7fc6de050b60236205fe`;
+  the PostgreSQL operand keeps the release manifest's image. Publication of replacement images
+  does not establish that they ran. Bootstrap update preparation remains unexercised live.
+- identity and provider: all three fixture users completed fresh password-verified OIDC admission
+  by 22:30:16.928. At 22:30:30.954, the original provider command returned configured and registered.
+  The first `testv5/gpt-4.1-nano` model, routed to `openai/gpt-4.1-nano-2025-04-14`, was created and
+  selected as the tenant default with successful readback at 22:30:33.853. No provider key, OIDC
+  secret or session cookie is recorded in source or this ledger.
+- human group: by 22:30:41, all three members read the same three ordered human messages from
+  KurrentDB-backed history. An exact message retry kept its original position; changed text with
+  the same command key returned 409. The ordinary group has no computer, agent service or run.
+- findings: codebase: onboarding conclusion returned 503 at 22:31:06 because initial-publication
+  authorization rejected grants activated by the later database transaction clock. The repair
+  stamps newly reconciled grants with the trusted operation time and retains existing validity,
+  revocation and deny rules. It still needs live completion proof.
+- findings: codebase: company setup returned 503 at 22:35:31. PostgreSQL rejected its Internal
+  Principal under `principals_identity_check`: the repository supplied an issuer other than the
+  reserved `urn:opencrane:agent-service`. The repair follows the existing schema, without changing it.
+- session limitation: successful server replacement loses current logins. Source inspection confirms
+  `express-session` uses its default process-local MemoryStore; preserving the signing secret does
+  not preserve session contents. Durable sessions, interrupted login continuity and multiple-server
+  behavior require a separate implementation and proof.
+- boundary: no personal answer, company child answer, reviewed return, browser password completion,
+  data-bearing restore or RTO is established here. Scheduled fileCopy backups succeed, but neither
+  recovery drill has restored the completed product fixture. The earlier browser clipboard rejection
+  remains in force; authenticated API login is not browser completion evidence.

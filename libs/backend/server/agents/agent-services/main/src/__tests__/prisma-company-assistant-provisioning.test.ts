@@ -33,7 +33,7 @@ describe("PrismaCompanyAssistantProvisioningRepository", function _Suite()
 		expect(result).toMatchObject({ created: true, name: "Company assistant", createdByPrincipalId: "admin" });
 		expect(result.principalId).not.toBe(_CALLER.principalId);
 		expect(f.admitPrincipal.mock.calls.map(call => call[0].action)).toEqual([ProductAuthorizationActions.Administer, ProductAuthorizationActions.Use]);
-		expect(f.transaction.principal.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: result.principalId, provenance: PrincipalProvenance.Internal }) });
+		expect(f.transaction.principal.create).toHaveBeenCalledWith({ data: { id: result.principalId, siloId: _CALLER.siloId, issuer: "urn:opencrane:agent-service", subject: result.agentServiceId, provenance: PrincipalProvenance.Internal, email: null, displayName: _COMMAND.name, createdAt: _NOW } });
 		expect(f.transaction.agentRevision.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ personaRevisionId: null, skillAssignments: { create: [] }, mcpToolAssignments: { create: [] }, boundaryAttachments: { create: [] } }) }));
 		expect(f.transaction.agentRevision.update).toHaveBeenCalledWith({ where: { id: result.agentRevisionId }, data: { state: AgentRevisionState.Published, publishedAt: _NOW } });
 		const calls = f.reconcileManagedResourceGrants.mock.calls.map(call => call[0]);
