@@ -65,7 +65,11 @@ the ordinary exact boundary-matching rules.
   external membership, expands direct Group subjects, loads matching grants, and resolves stored
   boundary context.
 - The managed-grant repository narrowly reconciles one manager's live grants against immutable
-  catalogue references.
+  catalogue references. New grants become valid at the caller's trusted operation time, which also
+  timestamps revocations. This lets onboarding create grants and admit publication with the same
+  clock even when PostgreSQL starts the transaction later. Callers supply server-derived time,
+  never a browser timestamp. Reconciliation leaves existing activation times unchanged; current
+  membership, future validity, expiry, revocation and competing deny grants still govern decisions.
 - Exact resource retirement rechecks organisation administration and soft-revokes every active
   grant on the retiring coordinates inside the owning product transaction.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from

@@ -72,7 +72,8 @@ export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthori
 		{
 			if (currentByKey.has(key))
 				continue;
-			await transaction.authorizationGrant.create({ data: { siloId: command.siloId, managerId: command.managerId, ..._SubjectData(grant.subject), ..._BoundaryData(grant.boundary), boundaryCoverage: grant.boundaryCoverage === AuthorizationBoundaryCoverages.Exact ? "Exact" : "Descendants", catalogId: grant.capability.catalog.catalogId, catalogRevision: grant.capability.catalog.revision, catalogDigest: grant.capability.catalog.digest, capabilityId: grant.capability.capabilityId, resourceKind: command.resource.kind, resourceId: command.resource.id, effect: "Allow", priority: grant.priority, createdBy: grant.createdByPrincipalId } });
+			// Admission can reuse this operation's clock even when the database transaction starts later.
+			await transaction.authorizationGrant.create({ data: { siloId: command.siloId, managerId: command.managerId, ..._SubjectData(grant.subject), ..._BoundaryData(grant.boundary), boundaryCoverage: grant.boundaryCoverage === AuthorizationBoundaryCoverages.Exact ? "Exact" : "Descendants", catalogId: grant.capability.catalog.catalogId, catalogRevision: grant.capability.catalog.revision, catalogDigest: grant.capability.catalog.digest, capabilityId: grant.capability.capabilityId, resourceKind: command.resource.kind, resourceId: command.resource.id, effect: "Allow", priority: grant.priority, createdBy: grant.createdByPrincipalId, validFrom: command.now } });
 			createdCount += 1;
 		}
 		const changedCount = revokedIds.length + createdCount;
