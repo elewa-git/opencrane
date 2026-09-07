@@ -244,7 +244,7 @@ export const Review: Story = {
 		const canvas = within(canvasElement);
 		const approveButton = canvas.getByRole("button", { name: "Approve persona" });
 		await expect(approveButton).toBeEnabled();
-		await expect(canvas.getByText("Exact compiled instructions")).toBeVisible();
+		await expect(canvas.getByText("Instructions your assistant will use")).toBeVisible();
 		await userEvent.click(approveButton);
 		await waitFor(async function assertConfirmationVisible()
 		{
