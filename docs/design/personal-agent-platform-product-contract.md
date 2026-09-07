@@ -48,21 +48,25 @@ renewal. An outage must not turn an unknown member into an active member.
 
 ## Conversation, run, and event contract
 
-`Conversation` is the durable aggregate. Its immutable mode is `agent_session`, `direct`, or `group`,
-and one database-owned sequence orders its messages and safe run-backed projections. Direct and
-ordinary group messages create no run. An agent session conditionally owns serial
-`AgentRun -> ordered RunEvent` hierarchies; before an attempt starts, OpenCrane persists the run and
-its exact immutable input snapshot. Events are accepted only through the control-plane admission
-path, use deterministic sequence ordering, and preserve one terminal outcome.
+`Conversation` is the durable aggregate. Its immutable mode is `agent_session`, `direct`, or `group`.
+KurrentDB stream revisions order its messages and safe execution events. PostgreSQL owns current
+authorization; an event or read projection cannot grant permission. Direct and ordinary group
+messages create no run. An agent session owns serial turns whose exact input is frozen before
+execution. The server admits events against current authority and preserves one terminal outcome.
 
 Runtime assignments and commands are fenced by attempt. Retry creates a new attempt; it does not
 rewrite the evidence of an earlier one. Cancellation, approvals, usage, external-action results,
 and failures become canonical events before clients rely on them.
 
 Conversation close is monotonic; participant archive and unread position remain separate visibility
-coordinates. An authorized group `@agent` message atomically creates one child agent session and its
-first run. [ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the full
-mode, parent/child, delivery, and non-disclosure contract.
+coordinates. The group-assistant target is one durable child agent session per authorized, idempotent
+request, with recoverable first-turn activation. This flow remains unimplemented; its assistant
+authority and durable creation sequence must be settled before implementation.
+[ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the mode,
+parent/child, delivery, and non-disclosure requirements.
+[ADR 0016](../adr/0016-conversation-history-and-computers.md) supersedes its immediate atomic
+first-run and old runtime/storage mechanisms: it does not promise one transaction across
+PostgreSQL, KurrentDB and Kubernetes.
 
 ## External-action contract
 
@@ -89,8 +93,9 @@ Canonical transcripts, persona revisions, memory references, artifacts, runs, an
 remain until an explicit authorized deletion and reference-safe purge completes. Durable stores use
 mounted persistent storage with backup and restore coverage.
 
-Runtime workspaces are non-authoritative scratch storage. Pod replacement, scale-to-zero, or lease
-expiry may clear them without losing product state.
+Conversation computers retain workspace checkpoints across cooling and Pod replacement. Those
+files never authorize an action or replace the conversation's canonical history. Agent Sandbox
+owns Pods; OpenCrane owns logical computer state, activation and generation-bound leases.
 
 ## Acceptance
 

@@ -7,6 +7,18 @@
 
 ## 2026-09-07 — first delivery-speed and personal-assistant repairs
 
+Personal-session commands now distinguish a new chat from a retry (`6db91d08d`); matching retries
+preserve the existing lifecycle and grants. The slice passed 169 backend tests and the relevant
+frontend tests and lints. Member display names now reach conversation selection and direct/group
+titles (`ddf20b629`), with 42 focused tests and four lint targets passing. Generated API artifacts
+include both contract changes. Ordinary direct/group creation retries remain an active track.
+
+Development guidance now scopes specialist reviews to changed responsibilities (`c648801e3`).
+Active Stop hooks are unchanged; their separately tested optimization still awaits explicit approval.
+Onboarding copy explains approved settings and saved progress (`a1ec98f5a`); visual qualification is
+recorded in `5ef5bd925`: 21 Storybook interaction checks pass, and four affected states have visually
+inspected Linux and Darwin baselines. No screenshot tolerances changed.
+
 People's approved persona instructions now reach the model, and each employee's assistant remains
 discoverable when colleagues have private assistants. Commit `825ceb3bc` includes regression tests:
 six directory cases, twelve runtime tests and fifteen review-surface dependency tests pass; the
@@ -14,7 +26,10 @@ conversation typecheck, scoped style/Prisma checks and dependency-boundary lint 
 
 Commit `975b80955` moves boundary lint before expensive CI preparation/builds and separates the
 build, API and Storybook Nx caches. Independent review found no change to job dependencies or
-required qualification. CI timing improvements still require measurement on subsequent runs.
+required qualification. A subsequent real CI run exposed that Nx rejects those restored local
+artifacts without its machine-bound metadata; `a97c57bcd` removes the ineffective cross-run
+transfers. Dependency/browser caches and within-job Nx reuse remain. CI timing improvements still
+require measurement on subsequent runs. See [Nx's explanation](https://nx.dev/docs/kb/unknown-local-cache).
 
 The README and website now explain the company-assistant vision, current architecture owners,
 implemented capabilities and remaining MVP work. The website build passes with no dead links.

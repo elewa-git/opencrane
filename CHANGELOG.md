@@ -40,9 +40,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Changed
 
-- **Contributors get dependency-boundary failures before the expensive CI work begins.** Build,
-  API and component jobs keep independent task caches, and implementation guidance assigns
-  specialist reviews according to the changed responsibility.
+- **Contributors get dependency-boundary failures before the expensive CI work begins.** CI avoids
+  transferring local Nx cache files that another runner cannot reuse, and implementation guidance
+  assigns specialist reviews according to the changed responsibility.
 
 - **People can understand the product and its development status from the README and website.**
   The guides distinguish implemented conversation capabilities, remaining MVP work and live
@@ -54,6 +54,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   only rebuildable transaction projections.
 
 ### Fixed
+
+- **People can start distinct personal chats and retry creation safely.** A new command starts a
+  separate conversation; retrying the same command returns its existing session without reopening
+  closed work or expanding access.
+
+- **People can recognize colleagues when starting and revisiting chats.** The picker and direct/group
+  titles use member display names, with generic text when a name is unavailable.
 
 - **Personal assistants use the preferences people approved during setup.** The runtime now sends
   the compiled instructions with conversation history to the model instead of dropping them.
