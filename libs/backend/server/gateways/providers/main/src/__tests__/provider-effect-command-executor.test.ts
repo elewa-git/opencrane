@@ -295,7 +295,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			if (url.includes("/credentials/"))
 				return new Response("", { status: 404 });
 			if (url.endsWith("/credentials"))
-				return new Response("{}", { status: 200 });
+				return new Response(JSON.stringify({ success: true, message: "Credential created successfully" }), { status: 200 });
 			if (url.endsWith("/model/new"))
 			{
 				const body = JSON.parse(init?.body as string) as { model_name: string; litellm_params: Record<string, unknown>; model_info?: { id?: string; mode?: string } };

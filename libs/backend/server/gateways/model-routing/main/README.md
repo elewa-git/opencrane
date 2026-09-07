@@ -52,7 +52,10 @@ provider embedding slug and `auto-embedding`; provider command finalization vali
 secret-free evidence with the governed provider generation.
 
 Credential rotation never deletes before replacing. It atomically PATCHes the fixed LiteLLM
-credential name and uses POST only after PATCH confirms a 404 absence. The deployed DB-backed
+credential name and uses POST only after PATCH confirms a 404 absence. LiteLLM 1.81.0 returns some
+credential errors inside HTTP 200, so the adapter checks the explicit success flag or serialized
+error code for updates, creation, and deletion. An unknown or malformed body remains uncertain.
+The deployed DB-backed
 LiteLLM profile reloads patched credentials into memory on its pinned refresh loop. A missing
 response from PATCH or POST remains uncertain, so the durable provider command retains its barrier
 until an exact retry converges. Provider and `auto-embedding` deployments likewise use stable UUIDs
