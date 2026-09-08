@@ -67,6 +67,30 @@ route, or second Pod controller. [ADR 0016](docs/adr/0016-conversation-history-a
 supersedes older runtime, storage and upgrade descriptions. Source completion, CI, deployment and
 live product acceptance remain separate evidence.
 
+## 0.12 and remaining MVP delivery
+
+The accepted [delivery plan](docs/design/mvp-delivery-plan.md) turns the remaining scope into
+bounded PRs, owners, dependencies and acceptance criteria. 0.12 aims to let a personal or company
+assistant retrieve permitted company data and complete a precise human-approved action. Memory,
+files, autonomous delegation, schedules, administration and operational qualification each retain
+their own completion track; they are not silently bundled into the first tool PR.
+
+| Slice | Current state |
+| --- | --- |
+| C0 — close the replay-contract CI failure on #826 | FIX PUSHED in `77a1cdaa6` — deterministic test clock; focused replay contracts, shell syntax and independent review pass. Linux CI remains pending; the first local umbrella run was blocked by sandbox DNS for chart downloads. |
+| R1/R2 — reliable login and visible personal activity | READY — immediate follow-up PR; inspect existing session and activity owners, then prove restart and isolation. |
+| A1 — membership revocation and closed-work proof | PLANNED — current authority operation and product surface, followed by real-account browser proof. |
+| T1 — first permitted tool retrieval | READY FOR PREFLIGHT — compiled tool definitions and the invocation executor exist; connect the conversation run/lease and durable tool history. |
+| T2/T3/U1 — approved actions and visible recovery | DEPENDS ON T1 — exact approval, cancellation, uncertain outcomes, retries and accessible workspace controls. |
+| M1/F1 — explicit memory and durable files | PLANNED — independent owned tracks; dataset/artifact authority and complete cross-conversation or reload proof. |
+| D1/S1 — autonomous delegation and shared schedules | DEPENDS ON ACTION CONTRACTS — bounded authority, budgets, cancellation and durable results. |
+| A2/Q1 — administration and operational acceptance | PLANNED THROUGHOUT — extend protected product surfaces and prove each newly landed journey. |
+
+The overnight run on 8–9 September continues these slices in dependency order and hands off at
+08:00 Nairobi time. It commits and pushes reviewed progress, maintains incremental PRs and records
+blockers without treating the whole MVP as a one-night promise. See the delivery plan for the
+morning checkpoint and operating boundaries.
+
 ## Extend the proven text journeys
 
 The completed personal and group-assistant text path is recorded in [plan-done.md](plan-done.md).
