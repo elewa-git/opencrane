@@ -9,6 +9,12 @@ import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validato
 import { PrismaMcpToolAdmissionClaimRepository } from "./prisma-mcp-tool-admission-claim-repository";
 
 /**
+ * Caps each text response independently of the revision's total run budget.
+ * @see PrismaRevisionBudgetPolicyAuthority for the separate per-run ceiling.
+ */
+const _TEXT_TURN_MAX_OUTPUT_TOKENS = 4_096;
+
+/**
  * Re-checks a published revision's model route, selected MCP tool revisions, skills, and artifacts.
  *
  * Updates the revision's MCP admission claim before reading. The surrounding Serializable admission
@@ -84,7 +90,7 @@ export class PrismaRevisionToolPolicyAuthority implements ToolPolicySource
 			outcome: "loaded",
 			value: {
 				modelDefinitionId: revision.modelDefinition.id,
-				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId, generatedOutputCapabilities: [...revision.modelDefinition.generatedOutputCapabilities].sort() },
+				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId, maxOutputTokens: _TEXT_TURN_MAX_OUTPUT_TOKENS, generatedOutputCapabilities: [...revision.modelDefinition.generatedOutputCapabilities].sort() },
 				mcpTools,
 				skillRevisionIds,
 				artifactRevisionIds,

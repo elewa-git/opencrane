@@ -67,7 +67,7 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 			personaRevision: { findFirst: vi.fn().mockResolvedValue({ compiledInstructions: "Answer in plain English." }) },
 			orgMembership: { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
 			conversation: { findFirst: vi.fn().mockResolvedValue({ id: "child-1", runs: [] }) },
-			agentRevision: { findFirst: vi.fn().mockResolvedValue({ modelDefinition: model, mcpToolAssignments: [], skillAssignments: [], budget: { maxTurns: 1, maxTokens: 1024, maxDurationMs: 300_000 } }) },
+			agentRevision: { findFirst: vi.fn().mockResolvedValue({ modelDefinition: model, mcpToolAssignments: [], skillAssignments: [], budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 } }) },
 			mcpToolAdmissionClaim: { upsert: vi.fn() },
 			skillRevision: { findMany: vi.fn().mockResolvedValue([]) },
 			artifactRevision: { findMany: vi.fn().mockResolvedValue([]) },
@@ -88,6 +88,8 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 
 		expect(result.compiledInput.messages).toEqual([{ role: "user", content: "Please help with this group request." }]);
 		expect(result.compiledInput.model.modelAlias).toBe("test-model");
+		expect(result.compiledInput.model.maxOutputTokens).toBe(4096);
+		expect(result.compiledInput.budget.maxCompletionTokens).toBe(256_000);
 		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: subject.principalId, executionSubject: subject }) });
 		expect(transaction.runInputSnapshot.create).toHaveBeenCalledWith({ data: expect.objectContaining({ memoryQueryPolicy: { scope: "none" }, preferenceFactIds: [], messageIds: ["message-1"] }) });
 		expect(resources.mock.calls[0][0].every(function _ExecutionPrincipal(resource) { return resource.principalId === subject.principalId; })).toBe(true);

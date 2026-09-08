@@ -14,8 +14,11 @@ run-admission transaction that persists it. After that instant nothing about the
 change — a retry, an audit, or a replay all see the exact same record, identified by its digest
 (a SHA-256 fingerprint of the canonical content).
 
-The compiled budget retains the frozen model-turn limit. A conversation computer consumes exactly
-one admitted turn and refuses the model request when that limit is absent or below one.
+The current text-chat policy freezes a maximum of 4,096 generated tokens per response into the model
+route. This is OpenCrane's response limit; the revision's total run budget stays separate, including
+the initial personal assistant's 256,000-token ceiling. The runtime uses the smaller of those two
+limits. It consumes one admitted model turn and refuses the model request when the turn limit is
+absent or below one. Tool execution and loops with multiple model turns remain future work.
 
 The current text-chat baseline supplies conversation history and the personal assistant's approved
 persona. It resolves that persona through the verified local Principal (OpenCrane's permission

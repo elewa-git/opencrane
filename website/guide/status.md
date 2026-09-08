@@ -53,12 +53,13 @@ child-request admission also pass, including audience isolation and retry checks
 Fresh personal chats and company-assistant requests now reach their running computers. Private
 networking and activation replay have passed remote qualification and are deployed. A fresh company
 request was selected in the real browser, and all three group members can open its child chat.
-The server's narrow Pod-read permission is qualified and deployed: a fresh personal computer
-obtained its review credential and restored its workspace. Run admission then refused the first
-turn. The next repair corrects the onboarding persona identity lookup and the distinction between
-the human requester and company executor, and removes unfinished memory provisioning as a
-prerequisite for text turns. Complete personal and child answers, reviewed sharing and reconnect
-remain pending live.
+The server's narrow Pod-read permission and the persona/requester admission repairs are qualified
+and deployed. Fresh personal computers obtained credentials, restored their workspaces and
+successfully bootstrapped. Their model requests reached the gateway but were rejected because the
+whole-run token budget was being sent as the output limit for one response. The next repair freezes
+a separate 4,096-token response cap, while retaining any stricter run budget. This is a product
+limit, not a claim about every provider's maximum. Complete personal and child answers, reviewed
+sharing and reconnect remain pending live.
 
 Access changes, recovery and computer actions need their complete live journeys. Tool, memory and
 shared-work journeys need their own evidence as they become available. Both history restore modes

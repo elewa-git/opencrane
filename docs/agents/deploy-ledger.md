@@ -1090,3 +1090,35 @@ Full run reports belong in the corresponding pull request or issue.
   seconds, affected build/test/lint 387 seconds, Storybook 230 seconds and server publication 107
   seconds. These jobs overlap; their durations must not be summed as total elapsed time. The
   remaining product and recovery proofs are the completion gates, not another optional review loop.
+
+
+## 2026-09-08 · testv5 · admitted personal turns and model limit diagnosis · PARTIAL
+
+- qualification: `af3bf689fcb43347cddb24db825c281d5231c13d` passed all thirteen selected validation
+  and publication jobs in [run 34238519338](https://github.com/elewa-git/opencrane/actions/runs/34238519338).
+  CI completed at 14:42:07 UTC, approximately 13 minutes after preparation began. A later local/API
+  interruption delayed collecting its result; that delay is not CI duration.
+- deployment: owning preflight passed in 65.518 seconds. Installation ran 15:36:47–15:40:43 UTC,
+  exit 0, 235.919 seconds, Helm revision 12. All eleven service Pods, TLS health and the privilege
+  Job passed. Server index: `sha256:9981f2caf60e479b668c89eb80f1d06dc650b1363b288149a0dfe1c730e95a0a`;
+  amd64: `sha256:2efba67b8f16641228808a2623bdcb7d83de8aaa7a8b65879e18c836414ff209`.
+  Qualified companions, admitted profile, bootstrap and database pins remain unchanged.
+- fresh journeys: all five test accounts signed in. Two new personal sessions and first-message
+  retries passed at 15:43:07–10. The owner selected the company assistant in a real browser at
+  15:43:32. Its exact retry recovered the same child; changed-source and other-caller retries were
+  denied, and all three group members could read it.
+- startup: D triggered node scale-up at 15:43:07. Both personal Pods scheduled at 15:44:46 and
+  completed image pulls at 15:45:44. Both incurred one liveness restart before the health listener
+  opened; the template has no startup probe. This startup allowance needs a separate chart review.
+- admission: both computers obtained review credentials and restored checkpoints around 15:46:26.
+  E bootstrap returned 200 at 15:46:27.706; D's first typed persistence refusal recovered on its
+  normal retry, bootstrap 200 at 15:46:31.931. The initial three-minute answer wait expired during
+  cold startup; its evidence source attribution was corrected with the original label retained.
+- model finding: both computer IPs reached LiteLLM `/v1/chat/completions`, which returned HTTP 400.
+  The provider identified `invalid_request_error`, `invalid_value`, parameter `max_tokens`.
+  Admission preserved the default 256,000-token whole-run ceiling, but supplied no per-response
+  cap, so the runtime sent that ceiling as one response limit. No quota or authentication failure
+  was established. No assistant output or completed recovery drill is claimed.
+- repair: freeze a separate 4,096-token product response cap in the existing model route. The
+  runtime already takes the smaller route/budget limit, and existing immutable snapshots retain
+  their original policy. Fresh admitted turns must prove the repair before both `latest` restores.

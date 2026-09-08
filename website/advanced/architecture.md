@@ -85,6 +85,11 @@ history and model choice. Personal memory is explicitly unavailable in this base
 a dataset and recalling its content remain separate product work. This does not prevent a person
 from using their approved instructions and the current conversation.
 
+Admission also freezes a 4,096-token output cap for each text response. The computer takes the
+smaller of that limit and the run's token budget, so a generous aggregate budget does not become
+an oversized request for one answer. Provider capability discovery remains separate from this
+product response limit.
+
 The requester and executor are distinct roles. The human must own the input message and retain
 access to the conversation. A company assistant executes with its own identity and resource
 permissions. Retrying the same request preserves both identities and the original frozen input.

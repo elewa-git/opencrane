@@ -152,7 +152,7 @@ class ConfigurationTests(unittest.TestCase):
 
     @patch("src.main._read_token", return_value="projected-token")
     def test_executes_real_http_turn_boundaries(self, _token: MagicMock) -> None:
-        """Call a real model HTTP stub and append its assistant output through a real server stub."""
+        """Cap one HTTP response below the aggregate run budget, then append the returned text."""
         received: list[tuple[str, str, dict[str, object]]] = []
 
         class Handler(BaseHTTPRequestHandler):
@@ -177,7 +177,7 @@ class ConfigurationTests(unittest.TestCase):
         for thread in threads:
             thread.start()
         try:
-            bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"instructions": "Use the approved persona.", "messages": [{"role": "user", "content": "hi"}], "model": {"maxOutputTokens": None}, "budget": {"maxModelTurns": 1, "maxCompletionTokens": 256}}, "modelCredential": {"endpoint": f"http://127.0.0.1:{model.server_port}", "key": "sk-attempt", "model": "silo-default"}}
+            bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"instructions": "Use the approved persona.", "messages": [{"role": "user", "content": "hi"}], "model": {"maxOutputTokens": 4096}, "budget": {"maxModelTurns": 64, "maxCompletionTokens": 256_000}}, "modelCredential": {"endpoint": f"http://127.0.0.1:{model.server_port}", "key": "sk-attempt", "model": "silo-default"}}
             _execute_turn({"internalEndpoint": f"http://127.0.0.1:{server.server_port}", "tokenPath": "/token"}, bootstrap)
         finally:
             model.shutdown()
@@ -185,6 +185,7 @@ class ConfigurationTests(unittest.TestCase):
             model.server_close()
             server.server_close()
         self.assertEqual(received[0][0:2], ("/v1/chat/completions", "Bearer sk-attempt"))
+        self.assertEqual(received[0][2]["max_tokens"], 4096)
         self.assertEqual(received[0][2]["messages"], [{"role": "system", "content": "Use the approved persona."}, {"role": "user", "content": "hi"}])
         self.assertEqual(received[1][0:2], ("/api/internal/conversation-computer/output", "Bearer projected-token"))
         self.assertEqual(received[1][2]["text"], "real answer")

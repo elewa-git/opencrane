@@ -43,10 +43,10 @@ function _Skill(overrides: Record<string, unknown> = {})
 
 describe("PrismaRevisionToolPolicyAuthority", function _DescribePrismaRevisionToolPolicyAuthority()
 {
-	it("freezes only live model, MCP, skill, and artifact references", async function _LoadsLivePolicy()
+	it("freezes the text-response limit with live model, MCP, skill, and artifact references", async function _LoadsLivePolicy()
 	{
 		const transaction = _Transaction(_Revision(), [_Skill()], [{ id: "artifact-revision-1", state: ArtifactRevisionState.Published }]);
-		await expect(_ToolPolicySource(transaction).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelDefinitionId: "model-definition-1", modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1", generatedOutputCapabilities: [] }, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "calendar.read", description: "Read a calendar", inputSchema: { type: "object", additionalProperties: false }, inputSchemaDigest: ___DigestCanonicalJson({ type: "object", additionalProperties: false }) }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
+		await expect(_ToolPolicySource(transaction).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelDefinitionId: "model-definition-1", modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1", maxOutputTokens: 4096, generatedOutputCapabilities: [] }, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "calendar.read", description: "Read a calendar", inputSchema: { type: "object", additionalProperties: false }, inputSchemaDigest: ___DigestCanonicalJson({ type: "object", additionalProperties: false }) }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
 		expect((transaction.prisma as Prisma.TransactionClient).mcpToolAdmissionClaim.upsert).toHaveBeenCalledWith({ where: { agentRevisionId_siloId: { agentRevisionId: "revision-1", siloId: "silo-1" } }, create: { agentRevisionId: "revision-1", siloId: "silo-1", touchedAt: new Date("2026-07-26T00:00:00.000Z") }, update: { touchedAt: new Date("2026-07-26T00:00:00.000Z") } });
 	});
 
@@ -72,10 +72,10 @@ describe("PrismaRevisionToolPolicyAuthority", function _DescribePrismaRevisionTo
 
 describe("PrismaRevisionBudgetPolicyAuthority", function _DescribePrismaRevisionBudgetPolicyAuthority()
 {
-	it("freezes complete positive ceilings into a server-time deadline", async function _LoadsBudget()
+	it("preserves the total run ceiling independently of the text-response limit", async function _LoadsBudget()
 	{
-		const transaction = _Transaction(_Revision());
-		await expect(new PrismaRevisionBudgetPolicyAuthority(transaction.prisma as never).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 1024, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
+		const transaction = _Transaction(_Revision({ budget: { maxTurns: 4, maxTokens: 256000, maxDurationMs: 60_000 } }));
+		await expect(new PrismaRevisionBudgetPolicyAuthority(transaction.prisma as never).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 256000, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
 	});
 
 	it("denies malformed budget policy before it can enter an immutable snapshot", async function _DeniesMalformedBudget()
