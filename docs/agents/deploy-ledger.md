@@ -988,3 +988,23 @@ Full run reports belong in the corresponding pull request or issue.
   replay, installation and replay of the parked testv5 activations remain pending.
 - remaining evidence: personal and child answers, reviewed human sharing, reconnect, both history
   restore modes and their measured recovery times. A running Pod does not establish these outcomes.
+
+
+## 2026-09-08 · testv5 · reciprocal model-network preflight · PARTIAL
+
+- read-only verification at 12:01:56 UTC confirmed the computer/server paths on 8081 and 8090,
+  their Service selectors, and UDP/TCP DNS allowances. LiteLLM's policy allowed only server and
+  Cognee ingress on 4000. Computer egress already selected LiteLLM, but no reciprocal rule admitted
+  computer traffic. Correcting DNS alone would therefore leave the first model call blocked.
+- source repair: LiteLLM now admits only the configured computer namespace, `agent-sandbox`
+  component and configured profile on its model port. It retains attempt-key authentication.
+  The server chart's duplicate computer-egress policy is deleted; the Agent Sandbox chart remains
+  the owner of the unchanged computer ingress/egress rules. Tests cover a separate computer
+  namespace, a non-default model port, forbidden namespace/component/profile, disabled computers,
+  and the installed computer-to-model TCP path without a model invocation.
+- replay preflight: the live bootstrap Job and ConfigMap have the expected release ownership,
+  pinned utility image, token automount disabled and matching administrator/CA mount references.
+  The ConfigMap still needs the new replay script and target from the normal installation.
+  This inspection read no credential content and made no traffic probes or cluster changes.
+- pending: qualify and install the combined network/replay source, then complete product and
+  recovery evidence. Configuration matches are distinct from an actual model answer.

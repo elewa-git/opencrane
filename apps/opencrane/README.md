@@ -145,6 +145,10 @@ remains ready to serve unaffected data. The `:8081` Service is restricted by Kub
 that grant workload authority additionally review the caller's projected Kubernetes identity and
 bind it to durable assignment evidence.
 
+The server chart owns the server's network boundary. The
+[Agent Sandbox chart](../_infra/agent-sandbox/README.md) owns computer ingress and egress, and the
+[LiteLLM chart](../_infra/litellm/README.md) admits those computer peers at the model service.
+
 ### Run admission boundary
 
 Run admission is not an agent proxy and does not execute an agent session. Personal

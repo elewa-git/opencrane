@@ -63,6 +63,8 @@ if (args.includes('create')) {
     }));
   } else if (resource === 'networkpolicy/smoke-developer-template-network-policy') {
     if (scenario === 'upstream-policy') process.stdout.write(resource);
+  } else if (resource === 'service/smoke-litellm') {
+    process.stdout.write('4100');
   } else {
     throw new Error(`Unexpected read: ${resource}`);
   }
@@ -72,7 +74,9 @@ if (args.includes('create')) {
   const script = fs.readFileSync(0, 'utf8');
   assert(script.includes('socket.getaddrinfo'));
   assert(script.includes('socket.create_connection'));
-  if (scenario === 'dns-unreachable') process.exit(1);
+  assert(args.includes('smoke-litellm.smoke.svc.cluster.local'));
+  assert(args.includes('4100'));
+  if (scenario === 'dns-unreachable' || scenario === 'model-unreachable') process.exit(1);
 } else if (args.includes('delete')) {
   assert.equal(args[args.indexOf('--as') + 1], 'system:serviceaccount:smoke:smoke-opencrane-server');
   assert.equal(args[args.indexOf('--raw') + 1], `/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/smoke/sandboxclaims/${names.claim}`);
@@ -100,7 +104,7 @@ grep -Fq 'wait --for=delete sandbox/computer-controller-proof-g1 pod/computer-co
 grep -Fq 'wait --for=delete service/controller-proof-service' "$FIXTURE_DIR/calls"
 [[ "$(grep -c ' delete ' "$FIXTURE_DIR/calls")" == 1 ]]
 
-for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable upstream-policy missing-pod cleanup-blocked existing; do
+for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable model-unreachable upstream-policy missing-pod cleanup-blocked existing; do
   : > "$FIXTURE_DIR/calls"
   rm -f "$FIXTURE_DIR/deleted"
   if PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO="$scenario" bash "$SMOKE" k3d-contract smoke smoke 1 > "$FIXTURE_DIR/$scenario.log" 2>&1; then

@@ -54,9 +54,9 @@ The computer-history and Kubernetes naming repairs are deployed. A fresh employe
 a personal chat and send its first message. The Sandbox admission and controller configuration
 repairs passed remote Kubernetes qualification and are deployed. A new company-assistant request
 was selected in the real browser, and every group member can open its child chat. Its computer
-starts, but cannot resolve the private server with its current DNS configuration. The repair passes
-local tests and independent review; deployment, complete model answers, reviewed sharing and
-reconnect remain pending live. Access
+starts, but its current networking blocks private server discovery and model access. The DNS repair
+passed independent review, and the missing model connection is being repaired. Deployment, complete
+model answers, reviewed sharing and reconnect remain pending live. Access
 changes, recovery and computer actions need their complete live journeys. Tool, memory and
 shared-work journeys need their own evidence as they become available. Both history restore
 modes still need a completed product fixture and measured recovery time.

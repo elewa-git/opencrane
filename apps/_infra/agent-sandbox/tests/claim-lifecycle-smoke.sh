@@ -106,19 +106,23 @@ while true; do
   sleep 2
 done
 
-# Resolve and connect to the private listener without presenting a token or invoking a product command.
-kubectl --context "$CONTEXT" exec -i "$SANDBOX_NAME" -n "$NAMESPACE" --container=conversation-computer -- python3 - <<'PY'
+# Resolve both required services without presenting credentials or invoking a product or model command.
+MODEL_PORT="$(kubectl --context "$CONTEXT" get "service/${RELEASE}-litellm" -n "$NAMESPACE" -o jsonpath='{.spec.ports[0].port}')"
+kubectl --context "$CONTEXT" exec -i "$SANDBOX_NAME" -n "$NAMESPACE" --container=conversation-computer -- python3 - "${RELEASE}-litellm.${NAMESPACE}.svc.cluster.local" "$MODEL_PORT" <<'PY'
 import os
 import socket
+import sys
 import urllib.parse
 
 endpoint = urllib.parse.urlparse(os.environ["OPENCRANE_INTERNAL_ENDPOINT"])
 socket.setdefaulttimeout(10)
-addresses = socket.getaddrinfo(endpoint.hostname, endpoint.port, type=socket.SOCK_STREAM)
-assert addresses, "The computer cannot resolve its internal server"
-with socket.create_connection((endpoint.hostname, endpoint.port), timeout=10):
-    pass
-print("Computer cluster DNS and private server transport: PASS")
+for host, port in [(endpoint.hostname, endpoint.port), (sys.argv[1], int(sys.argv[2]))]:
+    assert port is not None and 1 <= port <= 65535
+    addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    assert addresses, "The computer cannot resolve a required private service"
+    with socket.create_connection((host, port), timeout=10):
+        pass
+print("Computer cluster DNS, private server and model transport: PASS")
 PY
 template_policy="$(kubectl --context "$CONTEXT" get "networkpolicy/${RELEASE}-developer-template-network-policy" -n "$NAMESPACE" --ignore-not-found -o name)"
 if [[ -n "$template_policy" ]]; then
@@ -126,4 +130,4 @@ if [[ -n "$template_policy" ]]; then
   exit 1
 fi
 cleanup_claim
-printf 'Sandbox controller lifecycle: PASS (owned Sandbox, running Pod, lease labels, cluster DNS, private server transport, Service address and foreground cleanup; no product execution or Ready proof).\n'
+printf 'Sandbox controller lifecycle: PASS (owned Sandbox, running Pod, lease labels, cluster DNS, private server and model transport, Service address and foreground cleanup; no product execution or Ready proof).\n'

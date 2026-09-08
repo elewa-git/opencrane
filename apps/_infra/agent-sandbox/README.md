@@ -87,7 +87,7 @@ current Kubernetes type checking, rejects expression warnings, and dry-runs a va
 and forbidden identity, annotation, environment, lease and pool changes. Those requests persist no
 claims or Pods. The following `tests/claim-lifecycle-smoke.sh` then persists a server-impersonated
 claim in the disposable k3d cluster. It checks the controlling owner UID, Sandbox and Pod lease
-labels, running Pod, cluster DNS, private server transport and same-namespace Service address. It
+labels, running Pod, cluster DNS, private server and model transport and same-namespace Service address. It
 also rejects a controller-created template policy, then deletes that exact claim and waits for
 foreground cleanup. It rejects other contexts. This proves controller reconciliation, without
 claiming PostgreSQL admission, computer readiness or an assistant answer; live journeys prove those.
