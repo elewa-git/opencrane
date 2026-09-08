@@ -55,8 +55,9 @@ Nx skills PR [#772](https://github.com/elewa-git/opencrane/pull/772) now targets
   are deleted.
 - A personal conversation can perform a bounded model turn and persist its output. Approved persona
   instructions now reach the model. Governed tool execution is not yet connected to that model loop.
-- Authorized participants can inspect files, diffs, allowlisted commands, screenshots and temporary
-  local previews. Published applications, interactive desktops and unrestricted terminals are absent.
+- Authorized participants have file, diff and browser discovery routes. Commands, screenshots,
+  page creation and preview effects remain denied until concrete effect admission is connected.
+  Published applications, interactive desktops and unrestricted terminals are absent.
 - Backup schedules, restore tooling, HTTPS probes and disruption protection are implemented; their
   live recovery drill is still pending.
 

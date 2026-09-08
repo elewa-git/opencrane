@@ -312,7 +312,10 @@ preserve authority after revocation.
 
 The computer-review router keeps sandbox routes and the keyed review credential server-side (the lease id is a public label, never a bearer): file, diff, and
 browser discovery require current `Read`, while commands, page creation, screenshots, and preview
-access require current `Use`.
+access require current `Use`. Those effect routes currently remain denied: their coordinate lookup
+uses the read-entitlement port, which rejects effect actions. They need concrete argument-bound
+effect admission before execution can be enabled. The group child's reviewed text-sharing path
+already has its own transaction-bound admission and is separate from these computer actions.
 
 ## See also
 
