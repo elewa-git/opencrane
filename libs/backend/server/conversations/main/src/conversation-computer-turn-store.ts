@@ -3,11 +3,14 @@ import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";
-import type { ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerToolReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
+import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
+import { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
 const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v1";
+const _TOOL_RESERVED_EVENT = "opencrane.conversation-computer-turn-tool-reserved.v1";
 const _ACTIVE_EVENT = "opencrane.conversation-computer-turn-active.v1";
 const _SETTLED_EVENT = "opencrane.conversation-computer-turn-settled.v1";
 
@@ -37,7 +40,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		return result;
 	}
 
-	/** Load and validate the frozen record plus its optional terminal output coordinate. */
+	/** Load the immutable input anchor and the mutually exclusive output or tool decision. */
 	public async load(bootstrapId: string): Promise<FrozenConversationComputerTurn | null>
 	{
 		let frozen: FrozenConversationComputerTurn | null = null;
@@ -48,15 +51,52 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			else if (event.revision === 1n && frozen !== null)
 			{
 				const current: FrozenConversationComputerTurn = frozen;
-				const receipt = _Output(event, bootstrapId);
-				frozen = { ...current, outputSourceCommandId: receipt.sourceCommandId, outputReceipt: receipt };
+				if (event.type === _TOOL_RESERVED_EVENT)
+					frozen = { ...current, toolReservation: _ToolReservation(event, bootstrapId) };
+				else
+				{
+					const receipt = _Output(event, bootstrapId);
+					frozen = { ...current, outputSourceCommandId: receipt.sourceCommandId, outputReceipt: receipt };
+				}
 			}
 			else throw new Error("Conversation computer turn history is noncontiguous");
 		}
 		return frozen;
 	}
 
-	/** Append exactly one output coordinate or recognize the same uncertain retry. */
+	/**
+	 * Reserve a proposal before database admission using the same checked revision as output.
+	 *
+	 * The reservation survives response loss and database refusal. A later refusal does not prove
+	 * that an earlier request failed to commit. Only authoritative outcome reconciliation may settle
+	 * the reserved work; neither a retry nor a fresh model response can erase it.
+	 * A resolved append can acknowledge a reused event ID, so stored-decision readback precedes SQL.
+	 * Called by: ConversationComputerTurnAuthority.proposeTool.
+	 */
+	public async reserveTool(bootstrapId: string, reservation: ConversationComputerToolReservation): Promise<void>
+	{
+		const existing = await this.load(bootstrapId);
+		if (existing === null || existing.outputReceipt !== null)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+		if (existing.toolReservation !== null)
+			return _AssertSameReservation(existing.toolReservation, reservation);
+		const event = { id: _ReservationEventId(bootstrapId, reservation), type: _TOOL_RESERVED_EVENT, data: { bootstrapId, proposalId: reservation.proposalId, requestFingerprint: reservation.requestFingerprint }, metadata: { bootstrapId } };
+		try
+		{
+			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: 0n, events: [event] });
+		}
+		catch (error)
+		{
+			if (!(error instanceof WrongExpectedVersionError))
+				throw error;
+		}
+		const winner = await this.load(bootstrapId);
+		if (winner?.toolReservation === null || winner === null)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+		_AssertSameReservation(winner.toolReservation, reservation);
+	}
+
+	/** Resolve the unsettled turn named by this exact computer lease. */
 	public async loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>
 	{
 		let active: string | null = null;
@@ -71,23 +111,24 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		return active === null ? null : await this.load(active);
 	}
 
-	/** Append a restart-safe output receipt after the encrypted payload is durable. */
+	/** Verify the stored output receipt after append; an event-ID acknowledgement alone cannot defeat a tool reservation. */
 	public async markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<"accepted" | "idempotent">
 	{
+		let outcome: "accepted" | "idempotent" = "accepted";
 		try
 		{
 			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: 0n, events: [{ id: receipt.sourceCommandId, type: _OUTPUT_EVENT, data: { bootstrapId, ...receipt }, metadata: { bootstrapId } }] });
-			return "accepted";
 		}
 		catch (error)
 		{
 			if (!(error instanceof WrongExpectedVersionError))
 				throw error;
-			const existing = await this.load(bootstrapId);
-			if (existing?.outputReceipt !== null && existing !== null && _SameReceipt(existing.outputReceipt, receipt))
-				return "idempotent";
-			throw new Error("Conversation computer turn already records a different output");
+			outcome = "idempotent";
 		}
+		const existing = await this.load(bootstrapId);
+		if (existing === null || existing.toolReservation !== null || existing.outputReceipt === null || !_SameReceipt(existing.outputReceipt, receipt))
+			throw new Error("Conversation computer turn does not record this output decision");
+		return outcome;
 	}
 
 	/** Release the active-turn pointer only after run completion and credential revocation converge. */
@@ -201,7 +242,7 @@ function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown
 }
 
 /** Shape of the frozen event data as it is stored: the lease flattened to `generation`, `leaseId` and `sandboxClaimId`, and the stream revision as a string. */
-type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
+type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolReservation"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
 
 /** Rebuild the in-memory record from the stored event, gathering the flat lease fields into the `lease` bundle. */
 function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConversationComputerTurn
@@ -224,7 +265,33 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 		compile: value.compile,
 		outputSourceCommandId: null,
 		outputReceipt: null,
+		toolReservation: null,
 	};
+}
+
+function _ToolReservation(event: HistoryRecordedEvent, bootstrapId: string): ConversationComputerToolReservation
+{
+	const proposalId = event.data["proposalId"];
+	const requestFingerprint = event.data["requestFingerprint"];
+	if (event.streamName !== _Stream(bootstrapId) || event.data["bootstrapId"] !== bootstrapId || event.metadata["bootstrapId"] !== bootstrapId
+		|| typeof proposalId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/u.test(proposalId)
+		|| typeof requestFingerprint !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(requestFingerprint))
+		throw new Error("Conversation computer turn received an invalid tool reservation");
+	const reservation = { proposalId, requestFingerprint };
+	if (event.id !== _ReservationEventId(bootstrapId, reservation))
+		throw new Error("Conversation computer tool reservation has a different event identity");
+	return reservation;
+}
+
+function _ReservationEventId(bootstrapId: string, reservation: ConversationComputerToolReservation): string
+{
+	return _Uuid("tool-reservation", JSON.stringify([bootstrapId, reservation.proposalId, reservation.requestFingerprint]));
+}
+
+function _AssertSameReservation(existing: ConversationComputerToolReservation, requested: ConversationComputerToolReservation): void
+{
+	if (existing.proposalId !== requested.proposalId || existing.requestFingerprint !== requested.requestFingerprint)
+		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Conflict);
 }
 
 function _Output(event: HistoryRecordedEvent, bootstrapId: string): ConversationComputerTurnOutputReceipt
@@ -233,7 +300,7 @@ function _Output(event: HistoryRecordedEvent, bootstrapId: string): Conversation
 	const blockId = event.data["blockId"];
 	const payloadRef = event.data["payloadRef"];
 	const ciphertextDigest = event.data["ciphertextDigest"];
-	if (event.type !== _OUTPUT_EVENT || event.data["bootstrapId"] !== bootstrapId || typeof sourceCommandId !== "string" || typeof blockId !== "string" || typeof payloadRef !== "string" || typeof ciphertextDigest !== "string" || event.id !== sourceCommandId)
+	if (event.type !== _OUTPUT_EVENT || event.streamName !== _Stream(bootstrapId) || event.data["bootstrapId"] !== bootstrapId || event.metadata["bootstrapId"] !== bootstrapId || typeof sourceCommandId !== "string" || typeof blockId !== "string" || typeof payloadRef !== "string" || typeof ciphertextDigest !== "string" || event.id !== sourceCommandId)
 		throw new Error("Conversation computer turn received an invalid output event");
 	return { sourceCommandId, blockId, payloadRef, ciphertextDigest };
 }

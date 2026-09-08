@@ -1,6 +1,7 @@
 import { ___ConversationToolProposalSchema, type ConversationToolProposalReceipt } from "@opencrane/contracts";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals, type ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
+import { _PrepareConversationToolProposal } from "./conversation-tool-proposal";
 import { createHash } from "node:crypto";
 
 import type { CompiledRunInput, ComputerScope } from "@opencrane/contracts";
@@ -49,7 +50,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		_AssertSameTurn(proposed, turn);
 		_AssertRecompiledInput(turn, candidate.compiledInput);
 		await this.dependencies.candidates.assertCurrent(turn, command.workload);
-		if (turn.outputSourceCommandId !== null)
+		if (turn.outputSourceCommandId !== null || turn.toolReservation !== null)
 			return null;
 		await this.dependencies.runLifecycle.start(_RunLifecycleCommand(turn));
 		const keyAlias = `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`;
@@ -69,7 +70,9 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		if (turn === null || turn.outputSourceCommandId !== null || turn.outputReceipt !== null)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		const candidate = await this.dependencies.candidates.assertCurrent(turn, command.workload);
-		return this.dependencies.toolProposals.admit(turn, candidate, proposal.data);
+		const prepared = _PrepareConversationToolProposal(turn, candidate, proposal.data);
+		await this.dependencies.store.reserveTool(turn.bootstrapId, { proposalId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint });
+		return this.dependencies.toolProposals.admit(turn, candidate, { ...proposal.data, arguments: prepared.arguments });
 	}
 
 	/** Persist assistant text as an encrypted payload and append its non-secret reference through the frozen writer. */
@@ -79,6 +82,8 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		if (turn === null)
 			throw new Error("Conversation computer output requires an admitted bootstrap");
 		await this.dependencies.candidates.assertCurrent(turn, command.workload);
+		if (turn.toolReservation !== null)
+			throw new Error("Conversation computer output cannot finish unresolved tool work");
 		if (turn.outputSourceCommandId !== null)
 		{
 			if (turn.outputSourceCommandId !== command.sourceCommandId)
@@ -139,6 +144,7 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		compile: { runId: input.runId, attempt: input.attempt, promptCompilerVersion: input.promptCompilerVersion, digest: input.digest },
 		outputSourceCommandId: null,
 		outputReceipt: null,
+		toolReservation: null,
 	};
 }
 

@@ -147,6 +147,17 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly outputSourceCommandId: string | null;
 	/** Receipt of the durable output, or null while the turn is still open. */
 	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
+	/** Blocks terminal output while the exact proposed call remains unresolved. */
+	readonly toolReservation: ConversationComputerToolReservation | null;
+}
+
+/** Durable decision to pursue one proposal; PostgreSQL remains the authority for its admission and outcome. */
+export interface ConversationComputerToolReservation
+{
+	/** Server-derived single slot for the frozen run attempt. */
+	readonly proposalId: string;
+	/** Binds the slot to the exact frozen assignment, tool and argument digest without storing content. */
+	readonly requestFingerprint: string;
 }
 
 /** Durable material that lets a restarted worker finish an output without retaining plaintext. */
@@ -234,6 +245,8 @@ export interface ConversationComputerTurnStore
 	loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>;
 	/** Appends the output receipt, or recognizes the same receipt on an uncertain retry. */
 	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<"accepted" | "idempotent">;
+	/** Reserves one exact proposal against the same turn revision as terminal output, before database admission. */
+	reserveTool(bootstrapId: string, reservation: ConversationComputerToolReservation): Promise<void>;
 	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
 	settle(turn: FrozenConversationComputerTurn): Promise<void>;
 }

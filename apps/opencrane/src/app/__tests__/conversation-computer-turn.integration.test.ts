@@ -164,6 +164,7 @@ describe("conversation computer turn integration", function _Suite() {
           }),
       },
       store: {
+        reserveTool: vi.fn().mockResolvedValue(undefined),
         createOrRead: vi.fn(async (turn) => (frozen ??= turn)),
         load: vi.fn(async () => frozen),
         markOutput: vi.fn().mockResolvedValue("accepted"),

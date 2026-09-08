@@ -46,6 +46,8 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   route accepts one frozen tool revision and validated arguments, checks current permission and
   preserves the same proposal across retries. Connecting it to model execution and durable
   conversation results remains in development.
+  A durable reservation prevents unresolved tool work from being accepted as a final answer.
+  Exact proposal retries are supported; automatic recovery of an abandoned reservation is pending.
 
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,

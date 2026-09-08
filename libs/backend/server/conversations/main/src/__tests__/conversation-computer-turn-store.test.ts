@@ -16,6 +16,7 @@ const _TURN = {
   credentialLifetimeSeconds: 300,
   outputSourceCommandId: null,
   outputReceipt: null,
+  toolReservation: null,
   binding: {
     siloId: "testv5",
     conversationId: "conversation-1",
@@ -130,7 +131,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       id: outputId,
       type: "opencrane.conversation-computer-turn-output.v1",
       data: { bootstrapId: _ID, sourceCommandId: outputId, blockId: "block-1", payloadRef: "payload-1", ciphertextDigest: "sha256:ciphertext" },
-      metadata: {},
+      metadata: { bootstrapId: _ID },
     };
     const history = {
       append: vi

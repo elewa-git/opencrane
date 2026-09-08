@@ -31,6 +31,13 @@ recover the stored proposal without resetting its lifecycle. The route neither d
 nor returns a result. The model loop and durable
 conversation progress remain the next integration steps.
 
+Before database admission, the turn stream reserves that exact proposal against the same revision
+used to accept final output. Stored-decision readback confirms which command won. A reserved turn
+cannot accept an answer; bootstrap retries that observe it wait instead of issuing another key. Admission errors keep the
+reservation because an earlier request may already have committed. An exact client retry can
+recover it; an abandoned reservation remains pending until outcome reconciliation is implemented.
+The reservation contains only identity and digests, so it cannot reconstruct missing arguments.
+
 Before an MCP (Model Context Protocol) executor claims a saved run-owned tool call, this package rechecks its current
 Running run, unchanged execution subject, conversation participation, identity and exact active
 computer lease. Existing service and membership owners supply fresh evidence; the central

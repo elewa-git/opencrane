@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerTurnAuthority } from "../conversation-computer-turn-authority";
-import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import type { ConversationComputerToolReservation, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 
 const _WORKLOAD = {
   subject: "system:serviceaccount:testv5:conversation-computer",
@@ -92,6 +93,7 @@ function _Harness() {
       complete: vi.fn().mockResolvedValue(undefined),
     },
     store: {
+      reserveTool: vi.fn(async function _Reserve(_id: string, reservation: ConversationComputerToolReservation) { stored = { ...stored!, toolReservation: reservation }; }),
       createOrRead: vi.fn(async function _Create(
         turn: FrozenConversationComputerTurn,
       ) {
@@ -289,11 +291,13 @@ describe("conversation tool proposal turn ownership", function _Suite()
 		const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD };
 		const bootstrap = await authority.bootstrap(command);
 		const candidate = await dependencies.candidates.resolve(command);
-		dependencies.candidates.assertCurrent.mockResolvedValue(candidate);
+		const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
+		const ready = { ...candidate, compiledInput: { ...candidate.compiledInput, tools: [{ name: "records.read", toolRevisionId: "tool-1", description: "Read", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }], budget: { ...candidate.compiledInput.budget, maxToolInvocations: 1, wallClockDeadlineEpochMs: Date.now() + 60_000 } } };
+		dependencies.candidates.assertCurrent.mockResolvedValue(ready);
 		dependencies.toolProposals.admit.mockResolvedValue({ proposalId: "server-slot", outcome: "recorded" });
 		const proposal = { bootstrapId: bootstrap!.bootstrapId, toolRevisionId: "tool-1", arguments: { query: "record" } };
 		expect(await authority.proposeTool({ ...proposal, workload: _WORKLOAD })).toEqual({ proposalId: "server-slot", outcome: "recorded" });
-		expect(dependencies.toolProposals.admit).toHaveBeenCalledWith(dependencies.store.createOrRead.mock.calls[0][0], candidate, proposal);
+		expect(dependencies.toolProposals.admit).toHaveBeenCalledWith(dependencies.store.createOrRead.mock.calls[0][0], ready, proposal);
 		expect(dependencies.candidates.assertCurrent).toHaveBeenLastCalledWith(dependencies.store.createOrRead.mock.calls[0][0], _WORKLOAD);
 	});
 	it("refuses missing and output-started turns before proposal admission", async function _ClosedTurn()
