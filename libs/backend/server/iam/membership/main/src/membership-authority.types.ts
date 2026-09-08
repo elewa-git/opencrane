@@ -130,8 +130,7 @@ export interface FleetMembershipAuthorityRepository
  *
  * An implementation holds the issuer's public key and nothing else — it answers "did this issuer
  * sign exactly these bytes?" and leaves every ordering and freshness rule to the caller. A
- * silo with no fleet key still gets an implementation: the standalone one answers `verified: false`
- * for everything, so a missing key can never read as "membership is fine".
+ * standalone silo uses its local membership reader instead; it cannot accept a Fleet assertion.
  *
  * Called by: __VerifyCurrentFleetMembershipEvidence;
  * supplied through {@link FleetMembershipEvidenceConfig} and implemented by
@@ -155,11 +154,11 @@ export interface FleetMembershipSignatureVerifier
  * The three deployment-owned values every membership check needs: who to trust, how stale is too
  * stale, and the key to check signatures with.
  *
- * Built once at startup from environment variables by {@link _CreateFleetMembershipEvidenceConfig}
+ * Built once at startup from environment variables by {@link _CreateHumanMembershipEvidenceConfig}
  * and then passed down, so no request can pick its own issuer or widen its own staleness limit.
  *
  * Called by: apps/opencrane/src/app/run-admission-composition.ts builds it;
- * `PrismaRuntimeMembershipEligibilitySource` consumes it.
+ * `PrismaHumanMembershipEvidenceRepository` consumes it.
  */
 export interface FleetMembershipEvidenceConfig
 {
@@ -176,14 +175,14 @@ export interface FleetMembershipEvidenceConfig
  *
  * The value is deployment configuration, not a request claim: `Fleet` retains the independent
  * Fleet signer boundary, while `Standalone` lets a silo start without pretending that an absent
- * Fleet key establishes membership. Standalone admission remains denied until a local issuer is
- * implemented and has issued a signed revision.
+ * Fleet key establishes membership. Standalone verifies the active local organization membership
+ * and external Principal in PostgreSQL. Values select deployment policy and are never request claims.
  */
 export enum FleetMembershipDeploymentModes
 {
 	/** Requires the independently managed Fleet public verification key. */
 	Fleet = "fleet",
-	/** Starts a silo without Fleet trust; no unsigned membership is ever accepted. */
+	/** Requires the deployment-trusted OIDC identity and active local PostgreSQL membership. */
 	Standalone = "standalone",
 }
 

@@ -24,18 +24,23 @@ export interface ExecutionSubjectIdentityEvidence
  * Selects the membership evidence that admission and runtime authorities must verify.
  * The values are stored in execution subjects on runs and input snapshots and sent across package
  * boundaries. Renaming a value changes the persisted and wire contracts; validators reject unknown
- * kinds. Neither kind is a lifecycle state or grants current access from saved evidence alone.
+ * kinds. No kind is a lifecycle state or grants current access from saved evidence alone.
  */
 export enum ExecutionSubjectMembershipKinds
 {
 	/** A human Principal belongs through a currently verified, signed fleet membership assertion. */
 	Fleet = "fleet",
+	/** A human Principal belongs through an active local organization membership in standalone mode. */
+	Standalone = "standalone",
 	/** An internal Principal belongs through its currently active managed AgentService. */
 	Managed = "managed",
 }
 
 /** Carries the membership evidence appropriate to the executing Principal. */
-export type ExecutionSubjectMembershipEvidence = ExecutionSubjectFleetMembershipEvidence | ExecutionSubjectManagedMembershipEvidence;
+export type ExecutionSubjectMembershipEvidence = ExecutionSubjectHumanMembershipEvidence | ExecutionSubjectManagedMembershipEvidence;
+
+/** Preserves the deployment-selected human membership proof; Managed is never requester evidence. */
+export type ExecutionSubjectHumanMembershipEvidence = ExecutionSubjectFleetMembershipEvidence | ExecutionSubjectStandaloneMembershipEvidence;
 
 /** Records signed fleet membership for a human requester or a personal assistant's Principal. */
 export interface ExecutionSubjectFleetMembershipEvidence
@@ -55,6 +60,34 @@ export interface ExecutionSubjectFleetMembershipEvidence
 	/** Identifies the authority evidence that verified the membership assertion. */
 	readonly decisionEvidenceId: string;
 	/** Records when the signed membership assertion expires. */
+	readonly trustedUntil: string;
+}
+
+/**
+ * Records an active local membership observed by the standalone IAM reader.
+ * Admission freezes this value in the run. Rechecks require the same membership row and update
+ * timestamp, current Active status and the same external identity. Profile data is not authority.
+ * The trust deadline bounds reuse; this witness grants no permission without current authorization.
+ */
+export interface ExecutionSubjectStandaloneMembershipEvidence
+{
+	/** Selects the deployment's local PostgreSQL membership authority, without a Fleet assertion. */
+	readonly kind: ExecutionSubjectMembershipKinds.Standalone;
+	/** Identifies the external Principal whose membership was checked. */
+	readonly principalId: string;
+	/** Identifies the deployment-selected silo. */
+	readonly siloId: SiloId;
+	/** Binds the Principal to the deployment-trusted OIDC issuer. */
+	readonly issuer: string;
+	/** Binds the Principal to the local membership's OIDC subject. */
+	readonly subjectId: string;
+	/** Identifies the local membership row; replacement invalidates this witness. */
+	readonly membershipId: string;
+	/** Records the membership version in UTC; authority changes must advance this timestamp. */
+	readonly membershipUpdatedAt: string;
+	/** Records the trusted server time at which IAM observed the membership. */
+	readonly observedAt: string;
+	/** Bounds trust by the deployment's maximum membership staleness. */
 	readonly trustedUntil: string;
 }
 
@@ -136,7 +169,7 @@ export interface ExecutionSubjectRequesterProvenance
 	/** Records when the server authenticated the requester. */
 	readonly authenticatedAt: string;
 	/** Preserves the requester's independently verified membership, separate from the assistant's authority. */
-	readonly membership: ExecutionSubjectFleetMembershipEvidence;
+	readonly membership: ExecutionSubjectHumanMembershipEvidence;
 }
 
 /** Records the separate authority decision that admitted one requested execution. */

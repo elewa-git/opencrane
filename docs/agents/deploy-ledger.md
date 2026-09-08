@@ -792,3 +792,32 @@ Full run reports belong in the corresponding pull request or issue.
   invitations, with 403 before acceptance and admission afterward. By 06:54:04, both had approved
   personas and three saved, resumable and idempotent guided answers. Their final assistant creation
   is deliberately pending the corrected deployment. The original three-user group is unchanged.
+- audience isolation: at 07:03:05–08 UTC, both newly admitted colleagues were absent from the
+  original group's conversation list. Its metadata and history returned the same 404 body as an
+  unknown conversation. No group messages or audience records were changed by this check.
+- CI finding: the profile checkpoint's [PR run 34196087299](https://github.com/elewa-git/opencrane/actions/runs/34196087299)
+  failed a mechanical style check. Large-diff batches dropped the original comparison base and
+  checked inherited lines that the focused local run correctly excluded. The source repair preserves
+  that base across batches; 12 checker tests pass, including inherited-line, new-violation and
+  explicit-file regressions. Live source qualification still awaits the next successful CI run.
+
+## 2026-09-08 · source gate · standalone assistant membership · PARTIAL
+
+- outcome: standalone employees now supply explicit local membership evidence to personal and
+  company assistant admission. The deployment chooses the authority; failed Fleet verification
+  never falls back to standalone access. One transaction-bound IAM reader replaces the duplicated
+  Fleet-only personal and company readers.
+- saved-run boundary: the active computer bootstrap path rejects changed membership mode, local
+  row version or external identity before a retry can issue a second model credential. Rechecking
+  unchanged membership preserves the original deadline. Existing provider credentials retain their
+  bounded lifetime; instantaneous provider-side revocation is not claimed.
+- source qualification: 772 focused tests and nine lints pass. Prisma, dependency, app ownership,
+  agent-domain, growth and whitespace guards pass, including both ownership negative suites.
+  Style has zero errors and 19 verified inherited warnings. The independent architecture/security/
+  correctness/residue review found no Critical, High or Medium issue; its one Low README ownership
+  correction is applied. The separate CI batching repair also passes independent review and all
+  12 checker regressions. Website build passes.
+- boundary: these changes are source-qualified only. They do not rewrite the original fixtures'
+  mismatched personal services, issue invented Fleet signatures, alter the schema or establish
+  a completed model reply. Publish and deploy the reviewed source before completing the two fresh
+  personal setups and the company child journey; capture that fixture before either recovery drill.

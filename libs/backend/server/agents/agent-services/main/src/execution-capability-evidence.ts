@@ -1,4 +1,5 @@
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
+import { __DigestHumanMembershipEvidence } from "@opencrane/backend/server/iam/membership";
 import type { RevisionBoundaryAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
@@ -16,8 +17,7 @@ export function __ExecutionCapabilityEvidence(input: ExecutionCapabilityEvidence
 		agentRevisionId: input.agentRevisionId,
 		agentRevisionDigest: input.agentRevisionDigest,
 		principalId: input.principalId,
-		fleetMembershipRevision: input.fleetMembershipRevision,
-		fleetMembershipPayloadDigest: input.fleetMembershipPayloadDigest,
+		membershipDigest: __DigestHumanMembershipEvidence(input.membership),
 		authorizationDecisionDigests,
 		effectiveBoundaryAttachments: attachments,
 		modelDefinitionId: input.modelDefinitionId,

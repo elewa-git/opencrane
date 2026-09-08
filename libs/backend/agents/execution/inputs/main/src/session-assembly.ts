@@ -1,3 +1,4 @@
+import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
 import { __DigestRunInputSnapshot, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
@@ -133,7 +134,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot, currentExecutionSubject: checked.subject };
 }
 
-/** Ensures a duplicate keeps the same immutable identity and computer while accepting refreshed evidence. */
+/** Ensures a duplicate keeps the same identity, computer and membership version while accepting a fresh observation. */
 function _SameExistingSubject(stored: ExecutionSubject, current: ExecutionSubject): boolean
 {
 	return stored.siloId === current.siloId && stored.agentIdentityId === current.agentIdentityId
@@ -141,7 +142,9 @@ function _SameExistingSubject(stored: ExecutionSubject, current: ExecutionSubjec
 		&& stored.runScope.agentRevisionId === current.runScope.agentRevisionId
 		&& stored.computerScope.computerId === current.computerScope.computerId
 		&& stored.computerScope.leaseId === current.computerScope.leaseId
-		&& stored.computerScope.leaseGeneration === current.computerScope.leaseGeneration;
+		&& stored.computerScope.leaseGeneration === current.computerScope.leaseGeneration
+		&& __SameMembershipBinding(stored.membership, current.membership)
+		&& __SameMembershipBinding(stored.requester.membership, current.requester.membership);
 }
 
 /** Returns whether a command contains valid run coordinates and one deterministic compilation instant. */

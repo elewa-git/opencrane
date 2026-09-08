@@ -1,4 +1,4 @@
-import type { RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import type { ExecutionSubjectHumanMembershipEvidence, RevisionBoundaryAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 /** Immutable revision and current authorization inputs used to derive execution capability evidence. */
@@ -14,10 +14,8 @@ export interface ExecutionCapabilityEvidenceInput
 	readonly agentRevisionDigest: string;
 	/** Principal whose current grants were evaluated. */
 	readonly principalId: string;
-	/** Signed membership revision accepted during this evaluation. */
-	readonly fleetMembershipRevision: number;
-	/** Digest of the signed membership payload accepted during this evaluation. */
-	readonly fleetMembershipPayloadDigest: string;
+	/** Deployment-selected human witness accepted during this evaluation. */
+	readonly membership: ExecutionSubjectHumanMembershipEvidence;
 	/** Durable central-authorization decision digests for Invoke and every declared boundary. */
 	readonly authorizationDecisionDigests: readonly string[];
 	/** Revision boundaries that survived current authorization. */

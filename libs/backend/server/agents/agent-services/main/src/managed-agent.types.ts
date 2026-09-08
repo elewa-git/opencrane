@@ -1,5 +1,6 @@
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
-import type { FleetMembershipEvidenceConfig, TrustedFleetMembershipEvidence } from "@opencrane/backend/server/iam/membership";
+import type { HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import type { ExecutionSubjectHumanMembershipEvidence } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 /** Contains the active company assistant and its first, deliberately unextended execution policy. */
@@ -34,8 +35,8 @@ export interface CurrentManagedAgentConversation
 	readonly candidate: ManagedAgentConversationCandidate;
 	/** Model whose Use permission belongs to the company's Principal. */
 	readonly modelDefinitionId: string;
-	/** Current verified human membership revision to bind into a recorded invocation. */
-	readonly membershipRevision: number;
+	/** Current verified human membership witness to bind into a recorded invocation. */
+	readonly membership: ExecutionSubjectHumanMembershipEvidence;
 	/** Trusted time used by both membership verification and permission decisions. */
 	readonly nowEpochMs: number;
 }
@@ -44,7 +45,7 @@ export interface CurrentManagedAgentConversation
 export interface ManagedAgentConversationDependencies
 {
 	readonly identityHistory: Pick<AgentIdentityHistory, "load">;
-	readonly membershipConfig: FleetMembershipEvidenceConfig;
+	readonly membershipConfig: HumanMembershipEvidenceConfig;
 	readonly profiles: readonly { readonly workloadProfile: string; readonly profileRevisionId: string }[];
 	readonly nowEpochMs?: () => number;
 }
@@ -53,5 +54,5 @@ export interface ManagedAgentConversationDependencies
 export interface ManagedExecutionEvidenceRepository
 {
 	loadCurrent(siloId: string, agentServiceId: string): Promise<ManagedAgentRevisionEvidence | null>;
-	verifyRequesterMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<TrustedFleetMembershipEvidence | null>;
+	verifyRequesterMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<ExecutionSubjectHumanMembershipEvidence | null>;
 }

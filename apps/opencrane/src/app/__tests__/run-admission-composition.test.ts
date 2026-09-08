@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissionExistingVerifier, type RunAdmissionResult, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
-import type { ConversationComputerRunAdmissionCommand } from "@opencrane/backend/server/conversations";
-import { ExecutionSubjectMembershipKinds, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
+import { ConversationComputerTurnAuthorityService, type ConversationComputerRunAdmissionCommand, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { FleetMembershipDeploymentModes, PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { _CreateConversationRunAdmission } from "../run-admission-composition";
@@ -61,6 +62,8 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		const { snapshot, compiled } = _savedRun();
 		const original = structuredClone(snapshot);
 		const subject = snapshot.executionSubject;
+		if (subject.requester.membership.kind !== ExecutionSubjectMembershipKinds.Fleet)
+			throw new Error("Fixture requires Fleet membership");
 		const current: ExecutionSubject = { ...subject, membership: { ...subject.membership, trustedUntil: executionExpiry }, requester: { ...subject.requester, membership: { ...subject.requester.membership, revision: 2, trustedUntil: requesterExpiry } } };
 		const load = vi.fn<ExecutionSubjectAuthority["load"]>().mockResolvedValue({ outcome: "loaded", value: current });
 		const admitPrincipal = vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"d".repeat(64)}` } });
@@ -86,5 +89,90 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		expect(compilers.create).not.toHaveBeenCalled();
 		expect(compilers.compile).toHaveBeenCalledWith(command, snapshot);
 		expect(snapshot).toEqual(original);
+	});
+});
+
+/** Exercises the real local reader, saved-run verifier and computer credential orchestration. */
+function _StandaloneComputerFixture()
+{
+	const saved = _savedRun();
+	let snapshot = saved.snapshot;
+	const compiled = saved.compiled;
+	let now = Date.parse("2026-09-07T00:01:00.000Z");
+	const observed = "2026-09-07T00:00:00.000Z";
+	const human = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "human-principal", siloId: "silo-1", issuer: "https://issuer.test", subjectId: "human-subject", membershipId: "local-1", membershipUpdatedAt: observed, observedAt: observed, trustedUntil: "2026-09-07T00:05:00.000Z" } as const;
+	snapshot = { ...snapshot, executionSubject: { ...snapshot.executionSubject, requester: { ...snapshot.executionSubject.requester, membership: human } } };
+	const row = { id: "local-1", clusterTenant: "silo-1", subject: "human-subject", status: "Active", updatedAt: new Date(observed) };
+	const principal = { id: "human-principal", siloId: "silo-1", issuer: "https://issuer.test", subject: "human-subject", provenance: "External" };
+	const database = { principal: { findFirst: vi.fn().mockResolvedValue(principal) }, orgMembership: { findUnique: vi.fn().mockResolvedValue(row) }, verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(null) } };
+	let config: HumanMembershipEvidenceConfig = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.test", maximumStalenessMs: 300_000 };
+	const load: ExecutionSubjectAuthority["load"] = async function _CurrentMembership()
+	{
+		const current = await new PrismaHumanMembershipEvidenceRepository(database as never, config).load("silo-1", "human-principal", now);
+		if (current === null)
+			return { outcome: "denied", reason: "membership_stale" };
+		const value = ___ExecutionSubjectSchema.parse({ ...snapshot.executionSubject, requester: { ...snapshot.executionSubject.requester, membership: current } });
+		return { outcome: "loaded", value };
+	};
+	const admitPrincipal = vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"d".repeat(64)}` } });
+	vi.spyOn(PrismaRunAdmissionUnitOfWork.prototype, "admit").mockImplementation(async function _Duplicate<TDenial>(_admission: RunAdmissionCommand, verifyExisting: RunAdmissionExistingVerifier<TDenial>): Promise<RunAdmissionResult<TDenial>>
+	{
+		const transaction: RunAdmissionTransaction = { prisma: database, authorization: { admitPrincipal } as never, admittedAt: new Date(now).toISOString(), admittedAtEpochMs: now };
+		const verified = await verifyExisting(snapshot, transaction);
+		return verified.outcome === "denied" ? { outcome: "denied", reason: verified.reason } : { outcome: "idempotent", snapshot };
+	});
+	const compilers = { create: vi.fn(), compile: vi.fn().mockResolvedValue(compiled) };
+	const port = _CreateConversationRunAdmission({} as never, { create: function _Subject() { return { load }; } }, { create: vi.fn() }, compilers, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 });
+	const command = _command();
+	let stored: FrozenConversationComputerTurn | null = null;
+	const issueOrRotate = vi.fn().mockResolvedValue({ key: "test-attempt-key", credentialDigest: `sha256:${"f".repeat(64)}` });
+	const computer = new ConversationComputerTurnAuthorityService({
+		siloId: "silo-1", endpoint: "http://gateway.test", credentials: { issueOrRotate, revoke: vi.fn() },
+		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { create: vi.fn() },
+		runLifecycle: { start: vi.fn(), complete: vi.fn() },
+		store: { loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: vi.fn(), markOutput: vi.fn(), settle: vi.fn() },
+		candidates: {
+			admit: vi.fn(), assertCurrent: async function _Current() { await port.admit(command); },
+			resolve: async function _Resolve()
+			{
+				const result = await port.admit(command);
+				return { binding: { siloId: "silo-1", conversationId: "child-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Company", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 }, lease: command.lease, compiledInput: result.compiledInput, latestPendingEntryId: "message-1", modelAlias: "company-model", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: result.authorityExpiresAt };
+			},
+		},
+	});
+	const bootstrap = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 }, workload: { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" } };
+	return { database, row, principal, issueOrRotate, computer, bootstrap, compilers, advance: function _Advance() { now += 60_000; }, selectFleet: function _SelectFleet() { config = { mode: FleetMembershipDeploymentModes.Fleet, trustedIssuerId: "fleet", maximumStalenessMs: 300_000, verifier: { verify: vi.fn() } }; } };
+}
+
+describe("standalone membership on actual computer bootstrap retry", function _StandaloneRetrySuite()
+{
+	it("rechecks an unchanged row before reissuing a key and retains the original deadline", async function _UnchangedRetry()
+	{
+		const f = _StandaloneComputerFixture();
+		await expect(f.computer.bootstrap(f.bootstrap)).resolves.toMatchObject({ outcome: "ready" });
+		f.advance();
+		await expect(f.computer.bootstrap(f.bootstrap)).resolves.toMatchObject({ outcome: "ready" });
+		expect(f.issueOrRotate).toHaveBeenCalledTimes(2);
+		for (const call of f.issueOrRotate.mock.calls)
+			expect(call[0].notAfter).toBe("2026-09-07T00:05:00.000Z");
+	});
+
+	it.each(["version", "row", "inactive", "issuer", "mode"])("refuses changed %s authority before a second model credential", async function _ChangedRetry(change)
+	{
+		const f = _StandaloneComputerFixture();
+		await f.computer.bootstrap(f.bootstrap);
+		f.advance();
+		if (change === "version")
+			f.database.orgMembership.findUnique.mockResolvedValue({ ...f.row, updatedAt: new Date("2026-09-07T00:01:30.000Z") });
+		if (change === "row")
+			f.database.orgMembership.findUnique.mockResolvedValue({ ...f.row, id: "replacement" });
+		if (change === "inactive")
+			f.database.orgMembership.findUnique.mockResolvedValue({ ...f.row, status: "Suspended" });
+		if (change === "issuer")
+			f.database.principal.findFirst.mockResolvedValue({ ...f.principal, issuer: "https://other.test" });
+		if (change === "mode")
+			f.selectFleet();
+		await expect(f.computer.bootstrap(f.bootstrap)).rejects.toThrow("Conversation run admission was denied");
+		expect(f.issueOrRotate).toHaveBeenCalledTimes(1);
 	});
 });

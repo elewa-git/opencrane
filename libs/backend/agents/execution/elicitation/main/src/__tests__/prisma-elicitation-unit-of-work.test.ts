@@ -1,4 +1,3 @@
-import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AgentRunState, ElicitationPurpose, ElicitationRequestState, ExternalActionClaimKind, PersonalMemoryPermissionReceiptState, Prisma, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,7 +13,7 @@ vi.mock("../elicitation-product-authorization", function _MockProductAuthorizati
 
 import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationAuthorizationEvidence, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { ElicitationBodyKinds, ElicitationPurposes, type RunInputSnapshot } from "@opencrane/contracts";
-import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
 import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
 import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work";
@@ -373,5 +372,20 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const transaction = _ResponseTransaction(request);
 		await expect(_Unit(transaction).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-1", response: { kind: ElicitationBodyKinds.FreeText, text: "Confirmed" } }, now: NOW })).resolves.toMatchObject({ outcome: "accepted" });
 		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledWith({ data: expect.objectContaining({ requestId: "request-1", payload: { kind: "a2ui_action", displayedActionId: "action-1", sourceComponentId: "card-1", actionDigest: "sha256:action", response: { kind: ElicitationBodyKinds.FreeText, text: "Confirmed" } } }) });
+	});
+});
+
+
+describe("standalone personal memory remains unavailable", function _StandaloneMemorySuite()
+{
+	it("refuses a local witness even when every other recall coordinate matches", function _DeniesLocalRecall()
+	{
+		const invocation = _MemoryInvocation();
+		const snapshot = _MemorySnapshot();
+		expect(_BuildMemoryPermissionPayload(invocation, snapshot)).not.toBeNull();
+		const membership = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "user-1", siloId: "silo-1", issuer: "https://issuer.test", subjectId: "oidc-1", membershipId: "local-1", membershipUpdatedAt: "2026-08-11T10:00:00.000Z", observedAt: "2026-08-11T10:00:00.000Z", trustedUntil: "2026-08-11T10:05:00.000Z" } as const;
+		const subject = { ...snapshot.executionSubject, membership, requester: { ...snapshot.executionSubject.requester, membership } };
+		const localInvocation = { ...invocation, authorizationEvidence: { ..._MemoryAuthorizationEvidence(), executionSubject: subject } };
+		expect(_BuildMemoryPermissionPayload(localInvocation, { ...snapshot, executionSubject: subject })).toBeNull();
 	});
 });

@@ -65,8 +65,8 @@
 				"contractImportPath": "./runtime-membership-eligibility.types",
 				"constructs": [
 					{
-						"adapter": "PrismaFleetMembershipAuthorityRepository",
-						"importPath": "./prisma-membership-authority"
+						"adapter": "PrismaHumanMembershipEvidenceRepository",
+						"importPath": "./prisma-human-membership-evidence"
 					}
 				]
 			},
@@ -936,7 +936,7 @@
 				"contractImportPath": "../personal-execution-evidence.types",
 				"constructs": [
 					{
-						"adapter": "PrismaFleetMembershipAuthorityRepository",
+						"adapter": "PrismaHumanMembershipEvidenceRepository",
 						"importPath": "@opencrane/backend/server/iam/membership"
 					}
 				]
@@ -993,7 +993,7 @@
 				"contractImportPath": "../managed-agent.types",
 				"constructs": [
 					{
-						"adapter": "PrismaFleetMembershipAuthorityRepository",
+						"adapter": "PrismaHumanMembershipEvidenceRepository",
 						"importPath": "@opencrane/backend/server/iam/membership"
 					}
 				]
@@ -1047,6 +1047,18 @@
 					{
 						"adapter": "PrismaConversationHistoryRepository",
 						"importPath": "./prisma-conversation-history-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/iam/membership/main/src/prisma-human-membership-evidence.ts",
+				"adapter": "PrismaHumanMembershipEvidenceRepository",
+				"contract": "HumanMembershipEvidenceRepository",
+				"contractImportPath": "./human-membership.types",
+				"constructs": [
+					{
+						"adapter": "PrismaFleetMembershipAuthorityRepository",
+						"importPath": "./prisma-membership-authority"
 					}
 				]
 			}

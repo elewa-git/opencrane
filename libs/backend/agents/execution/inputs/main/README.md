@@ -34,7 +34,7 @@ one admitted turn and refuses the model request when that limit is absent or bel
 
 **In this flow:** [execution/runs](../../runs/main/README.md) *(owns the admission transaction, the digest
 function, and the durable rows)* · [membership](../../../../server/iam/membership/main/README.md)
-*(supplies signed fleet-membership evidence consumed by the execution-subject authority)*
+*(supplies deployment-selected human membership evidence consumed by the execution-subject authority)*
 
 Every input is loaded through a port (`RunAuthoritySource`, `ApprovedPersonaSource`, and the other
 named sources) inside the
@@ -46,7 +46,7 @@ whole assembly with a single precise reason; a duplicate request (same idempoten
 previously admitted snapshot without recompiling anything.
 
 Conversational admission records an exact `Conversation / Use` decision for the requester inside
-that final transaction, using the same membership revision, run-arguments digest, and admission
+that final transaction, using the same membership witness digest, run arguments, and admission
 instant. The earlier participant check remains defense-in-depth; it cannot replace this final fence
 because membership or grants may change before persistence.
 
@@ -71,7 +71,7 @@ current active service and published revision inside the admission transaction. 
 one handler; a refused personal identity is never retried as managed.
 
 `ManagedConversationExecutionSubjectAuthority` binds the company's own stable Principal and checked
-identity to the active computer lease. The human requester retains separate signed membership and
+identity to the active computer lease. The human requester retains separate human membership and
 current Invoke permission. The company Principal needs current Use on its model; the human needs
 current Use on the conversation. No personal persona, memory or tool assignment enters the initial
 company revision. An explicit no-personal-memory policy returns an empty preference list without
@@ -79,7 +79,7 @@ opening the personal-memory repository.
 
 The production conversation computer repeats this authority check during bootstrap and before
 output, including retries that return an existing run snapshot. Current service state, revision,
-identity, signed human membership and required grants must still admit the operation. The frozen
+identity, current human membership and required grants must still admit the operation. The frozen
 snapshot supplies evidence and input limits; it cannot restore removed access.
 
 `__RunInputAuthorityExpiresAt` bounds model credentials by the earliest original execution-evidence
@@ -158,6 +158,12 @@ Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:ar
 `scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. It receives its
 execution subject through a narrow port and never decides identity, membership, grant, capability,
 or ConversationComputer-lease policy.
+
+
+Standalone run recovery requires the same membership row ID, update timestamp, external identity
+and deployment mode before accepting a saved snapshot. A refreshed observation can narrow the
+credential deadline but cannot extend the original evidence or budget. Personal memory permission
+and upgrade-session helpers remain unavailable for Standalone until their effect paths support it.
 
 ## See also
 

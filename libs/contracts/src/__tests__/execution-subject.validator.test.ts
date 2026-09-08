@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 
-import { ___ExecutionSubjectSchema } from "../execution-subject.validator";
+import { ___ExecutionSubjectSchema } from "../index";
 
 /** Creates one complete execution subject with separate requester and admission authority. */
 function _Subject(): Record<string, unknown>
@@ -79,5 +79,30 @@ describe("execution subject structure", function _DescribeExecutionSubjectStruct
 		expect(___ExecutionSubjectSchema.safeParse({ ...subject, capability: undefined }).success).toBe(false);
 		const capability = { ...subject.capability as Record<string, unknown>, computerId: "foreign" };
 		expect(___ExecutionSubjectSchema.safeParse({ ...subject, capability }).success).toBe(false);
+	});
+});
+
+/** Builds local evidence without copying Fleet-only proof fields. */
+function _Standalone(principalId: string)
+{
+	return { kind: ExecutionSubjectMembershipKinds.Standalone, principalId, siloId: "silo-1", issuer: "https://issuer.example", subjectId: principalId, membershipId: `membership-${principalId}`, membershipUpdatedAt: "2026-09-01T00:00:00.000Z", observedAt: "2026-09-01T00:01:00.000Z", trustedUntil: "2026-09-01T00:06:00.000Z" };
+}
+
+describe("standalone execution subject structure", function _StandaloneSuite()
+{
+	it("rejects mixed human deployment modes", function _RejectsMixedModes()
+	{
+		const subject = ___ExecutionSubjectSchema.parse(_Subject());
+		expect(___ExecutionSubjectSchema.safeParse({ ...subject, membership: _Standalone(subject.principalId) }).success).toBe(false);
+	});
+
+	it.each([false, true])("accepts local human evidence while preserving managed=%s execution", function _Accepts(managed)
+	{
+		const subject = ___ExecutionSubjectSchema.parse(managed ? _Managed() : _Subject());
+		const membership = managed ? subject.membership : _Standalone(subject.principalId);
+		const requester = { ...subject.requester, membership: _Standalone(subject.requester.requesterPrincipalId) };
+		expect(___ExecutionSubjectSchema.safeParse({ ...subject, membership, requester }).success).toBe(true);
+		for (const patch of [{ principalId: "wrong" }, { siloId: "wrong" }, { revision: 1 }, { assertionId: "fabricated" }, { observedAt: "2026-09-01T00:07:00.000Z" }])
+			expect(___ExecutionSubjectSchema.safeParse({ ...subject, membership, requester: { ...requester, membership: { ...requester.membership, ...patch } } }).success).toBe(false);
 	});
 });

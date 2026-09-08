@@ -29,4 +29,4 @@ export type { ExecutionCapabilityEvidence, ExecutionCapabilityEvidenceInput } fr
 export { PrismaPersonalExecutionEvidenceRepository } from "./db/prisma-personal-execution-evidence-repository";
 export { PersonalExecutionEvidenceAuthority } from "./personal-execution-evidence";
 export { PersonalExecutionEvidenceDenialReasons } from "./personal-execution-evidence.types";
-export type { PersonalExecutionEvidence, PersonalExecutionEvidenceAuthorityPort, PersonalExecutionEvidenceCommand, PersonalExecutionEvidenceMembership, PersonalExecutionEvidenceRepository, PersonalExecutionEvidenceResult, PersonalExecutionEvidenceTransaction, PersonalExecutionIdentityCoordinates, PersonalExecutionRevisionEvidence } from "./personal-execution-evidence.types";
+export type { PersonalExecutionEvidence, PersonalExecutionEvidenceAuthorityPort, PersonalExecutionEvidenceCommand, PersonalExecutionEvidenceRepository, PersonalExecutionEvidenceResult, PersonalExecutionEvidenceTransaction, PersonalExecutionIdentityCoordinates, PersonalExecutionRevisionEvidence } from "./personal-execution-evidence.types";

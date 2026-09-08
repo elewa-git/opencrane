@@ -1,19 +1,20 @@
 import type { ExecutionSubject } from "@opencrane/contracts";
 
-/** Signed membership identity frozen into a run and rechecked before an outside effect. */
+/** Human membership evidence frozen into a run and rechecked before an outside effect. */
 export interface RuntimeMembershipEligibilityCommand
 {
 	/** Silo in which the effect would run. */
 	readonly siloId: string;
 	/** Complete execution subject sealed when this run attempt was admitted. */
 	readonly executionSubject: ExecutionSubject;
-	/** Trusted server time used for signature freshness and expiry. */
+	/** Trusted server time used for membership freshness and expiry. */
 	readonly nowEpochMs: number;
 }
 
-/** Rechecks signed fleet membership on the transaction that admits an outside effect. */
+/** Rechecks deployment-selected human membership in an effect transaction.
+ * Managed service and revision eligibility require their separate authority check. */
 export interface RuntimeMembershipEligibility
 {
-	/** Returns true only when the current signed revision still proves the frozen subject and evidence. */
+	/** Returns true when current human membership still proves the frozen binding and lifetime. */
 	isEligible(command: RuntimeMembershipEligibilityCommand): Promise<boolean>;
 }

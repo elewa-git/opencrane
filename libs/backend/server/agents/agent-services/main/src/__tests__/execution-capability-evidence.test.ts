@@ -1,4 +1,4 @@
-import { RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
 import { __ExecutionCapabilityEvidence } from "../execution-capability-evidence";
@@ -13,8 +13,7 @@ function _Input(): ExecutionCapabilityEvidenceInput
 		agentRevisionId: "revision-1",
 		agentRevisionDigest: `sha256:${"a".repeat(64)}`,
 		principalId: "principal-1",
-		fleetMembershipRevision: 7,
-		fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`,
+		membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", decisionEvidenceId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, trustedUntil: "2026-09-09T00:00:00.000Z" },
 		authorizationDecisionDigests: [`sha256:${"f".repeat(64)}`, `sha256:${"c".repeat(64)}`],
 		effectiveBoundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "😀", boundaryCoverage: RevisionBoundaryCoverages.Exact }, { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "\uE000", boundaryCoverage: RevisionBoundaryCoverages.Exact }],
 		modelDefinitionId: "model-1",

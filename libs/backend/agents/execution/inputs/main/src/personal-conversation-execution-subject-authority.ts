@@ -1,6 +1,6 @@
 import type { PersonalExecutionEvidenceTransaction } from "@opencrane/backend/server/agents/agent-services";
 import { PersonalExecutionEvidenceDenialReasons } from "@opencrane/backend/server/agents/agent-services";
-import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
+import { type ExecutionSubject } from "@opencrane/models/agents";
 
 import type { ExecutionSubjectAuthority, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 import type { PersonalConversationExecutionSubjectCoordinates, PersonalConversationExecutionSubjectDependencies } from "./personal-conversation-execution-subject-authority.types";
@@ -59,7 +59,7 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 			return { outcome: "denied", reason: "identity_unavailable" };
 
 		// The stored execution subject keeps `computerScope` flat with `leaseId` and `leaseGeneration`: PostgreSQL triggers read that shape.
-		const membership = { kind: ExecutionSubjectMembershipKinds.Fleet as const, principalId: coordinates.requesterPrincipalId, siloId: command.siloId, revision: value.membership.revision, assertionId: value.membership.assertionId, payloadDigest: value.membership.payloadDigest, decisionEvidenceId: value.membership.assertionId, trustedUntil: value.membership.trustedUntil };
+		const membership = value.membership;
 		return { outcome: "loaded", value: {
 			schemaVersion: 1,
 			siloId: command.siloId,

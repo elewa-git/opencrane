@@ -14,7 +14,7 @@ import type { FleetMembershipSignatureVerifier } from "./membership-authority.ty
  * stored digest disagrees, before it even looks at the signature — a caller cannot get a signature
  * checked against bytes of its own choosing.
  *
- * Called by: _CreateFleetMembershipEvidenceConfig in this package builds one per key read; the
+ * Called by: _CreateHumanMembershipEvidenceConfig in this package builds one per key read; the
  * resulting verifier is used by __VerifyCurrentFleetMembershipEvidence.
  * @implements FleetMembershipSignatureVerifier
  * @throws Error from the constructor when a key is blank, not Ed25519, or absent entirely.

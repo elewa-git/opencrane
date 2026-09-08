@@ -1,5 +1,5 @@
 import type { ManagedAgentIdentity } from "@opencrane/contracts";
-import type { ExecutionSubjectFleetMembershipEvidence, ExecutionSubjectManagedMembershipEvidence } from "@opencrane/models/agents";
+import type { ExecutionSubjectHumanMembershipEvidence, ExecutionSubjectManagedMembershipEvidence } from "@opencrane/models/agents";
 
 import type { ExecutionCapabilityEvidence } from "./execution-capability-evidence.types";
 import type { ManagedAgentRevisionEvidence } from "./managed-agent.types";
@@ -18,7 +18,7 @@ export interface ManagedExecutionEvidence
 {
 	readonly revision: ManagedAgentRevisionEvidence;
 	readonly membership: ExecutionSubjectManagedMembershipEvidence;
-	readonly requesterMembership: ExecutionSubjectFleetMembershipEvidence;
+	readonly requesterMembership: ExecutionSubjectHumanMembershipEvidence;
 	readonly capability: ExecutionCapabilityEvidence;
 	readonly admissionDecisionDigest: string;
 }
@@ -30,7 +30,7 @@ export enum ManagedExecutionEvidenceDenialReasons
 	IdentityUnavailable = "identity_unavailable",
 	/** The service or selected published revision is no longer runnable. */
 	RunNotAdmittable = "run_not_admittable",
-	/** The requesting human no longer has current signed silo membership. */
+	/** The requesting human no longer has current silo membership. */
 	MembershipStale = "membership_stale",
 	/** Human Invoke or the company's own model Use permission was denied. */
 	CapabilityUnavailable = "product_authorization_unavailable",

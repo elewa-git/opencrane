@@ -1,15 +1,16 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, PrincipalProvenance, type Prisma } from "@prisma/client";
 
-import { __SelectCurrentFleetMembershipAssertion, __VerifyCurrentFleetMembershipEvidence, FleetMembershipAssertionSelectionOutcomes, FleetMembershipEvidenceOutcomes, PrismaFleetMembershipAuthorityRepository, type FleetMembershipEvidenceConfig, type TrustedFleetMembershipEvidence } from "@opencrane/backend/server/iam/membership";
+import { PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import type { ExecutionSubjectHumanMembershipEvidence } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import type { ManagedAgentRevisionEvidence, ManagedExecutionEvidenceRepository } from "../managed-agent.types";
 
-/** Loads the managed service binding and the human requester's separate signed membership in one transaction. */
+/** Loads the managed service binding and the human requester's separate membership in one transaction. */
 export class PrismaManagedExecutionEvidenceRepository implements ManagedExecutionEvidenceRepository
 {
 	/** Binds all mutable authority reads to the transaction that admits the child or its run. */
-	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly membership: FleetMembershipEvidenceConfig) {}
+	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly membership: HumanMembershipEvidenceConfig) {}
 
 	/** Rejects inactive or extended revisions before a company assistant can acquire conversation authority. */
 	public async loadCurrent(siloId: string, agentServiceId: string): Promise<ManagedAgentRevisionEvidence | null>
@@ -27,14 +28,9 @@ export class PrismaManagedExecutionEvidenceRepository implements ManagedExecutio
 		return { agentServiceId: service.id, agentRevisionId: revision.id, agentRevisionDigest: revision.digest, principalId: service.principalId, name: service.name, workloadProfile: service.workloadProfile, modelDefinitionId: revision.modelDefinitionId, budget: revision.budget as JsonValue };
 	}
 
-	/** Verifies a current fleet assertion for the requesting human without assigning it to the managed Principal. */
-	public async verifyRequesterMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<TrustedFleetMembershipEvidence | null>
+	/** Delegates human membership to the deployment-selected IAM authority. */
+	async verifyRequesterMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<ExecutionSubjectHumanMembershipEvidence | null>
 	{
-		const repository = new PrismaFleetMembershipAuthorityRepository(this.transaction);
-		const selected = await __SelectCurrentFleetMembershipAssertion(repository, { trustedIssuerId: this.membership.trustedIssuerId, siloId, subjectId: principalId });
-		if (selected.outcome === FleetMembershipAssertionSelectionOutcomes.Denied)
-			return null;
-		const verified = await __VerifyCurrentFleetMembershipEvidence(repository, this.membership.verifier, { trustedIssuerId: this.membership.trustedIssuerId, siloId, subjectId: principalId, assertionId: selected.assertionId, nowEpochMs, maximumStalenessMs: this.membership.maximumStalenessMs });
-		return verified.outcome === FleetMembershipEvidenceOutcomes.Trusted && verified.evidence.subjectId === principalId ? verified.evidence : null;
+		return new PrismaHumanMembershipEvidenceRepository(this.transaction, this.membership).load(siloId, principalId, nowEpochMs);
 	}
 }

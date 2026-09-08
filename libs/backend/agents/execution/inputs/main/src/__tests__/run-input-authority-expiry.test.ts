@@ -5,7 +5,7 @@ import { __RunInputAuthorityExpiresAt } from "../run-input-authority-expiry";
 /** Supplies original snapshot ceilings independently of the clock used for a later retry. */
 function _Fixture(execution = 9_000, requester = 8_000, deadline = 7_000)
 {
-	const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", budgetPolicy: { wallClockDeadlineEpochMs: deadline }, executionSubject: { siloId: "silo-1", principalId: "principal-1", agentIdentityId: "identity-1", computerScope: { computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, runScope: { runId: "run-1", attempt: 1, siloId: "silo-1" }, membership: { trustedUntil: new Date(execution).toISOString() }, requester: { membership: { trustedUntil: new Date(requester).toISOString() } } } };
+	const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", budgetPolicy: { wallClockDeadlineEpochMs: deadline }, executionSubject: { siloId: "silo-1", principalId: "principal-1", agentIdentityId: "identity-1", computerScope: { computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, runScope: { runId: "run-1", attempt: 1, siloId: "silo-1" }, membership: { kind: "fleet", principalId: "principal-1", siloId: "silo-1", trustedUntil: new Date(execution).toISOString() }, requester: { membership: { kind: "fleet", principalId: "principal-1", siloId: "silo-1", trustedUntil: new Date(requester).toISOString() } } } };
 	const compiled = { runId: "run-1", attempt: 1, budget: { maxModelTurns: 1, maxCompletionTokens: 4_096, wallClockDeadlineEpochMs: deadline } };
 	return { snapshot, compiled };
 }

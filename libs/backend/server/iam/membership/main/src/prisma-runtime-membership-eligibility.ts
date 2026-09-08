@@ -1,62 +1,49 @@
 import type { Prisma } from "@prisma/client";
-import { ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
+import { ___StandaloneMembershipSchema, ExecutionSubjectMembershipKinds, type ExecutionSubjectHumanMembershipEvidence } from "@opencrane/contracts";
 
-import { __VerifyCurrentFleetMembershipEvidence } from "./membership-authority";
-import type { FleetMembershipEvidenceConfig } from "./membership-authority.types";
-import { PrismaFleetMembershipAuthorityRepository } from "./prisma-membership-authority";
+import { __SameMembershipBinding } from "./human-membership-evidence";
+import type { HumanMembershipEvidenceConfig } from "./human-membership.types";
+import { PrismaHumanMembershipEvidenceRepository } from "./prisma-human-membership-evidence";
 import type { RuntimeMembershipEligibility, RuntimeMembershipEligibilityCommand } from "./runtime-membership-eligibility.types";
 
-/** Re-runs signed fleet-membership verification on the runtime effect transaction. */
+/** Rechecks human membership in the caller's effect transaction; managed service checks remain separate. */
 export class PrismaRuntimeMembershipEligibilityAuthority implements RuntimeMembershipEligibility
 {
-	/** Transaction shared with the ToolInvocation admission. */
-	private readonly transaction: Prisma.TransactionClient;
-	/** Deployment-owned issuer, key, and maximum signed-revision age. */
-	private readonly config: FleetMembershipEvidenceConfig;
+	/** Binds the reusable membership port to the caller's transaction and deployment policy. */
+	constructor(private readonly transaction: Prisma.TransactionClient, private readonly config: HumanMembershipEvidenceConfig) {}
 
-	/**
-	 * Binds membership verification to the caller's open transaction and trusted deployment key.
-	 *
-	 * Called by: the OpenCrane runtime composition when it builds external-effect admission.
-	 * @param transaction - Transaction that will also persist the admitted ToolInvocation.
-	 * @param config - Deployment-owned membership issuer, signature verifier, and staleness limit.
-	 */
-	constructor(transaction: Prisma.TransactionClient, config: FleetMembershipEvidenceConfig)
-	{
-		this.transaction = transaction;
-		this.config = config;
-	}
-
-	/** @inheritdoc */
+	/** Requires current human membership for the requester and any human execution Principal. */
 	async isEligible(command: RuntimeMembershipEligibilityCommand): Promise<boolean>
 	{
 		const subject = command.executionSubject;
-		if (subject.membership.kind !== ExecutionSubjectMembershipKinds.Fleet
-			|| subject.siloId !== command.siloId
-			|| subject.principalId !== subject.identity.principalId
-			|| subject.principalId !== subject.membership.principalId
-			|| subject.membership.siloId !== command.siloId
-			|| subject.identity.siloId !== command.siloId)
+		if (subject.siloId !== command.siloId || subject.principalId !== subject.identity.principalId
+			|| subject.principalId !== subject.membership.principalId || subject.membership.siloId !== command.siloId
+			|| subject.identity.siloId !== command.siloId || subject.requester.siloId !== command.siloId
+			|| subject.requester.membership.siloId !== command.siloId
+			|| subject.requester.membership.principalId !== subject.requester.requesterPrincipalId)
 			return false;
-		const repository = new PrismaFleetMembershipAuthorityRepository(this.transaction);
-		const result = await __VerifyCurrentFleetMembershipEvidence(repository, this.config.verifier, {
-			trustedIssuerId: this.config.trustedIssuerId,
-			siloId: command.siloId,
-			subjectId: subject.principalId,
-			assertionId: subject.membership.assertionId,
-			nowEpochMs: command.nowEpochMs,
-			maximumStalenessMs: this.config.maximumStalenessMs,
-		});
-		if (result.outcome === "denied")
+		const repository = new PrismaHumanMembershipEvidenceRepository(this.transaction, this.config);
+		if (!await this._matches(repository, subject.requester.membership, command.nowEpochMs))
 			return false;
-		const trustedUntilEpochMs = Date.parse(subject.membership.trustedUntil);
-		return Number.isFinite(trustedUntilEpochMs)
-			&& trustedUntilEpochMs >= command.nowEpochMs
-			&& result.evidence.issuerId === this.config.trustedIssuerId
-			&& result.evidence.revision === subject.membership.revision
-			&& result.evidence.assertionId === subject.membership.assertionId
-			&& result.evidence.subjectId === subject.principalId
-			&& result.evidence.payloadDigest === subject.membership.payloadDigest
-			&& result.evidence.trustedUntilEpochMs === trustedUntilEpochMs;
+		if (subject.membership.kind === ExecutionSubjectMembershipKinds.Managed)
+			return true;
+		return this._matches(repository, subject.membership, command.nowEpochMs);
+	}
+
+	/** Keeps Fleet's frozen signed revision checks and Standalone's frozen local row version checks. */
+	private async _matches(repository: PrismaHumanMembershipEvidenceRepository, stored: ExecutionSubjectHumanMembershipEvidence, nowEpochMs: number): Promise<boolean>
+	{
+		const expiry = Date.parse(stored.trustedUntil);
+		if (!Number.isFinite(expiry) || expiry <= nowEpochMs)
+			return false;
+		if (stored.kind === ExecutionSubjectMembershipKinds.Standalone && (!___StandaloneMembershipSchema.safeParse(stored).success || Date.parse(stored.observedAt) > nowEpochMs))
+			return false;
+		const current = await repository.load(stored.siloId, stored.principalId, nowEpochMs);
+		if (current === null || !__SameMembershipBinding(stored, current))
+			return false;
+		if (stored.kind === ExecutionSubjectMembershipKinds.Fleet && current.kind === ExecutionSubjectMembershipKinds.Fleet)
+			return stored.revision === current.revision && stored.assertionId === current.assertionId
+				&& stored.payloadDigest === current.payloadDigest && stored.trustedUntil === current.trustedUntil;
+		return true;
 	}
 }

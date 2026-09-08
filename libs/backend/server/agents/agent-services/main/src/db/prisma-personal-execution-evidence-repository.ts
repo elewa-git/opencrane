@@ -1,7 +1,7 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, AuthorizationBoundaryCoverage, AuthorizationBoundaryKind, type Prisma } from "@prisma/client";
 
-import { __SelectCurrentFleetMembershipAssertion, __VerifyCurrentFleetMembershipEvidence, FleetMembershipAssertionSelectionOutcomes, FleetMembershipEvidenceOutcomes, PrismaFleetMembershipAuthorityRepository, type FleetMembershipEvidenceConfig, type TrustedFleetMembershipEvidence } from "@opencrane/backend/server/iam/membership";
-import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import { PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type ExecutionSubjectHumanMembershipEvidence, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import type { PersonalExecutionEvidenceRepository, PersonalExecutionRevisionEvidence } from "../personal-execution-evidence.types";
@@ -10,14 +10,12 @@ import type { PersonalExecutionEvidenceRepository, PersonalExecutionRevisionEvid
 export class PrismaPersonalExecutionEvidenceRepository implements PersonalExecutionEvidenceRepository
 {
 	/** Membership repository bound to the same run-admission transaction. */
-	private readonly membership: PrismaFleetMembershipAuthorityRepository;
+	private readonly membership: PrismaHumanMembershipEvidenceRepository;
 
-	/** Binds all revision and signed-membership reads to one admission transaction. */
-	constructor(private readonly prisma: Prisma.TransactionClient, private readonly config: FleetMembershipEvidenceConfig)
+	/** Binds all revision and membership reads to one admission transaction. */
+	constructor(private readonly prisma: Prisma.TransactionClient, config: HumanMembershipEvidenceConfig)
 	{
-		if (config.trustedIssuerId.trim().length === 0 || !Number.isSafeInteger(config.maximumStalenessMs) || config.maximumStalenessMs <= 0)
-			throw new Error("personal execution evidence requires a trusted issuer and positive staleness bound");
-		this.membership = new PrismaFleetMembershipAuthorityRepository(this.prisma);
+		this.membership = new PrismaHumanMembershipEvidenceRepository(this.prisma, config);
 	}
 
 	/** Loads only the exact published revision of the exact active Personal service. */
@@ -32,14 +30,10 @@ export class PrismaPersonalExecutionEvidenceRepository implements PersonalExecut
 		return { id: revision.id, digest: revision.digest, modelDefinitionId: revision.modelDefinitionId, budget: revision.budget as JsonValue, boundaryAttachments: revision.boundaryAttachments.map(_Attachment), skillAssignments: revision.skillAssignments, mcpToolRevisionIds: revision.mcpToolAssignments.map(function _ToolId(assignment): string { return assignment.toolRevisionId; }) };
 	}
 
-	/** Selects and verifies one current assertion from the deployment-trusted membership revision. */
-	async verifyCurrentMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<TrustedFleetMembershipEvidence | null>
+	/** Delegates human membership to the deployment-selected IAM authority. */
+	async verifyCurrentMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<ExecutionSubjectHumanMembershipEvidence | null>
 	{
-		const assertion = await __SelectCurrentFleetMembershipAssertion(this.membership, { trustedIssuerId: this.config.trustedIssuerId, siloId, subjectId: principalId });
-		if (assertion.outcome === FleetMembershipAssertionSelectionOutcomes.Denied)
-			return null;
-		const result = await __VerifyCurrentFleetMembershipEvidence(this.membership, this.config.verifier, { trustedIssuerId: this.config.trustedIssuerId, siloId, subjectId: principalId, assertionId: assertion.assertionId, nowEpochMs, maximumStalenessMs: this.config.maximumStalenessMs });
-		return result.outcome === FleetMembershipEvidenceOutcomes.Trusted && result.evidence.subjectId === principalId ? result.evidence : null;
+		return this.membership.load(siloId, principalId, nowEpochMs);
 	}
 }
 

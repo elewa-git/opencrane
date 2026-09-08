@@ -1,5 +1,5 @@
 import { AgentIdentityStates } from "@opencrane/contracts";
-import { RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
 import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,7 +18,7 @@ function _Revision()
 /** Builds narrow repository and central-authority spies around current evidence. */
 function _Dependencies(revision: ReturnType<typeof _Revision> | null = _Revision())
 {
-	const membership = { issuerId: "fleet-1", issuerKeyId: "key-1", revision: 7, assertionId: "assertion-1", subjectId: "principal-1", payloadDigest: "sha256:membership", trustedUntilEpochMs: 12_000 };
+	const membership = { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", decisionEvidenceId: "assertion-1", payloadDigest: "sha256:membership", trustedUntil: new Date(12_000).toISOString() };
 	const repository = { loadActiveRevision: vi.fn().mockResolvedValue(revision), verifyCurrentMembership: vi.fn().mockResolvedValue(membership) };
 	const evidence = { decisionDigest: `sha256:${"b".repeat(64)}`, policyRevisionHash: `sha256:${"c".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"d".repeat(64)}` };
 	const authorization = { admitPrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence }), admit: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { ...evidence, decisionDigest: `sha256:${"e".repeat(64)}` } }) };

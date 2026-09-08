@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { AesGcmConversationPrivatePayloadCipher, ConversationComputerHistory, ConversationHistoryAuthority, GROUP_CHILD_TASK, PrismaGroupChildAuthority, _CreateGroupChildRouter, PrismaAgentSessionCreationUnitOfWork, PrismaConversationMetadataUnitOfWork, PrismaSelfConversationHistoryUnitOfWork, _CreateConversationMetadataRouter, _CreateSelfConversationHistoryRouter, type GroupChildTaskInput, type ConversationPrivatePayloadKeyringDocument } from "@opencrane/backend/server/conversations";
 import { PrismaManagedAgentConversationResolver } from "@opencrane/backend/server/agents/agent-services";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
-import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -54,7 +54,7 @@ export function _CreateConversationHistoryComposition(
   );
   const managedDependencies = {
     identityHistory: new AgentIdentityHistory(historyStore),
-    membershipConfig: _CreateFleetMembershipEvidenceConfig(),
+    membershipConfig: _CreateHumanMembershipEvidenceConfig(),
     profiles: [{ workloadProfile: releaseProfile.profileName, profileRevisionId: releaseProfile.profileRevisionId }],
   };
   const metadata = new PrismaConversationMetadataUnitOfWork(prisma, creation, function _ListCompanyAssistants(caller)

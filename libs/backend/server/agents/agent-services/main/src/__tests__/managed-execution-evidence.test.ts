@@ -11,7 +11,7 @@ const _IDENTITY = { schemaVersion: 1, kind: "managed", id: "company-identity", s
 function _Fixture()
 {
 	const revision = { agentServiceId: "company-service", agentRevisionId: "revision-1", agentRevisionDigest: "sha256:revision", principalId: "company-principal", name: "Company assistant", workloadProfile: "company", modelDefinitionId: "model-1", budget: { maxDurationMs: 10_000 } };
-	const human = { subjectId: "human-1", revision: 7, assertionId: "human-assertion", payloadDigest: "sha256:human", trustedUntilEpochMs: 6_000 };
+	const human = { kind: "fleet", principalId: "human-1", siloId: "silo-1", decisionEvidenceId: "human-assertion", revision: 7, assertionId: "human-assertion", payloadDigest: "sha256:human", trustedUntil: new Date(6_000).toISOString() };
 	const repository = { loadCurrent: vi.fn().mockResolvedValue(revision), verifyRequesterMembership: vi.fn().mockResolvedValue(human) };
 	const admitPrincipal = vi.fn().mockResolvedValueOnce({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:invoke" } }).mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:model" } });
 	const command = { identity: _IDENTITY, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" };

@@ -4,7 +4,10 @@ export { __DigestFleetMembershipSignedPayload } from "./fleet-membership-payload
 export { FleetMembershipAcceptanceStatuses, FleetMembershipAssertionSelectionOutcomes, FleetMembershipDeploymentModes, FleetMembershipEvidenceOutcomes } from "./membership-authority.types";
 export type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier, SelectFleetMembershipAssertionCommand, SelectFleetMembershipAssertionResult, TrustedFleetMembershipEvidence, VerifyFleetMembershipCommand, VerifyFleetMembershipEvidenceResult } from "./membership-authority.types";
 export { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier";
-export { _CreateFleetMembershipEvidenceConfig } from "./fleet-membership-evidence.factory";
+export { _CreateHumanMembershipEvidenceConfig } from "./human-membership-evidence.factory";
 export { PrismaFleetMembershipAuthorityRepository } from "./prisma-membership-authority";
 export { PrismaRuntimeMembershipEligibilityAuthority } from "./prisma-runtime-membership-eligibility";
 export type { RuntimeMembershipEligibility, RuntimeMembershipEligibilityCommand } from "./runtime-membership-eligibility.types";
+export type { HumanMembershipEvidenceConfig, HumanMembershipEvidenceRepository } from "./human-membership.types";
+export { PrismaHumanMembershipEvidenceRepository } from "./prisma-human-membership-evidence";
+export { __SameMembershipBinding, __DigestHumanMembershipEvidence, __HumanMembershipRevision } from "./human-membership-evidence";

@@ -1,3 +1,4 @@
+import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
 import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
@@ -23,7 +24,9 @@ export function __RunInputAuthorityExpiresAt(snapshot: RunInputSnapshot, compile
 		|| current.runScope.attempt !== snapshot.attempt || current.runScope.agentRevisionId !== subject.runScope.agentRevisionId
 		|| current.computerScope.computerId !== subject.computerScope.computerId
 		|| current.computerScope.leaseId !== subject.computerScope.leaseId || current.computerScope.leaseGeneration !== subject.computerScope.leaseGeneration
-		|| current.requester.requesterPrincipalId !== subject.requester.requesterPrincipalId)
+		|| current.requester.requesterPrincipalId !== subject.requester.requesterPrincipalId
+		|| !__SameMembershipBinding(subject.membership, current.membership)
+		|| !__SameMembershipBinding(subject.requester.membership, current.requester.membership))
 		throw new Error("Conversation credential authority requires the same currently verified subject");
 	const budget = compiled.budget;
 	const deadline = budget.wallClockDeadlineEpochMs;

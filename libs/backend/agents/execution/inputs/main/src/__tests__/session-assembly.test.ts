@@ -51,6 +51,16 @@ describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
 		}
 	});
 
+	it("freezes the deployment-selected standalone witness in the first snapshot", async function _FreezesLocal()
+	{
+		const membership = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.example", subjectId: "requester-subject-1", membershipId: "local-1", membershipUpdatedAt: "2026-09-01T00:00:00.000Z", observedAt: "2026-09-01T00:01:00.000Z", trustedUntil: "2026-09-01T00:06:00.000Z" } as const;
+		const subject = { ..._subject(), membership, requester: { ..._subject().requester, membership } };
+		const authorities = _authorities();
+		authorities.executionSubject = { load: async function _LocalSubject() { return { outcome: "loaded", value: subject }; } };
+		const result = await __AssembleRunInputSnapshot(_command(), authorities);
+		expect(result).toMatchObject({ outcome: "assembled", snapshot: { executionSubject: { membership, requester: { membership } } } });
+	});
+
 	it("refuses a subject whose computer lease does not match its capability evidence", async function _RefusesWrongComputer()
 	{
 		const authorities = _authorities();

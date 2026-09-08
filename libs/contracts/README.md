@@ -53,9 +53,10 @@ boundaries and never enter the snapshot or conversation computer. The compiled m
 route also freezes the model registry's generated-output allowlist; the executor
 cannot infer image-generation authority from a prompt or provider response. The compiled budget
 preserves the admitted model-turn limit alongside token, cost, tool, and wall-clock ceilings.
-Identity evidence is explicitly tagged. A personal run pins the human's signed Fleet membership.
+Identity evidence is explicitly tagged. A personal run pins the human's deployment-selected Fleet or Standalone membership.
 A company run pins its own Internal Principal, active service and exact published revision. Both
-carry the human requester's independently verified Fleet membership. The strict schema rejects
+carry the human requester's independently verified human membership. The strict schema lives beside the agent model and is re-exported here. Standalone evidence uses
+the local membership row/version and bounded observation instead of Fleet proof fields. The schema rejects
 mixed kinds, missing requester evidence and principal/silo/revision substitutions; current database
 and identity checks still run at admission. A stored snapshot never grants current permission.
 

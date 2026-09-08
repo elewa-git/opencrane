@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ExecutionSubject } from "@opencrane/contracts";
 import type { FleetSignatureVerificationEvidence } from "@opencrane/models/authorization";
 
-import type { FleetMembershipEvidenceConfig } from "../membership-authority.types";
+import { FleetMembershipDeploymentModes } from "../membership-authority.types";
+import type { HumanMembershipEvidenceConfig } from "../human-membership.types";
 import { PrismaRuntimeMembershipEligibilityAuthority } from "../prisma-runtime-membership-eligibility";
 
 const _NOW = 2_000;
@@ -49,7 +50,7 @@ function _Authority(assertions = _ROW.assertions)
 		highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
 		auditDecision: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
 	} as unknown as Prisma.TransactionClient;
-	const config: FleetMembershipEvidenceConfig = { trustedIssuerId: "fleet-1", maximumStalenessMs: 5_000, verifier: { verify: vi.fn().mockResolvedValue(_EVIDENCE) } };
+	const config: HumanMembershipEvidenceConfig = { mode: FleetMembershipDeploymentModes.Fleet, trustedIssuerId: "fleet-1", maximumStalenessMs: 5_000, verifier: { verify: vi.fn().mockResolvedValue(_EVIDENCE) } };
 	return new PrismaRuntimeMembershipEligibilityAuthority(transaction, config);
 }
 
@@ -74,5 +75,35 @@ describe("PrismaRuntimeMembershipEligibilityAuthority", function _Suite()
 	it("rejects a signed revision that has revoked the frozen subject assertion", async function _RejectsRevocation()
 	{
 		await expect(_Authority([]).isEligible({ siloId: "silo-1", executionSubject: _ExecutionSubject(), nowEpochMs: _NOW })).resolves.toBe(false);
+	});
+});
+
+/** Rechecks a frozen local witness against the same transaction's current membership row. */
+function _StandaloneAuthority()
+{
+	const original = _ExecutionSubject();
+	const membership = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "user-1", siloId: "silo-1", issuer: "https://issuer.test", subjectId: "oidc-1", membershipId: "local-1", membershipUpdatedAt: new Date(1_000).toISOString(), observedAt: new Date(2_000).toISOString(), trustedUntil: new Date(7_000).toISOString() } as const;
+	const subject = { ...original, membership, requester: { ...original.requester, membership } };
+	const row = { id: "local-1", clusterTenant: "silo-1", subject: "oidc-1", status: "Active", updatedAt: new Date(1_000) };
+	const transaction = { principal: { findFirst: vi.fn().mockResolvedValue({ id: "user-1", siloId: "silo-1", issuer: "https://issuer.test", subject: "oidc-1", provenance: "External" }) }, orgMembership: { findUnique: vi.fn().mockResolvedValue(row) } };
+	const authority = new PrismaRuntimeMembershipEligibilityAuthority(transaction as never, { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.test", maximumStalenessMs: 5_000 });
+	return { subject, row, transaction, authority };
+}
+
+describe("runtime local membership rechecks", function _StandaloneSuite()
+{
+	it("accepts a new observation of the original row without extending frozen trust", async function _SameVersion()
+	{
+		const f = _StandaloneAuthority();
+		await expect(f.authority.isEligible({ siloId: "silo-1", executionSubject: f.subject, nowEpochMs: 3_000 })).resolves.toBe(true);
+		await expect(f.authority.isEligible({ siloId: "silo-1", executionSubject: f.subject, nowEpochMs: 7_000 })).resolves.toBe(false);
+		await expect(f.authority.isEligible({ siloId: "silo-1", executionSubject: f.subject, nowEpochMs: 1_500 })).resolves.toBe(false);
+	});
+
+	it.each([{ id: "replacement" }, { updatedAt: new Date(2_500) }, { status: "Suspended" }])("rejects changed local membership %j", async function _Changed(patch)
+	{
+		const f = _StandaloneAuthority();
+		f.transaction.orgMembership.findUnique.mockResolvedValue({ ...f.row, ...patch });
+		await expect(f.authority.isEligible({ siloId: "silo-1", executionSubject: f.subject, nowEpochMs: 3_000 })).resolves.toBe(false);
 	});
 });

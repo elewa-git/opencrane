@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PrismaPersonalExecutionEvidenceRepository } from "../db/prisma-personal-execution-evidence-repository";
 
 /** Deployment membership config is unused by revision-only repository tests. */
-const _MEMBERSHIP = { trustedIssuerId: "fleet-1", maximumStalenessMs: 10_000, verifier: { verify: vi.fn() } } as never;
+const _MEMBERSHIP = { mode: "fleet", trustedIssuerId: "fleet-1", maximumStalenessMs: 10_000, verifier: { verify: vi.fn() } } as never;
 
 describe("PrismaPersonalExecutionEvidenceRepository", function _Suite()
 {

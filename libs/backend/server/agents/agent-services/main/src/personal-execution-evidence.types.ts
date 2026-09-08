@@ -1,7 +1,6 @@
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
-import type { TrustedFleetMembershipEvidence } from "@opencrane/backend/server/iam/membership";
 import type { ProxiedAgentIdentity } from "@opencrane/contracts";
-import type { RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import type { ExecutionSubjectHumanMembershipEvidence, RevisionBoundaryAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import type { ExecutionCapabilityEvidence } from "./execution-capability-evidence.types";
@@ -50,8 +49,8 @@ export interface PersonalExecutionEvidenceRepository
 {
 	/** Loads only the exact active Personal service revision, or null when it is not runnable. */
 	loadActiveRevision(siloId: string, agentServiceId: string, agentRevisionId: string): Promise<PersonalExecutionRevisionEvidence | null>;
-	/** Selects and verifies one current signed membership assertion without caller-selected evidence. */
-	verifyCurrentMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<TrustedFleetMembershipEvidence | null>;
+	/** Selects and verifies one current human membership witness without caller-selected evidence. */
+	verifyCurrentMembership(siloId: string, principalId: string, nowEpochMs: number): Promise<ExecutionSubjectHumanMembershipEvidence | null>;
 }
 
 /** Personal identity coordinates that survived current authority checks. */
@@ -71,30 +70,13 @@ export interface PersonalExecutionIdentityCoordinates
 	readonly delegationPolicyId: string;
 }
 
-/** Signed membership evidence accepted for the personal execution Principal. */
-export interface PersonalExecutionEvidenceMembership
-{
-	/** Monotonic signed membership revision accepted at admission. */
-	readonly revision: number;
-	/** Trusted issuer that signed the accepted membership assertion. */
-	readonly issuerId: string;
-	/** Key identifier the trusted issuer used to sign the assertion. */
-	readonly issuerKeyId: string;
-	/** Exact accepted assertion identifier. */
-	readonly assertionId: string;
-	/** SHA-256 digest of the accepted signed membership payload. */
-	readonly payloadDigest: string;
-	/** Instant after which the assertion must no longer be accepted. */
-	readonly trustedUntil: string;
-}
-
 /** Checked evidence needed by the execution-subject authority. */
 export interface PersonalExecutionEvidence
 {
 	/** Personal identity and Principal coordinates checked against current service state. */
 	readonly identity: PersonalExecutionIdentityCoordinates;
-	/** Current signed membership evidence for the proxied Principal. */
-	readonly membership: PersonalExecutionEvidenceMembership;
+	/** Current human membership evidence for the proxied Principal. */
+	readonly membership: ExecutionSubjectHumanMembershipEvidence;
 	/** Canonical effective contract and durable authorization decisions. */
 	readonly capability: ExecutionCapabilityEvidence;
 	/** Durable Invoke decision kept separate for the final run-admission evidence binding. */
@@ -108,7 +90,7 @@ export enum PersonalExecutionEvidenceDenialReasons
 	IdentityUnavailable = "identity_unavailable",
 	/** The personal service or exact published revision is no longer active. */
 	RunNotAdmittable = "run_not_admittable",
-	/** Current signed silo membership is absent, invalid, ambiguous, or stale. */
+	/** Current silo membership is absent, invalid, ambiguous, or stale. */
 	MembershipStale = "membership_stale",
 	/** One or more current central-authorization decisions refused the effective contract. */
 	CapabilityUnavailable = "capability_unavailable",

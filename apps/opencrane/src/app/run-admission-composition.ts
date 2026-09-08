@@ -5,7 +5,7 @@ import { PrismaRunAdmissionUnitOfWork, RunAdmissionConcurrencyGate, RunAdmission
 import { AesGcmConversationPrivatePayloadCipher, ConversationComputerHistory, KurrentConversationHistoryAdmissionReader, PrismaKurrentConversationPromptMessageRepository, type ConversationComputerRunAdmissionCommand, type ConversationComputerRunAdmissionPort } from "@opencrane/backend/server/conversations";
 import { PersonalExecutionEvidenceAuthority, PrismaPersonalExecutionEvidenceRepository, ManagedExecutionEvidenceAuthority, PrismaManagedExecutionEvidenceRepository } from "@opencrane/backend/server/agents/agent-services";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
-import { _CreateFleetMembershipEvidenceConfig, type FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { _CreateHumanMembershipEvidenceConfig, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import type { RunAdmissionCapacityConfig } from "./config.types";
@@ -21,7 +21,7 @@ import type { ConversationRunExecutionSubjectAuthorityFactory, ConversationRunHi
  */
 export function _CreateProductionConversationRunAdmission(prisma: ConstructorParameters<typeof PrismaRunAdmissionUnitOfWork>[0], history: HistoryStore, keyringPath: string, policy: RunAdmissionCapacityConfig): ConversationComputerRunAdmissionPort
 {
-	const authorities = _CreateConversationRunAuthorities(history, _CreateFleetMembershipEvidenceConfig());
+	const authorities = _CreateConversationRunAuthorities(history, _CreateHumanMembershipEvidenceConfig());
 	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(keyringPath));
 	function _CreateMessages(command: ConversationComputerRunAdmissionCommand, transaction: Prisma.TransactionClient): VerifiedConversationPromptMessageRepository
 	{
@@ -40,7 +40,7 @@ export function _CreateProductionConversationRunAdmission(prisma: ConstructorPar
 }
 
 /** Build transaction-bound identity evidence and exact Kurrent history authorities for admission. */
-function _CreateConversationRunAuthorities(history: HistoryStore, membership: FleetMembershipEvidenceConfig): ConversationRunAuthorities
+function _CreateConversationRunAuthorities(history: HistoryStore, membership: HumanMembershipEvidenceConfig): ConversationRunAuthorities
 {
 	const identityHistory = new AgentIdentityHistory(history);
 	const computerHistory = new ConversationComputerHistory(history);

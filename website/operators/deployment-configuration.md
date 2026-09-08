@@ -58,6 +58,20 @@ the supported flags or `--set-string`. Once a standalone first owner is configur
 rejects `--values` and `--reset-values` to preserve its immutable email, issuer and silo binding.
 Continue supplying the same first-owner and OIDC coordinates.
 
+## Membership mode
+
+Set `clustertenantManager.membership.mode` explicitly. A `standalone` installation admits its first
+owner and invited members through local PostgreSQL membership. `fleet` requires its configured
+issuer and mounted verification key; a missing or invalid Fleet proof never becomes local access.
+The [membership guide](/integrators/silo-iam#membership-in-an-installation) explains how the selected
+evidence constrains assistant runs.
+
+`clustertenantManager.membership.maximumStalenessMs` bounds evidence lifetime. Its default is
+300,000 milliseconds; the server requires a positive integer of at most 86,400,000 milliseconds.
+The chart supplies the installation ID and sign-in issuer used for standalone checks. Preserve those
+identity settings across ordinary repairs. A shorter evidence lifetime does not replace current
+membership and permission checks, and refreshing evidence cannot extend an already admitted run.
+
 ## Conversation execution profile
 
 Generic defaults disable `historyStore.kurrentdb` and `agentSandbox`. The current wrapper enables

@@ -1,4 +1,5 @@
 import { AgentIdentityStates } from "@opencrane/contracts";
+import { __DigestHumanMembershipEvidence, __HumanMembershipRevision } from "@opencrane/backend/server/iam/membership";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type AuthorizationBoundary } from "@opencrane/models/authorization";
@@ -26,29 +27,29 @@ export class PersonalExecutionEvidenceAuthority implements PersonalExecutionEvid
 		if (revision === null)
 			return { outcome: "denied", reason: PersonalExecutionEvidenceDenialReasons.RunNotAdmittable };
 
-		// 3. Verify one current signed membership assertion for the proxied Principal.
+		// 3. Verify current deployment-selected human membership for the proxied Principal.
 		const membership = await this.repository.verifyCurrentMembership(identity.siloId, command.requesterPrincipalId, transaction.admittedAtEpochMs);
 		if (membership === null)
 			return { outcome: "denied", reason: PersonalExecutionEvidenceDenialReasons.MembershipStale };
 
 		// 4. Admit Invoke centrally and then require an explicit current decision for every revision boundary.
 		const declared = revision.boundaryAttachments;
-		const argumentsDigest = __DigestCanonicalJson({ agentIdentityId: identity.id, agentServiceId: identity.agentServiceId, agentRevisionId: revision.id, delegationPolicyId: identity.delegationPolicyId, boundaryAttachments: declared } as unknown as JsonValue);
-		const invocation = await transaction.authorization.admitPrincipal({ siloId: identity.siloId, principalId: command.requesterPrincipalId, actorKind: "user", actorId: command.requesterPrincipalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: identity.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: membership.revision, nowEpochMs: transaction.admittedAtEpochMs });
+		const argumentsDigest = __DigestCanonicalJson({ agentIdentityId: identity.id, agentServiceId: identity.agentServiceId, agentRevisionId: revision.id, delegationPolicyId: identity.delegationPolicyId, boundaryAttachments: declared, membershipDigest: __DigestHumanMembershipEvidence(membership) } as unknown as JsonValue);
+		const invocation = await transaction.authorization.admitPrincipal({ siloId: identity.siloId, principalId: command.requesterPrincipalId, actorKind: "user", actorId: command.requesterPrincipalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: identity.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: __HumanMembershipRevision(membership), nowEpochMs: transaction.admittedAtEpochMs });
 		if (invocation.outcome !== AuthorizationDecisionOutcomes.Allow || invocation.evidence === null)
 			return { outcome: "denied", reason: PersonalExecutionEvidenceDenialReasons.CapabilityUnavailable };
 		const boundaryAdmissions = [];
 		for (const attachment of declared)
 		{
-			boundaryAdmissions.push(await transaction.authorization.admit({ siloId: identity.siloId, principalId: command.requesterPrincipalId, actorKind: "user", actorId: command.requesterPrincipalId, boundary: _AuthorizationBoundary(attachment), requiredBoundaryCoverage: attachment.boundaryCoverage === RevisionBoundaryCoverages.Descendants ? AuthorizationBoundaryCoverages.Descendants : AuthorizationBoundaryCoverages.Exact, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: identity.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: membership.revision, nowEpochMs: transaction.admittedAtEpochMs }));
+			boundaryAdmissions.push(await transaction.authorization.admit({ siloId: identity.siloId, principalId: command.requesterPrincipalId, actorKind: "user", actorId: command.requesterPrincipalId, boundary: _AuthorizationBoundary(attachment), requiredBoundaryCoverage: attachment.boundaryCoverage === RevisionBoundaryCoverages.Descendants ? AuthorizationBoundaryCoverages.Descendants : AuthorizationBoundaryCoverages.Exact, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: identity.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: __HumanMembershipRevision(membership), nowEpochMs: transaction.admittedAtEpochMs }));
 		}
 		if (boundaryAdmissions.some(function _Denied(admission): boolean { return admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null; }))
 			return { outcome: "denied", reason: PersonalExecutionEvidenceDenialReasons.CapabilityUnavailable };
 
 		// 5. Canonicalize immutable inputs and durable decisions for execution-subject binding.
 		const authorizationDecisionDigests = [invocation.evidence.decisionDigest, ...boundaryAdmissions.map(function _DecisionDigest(admission): string { return admission.evidence!.decisionDigest; })];
-		const capability = __ExecutionCapabilityEvidence({ siloId: identity.siloId, agentServiceId: identity.agentServiceId, agentRevisionId: revision.id, agentRevisionDigest: revision.digest, principalId: command.requesterPrincipalId, fleetMembershipRevision: membership.revision, fleetMembershipPayloadDigest: membership.payloadDigest, authorizationDecisionDigests, effectiveBoundaryAttachments: declared, modelDefinitionId: revision.modelDefinitionId, budget: revision.budget, skillAssignments: revision.skillAssignments, mcpToolRevisionIds: revision.mcpToolRevisionIds });
-		return { outcome: "loaded", value: { identity: { siloId: identity.siloId, agentIdentityId: identity.id, agentServiceId: identity.agentServiceId, agentRevisionId: revision.id, principalId: command.requesterPrincipalId, delegationPolicyId: identity.delegationPolicyId }, membership: { revision: membership.revision, issuerId: membership.issuerId, issuerKeyId: membership.issuerKeyId, assertionId: membership.assertionId, payloadDigest: membership.payloadDigest, trustedUntil: new Date(membership.trustedUntilEpochMs).toISOString() }, capability, admissionDecisionDigest: invocation.evidence.decisionDigest } };
+		const capability = __ExecutionCapabilityEvidence({ siloId: identity.siloId, agentServiceId: identity.agentServiceId, agentRevisionId: revision.id, agentRevisionDigest: revision.digest, principalId: command.requesterPrincipalId, membership, authorizationDecisionDigests, effectiveBoundaryAttachments: declared, modelDefinitionId: revision.modelDefinitionId, budget: revision.budget, skillAssignments: revision.skillAssignments, mcpToolRevisionIds: revision.mcpToolRevisionIds });
+		return { outcome: "loaded", value: { identity: { siloId: identity.siloId, agentIdentityId: identity.id, agentServiceId: identity.agentServiceId, agentRevisionId: revision.id, principalId: command.requesterPrincipalId, delegationPolicyId: identity.delegationPolicyId }, membership, capability, admissionDecisionDigest: invocation.evidence.decisionDigest } };
 	}
 }
 

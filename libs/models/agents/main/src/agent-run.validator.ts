@@ -1,4 +1,6 @@
-import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
+// Persisted and transported run subjects become trusted model shapes here; unknown fields are rejected.
+// Keep this validator beside the model so new evidence variants cannot drift across adapters.
+import { ExecutionSubjectMembershipKinds, type ExecutionSubject, type ExecutionSubjectStandaloneMembershipEvidence } from "./agent-run.types";
 import { z } from "zod";
 
 
@@ -35,6 +37,10 @@ const _KurrentRevisionSchema = z.string().regex(/^(0|[1-9][0-9]*)$/u);
 /** Verifies that all duplicated evidence and scope coordinates bind to one trusted subject. */
 function _ValidateSubjectBindings(subject: ExecutionSubject, context: z.RefinementCtx): void
 {
+	if (subject.membership.kind !== ExecutionSubjectMembershipKinds.Managed && subject.membership.kind !== subject.requester.membership.kind)
+	{
+		context.addIssue({ code: z.ZodIssueCode.custom, path: ["membership"], message: "human execution and requester membership must use the same deployment mode" });
+	}
 	if (subject.requester.membership.principalId !== subject.requester.requesterPrincipalId || subject.requester.membership.siloId !== subject.siloId)
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["requester", "membership"], message: "requester membership must bind the authenticated requester and silo" });
@@ -64,6 +70,33 @@ function _ValidateSubjectBindings(subject: ExecutionSubject, context: z.Refineme
 /** Validates signed human membership evidence; its signature and current status are checked by the authority. */
 const _FleetMembershipSchema = z.object({ kind: z.literal(ExecutionSubjectMembershipKinds.Fleet), principalId: _PrincipalIdentifierSchema, siloId: _IdentifierSchema, revision: _PositiveIntegerSchema, assertionId: _IdentifierSchema, payloadDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, trustedUntil: _InstantSchema }).strict();
 
+/** Requires UTC instants so a membership version has one serialized representation. */
+const _CanonicalInstantSchema = z.string().datetime().refine(function _Canonical(value): boolean
+{
+	const epoch = Date.parse(value);
+	return Number.isFinite(epoch) && new Date(epoch).toISOString() === value;
+});
+
+/** Checks local evidence shape and time ordering; current database authority remains IAM's job. */
+export const ___StandaloneMembershipSchema: z.ZodType<ExecutionSubjectStandaloneMembershipEvidence> = z.object({
+	kind: z.literal(ExecutionSubjectMembershipKinds.Standalone),
+	principalId: _PrincipalIdentifierSchema,
+	siloId: _IdentifierSchema,
+	issuer: _IdentifierSchema,
+	subjectId: _IdentifierSchema,
+	membershipId: _IdentifierSchema,
+	membershipUpdatedAt: _CanonicalInstantSchema,
+	observedAt: _CanonicalInstantSchema,
+	trustedUntil: _CanonicalInstantSchema,
+}).strict().refine(function _Ordered(value): boolean
+{
+	return Date.parse(value.membershipUpdatedAt) <= Date.parse(value.observedAt)
+		&& Date.parse(value.observedAt) < Date.parse(value.trustedUntil);
+}, { message: "membership version and observation must precede the trust deadline" });
+
+/** Allows either human proof while rejecting managed requester evidence. */
+const _HumanMembershipSchema = z.union([_FleetMembershipSchema, ___StandaloneMembershipSchema]);
+
 /** Validates a managed Principal binding; current service state and grants are checked by the authority. */
 const _ManagedMembershipSchema = z.object({ kind: z.literal(ExecutionSubjectMembershipKinds.Managed), principalId: _PrincipalIdentifierSchema, siloId: _IdentifierSchema, agentServiceId: _IdentifierSchema, agentRevisionId: _IdentifierSchema, agentRevisionDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, trustedUntil: _InstantSchema }).strict();
 
@@ -78,10 +111,10 @@ export const ___ExecutionSubjectSchema: z.ZodType<ExecutionSubject> = z.object({
 	agentIdentityId: _IdentifierSchema,
 	principalId: _PrincipalIdentifierSchema,
 	identity: z.object({ agentIdentityId: _IdentifierSchema, principalId: _PrincipalIdentifierSchema, siloId: _IdentifierSchema, headRevision: _KurrentRevisionSchema, headDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, verifiedAt: _InstantSchema }).strict(),
-	membership: z.discriminatedUnion("kind", [_FleetMembershipSchema, _ManagedMembershipSchema]),
+	membership: z.union([_FleetMembershipSchema, ___StandaloneMembershipSchema, _ManagedMembershipSchema]),
 	capability: z.object({ agentIdentityId: _IdentifierSchema, computerId: _IdentifierSchema, capabilitySetDigest: _DigestSchema, effectiveContractDigest: _DigestSchema, decisionEvidenceId: _IdentifierSchema, decidedAt: _InstantSchema }).strict(),
 	runScope: z.object({ siloId: _IdentifierSchema, runId: _IdentifierSchema, attempt: _PositiveIntegerSchema, agentServiceId: _IdentifierSchema, agentRevisionId: _IdentifierSchema }).strict(),
 	computerScope: z.object({ siloId: _IdentifierSchema, computerId: _IdentifierSchema, leaseId: _IdentifierSchema, leaseGeneration: _PositiveIntegerSchema }).strict(),
-	requester: z.object({ siloId: _IdentifierSchema, requesterPrincipalId: _PrincipalIdentifierSchema, requestIdempotencyKey: _IdentifierSchema, authenticatedAt: _InstantSchema, membership: _FleetMembershipSchema }).strict(),
+	requester: z.object({ siloId: _IdentifierSchema, requesterPrincipalId: _PrincipalIdentifierSchema, requestIdempotencyKey: _IdentifierSchema, authenticatedAt: _InstantSchema, membership: _HumanMembershipSchema }).strict(),
 	admission: z.object({ authorizingPrincipalId: _PrincipalIdentifierSchema, decisionEvidenceId: _IdentifierSchema, admittedAt: _InstantSchema }).strict(),
 }).strict().superRefine(_ValidateSubjectBindings) as z.ZodType<ExecutionSubject>;

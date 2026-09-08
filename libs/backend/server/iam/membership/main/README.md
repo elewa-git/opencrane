@@ -1,98 +1,92 @@
-# @opencrane/backend/server/iam/membership — is this person still a signed member of the fleet?
+# @opencrane/backend/server/iam/membership — current human membership
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [iam](../../README.md) › membership
 
 ## What it owns
 
-This package is part of **IAM** — *identity and access management*, the side of OpenCrane that
-answers **who is making this request, and are they allowed to do this?** Membership owns one narrow,
-load-bearing question in the middle of that flow: **right now, is this person still a member of this
-fleet, and can we prove it?**
-
-A **fleet** is the set of silos (isolated customer workspaces) managed together; a central authority
-signs a statement — a **membership revision** — saying "this subject belongs to this silo, until
-this time". This package verifies that signed statement before any access decision trusts it. It does
-not decide *what* the person may do (that is authorization's job); it only confirms the membership
-itself is genuine, current, and the newest one seen.
+This Identity and Access Management (IAM) package answers whether a human still belongs to a silo,
+which is one isolated customer workspace. Identity establishes the Principal first. Membership
+checks the deployment-selected authority, then central authorization decides what that person may do.
+A membership witness is evidence for that check, never a permission or a browser claim.
 
 ```
- identity has established WHO the person is
-        │
-        ▼
- ┌───────────────────────────────┐
- │   membership   ◄── HERE        │  newest signed revision? signature valid?
- └───────────────────────────────┘  in scope? not expired? not rolled back?
-        │  trusted (with an expiry window)  /  denied (+ plain reason)
-        ▼
-  authorization ......... uses this as its mandatory first gate before deciding
+ verified Principal + deployment mode
+                │
+                ▼
+ membership ◄── HERE
+    Fleet signature / local PostgreSQL row
+                │
+                ▼
+ central authorization → admitted run snapshot
 ```
 
-**In this flow:** [identity](../../identity/main/README.md) · [authorization](../../authorization/main/README.md) · [audit](../../audit/main/README.md)
+**In this flow:** [identity](../../identity/main/README.md) · [authorization](../../authorization/main/README.md) · [run inputs](../../../../agents/execution/inputs/main/README.md)
 
-**Its role:** it runs *after* identity has said who the person is and *before* authorization decides.
-It consumes the freshest locally stored signed revision plus a fresh cryptographic check of the
-signature, and hands off either a trusted window or the complete signed evidence needed to freeze
-identity into a run snapshot. That evidence names the issuer, signing key, revision, assertion,
-subject, payload digest and trust expiry; callers cannot assemble it from request claims.
+Fleet mode selects and verifies the newest signed assertion and advances its accepted revision
+atomically. Signatures, issuer and silo bindings, expiry, staleness and rollback prevention all
+remain required. A missing or invalid Fleet proof never falls back to local membership.
 
-It is strict in three ways worth knowing. Absence is never membership — no stored revision means
-denied, not trusted. A cached revision is trusted only until the earlier of its own signed expiry or
-a configured staleness limit, so stale trust cannot linger. And acceptance advances a **high-water
-mark** atomically: once revision N is accepted, an older revision can never be replayed to roll
-membership back, even under concurrent logins.
-
-Invariant: it only ever returns "trusted" for a signature that verified, is in scope, has not
-expired, is not stale, and is the newest accepted. If any check is uncertain, the answer is "denied".
+Standalone mode checks the configured silo, the external Principal's trusted OpenID Connect (OIDC)
+issuer and subject, and an active local `OrgMembership`. Its witness freezes the membership row ID,
+`updatedAt`, identity coordinates, observation time and a deployment-bounded trust deadline. It has
+no signature or Fleet revision. Login updates to Principal email or display name do not change this
+version. Membership authority changes must advance `OrgMembership.updatedAt`; replacing the row or
+suspending membership also invalidates the witness. The reader never writes either identity table.
 
 ## Public surface
 
-- `__VerifyCurrentFleetMembershipEvidence` — verifies the newest signed membership revision and, on
-  success, atomically records its acceptance; returns the exact signed issuer, key, assertion,
-  subject, payload digest, revision, and trust window that a run may freeze into its input snapshot,
-  or a denial with a reason.
-- `PrismaFleetMembershipAuthorityRepository` — the database-backed store of signed revisions and the
-  highest-accepted high-water mark. It joins the run-admission transaction, so the snapshot and
-  membership high-water mark cannot commit separately.
-- `Ed25519FleetMembershipSignatureVerifier` — verifies the detached base64url signature over the
-  recomputed canonical membership payload digest using only exact issuer-key IDs from mounted
-  public-key files. A stored assertion cannot change independently of its signature.
-- `__DigestFleetMembershipSignedPayload` — the shared issuer/verifier contract that canonicalizes
-  every issuer, time, silo, subject, assertion, and scope field before signing.
-- `_CreateFleetMembershipEvidenceConfig(environment?)` — reads the explicitly selected issuer
-  model. `fleet` reloads an independent projected Ed25519 public key. `standalone` requires no
-  Fleet key and denies every presented revision until a local issuer exists; an OIDC session is
-  never treated as membership. It is neutral to personal and managed agents.
-- `__SelectCurrentFleetMembershipAssertion` — the reusable transaction-neutral selector used by
-  standalone checks and personal or managed run admission. It returns an assertion identifier only
-  when the newest trusted-issuer revision contains exactly one matching silo and subject.
-- Contract types: `VerifyFleetMembershipCommand`/`Result`, `FleetMembershipAuthorityRepository`,
-  `FleetMembershipSignatureVerifier`, `FleetMembershipAcceptance`/`Result`,
-  `FleetMembershipEvidenceConfig`, and `TrustedFleetMembershipEvidence`.
+- `_CreateHumanMembershipEvidenceConfig(environment?)` selects explicit Fleet or Standalone policy
+  at startup. No request may supply the mode, trusted issuer, silo or lifetime.
+- `PrismaHumanMembershipEvidenceRepository` reads the selected human authority using the caller's
+  transaction. Personal admission, company discovery and company requester checks share this owner.
+- `__SameMembershipBinding` compares frozen and current authority, requiring the same mode and local
+  row version. Callers must also enforce current eligibility and the original trust deadline.
+- `__DigestHumanMembershipEvidence` binds the whole verified witness into admission arguments and
+  capability evidence. `__HumanMembershipRevision` returns a revision for Fleet alone.
+- `PrismaRuntimeMembershipEligibilityAuthority` rechecks the frozen human witness in an effect
+  transaction. Managed execution also needs its separate current service/revision check.
+- `__SelectCurrentFleetMembershipAssertion`, `__VerifyCurrentFleetMembershipEvidence` and
+  `PrismaFleetMembershipAuthorityRepository` own signed selection, verification and monotonic acceptance.
+- `Ed25519FleetMembershipSignatureVerifier` recomputes the signed payload digest and verifies the
+  signature with its supplied keys. The configuration factory's wrapper reloads the mounted key
+  before verification. `__DigestFleetMembershipSignedPayload` owns the payload digest.
+- Types include `HumanMembershipEvidenceConfig`, `HumanMembershipEvidenceRepository`,
+  `FleetMembershipEvidenceConfig`, `TrustedFleetMembershipEvidence` and the signed verification ports.
 
 ## Boundary
 
-Consumed by [authorization](../../authorization/main/README.md) as its `AuthorizationMembershipAuthority`
-first gate. The signature verifier itself is a port supplied by the caller — this package orchestrates
-the decision but does not own the cryptography. Fail-closed: a missing revision, a verifier that
-throws, a failed check, or a concurrent-acceptance conflict all return "denied". A caller such as the
-personal-session assembler may supply its existing Prisma transaction. In that mode the repository
-must not open a nested transaction: membership acceptance, its audit decision, and the resulting run
-snapshot share one commit or rollback together.
-Runtime effects use `PrismaRuntimeMembershipEligibilityAuthority` on their existing dispatch
-transaction to reverify the current signed assertion and require every frozen membership coordinate,
-revision, payload digest, and trust deadline to remain exact.
+The reader uses the caller's transaction, so Fleet acceptance and its audit record commit with the
+admission they supported. Standalone reads share that transaction without creating grants or members.
+Expected absence, revocation or failed verification returns no evidence; storage failures propagate.
+
+The active conversation computer path re-enters run admission before issuing a model credential or
+accepting output. Saved-run recovery checks the same local row version before compiling the stored
+snapshot again. Credential lifetime is the minimum of original and current evidence, budget and
+lease deadlines. A later observation cannot extend an existing run. Already issued provider keys
+retain their short expiry; this package does not claim instantaneous provider-side revocation.
+The reusable runtime eligibility port has no current production caller and is not the active
+computer path's enforcement mechanism.
 
 ## Dependency direction
 
-Tagged `scope:membership`: it may depend only on `scope:audit`, `scope:auth`, `scope:authorization`,
-`scope:membership`, and `scope:shared` — never on apps or other sibling domains.
+Tagged `scope:membership`: it uses allowed identity, authorization, audit and shared/model contracts.
+It never depends on an app or on personal/managed agent policy.
 
 ## Data & persistence
 
-Owns `VerifiedFleetMembershipRevision`, `VerifiedFleetMembershipAssertion`, and
+Owns `VerifiedFleetMembershipRevision`, `VerifiedFleetMembershipAssertion` and
 `HighestAcceptedFleetMembership` in `apps/opencrane/prisma/schema/membership.prisma`.
+It reads `Principal` and `OrgMembership`; identity and organization-members retain their write rules.
+The existing JSON execution-subject storage accepts the new evidence kind without a schema change.
+
+## Runtime & config
+
+`OPENCRANE_MEMBERSHIP_MODE` must be `fleet` or `standalone`.
+`OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS` must be positive and no more than 24 hours.
+Fleet requires `OPENCRANE_MEMBERSHIP_ISSUER_ID`, `OPENCRANE_MEMBERSHIP_KEY_ID` and
+`OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE`. Standalone requires `OPENCRANE_SILO_ID` and `OIDC_ISSUER_URL`.
 
 ## See also
 
 - Parent index: [iam](../../README.md)
-- Siblings: [authorization](../../authorization/main/README.md) · [identity](../../identity/main/README.md) · [audit](../../audit/main/README.md)
+- Siblings: [authorization](../../authorization/main/README.md) · [identity](../../identity/main/README.md) · [organization members](../../organization-members/main/README.md)

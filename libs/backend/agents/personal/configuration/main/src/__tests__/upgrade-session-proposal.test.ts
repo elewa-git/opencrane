@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PersonalConfigurationProposalPersistenceReceipt } from "../proposal/personal-configuration-proposal-repository.types";
 import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types";
-import { _ProposeUpgradeSession } from "../upgrade-session/upgrade-session-proposal";
+import { _ProposeUpgradeSession, _RequirePersonalUpgradeSessionSnapshot } from "../upgrade-session/upgrade-session-proposal";
 import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot } from "../upgrade-session/upgrade-session.types";
 
 /** Builds the validated candidate consumed by transaction-scoped orchestration. */
@@ -106,6 +106,18 @@ describe("upgrade-session proposal orchestration", function _UpgradeSessionPropo
 		const proposals = _proposals();
 
 		await expect(_ProposeUpgradeSession(profiles, proposals, _candidate(), _snapshot(), "2026-08-01T00:00:00.000Z")).resolves.toBeNull();
+		expect(proposals.propose).not.toHaveBeenCalled();
+	});
+
+	it("keeps standalone upgrade sessions unavailable before profile or proposal authority", function _StandaloneDenied()
+	{
+		const profiles = _profiles();
+		const proposals = _proposals();
+		const snapshot = _snapshot();
+		const membership = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "user-1", siloId: "silo-1", issuer: "https://issuer.test", subjectId: "oidc-1", membershipId: "local-1", membershipUpdatedAt: "2026-08-01T00:00:00.000Z", observedAt: "2026-08-01T00:00:00.000Z", trustedUntil: "2026-08-01T00:05:00.000Z" } as const;
+		const local = { ...snapshot, executionSubject: { ...snapshot.executionSubject, membership, requester: { ...snapshot.executionSubject.requester, membership } } };
+		expect(function _RequireSupportedSnapshot() { _RequirePersonalUpgradeSessionSnapshot(local as never); }).toThrow("requires a personal conversation snapshot");
+		expect(profiles.readOwnerProfileId).not.toHaveBeenCalled();
 		expect(proposals.propose).not.toHaveBeenCalled();
 	});
 

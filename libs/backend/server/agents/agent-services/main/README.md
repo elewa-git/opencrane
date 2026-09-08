@@ -20,15 +20,18 @@ rewriting the service. The product's initial revision policy supplies budgets an
 while the deployment selects which computer can run it.
 
 The package also owns personal execution evidence. Admission proves that the personal service is
-active, its requested revision is still published and active, current signed membership realizes the
+active, its requested revision is still published and active, current deployment-selected human membership proves the
 requester, and the central authority permits invocation and every frozen revision boundary. The
 result is immutable decision evidence for one run; it is not a reusable grant.
 
 A company assistant acts through its own stable Internal Principal. Its evidence binds the current
-service, published revision and model-use decision. The requesting human has separate signed fleet
+service, published revision and model-use decision. The requesting human has separate Fleet or Standalone
 membership evidence and must currently be allowed to invoke the service. Internal Principals do not
 need a fabricated fleet membership assertion: PostgreSQL service authority and checked identity
-history supply their current binding. Neither evidence form grants access by itself.
+history supply their current binding. Neither evidence form grants access by itself. Both service repositories delegate human membership
+to the common IAM reader. Standalone evidence binds the active local membership row/version and
+external identity; its digest enters admission arguments and capability evidence. Audit records carry
+a membership revision for Fleet alone.
 
 Company model-use admissions record `agent-service` with the company's Principal ID, both when
 creating a child conversation and when admitting a run. Human Invoke decisions record `user` with

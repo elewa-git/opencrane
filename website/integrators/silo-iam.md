@@ -29,6 +29,25 @@ frozen run evidence
 Membership evidence must name the same silo and subject as the authorisation request.
 Stale, missing or unverifiable evidence denies the request.
 
+## Membership in an installation
+
+The operator selects the membership source for the installation. A request cannot select a source,
+and a failed check never falls back to the other mode.
+
+| Mode | Current evidence for a person |
+|---|---|
+| Standalone | The external identity matches the configured sign-in provider and an active organisation membership in PostgreSQL. Run evidence records that membership's row ID and update time. |
+| Fleet | The configured Fleet issuer supplies a signed membership assertion. Signature, expiry and the newest accepted revision must all verify. |
+
+Both modes still need the central permission decision. An assistant run preserves the admitted
+person, organisation and membership evidence. When the computer retries admission, standalone
+membership must still refer to the same active row version and external identity before a model
+credential is issued. A fresh check cannot extend the original run deadline. Credentials already
+issued to a provider retain their bounded lifetime; this is not a promise of instantaneous recall.
+
+A company assistant also has its own active service and internal Principal. The person's membership
+proves who requested the work; the assistant's own grants determine what it may use.
+
 ## Grant composition
 
 OpenCrane calculates effective access for the actor that actually performs the action. A personal
@@ -42,7 +61,7 @@ human who invokes or administers a managed agent needs a separate management per
 | Human grants | Bound direct human actions and personal-agent execution |
 | Managed AgentService grants | Bound autonomous managed-agent execution |
 | Resource boundary | Selects an exact group or personal boundary; group coverage can include descendants |
-| Membership revision | Makes the accepted decision auditable |
+| Membership evidence | Records the accepted local membership version or signed Fleet assertion |
 
 ## Run admission
 

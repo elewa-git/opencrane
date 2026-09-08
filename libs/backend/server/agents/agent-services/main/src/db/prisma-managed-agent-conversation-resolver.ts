@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
+import { __DigestHumanMembershipEvidence, __HumanMembershipRevision } from "@opencrane/backend/server/iam/membership";
 import { AgentIdentityStates } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority, __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
@@ -51,10 +52,10 @@ export class PrismaManagedAgentConversationResolver
 		const current = await this._loadCandidate(caller, agentServiceId);
 		if (current === null)
 			return null;
-		const { candidate, modelDefinitionId, membershipRevision, nowEpochMs } = current;
+		const { candidate, modelDefinitionId, membership, nowEpochMs } = current;
 		const authorization = new PrismaAuthorizationAuthority(this.transaction);
-		const argumentsDigest = __DigestCanonicalJson({ agentServiceId, agentRevisionId: candidate.agentRevisionId, agentIdentityId: candidate.agentIdentityId });
-		const decision = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision, nowEpochMs });
+		const argumentsDigest = __DigestCanonicalJson({ agentServiceId, agentRevisionId: candidate.agentRevisionId, agentIdentityId: candidate.agentIdentityId, membershipDigest: __DigestHumanMembershipEvidence(membership) });
+		const decision = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: __HumanMembershipRevision(membership), nowEpochMs });
 		if (decision.outcome !== AuthorizationDecisionOutcomes.Allow || decision.evidence === null)
 			return null;
 		const model = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: candidate.principalId, actorKind: "agent-service", actorId: candidate.principalId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: modelDefinitionId }, action: ProductAuthorizationActions.Use, argumentsDigest, nowEpochMs });
@@ -82,6 +83,6 @@ export class PrismaManagedAgentConversationResolver
 		if (membership === null)
 			return null;
 		const candidate = { agentServiceId, agentRevisionId: service.agentRevisionId, agentIdentityId, principalId: service.principalId, name: service.name, workloadProfile: service.workloadProfile, profileRevisionId: profiles[0]!.profileRevisionId };
-		return { candidate, modelDefinitionId: service.modelDefinitionId, membershipRevision: membership.revision, nowEpochMs };
+		return { candidate, modelDefinitionId: service.modelDefinitionId, membership, nowEpochMs };
 	}
 }
