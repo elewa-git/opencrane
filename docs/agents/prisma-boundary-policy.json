@@ -1068,6 +1068,38 @@
 						"importPath": "./prisma-membership-authority"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/iam/authorization/main/src/prisma-run-unused-tool-invocation-repository.ts",
+				"adapter": "PrismaRunUnusedToolInvocationRepository",
+				"contract": "RunUnusedToolInvocationRepository",
+				"contractImportPath": "./mcp-tool-invocation-participant.types",
+				"constructs": [
+					{
+						"adapter": "PrismaToolInvocationRepository",
+						"importPath": "./prisma-tool-invocation-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-tool-dispatch-authority.ts",
+				"adapter": "PrismaConversationToolDispatchAuthority",
+				"contract": "ConversationToolDispatchAuthority",
+				"contractImportPath": "../conversation-tool-dispatch.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerLifecycleProjectionRepository",
+						"importPath": "./prisma-conversation-computer-lifecycle-projection-repository"
+					},
+					{
+						"adapter": "PrismaGroupChildAccessRepository",
+						"importPath": "./prisma-group-child-access-repository"
+					},
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					}
+				]
 			}
 		],
 		"unitsOfWork": [
@@ -1638,18 +1670,6 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-unit-of-work.ts",
-				"adapter": "PrismaToolInvocationUnitOfWork",
-				"contract": "ToolInvocationUnitOfWork",
-				"contractImportPath": "./tool-invocation.types",
-				"constructs": [
-					{
-						"adapter": "PrismaToolInvocationRepository",
-						"importPath": "./prisma-tool-invocation-repository"
-					}
-				]
-			},
-			{
 				"path": "libs/backend/server/iam/authorization/main/src/prisma-mcp-tool-invocation-participant.ts",
 				"adapter": "PrismaMcpToolInvocationParticipantUnitOfWork",
 				"contract": "McpToolInvocationTransactionParticipant",
@@ -1662,6 +1682,10 @@
 					{
 						"adapter": "PrismaMcpUnusedToolInvocationRepository",
 						"importPath": "./prisma-mcp-unused-tool-invocation-repository"
+					},
+					{
+						"adapter": "PrismaRunUnusedToolInvocationRepository",
+						"importPath": "./prisma-run-unused-tool-invocation-repository"
 					}
 				]
 			},

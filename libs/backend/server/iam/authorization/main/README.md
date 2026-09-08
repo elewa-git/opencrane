@@ -75,10 +75,16 @@ the ordinary exact boundary-matching rules.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
 - `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
-  `PrismaToolInvocationUnitOfWork`, and their lifecycle contracts own durable human approval and
+  `PrismaMcpToolInvocationParticipantUnitOfWork`, and their lifecycle contracts own durable human approval and
   provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
   invocation carry the same immutable execution subject, including the active conversation-computer
   lease id and generation; released or replaced leases fail closed.
+- Run-owned MCP dispatch requires the injected current-authority check before a provider claim.
+  A known denial closes only the observed Ready revision and saves one failed result delivery
+  after the lifecycle fence accepts it. Durable KurrentDB tool history remains pending.
+  A read outage propagates so the transaction rolls back.
+  Task-owned calls retain their distinct task projection. The unused external-action transaction
+  wrapper is removed; the MCP runtime owns production dispatch.
 - `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
   tool work inside the runs domain's cancellation transaction.
 

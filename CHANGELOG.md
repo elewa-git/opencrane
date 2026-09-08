@@ -133,6 +133,11 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Security
 
+- **Queued run-owned tool calls recheck current access before execution.** The MCP executor
+  refuses a revoked permission or stale conversation lease before contacting the tool. A definite
+  refusal stores one failed result; an unavailable authority leaves the call unclaimed for retry.
+  Connecting the conversation model loop to this guarded path remains in development.
+
 - **Company assistants execute with their own model authority and a separately checked human
   requester.** Current membership, service permission, and parent and child access are checked at
   the relevant reads and effects. Shared work inherits no person's private tools, persona or memory.

@@ -25,7 +25,9 @@ current review work and its evidence.
 ## Still to complete
 
 - **Useful work across tools:** connect the conversation model loop to governed tool execution,
-  approvals and durable results, then prove a real business task from start to finish.
+  approvals and durable results, then prove a real business task from start to finish. The next
+  implementation rechecks current access before a queued tool call starts; its guard alone does
+  not enable a model tool call or establish a live integration journey.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
   across conversations.
 - **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete

@@ -4,10 +4,11 @@ import type { JsonValue } from "@opencrane/util";
 
 import { _AppendMcpToolInvocationCompleted, _AppendMcpToolInvocationFailed, _EnterMcpToolInvocationRecovery, _MCP_AMBIGUOUS_FAILURE_CODE } from "./mcp-tool-invocation-lifecycle-events";
 import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository";
+import { PrismaRunUnusedToolInvocationRepository, _RUN_TOOL_DISPATCH_DENIED } from "./prisma-run-unused-tool-invocation-repository";
 import { PrismaMcpUnusedToolInvocationRepository } from "./prisma-mcp-unused-tool-invocation-repository";
 import { ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 import { ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes } from "./tool-invocation.types";
-import type { McpTaskToolInvocationLifecycleParticipant, McpToolInvocationTransactionParticipant, McpToolInvocationTransactionParticipantFactory } from "./mcp-tool-invocation-participant.types";
+import type { McpTaskToolInvocationLifecycleParticipant, McpToolInvocationTransactionParticipant, McpToolInvocationTransactionParticipantFactory, RunToolInvocationDispatchAuthority } from "./mcp-tool-invocation-participant.types";
 import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationLifecycleEventSink, ToolInvocationRecord, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationTransitionResult, ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Return true only for a persisted MCP task owner. */
@@ -41,7 +42,7 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 	private readonly _mcpTasks: McpTaskToolInvocationLifecycleParticipant | null;
 
 	/** Bind every authorization writer to the transaction already opened by the MCP authority. */
-	constructor(transaction: Prisma.TransactionClient, lifecycleEvents: ToolInvocationLifecycleEventSink, recoveryEvents: ToolInvocationRecoveryEventSink, runRecovery: ToolInvocationRunRecoveryAuthority, mcpTasks: McpTaskToolInvocationLifecycleParticipant | null)
+	constructor(transaction: Prisma.TransactionClient, lifecycleEvents: ToolInvocationLifecycleEventSink, recoveryEvents: ToolInvocationRecoveryEventSink, runRecovery: ToolInvocationRunRecoveryAuthority, mcpTasks: McpTaskToolInvocationLifecycleParticipant | null, private readonly runDispatch: RunToolInvocationDispatchAuthority)
 	{
 		this._transaction = transaction;
 		this._repository = new PrismaToolInvocationRepository(this._transaction);
@@ -61,6 +62,20 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 	/** Claim dispatch, because the companion is about to call the uploaded MCP server. */
 	async claim(invocationId: string, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>
 	{
+		const invocation = await this._repository.findById(invocationId);
+		if (invocation === null)
+			return { outcome: ToolInvocationClaimOutcomes.Missing };
+		if (!_IsMcpTaskOwned(invocation) && invocation.state === ToolInvocationStates.Ready
+			&& !await this.runDispatch.isCurrentlyEligibleInTransaction(this._transaction, invocation, now))
+		{
+			const unused = new PrismaRunUnusedToolInvocationRepository(this._transaction);
+			const transition = await unused.complete(invocation, now);
+			if (transition.changed && transition.invocation !== null)
+				await _AppendMcpToolInvocationFailed(this._lifecycleEvents, this._transaction, transition.invocation, _RUN_TOOL_DISPATCH_DENIED, false);
+			if (transition.invocation === null)
+				return { outcome: ToolInvocationClaimOutcomes.Missing };
+			return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: transition.invocation };
+		}
 		const claimed = await this._repository.claim(invocationId, ExternalActionClaimKinds.Dispatch, now, leaseMilliseconds);
 		if (claimed.outcome === ToolInvocationClaimOutcomes.Claimed && _IsMcpTaskOwned(claimed.invocation))
 		{
@@ -146,21 +161,22 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
  * Builds the authorization-owned participant factory used by the OCI MCP runtime unit of work.
  *
  * The factory receives no Prisma client because it must never open a nested transaction. Every
- * participant writes through the transaction supplied by the MCP authority, while these three
- * ports keep run events and recovery changes owned by their existing packages.
+ * participant writes through the transaction supplied by the MCP authority, while these
+ * ports keep current dispatch authority, run events and recovery owned by their existing packages.
  *
  * Called by: apps/opencrane/src/app/mcp-runtime-composition.ts.
  * @param lifecycleEvents - Runs-owned timeline writer used in the caller's transaction.
  * @param recoveryEvents - Runs-owned recovery-event writer used in the caller's transaction.
  * @param runRecovery - Runs-owned state authority used in the caller's transaction.
+ * @param runDispatch - Current run, identity, lease and permission reader used before a provider claim.
  * @returns A factory that binds authorization operations to one open Prisma transaction.
  */
-export function __CreatePrismaMcpToolInvocationParticipantFactory(lifecycleEvents: ToolInvocationLifecycleEventSink, recoveryEvents: ToolInvocationRecoveryEventSink, runRecovery: ToolInvocationRunRecoveryAuthority): McpToolInvocationTransactionParticipantFactory
+export function __CreatePrismaMcpToolInvocationParticipantFactory(lifecycleEvents: ToolInvocationLifecycleEventSink, recoveryEvents: ToolInvocationRecoveryEventSink, runRecovery: ToolInvocationRunRecoveryAuthority, runDispatch: RunToolInvocationDispatchAuthority): McpToolInvocationTransactionParticipantFactory
 {
 	return {
 		__ForTransaction(transaction: unknown, mcpTasks?: McpTaskToolInvocationLifecycleParticipant): McpToolInvocationTransactionParticipant
 		{
-			return new PrismaMcpToolInvocationParticipantUnitOfWork(transaction as Prisma.TransactionClient, lifecycleEvents, recoveryEvents, runRecovery, mcpTasks ?? null);
+			return new PrismaMcpToolInvocationParticipantUnitOfWork(transaction as Prisma.TransactionClient, lifecycleEvents, recoveryEvents, runRecovery, mcpTasks ?? null, runDispatch);
 		},
 	};
 }

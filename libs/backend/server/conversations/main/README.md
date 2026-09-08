@@ -23,6 +23,15 @@ and fails closed when asked for Use; this message repair does not enable them th
 check. Human-reviewed group-child text sharing uses its separate recorded admission and remains
 available through that existing path.
 
+Before an MCP executor claims a saved run-owned tool call, this package rechecks its current
+Running run, unchanged execution subject, conversation participation, identity and exact active
+computer lease. Existing service and membership owners supply fresh evidence; the central
+authority re-admits Conversation Use and every saved tool coordinate. Revoked permission becomes
+a definite failed invocation before provider dispatch. An unavailable history store leaves the
+transaction uncommitted for retry. Kurrent reads and PostgreSQL decisions remain separate
+observations, and frozen authority deadlines are never extended. This guard does not enable the
+model tool loop; company revisions with tool assignments remain refused by their current owner.
+
 The creation directory lists active members in the current silo with their stored display names.
 Missing names use a generic label; login subjects and email addresses never become fallback names.
 The browser reuses this directory for participant selection and direct/group chat titles.

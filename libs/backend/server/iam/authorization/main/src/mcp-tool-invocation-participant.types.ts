@@ -3,6 +3,21 @@ import type { JsonValue } from "@opencrane/util";
 import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationRecord, ToolInvocationTransitionResult } from "./tool-invocation.types";
 
 /**
+ * Rechecks a run's current authority before the MCP participant claims provider dispatch.
+ *
+ * PostgreSQL decisions share the claim transaction. History checks observe the current lease and
+ * identity separately; they do not make revocation atomic across PostgreSQL and KurrentDB.
+ * A known denial returns false. An unavailable dependency throws so the transaction can retry
+ * without recording a policy denial or starting the provider request.
+ * Called by: PrismaMcpToolInvocationParticipantUnitOfWork.claim.
+ */
+export interface RunToolInvocationDispatchAuthority
+{
+	/** Check the saved run-owned invocation through the caller's open transaction. */
+	isCurrentlyEligibleInTransaction(transaction: unknown, invocation: ToolInvocationRecord, now: Date): Promise<boolean>;
+}
+
+/**
  * Moves an MCP tool call while another package owns the open database transaction.
  *
  * The MCP runtime uses this port when it must change its command row and the existing
@@ -70,4 +85,11 @@ export interface McpToolInvocationTransactionParticipantFactory
 {
 	/** Bind the authorization operations and event writers to the supplied Prisma transaction. */
 	__ForTransaction(transaction: unknown, mcpTasks?: McpTaskToolInvocationLifecycleParticipant): McpToolInvocationTransactionParticipant;
+}
+
+/** Fails one observed Ready run-owned call without creating a provider claim. */
+export interface RunUnusedToolInvocationRepository
+{
+	/** Save a definite dispatch refusal and return the current row when the observed revision loses. */
+	complete(invocation: ToolInvocationRecord, now: Date): Promise<ToolInvocationTransitionResult>;
 }

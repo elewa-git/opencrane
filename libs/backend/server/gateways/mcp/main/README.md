@@ -57,6 +57,12 @@ run the upload. It does not treat a valid layout as evidence that the image is a
 that evidence must come from the actual `server/discover` exchange after a governed runtime starts
 the imported image.
 
+Run-owned calls pass through the authorization participant before the companion receives provider
+arguments. The participant rechecks current conversation authority and can close denied Ready work
+with a failed result. A terminal winner closes the MCP execution without contacting the provider.
+History reads happen before the claim inside its bounded SQL transaction, while provider I/O stays
+after commit. The history read does not create a cross-store lock or enable the pending model loop.
+
 An installed server can then run a tool through a public task. The task keeps its state, input,
 result, and failure in the database, so a server restart does not repeat the tool call.
 
