@@ -84,6 +84,8 @@ while true; do
         ($owners | length) == 1 and $owners[0].uid == $uid and $owners[0].name == $name and
         $owners[0].apiVersion == "agents.x-k8s.io/v1beta1" and $owners[0].kind == "Sandbox" and
         .spec.serviceAccountName == $account and .spec.runtimeClassName == "opencrane-smoke-runc" and
+        .spec.dnsPolicy == "ClusterFirst" and .spec.dnsConfig == null and
+        .metadata.labels["app.kubernetes.io/component"] == "agent-sandbox" and
         (.metadata.labels as $actual | $labels | to_entries | all($actual[.key] == .value))
       ' <<<"$POD" >/dev/null
       SERVICE_NAME="$(jq -r '.status.service // empty' <<<"$SANDBOX")"
@@ -104,5 +106,24 @@ while true; do
   sleep 2
 done
 
+# Resolve and connect to the private listener without presenting a token or invoking a product command.
+kubectl --context "$CONTEXT" exec -i "$SANDBOX_NAME" -n "$NAMESPACE" --container=conversation-computer -- python3 - <<'PY'
+import os
+import socket
+import urllib.parse
+
+endpoint = urllib.parse.urlparse(os.environ["OPENCRANE_INTERNAL_ENDPOINT"])
+socket.setdefaulttimeout(10)
+addresses = socket.getaddrinfo(endpoint.hostname, endpoint.port, type=socket.SOCK_STREAM)
+assert addresses, "The computer cannot resolve its internal server"
+with socket.create_connection((endpoint.hostname, endpoint.port), timeout=10):
+    pass
+print("Computer cluster DNS and private server transport: PASS")
+PY
+template_policy="$(kubectl --context "$CONTEXT" get "networkpolicy/${RELEASE}-developer-template-network-policy" -n "$NAMESPACE" --ignore-not-found -o name)"
+if [[ -n "$template_policy" ]]; then
+  printf 'The controller added a second network policy to the release-owned computer policy.\n' >&2
+  exit 1
+fi
 cleanup_claim
-printf 'Sandbox controller lifecycle: PASS (owned Sandbox, running Pod, lease labels, Service address and foreground cleanup; no product execution or Ready proof).\n'
+printf 'Sandbox controller lifecycle: PASS (owned Sandbox, running Pod, lease labels, cluster DNS, private server transport, Service address and foreground cleanup; no product execution or Ready proof).\n'

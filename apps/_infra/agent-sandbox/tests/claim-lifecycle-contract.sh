@@ -57,13 +57,22 @@ if (args.includes('create')) {
     if (scenario === 'missing-pod') process.exit(0);
     if (scenario === 'wrong-pod-lease') labels['opencrane.ai/computer-lease-id'] = 'another-lease';
     process.stdout.write(JSON.stringify({
-      metadata: { name: names.claim, namespace: names.namespace, ownerReferences: [sandboxOwner], labels },
-      spec: { serviceAccountName: 'smoke-agent-sandbox', runtimeClassName: 'opencrane-smoke-runc' },
+      metadata: { name: names.claim, namespace: names.namespace, ownerReferences: [sandboxOwner], labels: { ...labels, 'app.kubernetes.io/component': scenario === 'wrong-network-selector' ? 'foreign' : 'agent-sandbox' } },
+      spec: { serviceAccountName: 'smoke-agent-sandbox', runtimeClassName: 'opencrane-smoke-runc', dnsPolicy: scenario === 'public-dns' ? 'None' : 'ClusterFirst', ...(scenario === 'injected-dns' ? { dnsConfig: { nameservers: ['8.8.8.8'] } } : {}) },
       status: { phase: 'Running', conditions: [{ type: 'Ready', status: 'False' }] }
     }));
+  } else if (resource === 'networkpolicy/smoke-developer-template-network-policy') {
+    if (scenario === 'upstream-policy') process.stdout.write(resource);
   } else {
     throw new Error(`Unexpected read: ${resource}`);
   }
+} else if (args.includes('exec')) {
+  assert(args.includes('python3'));
+  assert(args.includes('--container=conversation-computer'));
+  const script = fs.readFileSync(0, 'utf8');
+  assert(script.includes('socket.getaddrinfo'));
+  assert(script.includes('socket.create_connection'));
+  if (scenario === 'dns-unreachable') process.exit(1);
 } else if (args.includes('delete')) {
   assert.equal(args[args.indexOf('--as') + 1], 'system:serviceaccount:smoke:smoke-opencrane-server');
   assert.equal(args[args.indexOf('--raw') + 1], `/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/smoke/sandboxclaims/${names.claim}`);
@@ -91,7 +100,7 @@ grep -Fq 'wait --for=delete sandbox/computer-controller-proof-g1 pod/computer-co
 grep -Fq 'wait --for=delete service/controller-proof-service' "$FIXTURE_DIR/calls"
 [[ "$(grep -c ' delete ' "$FIXTURE_DIR/calls")" == 1 ]]
 
-for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address missing-pod cleanup-blocked existing; do
+for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable upstream-policy missing-pod cleanup-blocked existing; do
   : > "$FIXTURE_DIR/calls"
   rm -f "$FIXTURE_DIR/deleted"
   if PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO="$scenario" bash "$SMOKE" k3d-contract smoke smoke 1 > "$FIXTURE_DIR/$scenario.log" 2>&1; then

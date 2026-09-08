@@ -58,7 +58,12 @@ grep -Fq '            medium: Memory' <<<"$template"
 SANDBOX_RENDERED_TEMPLATE="$template" node <<'NODE'
 const assert = require("node:assert/strict");
 const YAML = require("yaml");
-const pod = YAML.parse(process.env.SANDBOX_RENDERED_TEMPLATE).spec.podTemplate.spec;
+const profile = YAML.parse(process.env.SANDBOX_RENDERED_TEMPLATE).spec;
+const pod = profile.podTemplate.spec;
+assert.equal(profile.networkPolicyManagement, "Unmanaged",
+  "The release NetworkPolicy must be the sole owner of computer network access");
+assert.equal(pod.dnsPolicy, "ClusterFirst", "The computer must resolve its private server and model service");
+assert.equal(pod.dnsConfig, undefined, "The controller must not inject public DNS resolvers");
 const reviewMount = pod.containers.find(container => container.name === "conversation-computer")
   .volumeMounts.find(mount => mount.mountPath === "/var/run/opencrane/review");
 assert.ok(reviewMount, "The review credential directory must stay mounted");
@@ -73,6 +78,24 @@ for (const volume of emptyDirs) {
     assert.ok(Buffer.byteLength(annotationName, "utf8") <= 63,
       `Generated gVisor annotation name exceeds 63 bytes: ${annotationName}`);
   }
+}
+NODE
+# The release policy must select the actual template and retain only its fixed service paths.
+SANDBOX_RENDERED="$rendered" node <<'NODE'
+const assert = require("node:assert/strict");
+const YAML = require("yaml");
+const resources = YAML.parseAllDocuments(process.env.SANDBOX_RENDERED).map(document => document.toJSON());
+const template = resources.find(resource => resource?.kind === "SandboxTemplate");
+const policy = resources.find(resource => resource?.kind === "NetworkPolicy" && resource.metadata.name === "opencrane-testv5-conversation-computer");
+assert.ok(policy);
+for (const [label, value] of Object.entries(policy.spec.podSelector.matchLabels)) {
+  assert.equal(template.spec.podTemplate.metadata.labels[label], value);
+}
+assert.deepEqual(policy.spec.policyTypes, ["Ingress", "Egress"]);
+assert.deepEqual(policy.spec.ingress.map(rule => rule.ports.map(port => port.port)), [[8090]]);
+assert.deepEqual(policy.spec.egress.map(rule => rule.ports.map(port => port.port)), [[8081], [4000], [53, 53]]);
+for (const rule of [...policy.spec.ingress, ...policy.spec.egress]) {
+  for (const peer of rule.from ?? rule.to ?? []) assert.equal(peer.ipBlock, undefined);
 }
 NODE
 grep -Fq '            - name: opencrane-conversation-workspace' <<<"$template"

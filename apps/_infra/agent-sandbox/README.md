@@ -35,6 +35,14 @@ After foreground deletion, the standard Kubernetes garbage-collector identity ma
 The server can read the claim's owned Sandbox for its service address, but cannot mutate that
 Sandbox or its Pod. A mistake therefore denies activation instead of widening the Pod profile.
 
+The release owns the computer's NetworkPolicy: the private server, LiteLLM and DNS are its only
+outbound paths, and only the server can reach its review port. The template sets
+`networkPolicyManagement: Unmanaged` so the upstream controller does not add its default public
+internet access alongside that policy. Explicit `dnsPolicy: ClusterFirst` lets the computer resolve
+the internal server and model service. The pinned controller otherwise replaces an omitted DNS
+policy with public resolvers when its default managed policy applies. Changes to the template apply
+to new claims; an existing Pod keeps its original DNS configuration.
+
 The review credential uses the memory-backed `review-credential` volume at
 `/var/run/opencrane/review`. Empty-directory volume names stay short enough for the gVisor mount
 annotation keys generated from them. The rendered contract checks the Kubernetes 63-byte name
@@ -79,7 +87,8 @@ current Kubernetes type checking, rejects expression warnings, and dry-runs a va
 and forbidden identity, annotation, environment, lease and pool changes. Those requests persist no
 claims or Pods. The following `tests/claim-lifecycle-smoke.sh` then persists a server-impersonated
 claim in the disposable k3d cluster. It checks the controlling owner UID, Sandbox and Pod lease
-labels, running Pod and same-namespace Service address, then deletes that exact claim and waits for
+labels, running Pod, cluster DNS, private server transport and same-namespace Service address. It
+also rejects a controller-created template policy, then deletes that exact claim and waits for
 foreground cleanup. It rejects other contexts. This proves controller reconciliation, without
 claiming PostgreSQL admission, computer readiness or an assistant answer; live journeys prove those.
 

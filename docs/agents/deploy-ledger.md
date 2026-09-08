@@ -963,3 +963,28 @@ Full run reports belong in the corresponding pull request or issue.
   by a bounded operator Job using the installed bootstrap boundary. Focused tests prove script
   and target binding, ownership and failure refusals, TLS and credential separation. This source
   still needs review, remote qualification, installation and live replay before it is qualified.
+
+
+## 2026-09-08 · testv5 · computer DNS diagnosis and replay repair · PARTIAL
+
+- live finding: the new company child has an owned, running computer Pod, correct lease labels and
+  service address, with zero restarts. At 11:42:33 UTC its readiness returned 503, reason `URLError`.
+  The review credential file was absent. Its only resolvers were `8.8.8.8` and `1.1.1.1`; resolving
+  the release's private server failed with `gaierror`, errno -2. Failure precedes credential
+  exchange, checkpoint restore and model execution. Both personal follow-up messages were admitted
+  at 11:35, but their new Pods inherited the same template. No runtime data was patched.
+- source repair: the pinned v0.5.3 controller replaces omitted DNS under its default managed network
+  policy and also adds public internet egress. The release already owns the computer's restrictive
+  NetworkPolicy. The template now selects `Unmanaged` and explicit `ClusterFirst`; that existing
+  policy stays unchanged. The upstream controller removes only its own template policy. Existing
+  Pods keep their old DNS, so qualification must admit fresh normal sessions.
+- local evidence: Agent Sandbox Helm and controller contracts, including DNS/selector denials,
+  lint, workload ownership and independent review pass. The k3d lifecycle smoke now resolves and
+  opens a TCP connection to the private server and rejects an extra controller-managed policy.
+  That new remote check and live DNS proof have not yet run.
+- replay source: `4b3909af2` replaces the unusable application replay route with a bounded operator
+  Job. Independent review passed after fixing immediate terminal failures to return without waiting
+  the full deployment timeout. The normal server identity remains unprivileged. Remote secure
+  replay, installation and replay of the parked testv5 activations remain pending.
+- remaining evidence: personal and child answers, reviewed human sharing, reconnect, both history
+  restore modes and their measured recovery times. A running Pod does not establish these outcomes.

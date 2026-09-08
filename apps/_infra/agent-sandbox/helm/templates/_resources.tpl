@@ -270,7 +270,8 @@ metadata:
     opencrane.ai/agent-sandbox-profile: {{ $profile.name | quote }}
 spec:
   service: true
-  networkPolicyManagement: Managed
+  # The release owns the restrictive NetworkPolicy above; upstream defaults also allow public egress.
+  networkPolicyManagement: Unmanaged
   envVarsInjectionPolicy: Disallowed
   volumeClaimTemplatesPolicy: Disallowed
   podTemplate:
@@ -282,6 +283,7 @@ spec:
       serviceAccountName: {{ $sandbox.serviceAccountName }}
       automountServiceAccountToken: false
       enableServiceLinks: false
+      dnsPolicy: ClusterFirst
       runtimeClassName: {{ $sandbox.runtimeClassName }}
       restartPolicy: Always
       terminationGracePeriodSeconds: 0
