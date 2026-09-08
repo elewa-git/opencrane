@@ -1,7 +1,17 @@
+import { ___ConversationToolProposalSchema, ConversationToolProposalOutcomes } from "@opencrane/contracts";
+import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
+import { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
 import { Router, type Request, type Response } from "express";
 
 import type { ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";
 import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
+
+/** Disclose only the known proposal refusal categories through their fixed HTTP statuses. */
+const _TOOL_PROPOSAL_STATUS: Readonly<Record<ConversationToolProposalRefusals, number>> = {
+	[ConversationToolProposalRefusals.Invalid]: 400,
+	[ConversationToolProposalRefusals.Conflict]: 409,
+	[ConversationToolProposalRefusals.Denied]: 403,
+};
 
 const _UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -48,6 +58,38 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 			return;
 		}
 		response.status(200).json(bootstrap);
+	});
+	router.post("/tool-proposal", async function _ToolProposal(request: Request, response: Response): Promise<void>
+	{
+		const workload = await _Workload(request, options);
+		if (workload === null)
+		{
+			response.sendStatus(401);
+			return;
+		}
+		const proposal = ___ConversationToolProposalSchema.safeParse(request.body);
+		if (!proposal.success)
+		{
+			response.status(400).json({ error: ConversationToolProposalRefusals.Invalid });
+			return;
+		}
+		try
+		{
+			const receipt = await options.authority.proposeTool({ ...proposal.data, workload });
+			response.status(receipt.outcome === ConversationToolProposalOutcomes.Recorded ? 202 : 200).json(receipt);
+		}
+		catch (error)
+		{
+			if (error instanceof ConversationToolProposalRefusal)
+			{
+				const status = _TOOL_PROPOSAL_STATUS[error.refusal];
+				response.status(status).json({ error: error.refusal });
+				return;
+			}
+			const diagnostic = _ConversationFailureDiagnostic(error);
+			options.logger.warn({ operation: "conversation.computer.tool_proposal", err: diagnostic, errorType: diagnostic.type }, "Conversation computer tool proposal unavailable");
+			response.status(503).set("Retry-After", "1").json({ error: "conversation_tool_proposal_unavailable" });
+		}
 	});
 	router.post("/output", async function _Output(request: Request, response: Response): Promise<void>
 	{

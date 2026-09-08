@@ -1100,6 +1100,22 @@
 						"importPath": "@opencrane/backend/server/iam/authorization"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-tool-proposal.ts",
+				"adapter": "PrismaConversationToolProposalRepository",
+				"contract": "ConversationToolProposalRepository",
+				"contractImportPath": "../conversation-tool-proposal.types",
+				"constructs": [
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaConversationToolDispatchAuthority",
+						"importPath": "./prisma-conversation-tool-dispatch-authority"
+					}
+				]
 			}
 		],
 		"unitsOfWork": [
@@ -1848,6 +1864,18 @@
 					{
 						"adapter": "PrismaGroupChildRequestRepository",
 						"importPath": "./db/prisma-group-child-request-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-tool-proposal.ts",
+				"adapter": "PrismaConversationToolProposalUnitOfWork",
+				"contract": "ConversationToolProposalAdmission",
+				"contractImportPath": "../conversation-tool-proposal.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationToolProposalRepository",
+						"importPath": "<same-file>"
 					}
 				]
 			}

@@ -1,3 +1,6 @@
+import { PrismaConversationToolProposalUnitOfWork } from "@opencrane/backend/server/conversations";
+import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { _CreateConversationToolDispatchDependencies } from "./mcp-runtime-composition";
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
@@ -34,6 +37,7 @@ export function _CreateConversationComputerTurnComposition(prisma: PrismaClient,
 				throw new Error("Conversation computer output requires conversation visibility");
 		} }, { assertMayAppend: async function _RecheckLeaseAtAppend() { await candidates.assertCurrent(turn, workload); } });
 	} };
-	const authority = new ConversationComputerTurnAuthorityService({ siloId, candidates, credentials, endpoint: process.env.LITELLM_ENDPOINT ?? "", outputPayloads: unitOfWork, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
+	const toolProposals = new PrismaConversationToolProposalUnitOfWork(prisma, _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig()));
+	const authority = new ConversationComputerTurnAuthorityService({ toolProposals, siloId, candidates, credentials, endpoint: process.env.LITELLM_ENDPOINT ?? "", outputPayloads: unitOfWork, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
 	return _CreateConversationComputerTurnRouter({ logger: _log, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName), authority });
 }

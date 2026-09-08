@@ -87,6 +87,10 @@ its resources to the lifecycle owner.
   signed assertions; Standalone checks the configured silo, trusted OIDC Principal and active local
   membership row. A failed Fleet proof never selects Standalone.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
+- `src/app/conversation-computer-turn-composition.ts` binds the private tool-proposal route to
+  the existing turn, membership, service and tool authorities. Kubernetes TokenReview checks the
+  `opencrane-conversation-computer` audience and the current Pod assignment before admission.
+  Accepted proposals stay Preparing in PostgreSQL; this route does not dispatch a provider call.
 - `src/app/routes.ts` contains named per-area route lists and app-owned transport composition. The
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
 - `src/app/runtime-composition.ts` binds controller, task-owned validation, runtime, and optional-worker

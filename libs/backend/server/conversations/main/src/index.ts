@@ -70,3 +70,8 @@ export type { CompanyAssistantDirectory } from "./conversation-metadata.types";
 
 export { PrismaConversationToolDispatchAuthority } from "./db/prisma-conversation-tool-dispatch-authority";
 export type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies, ConversationToolExecutionEvidence, ConversationToolAssignmentAuthority, ConversationToolAssignmentCommand } from "./conversation-tool-dispatch.types";
+
+export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./db/prisma-conversation-tool-proposal";
+export { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
+export { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
+export type { ConversationToolProposalAdmission, ConversationToolProposalCommand } from "./conversation-tool-proposal.types";

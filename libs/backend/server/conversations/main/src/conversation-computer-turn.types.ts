@@ -1,4 +1,5 @@
-import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
+import type { ConversationToolProposalAdmission, ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
+import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ConversationToolProposalReceipt, ComputerScope, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
@@ -77,6 +78,8 @@ export interface ConversationComputerTurnAuthority
 	bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>;
 	/** Append untrusted output through the bootstrap-bound conversation writer and encrypted payload store. */
 	appendOutput(command: ConversationComputerOutputCommand): Promise<"accepted" | "idempotent">;
+	/** Save one tool proposal after current Pod, lease and frozen-input checks, without executing it. */
+	proposeTool(command: ConversationToolProposalCommand): Promise<ConversationToolProposalReceipt>;
 }
 
 /** Server-resolved coordinates shared by a freshly compiled candidate and its frozen record. */
@@ -165,7 +168,8 @@ export interface ConversationComputerTurnCandidateResolver
 	/** Throw unless the command names the current active lease and the TokenReviewed Pod bound to it; admit nothing. */
 	admit(command: ConversationComputerBootstrapCommand): Promise<void>;
 	resolve(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerTurnCandidate | null>;
-	assertCurrent(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<void>;
+	/** Return the current recompiled candidate only when it still matches the frozen turn. */
+	assertCurrent(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<ConversationComputerTurnCandidate>;
 }
 
 /** Locates immutable computer coordinates from the workload's reviewed silo. */
@@ -289,6 +293,8 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly store: ConversationComputerTurnStore;
 	readonly writers: ConversationComputerBoundWriterFactory;
 	readonly runLifecycle: ConversationComputerRunLifecycle;
+	/** Owns one stable proposal slot and its current transactional admission. */
+	readonly toolProposals: ConversationToolProposalAdmission;
 }
 
 /** Run, attempt and lease fence a run lifecycle transition must match against the saved execution subject. */

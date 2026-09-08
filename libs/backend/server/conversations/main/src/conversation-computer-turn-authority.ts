@@ -1,3 +1,6 @@
+import { ___ConversationToolProposalSchema, type ConversationToolProposalReceipt } from "@opencrane/contracts";
+import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
+import { ConversationToolProposalRefusals, type ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
 import { createHash } from "node:crypto";
 
 import type { CompiledRunInput, ComputerScope } from "@opencrane/contracts";
@@ -54,6 +57,19 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const maxBudgetUsd = snapshotBudget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, snapshotBudget / 1_000_000);
 		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, computer: _ComputerScope(turn), lease: turn.lease, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: candidate.credentialExpiresAt });
 		return { bootstrapId: turn.bootstrapId, compiledInput: candidate.compiledInput, modelCredential: { endpoint: this.dependencies.endpoint, key: credential.key, model: turn.modelAlias }, outcome: "ready" };
+	}
+
+	/** Admit one exact proposal for the current Pod without treating the runtime as effect authority. */
+	public async proposeTool(command: ConversationToolProposalCommand): Promise<ConversationToolProposalReceipt>
+	{
+		const proposal = ___ConversationToolProposalSchema.safeParse({ bootstrapId: command.bootstrapId, toolRevisionId: command.toolRevisionId, arguments: command.arguments });
+		if (!proposal.success)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
+		const turn = await this.dependencies.store.load(command.bootstrapId);
+		if (turn === null || turn.outputSourceCommandId !== null || turn.outputReceipt !== null)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+		const candidate = await this.dependencies.candidates.assertCurrent(turn, command.workload);
+		return this.dependencies.toolProposals.admit(turn, candidate, proposal.data);
 	}
 
 	/** Persist assistant text as an encrypted payload and append its non-secret reference through the frozen writer. */

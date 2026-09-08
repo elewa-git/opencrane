@@ -200,18 +200,20 @@ function _StandaloneComputerFixture()
 	const command = _command();
 	let stored: FrozenConversationComputerTurn | null = null;
 	const issueOrRotate = vi.fn().mockResolvedValue({ key: "test-attempt-key", credentialDigest: `sha256:${"f".repeat(64)}` });
+	const resolveCandidate = async function _ResolveCandidate()
+			{
+				const result = await port.admit(command);
+				return { binding: { siloId: "silo-1", conversationId: "child-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Company", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 }, lease: command.lease, compiledInput: result.compiledInput, latestPendingEntryId: "message-1", modelAlias: "company-model", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: result.authorityExpiresAt };
+			};
 	const computer = new ConversationComputerTurnAuthorityService({
+		toolProposals: { admit: vi.fn() },
 		siloId: "silo-1", endpoint: "http://gateway.test", credentials: { issueOrRotate, revoke: vi.fn() },
 		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { create: vi.fn() },
 		runLifecycle: { start: vi.fn(), complete: vi.fn() },
 		store: { loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: vi.fn(), markOutput: vi.fn(), settle: vi.fn() },
 		candidates: {
-			admit: vi.fn(), assertCurrent: async function _Current() { await port.admit(command); },
-			resolve: async function _Resolve()
-			{
-				const result = await port.admit(command);
-				return { binding: { siloId: "silo-1", conversationId: "child-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Company", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 }, lease: command.lease, compiledInput: result.compiledInput, latestPendingEntryId: "message-1", modelAlias: "company-model", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: result.authorityExpiresAt };
-			},
+			admit: vi.fn(), assertCurrent: resolveCandidate,
+			resolve: resolveCandidate
 		},
 	});
 	const bootstrap = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 }, workload: { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" } };

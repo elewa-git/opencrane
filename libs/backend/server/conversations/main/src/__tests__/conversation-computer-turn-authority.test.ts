@@ -50,6 +50,7 @@ function _Harness() {
   const append = vi.fn().mockResolvedValue({});
   const dependencies = {
     siloId: "testv5",
+    toolProposals: { admit: vi.fn() },
     candidates: {
       resolve: vi
         .fn()
@@ -277,4 +278,40 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     expect(dependencies.credentials.issueOrRotate).toHaveBeenLastCalledWith(expect.objectContaining({ expirySeconds: 20, notAfter: "2026-09-07T00:00:20.000Z" }));
   });
 
+});
+
+/** Proposal admission reuses the exact current Pod and turn checks before its database owner runs. */
+describe("conversation tool proposal turn ownership", function _Suite()
+{
+	it("passes the frozen turn and its verified current candidate to the proposal owner", async function _CurrentProposal()
+	{
+		const { authority, dependencies } = _Harness();
+		const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD };
+		const bootstrap = await authority.bootstrap(command);
+		const candidate = await dependencies.candidates.resolve(command);
+		dependencies.candidates.assertCurrent.mockResolvedValue(candidate);
+		dependencies.toolProposals.admit.mockResolvedValue({ proposalId: "server-slot", outcome: "recorded" });
+		const proposal = { bootstrapId: bootstrap!.bootstrapId, toolRevisionId: "tool-1", arguments: { query: "record" } };
+		expect(await authority.proposeTool({ ...proposal, workload: _WORKLOAD })).toEqual({ proposalId: "server-slot", outcome: "recorded" });
+		expect(dependencies.toolProposals.admit).toHaveBeenCalledWith(dependencies.store.createOrRead.mock.calls[0][0], candidate, proposal);
+		expect(dependencies.candidates.assertCurrent).toHaveBeenLastCalledWith(dependencies.store.createOrRead.mock.calls[0][0], _WORKLOAD);
+	});
+	it("refuses missing and output-started turns before proposal admission", async function _ClosedTurn()
+	{
+		const { authority, dependencies } = _Harness();
+		const proposal = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", toolRevisionId: "tool-1", arguments: {}, workload: _WORKLOAD };
+		await expect(authority.proposeTool(proposal)).rejects.toThrow("denied");
+		const bootstrap = await authority.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD });
+		await authority.appendOutput({ bootstrapId: bootstrap!.bootstrapId, sourceCommandId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", text: "answer", workload: _WORKLOAD });
+		await expect(authority.proposeTool({ ...proposal, bootstrapId: bootstrap!.bootstrapId })).rejects.toThrow("denied");
+		expect(dependencies.toolProposals.admit).not.toHaveBeenCalled();
+	});
+	it("does not admit a proposal when current lease, Pod or input verification fails", async function _CurrentFence()
+	{
+		const { authority, dependencies } = _Harness();
+		const bootstrap = await authority.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD });
+		dependencies.candidates.assertCurrent.mockRejectedValue(new Error("current Pod or input refused"));
+		await expect(authority.proposeTool({ bootstrapId: bootstrap!.bootstrapId, toolRevisionId: "tool-1", arguments: {}, workload: _WORKLOAD })).rejects.toThrow("current Pod or input refused");
+		expect(dependencies.toolProposals.admit).not.toHaveBeenCalled();
+	});
 });

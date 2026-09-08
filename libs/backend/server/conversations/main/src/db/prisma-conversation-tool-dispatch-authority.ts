@@ -42,8 +42,19 @@ export class PrismaConversationToolDispatchAuthority implements ConversationTool
 			|| scope.agentRevisionId !== invocation.agentRevisionId || Date.parse(subject.membership.trustedUntil) <= now.getTime()
 			|| Date.parse(subject.requester.membership.trustedUntil) <= now.getTime())
 			return false;
-		const run = await transaction.agentRun.findFirst({ where: { id: invocation.runId, siloId: invocation.siloId, attempt: invocation.attempt, state: AgentRunState.Running, agentServiceId: scope.agentServiceId, agentRevisionId: scope.agentRevisionId, agentIdentityId: subject.agentIdentityId, principalId: subject.principalId }, select: { conversationId: true, executionSubject: true } });
+		const run = await transaction.agentRun.findFirst({ where: { id: invocation.runId, siloId: invocation.siloId, attempt: invocation.attempt, state: AgentRunState.Running, agentServiceId: scope.agentServiceId, agentRevisionId: scope.agentRevisionId, agentIdentityId: subject.agentIdentityId, principalId: subject.principalId }, select: { conversationId: true, executionSubject: true, inputSnapshotDigest: true } });
 		if (run === null || run.conversationId === null || ___DigestCanonicalJson(run.executionSubject as JsonValue) !== ___DigestCanonicalJson(subject as unknown as JsonValue))
+			return false;
+		const snapshot = await transaction.runInputSnapshot.findFirst({ where: { runId: invocation.runId, attempt: invocation.attempt, digest: run.inputSnapshotDigest, siloId: invocation.siloId, agentRevisionId: invocation.agentRevisionId, agentIdentityId: subject.agentIdentityId, principalId: subject.principalId }, select: { budgetPolicy: true } });
+		const budget = snapshot?.budgetPolicy;
+		if (budget === null || typeof budget !== "object" || Array.isArray(budget))
+			return false;
+		const deadline = budget.wallClockDeadlineEpochMs;
+		const toolLimit = budget.maxToolInvocations;
+		if (typeof deadline !== "number" || !Number.isSafeInteger(deadline) || deadline <= now.getTime()
+			|| (toolLimit !== undefined && toolLimit !== null && (typeof toolLimit !== "number" || !Number.isSafeInteger(toolLimit) || toolLimit < 1)))
+			return false;
+		if (typeof toolLimit === "number" && await transaction.toolInvocation.count({ where: { runId: invocation.runId, attempt: invocation.attempt } }) > toolLimit)
 			return false;
 		const projection = new PrismaConversationComputerLifecycleProjectionRepository(this.transaction);
 		const coordinates = await projection.resolve(invocation.siloId, subject.computerScope.computerId);
@@ -107,7 +118,7 @@ export class PrismaConversationToolDispatchAuthority implements ConversationTool
 				return false;
 		}
 		const checkedAt = Math.max(now.getTime(), Date.now());
-		return Date.parse(lease.expiresAt) > checkedAt && Date.parse(subject.membership.trustedUntil) > checkedAt
+		return deadline > checkedAt && Date.parse(lease.expiresAt) > checkedAt && Date.parse(subject.membership.trustedUntil) > checkedAt
 			&& Date.parse(subject.requester.membership.trustedUntil) > checkedAt && Date.parse(membership.trustedUntil) > checkedAt && Date.parse(executionTrustedUntil) > checkedAt;
 	}
 }

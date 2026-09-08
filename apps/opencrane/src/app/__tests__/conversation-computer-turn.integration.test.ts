@@ -93,6 +93,7 @@ describe("conversation computer turn integration", function _Suite() {
     let frozen: any = null;
     const append = vi.fn().mockResolvedValue({});
     const authority = new ConversationComputerTurnAuthorityService({
+      toolProposals: { admit: vi.fn() },
 		siloId: "testv5",
 		runLifecycle: { start: vi.fn(), complete: vi.fn() },
       candidates: {

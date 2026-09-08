@@ -44,7 +44,9 @@ function _Fixture()
 	const principal = { id: "principal-1", siloId: "silo-1", issuer: "https://issuer.test", subject: "user-1", provenance: PrincipalProvenance.External };
 	const membership = { id: "membership-1", clusterTenant: "silo-1", subject: "user-1", status: OrgMemberStatus.Active as OrgMemberStatus, updatedAt: new Date(_NOW.getTime() - 2_000) };
 	const transaction = {
-		agentRun: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject }) },
+		agentRun: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject, inputSnapshotDigest: `sha256:${"e".repeat(64)}` }) },
+		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 60_000, maxToolInvocations: 1 } }) },
+		toolInvocation: { count: vi.fn().mockResolvedValue(1) },
 		conversation: { findFirst: vi.fn().mockResolvedValue({ id: "conversation-1", computerAgentIdentityId: "identity-1", computerProfileRevisionId: "profile-1" }) },
 		agentRevision: { findFirst: vi.fn().mockResolvedValue({ id: "revision-1", digest: `sha256:${"a".repeat(64)}`, modelDefinitionId: "model-1", budget: {}, boundaryAttachments: [], skillAssignments: [], mcpToolAssignments: [{ toolRevisionId: "tool-1" }] }) },
 		principal: { findFirst: vi.fn().mockResolvedValue(principal), findUnique: vi.fn().mockResolvedValue(principal) },
@@ -108,6 +110,28 @@ describe("current conversation tool dispatch authority", function _Suite()
 	{
 		const f = _Fixture();
 		f.computers.load.mockResolvedValue({ ...f.computer, lease: { ...f.computer.lease, ...patch } });
+		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW)).resolves.toBe(false);
+	});
+
+	it.each([null, { budgetPolicy: {} }, { budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() } }, { budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 60_000, maxToolInvocations: 0 } }])("denies absent, expired or exhausted frozen input %j", async function _OriginalBudget(snapshot)
+	{
+		const f = _Fixture();
+		f.transaction.runInputSnapshot.findFirst.mockResolvedValue(snapshot);
+		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW)).resolves.toBe(false);
+	});
+
+	it("keeps the original deadline across an awaited authority read", async function _BudgetExpiresDuringHistory()
+	{
+		const f = _Fixture();
+		f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 1_000, maxToolInvocations: 1 } });
+		f.computers.load.mockImplementation(async function _DelayedHistory() { vi.setSystemTime(_NOW.getTime() + 2_000); return f.computer; });
+		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW)).resolves.toBe(false);
+	});
+
+	it("counts all admitted invocations against the frozen limit", async function _ToolBudget()
+	{
+		const f = _Fixture();
+		f.transaction.toolInvocation.count.mockResolvedValue(2);
 		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW)).resolves.toBe(false);
 	});
 
