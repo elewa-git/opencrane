@@ -58,7 +58,9 @@ _write_kurrentdb_replay_job()
     | .spec.backoffLimit = 0 | .spec.ttlSecondsAfterFinished = 3600 | .spec.activeDeadlineSeconds = $timeout
     | .spec.template.metadata = {labels:(.spec.template.metadata.labels | del(."batch.kubernetes.io/controller-uid", ."batch.kubernetes.io/job-name", ."controller-uid", ."job-name"))}
     | .spec.template.spec.containers[0].command = ["/bin/sh", "-c", $config[0].data["replay.sh"]]
-    | .spec.template.spec.containers[0].env = [{name:"OPENCRANE_KURRENTDB_REPLAY_TARGET",value:$config[0].data["replay-target.json"]}]
+    | .spec.template.spec.containers[0].env = [
+        {name:"OPENCRANE_KURRENTDB_REPLAY_TARGET",value:$config[0].data["replay-target.json"]},
+        {name:"OPENCRANE_KURRENTDB_REPLAY_TIMEOUT_SECONDS",value:($timeout | tostring)}]
     | del(.spec.template.spec.containers[0].args, .spec.template.spec.containers[0].envFrom)
     | .spec.template.spec.containers[0].volumeMounts |= map(select(.name != "kurrentdb-service" and .name != "bootstrap-script"))
     | .spec.template.spec.volumes |= map(select(.name != "kurrentdb-service" and .name != "bootstrap-script")

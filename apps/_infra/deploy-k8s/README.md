@@ -134,6 +134,7 @@ package imports it.
 - `--kurrentdb-replay-parked` — replays the installed silo's parked computer activations through a
   separate bounded Job derived from its verified KurrentDB bootstrap template. It leaves the
   completed bootstrap Job intact and keeps administrator credentials outside the application.
+  The new Pod checks database connectivity before sending a single replay request.
   Install the matching chart configuration first; replay refuses absent or changed scripts,
   a different silo target, and combinations with bootstrap, restore or preflight actions.
 - `platform/k8s-deploy.sh --provision-agent-sandbox-controller --context CONTEXT` — installs the

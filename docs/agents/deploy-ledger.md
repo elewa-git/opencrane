@@ -1008,3 +1008,20 @@ Full run reports belong in the corresponding pull request or issue.
   This inspection read no credential content and made no traffic probes or cluster changes.
 - pending: qualify and install the combined network/replay source, then complete product and
   recovery evidence. Configuration matches are distinct from an actual model answer.
+
+## 2026-09-08 · remote qualification · computer networking and activation replay · PARTIAL
+
+- source `2ff1d727fe5c05b78e2693dca8149a0073841b91`, Actions run
+  [34223531038](https://github.com/elewa-git/opencrane/actions/runs/34223531038): eleven checks
+  passed; the Kubernetes smoke failed and server publication was skipped.
+- the smoke proved installed Sandbox admission, private DNS/server connectivity and controller
+  lifecycle at 12:09 UTC. Its later replay Job failed on its first TCP connection to KurrentDB,
+  before TLS or authentication, while the database remained Ready. The log does not establish
+  the underlying network timing cause.
+- the model-network repair passed independent review and was pushed as `7fe9132b3`. It adds the
+  missing ingress peer and removes the duplicate computer egress policy. Its remote and live
+  proofs remain pending.
+- replay now checks TLS health from inside its new Pod before sending the single replay POST.
+  The health wait shares the Job timeout; authentication and TLS failures stop immediately. Tests
+  cover initial connection refusal, an exhausted wait, denied health and uncertain POST failures.
+  No deployment, live replay, assistant answer or restore is claimed from this run.

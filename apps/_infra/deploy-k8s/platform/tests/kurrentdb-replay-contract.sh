@@ -98,11 +98,14 @@ assert.deepEqual(pod.securityContext, bootstrap.spec.template.spec.securityConte
 assert.equal(pod.containers[0].image, bootstrap.spec.template.spec.containers[0].image);
 assert.deepEqual(pod.containers[0].command, ['/bin/sh','-c',config.data['replay.sh']]);
 assert.deepEqual(JSON.parse(pod.containers[0].env[0].value), {endpoint:'https://opencrane-testv5-kurrentdb.opencrane-testv5.svc:2113',streamName:'computer-activations-testv5'});
+assert.deepEqual(pod.containers[0].env[1], {name:'OPENCRANE_KURRENTDB_REPLAY_TIMEOUT_SECONDS',value:String(job.spec.activeDeadlineSeconds)});
 assert.equal(pod.volumes.some(v => ['kurrentdb-service','bootstrap-script'].includes(v.name)), false);
 assert.equal(pod.containers[0].volumeMounts.some(v => ['kurrentdb-service','bootstrap-script'].includes(v.name)), false);
 assert.deepEqual(pod.volumes.find(v => v.name === 'kurrentdb-tls').secret.items, [{key:'ca.crt',path:'ca.crt'}]);
 assert.equal(pod.volumes.find(v => v.name === 'kurrentdb-bootstrap-admin').secret.secretName, 'kurrentdb-bootstrap-admin');
 assert.equal(job.spec.template.metadata.labels['app.kubernetes.io/component'], 'kurrentdb-bootstrap');
+assert.deepEqual(job.spec.template.metadata.labels, bootstrap.spec.template.metadata.labels,
+  'The derived Pod must retain the bootstrap NetworkPolicy selectors');
 assert.ok(!fs.readFileSync(dir + '/calls','utf8').match(/delete |patch |apply /));
 assert.ok(fs.readFileSync(dir + '/calls','utf8').includes('get job/kurrentdb-activation-replay-test123'));
 JS

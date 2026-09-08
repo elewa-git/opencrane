@@ -80,8 +80,10 @@ this script is refused before a Job is created.
 The one-off Job reuses the bootstrap image and security/network boundary, with only the administrator
 password and CA. It freezes the verified script and target inside its Pod specification, has no
 automatic retries, and expires one hour after completion. It does not replace the completed bootstrap
-Job or give the application an operations credential. The script uses TLS verification and a bounded
-POST to the fixed `conversation-computer-activation` group; failure output contains no credential.
+Job or give the application an operations credential. Before submitting replay, the script waits
+for a TLS-verified health response from inside the new Pod. It then sends one bounded POST to the
+fixed `conversation-computer-activation` group. A failed POST is not retried because the request may
+already have reached KurrentDB; failure output contains no credential.
 
 The backup Job holds no KurrentDB credential. In `fileCopy` mode it runs as the database identity
 on the database node, reads the data volume read-only, writes the archive PVC, and has no network
