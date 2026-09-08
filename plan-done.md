@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-09-08 — personal activity and saved-answer navigation qualified on testv5
+
+Employees can follow newly admitted personal work in Recent activity, refresh its status and open
+the saved answer. Each run grants only its verified owner read access; older runs receive no
+backfill. The workspace clears activity on identity, selection or access changes.
+
+[PR #829](https://github.com/elewa-git/opencrane/pull/829) contains the implementation. UI
+`6692b2e59750c228b05082dbf3c2fe2c7825331a` passed Linux CI and image publication. Its exact amd64
+image is installed alongside the separately qualified `e50cdcc5b` server. Two employees completed
+fresh real sign-ins and saw their completed work. Keyboard navigation focused the saved answer,
+manual refresh created no new run, reload recovered both activity and answer, and the narrow
+screen's activity overlay closed before answer focus. The other employee's private run and history
+returned 404. The serving server and all data-volume identities stayed unchanged.
+
+The 96 focused UI tests, 116 browser interaction checks and independent source/component review
+pass. Ten intended Linux screenshot changes were reviewed and recorded; current Linux CI is green.
+Two unchanged local Darwin heading comparisons remain different, with their baselines preserved.
+The later session-storage baseline is not installed here; fresh-install login continuity remains
+pending. This qualification does not establish tools, durable memory or autonomous delegation.
+Exact images, timings and browser receipts are in the [deploy ledger](docs/agents/deploy-ledger.md).
+
 ## 2026-09-08 — personal and group-assistant text journeys qualified on testv5
 
 Employees can complete setup, receive a personal-assistant answer and return to its saved history.

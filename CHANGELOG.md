@@ -13,7 +13,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
-Personal and group-assistant text journeys have passed integration CI and live testv5 checks.
+Personal and group-assistant text journeys and recent personal activity have passed integration
+CI and live testv5 checks.
 The 0.11 baseline remains under review; this is not a release or a completed MVP.
 
 ### Added
