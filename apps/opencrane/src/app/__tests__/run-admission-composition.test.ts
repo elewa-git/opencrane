@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissionExistingVerifier, type RunAdmissionResult, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import type { ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
+import { PrismaPromptCompilerRepository, type ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
 import { ConversationComputerTurnAuthorityService, type ConversationComputerRunAdmissionCommand, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes, PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
-import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { AgentServiceKind, ModelRoutingScope } from "@prisma/client";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { _CreateConversationRunAdmission } from "../run-admission-composition";
+import { _log } from "../log";
 
 afterEach(function _RestoreAdmission() { vi.restoreAllMocks(); });
 
@@ -33,7 +36,7 @@ function _subject(): ExecutionSubject
 function _savedRun(): { snapshot: RunInputSnapshot; compiled: CompiledRunInput }
 {
 	const budget = { maxModelTurns: 1, maxCompletionTokens: 4_096, maxCostUsdMicros: 10_000, maxToolInvocations: 0, wallClockDeadlineEpochMs: Date.parse("2026-09-07T00:20:00.000Z") };
-	const snapshot: RunInputSnapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "child-1", messageIds: ["message-1"], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: budget, executionSubject: _subject(), promptCompilerVersion: "v1", digest: `sha256:${"b".repeat(64)}`, compiledAt: "2026-09-07T00:00:00.000Z" };
+	const snapshot: RunInputSnapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "child-1", messageIds: ["message-1"], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: { scope: "none" }, mcpTools: [], modelRoute: {}, budgetPolicy: budget, executionSubject: _subject(), promptCompilerVersion: "v1", digest: `sha256:${"b".repeat(64)}`, compiledAt: "2026-09-07T00:00:00.000Z" };
 	const compiled: CompiledRunInput = { runId: snapshot.runId, attempt: 1, promptCompilerVersion: "v1", instructions: "", messages: [{ role: "user", content: "Group request" }], tools: [], model: { modelAlias: "company-model", maxOutputTokens: 4_096, generatedOutputCapabilities: [] }, budget, digest: `sha256:${"c".repeat(64)}` };
 	return { snapshot, compiled };
 }
@@ -46,6 +49,71 @@ function _command(): ConversationComputerRunAdmissionCommand
 
 describe("conversation run admission composition", function _ConversationRunAdmissionCompositionSuite()
 {
+	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("assembles and persists a first %s answer input through the real admission owners", async function _FirstAdmission(kind)
+	{
+		const company = _subject();
+		const subject: ExecutionSubject = kind === AgentServiceKind.Personal ? { ...company, principalId: "human-principal", identity: { ...company.identity, principalId: "human-principal" }, membership: company.requester.membership } : company;
+		const command = _command();
+		const model = { id: "model-1", siloId: "silo-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "test-model", litellmModelId: "provider-model", generatedOutputCapabilities: [] };
+		const transaction = {
+			agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+			runInputSnapshot: { create: vi.fn() },
+			agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", kind, activeRevisionId: "revision-1", activeRevision: { id: "revision-1", state: "Published", promptPolicyVersion: PROMPT_COMPILER_VERSION } }) },
+			principal: { findUnique: vi.fn().mockResolvedValue({ subject: "human-subject" }) },
+			personaProfile: { findUnique: vi.fn(async function _Persona(query)
+			{
+				return query.where.siloId_userId.userId === "human-subject" ? { activeRevision: { id: "persona-1", state: "Approved", personaProfileId: "profile-1" } } : null;
+			}) },
+			personaRevision: { findFirst: vi.fn().mockResolvedValue({ compiledInstructions: "Answer in plain English." }) },
+			orgMembership: { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
+			conversation: { findFirst: vi.fn().mockResolvedValue({ id: "child-1", runs: [] }) },
+			agentRevision: { findFirst: vi.fn().mockResolvedValue({ modelDefinition: model, mcpToolAssignments: [], skillAssignments: [], budget: { maxTurns: 1, maxTokens: 1024, maxDurationMs: 300_000 } }) },
+			mcpToolAdmissionClaim: { upsert: vi.fn() },
+			skillRevision: { findMany: vi.fn().mockResolvedValue([]) },
+			artifactRevision: { findMany: vi.fn().mockResolvedValue([]) },
+			agentRevisionSkillAssignment: { findMany: vi.fn().mockResolvedValue([]) },
+			modelDefinition: { findFirst: vi.fn().mockResolvedValue(model) },
+			memoryDataset: { findFirst: vi.fn() },
+		};
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) };
+		// Identity and grant decisions are supplied at their ports; persistence and input sources run unchanged.
+		vi.spyOn(PrismaAuthorizationAuthority.prototype, "admitPrincipal").mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"d".repeat(64)}` } } as never);
+		const resources = vi.spyOn(PrismaAuthorizationAuthority.prototype, "admitPrincipalBatch").mockImplementation(async function _AdmitResources(commands) { return commands.map(function _Allowed() { return {} as never; }); });
+		const messages = { loadMessages: vi.fn().mockResolvedValue([{ role: "user", content: "Please help with this group request." }]) };
+		const compilers = { create: function _Compiler(_command: ConversationComputerRunAdmissionCommand, transaction: ConstructorParameters<typeof PrismaPromptCompilerRepository>[0]) { return new PrismaPromptCompilerRepository(transaction, messages, "silo-1"); }, compile: vi.fn() };
+		const history = { read: vi.fn().mockResolvedValue({ historyRevision: "1", orderedMessageIds: ["message-1"], finalMessageAuthor: { principalId: "human-principal", issuer: command.requesterIssuer, subjectId: command.requesterSubjectId, authenticatedAt: command.requesterAuthenticatedAt } }) };
+		const port = _CreateConversationRunAdmission(prisma as never, { create: function _Identity() { return { load: vi.fn().mockResolvedValue({ outcome: "loaded", value: subject }) }; } }, { create: function _History() { return history; } }, compilers, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 });
+
+		const result = await port.admit(command);
+
+		expect(result.compiledInput.messages).toEqual([{ role: "user", content: "Please help with this group request." }]);
+		expect(result.compiledInput.model.modelAlias).toBe("test-model");
+		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: subject.principalId, executionSubject: subject }) });
+		expect(transaction.runInputSnapshot.create).toHaveBeenCalledWith({ data: expect.objectContaining({ memoryQueryPolicy: { scope: "none" }, preferenceFactIds: [], messageIds: ["message-1"] }) });
+		expect(resources.mock.calls[0][0].every(function _ExecutionPrincipal(resource) { return resource.principalId === subject.principalId; })).toBe(true);
+		expect(transaction.memoryDataset.findFirst).not.toHaveBeenCalled();
+		if (kind === AgentServiceKind.Personal)
+		{
+			expect(transaction.principal.findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "human-principal", siloId: "silo-1" } }, select: { subject: true } });
+			expect(result.compiledInput.instructions).toBe("Answer in plain English.");
+		}
+		else
+		{
+			expect(transaction.personaProfile.findUnique).not.toHaveBeenCalled();
+			expect(result.compiledInput.instructions).toBe("");
+		}
+	});
+
+	it("logs a typed refusal with trusted coordinates and keeps the thrown error generic", async function _SafeAdmissionRefusal()
+	{
+		vi.spyOn(PrismaRunAdmissionUnitOfWork.prototype, "admit").mockResolvedValue({ outcome: "denied", reason: "persona_unavailable" });
+		const warn = vi.spyOn(_log, "warn").mockImplementation(function _Silence() {});
+		const port = _CreateConversationRunAdmission({} as never, { create: vi.fn() }, { create: vi.fn() }, { create: vi.fn(), compile: vi.fn() }, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 });
+
+		await expect(port.admit(_command())).rejects.toThrow(/^Conversation run admission was denied$/);
+		expect(warn).toHaveBeenCalledExactlyOnceWith({ operation: "conversation.run.admission", reason: "persona_unavailable", runId: "run-1", siloId: "silo-1", conversationId: "child-1", agentServiceId: "service-1" }, "Conversation run admission was denied");
+	});
+
 	it("rejects an invalid process capacity before constructing usable admission", function _RejectInvalidCapacity()
 	{
 		expect(function _ComposeWithoutActiveCapacity()

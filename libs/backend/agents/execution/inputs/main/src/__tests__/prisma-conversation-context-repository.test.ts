@@ -13,9 +13,9 @@ function _Command(): RunAdmissionCommand
 }
 
 /** Create the already verified execution subject used by conversation authorization. */
-function _Subject(): ExecutionSubject
+function _Subject(principalId = "principal-1", requesterPrincipalId = "principal-1"): ExecutionSubject
 {
-	return { principalId: "principal-1" } as ExecutionSubject;
+	return { principalId, requester: { requesterPrincipalId } } as ExecutionSubject;
 }
 
 /** Create the transaction delegates needed for one open, idle personal conversation. */
@@ -53,6 +53,33 @@ describe("PrismaConversationContextRepository", function _Suite()
 		const repository = new PrismaConversationContextRepository(_Transaction() as never, history);
 
 		await expect(repository.load(_Command(), _Run(), _Subject())).resolves.toEqual({ outcome: "denied", reason: "conversation_unavailable" });
+	});
+
+	it("accepts the human requester's history when a company Principal executes the run", async function _LoadsCompanyHistory()
+	{
+		const history = { read: vi.fn().mockResolvedValue({ historyRevision: "8", orderedMessageIds: ["message-1", "message-2"], finalMessageAuthor: _Command().messageInput!.author }) };
+		const repository = new PrismaConversationContextRepository(_Transaction() as never, history);
+		await expect(repository.load(_Command(), _Run(), _Subject("company-principal"))).resolves.toEqual({ outcome: "loaded", value: { messageIds: ["message-1", "message-2"] } });
+	});
+
+	it.each([
+		{ principalId: "company-principal" },
+		{ principalId: "other-human" },
+		{ issuer: "https://other-issuer.example" },
+		{ subjectId: "other-subject" },
+		{ authenticatedAt: "2026-09-01T00:01:00.000Z" },
+	])("refuses company history with changed human author field %j", async function _RefusesChangedHuman(changed)
+	{
+		const history = { read: vi.fn().mockResolvedValue({ historyRevision: "8", orderedMessageIds: ["message-1", "message-2"], finalMessageAuthor: { ..._Command().messageInput!.author, ...changed } }) };
+		const repository = new PrismaConversationContextRepository(_Transaction() as never, history);
+		await expect(repository.load(_Command(), _Run(), _Subject("company-principal"))).resolves.toEqual({ outcome: "denied", reason: "conversation_unavailable" });
+	});
+
+	it("refuses an unchanged author when the verified requester is another human", async function _RefusesOtherRequester()
+	{
+		const history = { read: vi.fn().mockResolvedValue({ historyRevision: "8", orderedMessageIds: ["message-1", "message-2"], finalMessageAuthor: _Command().messageInput!.author }) };
+		const repository = new PrismaConversationContextRepository(_Transaction() as never, history);
+		await expect(repository.load(_Command(), _Run(), _Subject("company-principal", "other-human"))).resolves.toEqual({ outcome: "denied", reason: "conversation_unavailable" });
 	});
 
 	it("refuses while another non-terminal run owns the conversation", async function _RefusesActiveRun()

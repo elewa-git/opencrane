@@ -1,8 +1,8 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import { RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand, type RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
+import { __DigestRunInputSnapshot, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand, type RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 import { ___DigestCanonicalJson } from "@opencrane/util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { __AssembleRunInputSnapshot } from "../session-assembly";
 import { TransactionBoundProductResourceAuthorizationSource } from "../product-resource-authorization-source";
@@ -25,17 +25,36 @@ function _authorities(): SessionAssemblyAuthorities
 {
 	return {
 		admission: { admit: async function _admit(_command, _verifyExisting, build) { const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 }); return compiled.outcome === "denied" ? { outcome: "denied", reason: compiled.reason } : { outcome: "accepted", snapshot: compiled.value.snapshot }; } },
-		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed }, promptCompilerVersion: "v1", trigger: "interactive" } } as const; } },
+		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.None }, promptCompilerVersion: "v1", trigger: "interactive" } } as const; } },
 		executionSubject: { load: async function _load() { return { outcome: "loaded", value: _subject() } as const; } },
 		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId: "persona-1", personaId: "persona-1" } } as const; } },
 		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-1"] } } as const; } },
 		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [] } as const; } },
-		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: {}, datasetId: null } } as const; } },
+		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "none" }, datasetId: null } } as const; } },
 		toolPolicy: { load: async function _load() { const schema = { type: "object" } as const; return { outcome: "loaded", value: { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [{ toolRevisionId: "tool-1", name: "search", description: null, inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; }, verifyExisting: async function _VerifyExisting() { return { outcome: "loaded", value: null } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: {} } } as const; } },
 	};
+}
+
+/** Replays a frozen snapshot through the real duplicate checks without recompiling its inputs. */
+async function _DuplicateFixture(memoryQueryPolicy: RunInputSnapshot["memoryQueryPolicy"], preferenceFactIds: readonly string[] = [])
+{
+	const admitted = await __AssembleRunInputSnapshot(_command(), _authorities());
+	if (admitted.outcome === "denied")
+		throw new Error("The fixture must assemble its initial snapshot");
+	const snapshot = { ...admitted.snapshot, memoryQueryPolicy, preferenceFactIds };
+	snapshot.digest = __DigestRunInputSnapshot(snapshot);
+	const authorities = _authorities();
+	const executionSubject = vi.fn().mockResolvedValue({ outcome: "loaded", value: _subject() });
+	authorities.executionSubject = { load: executionSubject };
+	authorities.admission = { admit: async function _Replay(_command, verifyExisting)
+	{
+		const verified = await verifyExisting(snapshot, { prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 });
+		return verified.outcome === "denied" ? verified : { outcome: "idempotent", snapshot };
+	} };
+	return { authorities, executionSubject, snapshot };
 }
 
 describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
@@ -96,5 +115,42 @@ describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
 	{
 		const command = { ..._command(), messageInput: { ..._command().messageInput!, orderedMessageIds: ["message-1", "message-1"] } };
 		await expect(__AssembleRunInputSnapshot(command, _authorities())).resolves.toEqual({ outcome: "denied", reason: "invalid_command" });
+	});
+
+	it.each([
+		{ memoryQueryPolicy: { scope: "none" }, personalMemory: RunExecutionPersonalMemoryPolicies.None },
+		{ memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "gateway-dataset-1" }, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed },
+	] as const)("rechecks a duplicate using its frozen $personalMemory memory policy", async function _RestoresFrozenPolicy({ memoryQueryPolicy, personalMemory })
+	{
+		const fixture = await _DuplicateFixture(memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"]);
+		const result = await __AssembleRunInputSnapshot(_command(), fixture.authorities);
+		expect(result).toMatchObject({ outcome: "assembled", admissionOutcome: "idempotent", snapshot: fixture.snapshot });
+		expect(fixture.executionSubject).toHaveBeenCalledWith(_command(), expect.objectContaining({ executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory } }), expect.anything());
+	});
+
+	it.each([
+		{ policy: null },
+		{ policy: [] },
+		{ policy: {} },
+		{ policy: "none" },
+		{ policy: { scope: "unknown" } },
+		{ policy: { scope: "none", datasetId: "dataset-1" } },
+		{ policy: { scope: "personal" } },
+		{ policy: { scope: "personal", datasetId: "", cogneeDatasetId: "gateway-dataset-1" } },
+		{ policy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "  " } },
+		{ policy: { scope: "personal", datasetId: 42, cogneeDatasetId: "gateway-dataset-1" } },
+		{ policy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "gateway-dataset-1", unexpected: true } },
+	] as const)("refuses malformed frozen memory before rechecking identity: $policy", async function _RefusesMalformedPolicy({ policy })
+	{
+		const fixture = await _DuplicateFixture(policy as RunInputSnapshot["memoryQueryPolicy"]);
+		await expect(__AssembleRunInputSnapshot(_command(), fixture.authorities)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+		expect(fixture.executionSubject).not.toHaveBeenCalled();
+	});
+
+	it("refuses a frozen no-memory scope that carries preference facts", async function _RefusesConflictingPreferences()
+	{
+		const fixture = await _DuplicateFixture({ scope: "none" }, ["preference-1"]);
+		await expect(__AssembleRunInputSnapshot(_command(), fixture.authorities)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+		expect(fixture.executionSubject).not.toHaveBeenCalled();
 	});
 });

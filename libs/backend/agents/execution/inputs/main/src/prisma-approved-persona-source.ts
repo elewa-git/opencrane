@@ -8,8 +8,9 @@ import type { ApprovedPersonaInput, ApprovedPersonaSource, SessionAssemblyComman
 /**
  * Reads the one approved persona a personal service may put in a new snapshot.
  *
- * Reads the persona profile by its silo-and-user key and follows that profile's own active-revision
- * pointer, so neither the caller nor the service can name which revision to use. An active
+ * Resolves the verified local Principal to its sign-in subject, then reads that user's profile in
+ * the same silo and follows its active-revision pointer. Neither the caller nor the service can
+ * name which user or revision to use. An active
  * revision that is not approved is refused rather than used.
  *
  * @implements ApprovedPersonaSource
@@ -30,9 +31,12 @@ export class PrismaApprovedPersonaAuthority implements ApprovedPersonaSource
 			return { outcome: "denied", reason: "persona_unavailable" };
 		}
 
-		// 2. Read the profile through the verified principal, never through a caller-selected identity or revision.
+		// 2. Onboarding stores profiles under the sign-in subject, while execution carries the local Principal id.
+		const principal = await this.prisma.principal.findUnique({ where: { id_siloId: { id: executionSubject.principalId, siloId: command.siloId } }, select: { subject: true } });
+		if (principal === null || principal.subject.trim().length === 0)
+			return { outcome: "denied", reason: "persona_unavailable" };
 		const profile = await this.prisma.personaProfile.findUnique({
-			where: { siloId_userId: { siloId: command.siloId, userId: executionSubject.principalId } },
+			where: { siloId_userId: { siloId: command.siloId, userId: principal.subject } },
 			select: { activeRevision: { select: { id: true, state: true, personaProfileId: true } } },
 		});
 

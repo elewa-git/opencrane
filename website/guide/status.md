@@ -12,7 +12,7 @@ baseline from remaining product work and live verification.
 | Durable conversations | Creation, posting and history reads, including ordinary direct/group messages and personal assistant conversations. History is stored in KurrentDB. All three modes distinguish a new chat from a retried creation command. |
 | Recognizable chats | Member display names in the participant picker and direct/group chat titles, with generic text for missing names. |
 | Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. The event stream supplies message history and live changes; computer inspection refreshes separately. |
-| Personal model turns | Approved persona instructions and conversation history reach a bounded model request; its assistant output is persisted against the admitted conversation computer. |
+| Personal model turns | Approved persona instructions and conversation history feed a bounded model request; its assistant output is persisted against the admitted conversation computer. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
 | Company assistant in groups | Explicit assistant selection on an own group message, recoverable child creation, fixed audience, current parent and child access checks, follow-up answers, and human-reviewed sharing back. Administrator setup uses the API. |
 | Computer inspection | Workspace file, diff and browser discovery routes. Commands, page creation, screenshots and preview actions remain denied until their concrete effect admissions are connected. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
@@ -53,9 +53,12 @@ child-request admission also pass, including audience isolation and retry checks
 Fresh personal chats and company-assistant requests now reach their running computers. Private
 networking and activation replay have passed remote qualification and are deployed. A fresh company
 request was selected in the real browser, and all three group members can open its child chat.
-The server still lacks a Kubernetes read permission needed to verify the computer before it can
-answer. That repair is being qualified; complete personal and child answers, reviewed sharing and
-reconnect remain pending live.
+The server's narrow Pod-read permission is qualified and deployed: a fresh personal computer
+obtained its review credential and restored its workspace. Run admission then refused the first
+turn. The next repair corrects the onboarding persona identity lookup and the distinction between
+the human requester and company executor, and removes unfinished memory provisioning as a
+prerequisite for text turns. Complete personal and child answers, reviewed sharing and reconnect
+remain pending live.
 
 Access changes, recovery and computer actions need their complete live journeys. Tool, memory and
 shared-work journeys need their own evidence as they become available. Both history restore modes

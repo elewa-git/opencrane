@@ -1058,3 +1058,35 @@ Full run reports belong in the corresponding pull request or issue.
   Pod mutations and foreign-namespace reads. Closed server diagnostics identify the failing
   operation without copying Kubernetes errors or credentials. Review and fresh live answers remain
   required before either scheduled, data-bearing `latest` restore and its measured RTO.
+
+
+## 2026-09-08 · testv5 · qualified computer verification and admission diagnosis · PARTIAL
+
+- qualification: `fa094d9347d93154351ab4a5c70f1b42d16bd69a` passed all twelve selected validation
+  gates and server publication in [run 34232383769](https://github.com/elewa-git/opencrane/actions/runs/34232383769).
+  Installed named-Pod verification and the full service-account authorization denials passed at
+  13:40:51 UTC. Runtime discovery, Pod mutations and foreign-namespace reads remain denied.
+- deployment: owning preflight took 63.248 seconds. Installation ran 13:50:37.958–13:54:35 UTC,
+  exit 0, 237.467 seconds, Helm revision 11. All eleven service Pods and public TLS health passed.
+  Server index: `sha256:e1166d6ed0cc4ca9b89de00983f6b39f9a52617507523c791fb701ad892768ba`;
+  amd64: `sha256:45983339dbb3810852c36905bc9a58d95f4676ad62f320aa5fb7b742ad05b62e`.
+  Qualified `997dcda70` companions, admitted profile, completed bootstrap and database baseline
+  remain unchanged. Installation duration is not restore RTO.
+- live progress: all five dedicated test identities signed in again. A fresh personal chat and its
+  first message recovered exactly on retry. Its owned computer received the review credential at
+  13:55:57.705 (HTTP 200), restored its checkpoint at 13:55:57.821 (HTTP 204), then received a
+  bootstrap refusal at 13:55:58.207 (HTTP 409). No run or assistant output was admitted.
+- read-only diagnosis: the employee has an approved persona under their external sign-in subject;
+  the admission reader incorrectly looks it up under the internal Principal id. No memory dataset
+  exists for that Principal, and the current path has no dataset provisioner. Source inspection
+  also found three company-turn author comparisons using the execution Principal instead of the
+  human requester. No live authority rows, leases or failed messages were patched.
+- repair: resolve the persona through the exact verified Principal; keep the human requester and
+  company execution identity distinct for history, first admission and duplicate recovery. New
+  text turns explicitly freeze memory as unavailable; future enabled-memory reads still deny
+  missing datasets. Typed admission warnings expose the refusal reason without message content,
+  credentials or raw errors. Independent review and fresh personal/company answers remain required.
+- process evidence: the previous successful qualification's Kubernetes lifecycle job took 745
+  seconds, affected build/test/lint 387 seconds, Storybook 230 seconds and server publication 107
+  seconds. These jobs overlap; their durations must not be summed as total elapsed time. The
+  remaining product and recovery proofs are the completion gates, not another optional review loop.

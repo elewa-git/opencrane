@@ -76,6 +76,15 @@ export interface PreferenceFactInput
 	id: string;
 }
 
+/** Identifies the memory coordinates written by the input sources into a run snapshot. */
+export enum RunInputMemoryScopes
+{
+	/** The run carries no personal dataset or preference facts. */
+	None = "none",
+	/** The run freezes a verified personal dataset; a later effect still requires current permission. */
+	Personal = "personal",
+}
+
 /** Authorised memory dataset coordinates frozen for a single run. */
 export interface MemoryScopeInput
 {

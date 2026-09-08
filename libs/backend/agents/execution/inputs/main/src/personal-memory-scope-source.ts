@@ -2,28 +2,22 @@ import { __ResolvePersonalMemoryDataset, PersonalMemoryDatasetResolutionOutcomes
 import { RunExecutionPersonalMemoryPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { ConversationContextInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
+import { RunInputMemoryScopes, type ConversationContextInput, type MemoryScopeInput, type MemoryScopeSource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
- * Chooses the personal Cognee dataset for a run and freezes the facts the gateway picked.
+ * Freezes the verified personal dataset coordinates when the run policy allows personal memory.
  *
- * Cognee is the third-party knowledge store behind the memory gateway, and a dataset is its
- * per-subject partition. This source never talks to Cognee directly: it resolves the dataset id from
- * the product database and hands it to the gateway client, which owns the recall call.
+ * The product database resolves the dataset from the verified Principal and silo. This source
+ * reads no fact content and makes no gateway call. It saves both the product dataset id and the
+ * gateway dataset id so a future admitted memory effect can use the frozen coordinates.
  *
- * The dataset comes from the already-verified identity, never from the caller, so a request cannot
- * name someone else's memory. The recall query comes from the newest user message in the
- * already-frozen transcript, so recall cannot reach beyond what the snapshot names.
+ * Missing or malformed dataset coordinates deny admission with `memory_scope_unavailable`;
+ * they never become an empty memory scope. The current text-chat policy skips this source.
  *
- * Fails closed: if the gateway selector throws, admission is refused with `memory_unavailable`
- * rather than freezing an empty fact set, which would be indistinguishable from a user having no
- * memories.
- *
- * Constructed by: `__CreatePrismaPersonalSessionAssemblyAuthorities`
- * (prisma-session-assembly-authorities.ts).
+ * Constructed by: `__CreatePrismaSessionAssemblyAuthorities`.
  *
  * @implements MemoryScopeSource
- * @see PersonalMemoryFactSelector
+ * @see __ResolvePersonalMemoryDataset
  */
 export class PersonalMemoryScopeSource implements MemoryScopeSource
 {
@@ -52,8 +46,7 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 			return resolved;
 		}
 
-		// 3. Freeze only verified dataset coordinates. The model may later propose a bounded query via
-		//    the declared memory tool, but user text and recalled content never enter the snapshot.
-		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }, datasetId: resolved.dataset.datasetId } };
+		// 3. The snapshot stores dataset coordinates without a recall query or memory content.
+		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: RunInputMemoryScopes.Personal, datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }, datasetId: resolved.dataset.datasetId } };
 	}
 }

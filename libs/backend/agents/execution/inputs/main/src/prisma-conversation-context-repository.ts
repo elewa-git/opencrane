@@ -72,7 +72,7 @@ export class PrismaConversationContextRepository implements ConversationContextR
 	}
 }
 
-/** Require exact revision, ordering, final trigger, and immutable human author provenance. */
+/** Checks the history revision, order and human requester even when a company Principal executes the run. */
 function _MatchesHistory(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, history: Awaited<ReturnType<ConversationHistoryAdmissionReader["read"]>>): history is Exclude<typeof history, null>
 {
 	if (history === null || command.messageInput === null)
@@ -82,7 +82,7 @@ function _MatchesHistory(command: SessionAssemblyCommand, executionSubject: Exec
 		&& history.orderedMessageIds.length === expected.orderedMessageIds.length
 		&& history.orderedMessageIds.every(function _SameMessage(messageId, index): boolean { return expected.orderedMessageIds[index] === messageId; })
 		&& history.orderedMessageIds.at(-1) === expected.messageId
-		&& history.finalMessageAuthor.principalId === executionSubject.principalId
+		&& history.finalMessageAuthor.principalId === executionSubject.requester.requesterPrincipalId
 		&& history.finalMessageAuthor.principalId === expected.author.principalId
 		&& history.finalMessageAuthor.issuer === expected.author.issuer
 		&& history.finalMessageAuthor.subjectId === expected.author.subjectId

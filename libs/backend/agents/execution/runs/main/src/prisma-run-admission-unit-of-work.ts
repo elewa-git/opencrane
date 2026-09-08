@@ -26,7 +26,7 @@ class _AdmissionDenied<TDenial> extends Error
 /**
  * Atomically persists a run and its first immutable snapshot for an already claimed conversation computer.
  *
- * Called by: application-owned personal run composition behind conversation turn admission.
+ * Called by: application-owned personal and company run composition behind conversation turn admission.
  * @implements RunAdmissionRepository
  * @see PrismaRunAdmissionRepository for transaction-bound row access.
  */
@@ -188,7 +188,10 @@ function _MatchesRun(run: { readonly id: string; readonly siloId: string; readon
 /** Check the current immutable snapshot coordinates before returning stored JSON to a duplicate caller. */
 function _MatchesSnapshot(snapshot: PrismaRunInputSnapshot, storedRunId: string, command: RunAdmissionCommand): boolean
 {
-	return snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId && (command.messageInput === null || snapshot.principalId === command.messageInput.author.principalId) && _MatchesMessageInput(command, snapshot.messageIds);
+	const parsed = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
+	if (!parsed.success || parsed.data.principalId !== snapshot.principalId || parsed.data.agentIdentityId !== snapshot.agentIdentityId)
+		return false;
+	return snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId && (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId) && _MatchesMessageInput(command, snapshot.messageIds);
 }
 
 /** Require the transaction-built authority, snapshot, and execution subject to name one first attempt. */
@@ -206,7 +209,7 @@ function _MatchesAdmission(value: RunAdmissionBuild, command: RunAdmissionComman
 		&& value.snapshot.agentServiceId === command.agentServiceId
 		&& value.snapshot.conversationId === command.conversationId
 		&& _MatchesMessageInput(command, value.snapshot.messageIds)
-		&& (command.messageInput === null || parsed.data.principalId === command.messageInput.author.principalId)
+		&& (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId)
 		&& parsed.data.runScope.runId === command.runId
 		&& parsed.data.runScope.attempt === 1
 		&& parsed.data.runScope.siloId === command.siloId
@@ -235,8 +238,6 @@ function _MatchesMessageInput(command: RunAdmissionCommand, snapshotMessageIds: 
 		&& command.messageInput.author.subjectId === command.requester.subjectId
 		&& command.messageInput.author.authenticatedAt === command.requester.authenticatedAt;
 }
-
-/** Map the contract trigger to Prisma's generated enum spelling. */
 
 /**
  * Copy every contract field into Prisma's current append-only snapshot create shape.

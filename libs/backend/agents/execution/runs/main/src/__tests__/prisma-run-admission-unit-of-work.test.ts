@@ -27,6 +27,18 @@ function _ExecutionSubject(): ExecutionSubject
 	};
 }
 
+/** Gives the company its own execution identity while retaining the human requester. */
+function _ManagedSubject(): ExecutionSubject
+{
+	const personal = _ExecutionSubject();
+	return {
+		...personal,
+		principalId: "company-principal",
+		identity: { ...personal.identity, principalId: "company-principal" },
+		membership: { kind: ExecutionSubjectMembershipKinds.Managed, siloId: "silo-1", principalId: "company-principal", agentServiceId: "service-1", agentRevisionId: "revision-1", agentRevisionDigest: `sha256:${"f".repeat(64)}`, decisionEvidenceId: "company-decision", trustedUntil: "2099-09-01T00:00:00.000Z" },
+	};
+}
+
 /** Create the immutable first-attempt snapshot persisted by every successful test admission. */
 function _Snapshot(subject: ExecutionSubject = _ExecutionSubject()): RunInputSnapshot
 {
@@ -59,6 +71,68 @@ async function _VerifyExisting()
 
 describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 {
+	it.each(["personal", "company"])("persists and retries a %s run under its execution identity and human requester", async function _FirstAndDuplicate(kind)
+	{
+		const subject = kind === "company" ? _ManagedSubject() : _ExecutionSubject();
+		const snapshot = { ..._Snapshot(subject), preferenceFactIds: [], memoryQueryPolicy: { scope: "none" } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
+		const build = vi.fn().mockResolvedValue({ outcome: "ready", value: { authority: _Authority(), snapshot } });
+		const verify = vi.fn(_VerifyExisting);
+
+		await expect(repository.admit(_Command(), verify, build)).resolves.toEqual({ outcome: "accepted", snapshot });
+		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: subject.principalId, executionSubject: subject }) });
+		const stored = transaction.runInputSnapshot.create.mock.calls[0][0].data;
+		expect(stored.principalId).toBe(subject.principalId);
+		expect(stored.executionSubject.requester.requesterPrincipalId).toBe("principal-1");
+		transaction.agentRun.findUnique.mockResolvedValue({ ...transaction.agentRun.create.mock.calls[0][0].data, attempt: 1 });
+		transaction.runInputSnapshot.findUnique.mockResolvedValue(stored);
+
+		await expect(repository.admit(_Command(), verify, build)).resolves.toEqual({ outcome: "idempotent", snapshot });
+		expect(build).toHaveBeenCalledTimes(1);
+		expect(verify).toHaveBeenCalledTimes(1);
+		expect(transaction.agentRun.create).toHaveBeenCalledTimes(1);
+	});
+
+	it.each(["requester", "malformed subject", "indexed principal", "indexed identity"])("refuses a company duplicate with changed %s before rechecking grants", async function _RejectChangedCompanyDuplicate(change)
+	{
+		const snapshot = _Snapshot(_ManagedSubject());
+		const row = { ...snapshot, agentIdentityId: "identity-1", principalId: "company-principal", compiledAt: new Date(snapshot.compiledAt) };
+		if (change === "requester")
+		{
+			row.executionSubject = { ...row.executionSubject, requester: { ...row.executionSubject.requester, requesterPrincipalId: "other-human", membership: { ...row.executionSubject.requester.membership, principalId: "other-human" } }, admission: { ...row.executionSubject.admission, authorizingPrincipalId: "other-human" } };
+		}
+		if (change === "malformed subject")
+			row.executionSubject = {} as ExecutionSubject;
+		if (change === "indexed principal")
+			row.principalId = "different-company";
+		if (change === "indexed identity")
+			row.agentIdentityId = "different-identity";
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "Interactive", inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(row) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
+		const verify = vi.fn(_VerifyExisting);
+		const build = vi.fn();
+
+		await expect(repository.admit(_Command(), verify, build)).resolves.toEqual({ outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict });
+		expect(verify).not.toHaveBeenCalled();
+		expect(build).not.toHaveBeenCalled();
+	});
+
+	it("refuses a first company turn when its requester differs from the human message author", async function _RejectDifferentRequester()
+	{
+		const command = _Command();
+		const otherCommand = { ...command, messageInput: { ...command.messageInput!, author: { ...command.messageInput!.author, principalId: "other-human" } } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() }, runInputSnapshot: { create: vi.fn() } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
+		const build = vi.fn().mockResolvedValue({ outcome: "ready", value: { authority: _Authority(), snapshot: _Snapshot(_ManagedSubject()) } });
+
+		await expect(repository.admit(otherCommand, _VerifyExisting, build)).resolves.toEqual({ outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict });
+		expect(transaction.agentRun.create).not.toHaveBeenCalled();
+	});
+
 	it("commits one run and its immutable snapshot without reviving a managed workflow task", async function _PersistsAdmission()
 	{
 		const snapshot = _Snapshot();

@@ -17,6 +17,14 @@ change — a retry, an audit, or a replay all see the exact same record, identif
 The compiled budget retains the frozen model-turn limit. A conversation computer consumes exactly
 one admitted turn and refuses the model request when that limit is absent or below one.
 
+The current text-chat baseline supplies conversation history and the personal assistant's approved
+persona. It resolves that persona through the verified local Principal (OpenCrane's permission
+identity) to the user's sign-in subject stored during onboarding. Company assistants run as their
+own Principal, while the triggering message remains bound to the human requester. Both kinds use
+an explicit no-personal-memory policy: preference and dataset repositories are skipped. Dataset
+provisioning and memory recall remain future work; an enabled policy with no valid dataset still
+denies admission.
+
 ```
  run request  (runId · silo · service · conversation? · subject · idempotency key)
           │  __AssembleRunInputSnapshot
@@ -81,6 +89,8 @@ The production conversation computer repeats this authority check during bootstr
 output, including retries that return an existing run snapshot. Current service state, revision,
 identity, current human membership and required grants must still admit the operation. The frozen
 snapshot supplies evidence and input limits; it cannot restore removed access.
+Retries recover the memory policy from the saved snapshot. A valid `none` scope stays disabled;
+`personal` requires both saved dataset identifiers. Unknown or inconsistent saved scopes are denied.
 
 `__RunInputAuthorityExpiresAt` bounds model credentials by the earliest original execution-evidence
 expiry, requester-evidence expiry and absolute budget deadline. It verifies run/attempt binding and
@@ -102,8 +112,9 @@ evidence reduces credential validity, while refreshed evidence never extends the
 - `__CreatePrismaSessionAssemblyAuthorities` — composes the production readers around that subject
   authority, an exact durable-history reader, and an explicit run policy. It freezes only the verified principal's active Cognee
   dataset coordinates when that policy allows personal memory.
-  Admission never stores the recall query, reads fact content, or calls Cognee. The model chooses a
-  query only through the approval-required `memory_recall` tool; safe content delivery is deferred to #601.
+  Admission never stores a recall query, reads fact content, or calls Cognee, the knowledge store
+  behind the memory gateway. The current text-chat policy disables personal memory; a usable
+  `memory_recall` flow and content delivery remain deferred to #601.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.

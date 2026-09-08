@@ -118,7 +118,10 @@ export function _CreateConversationRunAdmission(prisma: ConstructorParameters<ty
 			if (result.outcome === RunAdmissionConcurrencyOutcomes.Rejected)
 				throw new Error("Conversation run admission capacity is exhausted");
 			if (result.value.outcome === SessionAssemblyOutcomes.Denied)
-				throw new Error(`Conversation run admission was denied: ${result.value.reason}`);
+			{
+				_log.warn({ operation: "conversation.run.admission", reason: result.value.reason, runId: command.runId, siloId: command.computer.siloId, conversationId: command.computer.conversationId, agentServiceId: command.agent.agentServiceId }, "Conversation run admission was denied");
+				throw new Error("Conversation run admission was denied");
+			}
 			if (command.agent.agentRevisionId !== result.value.snapshot.agentRevisionId)
 				throw new Error("Conversation run admission selected another agent revision");
 			const compiledInput = compiled ?? await compilers.compile(command, result.value.snapshot);

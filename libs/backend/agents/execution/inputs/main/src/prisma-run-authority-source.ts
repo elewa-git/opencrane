@@ -48,14 +48,14 @@ export class PrismaRunAuthority implements RunAuthoritySource
 			return { outcome: "denied", reason: "revision_unavailable" };
 		}
 
-		// 3. Build the run facts from the revision just read, not from anything the caller sent.
+		// 3. The text-chat baseline uses approved personas without requiring future memory provisioning.
 		return {
 			outcome: "loaded",
 			value: {
 				agentServiceId: service.id,
 				agentRevisionId: service.activeRevision.id,
 				executionPolicy: service.kind === AgentServiceKind.Personal
-					? { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed }
+					? { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.None }
 					: { persona: RunExecutionPersonaPolicies.None, personalMemory: RunExecutionPersonalMemoryPolicies.None },
 				promptCompilerVersion: service.activeRevision.promptPolicyVersion,
 				trigger: command.trigger,

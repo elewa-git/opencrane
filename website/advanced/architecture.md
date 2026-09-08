@@ -79,6 +79,16 @@ Checkpoint and restore preserve the computer's workspace across cooling and repl
 Conversation history does not depend on the Pod or browser surviving. Ordinary direct and group
 messages do not activate an assistant computer.
 
+For a personal text turn, admission resolves the employee's verified internal identity to the
+sign-in identity used during onboarding, then freezes their approved persona, ordered conversation
+history and model choice. Personal memory is explicitly unavailable in this baseline: provisioning
+a dataset and recalling its content remain separate product work. This does not prevent a person
+from using their approved instructions and the current conversation.
+
+The requester and executor are distinct roles. The human must own the input message and retain
+access to the conversation. A company assistant executes with its own identity and resource
+permissions. Retrying the same request preserves both identities and the original frozen input.
+
 ## Shared work from a group
 
 A group remains a conversation between people. Selecting **Ask company assistant** creates one

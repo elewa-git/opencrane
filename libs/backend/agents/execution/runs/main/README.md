@@ -5,7 +5,7 @@
 ## What it owns
 
 A **run** is one request for an agent to do work. An **attempt** is one try at finishing that run.
-This package admits a personal conversation run and freezes its fixed input in one database transaction.
+This package admits personal and company-assistant conversation runs and freezes their fixed input in one database transaction.
 The active conversation-computer lease and its Sandbox claim are independently proven inputs; the
 transaction does not create or claim that runtime. The conversation computer continues the turn after
 admission; this package does not create a second managed workflow task for it.
@@ -34,6 +34,8 @@ does not grant permission to use a run.
 ## Main rules
 
 - A duplicate admission returns the first saved input only when the caller and request match.
+- The human requester must match the input message's author. A company assistant keeps its own
+  execution identity and permissions; it does not become the human who asked for help.
 - Status uses the current exact `AgentRun` grant. Ownership, conversation
   participation, lifecycle state, attempt fencing, and execution-subject proof remain separate safety facts;
   none of them grants product permission by itself.
@@ -58,6 +60,10 @@ does not grant permission to use a run.
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input
 assembler supplies the fixed run input. The conversation-computer boundary runs the model loop
 through an Agent Sandbox lease.
+
+The current text-turn baseline uses approved personal instructions, conversation history and the
+selected model. New runs explicitly freeze memory as unavailable. Dataset provisioning and memory
+recall remain roadmap work in the [input assembler](../../inputs/main/README.md).
 
 The package does not run uploaded OCI images. OCI-backed MCP and code-skill workloads use their own
 executor class and meet AgentRun through the shared workload-claim contract.

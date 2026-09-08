@@ -6,7 +6,7 @@ import { ___CloneCanonicalJson, ___SortBy, type JsonValue } from "@opencrane/uti
 
 import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types";
-import type { ApprovedPersonaInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types";
+import { RunInputMemoryScopes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput } from "./session-assembly.types";
 
 /** Snapshot format version this assembler stamps on every snapshot it writes. */
 const _SNAPSHOT_VERSION = 1;
@@ -60,7 +60,10 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// source below can read a conversation the caller has only just created.
 	const admitted = await authorities.admission.admit(command, async function _VerifyExisting(snapshot, transaction)
 	{
-		const authority: InitialRunAuthority = { agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, executionPolicy: { persona: snapshot.personaRevisionId === null ? RunExecutionPersonaPolicies.None : RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed }, promptCompilerVersion: snapshot.promptCompilerVersion, trigger: command.trigger };
+		const personalMemory = _ExistingPersonalMemoryPolicy(snapshot);
+		if (personalMemory === null)
+			return { outcome: "denied", reason: "memory_scope_unavailable" } as const;
+		const authority: InitialRunAuthority = { agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, executionPolicy: { persona: snapshot.personaRevisionId === null ? RunExecutionPersonaPolicies.None : RunExecutionPersonaPolicies.Required, personalMemory }, promptCompilerVersion: snapshot.promptCompilerVersion, trigger: command.trigger };
 		const current = await authorities.executionSubject.load(command, authority, transaction);
 		if (current.outcome === "denied")
 			return current;
@@ -132,6 +135,21 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	if (checked.subject === null)
 		throw new Error("Run admission returned without current execution authority");
 	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot, currentExecutionSubject: checked.subject };
+}
+
+/** Recovers the saved memory policy without promoting an absent or malformed scope into permission. */
+function _ExistingPersonalMemoryPolicy(snapshot: RunInputSnapshot): RunExecutionPersonalMemoryPolicies | null
+{
+	const policy: unknown = snapshot.memoryQueryPolicy;
+	if (policy === null || typeof policy !== "object" || Array.isArray(policy) || !("scope" in policy))
+		return null;
+	if (policy.scope === RunInputMemoryScopes.None)
+		return Object.keys(policy).length === 1 && snapshot.preferenceFactIds.length === 0 ? RunExecutionPersonalMemoryPolicies.None : null;
+	if (policy.scope !== RunInputMemoryScopes.Personal || Object.keys(policy).length !== 3)
+		return null;
+	if (!("datasetId" in policy) || typeof policy.datasetId !== "string" || policy.datasetId.trim().length === 0 || !("cogneeDatasetId" in policy) || typeof policy.cogneeDatasetId !== "string" || policy.cogneeDatasetId.trim().length === 0)
+		return null;
+	return RunExecutionPersonalMemoryPolicies.Allowed;
 }
 
 /** Ensures a duplicate keeps the same identity, computer and membership version while accepting a fresh observation. */

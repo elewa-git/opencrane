@@ -1,7 +1,7 @@
 import { RunExecutionPersonalMemoryPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { ConversationContextInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
+import { RunInputMemoryScopes, type ConversationContextInput, type MemoryScopeInput, type MemoryScopeSource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "./session-assembly.types";
 
 /** Selects the sole memory source allowed by the explicit policy frozen for one run. */
 export class RunPolicyMemoryScopeSource implements MemoryScopeSource
@@ -20,7 +20,7 @@ export class RunPolicyMemoryScopeSource implements MemoryScopeSource
 	{
 		if (run.executionPolicy.personalMemory === RunExecutionPersonalMemoryPolicies.None)
 		{
-			return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "none" }, datasetId: null } };
+			return { outcome: "loaded", value: { memoryQueryPolicy: { scope: RunInputMemoryScopes.None }, datasetId: null } };
 		}
 		if (run.executionPolicy.personalMemory !== RunExecutionPersonalMemoryPolicies.Allowed)
 		{
