@@ -192,7 +192,7 @@ spec:
         variables.finalizerCleanup
       message: claim writes require the release server, pinned controller or bounded Kubernetes foreground cleanup
     - expression: >-
-        object.metadata.namespace == {{ $sandbox.namespace | toJson }} &&
+        request.namespace == {{ $sandbox.namespace | toJson }} &&
         object.metadata.name.matches('^computer-[a-z0-9]([-a-z0-9]*[a-z0-9])?-g[1-9][0-9]*$') &&
         (!has(object.metadata.generateName) || object.metadata.generateName == '') &&
         (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&

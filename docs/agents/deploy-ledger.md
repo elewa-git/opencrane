@@ -897,3 +897,16 @@ Full run reports belong in the corresponding pull request or issue.
 - boundary: the original company child request remains terminal; the next explicit request must
   create a new child. Complete personal and child answers, reviewed return and reconnect before
   capturing the data-bearing fixture for both scheduled recovery drills.
+
+## 2026-09-08 · testv5 · installed claim-policy qualification · PARTIAL
+
+- candidate: `d5d0040505e38db60faefdb68d2672d4846a372d` passed eleven qualification gates in
+  [run 34211666015](https://github.com/elewa-git/opencrane/actions/runs/34211666015). The Kubernetes
+  smoke failed after workload readiness, TLS and database isolation passed. No image publication
+  or testv5 repair deployment followed; the live server remains `a32380bee`.
+- finding: at 09:54:50.657 UTC, the new installed-policy check reported an undefined `namespace`
+  field in `object.metadata.namespace`. The chart now reads `request.namespace` for the same
+  namespace restriction. Keep the warning gate and qualify this correction before deployment.
+- validation scope: this failure occurred before the dry-run admission fixtures. Local render
+  checks alone cannot establish that Kubernetes accepts and evaluates the policy. Personal and
+  child answers, reviewed return, and both data-bearing restores remain pending.
