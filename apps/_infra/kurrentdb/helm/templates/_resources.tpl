@@ -51,6 +51,10 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
     app.kubernetes.io/component: kurrentdb-bootstrap
 data:
+  replay.sh: |
+    {{- (index .Subcharts "opencrane-kurrentdb").Files.Get "files/replay.sh" | nindent 4 }}
+  replay-target.json: |
+    {"endpoint":"https://{{ $serviceName }}.{{ .Release.Namespace }}.svc:{{ $history.service.port }}","streamName":"computer-activations-{{ $siloId }}"}
   bootstrap.sh: |
     #!/bin/sh
     set -eu

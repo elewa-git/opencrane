@@ -131,6 +131,11 @@ package imports it.
 - `platform/provision-kurrentdb-bootstrap-secrets.sh` — creates the namespace-local immutable TLS,
   administrator, operations, and `opencrane-history` Secrets for one fresh testv5 silo. Reruns
   validate the existing authorities and never rotate them.
+- `--kurrentdb-replay-parked` — replays the installed silo's parked computer activations through a
+  separate bounded Job derived from its verified KurrentDB bootstrap template. It leaves the
+  completed bootstrap Job intact and keeps administrator credentials outside the application.
+  Install the matching chart configuration first; replay refuses absent or changed scripts,
+  a different silo target, and combinations with bootstrap, restore or preflight actions.
 - `platform/k8s-deploy.sh --provision-agent-sandbox-controller --context CONTEXT` — installs the
   pinned shared controller and its `opencrane.ai` Pod-label allowlist. Add `--preflight` to verify
   the downloaded manifest and local configuration without changing the cluster. This separate

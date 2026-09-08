@@ -937,3 +937,29 @@ Full run reports belong in the corresponding pull request or issue.
   maintenance boundary; the server must retain its unprivileged history credentials.
 - remaining proof: complete personal and child answers, reviewed return and reconnect, followed by
   both scheduled data-bearing restore drills and measured recovery time.
+
+## 2026-09-08 · testv5 · qualified controller repair and browser child admission · PARTIAL
+
+- qualification: `1cb9dd2c0971377d00afc8396c54300696b8cb78` passed all twelve gates in
+  [run 34219608300](https://github.com/elewa-git/opencrane/actions/runs/34219608300), including the
+  persisted claim-to-owned-Sandbox-and-Pod lifecycle check and foreground cleanup.
+- controller repair: the helper and executable early dispatcher matched that qualified source.
+  The owning `--provision-agent-sandbox-controller` action passed preflight in 1.357 seconds and
+  applied from 11:29:06.271 to 11:29:26.194 UTC (19.923 seconds), exit 0. At 11:30:44 the controller
+  had generation/observedGeneration 2, one Ready replica and zero restarts. The fixed ConfigMap
+  contains only `allowed-label-domains: opencrane.ai` and is mounted read-only at `/etc/sandbox-config`.
+  Image, service account, UID, selector and rollout strategy stayed unchanged. Application images
+  remain the `ac5f12c4d` server and qualified `997dcda70` companions.
+- existing runtime state: both earlier personal claims and their runtime resources were absent
+  after repair. The 11:17:28 read-only queue snapshot had one live consumer and three parked
+  messages, with no inflight or outstanding delivery. No fake claim, manual lease, or replay was
+  created during this controller operation.
+- browser proof: the owner signed in afresh, selected their own group message and explicitly chose
+  the company assistant. A new child request was admitted at 11:31:09.617. At 11:32:06–11:32:11,
+  exact command retry recovered the same ready child, changed-source retry was denied, another
+  human could not replay that command, and all three group members could open the child. The
+  original failed request remains terminal. Assistant answers and reviewed return remain pending.
+- replay repair: the broken public route and application HistoryStore replay method are replaced
+  by a bounded operator Job using the installed bootstrap boundary. Focused tests prove script
+  and target binding, ownership and failure refusals, TLS and credential separation. This source
+  still needs review, remote qualification, installation and live replay before it is qualified.

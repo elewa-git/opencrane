@@ -10903,49 +10903,6 @@
         }
       }
     },
-    "/conversation-computers/activations/parked:replay": {
-      "post": {
-        "operationId": "replayParkedConversationComputerActivations",
-        "summary": "Replay parked conversation-computer activations",
-        "description": "Moves every parked delivery of the silo's activation consumer group back into live delivery. Requires the current Organization/Administer grant; the silo comes from the request host.",
-        "tags": [
-          "Conversation computer operations"
-        ],
-        "responses": {
-          "202": {
-            "description": "Replay requested.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "outcome"
-                  ],
-                  "properties": {
-                    "outcome": {
-                      "type": "string",
-                      "enum": [
-                        "replay_requested"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required."
-          },
-          "403": {
-            "description": "Operator permission required."
-          },
-          "503": {
-            "description": "Activation queue unavailable."
-          }
-        }
-      }
-    },
     "/me/conversations/directory": {
       "get": {
         "operationId": "getMyConversationCreationDirectory",

@@ -51,9 +51,10 @@ chat workspace with their assistant ready. Company-assistant discovery, administ
 child-request admission also pass, including audience isolation and retry checks.
 
 The computer-history and Kubernetes naming repairs are deployed. A fresh employee can now create
-a personal chat and send its first message. Starting the assistant exposed a further integration
-gap: the installation policy rejects a metadata update required by the Sandbox controller.
-Complete model answers, reviewed sharing and reconnect remain pending that repair. Access
+a personal chat and send its first message. The Sandbox admission and controller configuration
+repairs passed remote Kubernetes qualification and are deployed. A new company-assistant request
+was selected in the real browser, and every group member can open its child chat. Complete model
+answers, reviewed sharing and reconnect remain pending live. Access
 changes, recovery and computer actions need their complete live journeys. Tool, memory and
 shared-work journeys need their own evidence as they become available. Both history restore
 modes still need a completed product fixture and measured recovery time.

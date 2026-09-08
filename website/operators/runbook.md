@@ -58,19 +58,22 @@ own, so the conversation stays cold until an operator replays the queue.
 1. Read the parked queue: `GET /subscriptions/computer-activations-<silo>/conversation-computer-activation/parked`
    on the KurrentDB HTTP port with the bootstrap admin credential, and fix the recorded cause
    (profile revision, claim admission, controller health).
-2. Replay the queue through the OpenCrane API as a Principal holding the current
-   Organization/Administer grant:
+2. Replay the queue through the same deployment entrypoint and silo arguments used to install it:
 
    ```bash
-   curl --request POST --cookie "$SESSION" https://<silo-host>/api/v1/conversation-computers/activations/parked:replay
+   bash apps/_infra/deploy-k8s/deploy.sh <usual silo flags> --kurrentdb-replay-parked
    ```
 
-   A `202 {"outcome":"replay_requested"}` means every parked delivery re-enters live delivery with the
-   ordinary at-least-once contract. `403` means the caller lacks the grant; `503` means the queue is
-   unreachable.
+   The command checks the installed release, the current Ready database, and the replay script and
+   target before creating a separate bounded Job. Success means the queue was submitted for replay;
+   check the conversation and consumer afterward to confirm processing. A failed Job remains
+   available for diagnosis and is never reported as successful.
 
 Do not edit the consumer group or acknowledge parked messages in the KurrentDB UI; the replay
-route keeps the group's checkpoint and retry accounting intact.
+command keeps the group's checkpoint and retry accounting intact. KurrentDB requires operations or
+administrator authority for replay. Those credentials stay in the deployment maintenance boundary;
+the application server keeps its ordinary history identity. Install the matching chart before using
+the command: a missing or changed replay script is refused before any Job is created.
 
 ## Lost and renewed leases
 

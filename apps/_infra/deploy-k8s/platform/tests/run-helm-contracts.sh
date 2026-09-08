@@ -33,6 +33,7 @@ for contract in \
   cluster-tenant-crd-policy-contract.sh \
   kurrentdb-bootstrap-secrets-contract.sh \
   kurrentdb-bootstrap-retry-contract.sh \
+  kurrentdb-replay-contract.sh \
   kurrentdb-restore-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \

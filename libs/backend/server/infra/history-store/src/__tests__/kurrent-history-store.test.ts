@@ -185,16 +185,6 @@ describe("_KurrentHistoryStore", function ()
 		expect(unsubscribe).toHaveBeenCalledOnce();
 	});
 
-	it("replays the parked queue of exactly the named consumer group", async function ()
-	{
-		const replayParkedMessagesToStream = vi.fn().mockResolvedValue(undefined);
-		const store = new _KurrentHistoryStore({ replayParkedMessagesToStream } as unknown as KurrentDBClient);
-
-		await store.replayParked({ streamName: "computer-activations-silo-1", groupName: "conversation-computer-activation" });
-
-		expect(replayParkedMessagesToStream).toHaveBeenCalledWith("computer-activations-silo-1", "conversation-computer-activation");
-	});
-
 	it("uses the newest opaque handle when KurrentDB redelivers an event", async function ()
 	{
 		const firstDelivery = { event: { id: "8e0e2498-819f-4339-8d78-4f4c7377e20b", type: "computer.activation-requested.v1", data: {}, metadata: {}, streamId: "computer-computer-1", revision: 4n, created: new Date("2026-08-31T00:00:00.000Z") }, retryCount: 0 };

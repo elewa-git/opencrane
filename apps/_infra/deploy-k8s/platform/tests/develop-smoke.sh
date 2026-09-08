@@ -476,7 +476,7 @@ _assert_current_history_and_sandbox()
     | jq -e '.spec.replicas == 0' >/dev/null
   bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-admission-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME"
   bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-lifecycle-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME" "$TIMEOUT_SECONDS"
-  kubectl exec -i "deployment/${RELEASE_NAME}-opencrane-server" -n "$NAMESPACE" -- node --input-type=module <<'NODE'
+  kubectl exec -i "deployment/${RELEASE_NAME}-opencrane-server" -n "$NAMESPACE" -- node --input-type=module - "$CLUSTER_TENANT" <<'NODE'
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import https from "node:https";
@@ -486,10 +486,11 @@ const ca = readFileSync(process.env.OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH)
 const username = readFileSync(process.env.OPENCRANE_HISTORY_STORE_USERNAME_PATH, "utf8").trim();
 const password = readFileSync(process.env.OPENCRANE_HISTORY_STORE_PASSWORD_PATH, "utf8").trim();
 assert.equal(username, "opencrane-history");
-function status(path, authenticated = false) {
+function status(path, authenticated = false, method = "GET") {
   return new Promise((resolve, reject) => {
-    const request = https.get(`${endpoint}${path}`, {
+    const request = https.request(`${endpoint}${path}`, {
       ca,
+      method,
       rejectUnauthorized: true,
       ...(authenticated ? { auth: `${username}:${password}` } : {}),
     }, (response) => {
@@ -499,13 +500,20 @@ function status(path, authenticated = false) {
     });
     request.setTimeout(5000, () => request.destroy(new Error("KurrentDB probe timed out")));
     request.once("error", reject);
+    request.end();
   });
 }
 assert.ok([200, 204].includes(await status("/health/live")), "Anonymous TLS health must succeed");
 assert.ok([401, 403].includes(await status("/users")), "Anonymous administration must be refused");
 assert.ok([401, 403].includes(await status("/streams/opencrane-silo/0")), "Anonymous ledger reads must be refused");
 assert.equal(await status("/streams/opencrane-silo/0", true), 200, "The service identity must read the server's silo sentinel");
+const activationStream = encodeURIComponent(`computer-activations-${process.argv[2]}`);
+assert.ok([401, 403].includes(await status(`/subscriptions/${activationStream}/conversation-computer-activation/replayParked`, true, "POST")), "The application service identity must not replay parked activations");
 NODE
+  OPENCRANE_CHART_DIR="$ROOT_DIR/apps/_infra/deploy-k8s" \
+    bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh" \
+    --cluster-tenant "$CLUSTER_TENANT" --namespace "$NAMESPACE" --release "$RELEASE_NAME" \
+    --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" --kurrentdb-replay-parked
 }
 
 trap _cleanup EXIT

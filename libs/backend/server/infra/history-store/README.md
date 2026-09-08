@@ -47,8 +47,10 @@ does not create it, so its deployment owner must provision group settings before
 Each delivery is at least once: a consumer acknowledges successful work, retries a transient
 failure, parks a poison event, or closes without acknowledging outstanding work. A redelivery
 supersedes the prior opaque client handle, while consumers make their own handlers idempotent.
-`replayParked` moves a group's parked queue back into live delivery once an operator has repaired
-the cause; the events then follow the same at-least-once contract.
+Parked replay requires KurrentDB operations or administrator authority and is deliberately absent
+from this application port. The deployment maintenance command `--kurrentdb-replay-parked` replays
+the installed silo's activation group after its cause is repaired, using the bootstrap trust boundary.
+The server keeps its unprivileged history identity.
 
 ## Boundary
 
@@ -88,7 +90,8 @@ checked single-stream appends, the atomic multi-stream append used for genesis a
 message+activation, the exact `WrongExpectedVersionError` the authorities catch (including a
 two-writer race and a stale head that rolls the whole atomic append back), reads, catch-up
 subscriptions, and the persistent consumer group with acknowledge, retry, park, and replay, using the
-same group settings the Helm bootstrap Job provisions.
+same group settings the Helm bootstrap Job provisions. Replay uses the test's privileged client
+directly; the deployment maintenance tests and live drill qualify its separate operator boundary.
 
 Run them with a server reachable from this machine:
 

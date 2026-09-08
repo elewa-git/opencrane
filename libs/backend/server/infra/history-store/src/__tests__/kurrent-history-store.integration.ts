@@ -436,7 +436,8 @@ describe.skipIf(_URL === undefined)("_KurrentHistoryStore against a live Kurrent
 				const info = await client.getPersistentSubscriptionToStreamInfo(queueStream, _ACTIVATION_GROUP);
 				return info.stats.parkedMessageCount === 1n;
 			}, "KurrentDB never reported the parked activation");
-			await store.replayParked({ streamName: queueStream, groupName: _ACTIVATION_GROUP });
+			// Replay is a privileged operator operation, outside the application HistoryStore port.
+			await client.replayParkedMessagesToStream(queueStream, _ACTIVATION_GROUP);
 			const replayed = await _next(iterator, "the group did not redeliver the parked activation after replay");
 			await consumer.acknowledge(replayed);
 			await consumer.close();

@@ -245,8 +245,8 @@ shared group-child journey and its durable recovery worker. The public routes ar
   acknowledges activated, idempotent, or denied outcomes, waits with bounded exponential backoff
   before retrying a pending sandbox assignment or a transient authority failure, and leaves an
   acknowledgement failure for KurrentDB to redeliver.
-- `_CreateConversationComputerOperatorRouter` exposes `POST /conversation-computers/activations/parked:replay`
-  for a Principal holding Organization/Administer; it replays the silo's parked activation queue.
+- Parked activation replay belongs to the deployment maintenance command `--kurrentdb-replay-parked`.
+  The application history identity can consume, retry and park deliveries, but cannot administer the queue.
 - `ConversationComputerLifecycleAuthority` measures idleness from the newest turn activity on the
   lease's active-turn stream (`KurrentConversationComputerActivityReader`), renews an in-use lease at
   half of its lifetime, records an expired or claim-less lease as `lost` with a cold computer, and

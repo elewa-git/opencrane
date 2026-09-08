@@ -70,6 +70,19 @@ Verification reads the latest settings event as JSON and rejects different permi
 matching event in the stream cannot conceal a changed current ACL.
 Bootstrap inspects subscription metadata without consuming queued activation messages.
 
+Parked activation replay is an operator maintenance action: KurrentDB 26.1.1 requires operations
+or administrator authority for it, independently of stream ACLs. Run the usual silo deploy command
+with `--kurrentdb-replay-parked` after fixing the activation failure. The engine verifies the Ready
+database and installed bootstrap ownership, matches `replay.sh` to the checked-out source and live
+ConfigMap, and validates the release-local endpoint and silo stream. An older installation without
+this script is refused before a Job is created.
+
+The one-off Job reuses the bootstrap image and security/network boundary, with only the administrator
+password and CA. It freezes the verified script and target inside its Pod specification, has no
+automatic retries, and expires one hour after completion. It does not replace the completed bootstrap
+Job or give the application an operations credential. The script uses TLS verification and a bounded
+POST to the fixed `conversation-computer-activation` group; failure output contains no credential.
+
 The backup Job holds no KurrentDB credential. In `fileCopy` mode it runs as the database identity
 on the database node, reads the data volume read-only, writes the archive PVC, and has no network
 at all. In `volumeSnapshot` mode it runs under its own ServiceAccount whose Role may only get,

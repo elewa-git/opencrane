@@ -246,7 +246,7 @@
       "id": "kurrentdb-bootstrap",
       "podClass": "Job/kurrentdb-bootstrap",
       "renderedPodClass": "Job/opencrane-kurrentdb-bootstrap",
-      "image": "purpose-built bootstrap image at immutable OCI digest",
+      "image": "purpose-built bootstrap image at immutable OCI digest; the deploy engine derives a bounded operator replay Job from this installed template, freezing the verified script and silo target while removing the service credential",
       "owner": "apps/_infra/kurrentdb",
       "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_resources.tpl", "anchor": "kind: Job", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }

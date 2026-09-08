@@ -24,8 +24,6 @@ export { KurrentConversationComputerActivityReader, _ConversationComputerActiveT
 export type { ConversationComputerActivity, ConversationComputerActivityReader } from "./conversation-computer-activity.types";
 export { ConversationComputerLifecycleAuthority } from "./conversation-computer-lifecycle";
 export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerIdlePolicy, ConversationComputerLeaseProjectionCommand, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome, ConversationComputerSandboxClaims } from "./conversation-computer-lifecycle.types";
-export { _CreateConversationComputerOperatorRouter } from "./conversation-computer-operator.router";
-export type { ConversationComputerActivationReplayer, ConversationComputerOperatorAuthorization, ConversationComputerOperatorCaller, ConversationComputerOperatorPrincipalResolver, ConversationComputerOperatorRouterOptions } from "./conversation-computer-operator.router.types";
 export { ConversationComputerCheckpointAuthority, _CheckpointArtifactId, _CheckpointRevisionId } from "./conversation-computer-checkpoint";
 export type { ConversationComputerCheckpointCapture, ConversationComputerCheckpointCatalogue, ConversationComputerCheckpointFence, ConversationComputerCheckpointPolicy, ConversationComputerCheckpointReader, ConversationComputerCheckpointRestoreCommand, ConversationComputerCheckpointRestoreResult, ConversationComputerCheckpointSandbox, ConversationComputerCheckpointUploader } from "./conversation-computer-checkpoint.types";
 export { _CreateConversationComputerCheckpointRouter } from "./conversation-computer-checkpoint.router";

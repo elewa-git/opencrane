@@ -64,6 +64,7 @@
 #
 # KurrentDB restore: --kurrentdb-restore-list prints the scheduled backups of this silo and exits.
 # KurrentDB bootstrap: --kurrentdb-bootstrap-retry retries a failed or missing bootstrap Job and exits.
+# KurrentDB replay: --kurrentdb-replay-parked replays the silo activation queue through a separate operator Job.
 # --kurrentdb-bootstrap-prepare-update removes a completed bootstrap Job before a normal deploy changes its template.
 # --kurrentdb-restore BACKUP_ID (or `latest`) scales KurrentDB to zero, restores the data volume
 # from that backup with the same image and scripts the backup CronJob uses, scales it back up,
@@ -171,6 +172,7 @@ source "$SCRIPT_DIR/postgres-release.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
 source "$SCRIPT_DIR/kurrentdb-restore.sh"
 source "$SCRIPT_DIR/kurrentdb-bootstrap.sh"
+source "$SCRIPT_DIR/kurrentdb-replay.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -297,6 +299,7 @@ KURRENTDB_RESTORE_CONFIRM_SERVING="0"
 KURRENTDB_RESTORE_LIST="0"
 KURRENTDB_BOOTSTRAP_RETRY="0"
 KURRENTDB_BOOTSTRAP_PREPARE_UPDATE="0"
+KURRENTDB_REPLAY_PARKED="0"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[k8s-deploy]\033[0m $1"; }
@@ -348,10 +351,15 @@ while [[ $# -gt 0 ]]; do
     --kurrentdb-restore-list)            KURRENTDB_RESTORE_LIST="1"; shift ;;
     --kurrentdb-bootstrap-retry)         KURRENTDB_BOOTSTRAP_RETRY="1"; shift ;;
     --kurrentdb-bootstrap-prepare-update) KURRENTDB_BOOTSTRAP_PREPARE_UPDATE="1"; shift ;;
+    --kurrentdb-replay-parked) KURRENTDB_REPLAY_PARKED="1"; shift ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
+if [[ "$KURRENTDB_REPLAY_PARKED" == "1" && ( "$KURRENTDB_BOOTSTRAP_RETRY" == "1" || "$KURRENTDB_BOOTSTRAP_PREPARE_UPDATE" == "1" || -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
+  err "--kurrentdb-replay-parked cannot be combined with bootstrap, restore or preflight actions."
+  exit 1
+fi
 if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" && ( -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
   err "--kurrentdb-bootstrap-retry cannot be combined with restore or preflight actions."
   exit 1
@@ -443,6 +451,10 @@ wait_for_final_kurrentdb_bootstrap_job_if_present()
 
 # KurrentDB recovery runs once the target silo is known and exits before image resolution,
 # so a silo with a broken ledger never has to wait on registry access to recover its history.
+if [[ "$KURRENTDB_REPLAY_PARKED" == "1" ]]; then
+  run_kurrentdb_replay_parked || exit $?
+  exit 0
+fi
 if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" ]]; then
   run_kurrentdb_bootstrap_retry || exit $?
   exit 0
