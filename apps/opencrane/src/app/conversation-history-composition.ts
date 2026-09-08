@@ -69,12 +69,12 @@ export function _CreateConversationHistoryComposition(
     {
       return new PrismaManagedAgentConversationResolver(transaction, managedDependencies).resolve(caller, agentServiceId);
     },
-  }, workflows, authority);
+  }, workflows, authority, _log);
   workflows.register({ ...GROUP_CHILD_TASK, run: function _ResumeGroupChild(context, input: GroupChildTaskInput)
   {
     return children.run(input, context.attempt);
   } });
-  const router = _CreateConversationMetadataRouter(metadata, resolveCaller);
+  const router = _CreateConversationMetadataRouter(metadata, resolveCaller, _log);
   router.use(_CreateGroupChildRouter(children, resolveCaller, _log));
   router.use(
     _CreateSelfConversationHistoryRouter({ authority, resolveCaller, logger: _log, events: { historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),

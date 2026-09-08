@@ -57,9 +57,7 @@ export class ConversationComputerHistory
 					conversationId: snapshot.computer.conversationId,
 					agentIdentityId: snapshot.computer.agentIdentityId,
 					profileRevisionId: snapshot.computer.profileRevisionId,
-					leaseId: snapshot.lease?.id ?? null,
-					leaseGeneration: snapshot.lease?.generation ?? null,
-					leaseState: snapshot.lease?.state ?? null,
+					...(snapshot.lease === null ? {} : { leaseId: snapshot.lease.id, leaseGeneration: String(snapshot.lease.generation), leaseState: snapshot.lease.state }),
 				},
 			}],
 		});

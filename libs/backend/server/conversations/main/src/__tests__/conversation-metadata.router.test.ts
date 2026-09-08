@@ -8,10 +8,21 @@ import { PrismaAgentSessionCreationUnitOfWork } from "../agent-session-creation"
 /** Verified participant supplied by app composition rather than request data. */
 const _CALLER = { siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" } as const;
 /** Mounts one metadata router with an isolated mocked authority. */
-function _App(authority: any) { const app = express(); app.use(express.json()); app.use("/api/v1/me/conversations", _CreateConversationMetadataRouter(authority, function _Resolve() { return _CALLER; })); return app; }
+function _App(authority: any, logger = { warn: vi.fn() }) { const app = express(); app.use(express.json()); app.use("/api/v1/me/conversations", _CreateConversationMetadataRouter(authority, function _Resolve() { return _CALLER; }, logger)); return app; }
 
 describe("_CreateConversationMetadataRouter", function _DescribeMetadataRouter()
 {
+	it("logs a bounded creation diagnostic while hiding dependency details from the response", async function ()
+	{
+		const failure = Object.assign(new Error("private upstream response"), { code: "P2002", token: "private credential" });
+		const logger = { warn: vi.fn() };
+		const response = await request(_App({ create: vi.fn().mockRejectedValue(failure) }, logger)).post("/api/v1/me/conversations").send({ text: "private user input" });
+		expect(response.status).toBe(503);
+		expect(response.body).toEqual({ error: "conversation_authority_unavailable" });
+		expect(logger.warn).toHaveBeenCalledWith({ err: { type: "Error", message: "Conversation history operation failed", code: "P2002" }, errorType: "Error", siloId: "silo-1", operation: "/", method: "POST" }, "Conversation metadata operation unavailable");
+		expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("private");
+	});
+
 	it("preserves metadata envelopes without returning relational messages", async function _ReturnsMetadata()
 	{
 		const conversation = { id: "conversation-1", mode: "direct", lifecycle: "open", agentServiceId: null, participantRefs: ["membership-1"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T00:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null };

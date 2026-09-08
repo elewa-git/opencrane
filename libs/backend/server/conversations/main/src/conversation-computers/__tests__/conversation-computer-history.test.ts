@@ -1,5 +1,6 @@
 import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
-import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import type { KurrentDBClient } from "@kurrent/kurrentdb-client";
+import { _KurrentHistoryStore, HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerHistory } from "../conversation-computer-history";
@@ -78,9 +79,7 @@ function _Event(revision: bigint, computer: ConversationComputer = _Computer(), 
 			conversationId: computer.conversationId,
 			agentIdentityId: computer.agentIdentityId,
 			profileRevisionId: computer.profileRevisionId,
-			leaseId: lease?.id ?? null,
-			leaseGeneration: lease?.generation ?? null,
-			leaseState: lease?.state ?? null,
+			...(lease === null ? {} : { leaseId: lease.id, leaseGeneration: String(lease.generation), leaseState: lease.state }),
 		},
 		revision,
 		recordedAt: new Date("2026-09-01T00:00:00.000Z"),
@@ -107,6 +106,38 @@ function _Store(overrides: Partial<Pick<HistoryStore, "append" | "readHead" | "r
 
 describe("ConversationComputerHistory", function ()
 {
+	it.each(["cold", "warm"])("reloads a %s computer through the Kurrent adapter", async function (state)
+	{
+		const lease = state === "cold" ? null : _Lease();
+		const computer = _Computer({ state: state === "cold" ? ConversationComputerStates.Cold : ConversationComputerStates.Warm });
+		const appendToStream = vi.fn().mockResolvedValue({ nextExpectedRevision: 0n });
+		const readStream = vi.fn(async function* _ReadStoredRecord()
+		{
+			const [streamId, events] = appendToStream.mock.calls[0]!;
+			yield { event: { ...events[0], streamId, revision: 0n, created: new Date("2026-09-01T00:00:00.000Z") } };
+		});
+		const history = new ConversationComputerHistory(new _KurrentHistoryStore({ appendToStream, readStream } as unknown as KurrentDBClient));
+		await history.append({ expectedRevision: HistoryExpectedRevisions.NoStream, eventId: _EVENT_ID, computer, lease });
+		await expect(history.load(_CurrentCommand())).resolves.toEqual({ streamName: "conversation-computer-computer-1", revision: 0n, computer, lease });
+	});
+
+	it.each([
+		{ leaseId: null, leaseGeneration: null, leaseState: null },
+		{ leaseId: "foreign", leaseGeneration: "1", leaseState: "active" },
+	])("rejects lease metadata on a lease-free computer: %j", async function (metadata)
+	{
+		const event = _Event(0n, _Computer({ state: ConversationComputerStates.Cold }), null);
+		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([{ ...event, metadata: { ...event.metadata, ...metadata } }])) }));
+		await expect(history.load(_CurrentCommand())).rejects.toThrow("does not match its envelope");
+	});
+
+	it.each([1, "01", "2", undefined])("rejects a noncanonical or mismatched lease generation: %s", async function (generation)
+	{
+		const event = _Event(0n);
+		const history = new ConversationComputerHistory(_Store({ readStream: vi.fn().mockReturnValue(_Events([{ ...event, metadata: { ...event.metadata, leaseGeneration: generation } }])) }));
+		await expect(history.load(_CurrentCommand())).rejects.toThrow("does not match its envelope");
+	});
+
 	it("appends a validated complete snapshot to its deterministic stream and propagates a stale append conflict", async function ()
 	{
 		const append = vi.fn().mockResolvedValueOnce({ streamName: "conversation-computer-computer-1", revision: 1n }).mockRejectedValueOnce(new Error("stale expected revision"));
@@ -120,7 +151,7 @@ describe("ConversationComputerHistory", function ()
 				id: _EVENT_ID,
 				type: "opencrane.conversation-computer.v1",
 				data: { computer: _Computer(), lease: _Lease() },
-				metadata: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", leaseId: "lease-1", leaseGeneration: 1, leaseState: ComputerLeaseStates.Active },
+				metadata: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", leaseId: "lease-1", leaseGeneration: "1", leaseState: ComputerLeaseStates.Active },
 			}],
 		});
 		await expect(history.append(_AppendCommand({ expectedRevision: HistoryExpectedRevisions.NoStream }))).rejects.toThrow("stale expected revision");

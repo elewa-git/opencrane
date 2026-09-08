@@ -51,13 +51,24 @@ function _Fixture()
 	const agents = { resolve: vi.fn(async () => ({ agentServiceId: "company", agentRevisionId: "revision", agentIdentityId: "managed-company", principalId: "company-principal", name: "Company assistant", workloadProfile: "standard", profileRevisionId: "profile" })) };
 	const workflows = { spawn: vi.fn(async () => ({ taskId: "task", taskName: "task", idempotencyKey: "key" })) };
 	const participantHistory = { read: vi.fn(async () => state.sourceVisible ? { entries: [{ id: _SOURCE, position: "5", kind: "message", state: "completed", blocks: [{ kind: "text", payloadRef: "source" }], author: { kind: "human", principalId: state.sourceAuthor, participantId: "subject" }, visibility: { audience: state.sourceAudience } }], payloads: { source: "Visible group request" }, nextPosition: "5", computer: null } : null) };
-	const lifecycle = new PrismaGroupChildLifecycleUnitOfWork(prisma as never, histories as never, cipher, agents, workflows, participantHistory as never);
-	return { lifecycle, state, transaction, histories, workflows, participantHistory, agents };
+	const logger = { warn: vi.fn() };
+	const lifecycle = new PrismaGroupChildLifecycleUnitOfWork(prisma as never, histories as never, cipher, agents, workflows, participantHistory as never, logger);
+	return { lifecycle, state, transaction, histories, workflows, participantHistory, agents, logger };
 }
 
 describe("shared group child lifecycle", () =>
 {
 	beforeEach(() => { vi.clearAllMocks(); _authorization.canAccess.mockResolvedValue(true); _authorization.isCurrentlyEligible.mockResolvedValue(true); _authorization.admit.mockResolvedValue(true); });
+	it("records the failed creation stage without copying upstream text or credentials", async () =>
+	{
+		const f = _Fixture();
+		await f.lifecycle.create(_CALLER, "parent", _COMMAND);
+		f.histories.establish.mockRejectedValueOnce(Object.assign(new Error("private upstream response"), { token: "private credential" }));
+		await expect(f.lifecycle.run({ siloId: "silo", requestId: f.state.request.id })).rejects.toThrow("dependency is unavailable");
+		expect(f.logger.warn).toHaveBeenCalledWith({ err: { type: "Error", message: "Conversation history operation failed" }, errorType: "Error", siloId: "silo", requestId: f.state.request.id, stage: "history_establishment", attempt: 1 }, "Group child creation unavailable");
+		expect(JSON.stringify(f.logger.warn.mock.calls)).not.toContain("private");
+		expect(f.state.request.state).toBe("Pending");
+	});
 	it("commits one immutable command with its workflow and recovers a lost response without another request", async () =>
 	{
 		const f = _Fixture();

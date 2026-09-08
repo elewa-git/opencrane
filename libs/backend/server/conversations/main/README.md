@@ -39,6 +39,10 @@ positions, or reconciling grants. The serializable transaction retries only prov
 Genesis verification reads only the first history record with a ten-second timeout. A timeout leaves
 the same command safe to retry and cannot make existing messages part of creation verification.
 
+Computer history uses the same metadata shape on write and read: strings for present coordinates,
+and no lease fields while the computer has no lease. The typed snapshot retains numeric generations
+and a nullable lease; the reader checks those values against the stored metadata before activation.
+
 Personal-session creation requires the same client UUID contract. Retrying that command returns the same session,
 even after its computer has started; a new UUID creates another conversation and computer for the
 same personal assistant identity. Reusing a key with a different assistant is rejected. Recovering
@@ -56,7 +60,8 @@ Creation returns a pending request. PostgreSQL stores only the immutable command
 selected service and audience, together with its durable recovery task. The worker establishes the
 child's Kurrent history and cold computer before creating its read projection. It then encrypts a
 copy of the selected text and commits the child message together with its activation request.
-Only that completed sequence makes the child ready. Retries verify the same origin, preserve
+Failure logs identify the creation stage and recognized error code without copying the upstream
+exception, user text or credentials. Only that completed sequence makes the child ready. Retries verify the same origin, preserve
 existing grants and ciphertext, and do not reactivate the same message. Revoked authority closes the
 request; exhausted dependency retries report unavailable. The list returns the latest 100 admitted requests. A new run still requires an active,
 Pod-bound lease and the selected company's current execution authority.

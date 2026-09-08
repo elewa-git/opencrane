@@ -43,17 +43,19 @@ do not publish an application.
 
 ## Still to prove live
 
-The test installation has verified real identity-provider login through its API, invitation
-admission, completed guided onboarding for three users, provider configuration and a three-person
-group with durable ordered messages and idempotent retries. Company-assistant setup and its
-administrator checks also pass. These results are recorded against the tested application revision
-in the ledger. Assistant conversations exposed a deployment-profile mismatch and a missing execution
-path for standalone membership; those repairs still need complete live proof. Browser login
-completion, personal model answers, company-assistant child answers, reviewed sharing, reconnect,
-access changes, recovery and computer actions still need their complete live journeys.
-Tool, memory and shared-work journeys need
-their own live evidence as they become available. KurrentDB backup and restore also need a real
-drill and measured recovery time.
+The test installation has verified real identity-provider login, invitation admission, provider
+configuration and a three-person group with durable ordered messages and idempotent retries.
+Five test employees have completed guided onboarding. After deploying the profile and standalone
+membership repairs, a fresh employee signed in with a password in a real browser and reached the
+chat workspace with their assistant ready. Company-assistant discovery, administrator checks and
+child-request admission also pass, including audience isolation and retry checks.
+
+Personal and child conversation creation then exposed a computer-history metadata mismatch.
+The runtime also encountered a Kubernetes naming limit. Both have source repairs; complete model
+answers, reviewed sharing and reconnect remain pending on the corrected installation. Access
+changes, recovery and computer actions need their complete live journeys. Tool, memory and
+shared-work journeys need their own evidence as they become available. Both history restore
+modes still need a completed product fixture and measured recovery time.
 
 Component tests, a chart render or a healthy process do not establish those complete journeys.
 Conversely, a pending live drill does not make already implemented code unfinished. Deployment

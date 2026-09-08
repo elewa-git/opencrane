@@ -1,7 +1,9 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Logger } from "@opencrane/backend/observability";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { WorkflowTaskRetryableError, type IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
 import type { ConversationPrivatePayloadCipher } from "./conversation-private-payload.types";
 import type { GroupChildAgentResolver, GroupChildCreateCommand, GroupChildTaskInput, GroupChildView, GroupChildLifecyclePort, GroupChildRequest } from "./group-child.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
@@ -18,7 +20,7 @@ import { GROUP_CHILD_TASK } from "./group-child-task";
 /** Resumes admitted cold creation without placing history effects inside database rollback retries. */
 export class PrismaGroupChildLifecycleUnitOfWork implements GroupChildLifecyclePort
 {
-	public constructor(private readonly prisma: PrismaClient, private readonly histories: GroupChildHistory, private readonly cipher: ConversationPrivatePayloadCipher, private readonly agents: GroupChildAgentResolver<Prisma.TransactionClient>, private readonly workflows: Pick<IWorkflowEngine, "spawn">, private readonly participantHistory: Pick<SelfConversationHistoryAuthority, "read">) {}
+	public constructor(private readonly prisma: PrismaClient, private readonly histories: GroupChildHistory, private readonly cipher: ConversationPrivatePayloadCipher, private readonly agents: GroupChildAgentResolver<Prisma.TransactionClient>, private readonly workflows: Pick<IWorkflowEngine, "spawn">, private readonly participantHistory: Pick<SelfConversationHistoryAuthority, "read">, private readonly logger: Pick<Logger, "warn">) {}
 
 	/** Binds one caller UUID to an exact own group message and a currently admitted shared audience. */
 	public async create(caller: ConversationCaller, parentId: string, command: GroupChildCreateCommand): Promise<GroupChildView | null>
@@ -45,24 +47,33 @@ export class PrismaGroupChildLifecycleUnitOfWork implements GroupChildLifecycleP
 		const request = await this._transaction(repository => repository.find(input.requestId));
 		if (request === null || request.siloId !== input.siloId || request.state !== "Pending")
 			return;
+		let stage = "current_authority";
 		try
 		{
 			if (!await this._transaction(repository => repository.current(request)))
 				return this._unavailable(request);
+			stage = "history_establishment";
 			await this.histories.establish(request);
+			stage = "projection";
 			if (!await this._transaction(repository => repository.project(request)))
 				return this._unavailable(request);
+			stage = "source_read";
 			const source = await _ReadGroupChildSource(this.participantHistory, _GroupChildCaller(request), request.parentConversationId, request.parentMessageId, request.parentMessagePosition);
 			if (source === null || source.entry.author.kind !== "human" || source.entry.author.principalId !== request.requestedByPrincipalId || source.entry.author.participantId !== request.requesterSubjectId || source.entry.visibility.audience !== "conversation")
 				return this._unavailable(request);
+			stage = "input_admission";
 			const payload = await this._transaction(repository => repository.prepareInput(request, source.text));
 			if (payload === null || !await this._transaction(repository => repository.current(request)))
 				return this._unavailable(request);
+			stage = "activation";
 			await this.histories.activate(request, source.entry, payload);
+			stage = "completion";
 			await this._transaction(async repository => repository.setState(request, await repository.current(request) ? "Ready" : "Unavailable"));
 		}
 		catch (error)
 		{
+			const diagnostic = _ConversationFailureDiagnostic(error);
+			this.logger.warn({ err: diagnostic, errorType: diagnostic.type, siloId: request.siloId, requestId: request.id, stage, attempt }, "Group child creation unavailable");
 			if (error instanceof GroupChildConflictError || attempt >= GROUP_CHILD_TASK.retryPolicy!.maximumAttempts)
 				return this._unavailable(request);
 			throw new WorkflowTaskRetryableError("Group child creation dependency is unavailable");

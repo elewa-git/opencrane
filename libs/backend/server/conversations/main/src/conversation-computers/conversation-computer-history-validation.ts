@@ -43,7 +43,9 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 	if (!_UUID_PATTERN.test(event.id))
 		throw new Error("Conversation computer history received an event with an invalid identifier");
 	const snapshot = _ValidatedConversationComputerSnapshot(event.data);
-	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== (snapshot.lease?.id ?? null) || event.metadata.leaseGeneration !== (snapshot.lease?.generation ?? null) || event.metadata.leaseState !== (snapshot.lease?.state ?? null))
+	// KurrentDB stores a string map: a lease-free computer omits all three lease coordinates.
+	const leaseGeneration = snapshot.lease === null ? undefined : String(snapshot.lease.generation);
+	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== snapshot.lease?.id || event.metadata.leaseGeneration !== leaseGeneration || event.metadata.leaseState !== snapshot.lease?.state)
 		throw new Error("Conversation computer history received an event that does not match its envelope");
 	if (snapshot.computer.siloId !== command.computer.siloId)
 		throw new Error("Conversation computer history received a computer from a different silo");

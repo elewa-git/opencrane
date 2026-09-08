@@ -1,15 +1,14 @@
 import { Router, type Request } from "express";
 import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
 
-import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, type ConversationMessageCommand, type SelfConversationHistoryDiagnosticError, type SelfConversationHistoryRouterDependencies } from "./self-conversation-history.types";
+import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, type ConversationMessageCommand, type SelfConversationHistoryRouterDependencies } from "./self-conversation-history.types";
+import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
 import { _CreateSelfConversationEventsHandler } from "./self-conversation-events";
 
 /** UUID syntax accepted for browser message retry keys. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** Nonnegative decimal cursor accepted without normalization ambiguity. */
 const _POSITION_PATTERN = /^(0|[1-9][0-9]*)$/;
-/** Recognizes Prisma's documented error classes across its CommonJS and ESM runtime copies. */
-const _PRISMA_ERROR_TYPES = ["PrismaClientValidationError", "PrismaClientInitializationError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientRustPanicError"] as const;
 
 /** Creates the authenticated participant KurrentDB history and message router. */
 export function _CreateSelfConversationHistoryRouter(dependencies: SelfConversationHistoryRouterDependencies): Router
@@ -52,7 +51,7 @@ async function _HandleRead(request: Request, response: import("express").Respons
 		catch (error)
 		{
 			___MarkActiveSpanFailed();
-			const diagnostic = _DiagnosticError(error);
+			const diagnostic = _ConversationFailureDiagnostic(error);
 			dependencies.logger.warn({ err: diagnostic, errorType: diagnostic.type, siloId: caller.siloId, principalId: caller.principalId }, "Conversation history read unavailable");
 			response.status(503).json({ error: "conversation_history_unavailable" });
 		}
@@ -95,45 +94,11 @@ async function _HandlePost(request: Request, response: import("express").Respons
 				return;
 			}
 			___MarkActiveSpanFailed();
-			const diagnostic = _DiagnosticError(error);
+			const diagnostic = _ConversationFailureDiagnostic(error);
 			dependencies.logger.warn({ err: diagnostic, errorType: diagnostic.type, siloId: caller.siloId, principalId: caller.principalId }, "Conversation message post unavailable");
 			response.status(503).json({ error: "conversation_history_unavailable" });
 		}
 	});
-}
-
-/** Copies recognized diagnostic codes while leaving error text, causes, names, and metadata behind. */
-function _DiagnosticError(error: unknown): SelfConversationHistoryDiagnosticError
-{
-	const type = _ErrorType(error);
-	const diagnostic = { type, message: "Conversation history operation failed" };
-	if (!(error instanceof Error))
-		return diagnostic;
-	const codeProperty = type === "PrismaClientInitializationError" ? "errorCode" : "code";
-	const code: unknown = Object.getOwnPropertyDescriptor(error, codeProperty)?.value;
-	if (typeof code === "number" && Number.isInteger(code) && code >= 0 && code <= 599)
-		return { ...diagnostic, code };
-	if (typeof code === "string" && (/^P[0-9]{4}$/.test(code) || ["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN"].includes(code)))
-		return { ...diagnostic, code };
-	return diagnostic;
-}
-
-/** Selects an allowlisted Prisma name or standard JavaScript class without copying arbitrary text. */
-function _ErrorType(error: unknown): string
-{
-	if (!(error instanceof Error))
-		return "unknown";
-	const name: unknown = Object.getOwnPropertyDescriptor(error, "name")?.value;
-	const prismaType = _PRISMA_ERROR_TYPES.find(knownType => knownType === name);
-	if (prismaType !== undefined)
-		return prismaType;
-	if (error instanceof TypeError)
-		return "TypeError";
-	if (error instanceof RangeError)
-		return "RangeError";
-	if (error instanceof SyntaxError)
-		return "SyntaxError";
-	return "Error";
 }
 
 /** Parses an optional exclusive decimal cursor and distinguishes omission from malformed input. */

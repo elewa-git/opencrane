@@ -1,22 +1,24 @@
 import { Router } from "express";
+import type { Logger } from "@opencrane/backend/observability";
+import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
 import type { ConversationCallerResolver } from "./self-conversation-history.types";
 import type { ConversationMetadataAuthority } from "./conversation-metadata.types";
 
 /** Creates projection-only directory, list, detail, create, archive, and close routes. */
-export function _CreateConversationMetadataRouter(authority: ConversationMetadataAuthority, resolveCaller: ConversationCallerResolver): Router
+export function _CreateConversationMetadataRouter(authority: ConversationMetadataAuthority, resolveCaller: ConversationCallerResolver, logger: Pick<Logger, "warn">): Router
 {
 	const router = Router();
-	router.get("/directory", function _Directory(request, response) { void _Handle(request, response, resolveCaller, async function _Run(caller) { response.json({ directory: await authority.directory(caller) }); }); });
-	router.get("/", function _List(request, response) { void _Handle(request, response, resolveCaller, async function _Run(caller) { response.json({ conversations: await authority.list(caller, request.query["includeArchived"] === "true") }); }); });
-	router.get("/:conversationId", function _Open(request, response) { void _Handle(request, response, resolveCaller, async function _Run(caller) { _Respond(response, await authority.open(caller, _Id(request.params["conversationId"])), 200); }); });
-	router.post("/", function _Create(request, response) { void _Handle(request, response, resolveCaller, async function _Run(caller) { _Respond(response, await authority.create(caller, request.body), 201); }); });
-	router.patch("/:conversationId/archive", function _Archive(request, response) { void _Handle(request, response, resolveCaller, async function _Run(caller) { await _ArchiveConversation(request, response, authority, caller); }); });
-	router.post("/:conversationId/close", function _Close(request, response) { void _Handle(request, response, resolveCaller, async function _Run(caller) { _Respond(response, await authority.close(caller, _Id(request.params["conversationId"])), 200); }); });
+	router.get("/directory", function _Directory(request, response) { void _Handle(request, response, resolveCaller, logger, async function _Run(caller) { response.json({ directory: await authority.directory(caller) }); }); });
+	router.get("/", function _List(request, response) { void _Handle(request, response, resolveCaller, logger, async function _Run(caller) { response.json({ conversations: await authority.list(caller, request.query["includeArchived"] === "true") }); }); });
+	router.get("/:conversationId", function _Open(request, response) { void _Handle(request, response, resolveCaller, logger, async function _Run(caller) { _Respond(response, await authority.open(caller, _Id(request.params["conversationId"])), 200); }); });
+	router.post("/", function _Create(request, response) { void _Handle(request, response, resolveCaller, logger, async function _Run(caller) { _Respond(response, await authority.create(caller, request.body), 201); }); });
+	router.patch("/:conversationId/archive", function _Archive(request, response) { void _Handle(request, response, resolveCaller, logger, async function _Run(caller) { await _ArchiveConversation(request, response, authority, caller); }); });
+	router.post("/:conversationId/close", function _Close(request, response) { void _Handle(request, response, resolveCaller, logger, async function _Run(caller) { _Respond(response, await authority.close(caller, _Id(request.params["conversationId"])), 200); }); });
 	return router;
 }
 
 /** Applies trusted caller resolution and one bounded unavailable response. */
-async function _Handle(request: import("express").Request, response: import("express").Response, resolveCaller: ConversationCallerResolver, work: (caller: NonNullable<ReturnType<ConversationCallerResolver>>) => Promise<void>): Promise<void>
+async function _Handle(request: import("express").Request, response: import("express").Response, resolveCaller: ConversationCallerResolver, logger: Pick<Logger, "warn">, work: (caller: NonNullable<ReturnType<ConversationCallerResolver>>) => Promise<void>): Promise<void>
 {
 	const caller = resolveCaller(request);
 	if (caller === null)
@@ -25,7 +27,12 @@ async function _Handle(request: import("express").Request, response: import("exp
 		return;
 	}
 	try { await work(caller); }
-	catch { response.status(503).json({ error: "conversation_authority_unavailable" }); }
+	catch (error)
+	{
+		const diagnostic = _ConversationFailureDiagnostic(error);
+		logger.warn({ err: diagnostic, errorType: diagnostic.type, siloId: caller.siloId, operation: request.route.path, method: request.method }, "Conversation metadata operation unavailable");
+		response.status(503).json({ error: "conversation_authority_unavailable" });
+	}
 }
 
 /** Validates and applies one archive state change. */

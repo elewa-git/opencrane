@@ -35,7 +35,7 @@ export class GroupChildHistory
 		const computerStreamName = `conversation-computer-${request.computerId}`;
 		try
 		{
-			await this.store.appendAtomic({ expectedHeads: [{ streamName: conversation.streamName, revision: HistoryExpectedRevisions.NoStream }, { streamName: computerStreamName, revision: HistoryExpectedRevisions.NoStream }], appends: [conversation, { streamName: computerStreamName, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: _DeterministicUuid("group-child-computer", request.id), type: "opencrane.conversation-computer.v1", data: { computer, lease: null }, metadata: { siloId: request.siloId, computerId: request.computerId, conversationId: request.childConversationId, agentIdentityId: request.agentIdentityId, profileRevisionId: request.profileRevisionId, leaseId: null, leaseGeneration: null, leaseState: null } }] }] });
+			await this.store.appendAtomic({ expectedHeads: [{ streamName: conversation.streamName, revision: HistoryExpectedRevisions.NoStream }, { streamName: computerStreamName, revision: HistoryExpectedRevisions.NoStream }], appends: [conversation, { streamName: computerStreamName, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: _DeterministicUuid("group-child-computer", request.id), type: "opencrane.conversation-computer.v1", data: { computer, lease: null }, metadata: { siloId: request.siloId, computerId: request.computerId, conversationId: request.childConversationId, agentIdentityId: request.agentIdentityId, profileRevisionId: request.profileRevisionId } }] }] });
 		}
 		catch (error)
 		{

@@ -821,3 +821,45 @@ Full run reports belong in the corresponding pull request or issue.
   mismatched personal services, issue invented Fleet signatures, alter the schema or establish
   a completed model reply. Publish and deploy the reviewed source before completing the two fresh
   personal setups and the company child journey; capture that fixture before either recovery drill.
+
+## 2026-09-08 · testv5 · browser onboarding and assistant creation diagnosis · PARTIAL
+
+- source and CI: `997dcda70950d5403545a93e1d5b9a3836d5d958`; both the
+  [PR run 34199835273](https://github.com/elewa-git/opencrane/actions/runs/34199835273) and
+  [publication run 34199880088](https://github.com/elewa-git/opencrane/actions/runs/34199880088)
+  succeeded. All 13 application images were published; seven deployed application image digests
+  were verified against this source. The manual run compared against its unqualified checker-only
+  parent `058681656`, exposing a separate cumulative-comparison defect; its green status does not
+  turn that parent into a qualified baseline.
+- deployment: the authorised app-owned install ran 07:45:58.398–07:49:55.903 UTC (237.505 seconds),
+  Helm revision 7. Server Ready was observed at 07:49:30 and public TLS health at 07:49:43.303.
+  At 07:51:18, all 11 application/support Pods were Ready without restarts. These are repair
+  timings; the retained database and bootstrap Job do not establish a fresh-install RTO.
+- identity and onboarding: five dedicated test accounts renewed real OIDC login between 07:50:55
+  and 07:51:21. Fresh colleague D completed browser password sign-in and saved guided onboarding
+  at 07:51:54–07:52:07, reaching `/chats` with “My sessions” and “Welcome to OpenCrane”. The browser
+  verified the completed persona and ready personal assistant. Colleague E completed onboarding
+  through the authenticated API at 07:53:57. Passwords stayed in-process in the isolated browser;
+  no clipboard transfer, fabricated session or direct membership write was used.
+- company journey: discovery passed for the original three group members at 07:56:45, while the
+  two outside colleagues remained excluded. Administrator and retry checks passed. At 07:56:50,
+  the product admitted one child request, recovered its exact retry, rejected changed source with
+  409 and another member's replay with 404. The request later became unavailable after exhausting
+  dependency retries; no child reply or reviewed return is claimed.
+- codebase finding: personal creation returned 503 at 07:53:59. Read-only KurrentDB inspection
+  proves that the child genesis and cold computer were committed. The adapter omits null metadata
+  and writes numeric metadata as strings, while the computer reader required explicit nulls and a
+  numeric generation. This rejects both cold and active computer records. The source repair makes
+  all computer writers and readers use one canonical metadata shape and preserves strict envelope
+  rejection. Regressions reproduce the original failure and exercise the adapter round trip.
+- diagnostics: creation routes and the durable child worker now use the existing safe diagnostic
+  contract; worker failures identify the failed stage without logging upstream text, credentials
+  or user content. Public error bodies remain fixed. Source review and deployment follow below.
+- runtime finding: Sandbox `developer-pool-dvkgf` could not create a Pod because its review-volume
+  name generated a 70-byte gVisor annotation name. Independently reviewed commit `3d90607b0`
+  shortens only the internal volume name, producing 47 bytes while retaining the credential path
+  and memory-backed storage. Focused Nx/Helm checks pass; live Pod creation remains to be proved.
+- backup observation: scheduled Job `29814230` waited for node placement from 07:50:00 to 07:54:17
+  and completed at 07:54:30. The archive and KurrentDB volumes require same-node placement; the
+  node was near its requested-memory limit. This was a 257-second scheduling delay, not a failed
+  copy or a measured restore. Neither data-bearing recovery mode is qualified yet.

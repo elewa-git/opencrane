@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Logger } from "@opencrane/backend/observability";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { ConversationPrivatePayloadCipher } from "./conversation-private-payload.types";
@@ -15,10 +16,10 @@ export class PrismaGroupChildAuthority implements GroupChildAuthority
 {
 	private readonly lifecycle: PrismaGroupChildLifecycleUnitOfWork;
 	private readonly sharing: PrismaGroupChildShareUnitOfWork;
-	public constructor(prisma: PrismaClient, history: Pick<HistoryStore, "readStream" | "readHead" | "append" | "appendAtomic">, cipher: ConversationPrivatePayloadCipher, agents: GroupChildAgentResolver<Prisma.TransactionClient>, workflows: Pick<IWorkflowEngine, "spawn">, participantHistory: Pick<SelfConversationHistoryAuthority, "read">)
+	public constructor(prisma: PrismaClient, history: Pick<HistoryStore, "readStream" | "readHead" | "append" | "appendAtomic">, cipher: ConversationPrivatePayloadCipher, agents: GroupChildAgentResolver<Prisma.TransactionClient>, workflows: Pick<IWorkflowEngine, "spawn">, participantHistory: Pick<SelfConversationHistoryAuthority, "read">, logger: Pick<Logger, "warn">)
 	{
 		const writer = new ConversationHistoryAuthority(history);
-		this.lifecycle = new PrismaGroupChildLifecycleUnitOfWork(prisma, new GroupChildHistory(history, writer), cipher, agents, workflows, participantHistory);
+		this.lifecycle = new PrismaGroupChildLifecycleUnitOfWork(prisma, new GroupChildHistory(history, writer), cipher, agents, workflows, participantHistory, logger);
 		this.sharing = new PrismaGroupChildShareUnitOfWork(prisma, history, cipher, participantHistory, agents, workflows, writer);
 	}
 	/** Admits one exact selected group request. */
