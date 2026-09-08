@@ -50,9 +50,31 @@ grep -Fq '            - name: OPENCRANE_PREVIEW_PORTS' <<<"$template"
 grep -Fq '              value: "3000,4173,4200,5173,8000"' <<<"$template"
 grep -Fq '            - name: OPENCRANE_REVIEW_CREDENTIAL_PATH' <<<"$template"
 grep -Fq '              value: /var/run/opencrane/review/credential' <<<"$template"
-grep -Fq '            - name: opencrane-conversation-review-credential' <<<"$template"
+grep -Fq '            - name: review-credential' <<<"$template"
 grep -Fq '              mountPath: /var/run/opencrane/review' <<<"$template"
 grep -Fq '            medium: Memory' <<<"$template"
+# gVisor includes emptyDir volume names in annotation keys, whose name portion must fit 63 bytes.
+# @see https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/#syntax-and-character-set
+SANDBOX_RENDERED_TEMPLATE="$template" node <<'NODE'
+const assert = require("node:assert/strict");
+const YAML = require("yaml");
+const pod = YAML.parse(process.env.SANDBOX_RENDERED_TEMPLATE).spec.podTemplate.spec;
+const reviewMount = pod.containers.find(container => container.name === "conversation-computer")
+  .volumeMounts.find(mount => mount.mountPath === "/var/run/opencrane/review");
+assert.ok(reviewMount, "The review credential directory must stay mounted");
+const reviewVolume = pod.volumes.find(volume => volume.name === reviewMount.name);
+assert.deepEqual(reviewVolume?.emptyDir, { medium: "Memory", sizeLimit: "1Mi" },
+  "The review credential must remain on the matching memory-backed volume");
+const emptyDirs = pod.volumes.filter(volume => volume.emptyDir !== undefined);
+assert.ok(emptyDirs.length > 0, "The rendered profile must contain its ephemeral volumes");
+for (const volume of emptyDirs) {
+  for (const suffix of ["options", "share", "type"]) {
+    const annotationName = `dev.gvisor.spec.mount.${volume.name}.${suffix}`;
+    assert.ok(Buffer.byteLength(annotationName, "utf8") <= 63,
+      `Generated gVisor annotation name exceeds 63 bytes: ${annotationName}`);
+  }
+}
+NODE
 grep -Fq '            - name: opencrane-conversation-workspace' <<<"$template"
 grep -Fq '          emptyDir:' <<<"$template"
 grep -Fq '            sizeLimit: 2Gi' <<<"$template"

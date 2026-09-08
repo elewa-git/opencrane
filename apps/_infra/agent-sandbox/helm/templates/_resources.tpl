@@ -287,7 +287,7 @@ spec:
             - name: opencrane-conversation-computer-identity
               mountPath: /var/run/secrets/opencrane
               readOnly: true
-            - name: opencrane-conversation-review-credential
+            - name: review-credential
               mountPath: /var/run/opencrane/review
             - name: opencrane-conversation-workspace
               mountPath: /workspace
@@ -312,7 +312,7 @@ spec:
         - name: opencrane-conversation-workspace
           emptyDir:
             sizeLimit: 2Gi
-        - name: opencrane-conversation-review-credential
+        - name: review-credential
           emptyDir:
             medium: Memory
             sizeLimit: 1Mi

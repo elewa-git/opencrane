@@ -31,6 +31,12 @@ claim shape, forbids claim environment variables and volume claims, limits dynam
 those three values, and denies every spec update. A mistake therefore denies a computer activation
 instead of widening its Pod profile.
 
+The review credential uses the memory-backed `review-credential` volume at
+`/var/run/opencrane/review`. Empty-directory volume names stay short enough for the gVisor mount
+annotation keys generated from them. The rendered contract checks the Kubernetes 63-byte name
+limit as well as the mount and its memory-backed storage, so an overlong internal name or a
+mismatched credential mount fails validation before deployment.
+
 ## Public surface
 
 `helm/templates/_resources.tpl` exports `opencrane.agentSandbox.resources`, which the silo umbrella
