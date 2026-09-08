@@ -57,3 +57,6 @@ export { ___AuthMiddleware } from "./auth-middleware";
 export * from "./per-org-client";
 export type * from "./per-org-client.types";
 export * from "./request-silo";
+
+export { PrismaOidcSessionUnitOfWork } from "./prisma-oidc-session-repository";
+export type { OidcSessionRepository } from "./oidc-session-repository.types";

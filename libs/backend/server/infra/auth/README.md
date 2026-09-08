@@ -1,4 +1,4 @@
-# @opencrane/backend/server/infra/auth — OIDC login and authorization substrate
+# @opencrane/backend/server/infra/auth — browser sign-in and session storage
 
 > [backend](../../../README.md) › [server](../../README.md) › [infra](../README.md) › auth
 
@@ -8,6 +8,8 @@ This library answers, for every incoming HTTP request, **"who is this?"** — th
 identity-admission layer the OpenCrane server sits behind. It uses **OIDC** (OpenID Connect,
 the standard sign-in protocol where an external identity provider vouches for a user) and keeps a
 **session** (the server-remembered fact that a browser has logged in, carried in a cookie).
+Encrypted PostgreSQL sessions let people stay signed in when a server is replaced or a request
+reaches another server. The cookie contains a signed identifier, never the stored identity or tokens.
 
 It is the first runtime seam every protected request passes through:
 
@@ -48,6 +50,8 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
   Subclasses may declare a post-login admission failure fatal when silently continuing would present
   a signed-in user with false onboarding state. Fatal failures destroy the freshly regenerated
   session before returning the callback error; optional projection work remains best-effort.
+- `PrismaOidcSessionUnitOfWork` and `OidcSessionRepository` — encrypted browser-session storage,
+  current-revision saves, logout markers and bounded expiry cleanup.
 - Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOwnedOrgSummaries`,
   `OwnedOrgSummaryFacts`, `OwnedOrgSummaryRepository`, and `PrismaOwnedOrgSummaryRepository`.
 - `_ResolveRequestPrincipal`, `RequestPrincipal` — expose the admitted local Principal and
@@ -63,7 +67,7 @@ establishes *who* the caller is; all product permission decisions belong to the 
 authorization authority. Backend routers map `RequestPrincipal` into their own caller
 contracts, keeping this package independent of business types. It reads config, sessions,
 organisation membership, and (optionally) tokens. Its mounted-key source knows only how to reload public material; the consuming
-backend authority decides what that key is trusted to verify. It owns no business tables of its own.
+backend authority decides what that key is trusted to verify. It owns no business authorization tables of its own; its technical session table stores login state.
 
 `isPlatformOperator` survives only as a fleet identity-plane claim used by
 `IdentityAuthority.authenticate` and operator-facing introspection. It never grants a product
@@ -78,10 +82,26 @@ Tagged `scope:auth` (`layer:infra`): it may depend only on `scope:auth`, `scope:
 ## Data & persistence
 
 `PrismaOwnedOrgSummaryRepository` reads the verified subject's `OrgMembership` rows and projects
-owner and administrator labels for `/auth/me`; that summary never authorizes a route. This package
-owns neither the model nor its schema or migrations; clean-database setup stays with the target
-baseline under `apps/opencrane/prisma`. Repository failures propagate so callers do not confuse an
+owner and administrator labels for `/auth/me`; that summary never authorizes a route. This package does not own the membership model. Its own `OidcSession` model lives in
+`prisma/schema/oidc-sessions.prisma`; installation uses the reviewed fresh target baseline. Repository failures propagate so callers do not confuse an
 unavailable summary source with a successful empty result.
+
+## Runtime & config
+
+OIDC requires the persistent repository and a stable `OIDC_SESSION_SECRET` with at least 32 bytes.
+Use a randomly generated secret and preserve it across replicas and replacement. A purpose-separated
+key encrypts ID tokens, PKCE state and identity fields; replacing the secret invalidates sessions.
+`OIDC_SESSION_MAX_AGE_SECONDS` defaults to 12 hours and must be positive and at most seven days.
+A new identifier freezes its deadline. Configuration changes affect new identifiers; existing
+ones retain their original deadline so another replica can still log them out. Anonymous sign-in flows last
+at most ten minutes; authenticated sessions also stop at verified ID-token expiry. Cookie touch
+never extends server-side validity. Reads still run the current membership and host/issuer checks.
+
+Logout clears the encrypted content and retains a marker through identifier expiry plus the supported
+60-second maximum clock difference between replicas. A delayed first save or stale revision cannot
+restore it. Active servers prune at most 100 expired identifiers per minute through the existing
+database; idle servers need no background timer. A database outage
+fails session reads and writes rather than falling back to local memory.
 
 ## See also
 

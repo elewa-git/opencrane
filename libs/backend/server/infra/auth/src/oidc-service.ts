@@ -14,6 +14,7 @@ import { ___BuildOidcEndSessionUrl } from "./oidc-logout";
 import { ___CreateOidcSessionMiddleware } from "./oidc-session-middleware";
 import { _buildCurrentUrl, _buildRedirectUri, _destroySession, _regenerateSession, _sanitizeReturnTo, _saveSession } from "./session";
 import type { AuthUser } from "./session.types";
+import type { OidcSessionRepository } from "./oidc-session-repository.types";
 
 export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types";
 
@@ -105,33 +106,19 @@ export abstract class OidcAuthServiceBase
   }
 
   /**
-   * Build the two Express handlers the login flow needs: the session itself and a CSRF
-   * check over it.
-   *
-   * Mount them together, in this order, by spreading the array into `app.use`:
-   *   1. `express-session` — creates the cookie-backed session.
-   *   2. CSRF origin check — for a request that changes state AND comes from a caller with
-   *      a session, compare the `Origin` header (or `Referer` when `Origin` is missing)
-   *      against the host the request arrived on, and reject with 403 when they differ.
-   *      Skipped for GET/HEAD/OPTIONS and for callers with no `authUser`, because a
-   *      request that carries no session cookie cannot be a cross-site request that
-   *      abuses one.
-   *
-   * When OIDC is disabled the array holds a single pass-through handler, so an app can
-   * mount this unconditionally.
+   * Mounts persistent session handling before same-origin CSRF checks.
+   * OIDC requires the database repository; disabled authentication returns a pass-through handler.
+   * Spread the returned handlers into Express in their given order, before protected routes.
    *
    * Called by: apps/opencrane/src/app/public-app.ts.
-   *
-   * @returns Two handlers, in mount order; never empty.
-   * @see https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
-   *      — the Origin/Referer check this implements, and why it is paired with a
-   *      SameSite cookie rather than relied on alone.
-   * @see https://www.rfc-editor.org/rfc/rfc6265 — the cookie attributes set below
-   *      (`HttpOnly`, `Secure`, `Max-Age`).
+   * @param repository - Persists encrypted browser sessions; required when OIDC is enabled.
+   * @returns Session and CSRF handlers when enabled, or one pass-through handler when disabled.
+   * @throws When enabled without persistent storage or with invalid secret/lifetime settings.
+   * @see ___CreateOidcSessionMiddleware for cookie attributes and Origin/Referer handling.
    */
-  createSessionMiddleware(): RequestHandler[]
+  createSessionMiddleware(repository?: OidcSessionRepository): RequestHandler[]
   {
-    return ___CreateOidcSessionMiddleware(this.config);
+    return ___CreateOidcSessionMiddleware(this.config, repository);
   }
 
   /**

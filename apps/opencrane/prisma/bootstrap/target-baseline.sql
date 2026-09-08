@@ -1207,6 +1207,18 @@ CREATE TABLE "model_routing_defaults" (
 );
 
 -- CreateTable
+CREATE TABLE "oidc_sessions" (
+    "namespace" VARCHAR(64) NOT NULL,
+    "id_digest" VARCHAR(64) NOT NULL,
+    "revision" INTEGER NOT NULL DEFAULT 1,
+    "payload" TEXT,
+    "valid_until" TIMESTAMP(3) NOT NULL,
+    "retain_until" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "oidc_sessions_pkey" PRIMARY KEY ("namespace","id_digest")
+);
+
+-- CreateTable
 CREATE TABLE "org_memberships" (
     "id" TEXT NOT NULL,
     "cluster_tenant" TEXT NOT NULL,
@@ -2438,6 +2450,9 @@ CREATE UNIQUE INDEX "model_routing_defaults_id_silo_id_key" ON "model_routing_de
 
 -- CreateIndex
 CREATE UNIQUE INDEX "model_routing_defaults_silo_id_scope_cluster_tenant_key" ON "model_routing_defaults"("silo_id", "scope", "cluster_tenant");
+
+-- CreateIndex
+CREATE INDEX "oidc_sessions_namespace_retain_until_idx" ON "oidc_sessions"("namespace", "retain_until");
 
 -- CreateIndex
 CREATE INDEX "org_memberships_subject_idx" ON "org_memberships"("subject");

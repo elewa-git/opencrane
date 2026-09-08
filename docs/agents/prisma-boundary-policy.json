@@ -349,6 +349,13 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/infra/auth/src/prisma-oidc-session-repository.ts",
+				"adapter": "PrismaOidcSessionRepository",
+				"contract": "OidcSessionRepository",
+				"contractImportPath": "./oidc-session-repository.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/infra/auth/src/prisma-owned-org-summary-repository.ts",
 				"adapter": "PrismaOwnedOrgSummaryRepository",
 				"contract": "OwnedOrgSummaryRepository",
@@ -1072,6 +1079,18 @@
 				"constructs": [
 					{
 						"adapter": "PrismaPromptCompilerRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/infra/auth/src/prisma-oidc-session-repository.ts",
+				"adapter": "PrismaOidcSessionUnitOfWork",
+				"contract": "OidcSessionRepository",
+				"contractImportPath": "./oidc-session-repository.types",
+				"constructs": [
+					{
+						"adapter": "PrismaOidcSessionRepository",
 						"importPath": "<same-file>"
 					}
 				]
