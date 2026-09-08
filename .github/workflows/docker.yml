@@ -30,6 +30,7 @@ on:
         default: none
         options:
           - none
+          - affected
           - bootstrap
           - artifact
           - all
@@ -105,9 +106,23 @@ jobs:
         run: npm ci
 
       - name: Select the last successful base
+        id: nx-shas
         uses: nrwl/nx-set-shas@v5
         with:
           main-branch-name: ${{ github.base_ref || github.ref_name }}
+          # Manual validation or partial publication must not advance the automatic base.
+          last-successful-event: push
+          set-environment-variables-for-job: false
+          # The next step replaces this empty-tree sentinel with an integration ancestor or fails.
+          # Without an explicit fallback, the action silently selects HEAD~1.
+          fallback-sha: 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+
+      - name: Verify the cumulative comparison base
+        env:
+          NX_CANDIDATE_BASE: ${{ steps.nx-shas.outputs.base }}
+          NX_CANDIDATE_HEAD: ${{ steps.nx-shas.outputs.head }}
+          NO_PREVIOUS_BUILD: ${{ steps.nx-shas.outputs.noPreviousBuild }}
+        run: node scripts/affected-deployables-base.mjs
 
       # The full main...develop range still drives builds, smoke selection, and publication. Diff-
       # scoped policy guards may trust the source only after this exact develop SHA passed its push

@@ -32,6 +32,14 @@ local runtime in the current task.
   baseline and authority suites, Storybook browser contracts, and k3d qualification.
 - Use the workflow's `heavy_qualification` dispatch input when an image smoke, k3d smoke, or both must
   run even though the affected graph would not select them.
+- Manual dispatch defaults to validation without publication. Select `publish_deployables: affected`
+  to publish the container owners selected by the cumulative comparison; `all` publishes every owner.
+  The comparison uses successful push evidence, never a partial or validation-only manual run. If
+  the branch has no successful push, it uses its merge-base with `origin/develop`, then `origin/main`
+  when needed. Develop falls back to main. Main without successful push evidence, or a branch with
+  no usable integration ancestor, fails preparation. This prevents the action's default `HEAD~1`
+  fallback from excluding earlier unqualified changes. All existing critical qualification gates
+  still apply. See [nx-set-shas inputs](https://github.com/nrwl/nx-set-shas/tree/v5#configuration-options).
 - Bind reported evidence to the tested commit SHA and Actions run URL. A local Docker result is not a
   substitute for the required remote job.
 

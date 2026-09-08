@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { parse } from "yaml";
 
 import {
 	selectAffectedDeployables,
@@ -14,6 +18,7 @@ import {
 	selectGuardInputsChanged,
 	selectImageSmokeProjects,
 } from "../affected-deployables.core.mjs";
+import { resolveAffectedComparisonBase } from "../affected-deployables-base.mjs";
 import { hasCompleteDevelopSmokeBaseline } from "../develop-smoke-baseline.core.mjs";
 import { hasSuccessfulDevelopValidation, selectGuardComparisonBase, selectPromotionSource } from "../promotion-guard-base.core.mjs";
 
@@ -37,6 +42,109 @@ function _DevelopSmoke()
 	const path = fileURLToPath(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url));
 	return readFileSync(path, "utf8");
 }
+
+/** Create real branch history with app changes followed by a checker-only commit. */
+function _ComparisonRepository(t)
+{
+	const cwd = mkdtempSync(join(tmpdir(), "opencrane-affected-base-"));
+	t.after(function _Cleanup() { rmSync(cwd, { recursive: true, force: true }); });
+	function git(args)
+	{
+		return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+	}
+	git(["init", "--initial-branch=feature"]);
+	git(["config", "user.email", "fixture@example.test"]);
+	git(["config", "user.name", "Affected fixture"]);
+	git(["config", "commit.gpgsign", "false"]);
+	git(["config", "core.hooksPath", "/dev/null"]);
+	writeFileSync(join(cwd, "README.md"), "integration baseline\n");
+	git(["add", "."]);
+	git(["commit", "-m", "integration baseline"]);
+	const integration = git(["rev-parse", "HEAD"]);
+	git(["update-ref", "refs/remotes/origin/main", integration]);
+	git(["update-ref", "refs/remotes/origin/develop", integration]);
+	for (const file of ["server.js", "ui.js", "checker.js"])
+	{
+		writeFileSync(join(cwd, file), `// ${file} changed.\n`);
+		git(["add", file]);
+		git(["commit", "-m", `Change ${file}`]);
+	}
+	const headSha = git(["rev-parse", "HEAD"]);
+	const candidateBase = git(["rev-parse", "HEAD~1"]);
+	return { cwd, git, integration, input: { cwd, headSha, candidateBase, noPreviousBuild: true, refName: "feature" } };
+}
+
+test("keeps cumulative app changes on a manual branch without any successful push or manual run", function _UsesIntegrationAncestry(t)
+{
+	const { cwd, git, integration, input } = _ComparisonRepository(t);
+	const environmentPath = join(cwd, "github-env");
+	const script = fileURLToPath(new URL("../affected-deployables-base.mjs", import.meta.url));
+	execFileSync(process.execPath, [script], {
+		cwd,
+		env: {
+			...process.env,
+			NX_CANDIDATE_BASE: input.candidateBase,
+			NX_CANDIDATE_HEAD: input.headSha,
+			NO_PREVIOUS_BUILD: "true",
+			GITHUB_REF_NAME: "feature",
+			GITHUB_ENV: environmentPath,
+		},
+	});
+	assert.equal(readFileSync(environmentPath, "utf8"), `NX_BASE=${integration}\nNX_HEAD=${input.headSha}\n`);
+	assert.deepEqual(git(["diff", "--name-only", integration, input.headSha]).split("\n"), ["checker.js", "server.js", "ui.js"]);
+	assert.equal(git(["diff", "--name-only", input.candidateBase, input.headSha]), "checker.js");
+});
+
+test("retains the successful push or PR ancestor and rejects a base newer than the workflow checkout", function _ChecksSelectedAncestry(t)
+{
+	const { integration, input } = _ComparisonRepository(t);
+	assert.equal(resolveAffectedComparisonBase({ ...input, noPreviousBuild: false }), input.candidateBase);
+	assert.throws(function _NewerBase() {
+		resolveAffectedComparisonBase({ ...input, noPreviousBuild: false, headSha: integration });
+	}, /not an ancestor/u);
+});
+
+test("uses main when develop has no usable integration ancestry", function _UsesMainAncestry(t)
+{
+	const { git, integration, input } = _ComparisonRepository(t);
+	git(["update-ref", "refs/remotes/origin/develop", input.headSha]);
+	assert.equal(resolveAffectedComparisonBase({ ...input, refName: "develop" }), integration);
+	assert.equal(resolveAffectedComparisonBase(input), integration);
+	git(["update-ref", "-d", "refs/remotes/origin/develop"]);
+	assert.equal(resolveAffectedComparisonBase(input), integration);
+});
+
+test("fails preparation when no successful run or integration comparison exists", function _RejectsMissingBase(t)
+{
+	const { git, input } = _ComparisonRepository(t);
+	assert.throws(function _UnqualifiedMain() {
+		resolveAffectedComparisonBase({ ...input, refName: "main" });
+	}, /No successful push or usable integration ancestor/u);
+	git(["update-ref", "-d", "refs/remotes/origin/main"]);
+	git(["update-ref", "-d", "refs/remotes/origin/develop"]);
+	assert.throws(function _MissingIntegration() {
+		resolveAffectedComparisonBase(input);
+	}, /refusing a previous-commit comparison/u);
+});
+
+test("wires a conservative fallback and explicit affected publication without trusting manual success", function _ChecksComparisonWiring()
+{
+	const workflow = parse(_Workflow());
+	const selection = workflow.on.workflow_dispatch.inputs.publish_deployables;
+	assert.equal(selection.default, "none");
+	assert.ok(selection.options.includes("affected"));
+	const steps = workflow.jobs.prepare.steps;
+	const action = steps.find(function _Action(step) { return step.uses === "nrwl/nx-set-shas@v5"; });
+	assert.equal(action.with["last-successful-event"], "push");
+	assert.equal(action.with["set-environment-variables-for-job"], false);
+	assert.equal(action.with["fallback-sha"], "4b825dc642cb6eb9a060e54bf8d69288fbee4904");
+	const comparison = steps.find(function _Comparison(step) { return step.run === "node scripts/affected-deployables-base.mjs"; });
+	assert.equal(comparison.env.NO_PREVIOUS_BUILD, "${{ steps.nx-shas.outputs.noPreviousBuild }}");
+	assert.equal(comparison.env.NX_CANDIDATE_BASE, "${{ steps.nx-shas.outputs.base }}");
+	assert.equal(comparison.env.NX_CANDIDATE_HEAD, "${{ steps.nx-shas.outputs.head }}");
+	assert.ok(steps.indexOf(comparison) > steps.indexOf(action));
+	assert.ok(steps.indexOf(comparison) < steps.findIndex(function _PolicyBase(step) { return step.id === "guard-base"; }));
+});
 
 test("selects sorted release descriptors owned by affected container apps", function _SelectsDescriptors()
 {
@@ -108,6 +216,7 @@ test("fails closed when a container target is not publishable", function _Reject
 test("uses an explicit publication set and makes manual dispatch validation-only by default", function _SelectsForcedProjects()
 {
 	assert.deepEqual(selectForcedContainerProjects("none"), []);
+	assert.equal(selectForcedContainerProjects("affected"), null);
 	assert.deepEqual(selectForcedContainerProjects("all", ["skill-authoring", "opencrane", "skill-authoring"]), ["opencrane", "skill-authoring"]);
 	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
