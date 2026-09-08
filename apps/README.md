@@ -13,7 +13,7 @@ testing on its own, it belongs in a library, not here.
 | Deployable | What it owns |
 | --- | --- |
 | [`opencrane`](./opencrane/README.md) | The organisation control plane and authenticated REST API. |
-| [`opencrane-ui`](./opencrane-ui/README.md) | The org-admin single-page app. |
+| [`opencrane-ui`](./opencrane-ui/README.md) | The browser workspace for personal assistants, team chats and organisation administration. |
 | [`conversation-computer`](./conversation-computer/README.md) | The generation-fenced process image used by Agent Sandbox. |
 | [`memory-gateway`](./memory-gateway/README.md) | The private authenticated boundary in front of Cognee. |
 | [`artifact-service`](./artifact-service/README.md) | The artifact promote-and-receipt service. |

@@ -782,3 +782,13 @@ Full run reports belong in the corresponding pull request or issue.
   signing invented fleet records or weakening the fleet verifier is not an acceptable test setup.
 - boundary: credentials, onboarding completion and human group history are proven. Personal chat
   creation, assistant answers, child sharing and both data-bearing recovery drills remain pending.
+
+- source repair: `ef6e033600327785aca3b2fee90826ddcefa29dc` passes the deployment profile through
+  initial personal-assistant publication, its recorded admission arguments and readiness checks.
+  Independent review, 374 focused tests, all three lints and the source boundary checks pass. Existing
+  mismatched services remain denied and are not rewritten; this source has not yet been deployed.
+- fresh fixtures: two additional reserved users were created in the dedicated Zitadel organisation
+  at 06:48:51–53 UTC. Both completed real password-verified OIDC login and accepted product
+  invitations, with 403 before acceptance and admission afterward. By 06:54:04, both had approved
+  personas and three saved, resumable and idempotent guided answers. Their final assistant creation
+  is deliberately pending the corrected deployment. The original three-user group is unchanged.

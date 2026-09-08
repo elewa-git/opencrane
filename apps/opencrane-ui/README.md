@@ -1,4 +1,4 @@
-# opencrane-ui — org-admin single-page app
+# opencrane-ui — the team workspace
 
 > [apps](../README.md) › opencrane-ui
 
@@ -6,10 +6,10 @@
      `project.json` name (`opencrane-ui`). It is a distinct deployable from the backend
      `apps/opencrane` (the server) — see the note in `apps/opencrane/README.md`. -->
 
-A **deployable app** is a thin unit that composes shared code and ships as one container. This one is
-the **org-admin web app**: the browser interface a customer's administrators use to run their slice of
-OpenCrane. It is a single-page app (SPA — the whole UI loads once, then re-renders in the browser
-without full page reloads), built with Angular.
+A **deployable app** composes shared code and ships as one container. This one is the browser
+workspace where people set up their personal assistant, talk with colleagues and ask company
+assistants to help. Administrators also manage members and tools here. It is a single-page app
+(SPA — the UI loads once, then updates without full page reloads), built with Angular.
 
 ## What it owns
 
@@ -45,8 +45,9 @@ define what it *is* as a deployable:
 **Trust posture.** The nginx here serves the static SPA and nothing else — there is deliberately no
 `proxy_pass`. The `/api` and `/gateway` paths are routed to the backend by the silo chart's Ingress, so
 the SPA and the API share one origin without this container ever proxying. Inside the app, the platform
-surface is pinned to `"org"`: capabilities derive only from the organisation-admin claim. Change
-detection is zoneless (no zone.js is bundled), and production data gateways always use the live API.
+surface is pinned to `"org"`: sign-in admits a person to the application, while administration
+controls use the server's current product-capability projection. The server checks every operation.
+Change detection is zoneless (no zone.js is bundled), and production data gateways use the live API.
 If the backend is unreachable the app refuses authenticated actions.
 
 ## Public surface

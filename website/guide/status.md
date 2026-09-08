@@ -44,11 +44,13 @@ do not publish an application.
 ## Still to prove live
 
 The test installation has verified real identity-provider login through its API, invitation
-admission, provider configuration and a three-person group with durable ordered messages and
-idempotent retries. These results are recorded against the tested application revision in the ledger.
-Browser login completion, completed onboarding, personal model answers, company-assistant child
-answers, reviewed sharing, reconnect, access changes, recovery and computer actions still need
-their complete live journeys.
+admission, completed guided onboarding for three users, provider configuration and a three-person
+group with durable ordered messages and idempotent retries. Company-assistant setup and its
+administrator checks also pass. These results are recorded against the tested application revision
+in the ledger. Assistant conversations exposed a deployment-profile mismatch and a missing execution
+path for standalone membership; those repairs still need complete live proof. Browser login
+completion, personal model answers, company-assistant child answers, reviewed sharing, reconnect,
+access changes, recovery and computer actions still need their complete live journeys.
 Tool, memory and shared-work journeys need
 their own live evidence as they become available. KurrentDB backup and restore also need a real
 drill and measured recovery time.
