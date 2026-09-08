@@ -752,3 +752,33 @@ Full run reports belong in the corresponding pull request or issue.
 - deployment decision: the next application repair will use the supported server-only image flag,
   retaining the already qualified companion images. Record the server's source separately; a mixed
   repair installation is not an exact-SHA release qualification.
+
+
+## 2026-09-08 · dev acceptance · testv5 onboarding completion · server 6edded27aec8ee24bc045156c93aeb950a676520 · PARTIAL
+
+- CI: [Actions run 34193509655](https://github.com/elewa-git/opencrane/actions/runs/34193509655)
+  passed seven jobs with three configured skips (image smoke, k3d and develop smoke) and published
+  only the changed server. Its source label and Linux amd64 manifest were verified. Companion
+  workloads retain the qualified `cf8b5f447` images; this is a mixed-source development repair.
+- deployment: the owning server-only install ran 06:17:06.267–06:21:08.993 UTC (242.726 seconds),
+  exited 0 and applied Helm revision 6. The server became Ready at 06:20:46. Independent public TLS
+  health returned 200 at 06:21:39.974. At 06:22:54, all 11 Pods were Ready with zero restarts;
+  the server and six retained companion image IDs matched their publication receipts. Initial owner,
+  OIDC, PostgreSQL baseline/operand and completed bootstrap Job bindings were unchanged.
+- onboarding: all three fixture users repeated real password-verified OIDC admission by 06:22:33.888.
+  Guided completion then passed for the owner at 06:22:38, colleague B at 06:22:42 and colleague C at
+  06:22:45. Each returned completed state, its own approved persona and a ready personal assistant.
+- company setup: initial creation and subsequent existing-result retries now succeed. Changed setup
+  names are not applied, and a non-admin colleague receives 403. The selected assistant still does
+  not appear in discovery, so no child request or model input was posted in this attempt.
+- findings: config/codebase: personal chat creation returned 404 at 06:23:06. Read-only database
+  inspection confirms all three personal services use the hardcoded `personal-default` profile,
+  while the deployment advertises `developer`. The session resolver correctly rejects that mismatch.
+  The repair must pass the deployment's profile through initial publication and readiness checks.
+- findings: codebase: the deployment explicitly uses standalone membership, with three active local
+  members and zero signed fleet revisions. Company discovery and personal/company run evidence
+  nevertheless require fleet-signed membership. The standalone fleet verifier intentionally denies
+  every such proof. Standalone execution needs an explicit current local-membership evidence path;
+  signing invented fleet records or weakening the fleet verifier is not an acceptable test setup.
+- boundary: credentials, onboarding completion and human group history are proven. Personal chat
+  creation, assistant answers, child sharing and both data-bearing recovery drills remain pending.

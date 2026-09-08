@@ -53,14 +53,17 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
  * @param mcpWorkflows - Shared guarded workflow engine plus saved MCP task authorities.
  * @returns The configured public listener.
+ * @throws When the deployment has not supplied its conversation-computer profile.
  */
 export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
 {
-	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
-	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined || agentSandboxReleaseProfile === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, mcpWorkflows.execution);
+	if (agentSandboxReleaseProfile === undefined)
+		throw new Error("Product routes require the configured conversation-computer profile");
+	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner, agentSandboxReleaseProfile.profileName);
+	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, mcpWorkflows.execution);
 	const unavailableInitialComputer = { resolve: async function _Unavailable() { return null; }, createOrdinaryGenesis: async function _UnavailableGenesis() { throw new Error("review composition cannot create conversations"); } };
 	const computerReviewAuthority = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataUnitOfWork(prisma, unavailableInitialComputer), new ConversationComputerHistory(historyStore), KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversationPrivatePayloadKeyringPath)));
-	const computerReview = computerReviewAuthority === null || agentSandboxReleaseProfile === undefined ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace, logger: _log }, _ResolveRequestPrincipal);
+	const computerReview = computerReviewAuthority === null ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace, logger: _log }, _ResolveRequestPrincipal);
 	const computerOperations = historyStore === undefined ? null : _CreateConversationComputerOperatorRouter({ authorization: { admitReplayParkedActivations: function _Admit(caller) { return _AdmitOrganizationAdministration(prisma, caller, { action: "replay-parked-conversation-computer-activations" }); } }, activations: { replayParked: function _ReplayParked(siloId) { return historyStore.replayParked({ streamName: `computer-activations-${siloId}`, groupName: "conversation-computer-activation" }); } }, logger: _log }, _ResolveRequestPrincipal);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
@@ -70,7 +73,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{ method: "use", path: "/api/v1/resource-shares", handler: _CreateRateLimitedResourceSharesRouter(prisma) },
 	];
 	const agentRoutes: readonly RouteMount[] = [
-		..._OptionalRoute("/api/v1/organization/company-assistant", historyStore === undefined || agentSandboxReleaseProfile === undefined ? null : _CreateCompanyAssistantComposition(prisma, historyStore, agentSandboxReleaseProfile)),
+		..._OptionalRoute("/api/v1/organization/company-assistant", historyStore === undefined ? null : _CreateCompanyAssistantComposition(prisma, historyStore, agentSandboxReleaseProfile)),
 		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/skills", handler: __CreateSkillAuthoringValidationSubmissionRouter({ resolveCaller: _ResolveSkillAuthoringValidationCaller, authority: new PrismaSkillAuthoringValidationSubmissionUnitOfWork(prisma, mcpWorkflows.execution), logger: _log }) },
 	];

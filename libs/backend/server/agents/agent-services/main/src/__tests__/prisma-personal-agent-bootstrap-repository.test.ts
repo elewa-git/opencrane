@@ -43,7 +43,7 @@ function _Transaction()
 			findMany: vi.fn().mockResolvedValue([]),
 			findUnique: vi.fn().mockResolvedValue(null),
 			findFirst: vi.fn(),
-			create: vi.fn().mockResolvedValue({ id: _COMMAND.onboardingId, workloadProfile: INITIAL_PERSONAL_AGENT_POLICY.workloadProfile }),
+			create: vi.fn().mockResolvedValue({ id: _COMMAND.onboardingId, workloadProfile: "developer" }),
 			update: vi.fn().mockResolvedValue({}),
 			updateMany: vi.fn().mockResolvedValue({ count: 1 }),
 		},
@@ -80,11 +80,33 @@ function _ProductEffects()
 /** Constructs the repository without widening production code to a test-only client shape. */
 function _Repository(transaction: ReturnType<typeof _Transaction>, productEffects: ReturnType<typeof _ProductEffects> = _ProductEffects()): PrismaPersonalAgentBootstrapRepository
 {
-	return new PrismaPersonalAgentBootstrapRepository(transaction as unknown as Prisma.TransactionClient, _DEFAULT_MODEL_RESOLVER, productEffects);
+	return new PrismaPersonalAgentBootstrapRepository(transaction as unknown as Prisma.TransactionClient, _DEFAULT_MODEL_RESOLVER, "developer", productEffects);
 }
 
 describe("Prisma personal-agent bootstrap repository", function _Suite()
 {
+	it.each(["", " ", " developer"])("rejects unusable configured profile %j before any authority read", function _InvalidProfile(profile)
+	{
+		const transaction = _Transaction();
+		expect(function _Construct() { return new PrismaPersonalAgentBootstrapRepository(transaction as never, _DEFAULT_MODEL_RESOLVER, profile, _ProductEffects()); }).toThrow("configured workload profile");
+		expect(transaction.personaRevision.findUnique).not.toHaveBeenCalled();
+	});
+
+	it.each([true, false])("rejects an existing mismatched profile without rewriting it (deterministic: %s)", async function _RejectsProfileMismatch(deterministic)
+	{
+		const transaction = _Transaction();
+		const id = deterministic ? _COMMAND.onboardingId : "earlier-personal";
+		const existing = { id, activeRevisionId: "revision-existing", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } };
+		transaction.agentService.findMany.mockResolvedValue([existing]);
+		if (deterministic)
+			transaction.agentService.findUnique.mockResolvedValue({ ...existing, siloId: _COMMAND.siloId, kind: "Personal", state: "Active" });
+		await expect(_Repository(transaction).ensureReady(_COMMAND)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.ServiceNotReady });
+		expect(transaction.agentService.create).not.toHaveBeenCalled();
+		expect(transaction.agentService.update).not.toHaveBeenCalled();
+		expect(transaction.agentService.updateMany).not.toHaveBeenCalled();
+		expect(transaction.agentRevision.create).not.toHaveBeenCalled();
+	});
+
 	it("rejects malformed evidence before consulting authority state", async function _InvalidCommand()
 	{
 		const transaction = _Transaction();
@@ -96,7 +118,7 @@ describe("Prisma personal-agent bootstrap repository", function _Suite()
 	it("returns the deterministic ready winner without duplicating writes", async function _IdempotentWinner()
 	{
 		const transaction = _Transaction();
-		const existing = { id: _COMMAND.onboardingId, activeRevisionId: "revision-existing", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } };
+		const existing = { id: _COMMAND.onboardingId, activeRevisionId: "revision-existing", workloadProfile: "developer", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } };
 		transaction.agentService.findMany.mockResolvedValue([existing]);
 		transaction.agentService.findUnique.mockResolvedValue({ ...existing, siloId: _COMMAND.siloId, kind: "Personal", state: "Active" });
 
@@ -109,7 +131,7 @@ describe("Prisma personal-agent bootstrap repository", function _Suite()
 	it("adopts one earlier ready personal service when the deterministic identity is unused", async function _ExistingPersonalService()
 	{
 		const transaction = _Transaction();
-		transaction.agentService.findMany.mockResolvedValue([{ id: "personal-existing", activeRevisionId: "revision-existing", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } }]);
+		transaction.agentService.findMany.mockResolvedValue([{ id: "personal-existing", activeRevisionId: "revision-existing", workloadProfile: "developer", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } }]);
 
 		await expect(_Repository(transaction).ensureReady(_COMMAND)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: "personal-existing", agentRevisionId: "revision-existing", created: false, revised: false });
 		expect(transaction.agentService.create).not.toHaveBeenCalled();
@@ -120,8 +142,8 @@ describe("Prisma personal-agent bootstrap repository", function _Suite()
 		const transaction = _Transaction();
 		transaction.personaRevision.findUnique.mockResolvedValue(_Persona("persona-newer"));
 		transaction.personaRevision.findFirst.mockResolvedValue({ personaProfileId: "profile-a" });
-		transaction.agentService.findMany.mockResolvedValue([{ id: _COMMAND.onboardingId, activeRevisionId: "revision-existing", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } }]);
-		transaction.agentService.findUnique.mockResolvedValue({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Active", activeRevisionId: "revision-existing", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } });
+		transaction.agentService.findMany.mockResolvedValue([{ id: _COMMAND.onboardingId, activeRevisionId: "revision-existing", workloadProfile: "developer", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } }]);
+		transaction.agentService.findUnique.mockResolvedValue({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Active", activeRevisionId: "revision-existing", workloadProfile: "developer", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } });
 		transaction.agentService.findFirst.mockResolvedValue({ id: _COMMAND.onboardingId, activeRevisionId: "revision-existing" });
 		const source = { id: "revision-existing", agentServiceId: _COMMAND.onboardingId, revision: 1, state: "Published", personaRevisionId: _COMMAND.onboardingPersonaRevisionId, promptPolicyVersion: "prompt-v1", modelDefinitionId: "model-1", budget: INITIAL_PERSONAL_AGENT_POLICY.budget, skillAssignments: [], mcpToolAssignments: [], boundaryAttachments: [] };
 		transaction.agentRevision.findFirst.mockResolvedValueOnce(source).mockResolvedValueOnce({ id: "revision-existing" });
@@ -136,8 +158,8 @@ describe("Prisma personal-agent bootstrap repository", function _Suite()
 	{
 		const transaction = _Transaction();
 		transaction.agentService.findMany.mockResolvedValue([
-			{ id: "personal-a", activeRevisionId: "revision-a", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } },
-			{ id: "personal-b", activeRevisionId: "revision-b", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } },
+			{ id: "personal-a", activeRevisionId: "revision-a", workloadProfile: "developer", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } },
+			{ id: "personal-b", activeRevisionId: "revision-b", workloadProfile: "developer", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } },
 		]);
 
 		await expect(_Repository(transaction).ensureReady(_COMMAND)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.ServiceAmbiguous });

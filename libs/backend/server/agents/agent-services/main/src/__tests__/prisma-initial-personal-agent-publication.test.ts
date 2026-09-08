@@ -41,7 +41,7 @@ function _Transaction()
 	return {
 		modelDefinition: { findUnique: vi.fn().mockResolvedValue({ id: "configured-default" }) },
 		agentService: {
-			create: vi.fn().mockResolvedValue({ id: _COMMAND.onboardingId, workloadProfile: INITIAL_PERSONAL_AGENT_POLICY.workloadProfile }),
+			create: vi.fn().mockResolvedValue({ id: _COMMAND.onboardingId, workloadProfile: "developer" }),
 			update: vi.fn().mockResolvedValue({}),
 		},
 		agentRevision: {
@@ -70,11 +70,31 @@ function _DefaultModelResolver(status: InitialPersonalAgentDefaultModelResolutio
 /** Constructs the publisher without widening production code to a test-only client shape. */
 function _Publisher(transaction: ReturnType<typeof _Transaction>, resolver: InitialPersonalAgentDefaultModelResolver = _DefaultModelResolver(), productEffects: ReturnType<typeof _ProductEffects> = _ProductEffects()): PrismaInitialPersonalAgentPublicationRepository
 {
-	return new PrismaInitialPersonalAgentPublicationRepository(transaction as unknown as Prisma.TransactionClient, resolver, productEffects);
+	return new PrismaInitialPersonalAgentPublicationRepository(transaction as unknown as Prisma.TransactionClient, resolver, "developer", productEffects);
 }
 
 describe("Prisma initial personal-Agent publication", function _Suite()
 {
+	it.each(["developer", "research"])("publishes the deployment-selected %s profile without substituting a product default", async function _ConfiguredProfile(profile)
+	{
+		const transaction = _Transaction();
+		const effects = _ProductEffects();
+		const publisher = new PrismaInitialPersonalAgentPublicationRepository(transaction as never, _DefaultModelResolver(), profile, effects);
+		await expect(publisher.publish(_COMMAND, _PERSONA, _CALLER)).resolves.toMatchObject({ status: PersonalAgentBootstrapStatuses.Ready });
+		expect(transaction.agentService.create).toHaveBeenCalledWith({ data: expect.objectContaining({ workloadProfile: profile }) });
+		expect(effects.admitInitialCreation).toHaveBeenCalledWith(expect.objectContaining({ argumentsValue: expect.objectContaining({ workloadProfile: profile }) }));
+		expect(effects.admitInitialPublication).toHaveBeenCalledWith(expect.objectContaining({ argumentsValue: expect.objectContaining({ workloadProfile: profile }) }));
+	});
+
+	it("rejects an absent configured profile before admission or persistence", function _InvalidProfile()
+	{
+		const transaction = _Transaction();
+		const effects = _ProductEffects();
+		expect(function _Construct() { return new PrismaInitialPersonalAgentPublicationRepository(transaction as never, _DefaultModelResolver(), "", effects); }).toThrow("configured workload profile");
+		expect(effects.admitInitialCreation).not.toHaveBeenCalled();
+		expect(transaction.agentService.create).not.toHaveBeenCalled();
+	});
+
 	it("creates, publishes, activates, and audits the first revision", async function _Publishes()
 	{
 		const transaction = _Transaction();
@@ -85,7 +105,7 @@ describe("Prisma initial personal-Agent publication", function _Suite()
 		expect(productEffects.admitInitialPublication).toHaveBeenCalledWith(expect.objectContaining({ caller: _CALLER, agentServiceId: _COMMAND.onboardingId, personaProfileId: _PERSONA.profileId, modelDefinitionId: "configured-default" }));
 		expect(productEffects.admitInitialCreation.mock.invocationCallOrder[0]).toBeLessThan(transaction.agentService.create.mock.invocationCallOrder[0] ?? 0);
 		expect(productEffects.admitInitialPublication.mock.invocationCallOrder[0]).toBeGreaterThan(transaction.agentRevision.create.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER);
-		expect(transaction.agentService.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Draft", name: "The Commander", workloadProfile: "personal-default" }) });
+		expect(transaction.agentService.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Draft", name: "The Commander", workloadProfile: "developer" }) });
 		expect(transaction.agentRevision.create).toHaveBeenCalledWith({
 			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id_siloId: { id: "configured-default", siloId: _COMMAND.siloId } } } }),
 			include: expect.any(Object),

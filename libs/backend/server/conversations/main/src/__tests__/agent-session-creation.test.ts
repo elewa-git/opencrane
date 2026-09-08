@@ -63,7 +63,8 @@ const _CREATE_KEY = "57de859d-1fb6-4782-aa0b-2b3d4dfd2292";
 const _NEXT_CREATE_KEY = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 
 /** Creates the minimum transaction surface needed to exercise Kurrent-first creation. */
-function _Prisma() {
+function _Prisma(workloadProfile = "personal-default")
+{
   const transaction = {
     orgMembership: { count: vi.fn().mockResolvedValue(1) },
     agentService: {
@@ -72,7 +73,7 @@ function _Prisma() {
         .mockResolvedValue({
           id: "service-1",
           name: "Personal agent",
-          workloadProfile: "personal-default",
+          workloadProfile,
           activeRevision: {
             personaRevisionId: "persona-1",
             state: "Published",
@@ -172,8 +173,9 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
     }
   });
 
-  it("atomically creates genesis and a DNS-safe cold generation-one computer before projection", async function _CreatesSession() {
-    const harness = _Prisma();
+  it.each(["developer", "research"])("creates the cold computer for the configured %s profile before projection", async function _CreatesSession(workloadProfile)
+  {
+    const harness = _Prisma(workloadProfile);
     const historyStore = {
       append: _Mocks.append,
       appendAtomic: _Mocks.appendAtomic,
@@ -185,7 +187,7 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
       historyStore as never,
       [
         {
-          workloadProfile: "personal-default",
+          workloadProfile,
           profileRevisionId: `sha256:${"a".repeat(64)}`,
         },
       ],
@@ -210,6 +212,16 @@ describe("PrismaAgentSessionCreationCoordinator", function _DescribeCoordinator(
     expect(harness.transaction.conversation.create).toHaveBeenCalledAfter(
       _Mocks.appendAtomic,
     );
+  });
+
+  it("rejects a service with an unconfigured profile before immutable history or projection writes", async function _RejectsProfileMismatch()
+  {
+    const harness = _Prisma("personal-default");
+    const coordinator = new PrismaAgentSessionCreationUnitOfWork(harness.prisma as never, { append: _Mocks.append, appendAtomic: _Mocks.appendAtomic, readHead: vi.fn(), readStream: vi.fn() } as never, [{ workloadProfile: "developer", profileRevisionId: `sha256:${"a".repeat(64)}` }]);
+    await expect(coordinator.resolve({ siloId: "silo-1", subjectId: "subject-1", principalId: "principal-1" }, "service-1", _CREATE_KEY)).resolves.toBeNull();
+    expect(_Mocks.appendAtomic).not.toHaveBeenCalled();
+    expect(_Mocks.identityAppend).not.toHaveBeenCalled();
+    expect(harness.transaction.conversation.create).not.toHaveBeenCalled();
   });
 
   it("denies missing authority before any immutable stream is created", async function _DeniesRevokedAuthority() {

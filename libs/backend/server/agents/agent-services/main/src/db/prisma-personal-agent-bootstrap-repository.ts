@@ -1,6 +1,5 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
-import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
 import type { InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
 import { AgentRevisionPersonaSelectionMaterializationCodes } from "../agent-revision-persona-selection.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "../personal-agent-bootstrap.types";
@@ -88,13 +87,18 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 	private readonly defaultModelResolver: InitialPersonalAgentDefaultModelResolver;
 	/** Shared product-effect adapter bound to the onboarding transaction. */
 	private readonly productEffects: PersonalAgentProductEffects;
+	/** Deployment-selected profile required by new and existing personal services. */
+	private readonly workloadProfile: string;
 
 	/** Creates the personal-agent strategy inside an existing Serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver, productEffects: PersonalAgentProductEffects | null = null)
+	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver, workloadProfile: string, productEffects: PersonalAgentProductEffects | null = null)
 	{
+		if (workloadProfile.trim().length === 0 || workloadProfile.trim() !== workloadProfile)
+			throw new Error("Personal agent bootstrap requires a configured workload profile");
 		this.transaction = transaction;
 		this.defaultModelResolver = defaultModelResolver;
 		this.productEffects = productEffects ?? new PrismaPersonalAgentProductEffectsAuthority(transaction);
+		this.workloadProfile = workloadProfile;
 	}
 
 	/**
@@ -141,7 +145,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			{
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceIdentityConflict);
 			}
-			if (matching.length !== 1 || matching[0]?.id !== deterministic.id || deterministic.state !== AgentServiceState.Active || deterministic.activeRevisionId === null || deterministic.activeRevision?.personaRevisionId === null || deterministic.workloadProfile !== INITIAL_PERSONAL_AGENT_POLICY.workloadProfile)
+			if (matching.length !== 1 || matching[0]?.id !== deterministic.id || deterministic.state !== AgentServiceState.Active || deterministic.activeRevisionId === null || deterministic.activeRevision?.personaRevisionId === null || deterministic.workloadProfile !== this.workloadProfile)
 			{
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			}
@@ -155,13 +159,13 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			const existing = matching[0];
 			if (existing === undefined)
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
-			if (existing.workloadProfile !== INITIAL_PERSONAL_AGENT_POLICY.workloadProfile)
+			if (existing.workloadProfile !== this.workloadProfile)
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			return this._EnsureCurrentPersona(command, persona, existing, caller);
 		}
 
 		// 4. Delegate initial publication after bootstrap has proved that no service exists.
-		const publicationRepository = new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver, this.productEffects);
+		const publicationRepository = new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver, this.workloadProfile, this.productEffects);
 		return publicationRepository.publish(command, persona, caller);
 	}
 

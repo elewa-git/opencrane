@@ -268,7 +268,7 @@ function _App(fixture: ReturnType<typeof _PrismaFixture>)
 		if (fields.err !== undefined)
 			fixture.errors.push(fields.err);
 	}) } as unknown as Logger;
-	const composition = _CreateUserOnboardingComposition(fixture.prisma, logger, function _ResolveOwner() { return _OWNER; });
+	const composition = _CreateUserOnboardingComposition(fixture.prisma, logger, function _ResolveOwner() { return _OWNER; }, "developer");
 	const app = express();
 	app.use(express.json());
 	app.use("/api/v1/me/onboarding", composition.router);
@@ -277,13 +277,20 @@ function _App(fixture: ReturnType<typeof _PrismaFixture>)
 
 describe("personal Agent onboarding app composition", function _PersonalAgentCompositionSuite()
 {
+	it("refuses missing deployment profile configuration before creating the router", function _MissingProfile()
+	{
+		const fixture = _PrismaFixture(true);
+		expect(function _Compose() { return _CreateUserOnboardingComposition(fixture.prisma, {} as Logger, function _ResolveOwner() { return _OWNER; }, ""); }).toThrow("configured conversation-computer profile");
+		expect(fixture.attempts()).toBe(0);
+	});
+
 	it("publishes one routed personal Agent before the conclude response succeeds", async function _PublishesFromThePublicRoute()
 	{
 		const fixture = _PrismaFixture(true);
 		const response = await request(_App(fixture)).post("/api/v1/me/onboarding/chat/conclude").send({});
 		expect(response.status, `${JSON.stringify(response.body)} ${fixture.errors.map(function _Error(error) { return error instanceof Error ? error.stack : String(error); }).join(" ")}`).toBe(200);
 		expect(response.body).toMatchObject({ state: "completed", canConclude: false });
-		expect(fixture.state()).toMatchObject({ onboardingState: UserOnboardingState.Completed, completionProvenance: UserOnboardingCompletionProvenance.BootstrapConcluded, agentService: { id: _ONBOARDING_ID, state: AgentServiceState.Active }, agentRevision: { state: AgentRevisionState.Published, personaRevisionId: _PERSONA_REVISION_ID }, auditCount: 6 });
+		expect(fixture.state()).toMatchObject({ onboardingState: UserOnboardingState.Completed, completionProvenance: UserOnboardingCompletionProvenance.BootstrapConcluded, agentService: { id: _ONBOARDING_ID, state: AgentServiceState.Active, workloadProfile: "developer" }, agentRevision: { state: AgentRevisionState.Published, personaRevisionId: _PERSONA_REVISION_ID }, auditCount: 6 });
 		expect(fixture.state().agentService?.activeRevisionId).toBe(fixture.state().agentRevision?.id);
 		expect(fixture.state().authorizationGrants).toHaveLength(19);
 		expect(fixture.attempts()).toBe(2);

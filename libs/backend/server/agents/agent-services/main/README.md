@@ -13,6 +13,12 @@ selection changes append and publish another immutable revision rather than edit
 repositories re-read the exact source revision, enforce silo and ownership coordinates, record
 central authorization decisions, and update the active revision in their caller's transaction.
 
+The app supplies the deployment's conversation-computer profile when composing personal-agent
+bootstrap. Initial publication stores that name, and readiness requires an existing service to
+match it. An absent profile prevents startup; a mismatched stored profile is refused without
+rewriting the service. The product's initial revision policy supplies budgets and prompt policy,
+while the deployment selects which computer can run it.
+
 The package also owns personal execution evidence. Admission proves that the personal service is
 active, its requested revision is still published and active, current signed membership realizes the
 requester, and the central authority permits invocation and every frozen revision boundary. The
