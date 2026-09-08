@@ -64,15 +64,22 @@ function _policy()
 
 describe("PrismaToolInvocationRepository", function _suite()
 {
-	it("admits proposed arguments as effective until an approval replaces them", async function _admits()
+	it("admits effective arguments with coherent timestamps after delayed uniqueness reads", async function _admits()
 	{
 		const created = _row({ preparationAttempt: 0 });
-		const create = vi.fn().mockResolvedValue(created);
-		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(null), create } } as unknown as Prisma.TransactionClient;
+		const create = vi.fn(async function _DelayedCreate({ data }: { data: Prisma.ToolInvocationUncheckedCreateInput })
+		{
+			const createdAt = new Date(data.createdAt ?? "2026-08-11T10:00:00.005Z");
+			if (new Date(data.nextPreparationAttemptAt).getTime() < createdAt.getTime() || new Date(data.retryDeadlineAt).getTime() <= createdAt.getTime())
+				throw new Error("tool_invocations_identity_check");
+			return { ...created, createdAt };
+		});
+		const findUnique = vi.fn(async function _DelayedRead() { await Promise.resolve(); return null; });
+		const transaction = { toolInvocation: { findUnique, create } } as unknown as Prisma.TransactionClient;
 		const intent = { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", authorizationEvidence: _authorizationEvidence(), requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1", arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null } as const;
 		const result = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date("2026-08-11T10:00:00.000Z"), _policy());
 		expect(result.outcome).toBe("admitted");
-		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z") }) });
+		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", createdAt: new Date("2026-08-11T10:00:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z") }) });
 	});
 
 	it("selects current-attempt work only when central authorization evidence is present", async function _findRunnable()

@@ -214,6 +214,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 				recoveryMode: _RECOVERY_TO_PRISMA[intent.recoveryMode],
 				recoveryKey: intent.recoveryKey,
 				retryDeadlineAt: new Date(now.getTime() + policy.retryWindowMilliseconds),
+				createdAt: now,
 				nextPreparationAttemptAt: now,
 			},
 		});
