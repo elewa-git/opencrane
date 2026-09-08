@@ -78,6 +78,10 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Fixed
 
+- **People can find newly admitted personal assistant work in their activity.** Admission saves the
+  owner’s run-read permission with the run and its inputs. Reads still check current membership and
+  permission; retries cannot restore revoked access. This follow-up awaits CI and live qualification.
+
 - **People can start distinct personal chats and retry creation safely.** A new command starts a
   separate conversation; retrying the same command returns its existing session without reopening
   closed work or expanding access.

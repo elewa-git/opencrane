@@ -33,8 +33,10 @@ current review work and its evidence.
 - **Inputs and outputs:** complete the user journeys for attachments, generated files and their
   recovery across refresh, retry and conversation closure.
 - **Administration:** complete the product surfaces for permissions, activity and cost without
-  requiring an employee to understand internal execution concepts. Personal activity listings
-  still omit completed runs that are present in the conversation history.
+  requiring an employee to understand internal execution concepts. The follow-up implementation
+  gives people read access to each new personal run when it starts, so completed work can appear
+  in their activity. This repair still needs CI and live qualification; existing testv5 runs are
+  unchanged. Revoked access is checked on every read.
 - **Login continuity:** preserve authenticated sessions across server replacement and support
   multiple servers consistently. The current server stores sessions in its own process, so a
   replacement requires people to sign in again even though their saved conversations remain.

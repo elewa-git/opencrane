@@ -6,6 +6,7 @@
 
 A **run** is one request for an agent to do work. An **attempt** is one try at finishing that run.
 This package admits personal and company-assistant conversation runs and freezes their fixed input in one database transaction.
+For a new personal run, that transaction also grants its verified owner permission to read its activity.
 The active conversation-computer lease and its Sandbox claim are independently proven inputs; the
 transaction does not create or claim that runtime. The conversation computer continues the turn after
 admission; this package does not create a second managed workflow task for it.
@@ -36,6 +37,8 @@ does not grant permission to use a run.
 - A duplicate admission returns the first saved input only when the caller and request match.
 - The human requester must match the input message's author. A company assistant keeps its own
   execution identity and permissions; it does not become the human who asked for help.
+- Admission creates an exact `AgentRun/Read` grant for the verified personal owner. Retrying an
+  admitted request cannot restore a revoked grant. Company runs do not grant their requester personal activity access.
 - Status uses the current exact `AgentRun` grant. Ownership, conversation
   participation, lifecycle state, attempt fencing, and execution-subject proof remain separate safety facts;
   none of them grants product permission by itself.
@@ -76,7 +79,7 @@ shared backend libraries. It never imports an application or Kubernetes client.
 ## Data and persistence
 
 The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Initial admission saves
-the run and attempt-one snapshot together.
+the run, attempt-one snapshot and personal-owner read grant together. A failure rolls them all back.
 
 ## See also
 

@@ -1,11 +1,13 @@
-import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient, type AgentRun, type AuthorizationGrant, type RunInputSnapshot as StoredSnapshot } from "@prisma/client";
 
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { ExecutionSubject } from "@opencrane/models/agents";
-import { describe, expect, it, vi } from "vitest";
+import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { PrismaSelfRunStatusRepository } from "../prisma-self-run-status-repository";
 import { PrismaRunAdmissionUnitOfWork } from "../prisma-run-admission-unit-of-work";
 import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand } from "../run-admission.types";
 
@@ -69,13 +71,164 @@ async function _VerifyExisting()
 	return { outcome: "verified" } as const;
 }
 
+/** Supplies stored grants to the real grant writer and authorization evaluator. */
+function _GrantDelegates()
+{
+	const rows: AuthorizationGrant[] = [];
+	const transaction = {
+		authorizationGrant: {
+			findMany: vi.fn(async function _Find({ where }: { where: Prisma.AuthorizationGrantWhereInput })
+			{
+				return rows.filter(function _Matches(row)
+				{
+					return row.siloId === where.siloId
+						&& (where.managerId === undefined || row.managerId === where.managerId)
+						&& (where.resourceKind === undefined || row.resourceKind === where.resourceKind)
+						&& (where.resourceId === undefined || row.resourceId === where.resourceId)
+						&& (where.effect === undefined || row.effect === where.effect)
+						&& (where.revokedAt !== null || row.revokedAt === null)
+						&& (where.OR === undefined || where.OR.some(subject => subject.subjectKind === row.subjectKind && subject.subjectPrincipalId === row.subjectPrincipalId));
+				});
+			}),
+			create: vi.fn(async function _Create({ data }: { data: Prisma.AuthorizationGrantUncheckedCreateInput })
+			{
+				const row = { id: `grant-${rows.length + 1}`, ...data, expiresAt: null, revokedAt: null, createdAt: new Date() } as AuthorizationGrant;
+				rows.push(row);
+				return row;
+			}),
+			updateMany: vi.fn(),
+		},
+		auditEntry: { create: vi.fn() },
+	};
+	return { rows, transaction };
+}
+
+/** Composes actual admission, grant writing and status authorization over transaction doubles. */
+function _ActivityFixture()
+{
+	vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-01T00:02:00.000Z").getTime());
+	const grants = _GrantDelegates();
+	const runs: AgentRun[] = [];
+	const snapshots: StoredSnapshot[] = [];
+	const transaction = {
+		...grants.transaction,
+		principal: { findUnique: vi.fn(async function _Principal({ where }: { where: Prisma.PrincipalWhereUniqueInput })
+		{
+			const coordinates = where.id_siloId!;
+			return coordinates.siloId === "silo-1" ? { id: coordinates.id, subject: coordinates.id, provenance: "External" } : null;
+		}) },
+		orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) },
+		groupMembership: { findMany: vi.fn().mockResolvedValue([]) },
+		agentRun: {
+			findUnique: vi.fn(async function _Existing({ where }: { where: Prisma.AgentRunWhereUniqueInput }) { return runs.find(run => run.siloId === where.siloId_requestIdempotencyKey?.siloId && run.requestIdempotencyKey === where.siloId_requestIdempotencyKey?.requestIdempotencyKey) ?? null; }),
+			create: vi.fn(async function _Create({ data }: { data: Prisma.AgentRunUncheckedCreateInput }) { const row = { ...data, attempt: 1, state: "Accepted", finishedAt: null } as AgentRun; runs.push(row); return row; }),
+			findMany: vi.fn(async function _List({ where }: { where: Prisma.AgentRunWhereInput }) { return runs.filter(run => run.siloId === where.siloId && run.principalId === (where.principalId as Prisma.StringFilter).equals); }),
+			findFirst: vi.fn(async function _Read({ where }: { where: Prisma.AgentRunWhereInput }) { return runs.find(run => run.id === where.id && run.siloId === where.siloId && run.principalId === (where.principalId as Prisma.StringFilter).equals) ?? null; }),
+		},
+		runInputSnapshot: {
+			create: vi.fn(async function _Create({ data }: { data: Prisma.RunInputSnapshotUncheckedCreateInput }) { snapshots.push(data as StoredSnapshot); return data; }),
+			findUnique: vi.fn(async function _Read({ where }: { where: Prisma.RunInputSnapshotWhereUniqueInput }) { return snapshots.find(snapshot => snapshot.runId === where.runId_attempt_digest?.runId && snapshot.attempt === where.runId_attempt_digest.attempt && snapshot.digest === where.runId_attempt_digest.digest) ?? null; }),
+		},
+	};
+	const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>)
+	{
+		const lengths = [runs.length, snapshots.length, grants.rows.length];
+		try { return await operation(transaction); }
+		catch (error) { runs.splice(lengths[0]); snapshots.splice(lengths[1]); grants.rows.splice(lengths[2]); throw error; }
+	}) } as unknown as PrismaClient;
+	const authority = new PrismaAuthorizationAuthority(transaction as never);
+	const status = new PrismaSelfRunStatusRepository(transaction as never, authority);
+	const admission = new PrismaRunAdmissionUnitOfWork(prisma, { now: function _Now() { return new Date("2026-09-01T00:00:00.000Z"); } }, _Logger());
+	return { grants: grants.rows, runs, snapshots, transaction, admission, status, authority };
+}
+
+/** Builds a personal run after the compiler has verified its owner and inputs. */
+async function _BuildPersonal()
+{
+	return { outcome: "ready", value: { authority: _Authority(), snapshot: _Snapshot() } } as const;
+}
+
 describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 {
+	afterEach(function _RestoreClock() { vi.restoreAllMocks(); });
+	it("shows new completed personal work using its admitted read grant", async function _PersonalActivity()
+	{
+		const f = _ActivityFixture();
+		await expect(f.admission.admit(_Command(), _VerifyExisting, _BuildPersonal)).resolves.toMatchObject({ outcome: "accepted" });
+		const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.AgentRun, ProductAuthorizationActions.Read)!;
+		expect(f.grants).toEqual([expect.objectContaining({ siloId: "silo-1", managerId: "personal-run-owner", subjectKind: "Principal", subjectPrincipalId: "principal-1", boundaryKind: "Personal", boundaryPrincipalId: "principal-1", boundaryCoverage: "Exact", resourceKind: ProductAuthorizationResourceKinds.AgentRun, resourceId: "run-1", catalogId: capability.catalog.catalogId, catalogDigest: capability.catalog.digest, capabilityId: capability.capabilityId, effect: "Allow", validFrom: new Date("2026-09-01T00:00:00.000Z") })]);
+		f.runs[0].state = "Completed";
+		f.runs[0].finishedAt = new Date("2026-09-01T00:01:00.000Z");
+		const caller = { siloId: "silo-1", principalId: "principal-1" };
+		const expected = { runId: "run-1", state: "completed", conversationId: "conversation-1", finishedAt: "2026-09-01T00:01:00.000Z" };
+		await expect(f.status.listOwned(caller)).resolves.toEqual([expect.objectContaining(expected)]);
+		await expect(f.status.readOwned(caller, "run-1")).resolves.toMatchObject(expected);
+		await expect(f.admission.admit({ ..._Command(), runId: "retry-id" }, _VerifyExisting, _BuildPersonal)).resolves.toMatchObject({ outcome: "idempotent" });
+		expect([f.runs.length, f.snapshots.length, f.grants.length]).toEqual([1, 1, 1]);
+		for (const other of [{ ...caller, principalId: "principal-2" }, { ...caller, siloId: "silo-2" }])
+		{
+			await expect(f.status.listOwned(other)).resolves.toEqual([]);
+			await expect(f.status.readOwned(other, "run-1")).resolves.toBeNull();
+			await expect(f.authority.listPrincipalEntitled({ ...other, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.AgentRun, id: "run-1" }], nowEpochMs: Date.now() })).resolves.toEqual([]);
+		}
+	});
+
+	it.each(["revocation", "membership", "explicit deny"])("keeps activity denied after %s, including an otherwise valid admission retry", async function _CurrentPermission(reason)
+	{
+		const f = _ActivityFixture();
+		await f.admission.admit(_Command(), _VerifyExisting, _BuildPersonal);
+		if (reason === "revocation")
+			f.grants[0].revokedAt = new Date("2026-09-01T00:01:00.000Z");
+		if (reason === "membership")
+			f.transaction.orgMembership.findFirst.mockResolvedValue(null);
+		if (reason === "explicit deny")
+			f.grants.push({ ...f.grants[0], id: "deny-1", managerId: "administrator", effect: "Deny", priority: 10 });
+		await expect(f.admission.admit({ ..._Command(), runId: "retry-id" }, _VerifyExisting, _BuildPersonal)).resolves.toMatchObject({ outcome: "idempotent" });
+		expect(f.transaction.authorizationGrant.create).toHaveBeenCalledOnce();
+		expect(f.transaction.authorizationGrant.findMany).toHaveBeenCalledOnce();
+		const caller = { siloId: "silo-1", principalId: "principal-1" };
+		await expect(f.status.listOwned(caller)).resolves.toEqual([]);
+		await expect(f.status.readOwned(caller, "run-1")).resolves.toBeNull();
+	});
+
+	it("does not grant company activity to its human requester", async function _CompanyActivity()
+	{
+		const f = _ActivityFixture();
+		await expect(f.admission.admit(_Command(), _VerifyExisting, async function _Build() { return { outcome: "ready", value: { authority: _Authority(), snapshot: _Snapshot(_ManagedSubject()) } } as const; })).resolves.toMatchObject({ outcome: "accepted" });
+		expect(f.runs[0].principalId).toBe("company-principal");
+		expect(f.grants).toEqual([]);
+		await expect(f.status.listOwned({ siloId: "silo-1", principalId: "principal-1" })).resolves.toEqual([]);
+	});
+
+	it.each(["compiler denial", "different personal owner"])("leaves no activity permission after %s", async function _DeniedAdmission(reason)
+	{
+		const f = _ActivityFixture();
+		const subject = _ExecutionSubject();
+		const changedOwner = { ...subject, principalId: "other-owner", identity: { ...subject.identity, principalId: "other-owner" }, membership: { ...subject.membership, principalId: "other-owner" } };
+		await expect(f.admission.admit(_Command(), _VerifyExisting, async function _Build()
+		{
+			if (reason === "compiler denial")
+				return { outcome: "denied", reason: "product_authorization_unavailable" } as const;
+			return { outcome: "ready", value: { authority: _Authority(), snapshot: _Snapshot(changedOwner) } } as const;
+		})).resolves.toMatchObject({ outcome: "denied" });
+		expect([f.runs.length, f.snapshots.length, f.grants.length]).toEqual([0, 0, 0]);
+		expect(f.transaction.authorizationGrant.create).not.toHaveBeenCalled();
+	});
+
+	it.each(["grant", "later commit"])("rolls back the run, snapshot and grant when %s persistence fails", async function _GrantRollback(failure)
+	{
+		const f = _ActivityFixture();
+		if (failure === "grant")
+			f.transaction.authorizationGrant.create.mockRejectedValue(new Error("grant storage unavailable"));
+		await expect(f.admission.admit(_Command(), _VerifyExisting, _BuildPersonal, async function _Commit() { throw new Error("later write failed"); })).resolves.toMatchObject({ outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable });
+		expect([f.runs.length, f.snapshots.length, f.grants.length]).toEqual([0, 0, 0]);
+	});
+
 	it.each(["personal", "company"])("persists and retries a %s run under its execution identity and human requester", async function _FirstAndDuplicate(kind)
 	{
 		const subject = kind === "company" ? _ManagedSubject() : _ExecutionSubject();
 		const snapshot = { ..._Snapshot(subject), preferenceFactIds: [], memoryQueryPolicy: { scope: "none" } };
-		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() } };
+		const transaction = { ..._GrantDelegates().transaction, agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
 		const build = vi.fn().mockResolvedValue({ outcome: "ready", value: { authority: _Authority(), snapshot } });
@@ -136,7 +289,7 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 	it("commits one run and its immutable snapshot without reviving a managed workflow task", async function _PersistsAdmission()
 	{
 		const snapshot = _Snapshot();
-		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) } };
+		const transaction = { ..._GrantDelegates().transaction, agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionUnitOfWork(prisma, { now: function _Now() { return new Date("2026-09-01T00:00:00.000Z"); } }, _Logger());
 

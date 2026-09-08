@@ -1083,6 +1083,10 @@
 				"contractImportPath": "./run-admission.types",
 				"constructs": [
 					{
+						"adapter": "PrismaManagedAuthorizationGrantRepository",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
 						"adapter": "PrismaRunAdmissionRepository",
 						"importPath": "<same-file>"
 					},

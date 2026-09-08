@@ -77,8 +77,9 @@ their own completion track; they are not silently bundled into the first tool PR
 
 | Slice | Current state |
 | --- | --- |
-| C0 — close the replay-contract CI failure on #826 | FIX PUSHED in `77a1cdaa6` — deterministic test clock; focused replay contracts, shell syntax and independent review pass. Linux CI remains pending; the first local umbrella run was blocked by sandbox DNS for chart downloads. |
-| R1/R2 — reliable login and visible personal activity | READY — immediate follow-up PR; inspect existing session and activity owners, then prove restart and isolation. |
+| C0 — close the replay-contract CI failure on #826 | ✅ COMPLETE in `77a1cdaa6` — focused replay contracts and independent review pass; [Linux CI](https://github.com/elewa-git/opencrane/actions/runs/34267589926), k3d and publication are green. |
+| R2 — visible personal activity | IMPLEMENTED in [#829](https://github.com/elewa-git/opencrane/pull/829) — admission creates the personal owner’s exact run-read grant atomically. All 51 run tests, type checking, boundaries and the website build pass. Independent review and architecture post-diff pass; CI and new-run live proof remain pending. |
+| R1 — reliable login | READY — architecture preflight passed for encrypted PostgreSQL session storage in the existing auth package. Requires a fresh baseline and installation proof. |
 | A1 — membership revocation and closed-work proof | PLANNED — current authority operation and product surface, followed by real-account browser proof. |
 | T1 — first permitted tool retrieval | READY FOR PREFLIGHT — compiled tool definitions and the invocation executor exist; connect the conversation run/lease and durable tool history. |
 | T2/T3/U1 — approved actions and visible recovery | DEPENDS ON T1 — exact approval, cancellation, uncertain outcomes, retries and accessible workspace controls. |
@@ -98,7 +99,7 @@ The remaining acceptance work is broader than producing a first answer:
 
 | Journey | Remaining work | Acceptance |
 | --- | --- | --- |
-| Keep login and activity continuous | Replace process-local sessions and repair personal activity visibility. | Server replacement preserves login; people can find the completed runs already present in their conversations. |
+| Keep login and activity continuous | Replace process-local sessions and repair personal activity visibility. | Server replacement preserves login; people can find newly admitted completed work, with current access checked on every read. |
 | Preserve access changes and closed work | Expose the required membership/participant operation and qualify revocation, browser purge and closure with real accounts. | Revoked or closed work stays inaccessible; late responses cannot restore its private history or draft. |
 | Follow long conversations efficiently | Measure initial-history and periodic computer replay cost after the completed [#827](https://github.com/elewa-git/opencrane/issues/827) stream. | Long history has bounded read cost; reconnect retains ordered delivery and current access checks. |
 | Perform a useful external action | Connect model tool requests to existing server-owned tool admission, approvals, execution and durable results. | One real task succeeds with a chosen integration; denied/revoked/ambiguous actions never execute or claim success. |
