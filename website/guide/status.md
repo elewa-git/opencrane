@@ -50,9 +50,10 @@ membership repairs, a fresh employee signed in with a password in a real browser
 chat workspace with their assistant ready. Company-assistant discovery, administrator checks and
 child-request admission also pass, including audience isolation and retry checks.
 
-Personal and child conversation creation then exposed a computer-history metadata mismatch.
-The runtime also encountered a Kubernetes naming limit. Both have source repairs; complete model
-answers, reviewed sharing and reconnect remain pending on the corrected installation. Access
+The computer-history and Kubernetes naming repairs are deployed. A fresh employee can now create
+a personal chat and send its first message. Starting the assistant exposed a further integration
+gap: the installation policy rejects a metadata update required by the Sandbox controller.
+Complete model answers, reviewed sharing and reconnect remain pending that repair. Access
 changes, recovery and computer actions need their complete live journeys. Tool, memory and
 shared-work journeys need their own evidence as they become available. Both history restore
 modes still need a completed product fixture and measured recovery time.

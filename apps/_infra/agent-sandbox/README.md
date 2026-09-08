@@ -25,11 +25,15 @@ Sandbox controller reconciles the custom resources into Pods.
 The template fixes the conversation-computer image digest, RuntimeClass, service account, resources,
 security context and static Pod metadata. It admits one exact copy of the server-issued computer id,
 lease id and generation into `additionalPodMetadata`, then projects those Pod labels and fixes the
-KurrentDB endpoint before the process starts. The claim policy permits
+private server endpoint before the process starts. The claim policy permits
 only the OpenCrane server identity to create the fixed v1beta1
 claim shape, forbids claim environment variables and volume claims, limits dynamic Pod metadata to
-those three values, and denies every spec update. A mistake therefore denies a computer activation
-instead of widening its Pod profile.
+those three values, and preserves those inputs across updates. The server may only extend the lease
+expiry; the pinned controller may only update its four documented bookkeeping annotations.
+After foreground deletion, the standard Kubernetes garbage-collector identity may remove its sole
+`foregroundDeletion` finalizer while preserving the terminating claim's specification and metadata.
+The server can read the claim's owned Sandbox for its service address, but cannot mutate that
+Sandbox or its Pod. A mistake therefore denies activation instead of widening the Pod profile.
 
 The review credential uses the memory-backed `review-credential` volume at
 `/var/run/opencrane/review`. Empty-directory volume names stay short enough for the gVisor mount
@@ -63,6 +67,13 @@ an installed `extensions.agents.x-k8s.io/v1beta1` API, a RuntimeClass, one servi
 at least one named profile. Each profile requires a unique pool name, repository-and-`sha256` image
 identity, pull policy, and CPU/memory requests and limits. Every resulting warm pool has
 `replicas: 0`; claims start the configured profile only after the durable computer authority admits one.
+The profile must set `warmReplicas: 0`. Nonzero values are rejected because the computer freezes its
+lease coordinates at process startup, before an unused pool Pod could receive them.
+
+The remote k3d smoke runs `tests/claim-admission-smoke.sh` against the installed policy. It waits for
+current Kubernetes type checking, rejects expression warnings, and dry-runs a valid server claim
+and forbidden identity, annotation, environment, lease and pool changes. Those requests persist no
+claims or Pods. Real conversation journeys separately prove controller reconciliation and model work.
 
 ## See also
 

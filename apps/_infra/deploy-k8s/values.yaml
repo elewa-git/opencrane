@@ -237,7 +237,7 @@ agentSandbox:
   runtimeClassName: ""
   # -- Zero-RBAC ServiceAccount created by this chart and referenced by every profile.
   serviceAccountName: ""
-  # -- Each profile creates one SandboxTemplate and an explicitly sized SandboxWarmPool.
+  # -- Each profile creates one SandboxTemplate and a zero-replica SandboxWarmPool for admitted claims.
   profiles: []
 
 # -- The only pod permitted to reach the private release-local Cognee Service. Its search-only route

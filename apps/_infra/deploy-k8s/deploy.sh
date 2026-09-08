@@ -215,7 +215,7 @@ if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
     --set-string "agentSandbox.serviceAccountName=${RELEASE}-agent-sandbox"
     --set-string "agentSandbox.profiles[0].name=developer"
     --set-string "agentSandbox.profiles[0].poolName=developer-pool"
-    --set "agentSandbox.profiles[0].warmReplicas=1"
+    --set "agentSandbox.profiles[0].warmReplicas=0"
     --set-string "agentSandbox.profiles[0].image.repository=$AGENT_SANDBOX_IMAGE_REPOSITORY"
     --set-string "agentSandbox.profiles[0].image.digest=$AGENT_SANDBOX_IMAGE_DIGEST"
     --set-string "agentSandbox.profiles[0].image.pullPolicy=$AGENT_SANDBOX_IMAGE_PULL_POLICY"

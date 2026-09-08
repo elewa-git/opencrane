@@ -575,7 +575,7 @@ testv5_forwarded_args="$(tr '\n' ' ' <"$wrapper_args_file")"
 [[ "$testv5_forwarded_args" == *'agentSandbox.serviceAccountName=opencrane-testv5-agent-sandbox'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].name=developer'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].poolName=developer-pool'* ]]
-[[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].warmReplicas=1'* ]]
+[[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].warmReplicas=0'* ]]
 [[ "$testv5_forwarded_args" == *'agentSandbox.profiles[0].image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'* ]]
 
 # The actual wrapper accepts the exact argument in Deployment JSON, never substrings or scalar text.

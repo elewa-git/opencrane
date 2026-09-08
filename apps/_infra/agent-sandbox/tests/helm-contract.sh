@@ -17,7 +17,7 @@ VALUES=(
   --set-string agentSandbox.serviceAccountName=agent-sandbox-runtime
   --set-string 'agentSandbox.profiles[0].name=developer'
   --set-string 'agentSandbox.profiles[0].poolName=developer-pool'
-  --set 'agentSandbox.profiles[0].warmReplicas=1'
+  --set 'agentSandbox.profiles[0].warmReplicas=0'
   --set-string 'agentSandbox.profiles[0].image.repository=registry.invalid/opencrane-conversation-computer'
   --set-string 'agentSandbox.profiles[0].image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   --set-string 'agentSandbox.profiles[0].image.pullPolicy=IfNotPresent'
@@ -91,13 +91,13 @@ grep -Fq 'readOnlyRootFilesystem: true' <<<"$template"
 grep -Fq 'drop: ["ALL"]' <<<"$template"
 grep -Fq 'envVarsInjectionPolicy: Disallowed' <<<"$template"
 grep -Fq 'volumeClaimTemplatesPolicy: Disallowed' <<<"$template"
-grep -Fq 'replicas: 1' <<<"$pool"
+grep -Fq 'replicas: 0' <<<"$pool"
 grep -Fq 'sandboxTemplateRef:' <<<"$pool"
 grep -Fq 'name: opencrane-testv5-developer-template' <<<"$pool"
 grep -Fq 'apiGroups: ["extensions.agents.x-k8s.io"]' <<<"$role"
 grep -Fq 'resources: ["sandboxclaims"]' <<<"$role"
-grep -Fq 'verbs: ["create", "get", "delete"]' <<<"$role"
-if grep -Eq '"(list|watch|patch|update)"' <<<"$role"; then
+grep -Fq 'verbs: ["create", "get", "patch", "delete"]' <<<"$role"
+if grep -Eq '"(list|watch|update)"' <<<"$role"; then
   echo "Agent Sandbox server Role is broader than deterministic claim lifecycle" >&2
   exit 1
 fi
@@ -108,9 +108,9 @@ grep -Fq 'resources: ["sandboxclaims/status"]' <<<"$policy"
 grep -Fq "request.operation == 'CREATE'" <<<"$policy"
 grep -Fq "object.metadata.labels.size() == 5" <<<"$policy"
 grep -Fq "'opencrane.ai/computer-lease-id'" <<<"$policy"
-grep -Fq "object.metadata.annotations.size() == 1" <<<"$policy"
+grep -Fq "k in variables.controllerAnnotations" <<<"$policy"
 grep -Fq "['activation_requested', 'recovery_requested']" <<<"$policy"
-grep -Fq 'object.spec.size() == 3' <<<"$policy"
+grep -Fq '!has(object.spec.env) && !has(object.spec.volumeClaimTemplates)' <<<"$policy"
 grep -Fq 'object.spec.additionalPodMetadata.labels.size() == 3' <<<"$policy"
 grep -Fq "object.spec.additionalPodMetadata.labels['opencrane.ai/computer-id'] == object.metadata.labels['opencrane.ai/computer-id']" <<<"$policy"
 grep -Fq "object.spec.additionalPodMetadata.labels['opencrane.ai/computer-generation'] == object.metadata.labels['opencrane.ai/computer-generation']" <<<"$policy"
@@ -138,30 +138,30 @@ if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agen
   exit 1
 fi
 
-# Values files decode numbers differently from --set. Both paths must accept only whole counts.
+# Values files and --set must both accept zero and reject idle prewarming.
 NUMERIC_VALUES=()
 for ((index=0; index<${#VALUES[@]}; index++)); do
-  if [[ "${VALUES[$index]}" == "--set" && "${VALUES[$((index + 1))]}" == 'agentSandbox.profiles[0].warmReplicas=1' ]]; then
+  if [[ "${VALUES[$index]}" == "--set" && "${VALUES[$((index + 1))]}" == 'agentSandbox.profiles[0].warmReplicas=0' ]]; then
     index=$((index + 1))
     continue
   fi
   NUMERIC_VALUES+=("${VALUES[$index]}")
 done
 numeric_profile="$CHART_DIR/numeric-profile-test.yaml"
-for replicas in 0 10 1.0; do
+for replicas in 0 0.0; do
   printf 'agentSandbox:\n  profiles:\n    - warmReplicas: %s\n' "$replicas" >"$numeric_profile"
   numeric_rendered="$(helm template opencrane-testv5 "$CHART_DIR" --values "$numeric_profile" "${NUMERIC_VALUES[@]}" --show-only templates/app-rollups.yaml)"
   numeric_pool="$(awk 'BEGIN { RS="---" } /kind: SandboxWarmPool/ { print }' <<<"$numeric_rendered")"
   grep -Fq "replicas: ${replicas%.*}" <<<"$numeric_pool"
 done
-for replicas in '"1"' 0.5 true -1 11 null; do
+for replicas in '"0"' 0.5 true -1 1 10 null; do
   printf 'agentSandbox:\n  profiles:\n    - warmReplicas: %s\n' "$replicas" >"$numeric_profile"
   if helm template opencrane-testv5 "$CHART_DIR" --values "$numeric_profile" "${NUMERIC_VALUES[@]}" >/dev/null 2>&1; then
     echo "Agent Sandbox accepted invalid YAML warmReplicas: $replicas" >&2
     exit 1
   fi
 done
-if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].warmReplicas=1' >/dev/null 2>&1; then
+if helm template opencrane-testv5 "$CHART_DIR" "${VALUES[@]}" --set-string 'agentSandbox.profiles[0].warmReplicas=0' >/dev/null 2>&1; then
   echo "Agent Sandbox accepted a string warmReplicas through --set-string" >&2
   exit 1
 fi

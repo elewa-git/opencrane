@@ -243,8 +243,9 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name", "poolName", "image", "resources"],
+            "required": ["name", "poolName", "warmReplicas", "image", "resources"],
             "properties": {
+              "warmReplicas": { "type": "integer", "const": 0, "description": "Computers start only after a lease is admitted; idle prewarming is unsupported." },
               "name": { "type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
               "poolName": { "type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
               "image": {

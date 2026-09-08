@@ -474,6 +474,7 @@ _assert_current_history_and_sandbox()
     | jq -e '.spec.podTemplate.spec.runtimeClassName == "opencrane-smoke-runc"' >/dev/null
   kubectl get sandboxwarmpool/developer-pool -n "$NAMESPACE" -o json \
     | jq -e '.spec.replicas == 0' >/dev/null
+  bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-admission-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME"
   kubectl exec -i "deployment/${RELEASE_NAME}-opencrane-server" -n "$NAMESPACE" -- node --input-type=module <<'NODE'
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

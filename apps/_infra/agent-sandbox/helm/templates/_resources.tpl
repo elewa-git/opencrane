@@ -20,9 +20,8 @@
 {{- if hasKey $seenProfiles $profile.name -}}{{- fail "Agent Sandbox profile names must be unique" -}}{{- end -}}
 {{- $_ := set $seenProfiles $profile.name true -}}
 {{- if empty $profile.poolName -}}{{- fail "every Agent Sandbox profile requires a poolName" -}}{{- end -}}
-{{- if not (or (kindIs "int64" $profile.warmReplicas) (kindIs "float64" $profile.warmReplicas)) -}}{{- fail "every Agent Sandbox profile requires integer warmReplicas between zero and ten" -}}{{- end -}}
-{{- $warmReplicas := float64 $profile.warmReplicas -}}
-{{- if or (lt $warmReplicas 0.0) (gt $warmReplicas 10.0) (ne $warmReplicas (floor $warmReplicas)) -}}{{- fail "every Agent Sandbox profile requires integer warmReplicas between zero and ten" -}}{{- end -}}
+{{- if not (or (kindIs "int64" $profile.warmReplicas) (kindIs "float64" $profile.warmReplicas)) -}}{{- fail "every Agent Sandbox profile requires numeric warmReplicas=0; computers start with an admitted lease" -}}{{- end -}}
+{{- if ne (float64 $profile.warmReplicas) 0.0 -}}{{- fail "every Agent Sandbox profile requires warmReplicas=0; computers start with an admitted lease" -}}{{- end -}}
 {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $profile.poolName) -}}{{- fail "every Agent Sandbox poolName must be a DNS label" -}}{{- end -}}
 {{- if hasKey $seenPools $profile.poolName -}}{{- fail "Agent Sandbox pool names must be unique" -}}{{- end -}}
 {{- $_ := set $seenPools $profile.poolName true -}}
@@ -113,7 +112,10 @@ metadata:
 rules:
   - apiGroups: ["extensions.agents.x-k8s.io"]
     resources: ["sandboxclaims"]
-    verbs: ["create", "get", "delete"]
+    verbs: ["create", "get", "patch", "delete"]
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -149,7 +151,7 @@ spec:
         operations: ["CREATE", "UPDATE"]
         resources: ["sandboxclaims"]
         scope: Namespaced
-    # This policy constrains only main-resource claim specifications; status updates are excluded.
+    # The controller owns status; main-resource updates are limited below to metadata and lease expiry.
     excludeResourceRules:
       - apiGroups: ["extensions.agents.x-k8s.io"]
         apiVersions: ["v1beta1"]
@@ -159,9 +161,36 @@ spec:
     namespaceSelector:
       matchLabels:
         kubernetes.io/metadata.name: {{ $sandbox.namespace | quote }}
+  variables:
+    - name: server
+      expression: request.userInfo.username == {{ $serverUsername | toJson }}
+    # The pinned prerequisite installs this exact identity; no namespace-wide controller exception applies.
+    - name: controller
+      expression: request.userInfo.username == 'system:serviceaccount:agent-sandbox-system:agent-sandbox-controller'
+    - name: controllerAnnotations
+      expression: >-
+        ['agents.x-k8s.io/controller-first-observed-at', 'opentelemetry.io/trace-context',
+         'agents.x-k8s.io/creation-latency-recorded', 'agents.x-k8s.io/sandbox-name']
+    # Kubernetes removes its foreground-deletion finalizer after the dependent resources are gone.
+    - name: finalizerCleanup
+      expression: >-
+        request.operation == 'UPDATE' &&
+        request.userInfo.username == 'system:serviceaccount:kube-system:generic-garbage-collector' &&
+        has(oldObject.metadata.deletionTimestamp) && has(object.metadata.deletionTimestamp) &&
+        timestamp(object.metadata.deletionTimestamp) == timestamp(oldObject.metadata.deletionTimestamp) &&
+        oldObject.metadata.finalizers == ['foregroundDeletion'] &&
+        (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
+        object.spec == oldObject.spec &&
+        object.metadata.labels == oldObject.metadata.labels &&
+        object.metadata.annotations == oldObject.metadata.annotations &&
+        (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
+        (!has(oldObject.metadata.ownerReferences) || oldObject.metadata.ownerReferences.size() == 0)
   validations:
-    - expression: request.operation == 'CREATE' && request.userInfo.username == {{ $serverUsername | toJson }}
-      message: only this release's OpenCrane server may create an Agent Sandbox claim; claims are immutable
+    - expression: >-
+        (request.operation == 'CREATE' && variables.server) ||
+        (request.operation == 'UPDATE' && !has(object.metadata.deletionTimestamp) && (variables.server || variables.controller)) ||
+        variables.finalizerCleanup
+      message: claim writes require the release server, pinned controller or bounded Kubernetes foreground cleanup
     - expression: >-
         object.metadata.namespace == {{ $sandbox.namespace | toJson }} &&
         object.metadata.name.matches('^computer-[a-z0-9]([-a-z0-9]*[a-z0-9])?-g[1-9][0-9]*$') &&
@@ -179,19 +208,17 @@ spec:
         object.metadata.labels['opencrane.ai/computer-lease-id'].matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
         object.metadata.name == object.metadata.labels['opencrane.ai/computer-id'] + '-g' + object.metadata.labels['opencrane.ai/computer-generation'] &&
         object.metadata.labels['opencrane.ai/profile'] in {{ $profileNames | toJson }} &&
-        object.metadata.annotations.size() == 1 &&
-        object.metadata.annotations.all(k, k == 'opencrane.ai/lease-reason') &&
+        object.metadata.annotations.all(k, k == 'opencrane.ai/lease-reason' ||
+          (request.operation == 'UPDATE' && k in variables.controllerAnnotations)) &&
         object.metadata.annotations['opencrane.ai/lease-reason'] in ['activation_requested', 'recovery_requested']
       message: an Agent Sandbox claim must identify one bounded computer lease and contain no caller-controlled metadata
     - expression: >-
-        object.spec.size() == 3 &&
-        object.spec.warmPoolRef.size() == 1 &&
+        !has(object.spec.env) && !has(object.spec.volumeClaimTemplates) &&
         object.spec.warmPoolRef.name in {{ $poolNames | toJson }} &&
         object.spec.warmPoolRef.name == {{ $profilePools | toJson }}[object.metadata.labels['opencrane.ai/profile']] &&
-        object.spec.lifecycle.size() == 2 &&
+        !has(object.spec.lifecycle.ttlSecondsAfterFinished) &&
         object.spec.lifecycle.shutdownPolicy == 'DeleteForeground' &&
         has(object.spec.lifecycle.shutdownTime) &&
-        object.spec.additionalPodMetadata.size() == 2 &&
         object.spec.additionalPodMetadata.labels.size() == 3 &&
         object.spec.additionalPodMetadata.labels.all(k, k in [
           'opencrane.ai/computer-id', 'opencrane.ai/computer-generation',
@@ -199,8 +226,22 @@ spec:
         object.spec.additionalPodMetadata.labels['opencrane.ai/computer-id'] == object.metadata.labels['opencrane.ai/computer-id'] &&
         object.spec.additionalPodMetadata.labels['opencrane.ai/computer-generation'] == object.metadata.labels['opencrane.ai/computer-generation'] &&
         object.spec.additionalPodMetadata.labels['opencrane.ai/computer-lease-id'] == object.metadata.labels['opencrane.ai/computer-lease-id'] &&
-        object.spec.additionalPodMetadata.annotations.size() == 0
+        (!has(object.spec.additionalPodMetadata.annotations) || object.spec.additionalPodMetadata.annotations.size() == 0)
       message: an Agent Sandbox claim may select only a release-owned pool, a foreground-deleted lease, and the admitted computer labels copied to its Pod
+    # Controller serialization may omit an empty annotation map or reformat an equivalent timestamp.
+    - expression: >-
+        request.operation != 'UPDATE' || variables.finalizerCleanup || (
+          object.metadata.labels == oldObject.metadata.labels &&
+          object.metadata.annotations['opencrane.ai/lease-reason'] == oldObject.metadata.annotations['opencrane.ai/lease-reason'] &&
+          object.spec.warmPoolRef == oldObject.spec.warmPoolRef &&
+          object.spec.lifecycle.shutdownPolicy == oldObject.spec.lifecycle.shutdownPolicy &&
+          object.spec.additionalPodMetadata.labels == oldObject.spec.additionalPodMetadata.labels &&
+          (variables.server ?
+            (object.metadata.annotations == oldObject.metadata.annotations &&
+             timestamp(object.spec.lifecycle.shutdownTime) > timestamp(oldObject.spec.lifecycle.shutdownTime)) :
+            timestamp(object.spec.lifecycle.shutdownTime) == timestamp(oldObject.spec.lifecycle.shutdownTime))
+        )
+      message: claim identity and Pod inputs are immutable; the server may only extend expiry and the controller may only update its own annotations
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

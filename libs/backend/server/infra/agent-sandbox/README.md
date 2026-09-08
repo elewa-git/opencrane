@@ -4,12 +4,54 @@
 
 ## What it owns
 
-This package realizes conversation-computer SandboxClaims and verifies the exact Kubernetes Pod bound to an active computer lease. Conversation policy stays in the conversations backend; this package owns only Kubernetes API translation and identity evidence.
+This package connects an admitted assistant conversation to its computer. The conversations backend
+first records a lease: the computer identity, generation and expiry that may execute work. This
+adapter asks Agent Sandbox to provide a Pod and checks that Kubernetes still reflects that lease.
+
+```text
+conversations backend ── admitted computer lease ──┐
+                                                 ▼
+                                  ┌────────────────────────┐
+                                  │ agent-sandbox adapter  │
+                                  └────────────────────────┘
+                                                 │ claim + verified assignment
+                                                 ▼
+                                    Agent Sandbox controller ── computer Pod
+```
+
+**In this flow:** [conversations](../../conversations/main/README.md),
+[Agent Sandbox deployment](../../../../../apps/_infra/agent-sandbox/README.md),
+[conversation computer](../../../../../apps/conversation-computer/README.md).
+
+A claim selects a release-owned computer template. Its status identifies a Sandbox; the adapter
+reads that Sandbox, verifies its controlling claim's unique Kubernetes identifier, and checks the
+Service address belongs to the same namespace. Missing assignment stays pending. Conflicting
+identity or lease metadata fails closed.
 
 ## Public surface
 
-- `AgentSandboxClaimAdapter` creates or observes the deterministic claim and returns controller-owned sandbox identity and Service DNS evidence. It also inspects, renews (moves `shutdownTime` later) and releases a claim only when its immutable lease labels still match.
-- `AgentSandboxPodBindingAdapter` verifies the TokenReviewed Pod UID, ServiceAccount, claim, and copied lease labels.
+- `AgentSandboxClaimAdapter` creates, observes, inspects, renews and releases claims. Renewal and deletion compare the observed Kubernetes identifier and resource version so they cannot modify a replacement or overwrite a concurrent change.
+- `AgentSandboxPodBindingAdapter` checks a Pod identity verified by Kubernetes TokenReview against the claim, service account and copied lease labels.
+
+## Boundary
+
+The conversations backend supplies authorised lease coordinates. This package translates the
+pinned Agent Sandbox v0.5.3 API; it neither chooses profiles nor grants product permissions. It
+accepts the controller's four known bookkeeping annotations while rejecting altered application
+metadata. The Service address can appear before Pod readiness: the computer needs its active lease
+to obtain the review credential that completes bootstrap.
+
+## Dependency direction
+
+This `scope:agent-sandbox`, `layer:infra` library uses the Kubernetes client and shared contracts.
+It must not import application roots, backend domain implementations or frontend packages.
+
+## Runtime & config
+
+The server client needs claim create/get/patch/delete and Sandbox get in the computer namespace.
+The app-owned admission policy confines patches to lease extension or controller bookkeeping.
+Shutdown times use the upstream controller's whole-second precision, rounded down from the admitted
+expiry. Pods retain their separate workload-token verification; a Service address grants no authority.
 
 ## See also
 

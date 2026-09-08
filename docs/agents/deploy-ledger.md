@@ -863,3 +863,37 @@ Full run reports belong in the corresponding pull request or issue.
   and completed at 07:54:30. The archive and KurrentDB volumes require same-node placement; the
   node was near its requested-memory limit. This was a 257-second scheduling delay, not a failed
   copy or a measured restore. Neither data-bearing recovery mode is qualified yet.
+
+## 2026-09-08 · testv5 · personal creation and Sandbox controller contract · PARTIAL
+
+- qualification: `a32380beee1a64405f689700001524965d250df9` passed all 12 validation gates,
+  including k3d, in [run 34205850254](https://github.com/elewa-git/opencrane/actions/runs/34205850254).
+  The corrected manual comparison selected integration ancestor `a155ff59b`, covering all 13
+  cumulative affected images. Publication finished successfully and server provenance matched.
+- deployment: the owning scripts ran 08:59:44.131–09:03:36.190 UTC (232.059 seconds), exit 0,
+  Helm revision 8. Server Ready was observed at 09:03:14 and public TLS health 200 at 09:03:57.720.
+  All 11 service Pods were Ready with zero restarts. The server uses the new source; companions
+  retain qualified `997dcda70`, including the computer image and its admitted profile revision.
+  Seven application digests were checked. PostgreSQL baseline, operand, completed bootstrap Job
+  and owner/OIDC binding were unchanged. This repair timing is not a fresh-install or restore RTO.
+- product proof: colleague D renewed real password-verified OIDC login at 09:04:05. Their original
+  personal creation key now returns the same conversation on retry. Its first human message was
+  accepted at 09:04:17. This proves the computer-history metadata repair on the live installation;
+  no assistant answer has completed yet.
+- controller finding: the new SandboxClaim exists, but its status remains absent. The pinned
+  controller's reconciliation logs at 09:04:17–09:05:39 show the release policy rejecting its
+  required metadata update. The adapter also expects a service address on the claim, whereas the
+  installed v0.5.3 schema places that address on the owned Sandbox. Lease renewal requests a patch
+  that the current Role does not grant. Repair these contracts without granting Pod mutation to
+  the server or runtime.
+- validation finding: Kubernetes reports four policy type-check warnings for size checks on
+  typed specification objects. Claim creation nevertheless succeeded; those warnings alone are
+  not evidence of a rejected create. The current k3d smoke checks controller and template presence
+  but misses these diagnostics. Add a check against the actual installed policy.
+- runtime finding: the shortened volume name now permits a Pod. The replacement was scheduled
+  at 09:04:32 and started at 09:05:25, but its unused prewarmed worker exits because no computer
+  lease labels exist yet. The next repair should start claimed computers directly and remove this
+  idle prewarming from the test profile. Existing conversation lease reuse remains separate.
+- boundary: the original company child request remains terminal; the next explicit request must
+  create a new child. Complete personal and child answers, reviewed return and reconnect before
+  capturing the data-bearing fixture for both scheduled recovery drills.
