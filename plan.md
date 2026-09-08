@@ -13,14 +13,14 @@ older run-owned runtime and relational transcript descriptions in historical pla
 
 | Work | State and next proof |
 | --- | --- |
-| Repair #772's obsolete stack ancestry | Done: identical patch rebased as `46ce3204e`, PR targets `develop`, live stack checker passes. |
-| Make development checks proportional to the change | Early boundaries, scoped specialist reviews, removed cross-run cache transfers and isolated Helm fixtures are implemented. The large-diff checker and cumulative manual-run comparison repairs pass CI. Full qualification at `ac5f12c4d` passed all 12 gates, including installed admission checks; its server/chart repair took 230.8 seconds. Fresh-install timing remains unqualified. Persisted claim-to-Sandbox-to-Pod proof passed all 12 remote gates at `1cb9dd2c0`; the qualified controller configuration was applied in 19.9 seconds. Bootstrap update preparation is implemented but unexercised live. Active local Stop hooks are unchanged. |
-| Explain the product and architecture consistently | Done in the review branch: README and website use the vision, current ownership, and built/pending status; website build passes. |
-| Complete onboarding-to-assistant continuity | Five employees completed real OIDC admission, approved personas and guided onboarding; one completed password sign-in through the real browser. The supplied model is configured. Qualified source `af3bf689f` is deployed; fresh personal computers obtained review credentials, restored their workspaces and bootstrapped successfully. The provider rejects the request because the whole-run token ceiling becomes a single response limit. A separate frozen 4,096-token response cap is being qualified. First assistant answers remain pending. |
-| Make new personal sessions and ordinary group chats usable | All three creation modes distinguish new chats from retries; chat names, enum mapping, inactive-peer reads, reconnect and revocation cleanup are implemented. Live proof on `cf8b5f447` confirms three human messages, identical ordered history for all three members, an idempotent exact retry and a 409 for changed text. The group has no computer or assistant run. Server replacement currently loses browser sessions because the session store is process-local; durable login continuity remains pending. |
-| Ask an assistant to work inside a group | Explicit company selection, fixed child audience, durable creation, Back to group and reviewed human-authored sharing are implemented. On `b2ee5a4ca`, a fresh real-browser request and exact API retry recover the same child; changed-source and other-caller retries are denied, and all three members can open it. The Pod-read and requester-identity repairs are deployed at `af3bf689f`. A fresh browser-selected child and all three audience reads pass; the per-response token-limit repair must be qualified. First answer, follow-up and reviewed sharing proof remain pending. |
-| Rebuild channel event reads (#827) | Implemented and qualified against real KurrentDB in CI at `cbdb742d4`: bounded, cancellable participant reads and resumable same-origin SSE on the public listener, consumed by the workspace. The deployed multi-user journey remains to be proven. |
-| Qualify backup and restore on testv5 | All eleven service Pods and public TLS health pass on `af3bf689f`. Anonymous KurrentDB health returns 204 while protected routes return 401 with anonymous access disabled. Both storage classes and scheduled file copies are proven. Remote replay qualification and the owning live replay command pass; the parked queue fell from three to zero. Complete assistant replies before the scheduled file-copy and volume-snapshot restores through `--kurrentdb-restore latest`, then measure both recovery times. |
+| Repair #772's obsolete stack ancestry | ✅ COMPLETE — independent patch targets `develop`; see [completed work](plan-done.md). |
+| Make development checks proportional to the change | ✅ COMPLETE — early boundaries, scoped reviews, usable caches and isolated Helm fixtures; see [completed work](plan-done.md). Measure gains on comparable runs; active local Stop hooks are unchanged. |
+| Explain the product and architecture consistently | ✅ COMPLETE — vision-led README, architecture and website with built/pending status; see [completed work](plan-done.md). |
+| Complete the first personal-assistant text journey | ✅ COMPLETE on `232d55d5a` — two employees received answers with approved settings and recovered them in fresh browsers; see [completed work](plan-done.md). |
+| Make new sessions and ordinary group chats usable | ✅ COMPLETE for creation, retry, ordered messages and saved history; see [completed work](plan-done.md). Login continuity and live membership-revocation proof remain below. |
+| Ask a company assistant to work inside a group | ✅ COMPLETE on `232d55d5a` — three-person audience, initial/follow-up answers, browser navigation and edited human sharing; see [completed work](plan-done.md). Autonomous subagents remain separate work. |
+| Rebuild channel event reads (#827) | ✅ COMPLETE — real KurrentDB CI and live multi-user SSE cursor resume pass; see [completed work](plan-done.md). Initial-history and periodic computer replay costs remain to measure. |
+| Qualify backup and restore on testv5 | ✅ COMPLETE for the requested drills — scheduled file-copy `latest` recovery, restricted anonymous health and scheduled volume-snapshot backups pass; see [completed work](plan-done.md) and the [deploy ledger](docs/agents/deploy-ledger.md). |
 
 Completed implementation moves to `plan-done.md`; live evidence belongs in
 [`docs/agents/deploy-ledger.md`](docs/agents/deploy-ledger.md). A green test, a pushed change, a
@@ -58,23 +58,25 @@ Nx skills PR [#772](https://github.com/elewa-git/opencrane/pull/772) now targets
 - Authorized participants have file, diff and browser discovery routes. Commands, screenshots,
   page creation and preview effects remain denied until concrete effect admission is connected.
   Published applications, interactive desktops and unrestricted terminals are absent.
-- Backup schedules, restore tooling, HTTPS probes and disruption protection are implemented; their
-  live recovery drill is still pending.
+- Backup schedules, restore tooling, HTTPS probes and disruption protection are implemented.
+  Scheduled file-copy recovery and volume-snapshot backup creation pass live. Snapshot restore
+  remains unqualified; it was additional to the requested backup-mode trial.
 
 The baseline uses fresh installation only. There is no migration, dual-write mode, compatibility
 route, or second Pod controller. [ADR 0016](docs/adr/0016-conversation-history-and-computers.md)
 supersedes older runtime, storage and upgrade descriptions. Source completion, CI, deployment and
 live product acceptance remain separate evidence.
 
-## Finish the first useful journeys
+## Extend the proven text journeys
+
+The completed personal and group-assistant text path is recorded in [plan-done.md](plan-done.md).
+The remaining acceptance work is broader than producing a first answer:
 
 | Journey | Remaining work | Acceptance |
 | --- | --- | --- |
-| Join and use a personal assistant | Qualify invite/sign-in, saved onboarding, approved settings, assistant selection and first answer together. | Two employees independently complete setup and receive answers influenced by their own approved settings. Refresh and retry preserve progress. |
-| Start and revisit chats | Qualify independent sessions, readable labels, reconnect and visible recovery together. | A new request creates a new chat; retry creates none extra; closed chats remain closed; late responses cannot replace the selected chat. |
-| Talk as a group | Qualify group navigation, ordered delivery, creation retries and membership changes with real accounts. | Three employees exchange ordered messages and resume after reconnect; ordinary messages create no agent run. |
-| Ask an assistant in a group | Qualify the implemented operator setup API, company assistant selection, durable child recovery, Back to group and reviewed sharing together. Record integration CI on the single review PR. | One request creates one child with its admitted audience; a late join does not change retries; answers use the company's model authority; reviewed results post as the human; revocation and guessed IDs reveal no private content. |
-| Receive live conversation updates | Qualify the implemented [#827](https://github.com/elewa-git/opencrane/issues/827) stream against live KurrentDB; measure the remaining initial-history and periodic computer replay cost. | Disconnect cancels upstream work; a reconnect resumes by stream revision; access is rechecked before plaintext delivery. |
+| Keep login and activity continuous | Replace process-local sessions and repair personal activity visibility. | Server replacement preserves login; people can find the completed runs already present in their conversations. |
+| Preserve access changes and closed work | Expose the required membership/participant operation and qualify revocation, browser purge and closure with real accounts. | Revoked or closed work stays inaccessible; late responses cannot restore its private history or draft. |
+| Follow long conversations efficiently | Measure initial-history and periodic computer replay cost after the completed [#827](https://github.com/elewa-git/opencrane/issues/827) stream. | Long history has bounded read cost; reconnect retains ordered delivery and current access checks. |
 | Perform a useful external action | Connect model tool requests to existing server-owned tool admission, approvals, execution and durable results. | One real task succeeds with a chosen integration; denied/revoked/ambiguous actions never execute or claim success. |
 
 Group child chats and runtime delegation are distinct. [ADR 0012](docs/adr/0012-conversation-modes-and-agent-thread-authority.md)
@@ -142,29 +144,20 @@ journeys may be labelled MVP-ready. See [#162](https://github.com/elewa-git/open
 Measure fresh-install readiness against the existing target of ready Pods within five minutes per
 silo. Record the result during deployment qualification; it is not a gate on ordinary source edits.
 
-Testv5 now has a dedicated confidential Zitadel client, three isolated test identities, a secure
-client-secret source, first-owner and ACME inputs. Its exact DNS record points to the current ingress.
-The supplied OpenAI key passed a small direct model request; registration through the authenticated
-product and real assistant answers remain pending. No existing human credentials were changed.
-The deploy entrypoint exposes PostgreSQL and KurrentDB credential preparation for the fresh silo.
-Snapshot resource names have emitted-manifest regression coverage. The dev cluster has a ready pinned
-Agent Sandbox controller, gVisor, and the non-default `opencrane-pd-snapshots` class.
-SSD quota has only 10Gi remaining, while standard-disk quota has 4096Gi available. The new explicit
-standard-disk prerequisite action provides a non-default CSI `pd-standard` class compatible with
-snapshots; the existing legacy standard class cannot qualify CSI snapshots. PostgreSQL, artifacts,
-Cognee, KurrentDB and its archive now use that class. The class and namespace credentials are
-provisioned with an unchanged class retry verified.
-The controller-argument preflight repair passed. The first installation bound all volumes and
-reached KurrentDB readiness, but bootstrap DNS was blocked by the missing node-local resolver rule.
-The DNS rule is now live and the installer correctly stops before dependent server waits. The
-bootstrap ownership guard now matches the actual chart's Pod-template labels, with rendered-resource
-regressions. The live retry, authenticated product journeys and both recovery modes remain pending.
-The anonymous KurrentDB health proof passed live: `/health/live` returned 204 while administration
-and silo-stream reads returned 401, with TLS verification and all anonymous/insecure flags false.
-The remaining drill is one scheduled fileCopy backup, a full `latest` restore with measured RTO,
-and snapshot-mode qualification using the provisioned class. Cluster changes
-use the authorized app-owned scripts. Record actual results in the
-[deploy ledger](docs/agents/deploy-ledger.md), not as assumed completion here.
+Testv5 has a dedicated Zitadel client, five isolated test employees, a configured model and a
+completed personal/group chat fixture. Its pinned Agent Sandbox controller, gVisor, private
+networking and non-default CSI storage/snapshot classes are installed. The latest server repair
+passed thirteen selected CI/publication jobs and deployed in 228.449 seconds. That is repair
+duration, not fresh-install timing or restore RTO. Cold node provisioning previously incurred
+liveness restarts; fresh computers on the latest run started without a restart. Review the startup
+allowance separately rather than treating the warm-node result as cold-start proof.
+
+The scheduled file-copy `latest` restore recovered all eight audience histories and allowed a new
+assistant answer. Scheduled volume snapshots are ready on the provisioned class. An additional
+snapshot restore was rejected before execution by automatic approval review; no snapshot recovery
+time is claimed.
+Cluster changes use the authorized app-owned scripts; exact inputs, incidents and proof belong in
+the [deploy ledger](docs/agents/deploy-ledger.md).
 
 ## Later work
 

@@ -16,7 +16,7 @@ baseline from remaining product work and live verification.
 | Company assistant in groups | Explicit assistant selection on an own group message, recoverable child creation, fixed audience, current parent and child access checks, follow-up answers, and human-reviewed sharing back. Administrator setup uses the API. |
 | Computer inspection | Workspace file, diff and browser discovery routes. Commands, page creation, screenshots and preview actions remain denied until their concrete effect admissions are connected. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
-| History operations | Scheduled backups, restore tooling and health checks. Live scheduled file copies and restricted anonymous health pass; restoring a completed product fixture and measuring recovery time remain pending. |
+| History operations | Scheduled backups, restore tooling and health checks. A scheduled file-copy restore recovered completed personal/group chats, removed a later message and allowed new group messages and an assistant answer. Scheduled volume snapshots are ready; restoring them remains unqualified. |
 
 These are implementation claims, not a claim that every journey is deployed, merged or live
 qualified. The [active plan](https://github.com/elewa-git/opencrane/blob/main/plan.md) records the
@@ -33,7 +33,8 @@ current review work and its evidence.
 - **Inputs and outputs:** complete the user journeys for attachments, generated files and their
   recovery across refresh, retry and conversation closure.
 - **Administration:** complete the product surfaces for permissions, activity and cost without
-  requiring an employee to understand internal execution concepts.
+  requiring an employee to understand internal execution concepts. Personal activity listings
+  still omit completed runs that are present in the conversation history.
 - **Login continuity:** preserve authenticated sessions across server replacement and support
   multiple servers consistently. The current server stores sessions in its own process, so a
   replacement requires people to sign in again even though their saved conversations remain.
@@ -41,29 +42,29 @@ current review work and its evidence.
 Durable application source, builds and published apps are later work. Temporary computer previews
 do not publish an application.
 
-## Still to prove live
+## Proven in the test installation
 
-The test installation has verified real identity-provider login, invitation admission, provider
-configuration and a three-person group with durable ordered messages and idempotent retries.
-Five test employees have completed guided onboarding. After deploying the profile and standalone
-membership repairs, a fresh employee signed in with a password in a real browser and reached the
-chat workspace with their assistant ready. Company-assistant discovery, administrator checks and
-child-request admission also pass, including audience isolation and retry checks.
+Five test employees completed sign-in and guided onboarding with approved assistant settings.
+Two employees independently received personal-assistant answers and recovered those saved answers
+after signing in through a fresh browser and reloading the page. The completed runs used each
+employee's approved settings and the configured model.
 
-Fresh personal chats and company-assistant requests now reach their running computers. Private
-networking and activation replay have passed remote qualification and are deployed. A fresh company
-request was selected in the real browser, and all three group members can open its child chat.
-The server's narrow Pod-read permission and the persona/requester admission repairs are qualified
-and deployed. Fresh personal computers obtained credentials, restored their workspaces and
-successfully bootstrapped. Their model requests reached the gateway but were rejected because the
-whole-run token budget was being sent as the output limit for one response. The next repair freezes
-a separate 4,096-token response cap, while retaining any stricter run budget. This is a product
-limit, not a claim about every provider's maximum. Complete personal and child answers, reviewed
-sharing and reconnect remain pending live.
+Three colleagues exchanged ordered group messages. The owner selected a company assistant on a
+group message, and all three members could open its linked chat. The assistant answered the request
+and a follow-up. In the browser, the owner returned to the group, reopened the assistant chat,
+reviewed and edited its answer, and shared it back as their own message. That result survived reload.
+Creation and posting retries, audience isolation and resuming live updates also passed.
 
-Access changes, recovery and computer actions need their complete live journeys. Tool, memory and
-shared-work journeys need their own evidence as they become available. Both history restore modes
-still need a completed product fixture and measured recovery time.
+These checks ran on the 0.11 review candidate in the dedicated testv5 installation. They establish
+the text-conversation journey; they do not establish the unfinished tool, memory or autonomous
+delegation journeys.
+
+## Next live checks
+
+The requested file-copy recovery and snapshot-backup checks have passed. Restoring a volume snapshot
+would be a separate qualification. Membership revocation and clearing private browser state after
+access is removed remain unproven live because the administrative operation is not yet exposed.
+Computer actions need their complete journeys as their effect admissions become available.
 
 Component tests, a chart render or a healthy process do not establish those complete journeys.
 Conversely, a pending live drill does not make already implemented code unfinished. Deployment

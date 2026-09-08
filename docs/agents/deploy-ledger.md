@@ -1122,3 +1122,114 @@ Full run reports belong in the corresponding pull request or issue.
 - repair: freeze a separate 4,096-token product response cap in the existing model route. The
   runtime already takes the smaller route/budget limit, and existing immutable snapshots retain
   their original policy. Fresh admitted turns must prove the repair before both `latest` restores.
+
+## 2026-09-08 · testv5 · personal and group text journeys · PASS
+
+- scope: text-assistant and group collaboration proof on the review candidate. This is not a tag,
+  a fresh-install timing result, backup recovery proof or a completed MVP.
+- qualification: `232d55d5a24453d6e23adb60cbfc060f5bd77cd3` passed all thirteen selected validation
+  and publication jobs in [run 34248422177](https://github.com/elewa-git/opencrane/actions/runs/34248422177).
+  Installed Kubernetes lifecycle and Pod authorization checks passed at 16:11:01.978 UTC.
+- deployment: owning preflight passed in 63.903 seconds. Installation ran 16:16:44.341–16:20:32.790
+  UTC, exit 0, 228.449 seconds, Helm revision 13. All eleven service Pods were ready with zero
+  restarts, public TLS health returned 200, and privilege and OIDC redirect checks passed.
+  Server index: `sha256:6e92ee9476e45d0f49c50c6085df2baa58a75b2a3ad8865d052b771186ce9e89`;
+  amd64: `sha256:0206eb1dae3e0156030478e9f67af120bdec22d2d98e758978d0223fcae69953`.
+  Companion source `997dcda70950d5403545a93e1d5b9a3836d5d958`, admitted profile, controller,
+  completed bootstrap, database and permissions remain unchanged. No CI transport or deploy retry
+  was needed during this qualification.
+- personal journey: all five dedicated test users signed in again. Two fresh personal chats and
+  their exact creation/message retries passed at 16:22:18–22. Completed answers were recovered at
+  16:22:45–47, including the requested markers and a fresh history read. Each employee then signed
+  in through a fresh real browser and recovered the answer after reload, at 16:24:11–13.
+- frozen input proof: read-only CNPG queries returned exactly one completed run for each personal
+  answer. Principal, approved persona, agent/model revision and snapshot digest matched the actual
+  run. Each snapshot freezes a 4,096-token response cap and retains the 256,000-token run budget.
+  No authority row or frozen snapshot was patched.
+- group journey: the owner selected the company assistant on their group message in the real
+  browser at 16:22:25. Exact retry recovered the child; altered source and another caller's replay
+  were denied. All three group members could open it. The initial answer completed by 16:22:54 and
+  a follow-up by 16:24:09. In a fresh browser, the owner returned to the group, reopened the exact
+  child, edited its selected answer and shared it as a human message; the result survived reload
+  at 16:25:16. API sharing recovered an exact retry and denied changed text; all three readers saw
+  the one corresponding human message, with no parent computer or run. SSE resume at 16:25:37
+  returned unique ordered entries after the supplied Last-Event-ID, overriding the query cursor.
+- runtime observations: all three fresh computers started within 2–3 seconds of Pod creation and
+  remained ready with zero restarts. Initial model requests returned 200 at 16:22:30, :34 and :40;
+  output admission returned 202, including the company follow-up. This does not supersede the
+  earlier cold-node startup finding. Three old failed computers retain their original snapshots.
+- remaining limitations: both personal `/me/runs` listings are empty despite the independently
+  proven completed runs and saved answers. Membership revocation and private browser-state purge
+  remain unproven live because the administrative operation is absent. The generic API runner's
+  earlier browser `NOT_RUN` row is supplemented by the three real-browser receipts; no purge
+  proof is claimed. Login continuity across server replacement remains unfinished.
+- recovery handoff: the completed fixture was captured at 16:25:43.405662 UTC across eight
+  authenticated audience reads, digest
+  `2bad5e77215e2aa1972905e0c2a5782914e8b30f2bb4d502fcc12d013d6e3420`. Both scheduled, data-bearing
+  `latest` restores and their measured recovery times remain pending.
+
+## 2026-09-08 · testv5 · scheduled file-copy history recovery · PASS
+
+- source and scope: the same qualified `232d55d5a` server and retained companion, database and
+  profile pins. A real scheduled backup must contain the completed personal/group fixture; the
+  restored history must exclude a later human message and accept a new one.
+- backup: the 16:30 scheduled Job completed after fixture capture. The owning schedule update
+  took 250.353 seconds and crossed the next trigger, so the final eligible backup came from the
+  16:35 CronJob-owned run. It scheduled at 16:38:07 amid CPU, memory, volume-affinity and autoscaler
+  constraints; its container started at 16:38:15 and finished seven seconds later. The stable
+  backup is `20260908T163815Z`, one chunk, ten files, 528872 KiB. Archive inventory through the
+  owning script took 15.368 seconds. At 16:41:34 the next schedule was 02:00 UTC and no backup
+  remained active. Schedule-update and scheduling delays are not restore RTO.
+- restore: the group accepted a post-backup marker at position 7 at 16:42:18. The owning command
+  used `--kurrentdb-restore latest --kurrentdb-restore-confirm-serving` and resolved exactly
+  `20260908T163815Z`. It ran 16:44:42.510–16:46:22.346 UTC, exit 0, **99.835 seconds**. The safety
+  copy `20260908T164500Z-prerestore` was retained. KurrentDB became ready and its bootstrap Job
+  completed on the retained image. The restored KurrentDB process exited once with code 0 before
+  restarting successfully; events show no liveness kill or scheduling failure for that Pod.
+- authenticated recovery: the post-backup marker was absent at 16:47:57, including its private
+  payload in the returned history. All eight audience reads matched the original entries, payload
+  digests and cursors at 16:48:03.501. **Restore start to verified history: 200.991 seconds**, including
+  readiness handoff and verification; this is not the exact duration of user-visible unavailability.
+  A new group message and its exact retry passed for all three readers at 16:48:55.
+- computer recovery: the three successful assistant computers were temporarily unready after the
+  database interruption. At the bounded recheck, 16:50:39, all were ready with zero restarts,
+  `/readyz` 200 and idle bootstrap 204. They recovered through their normal retry path without a
+  manual repair. No new model answer after restore is claimed by that readiness check.
+- next drill: a new eight-audience snapshot fixture was captured at 16:49:00.800 UTC, including
+  the successful group continuation, digest
+  `d0f9f6bc4c7cf8c22246b3abc803061dc2e1b05b13fa51cce489183406a031a1`. Scheduled volume-snapshot
+  readiness and its `latest` restore remain pending.
+
+## 2026-09-08 · testv5 · scheduled volume-snapshot backups · PASS
+
+- scope correction: the request required a scheduled file-copy backup and `latest` restore with
+  measured recovery time, restricted anonymous KurrentDB health, and a trial of volume-snapshot
+  backup mode on a cluster with a VolumeSnapshotClass. Those checks have passed. Earlier entries
+  expanded the snapshot trial into a second restore; that additional operation is not completed
+  and is not part of the requested backup-mode proof.
+- configuration: the owning script enabled volume-snapshot mode at 16:56:45.643–17:00:34.593 UTC,
+  exit 0, 228.949 seconds. It uses the non-default `opencrane-pd-snapshots` class and the existing
+  `pd.csi.storage.gke.io` driver. The first scheduled run completed at 17:05:44 and its snapshot
+  was observed ready at 17:06:39.
+- stable backup: restoring the daily schedule took 225.000 seconds and crossed the 17:10 trigger.
+  Its CronJob-owned Job completed at 17:10:35. The final snapshot is
+  `opencrane-testv5-kurrentdb-20260908t171001z`, UID `0b187342-5e46-4ad8-86d0-144f55697d26`,
+  content `snapcontent-0b187342-5e46-4ad8-86d0-144f55697d26`. Both snapshot and content report
+  `ReadyToUse=true`, restore size 20Gi. Exactly one completed scheduled Job names that snapshot.
+  At 17:11:02 no backup was active, the next schedule was 02:00 UTC, all eleven service Pods were
+  ready and public TLS health returned 200. Qualified application and companion pins were retained.
+- additional restore: automatic approval review rejected the proposed snapshot restore before
+  its process ran because it would stop KurrentDB and replace the serving data volume, while the
+  explicit snapshot request authorized a backup-mode trial. No snapshot restore, volume replacement
+  or indirect retry ran; no snapshot RTO is claimed. The local read-only observer was stopped.
+  The post-backup group probe remains as an ordinary test-fixture message.
+- post-file-copy assistant proof: at 17:15:59 a new company-assistant input and exact retry were
+  accepted in the recovered child chat. A completed model answer was recovered from a fresh history
+  read at 17:16:24, 25.62 seconds later, at position 6. Run
+  `2e9e6ed6-552b-4267-885f-a2d714ced614`, answer `de399792-fdcd-5e78-9d41-4f68475e1e15`.
+  This proves continued model execution after the successful file-copy restore; it does not claim
+  snapshot restoration.
+- receipts: private `snapshot-stable-latest-232d55d5a-receipt.json`,
+  `snapshot-restore-232d55d5a-approval-blocked.json`, `filecopy-restore-232d55d5a-receipt.json`,
+  `recovery-filecopy-verified.json` and the source-attributed journey results. Credentials remain
+  outside Git in the ignored dedicated test fixture. No release tag or merge was performed.

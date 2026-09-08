@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-09-08 — personal and group-assistant text journeys qualified on testv5
+
+Employees can complete setup, receive a personal-assistant answer and return to its saved history.
+Three colleagues can talk in a group, choose a company assistant for an own message, follow up in
+the linked chat, and return an edited answer as a human-authored group message.
+
+Live candidate `232d55d5a24453d6e23adb60cbfc060f5bd77cd3` passed all thirteen selected CI and
+publication jobs. The owning deployment completed in 228.449 seconds, with eleven service Pods
+ready and public TLS health passing. Two independent personal answers, the company answer and its
+follow-up completed. Fresh browser logins and reloads preserved both personal answers; the group
+owner navigated back and forth, edited the selected result and shared it to the group. All three
+members recovered that message. Exact retries, altered-command denials and SSE cursor resume passed.
+
+Read-only database evidence binds both completed personal runs to their actual approved personas,
+model revision and immutable input digest. The frozen 4,096-token response cap remains separate
+from the 256,000-token run budget. New personal text runs explicitly omit memory while its dataset
+provisioning and recall journey remain unfinished. The company assistant retains its own execution
+identity and model authority, with a separately verified human requester.
+
+PR #826 remains the single baseline review; #772's identical independent patch targets `develop`
+and the live stack check passes. The development-process and documentation implementation is
+recorded below. This proof does not qualify the whole MVP: personal activity listings are still
+empty, process-local logins do not survive server replacement, membership-revocation proof is
+pending, and tools, memory and autonomous subagents remain separate work.
+
+The requested recovery drills also passed. A scheduled file-copy `latest` restore recovered all
+eight authenticated audience histories and removed a post-backup message. The owning command took
+99.835 seconds; command start to verified history took 200.991 seconds, including handoff and
+verification. Group posting and a new model answer succeeded afterward. Scheduled volume snapshots
+are ready on the provisioned class. KurrentDB 26.1.1 serves anonymous health while denying protected
+routes with anonymous access disabled. Snapshot restoration is unqualified and was outside the
+requested snapshot-backup trial. Exact evidence is in the [deploy ledger](docs/agents/deploy-ledger.md).
+
 ## 2026-09-07 — shared company assistant implementation; qualification pending
 
 Group members can select one of their own text messages, choose the company assistant and work in

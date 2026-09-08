@@ -13,10 +13,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
-The group-assistant journey is implemented in the current development wave; integration CI and
-live qualification are pending.
+Personal and group-assistant text journeys have passed integration CI and live testv5 checks.
+The 0.11 baseline remains under review; this is not a release or a completed MVP.
 
 ### Added
+
+- **Operators can back up conversation history and recover it from a scheduled file copy.**
+  Live recovery preserved completed personal and group chats and allowed new messages and an
+  assistant answer. Scheduled volume snapshots are also proven on a supported storage class;
+  restoration from a snapshot remains unqualified.
 
 - **Group members can choose a company assistant to work on one of their own messages.** Work opens
   in a shared child chat with a fixed audience of people allowed to read the selected message.
@@ -42,12 +47,10 @@ live qualification are pending.
   completion can resume after a worker restart without duplicating model output.
 
 - **People can inspect an active conversation computer from the conversation workspace.**
-  Authorized participants can read workspace files and diffs, run release-allowlisted argv commands
-  (`git`, `node`, `npm`, `npx`, `python3`; no shell), take headless Chromium screenshots of
-  allow-listed localhost preview ports, and view those previews through a GET-only proxy, all
-  without exposing raw sandbox control ports. Not in 0.11: an interactive browser or desktop view,
-  noVNC, a terminal, artifact routes, and per-participant review-surface selection (every
-  participant with `Use` on the conversation gets every shipped surface).
+  Authorized participants have workspace file, diff and browser-discovery reads. Commands,
+  screenshots, page creation and preview actions remain denied until their concrete effect
+  admissions are connected. Interactive desktops, unrestricted terminals and application
+  publishing remain later work.
 
 - **Conversation computers can cool to zero and recover their workspace on demand.** OpenCrane
   checkpoints an idle workspace before releasing its Agent Sandbox claim, restores the checkpoint
@@ -91,6 +94,12 @@ live qualification are pending.
 
 - **Personal assistants use the preferences people approved during setup.** The runtime now sends
   the compiled instructions with conversation history to the model instead of dropping them.
+  Admission resolves those settings through the employee's verified sign-in identity and can
+  complete text turns before personal-memory provisioning is available.
+
+- **A generous run budget no longer prevents an assistant from answering.** Each text response has
+  a separate output cap, with any stricter run budget still respected, so the entire run allowance
+  is not sent to the model as one response request.
 
 - **Employees can find their own personal assistant when colleagues have private assistants too.**
   The directory selects the caller's assistant before checking its current read permission.
