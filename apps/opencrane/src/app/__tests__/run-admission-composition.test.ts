@@ -58,6 +58,8 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		const transaction = {
 			agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
 			runInputSnapshot: { create: vi.fn() },
+			authorizationGrant: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
+			auditEntry: { create: vi.fn() },
 			agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", kind, activeRevisionId: "revision-1", activeRevision: { id: "revision-1", state: "Published", promptPolicyVersion: PROMPT_COMPILER_VERSION } }) },
 			principal: { findUnique: vi.fn().mockResolvedValue({ subject: "human-subject" }) },
 			personaProfile: { findUnique: vi.fn(async function _Persona(query)
@@ -98,10 +100,12 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		{
 			expect(transaction.principal.findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "human-principal", siloId: "silo-1" } }, select: { subject: true } });
 			expect(result.compiledInput.instructions).toBe("Answer in plain English.");
+			expect(transaction.authorizationGrant.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", resourceKind: ProductAuthorizationResourceKinds.AgentRun, resourceId: "run-1", subjectPrincipalId: "human-principal", boundaryPrincipalId: "human-principal", boundaryCoverage: "Exact", effect: "Allow" }) });
 		}
 		else
 		{
 			expect(transaction.personaProfile.findUnique).not.toHaveBeenCalled();
+			expect(transaction.authorizationGrant.create).not.toHaveBeenCalled();
 			expect(result.compiledInput.instructions).toBe("");
 		}
 	});
