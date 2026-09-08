@@ -121,6 +121,25 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 		expect(claims.renew).toHaveBeenCalledWith(expect.objectContaining({ expiresAt: "2026-09-05T13:20:00.000Z" }));
 	});
 
+	it("does not renew for the controller's whole-second expiry serialization", async function _SerializedExpiry()
+	{
+		const lease = { ..._LEASE, expiresAt: "2026-09-05T13:00:00.999Z" };
+		const { authority, claims, append } = _Harness(_COMPUTER, false, lease, { lastActivityAt: _NOW, busy: true });
+		claims.inspect.mockResolvedValue({ claimId: lease.sandboxClaimId, sandboxId: lease.sandboxId, serviceFQDN: lease.serviceFQDN, shutdownTime: "2026-09-05T13:00:00Z" });
+		await expect(authority.reconcile(_COMMAND)).resolves.toBe("current");
+		expect(claims.renew).not.toHaveBeenCalled();
+		expect(append).not.toHaveBeenCalled();
+	});
+
+	it("renews a claim that is a full upstream timestamp second behind", async function _WholeSecondLag()
+	{
+		const lease = { ..._LEASE, expiresAt: "2026-09-05T13:00:00.999Z" };
+		const { authority, claims } = _Harness(_COMPUTER, false, lease, { lastActivityAt: _NOW, busy: true });
+		claims.inspect.mockResolvedValue({ claimId: lease.sandboxClaimId, sandboxId: lease.sandboxId, serviceFQDN: lease.serviceFQDN, shutdownTime: "2026-09-05T12:59:59Z" });
+		await expect(authority.reconcile(_COMMAND)).resolves.toBe("renewed");
+		expect(claims.renew).toHaveBeenCalledOnce();
+	});
+
 	it("retires an idle cooling computer instead of renewing its lease", async function _RetireBeforeRenew()
 	{
 		const { authority, claims, checkpoints } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling }, false, { ..._LEASE, expiresAt: "2026-09-05T12:40:00.000Z" });

@@ -250,7 +250,9 @@ shared group-child journey and its durable recovery worker. The public routes ar
 - `ConversationComputerLifecycleAuthority` measures idleness from the newest turn activity on the
   lease's active-turn stream (`KurrentConversationComputerActivityReader`), renews an in-use lease at
   half of its lifetime, records an expired or claim-less lease as `lost` with a cold computer, and
-  otherwise cools, checkpoints, and releases. Activation opens generation + 1 from `released` or `lost`.
+  otherwise cools, checkpoints, and releases. It compares claim lag at Kubernetes' whole-second
+  timestamp precision so discarded milliseconds do not trigger repeated renewals. Activation opens
+  generation + 1 from `released` or `lost`.
 - `ConversationComputerHistory` persists and reloads full computer and lease snapshots on one
   deterministic KurrentDB stream. Its checked current-head result lets future pre-admission code use
   only one matching warm computer with one active, generation-fenced lease.

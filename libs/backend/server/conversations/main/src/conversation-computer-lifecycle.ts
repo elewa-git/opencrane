@@ -35,7 +35,8 @@ export function _ConversationComputerRenewalDue(lease: ComputerLease, claimShutd
 {
 	if (Date.parse(lease.expiresAt) - now.getTime() <= policy.leaseTtlMilliseconds / 2)
 		return true;
-	return claimShutdownTime !== null && Date.parse(claimShutdownTime) < Date.parse(lease.expiresAt);
+	// The claim adapter drops fractional seconds when it writes the Kubernetes shutdown time.
+	return claimShutdownTime !== null && Math.floor(Date.parse(claimShutdownTime) / 1000) < Math.floor(Date.parse(lease.expiresAt) / 1000);
 }
 
 /**
