@@ -140,6 +140,9 @@ STATEFULSET_MUTATION='.'
 CREATE_FAILURE=1
 expect_no_creation
 CREATE_FAILURE=0
+# The test clock advances only when the mocked sleep runs.
+unset SECONDS
+SECONDS=0
 sleep() { printf '%s\n' "$1" >>"$TEST_DIRECTORY/sleeps"; SECONDS=$((SECONDS + $1)); }
 for JOB_CONDITION in Failed FailureTarget; do
   if run_kurrentdb_replay_parked >/dev/null 2>&1; then echo 'Failed replay Job was reported successful.' >&2; exit 1; fi
