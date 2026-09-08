@@ -30,7 +30,8 @@ current review work and its evidence.
   recheck current permission and the original run budget before execution. Connecting this
   admission to the model, tool results and conversation history remains in progress.
   Reserved tool work also blocks final completion; automatic recovery of an abandoned proposal
-  remains unfinished.
+  remains unfinished. The audit path now identifies the verified computer or executor behind a tool
+  request; fresh-database qualification of that repair is pending.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
   across conversations.
 - **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete

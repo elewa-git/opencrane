@@ -1,5 +1,5 @@
 import type { AgentIdentity } from "@opencrane/contracts";
-import type { AuthorizationAuthority, ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import type { AuthorizationAuthority, ProductAuthorizationWorkloadContext, ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import type { ExecutionSubject, ExecutionSubjectHumanMembershipEvidence } from "@opencrane/models/agents";
 
@@ -58,5 +58,5 @@ export interface ConversationToolAssignmentAuthority
 export interface ConversationToolDispatchAuthority
 {
 	/** Return a known permission refusal or propagate an unavailable dependency. */
-	isCurrentlyEligible(invocation: ToolInvocationRecord, now: Date): Promise<boolean>;
+	isCurrentlyEligible(invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<boolean>;
 }

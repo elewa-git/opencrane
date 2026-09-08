@@ -31,10 +31,10 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.
 		new PrismaToolRecoveryEventReporter(),
 		new PrismaToolInvocationRunRecoveryAuthority(),
 		{
-			async isCurrentlyEligibleInTransaction(transaction, invocation, now)
+			async isCurrentlyEligibleInTransaction(transaction, invocation, now, workload)
 			{
 				const authority = new PrismaConversationToolDispatchAuthority(transaction as Prisma.TransactionClient, dispatchDependencies);
-				return authority.isCurrentlyEligible(invocation, now);
+				return authority.isCurrentlyEligible(invocation, now, workload);
 			},
 		},
 	);

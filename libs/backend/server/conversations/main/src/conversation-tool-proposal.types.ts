@@ -1,4 +1,5 @@
 import type { CompiledToolDefinition, ConversationToolProposal, ConversationToolProposalReceipt } from "@opencrane/contracts";
+import type { ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
@@ -14,7 +15,7 @@ export interface ConversationToolProposalCommand extends ConversationToolProposa
 export interface ConversationToolProposalAdmission
 {
 	/** Save one exact proposal or recover its winner; current authority is checked before commit. */
-	admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: ConversationToolProposal): Promise<ConversationToolProposalReceipt>;
+	admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: ConversationToolProposal, workload: ProductAuthorizationWorkloadContext): Promise<ConversationToolProposalReceipt>;
 }
 
 /** Server-derived immutable facts passed into the proposal's transactional admission owner. */
@@ -49,5 +50,5 @@ export enum ConversationToolProposalRefusals
 export interface ConversationToolProposalRepository
 {
 	/** Admit one stable slot, requiring its current authority before the transaction may commit. */
-	admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal): Promise<ConversationToolProposalReceipt>;
+	admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal, workload: ProductAuthorizationWorkloadContext): Promise<ConversationToolProposalReceipt>;
 }

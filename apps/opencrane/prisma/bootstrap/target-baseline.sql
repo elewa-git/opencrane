@@ -218,7 +218,7 @@ CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running'
 CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
 
 -- CreateEnum
-CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
+CREATE TYPE "WorkloadKind" AS ENUM ('pod', 'job', 'deployment');
 
 -- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');

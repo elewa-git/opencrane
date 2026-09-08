@@ -1,7 +1,7 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
 import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
-import { __DigestCanonicalJson, PrismaAuthorizationAuthority, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { __DigestCanonicalJson, PrismaAuthorizationAuthority, type ToolInvocationRecord, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -24,7 +24,7 @@ export class PrismaConversationToolDispatchAuthority implements ConversationTool
 	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly dependencies: ConversationToolDispatchDependencies) {}
 
 	/** Refuse substituted or outdated execution authority before admitting every saved resource coordinate. */
-	public async isCurrentlyEligible(invocation: ToolInvocationRecord, now: Date): Promise<boolean>
+	public async isCurrentlyEligible(invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<boolean>
 	{
 		const transaction = this.transaction;
 		const evidence = invocation.authorizationEvidence;
@@ -113,7 +113,7 @@ export class PrismaConversationToolDispatchAuthority implements ConversationTool
 			return false;
 		for (const coordinate of evidence.coordinates)
 		{
-			const admitted = await authorization.admitPrincipal({ siloId: invocation.siloId, principalId: subject.principalId, actorKind: "workload", actorId: subject.agentIdentityId, ...coordinate, argumentsDigest, nowEpochMs: Math.max(decisionTime, Date.now()) });
+			const admitted = await authorization.admitPrincipal({ siloId: invocation.siloId, principalId: subject.principalId, actorKind: "workload", actorId: workload.podUid, workload, run: { runId: invocation.runId, attempt: invocation.attempt, agentServiceId: scope.agentServiceId, agentRevisionId: scope.agentRevisionId }, ...coordinate, argumentsDigest, nowEpochMs: Math.max(decisionTime, Date.now()) });
 			if (admitted.outcome !== AuthorizationDecisionOutcomes.Allow || admitted.evidence === null)
 				return false;
 		}

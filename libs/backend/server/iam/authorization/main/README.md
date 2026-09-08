@@ -100,6 +100,11 @@ Catalogue reads may be batch-filtered without one receipt per visible row. A mut
 decision evidence in the same transaction. An external effect must use the durable `ToolInvocation`
 or another typed one-use command; workers cannot list grants or choose a different target.
 
+Workload effect admission requires the identity verified by the transport owner. The authority
+rejects missing or inconsistent Pod coordinates before grant reads, binds that identity and any
+saved run coordinates into its evidence digest, and records them in the same transaction. The
+Principal still determines whose permissions are checked; the audit actor names the requesting Pod.
+
 ## Dependency direction
 
 Tagged `scope:authorization`: it may depend only on `scope:audit`, `scope:auth`,

@@ -1,10 +1,9 @@
-import { ___ConversationToolProposalSchema, type ConversationToolProposalReceipt } from "@opencrane/contracts";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals, type ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
 import { _PrepareConversationToolProposal } from "./conversation-tool-proposal";
 import { createHash } from "node:crypto";
 
-import type { CompiledRunInput, ComputerScope } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ___ConversationToolProposalSchema, type ConversationToolProposalReceipt, type CompiledRunInput, type ComputerScope } from "@opencrane/contracts";
 
 import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
@@ -72,7 +71,8 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const candidate = await this.dependencies.candidates.assertCurrent(turn, command.workload);
 		const prepared = _PrepareConversationToolProposal(turn, candidate, proposal.data);
 		await this.dependencies.store.reserveTool(turn.bootstrapId, { proposalId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint });
-		return this.dependencies.toolProposals.admit(turn, candidate, { ...proposal.data, arguments: prepared.arguments });
+		const workload = { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: command.workload.namespace, serviceAccountName: command.workload.serviceAccountName, workloadKind: "pod" as const, workloadUid: command.workload.podUid, podUid: command.workload.podUid };
+		return this.dependencies.toolProposals.admit(turn, candidate, { ...proposal.data, arguments: prepared.arguments }, workload);
 	}
 
 	/** Persist assistant text as an encrypted payload and append its non-secret reference through the frozen writer. */

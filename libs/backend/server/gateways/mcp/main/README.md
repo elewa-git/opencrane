@@ -124,6 +124,11 @@ labels an install connected before a real connection exists.
   login claims as access rights.
 - Route handlers use the authenticated user's silo. They do not accept a silo from the request body.
 
+Before a companion claims an invocation, the runtime binds its TokenReviewed namespace,
+ServiceAccount and Pod UID to the registered execution. It supplies that Pod and the verified Job
+UID to current dispatch admission, so the audit identifies the executor actually requesting the
+external effect. Missing Job coordinates cannot reach the provider claim.
+
 ## Public surface
 
 - `mcpOperatorRouter` — the Express router mounted at `/api/v1/mcp`.

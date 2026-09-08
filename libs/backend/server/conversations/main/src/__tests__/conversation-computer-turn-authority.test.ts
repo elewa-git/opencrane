@@ -297,7 +297,7 @@ describe("conversation tool proposal turn ownership", function _Suite()
 		dependencies.toolProposals.admit.mockResolvedValue({ proposalId: "server-slot", outcome: "recorded" });
 		const proposal = { bootstrapId: bootstrap!.bootstrapId, toolRevisionId: "tool-1", arguments: { query: "record" } };
 		expect(await authority.proposeTool({ ...proposal, workload: _WORKLOAD })).toEqual({ proposalId: "server-slot", outcome: "recorded" });
-		expect(dependencies.toolProposals.admit).toHaveBeenCalledWith(dependencies.store.createOrRead.mock.calls[0][0], ready, proposal);
+		expect(dependencies.toolProposals.admit).toHaveBeenCalledWith(dependencies.store.createOrRead.mock.calls[0][0], ready, proposal, { audience: "opencrane-conversation-computer", namespace: _WORKLOAD.namespace, serviceAccountName: _WORKLOAD.serviceAccountName, workloadKind: "pod", workloadUid: _WORKLOAD.podUid, podUid: _WORKLOAD.podUid });
 		expect(dependencies.candidates.assertCurrent).toHaveBeenLastCalledWith(dependencies.store.createOrRead.mock.calls[0][0], _WORKLOAD);
 	});
 	it("refuses missing and output-started turns before proposal admission", async function _ClosedTurn()

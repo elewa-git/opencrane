@@ -1,5 +1,6 @@
 import { type Prisma } from "@prisma/client";
 
+import type { ProductAuthorizationWorkloadContext } from "./authorization-authority.types";
 import type { JsonValue } from "@opencrane/util";
 
 import { _AppendMcpToolInvocationCompleted, _AppendMcpToolInvocationFailed, _EnterMcpToolInvocationRecovery, _MCP_AMBIGUOUS_FAILURE_CODE } from "./mcp-tool-invocation-lifecycle-events";
@@ -60,13 +61,13 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 	}
 
 	/** Claim dispatch, because the companion is about to call the uploaded MCP server. */
-	async claim(invocationId: string, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>
+	async claim(invocationId: string, now: Date, leaseMilliseconds: number, workload: ProductAuthorizationWorkloadContext): Promise<ToolInvocationClaimResult>
 	{
 		const invocation = await this._repository.findById(invocationId);
 		if (invocation === null)
 			return { outcome: ToolInvocationClaimOutcomes.Missing };
 		if (!_IsMcpTaskOwned(invocation) && invocation.state === ToolInvocationStates.Ready
-			&& !await this.runDispatch.isCurrentlyEligibleInTransaction(this._transaction, invocation, now))
+			&& !await this.runDispatch.isCurrentlyEligibleInTransaction(this._transaction, invocation, now, workload))
 		{
 			const unused = new PrismaRunUnusedToolInvocationRepository(this._transaction);
 			const transition = await unused.complete(invocation, now);

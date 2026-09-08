@@ -1,5 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
+import type { ProductAuthorizationWorkloadContext } from "./authorization-authority.types";
 import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationRecord, ToolInvocationTransitionResult } from "./tool-invocation.types";
 
 /**
@@ -14,7 +15,7 @@ import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationComp
 export interface RunToolInvocationDispatchAuthority
 {
 	/** Check the saved run-owned invocation through the caller's open transaction. */
-	isCurrentlyEligibleInTransaction(transaction: unknown, invocation: ToolInvocationRecord, now: Date): Promise<boolean>;
+	isCurrentlyEligibleInTransaction(transaction: unknown, invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<boolean>;
 }
 
 /**
@@ -34,7 +35,7 @@ export interface McpToolInvocationTransactionParticipant
 	/** Return the saved invocation without copying its arguments into MCP-owned storage. */
 	findById(invocationId: string): Promise<ToolInvocationRecord | null>;
 	/** Claim the provider dispatch and return the fence that the MCP command must save atomically. */
-	claim(invocationId: string, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>;
+	claim(invocationId: string, now: Date, leaseMilliseconds: number, workload: ProductAuthorizationWorkloadContext): Promise<ToolInvocationClaimResult>;
 	/** Return the failed invocation when its Ready revision closes unused; return unchanged state when the revision lost. */
 	completeUnusedBeforeDispatch(invocationId: string, expectedRevision: number, failureCode: string, now: Date): Promise<ToolInvocationTransitionResult>;
 	/** Save a checked result and update either its MCP task or its AgentRun delivery and event. */

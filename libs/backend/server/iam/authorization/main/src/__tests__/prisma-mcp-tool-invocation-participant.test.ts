@@ -6,6 +6,9 @@ import type { McpTaskToolInvocationLifecycleParticipant } from "../mcp-tool-invo
 import { ExternalActionClaimKinds, ToolInvocationStates } from "../tool-invocation-lifecycle.types";
 import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "../tool-invocation.types";
 
+/** Represents an identity already verified by this admission port's transport owner. */
+const _WORKLOAD = { audience: "opencrane-mcp-executor", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", workloadKind: "job", workloadUid: "executor-job-1", podUid: "executor-pod-1" } as const;
+
 /** Return a complete ToolInvocation persistence row around the state needed by one test. */
 function _Row(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown>
 {
@@ -37,9 +40,9 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(ready).mockResolvedValueOnce(claimed), updateMany } } as unknown as Prisma.TransactionClient;
 		const { participant, eligible } = _Participant(transaction);
 
-		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000)).resolves.toEqual({ outcome: "claimed", claim: { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 1, revision: 5 }, invocation: expect.objectContaining({ state: ToolInvocationStates.Claimed }) });
+		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD)).resolves.toEqual({ outcome: "claimed", claim: { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 1, revision: 5 }, invocation: expect.objectContaining({ state: ToolInvocationStates.Claimed }) });
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ claimKind: ExternalActionClaimKind.Dispatch }) }));
-		expect(eligible).toHaveBeenCalledWith(transaction, expect.objectContaining({ id: "invocation-row-1" }), new Date("2026-08-26T10:00:01.000Z"));
+		expect(eligible).toHaveBeenCalledWith(transaction, expect.objectContaining({ id: "invocation-row-1" }), new Date("2026-08-26T10:00:01.000Z"), _WORKLOAD);
 		expect(eligible.mock.invocationCallOrder[0]).toBeLessThan(updateMany.mock.invocationCallOrder[0]);
 	});
 
@@ -51,7 +54,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const create = vi.fn().mockResolvedValue({});
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(failed), updateMany }, toolResultDelivery: { create } } as unknown as Prisma.TransactionClient;
 		const { participant, appendLifecycle } = _Participant(transaction, vi.fn().mockResolvedValue(true), undefined, vi.fn().mockResolvedValue(false));
-		const result = await participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000);
+		const result = await participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD);
 		expect(result).toEqual({ outcome: "winner", invocation: expect.objectContaining({ state: ToolInvocationStates.Failed }) });
 		expect(updateMany).toHaveBeenCalledTimes(1);
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ revision: 4, state: ToolInvocationState.Ready, claimKind: null, run: { is: { attempt: 2, state: "Running" } } }), data: expect.objectContaining({ state: ToolInvocationState.Failed }) }));
@@ -66,7 +69,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const create = vi.fn();
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(winner), updateMany: vi.fn().mockResolvedValue({ count: 0 }) }, toolResultDelivery: { create } } as unknown as Prisma.TransactionClient;
 		const { participant, appendLifecycle } = _Participant(transaction, vi.fn(), undefined, vi.fn().mockResolvedValue(false));
-		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000)).resolves.toEqual({ outcome: "winner", invocation: expect.objectContaining({ state: ToolInvocationStates.Claimed }) });
+		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD)).resolves.toEqual({ outcome: "winner", invocation: expect.objectContaining({ state: ToolInvocationStates.Claimed }) });
 		expect(create).not.toHaveBeenCalled();
 		expect(appendLifecycle).not.toHaveBeenCalled();
 	});
@@ -76,7 +79,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const updateMany = vi.fn();
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(_Row()), updateMany } } as unknown as Prisma.TransactionClient;
 		const { participant } = _Participant(transaction, vi.fn(), undefined, vi.fn().mockRejectedValue(new Error("history unavailable")));
-		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000)).rejects.toThrow("history unavailable");
+		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD)).rejects.toThrow("history unavailable");
 		expect(updateMany).not.toHaveBeenCalled();
 	});
 
@@ -87,7 +90,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(ready).mockResolvedValueOnce(claimed), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } } as unknown as Prisma.TransactionClient;
 		const mcpTasks = { markClaimed: vi.fn().mockResolvedValue(true), completeUnusedBeforeDispatch: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
 		const { participant, eligible } = _Participant(transaction, vi.fn(), mcpTasks);
-		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000)).resolves.toEqual(expect.objectContaining({ outcome: "claimed" }));
+		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD)).resolves.toEqual(expect.objectContaining({ outcome: "claimed" }));
 		expect(eligible).not.toHaveBeenCalled();
 		expect(mcpTasks.markClaimed).toHaveBeenCalledOnce();
 	});
@@ -173,7 +176,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const failed = _Row({ state: ToolInvocationState.Failed, failureCode: "tool_dispatch_authority_denied", revision: 5 });
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(_Row()).mockResolvedValueOnce(failed), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, toolResultDelivery: { create: vi.fn().mockResolvedValue({}) } } as unknown as Prisma.TransactionClient;
 		const { participant } = _Participant(transaction, vi.fn().mockResolvedValue(false), undefined, vi.fn().mockResolvedValue(false));
-		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000)).rejects.toThrow("tool invocation transition requires its canonical lifecycle event");
+		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD)).rejects.toThrow("tool invocation transition requires its canonical lifecycle event");
 	});
 
 	it("aborts uncertain completion when its run recovery fence no longer matches", async function _RunRecoveryRefused()

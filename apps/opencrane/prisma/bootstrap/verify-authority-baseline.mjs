@@ -5,6 +5,8 @@ const _MINIMUM_FUNCTIONS = 79;
 const _MINIMUM_TRIGGERS = 89;
 const _MINIMUM_CONSTRAINTS = 227;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'CREATE TYPE "WorkloadKind" AS ENUM (\'pod\', \'job\', \'deployment\');',
+	'ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_check"',
 	'CREATE TABLE "oidc_sessions"',
 	'CONSTRAINT "oidc_sessions_pkey" PRIMARY KEY ("namespace","id_digest")',
 	'CREATE INDEX "oidc_sessions_namespace_retain_until_idx" ON "oidc_sessions"("namespace", "retain_until")',

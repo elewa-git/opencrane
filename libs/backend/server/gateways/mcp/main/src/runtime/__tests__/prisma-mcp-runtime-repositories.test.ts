@@ -183,7 +183,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 
 	it("closes MCP work when cancellation wins before the companion claim", async function _ClosesCancelledInvocation()
 	{
-		const execution = { id: "execution-1", siloId: "silo-1", profileName: "mcp-default", kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Pending, podUid: "pod-1", toolInvocationId: "invocation-1", companionClaimFence: null, companionClaimExpiresAt: null, serverRevision: { tools: [] } };
+		const execution = { id: "execution-1", siloId: "silo-1", profileName: "mcp-default", kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Pending, podUid: "pod-1", workloadUid: "job-1", toolInvocationId: "invocation-1", companionClaimFence: null, companionClaimExpiresAt: null, serverRevision: { tools: [] } };
 		const transaction = {
 			mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:00:00.000Z") }) },
 			mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -192,6 +192,28 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, toolInvocations as never, _Options());
 
 		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toBe("terminal");
+		expect(toolInvocations.claim).toHaveBeenCalledWith("invocation-1", new Date("2026-08-26T00:00:00.000Z"), 60_000, { audience: "opencrane-mcp-executor", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", workloadKind: "job", workloadUid: "job-1", podUid: "pod-1" });
 		expect(transaction.mcpRuntimeExecution.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, workloadState: McpExecutorWorkloadState.Closed }) }));
 	});
+
+	it.each(["missing-job", "wrong-namespace", "wrong-account", "different-pod"])("does not claim provider work with %s identity evidence", async function _RejectsIncompleteActor(scenario)
+	{
+		const identity = { subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" };
+		if (scenario === "wrong-namespace")
+			identity.namespace = "other-namespace";
+		if (scenario === "wrong-account")
+			identity.serviceAccountName = "other-account";
+		const execution = { id: "execution-1", siloId: "silo-1", kind: McpRuntimeExecutionKind.Invocation, commandState: McpExecutorCommandState.Pending, workloadState: McpExecutorWorkloadState.Registered, podUid: "pod-1", workloadUid: scenario === "missing-job" ? null : "job-1", toolInvocationId: "invocation-1", serverRevision: { tools: [] } };
+		const transaction = { mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(scenario === "different-pod" ? null : execution), updateManyAndReturn: vi.fn() }, mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:00:00.000Z") }) } };
+		const toolInvocations = { claim: vi.fn() };
+		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, toolInvocations as never, _Options());
+		await expect(repository.claim(identity, "reference-1")).resolves.toBeNull();
+		expect(toolInvocations.claim).not.toHaveBeenCalled();
+		expect(transaction.mcpRuntimeExecution.updateManyAndReturn).not.toHaveBeenCalled();
+		if (scenario === "wrong-namespace" || scenario === "wrong-account")
+			expect(transaction.mcpRuntimeExecution.findFirst).not.toHaveBeenCalled();
+		if (scenario === "different-pod")
+			expect(transaction.mcpRuntimeExecution.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ podUid: "pod-1", workloadState: McpExecutorWorkloadState.Registered }) }));
+	});
+
 });

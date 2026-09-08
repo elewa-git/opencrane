@@ -52,7 +52,7 @@ export interface AuditDecisionRecord
 	readonly siloId: string;
 	/** Class of principal that caused the decision. */
 	readonly actorKind: AuditDecisionActorKind;
-	/** Exact principal identifier. */
+	/** Identifies the requesting actor; a workload actor uses its verified Pod UID. */
 	readonly actorId: string;
 	/** Policy-enforcement audience for workload decisions. */
 	readonly audience?: string;
@@ -60,9 +60,9 @@ export interface AuditDecisionRecord
 	readonly namespace?: string;
 	/** Projected Kubernetes service account for workload decisions. */
 	readonly serviceAccountName?: string;
-	/** Controller-owned workload kind for workload decisions. */
-	readonly workloadKind?: "job" | "deployment";
-	/** Immutable controller workload UID. */
+	/** Identifies the verified workload object, which may be the Pod itself. */
+	readonly workloadKind?: "job" | "deployment" | "pod";
+	/** Identifies that workload object by its immutable Kubernetes UID. */
 	readonly workloadUid?: string;
 	/** Immutable runtime Pod UID. */
 	readonly podUid?: string;

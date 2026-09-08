@@ -31,6 +31,10 @@ recover the stored proposal without resetting its lifecycle. The route neither d
 nor returns a result. The model loop and durable
 conversation progress remain the next integration steps.
 
+Proposal audits name the verified conversation-computer Pod and the saved run. Later tool-dispatch
+audits name the current MCP executor Job and Pod instead. The transport owners supply those
+coordinates; a proposal body cannot choose an audience, actor or namespace.
+
 Before database admission, the turn stream reserves that exact proposal against the same revision
 used to accept final output. Stored-decision readback confirms which command won. A reserved turn
 cannot accept an answer; bootstrap retries that observe it wait instead of issuing another key. Admission errors keep the

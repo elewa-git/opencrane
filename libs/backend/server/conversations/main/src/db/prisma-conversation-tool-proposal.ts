@@ -3,7 +3,7 @@ import { AgentRunState, Prisma, type PrismaClient } from "@prisma/client";
 import { ___ExecutionSubjectSchema, ConversationToolProposalOutcomes, type ConversationToolProposal, type ConversationToolProposalReceipt, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { __AreRunInputSnapshotMcpToolsValid } from "@opencrane/backend/agents/execution/inputs";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { __AdmitPreparingToolInvocationInTransaction, ExternalActionRecoveryModes, PrismaAuthorizationAuthority, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, type ToolInvocationAuthorizationEvidence } from "@opencrane/backend/server/iam/authorization";
+import { __AdmitPreparingToolInvocationInTransaction, ExternalActionRecoveryModes, PrismaAuthorizationAuthority, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, type ToolInvocationAuthorizationEvidence, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -29,7 +29,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly dependencies: ConversationToolDispatchDependencies) {}
 
 	/** Recover the exact admitted winner or atomically save its Preparing row and fresh effect evidence. */
-	public async admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal): Promise<ConversationToolProposalReceipt>
+	public async admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal, workload: ProductAuthorizationWorkloadContext): Promise<ConversationToolProposalReceipt>
 	{
 		const run = await this.transaction.agentRun.findFirst({ where: { id: turn.compile.runId, attempt: turn.compile.attempt, siloId: turn.siloId, state: AgentRunState.Running, conversationId: turn.binding.conversationId, agentIdentityId: turn.binding.agentIdentityId, agentServiceId: turn.binding.agentServiceId }, select: { executionSubject: true, inputSnapshotDigest: true, agentRevisionId: true } });
 		const parsed = ___ExecutionSubjectSchema.safeParse(run?.executionSubject);
@@ -56,7 +56,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		const coordinate = { resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: proposal.tool.toolRevisionId }, action: ProductAuthorizationActions.Invoke } as const;
 		const authorization = new PrismaAuthorizationAuthority(this.transaction);
-		const decision = await authorization.admitPrincipal({ siloId: turn.siloId, principalId: subject.principalId, actorKind: "workload", actorId: subject.agentIdentityId, ...coordinate, argumentsDigest: proposal.argumentsDigest, nowEpochMs: Date.now() });
+		const decision = await authorization.admitPrincipal({ siloId: turn.siloId, principalId: subject.principalId, actorKind: "workload", actorId: workload.podUid, workload, run: { runId: turn.compile.runId, attempt: turn.compile.attempt, agentServiceId: turn.binding.agentServiceId, agentRevisionId: run.agentRevisionId }, ...coordinate, argumentsDigest: proposal.argumentsDigest, nowEpochMs: Date.now() });
 		if (decision.outcome !== AuthorizationDecisionOutcomes.Allow || decision.evidence === null)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		const binding = { actorKind: "workload" as const, executionSubject: subject, coordinates: [coordinate], decisionDigests: [decision.evidence.decisionDigest], assignmentDigest: proposal.assignmentDigest };
@@ -65,7 +65,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 		if (result.outcome === ToolInvocationAdmissionOutcomes.Conflict)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Conflict);
 		const authority = new PrismaConversationToolDispatchAuthority(this.transaction, this.dependencies);
-		if (!await authority.isCurrentlyEligible(result.invocation, new Date()) || candidate.compiledInput.budget.wallClockDeadlineEpochMs! <= Date.now() || Date.parse(candidate.credentialExpiresAt) <= Date.now())
+		if (!await authority.isCurrentlyEligible(result.invocation, new Date(), workload) || candidate.compiledInput.budget.wallClockDeadlineEpochMs! <= Date.now() || Date.parse(candidate.credentialExpiresAt) <= Date.now())
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		return { proposalId: result.invocation.toolInvocationId, outcome: result.outcome === ToolInvocationAdmissionOutcomes.Admitted ? ConversationToolProposalOutcomes.Recorded : ConversationToolProposalOutcomes.Existing };
 	}
@@ -78,7 +78,7 @@ export class PrismaConversationToolProposalUnitOfWork implements ConversationToo
 	public constructor(private readonly prisma: PrismaClient, private readonly dependencies: ConversationToolDispatchDependencies) {}
 
 	/** Validate immutable input once, then retry only proven database rollbacks of the complete admission. */
-	public admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: ConversationToolProposal): Promise<ConversationToolProposalReceipt>
+	public admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: ConversationToolProposal, workload: ProductAuthorizationWorkloadContext): Promise<ConversationToolProposalReceipt>
 	{
 		const prepared = _PrepareConversationToolProposal(turn, candidate, proposal);
 		const dependencies = this.dependencies;
@@ -88,7 +88,7 @@ export class PrismaConversationToolProposalUnitOfWork implements ConversationToo
 			return ___RunInPrismaUnitOfWork(prisma, async function _Admit(transaction)
 			{
 				const repository = new PrismaConversationToolProposalRepository(transaction, dependencies);
-				return repository.admit(turn, candidate, prepared);
+				return repository.admit(turn, candidate, prepared, workload);
 			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, operation: "conversation tool proposal", attemptLimit: 3, timeout: 10_000 });
 		});
 	}
