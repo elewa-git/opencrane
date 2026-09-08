@@ -22,7 +22,9 @@ export class TransactionBoundProductResourceAuthorizationSource implements Produ
 		if (conversation.outcome === "denied")
 			return conversation;
 		const membershipRevision = executionSubject.membership.kind === ExecutionSubjectMembershipKinds.Fleet ? executionSubject.membership.revision : undefined;
-		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind: "workload", actorId: executionSubject.agentIdentityId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision, nowEpochMs: transaction.admittedAtEpochMs })));
+		// Admission records the execution Principal; a runtime Pod has not requested these resources.
+		const actorKind = executionSubject.membership.kind === ExecutionSubjectMembershipKinds.Fleet ? "user" : "agent-service";
+		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind, actorId: principalId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision, nowEpochMs: transaction.admittedAtEpochMs })));
 		return admissions.length === resources.length ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
 	}
 

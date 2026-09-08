@@ -731,3 +731,24 @@ Full run reports belong in the corresponding pull request or issue.
   data-bearing restore or RTO is established here. Scheduled fileCopy backups succeed, but neither
   recovery drill has restored the completed product fixture. The earlier browser clipboard rejection
   remains in force; authenticated API login is not browser completion evidence.
+
+
+## 2026-09-08 · source gate · first assistant admission · PARTIAL
+
+- candidate: `5681f1cae2d7811903d2eae23665fab1f3209791` passed
+  [Actions run 34167722856](https://github.com/elewa-git/opencrane/actions/runs/34167722856):
+  24 successful jobs, two configured skips and all 13 deployable publications. Daemon-free
+  inspection verified every Linux amd64 manifest's source revision. It was not deployed.
+- findings: codebase: checking the next first-run path before rollout found product resource
+  admissions labelled as workload decisions without a Pod identity. The current database correctly
+  rejects those rows. Personal resource admission now names the human Principal; managed resource
+  admission names the company assistant's Principal with the existing agent-service actor class.
+  Human invocation and conversation access keep their separate requester decisions. Actual runtime
+  workload guards are unchanged; no workload evidence is fabricated.
+- regression scope: tests traverse the central authority, Prisma decision recorder and audit writer
+  for personal and company resource admission, company child resolution and company run evidence.
+  They verify persisted actor classes and identifiers and denial when a different Principal alone
+  has Model Use. These are source tests, not completed live model turns.
+- deployment decision: the next application repair will use the supported server-only image flag,
+  retaining the already qualified companion images. Record the server's source separately; a mixed
+  repair installation is not an exact-SHA release qualification.

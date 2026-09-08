@@ -57,7 +57,7 @@ export class PrismaManagedAgentConversationResolver
 		const decision = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision, nowEpochMs });
 		if (decision.outcome !== AuthorizationDecisionOutcomes.Allow || decision.evidence === null)
 			return null;
-		const model = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: candidate.principalId, actorKind: "workload", actorId: candidate.agentIdentityId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: modelDefinitionId }, action: ProductAuthorizationActions.Use, argumentsDigest, nowEpochMs });
+		const model = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: candidate.principalId, actorKind: "agent-service", actorId: candidate.principalId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: modelDefinitionId }, action: ProductAuthorizationActions.Use, argumentsDigest, nowEpochMs });
 		if (model.outcome !== AuthorizationDecisionOutcomes.Allow || model.evidence === null)
 			return null;
 		return candidate;

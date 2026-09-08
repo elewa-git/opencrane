@@ -24,6 +24,10 @@ membership evidence and must currently be allowed to invoke the service. Interna
 need a fabricated fleet membership assertion: PostgreSQL service authority and checked identity
 history supply their current binding. Neither evidence form grants access by itself.
 
+Company model-use admissions record `agent-service` with the company's Principal ID, both when
+creating a child conversation and when admitting a run. Human Invoke decisions record `user` with
+the requesting Principal ID. Runtime Pod identity belongs to later workload decisions.
+
 The first company revision has no persona, skills, tools, memory or knowledge-boundary assignments.
 Its deployment-owned profile and budget use a selected model. Admission rejects extended revisions
 until those capabilities have a supported company policy.

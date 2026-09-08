@@ -50,6 +50,11 @@ that final transaction, using the same membership revision, run-arguments digest
 instant. The earlier participant check remains defense-in-depth; it cannot replace this final fence
 because membership or grants may change before persistence.
 
+Resource-use decisions record the execution Principal: `user` for a personal agent acting through
+its human owner, or `agent-service` for a company agent acting through its own Principal. The
+requester's Conversation Use remains a separate human decision. These server-side admissions do
+not claim a runtime Pod identity; workload decisions still require verified Kubernetes coordinates.
+
 MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
 saved tool identifier, name, description, input schema, and schema digest. Missing, malformed, or
 digest-mismatched schemas fail admission. The assembler never receives registry or provider
