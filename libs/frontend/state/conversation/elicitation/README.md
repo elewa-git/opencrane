@@ -10,6 +10,9 @@ time, restores that draft after verified sign-in, and adopts only the server's r
 
 It also maps canonical request references and safe tool histories into Activity rows. It never
 creates a run, chooses the respondent, interprets protected A2UI actions, or reads personal memory.
+Its shared `ConversationActivityRow` also accepts a personal-run status row with an optional answer
+target. The workspace feature derives that row from its authorized run read and currently rendered
+transcript. The target grants no access and does not copy an answer into this state package.
 
 ## Public surface
 
@@ -20,7 +23,7 @@ creates a run, chooses the respondent, interprets protected A2UI actions, or rea
 ## Dependency direction
 
 Tagged `scope:conversation-elicitation`; depends only on shared browser/core contracts. The feature
-packages render this state. The workspace route is mounted later by issue #351.
+packages render this state. The conversation workspace composes the Activity feature.
 
 ## See also
 

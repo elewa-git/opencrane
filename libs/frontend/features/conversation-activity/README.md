@@ -7,6 +7,10 @@
 This package renders the derived Activity index and emits canonical transcript deep links. Failed
 tool attempts stay visible even while retrying; bounded technical fields are available only after
 the participant opens the disclosure.
+Personal-work rows show the public run state as Accepted, Queued, Preparing, Working, Waiting for
+input, Needs attention, Completed or Failed. **Open answer** requires an explicit target supplied
+by the workspace. Loading, refreshing, empty and failed reads are separate from those run states;
+the feature forwards a refresh intent and never retries execution.
 
 ```
  canonical references + safe failure fields
@@ -17,11 +21,12 @@ the participant opens the disclosure.
         optional Technical details
                     │ deep-link intent
                     ▼
-              workspace router (#351)
+              workspace page
 ```
 
 In this flow: [`state/conversation/elicitation`](../../state/conversation/elicitation/README.md)
-derives the rows without copying conversation messages.
+derives request and tool rows without copying conversation messages. The workspace feature maps
+personal work and checks answer targets against its current rendered history.
 
 ## Public surface
 

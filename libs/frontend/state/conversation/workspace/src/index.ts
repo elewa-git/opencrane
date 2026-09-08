@@ -14,6 +14,10 @@
 export { CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./lib/conversation-workspace.gateway";
 export { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./lib/conversation-workspace-gateway.errors";
 export { ConversationWorkspaceStore } from "./lib/conversation-workspace.store";
+export { ConversationPersonalRunsStore } from "./lib/conversation-personal-runs.store";
+export { CONVERSATION_PERSONAL_RUNS_GATEWAY } from "./lib/conversation-personal-runs.types";
+export type { ConversationPersonalRun, ConversationPersonalRunsGateway } from "./lib/conversation-personal-runs.types";
+export { _ParseConversationPersonalRuns } from "./lib/conversation-personal-runs.validator";
 export { ConversationComputerReviewStore } from "./lib/conversation-computer-review.store";
 export { ConversationOnboardingHistoryStore } from "./lib/conversation-onboarding-history.store";
 export { _ParseConversationDetail, _ParseConversationSummary, _ParseConversationWorkspaceDirectory } from "./lib/conversation-workspace.validator";

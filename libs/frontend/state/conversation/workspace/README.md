@@ -39,6 +39,14 @@ input while submitting, and aborts and purges request/share state when selection
 Pending creation is refreshed every five seconds for at most one minute; the participant can then
 refresh explicitly. Ready means the child can open, not that the assistant finished its work.
 
+`ConversationPersonalRunsStore` reads the signed-in person's recent work through a separate narrow
+port. It filters the API's latest 50 entitled runs to the selected personal chat, so an empty list
+does not promise that no older work exists. Selection, identity, access and history checkpoints
+invalidate the read; cancelled or late responses cannot restore an earlier selection. Active work
+and inputs awaiting admission refresh every five seconds for up to one minute, then require an
+explicit refresh. Failed reads clear rows; access denial stops retries until the chat is reopened.
+This store reads status and never starts, cancels or retries assistant execution.
+
 ## Public surface
 
 The package also owns the Zod response validators used by its transport adapter. Keeping runtime acceptance beside the workspace models means HTTP code only authenticates and transports data; it does not rebuild the domain shape.

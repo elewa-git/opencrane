@@ -1,10 +1,12 @@
-import type { ElicitationRequestStates, SafeToolTechnicalDetails } from "@opencrane/contracts";
+import type { ElicitationRequestStates, SafeToolTechnicalDetails, paths } from "@opencrane/contracts";
 
 /** Supported derived Activity row kinds. */
 export enum ConversationActivityKinds
 {
 	Elicitation = "elicitation",
 	ToolFailure = "tool_failure",
+	/** Shows the current server-owned state of recent personal work. */
+	Run = "run",
 }
 
 /** Deep link back to canonical transcript or request coordinates. */
@@ -14,7 +16,12 @@ export interface ConversationActivityTarget
 	readonly runId: string;
 	readonly requestId?: string;
 	readonly toolCallId?: string;
+	/** Identifies an answer that is already present in the current authorized transcript. */
+	readonly entryId?: string;
 }
+
+/** Reuses the public status vocabulary without importing execution authority into browser state. */
+export type ConversationActivityRunState = paths["/me/runs/{runId}"]["get"]["responses"][200]["content"]["application/json"]["state"];
 
 /** One visible failed attempt accepted by the derived Activity mapper. */
 export interface ToolFailureActivityAttempt
@@ -39,4 +46,5 @@ export interface ToolFailureActivitySource
 /** Browser-only row derived from canonical references, never a copied transcript. */
 export type ConversationActivityRow =
 	| { readonly kind: ConversationActivityKinds.Elicitation; readonly id: string; readonly label: string; readonly occurredAt: string; readonly status: ElicitationRequestStates; readonly target: ConversationActivityTarget }
-	| { readonly kind: ConversationActivityKinds.ToolFailure; readonly id: string; readonly label: string; readonly occurredAt: string; readonly retrying: boolean; readonly technicalDetails: SafeToolTechnicalDetails; readonly target: ConversationActivityTarget };
+	| { readonly kind: ConversationActivityKinds.ToolFailure; readonly id: string; readonly label: string; readonly occurredAt: string; readonly retrying: boolean; readonly technicalDetails: SafeToolTechnicalDetails; readonly target: ConversationActivityTarget }
+	| { readonly kind: ConversationActivityKinds.Run; readonly id: string; readonly label: string; readonly occurredAt: string; readonly status: ConversationActivityRunState; readonly target: ConversationActivityTarget | null };

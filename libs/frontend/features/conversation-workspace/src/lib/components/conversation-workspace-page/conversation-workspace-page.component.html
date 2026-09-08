@@ -8,6 +8,7 @@
     store.selected() !== null && contextPanelOpen()
   "
 >
+  <p class="sr-only" role="status" aria-live="polite">{{ activityAnnouncement() }}</p>
   @switch (store.routeState()) {
     @case (routeStates.Loading) {
       <section class="conversation-workspace__route-state" role="status">
@@ -179,8 +180,12 @@
       @if (store.selected(); as selected) {
         @if (contextPanelOpen()) {
           <wo-conversation-workspace-context-panel
-            [activityVisible]="false"
-            [activityRows]="[]"
+            [activityVisible]="personalRuns.eligible()"
+            [activityRows]="activityRows()"
+            [activityReadState]="activityReadState()"
+            [activityError]="personalRuns.error()"
+            [activityRefreshAvailable]="!personalRuns.accessChanged()"
+            (activityRefreshRequested)="personalRuns.refresh()"
             [assets]="assets()"
             [computerReviewVisible]="computerReviewVisible()"
             [computerReviewBusy]="reviewStore.busy()"

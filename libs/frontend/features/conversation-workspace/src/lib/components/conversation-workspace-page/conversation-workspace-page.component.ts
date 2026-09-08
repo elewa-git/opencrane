@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, input, output, signal, untracked } from "@angular/core";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import type { ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
-import { ConversationGroupChildStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { ConversationGroupChildStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { ConversationSessionRailItemKinds, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
 import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
@@ -23,7 +23,7 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {
 	/** Optional app-owned route selection adopted after the workspace list loads. */
@@ -142,20 +142,20 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 			this.conversationSelected.emit(navigation.conversationId);
 	}
 
-	/** Move focus to one Activity target already present in the selected page. */
+	/** Rechecks a mapped answer before moving focus and closing a narrow context overlay. */
 	protected focusActivity(target: ConversationActivityTarget): void
 	{
-		const id = target.requestId ?? target.toolCallId;
-		if (id === undefined)
-			return;
-		const destination = globalThis.document.getElementById(id);
-		if (destination === null)
+		const current = this.activityRows().some(row => row.target?.conversationId === target.conversationId && row.target.runId === target.runId && row.target.entryId !== undefined && row.target.entryId === target.entryId);
+		const destination = current && target.entryId !== undefined ? globalThis.document.getElementById(target.entryId) : null;
+		if (target.conversationId !== this.store.selected()?.id || destination === null)
 		{
 			this.activityAnnouncement.set("That activity is no longer available in this conversation.");
 			return;
 		}
-		destination.scrollIntoView({ block: "center", behavior: "smooth" });
-		destination.focus();
+		if (globalThis.matchMedia("(max-width: 70rem)").matches)
+			this.contextPanelOpen.set(false);
+		const behavior = globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+		globalThis.queueMicrotask(function _FocusAnswer() { destination.scrollIntoView({ block: "start", behavior }); destination.focus({ preventScroll: true }); });
 		this.activityAnnouncement.set("Opened the selected activity in the conversation.");
 	}
 

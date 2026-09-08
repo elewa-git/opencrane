@@ -6,6 +6,11 @@
   @if (activityVisible()) {
     <wo-conversation-activity
       [rows]="activityRows()"
+      title="Recent activity"
+      [readState]="activityReadState()"
+      [error]="activityError()"
+      [refreshAvailable]="activityRefreshAvailable()"
+      (refreshRequested)="activityRefreshRequested.emit()"
       (targetRequested)="activityTargetRequested.emit($event)"
     >
       <p-button

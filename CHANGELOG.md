@@ -18,6 +18,11 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **People can follow recent personal-assistant work and reopen a loaded answer.** The activity
+  pane shows current status and an explicit refresh control. Changing chats, signing out or losing
+  access clears its rows; answer links refer to the selected transcript. New runs grant their
+  verified owner read access without restoring previously revoked permissions.
+
 - **Operators can back up conversation history and recover it from a scheduled file copy.**
   Live recovery preserved completed personal and group chats and allowed new messages and an
   assistant answer. Scheduled volume snapshots are also proven on a supported storage class;

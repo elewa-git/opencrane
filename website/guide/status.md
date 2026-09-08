@@ -34,12 +34,14 @@ current review work and its evidence.
   recovery across refresh, retry and conversation closure.
 - **Administration:** complete the product surfaces for permissions, activity and cost without
   requiring an employee to understand internal execution concepts. The follow-up implementation
-  gives people read access to each new personal run when it starts, so completed work can appear
-  in their activity. CI passes for the activity repair; publication and live qualification remain pending. Existing
-  testv5 runs are unchanged. Revoked access is checked on every read.
+  gives people read access to each new personal run when it starts. Two new testv5 runs now appear
+  in their owners' activity API and remain invisible to the other employee. The follow-up UI adds
+  recent status, refresh and links to loaded answers; its live browser qualification is pending.
+  Existing older runs receive no backfill. Revoked access is checked on every read.
 - **Login continuity:** preserve authenticated sessions across server replacement and support
   multiple servers consistently. The follow-up implements encrypted PostgreSQL sessions with
-  fixed expiry and logout protection. It still needs CI and fresh-install qualification; the current
+  fixed expiry and logout protection. CI and fresh PostgreSQL tests pass; fresh-install live
+  qualification remains pending. The current
   testv5 server uses process-local sessions and requires a new sign-in after replacement.
 
 Durable application source, builds and published apps are later work. Temporary computer previews

@@ -15,6 +15,19 @@ function _Gateway(post: ReturnType<typeof vi.fn>, get: ReturnType<typeof vi.fn> 
 
 describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGateway()
 {
+	it("reads recent personal work with cancellation and rejects unknown status or duplicate rows", async function _PersonalRuns()
+	{
+		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: "2026-09-08T12:00:01Z" };
+		const get = vi.fn().mockResolvedValueOnce({ data: { runs: [run] } }).mockResolvedValueOnce({ data: { runs: [{ ...run, state: "unknown" }] } }).mockResolvedValueOnce({ data: { runs: [run, run] } }).mockResolvedValueOnce({ error: { message: "server secret" }, response: { status: 403 } });
+		const gateway = _Gateway(vi.fn(), get);
+		const signal = new AbortController().signal;
+		await expect(gateway.listPersonalRuns(signal)).resolves.toEqual([run]);
+		expect(get).toHaveBeenCalledWith("/me/runs", { signal });
+		await expect(gateway.listPersonalRuns(signal)).rejects.toThrow("invalid conversation response");
+		await expect(gateway.listPersonalRuns(signal)).rejects.toThrow("invalid conversation response");
+		await expect(gateway.listPersonalRuns(signal)).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+	});
+
 	it("binds a child request to the selected parent and preserves its retry command and abort signal", async function _ChildRequest()
 	{
 		const command = { parentMessageId: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", parentMessagePosition: "2", agentServiceId: "company", idempotencyKey: "c26f4e78-56ee-4ed2-a8be-06f13ef98164" };

@@ -2,7 +2,7 @@ import { Injector, signal } from "@angular/core";
 import { describe, expect, it } from "vitest";
 
 import { SessionStore } from "@opencrane/state/core";
-import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
 import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace/adapter";
 import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from "@opencrane/state/conversation/assets";
@@ -29,6 +29,7 @@ describe("Conversation workspace app providers", function _ConversationWorkspace
 			OpenCraneConversationEventStream,
 			OpenCraneConversationWorkspaceGateway,
 			{ provide: CONVERSATION_WORKSPACE_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
+			{ provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 			{ provide: CONVERSATION_GROUP_CHILD_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 			{ provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 			{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useExisting: OpenCraneConversationEventStream },

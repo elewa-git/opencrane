@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 
-import { ConversationActivityComponent } from "@opencrane/features/conversation-activity";
+import { ConversationActivityComponent, ConversationActivityReadStates } from "@opencrane/features/conversation-activity";
 import { ConversationFilesPanelComponent, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import type { ConversationActivityRow, ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import type { ConversationComputerBrowserTarget, ConversationComputerCommandResult } from "@opencrane/state/conversation/workspace";
@@ -27,6 +27,12 @@ export class ConversationWorkspaceContextPanelComponent
 	public readonly activityVisible = input(false);
 	/** Ordered browser-safe Activity rows. */
 	public readonly activityRows = input.required<readonly ConversationActivityRow[]>();
+	/** Separates a recent-work read from the lifecycle of each row. */
+	public readonly activityReadState = input(ConversationActivityReadStates.Ready);
+	/** Displays a fixed read failure supplied by the owning store. */
+	public readonly activityError = input<string | null>(null);
+	/** Allows a status retry while the current selection retains access. */
+	public readonly activityRefreshAvailable = input(false);
 	/** Existing durable and browser-private file presentations. */
 	public readonly assets = input.required<readonly ConversationAssetPresentation[]>();
 	/** Whether the selected Agent session has an active review-capable computer. */
@@ -51,6 +57,8 @@ export class ConversationWorkspaceContextPanelComponent
 	public readonly closed = output<void>();
 	/** Forwards one canonical Activity target to the page. */
 	public readonly activityTargetRequested = output<ConversationActivityTarget>();
+	/** Requests another activity read without restarting assistant work. */
+	public readonly activityRefreshRequested = output<void>();
 	/** Forwards one typed file action to the owning asset state. */
 	public readonly assetActionRequested = output<ConversationAssetActionIntent>();
 	/** Forwards file inspection intent. */

@@ -1,13 +1,13 @@
 import { Router } from "@angular/router";
 import { type Decorator, type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import type { MessageEntry } from "@opencrane/contracts";
 import { ConversationModes, ConversationLifecycles } from "@opencrane/models/conversations";
 import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationHistoryProjection, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
-import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
 import { ConversationWorkspaceRouteComponent } from "../conversation-workspace-route/conversation-workspace-route.component";
 
@@ -70,11 +70,13 @@ const _REVIEW = { readComputerFile: async function _ReadFile() { throw new Error
 const _ROUTER = { navigate: async function _Navigate() { return true; } };
 /** Keeps desktop and sign-in capabilities unavailable in the browser story. */
 const _PLATFORM = { isDesktop: false, bindFolder: async function _BindFolder() { throw new Error("Story command unavailable."); }, openAuthenticationWindow: function _OpenAuthenticationWindow() { return null; } };
+/** Supplies a completed personal status that links to the rendered history fixture. */
+const _PERSONAL_RUNS = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "completed", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", finishedAt: _ENTRY.occurredAt }]; } };
 
 /** Supplies explicit test-only ports around the real routed workspace shell. */
 function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY): Decorator
 {
-	return moduleMetadata({ providers: [{ provide: CONVERSATION_CURRENT_SUBJECT, useValue: function _Subject() { return "self"; } }, { provide: CONVERSATION_GROUP_CHILD_GATEWAY, useValue: {} }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: workspace }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
+	return moduleMetadata({ providers: [{ provide: CONVERSATION_CURRENT_SUBJECT, useValue: function _Subject() { return "self"; } }, { provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useValue: _PERSONAL_RUNS }, { provide: CONVERSATION_GROUP_CHILD_GATEWAY, useValue: {} }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: workspace }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
 }
 
 /** Defines the routed workspace viewport contracts without replacing its production stores. */
@@ -91,6 +93,21 @@ export const IntermediateLongContent: Story = { tags: ["visual-test"], decorator
 
 /** Wide desktop width keeps rail, transcript, composer, and context panel in one viewport. */
 export const WideLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(_HISTORY)] };
+
+/** Verifies that recent activity opens the answer already rendered by the real workspace page. */
+export const PersonalActivityAnswer: Story = { decorators: [_Providers(_HISTORY)], play: async function _OpenAnswer({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	(await canvas.findByRole("button", { name: "Open answer" })).focus();
+	await userEvent.keyboard("{Enter}");
+	await expect(canvasElement.querySelector(`[id="${_ENTRY.id}"]`)).toHaveFocus();
+	expect(await canvas.findByText("Opened the selected activity in the conversation.")).toBeInTheDocument();
+	if (globalThis.matchMedia("(max-width: 70rem)").matches)
+		expect(canvas.queryByRole("button", { name: "Close activity pane" })).not.toBeInTheDocument();
+} };
+
+/** Covers keyboard answer navigation after the narrow workspace overlay closes. */
+export const PersonalActivityAnswerNarrow: Story = { ...PersonalActivityAnswer, tags: ["visual-test", "visual-test-narrow"] };
 
 /** Makes the already-shared child audience visible independently of the human's later result share. */
 export const SharedCompanyChild: Story = { decorators: [_Providers({ ..._HISTORY, entries: [{ ..._ENTRY, author: { kind: "agent", agentIdentityId: "managed-company", agentServiceId: "company", name: "Company assistant", avatarArtifactRevisionId: null } }], payloads: { "payload-1": "Proposal A costs less. Proposal B gives us an earlier delivery date. Confirm both dates before choosing." } }, {
