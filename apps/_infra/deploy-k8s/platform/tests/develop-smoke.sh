@@ -475,6 +475,7 @@ _assert_current_history_and_sandbox()
   kubectl get sandboxwarmpool/developer-pool -n "$NAMESPACE" -o json \
     | jq -e '.spec.replicas == 0' >/dev/null
   bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-admission-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME"
+  bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-lifecycle-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME" "$TIMEOUT_SECONDS"
   kubectl exec -i "deployment/${RELEASE_NAME}-opencrane-server" -n "$NAMESPACE" -- node --input-type=module <<'NODE'
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -562,7 +563,7 @@ if ! wait "$CERT_MANAGER_INSTALL_PID"; then
 fi
 CERT_MANAGER_INSTALL_PID=""
 
-"$ROOT_DIR/apps/_infra/deploy-k8s/platform/deploy-agent-sandbox-controller.sh" --context "k3d-${CLUSTER_NAME}"
+"$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh" --provision-agent-sandbox-controller --context "k3d-${CLUSTER_NAME}"
 # This class truthfully names k3d's native runtime. Only a separate gVisor install can qualify isolation.
 cat <<'EOF' | kubectl apply -f -
 apiVersion: node.k8s.io/v1
@@ -651,4 +652,4 @@ _assert_database_isolation
 _assert_current_history_and_sandbox
 _assert_ingress_health
 
-echo "[develop-smoke] PASS: current service readiness, database isolation, authenticated KurrentDB TLS, anonymous health/read boundaries, Agent Sandbox runc profile, TLS ingress, and $SMOKE_STORAGE_MODE storage qualification"
+echo "[develop-smoke] PASS: current service readiness, database isolation, authenticated KurrentDB TLS, anonymous health/read boundaries, Agent Sandbox claim reconciliation and cleanup with its runc profile, TLS ingress, and $SMOKE_STORAGE_MODE storage qualification"

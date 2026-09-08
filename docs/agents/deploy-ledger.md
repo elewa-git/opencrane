@@ -910,3 +910,30 @@ Full run reports belong in the corresponding pull request or issue.
 - validation scope: this failure occurred before the dry-run admission fixtures. Local render
   checks alone cannot establish that Kubernetes accepts and evaluates the policy. Personal and
   child answers, reviewed return, and both data-bearing restores remain pending.
+
+## 2026-09-08 · testv5 · admitted claims and controller label configuration · PARTIAL
+
+- qualification: `ac5f12c4d712687b7e91e72e3ccbde2b3b11a547` passed all twelve selected validation
+  gates and server publication in [run 34213336076](https://github.com/elewa-git/opencrane/actions/runs/34213336076).
+  The disposable cluster reported `Sandbox installed admission contract: PASS` at 10:13:11 UTC.
+- deployment: preflight took 62.139 seconds. The owning install scripts ran
+  10:18:20.540–10:22:11.355 UTC (230.815 seconds), exit 0, Helm revision 9. All eleven service Pods
+  were Ready with zero restarts; public TLS health returned 200 at 10:23:06.760. The server uses
+  this candidate; seven checked application digests retain the qualified `997dcda70` companions
+  where appropriate, including the admitted computer profile. The completed bootstrap Job,
+  database baseline and owner/OIDC binding remain unchanged. This is repair timing, not restore RTO.
+- product proof: both fresh employees renewed their real OIDC sessions. At 10:26:29, colleague D
+  posted and retried a normal follow-up after their original computer became cold. At 10:26:32,
+  colleague E created and retried a personal conversation and posted its first message.
+- controller finding: both new claims were admitted, but the controller reported `InvalidMetadata`:
+  `opencrane.ai/computer-generation` uses a domain absent from its allowlist. No Sandbox or computer
+  Pod was created. The pinned v0.5.3 controller reads `/etc/sandbox-config/allowed-label-domains`
+  at startup. The repair mounts the fixed `opencrane.ai` configuration and adds a persisted
+  claim-to-Sandbox-to-Pod check to disposable-cluster CI. Application admission remains responsible
+  for the exact lease keys and authorized caller.
+- replay finding: the ordinary member was denied with 403 as expected; the owner received 503
+  because KurrentDB denied the service identity's replay operation. The pinned 26.1.1 policy permits
+  replay only to operations or administrator identities. Recovery must use the deployment
+  maintenance boundary; the server must retain its unprivileged history credentials.
+- remaining proof: complete personal and child answers, reviewed return and reconnect, followed by
+  both scheduled data-bearing restore drills and measured recovery time.

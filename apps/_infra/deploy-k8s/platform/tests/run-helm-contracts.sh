@@ -12,6 +12,7 @@ fi
 for contract in \
   bootstrap-prerequisites-contract.sh \
   bootstrap-prerequisites-render-contract.sh \
+  agent-sandbox-entrypoint-contract.sh \
   gke-snapshot-class-contract.sh \
   gke-standard-storage-class-contract.sh \
   current-chart-sources-contract.sh \

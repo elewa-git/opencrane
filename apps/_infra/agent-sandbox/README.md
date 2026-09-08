@@ -51,9 +51,13 @@ chart renders with its unchanged release context.
 The chart creates release-scoped profiles, server claim RBAC and admission policy only. It never
 installs Agent Sandbox CRDs or its controller, selects a Pod image at claim time, creates a bespoke
 Pod controller, or keeps a legacy warm-runtime workload. The upstream controller and CRDs are external
-cluster prerequisites. `deploy-k8s/platform/deploy-agent-sandbox-controller.sh` installs that shared prerequisite from the checksummed
-v0.5.3 upstream manifest with the multi-platform controller image pinned by digest; it requires an
-explicit matching Kubernetes context and is not part of a silo Helm release.
+cluster prerequisites. The core deploy action `--provision-agent-sandbox-controller --context CONTEXT`
+delegates to `deploy-k8s/platform/deploy-agent-sandbox-controller.sh`. It installs the checksummed
+v0.5.3 upstream manifest with the multi-platform controller image pinned by digest, and mounts
+the fixed `opencrane.ai` allowlist from ConfigMap `opencrane-agent-sandbox-label-domains` at
+`/etc/sandbox-config/allowed-label-domains`. The controller reads this file at startup. Its domain
+allowlist permits propagation; the release policy still enforces the exact keys and lease values.
+The action requires an explicit matching Kubernetes context and is separate from a silo Helm release.
 
 ## Dependency direction
 
@@ -73,7 +77,11 @@ lease coordinates at process startup, before an unused pool Pod could receive th
 The remote k3d smoke runs `tests/claim-admission-smoke.sh` against the installed policy. It waits for
 current Kubernetes type checking, rejects expression warnings, and dry-runs a valid server claim
 and forbidden identity, annotation, environment, lease and pool changes. Those requests persist no
-claims or Pods. Real conversation journeys separately prove controller reconciliation and model work.
+claims or Pods. The following `tests/claim-lifecycle-smoke.sh` then persists a server-impersonated
+claim in the disposable k3d cluster. It checks the controlling owner UID, Sandbox and Pod lease
+labels, running Pod and same-namespace Service address, then deletes that exact claim and waits for
+foreground cleanup. It rejects other contexts. This proves controller reconciliation, without
+claiming PostgreSQL admission, computer readiness or an assistant answer; live journeys prove those.
 
 ## See also
 

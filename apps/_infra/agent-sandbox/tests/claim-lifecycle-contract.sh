@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+SMOKE="$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-lifecycle-smoke.sh"
+FIXTURE_DIR="$(mktemp -d)"
+trap 'rm -rf "$FIXTURE_DIR"' EXIT
+mkdir -p "$FIXTURE_DIR/bin"
+export FIXTURE_DIR
+cat > "$FIXTURE_DIR/bin/kubectl" <<'SH'
+#!/usr/bin/env bash
+exec node "$FIXTURE_DIR/kubectl.cjs" "$@"
+SH
+cat > "$FIXTURE_DIR/kubectl.cjs" <<'NODE'
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const args = process.argv.slice(2);
+const scenario = process.env.FIXTURE_SCENARIO;
+const directory = process.env.FIXTURE_DIR;
+fs.appendFileSync(`${directory}/calls`, `${args.join(' ')}\n`);
+const names = { namespace: 'smoke', claim: 'computer-controller-proof-g1', service: 'controller-proof-service' };
+const labels = { 'opencrane.ai/computer-id': 'computer-controller-proof', 'opencrane.ai/computer-generation': '1', 'opencrane.ai/computer-lease-id': 'lease-controller-proof' };
+const claimOwner = { apiVersion: 'extensions.agents.x-k8s.io/v1beta1', kind: 'SandboxClaim', name: names.claim, uid: 'fixture-claim-uid', controller: true };
+const sandboxOwner = { apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox', name: names.claim, uid: 'fixture-sandbox-uid', controller: true };
+if (args.includes('create')) {
+  assert.equal(args[args.indexOf('--as') + 1], 'system:serviceaccount:smoke:smoke-opencrane-server');
+  assert(!args.some(argument => argument.startsWith('--dry-run')));
+  const claim = JSON.parse(fs.readFileSync(0, 'utf8'));
+  assert.deepEqual(claim.spec.additionalPodMetadata.labels, labels);
+  assert.equal(claim.spec.warmPoolRef.name, 'developer-pool');
+  claim.metadata.uid = 'fixture-claim-uid';
+  fs.writeFileSync(`${directory}/claim.json`, JSON.stringify(claim));
+  if (scenario === 'existing') {
+    process.stderr.write('AlreadyExists\n');
+    process.exit(1);
+  }
+  process.stdout.write(JSON.stringify(claim));
+} else if (args.includes('get')) {
+  const resource = args[args.indexOf('get') + 1];
+  if (resource === `sandboxclaim/${names.claim}`) {
+    const claim = JSON.parse(fs.readFileSync(`${directory}/claim.json`, 'utf8'));
+    claim.metadata.annotations['agents.x-k8s.io/controller-first-observed-at'] = '2026-09-08T12:00:00Z';
+    claim.status = { sandbox: { name: names.claim }, conditions: [{ type: 'Ready', status: 'False', reason: 'PodNotReady' }] };
+    if (scenario === 'invalid-metadata') {
+      claim.status = { sandbox: {}, conditions: [{ type: 'Ready', status: 'False', reason: 'InvalidMetadata', message: 'opencrane.ai is not in the allowlist' }] };
+    }
+    process.stdout.write(JSON.stringify(claim));
+  } else if (resource === `sandbox/${names.claim}`) {
+    if (scenario === 'foreign-owner') claimOwner.uid = 'another-claim-uid';
+    process.stdout.write(JSON.stringify({
+      apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox',
+      metadata: { name: names.claim, namespace: names.namespace, uid: 'fixture-sandbox-uid', ownerReferences: [claimOwner] },
+      spec: { podTemplate: { metadata: { labels } } },
+      status: { service: names.service, serviceFQDN: `${names.service}.${scenario === 'foreign-address' ? 'other' : names.namespace}.svc.cluster.local` }
+    }));
+  } else if (resource === `pod/${names.claim}`) {
+    if (scenario === 'missing-pod') process.exit(0);
+    if (scenario === 'wrong-pod-lease') labels['opencrane.ai/computer-lease-id'] = 'another-lease';
+    process.stdout.write(JSON.stringify({
+      metadata: { name: names.claim, namespace: names.namespace, ownerReferences: [sandboxOwner], labels },
+      spec: { serviceAccountName: 'smoke-agent-sandbox', runtimeClassName: 'opencrane-smoke-runc' },
+      status: { phase: 'Running', conditions: [{ type: 'Ready', status: 'False' }] }
+    }));
+  } else {
+    throw new Error(`Unexpected read: ${resource}`);
+  }
+} else if (args.includes('delete')) {
+  assert.equal(args[args.indexOf('--as') + 1], 'system:serviceaccount:smoke:smoke-opencrane-server');
+  assert.equal(args[args.indexOf('--raw') + 1], `/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/smoke/sandboxclaims/${names.claim}`);
+  const options = JSON.parse(fs.readFileSync(0, 'utf8'));
+  assert.deepEqual(options, { apiVersion: 'v1', kind: 'DeleteOptions', propagationPolicy: 'Foreground', preconditions: { uid: 'fixture-claim-uid' } });
+  fs.writeFileSync(`${directory}/deleted`, 'yes');
+  process.stdout.write('{}');
+} else if (args.includes('wait')) {
+  assert(args.includes('--for=delete'));
+  assert(fs.existsSync(`${directory}/deleted`));
+  if (scenario === 'cleanup-blocked') process.exit(1);
+} else {
+  throw new Error(`Unexpected command: ${args.join(' ')}`);
+}
+NODE
+chmod +x "$FIXTURE_DIR/bin/kubectl"
+
+bash -n "$SMOKE"
+: > "$FIXTURE_DIR/calls"
+PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO=healthy bash "$SMOKE" k3d-contract smoke smoke 5 > "$FIXTURE_DIR/healthy.log"
+grep -Fq 'Sandbox controller lifecycle: PASS' "$FIXTURE_DIR/healthy.log"
+grep -Fq 'get sandbox/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
+grep -Fq 'get pod/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
+grep -Fq 'wait --for=delete sandbox/computer-controller-proof-g1 pod/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
+grep -Fq 'wait --for=delete service/controller-proof-service' "$FIXTURE_DIR/calls"
+[[ "$(grep -c ' delete ' "$FIXTURE_DIR/calls")" == 1 ]]
+
+for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address missing-pod cleanup-blocked existing; do
+  : > "$FIXTURE_DIR/calls"
+  rm -f "$FIXTURE_DIR/deleted"
+  if PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO="$scenario" bash "$SMOKE" k3d-contract smoke smoke 1 > "$FIXTURE_DIR/$scenario.log" 2>&1; then
+    printf 'Controller smoke accepted invalid scenario: %s\n' "$scenario" >&2
+    exit 1
+  fi
+  if [[ "$scenario" == existing ]]; then
+    ! grep -q ' delete ' "$FIXTURE_DIR/calls"
+  else
+    grep -q ' delete ' "$FIXTURE_DIR/calls"
+  fi
+  ! grep -Fq 'Sandbox controller lifecycle: PASS' "$FIXTURE_DIR/$scenario.log"
+done
+grep -Fq 'InvalidMetadata' "$FIXTURE_DIR/invalid-metadata.log"
+
+: > "$FIXTURE_DIR/calls"
+if PATH="$FIXTURE_DIR/bin:$PATH" bash "$SMOKE" shared-production smoke smoke > "$FIXTURE_DIR/context.log" 2>&1; then
+  echo 'Controller fixture accepted a non-disposable context.' >&2
+  exit 1
+fi
+[[ ! -s "$FIXTURE_DIR/calls" ]]
+printf 'Sandbox controller lifecycle contract: PASS\n'

@@ -42,9 +42,22 @@ Pod and Service; OpenCrane does not run a second Pod lifecycle controller.
 - Ingress, DNS and certificate controllers when exposing a public host.
 - PostgreSQL credentials supplied through Kubernetes Secrets.
 - KurrentDB TLS and least-privilege service credentials.
-- Agent Sandbox v1beta1 CRDs and controller with extensions enabled.
+- Agent Sandbox v1beta1 CRDs and controller with extensions enabled and `opencrane.ai` allowed
+  for claim-supplied Pod labels.
 - An approved `gvisor` RuntimeClass.
 - Immutable image digests for KurrentDB, its bootstrap image and the conversation computer.
+
+Install the pinned shared Sandbox controller through the deployment entrypoint before installing a
+silo. The command verifies the current context, the upstream manifest checksum and the immutable
+controller image, and mounts the required label-domain configuration:
+
+```bash
+bash apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-agent-sandbox-controller --context "$CONTEXT"
+```
+
+Add `--preflight` to check those inputs without changing the cluster. This action installs shared
+cluster infrastructure; it is separate from the organisation release.
 
 ## Operator inputs
 

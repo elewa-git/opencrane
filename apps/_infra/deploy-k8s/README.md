@@ -131,6 +131,10 @@ package imports it.
 - `platform/provision-kurrentdb-bootstrap-secrets.sh` — creates the namespace-local immutable TLS,
   administrator, operations, and `opencrane-history` Secrets for one fresh testv5 silo. Reruns
   validate the existing authorities and never rotate them.
+- `platform/k8s-deploy.sh --provision-agent-sandbox-controller --context CONTEXT` — installs the
+  pinned shared controller and its `opencrane.ai` Pod-label allowlist. Add `--preflight` to verify
+  the downloaded manifest and local configuration without changing the cluster. This separate
+  prerequisite action runs before silo installation and requires the named current context.
 - `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
   shared `ClusterTenant` CRD, while later silos consume it without competing for Helm ownership.
 - `--first-user-email` — required standalone-onboarding input. It is matched exactly against an

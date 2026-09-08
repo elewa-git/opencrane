@@ -49,6 +49,11 @@
 #     --context CONTEXT
 # Creates or validates one owned, non-default expandable GKE pd-standard storage class.
 #
+# Agent Sandbox prerequisite (a separate action; this flag must come first):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-agent-sandbox-controller \
+#     --context CONTEXT [--preflight]
+# Installs the pinned shared controller with OpenCrane's allowed Pod-label domain.
+#
 # Fresh-install credentials (each action must come first and uses the current kubectl context):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-postgres-bootstrap-secrets \
 #     --namespace NAMESPACE --release RELEASE
@@ -114,6 +119,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 case "${1:-}" in
+  --provision-agent-sandbox-controller)
+    shift
+    exec bash "$SCRIPT_DIR/deploy-agent-sandbox-controller.sh" "$@"
+    ;;
   --provision-gke-standard-storage-class)
     source "$SCRIPT_DIR/gke-standard-storage-class.sh"
     shift

@@ -93,7 +93,9 @@ only Secret names here:
 | Computer image | `OPENCRANE_AGENT_SANDBOX_IMAGE_DIGEST`, `OPENCRANE_AGENT_SANDBOX_IMAGE_PULL_POLICY`; `OPENCRANE_AGENT_SANDBOX_IMAGE_REPOSITORY` may override the default repository |
 
 The target must already have immutable history Secrets, all four Agent Sandbox CRDs serving and
-storing `v1beta1`, a ready controller with extensions enabled and an approved `gvisor` RuntimeClass.
+storing `v1beta1`, a ready controller with extensions enabled and the `opencrane.ai` Pod-label
+domain configured, and an approved `gvisor` RuntimeClass. The [hosting guide](/operators/hosting)
+shows the controller prerequisite command.
 The [runbook](/operators/runbook) covers recovery; [development status](/guide/status) distinguishes
 this installation machinery from live qualification.
 
