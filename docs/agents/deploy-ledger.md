@@ -1025,3 +1025,36 @@ Full run reports belong in the corresponding pull request or issue.
   The health wait shares the Job timeout; authentication and TLS failures stop immediately. Tests
   cover initial connection refusal, an exhausted wait, denied health and uncertain POST failures.
   No deployment, live replay, assistant answer or restore is claimed from this run.
+
+## 2026-09-08 · testv5 · qualified networking, replay and Pod-read diagnosis · PARTIAL
+
+- qualification: `b2ee5a4ca5a261515721910c68b7969244abb4aa` passed all twelve selected validation
+  gates and server publication in [run 34226441577](https://github.com/elewa-git/opencrane/actions/runs/34226441577).
+  Installed computer DNS, private-server and model TCP checks passed at 12:42:33 UTC; owned
+  Sandbox/Pod lifecycle and foreground cleanup passed at 12:42:34; secure replay followed.
+- deployment: owning preflight took 63.038 seconds. Installation ran 12:50:20.526–12:54:19.738 UTC,
+  exit 0, 239.211 seconds, Helm revision 10. All eleven service Pods and public TLS health passed.
+  The server index is `sha256:9aabe2b31dab9a013f4c50466d76f02536b2e55a20acca735841c132a85659fa`;
+  its amd64 manifest is `sha256:ea9e7e8421300170835046f9273e8fd30280f4b3329ff24e95552e34041839bc`.
+  The admitted computer profile and qualified `997dcda70` companions remain pinned; the completed
+  bootstrap Job and database baseline remain unchanged. This is repair timing, not restore RTO.
+- live replay: the owning maintenance command completed in 21.480 seconds, Job
+  `kurrentdb-activation-replay-rcbjx`, complete at 12:56:38. A CA-verified HTTPS queue read at
+  12:57:06 confirmed parked messages fell from three to zero, with zero inflight/outstanding and
+  one consumer. The server history identity did not receive administrator credentials.
+- product evidence: all five test identities signed in again after server replacement. Two fresh
+  personal chats and their first messages passed exact retries. A real browser explicitly selected
+  the company assistant and admitted a new child; exact retry, changed-source denial, other-caller
+  denial and all three audience reads passed. Neither personal nor child output was produced.
+- finding: all three new computer Pods run with correct owner identifiers, lease labels and
+  ClusterFirst DNS; private server resolution succeeds. Their review credential is absent and
+  readiness reports HTTPError. A credential-route request from the bound Pod returned 409. The
+  server's applicable Role and ClusterRole bindings, including its groups, grant no Pod read, while
+  the binding adapter lists Pods during that exchange. Later cooling is recorded separately and
+  does not establish the cause of the earlier failure.
+- repair in progress: read only the named Pod from the claim, retain namespace, name, unique
+  identifier, service-account and lease checks, and grant namespaced `pods/get`. Installed smoke
+  must exercise the full server service-account identity and reject namespace-wide discovery,
+  Pod mutations and foreign-namespace reads. Closed server diagnostics identify the failing
+  operation without copying Kubernetes errors or credentials. Review and fresh live answers remain
+  required before either scheduled, data-bearing `latest` restore and its measured RTO.

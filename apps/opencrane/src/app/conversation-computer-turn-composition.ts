@@ -10,6 +10,7 @@ import { _CreateConversationComputerTokenReviewer, type RuntimeWorkloadIdentity 
 
 import type { AgentSandboxReleaseProfileConfig } from "./config.types";
 import { _ReadConversationPrivatePayloadKeyring } from "./conversation-history-composition";
+import { _log } from "./log";
 
 /** Compose the private Pod-authenticated turn transport from concrete product and infrastructure adapters. */
 export function _CreateConversationComputerTurnComposition(prisma: PrismaClient, history: HistoryStore, authApi: k8s.AuthenticationV1Api, coreApi: k8s.CoreV1Api, customApi: k8s.CustomObjectsApi, siloId: string, profile: AgentSandboxReleaseProfileConfig, keyringPath: string, runAdmission: ConversationComputerRunAdmissionPort)
@@ -34,5 +35,5 @@ export function _CreateConversationComputerTurnComposition(prisma: PrismaClient,
 		} }, { assertMayAppend: async function _RecheckLeaseAtAppend() { await candidates.assertCurrent(turn, workload); } });
 	} };
 	const authority = new ConversationComputerTurnAuthorityService({ siloId, candidates, credentials, endpoint: process.env.LITELLM_ENDPOINT ?? "", outputPayloads: unitOfWork, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
-	return _CreateConversationComputerTurnRouter({ tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName), authority });
+	return _CreateConversationComputerTurnRouter({ logger: _log, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName), authority });
 }

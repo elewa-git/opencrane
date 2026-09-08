@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import type { ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";
+import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
 
 const _UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -17,8 +18,10 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 		{
 			response.status(200).json(await options.authority.reviewCredential(command));
 		}
-		catch
+		catch (error)
 		{
+			const diagnostic = _ConversationFailureDiagnostic(error);
+			options.logger.warn({ operation: "conversation.computer.review_credential", err: diagnostic, errorType: diagnostic.type }, "Conversation computer review credential unavailable");
 			response.status(409).json({ error: "conversation_computer_rebootstrap_required" });
 		}
 	});
@@ -32,8 +35,10 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 		{
 			bootstrap = await options.authority.bootstrap(command);
 		}
-		catch
+		catch (error)
 		{
+			const diagnostic = _ConversationFailureDiagnostic(error);
+			options.logger.warn({ operation: "conversation.computer.bootstrap", err: diagnostic, errorType: diagnostic.type }, "Conversation computer bootstrap unavailable");
 			response.status(409).json({ error: "conversation_computer_rebootstrap_required" });
 			return;
 		}
@@ -66,8 +71,10 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 		{
 			outcome = await options.authority.appendOutput({ bootstrapId, sourceCommandId, text, workload });
 		}
-		catch
+		catch (error)
 		{
+			const diagnostic = _ConversationFailureDiagnostic(error);
+			options.logger.warn({ operation: "conversation.computer.output", err: diagnostic, errorType: diagnostic.type }, "Conversation computer output unavailable");
 			response.status(409).json({ error: "conversation_computer_rebootstrap_required" });
 			return;
 		}

@@ -31,7 +31,7 @@ identity or lease metadata fails closed.
 ## Public surface
 
 - `AgentSandboxClaimAdapter` creates, observes, inspects, renews and releases claims. Renewal and deletion compare the observed Kubernetes identifier and resource version so they cannot modify a replacement or overwrite a concurrent change.
-- `AgentSandboxPodBindingAdapter` checks a Pod identity verified by Kubernetes TokenReview against the claim, service account and copied lease labels.
+- `AgentSandboxPodBindingAdapter` reads the Pod named by the admitted claim and checks its namespace, name, unique identifier, service account and copied lease labels against the identity verified by Kubernetes TokenReview.
 
 ## Boundary
 
@@ -48,7 +48,10 @@ It must not import application roots, backend domain implementations or frontend
 
 ## Runtime & config
 
-The server client needs claim create/get/patch/delete and Sandbox get in the computer namespace.
+The server client needs claim create/get/patch/delete, Sandbox get and Pod get in the computer namespace.
+It reads one named Pod; it cannot list, watch, create or delete Pods. Agent Sandbox retains Pod
+ownership. A deleted Pod fails identity verification; Kubernetes permission and transport failures
+reach the server diagnostic without exposing their response bodies.
 The app-owned admission policy confines patches to lease extension or controller bookkeeping.
 Shutdown times use the upstream controller's whole-second precision, rounded down from the admitted
 expiry. Pods retain their separate workload-token verification; a Service address grants no authority.

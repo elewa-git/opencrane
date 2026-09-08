@@ -111,6 +111,11 @@ server-resolved coordinates. That port owns durable run assembly and returns the
 input. A denial fails bootstrap closed; the conversation package never creates an execution subject
 or treats computer-supplied coordinates as authority.
 
+Review-credential, bootstrap and output failures keep the private transport's opaque 409 response.
+Each warning identifies the fixed operation and a recognized error class and code; it excludes
+credentials, model input or output, request coordinates and upstream error text. The internal
+listener supplies request correlation and logging before these early handlers run.
+
 Every bootstrap, including a retry of a stored turn, recomputes the remaining original run deadline
 and execution/requester membership expiry, then shortens that bound to the current lease. Key
 issuance uses this absolute limit and a maximum five-minute lifetime. Encrypted custody records the

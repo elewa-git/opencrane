@@ -5,7 +5,7 @@ const _PRISMA_ERROR_TYPES = ["PrismaClientValidationError", "PrismaClientInitial
 
 /**
  * Copies recognized diagnostic codes while leaving error text, causes, names, and metadata behind.
- * Called by: participant history/metadata routers and the group-child creation worker.
+ * Called by: participant history/metadata routers, the private computer-turn router and the group-child creation worker.
  * Upstream exceptions can contain private messages or credentials, so logs retain only this closed shape.
  */
 export function _ConversationFailureDiagnostic(error: unknown): SelfConversationHistoryDiagnosticError
@@ -40,4 +40,3 @@ function _ErrorType(error: unknown): string
 		return "SyntaxError";
 	return "Error";
 }
-

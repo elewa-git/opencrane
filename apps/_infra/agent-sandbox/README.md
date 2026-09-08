@@ -32,8 +32,11 @@ those three values, and preserves those inputs across updates. The server may on
 expiry; the pinned controller may only update its four documented bookkeeping annotations.
 After foreground deletion, the standard Kubernetes garbage-collector identity may remove its sole
 `foregroundDeletion` finalizer while preserving the terminating claim's specification and metadata.
-The server can read the claim's owned Sandbox for its service address, but cannot mutate that
-Sandbox or its Pod. A mistake therefore denies activation instead of widening the Pod profile.
+The server reads the claim's owned Sandbox for its service address and reads a named Pod to verify
+the identity returned by Kubernetes token review: Pod name and UID, namespace, service account and
+computer lease labels must agree. Its Pod permission is limited to `get` in the configured computer
+namespace. The Agent Sandbox controller owns Pod creation and deletion; the server cannot list,
+watch or mutate Pods. A mistake therefore denies activation instead of widening the Pod profile.
 
 The release owns the computer's NetworkPolicy: the private server, LiteLLM and DNS are its only
 outbound paths, and only the server can reach its review port. The template sets
@@ -86,9 +89,13 @@ The remote k3d smoke runs `tests/claim-admission-smoke.sh` against the installed
 current Kubernetes type checking, rejects expression warnings, and dry-runs a valid server claim
 and forbidden identity, annotation, environment, lease and pool changes. Those requests persist no
 claims or Pods. The following `tests/claim-lifecycle-smoke.sh` then persists a server-impersonated
-claim in the disposable k3d cluster. It checks the controlling owner UID, Sandbox and Pod lease
-labels, running Pod, cluster DNS, private server and model transport and same-namespace Service address. It
-also rejects a controller-created template policy, then deletes that exact claim and waits for
+claim in the disposable k3d cluster. Before creating the claim, it checks that the server cannot list,
+watch or mutate Pods or read Pods in a foreign namespace. Authorization reviews make these checks
+without submitting Pod writes. Every server impersonation includes its service-account groups so
+group grants are covered. It reads the named Pod as that server identity, then checks the controlling
+owner UID, Sandbox and Pod lease labels, running Pod, cluster DNS, private server and model transport
+and same-namespace Service address. It also rejects a controller-created template policy, then
+deletes that exact claim and waits for
 foreground cleanup. It rejects other contexts. This proves controller reconciliation, without
 claiming PostgreSQL admission, computer readiness or an assistant answer; live journeys prove those.
 

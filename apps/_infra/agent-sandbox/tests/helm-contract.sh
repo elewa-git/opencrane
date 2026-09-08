@@ -205,6 +205,55 @@ const assert = require("node:assert/strict");
 const YAML = require("yaml");
 for (const [input, namespace, port] of [[process.env.SANDBOX_RENDERED, "opencrane-testv5", 4000], [process.env.SANDBOX_ISOLATED, "isolated-computers", 4100], [process.env.SANDBOX_DISABLED, null, 4000]]) {
   const resources = YAML.parseAllDocuments(input).map(document => document.toJSON()).filter(Boolean);
+  const claimRoleName = "opencrane-testv5-agent-sandbox-claims";
+  const claimRoles = resources.filter(resource => ["Role", "ClusterRole"].includes(resource.kind) && resource.metadata.name === claimRoleName);
+  const claimBindings = resources.filter(resource => ["RoleBinding", "ClusterRoleBinding"].includes(resource.kind) && resource.metadata.name === claimRoleName);
+  assert.equal(claimRoles.length, namespace === null ? 0 : 1);
+  assert.equal(claimBindings.length, namespace === null ? 0 : 1);
+  if (namespace !== null) {
+    const [role] = claimRoles;
+    assert.equal(role.kind, "Role");
+    assert.equal(role.metadata.namespace, namespace);
+    assert.deepEqual(role.rules, [
+      { apiGroups: ["extensions.agents.x-k8s.io"], resources: ["sandboxclaims"], verbs: ["create", "get", "patch", "delete"] },
+      { apiGroups: ["agents.x-k8s.io"], resources: ["sandboxes"], verbs: ["get"] },
+      { apiGroups: [""], resources: ["pods"], verbs: ["get"] }
+    ]);
+    const [binding] = claimBindings;
+    assert.equal(binding.kind, "RoleBinding");
+    assert.equal(binding.metadata.namespace, namespace);
+    assert.deepEqual(binding.subjects, [{ kind: "ServiceAccount", name: "opencrane-testv5-opencrane-server", namespace: "default" }]);
+    assert.deepEqual(binding.roleRef, { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: claimRoleName });
+  }
+  // Evaluate every rendered binding, including group grants, to catch rights from another role.
+  const allowsPod = (accountNamespace, accountName, targetNamespace, verb) => {
+    const username = `system:serviceaccount:${accountNamespace}:${accountName}`;
+    const groups = ["system:authenticated", "system:serviceaccounts", `system:serviceaccounts:${accountNamespace}`];
+    return resources.filter(binding => ["RoleBinding", "ClusterRoleBinding"].includes(binding.kind)).some(binding => {
+      if (binding.kind === "RoleBinding" && (binding.metadata.namespace ?? "default") !== targetNamespace) return false;
+      const matchesSubject = (binding.subjects ?? []).some(subject =>
+        subject.kind === "ServiceAccount" && subject.namespace === accountNamespace && subject.name === accountName ||
+        subject.kind === "User" && subject.name === username || subject.kind === "Group" && groups.includes(subject.name));
+      if (!matchesSubject) return false;
+      const role = resources.find(resource => resource.kind === binding.roleRef.kind && resource.metadata.name === binding.roleRef.name &&
+        (resource.kind === "ClusterRole" || (resource.metadata.namespace ?? "default") === (binding.metadata.namespace ?? "default")));
+      return (role?.rules ?? []).some(rule =>
+        rule.apiGroups?.some(group => group === "" || group === "*") &&
+        rule.resources?.some(resource => resource === "pods" || resource === "*") &&
+        rule.verbs?.some(candidate => candidate === verb || candidate === "*"));
+    });
+  };
+  for (const targetNamespace of [namespace ?? "opencrane-testv5", "foreign-computers"]) {
+    for (const verb of ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]) {
+      assert.equal(allowsPod("default", "opencrane-testv5-opencrane-server", targetNamespace, verb),
+        namespace !== null && targetNamespace === namespace && verb === "get",
+        `Unexpected server Pod permission: ${verb} in ${targetNamespace}`);
+      assert.equal(allowsPod(namespace ?? "opencrane-testv5", "agent-sandbox-runtime", targetNamespace, verb), false,
+        `The runtime must not receive Pod permission: ${verb} in ${targetNamespace}`);
+      assert.equal(allowsPod("foreign-server", "opencrane-testv5-opencrane-server", targetNamespace, verb), false,
+        `A foreign server must not receive Pod permission: ${verb} in ${targetNamespace}`);
+    }
+  }
   const policy = resources.find(resource => resource.kind === "NetworkPolicy" && resource.metadata.name === "opencrane-testv5-litellm");
   assert.ok(policy, "Computer isolation must not depend on the broad network-policy switch");
   const peers = policy.spec.ingress.flatMap(rule => {

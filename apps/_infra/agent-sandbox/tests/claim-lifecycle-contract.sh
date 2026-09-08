@@ -22,8 +22,32 @@ const names = { namespace: 'smoke', claim: 'computer-controller-proof-g1', servi
 const labels = { 'opencrane.ai/computer-id': 'computer-controller-proof', 'opencrane.ai/computer-generation': '1', 'opencrane.ai/computer-lease-id': 'lease-controller-proof' };
 const claimOwner = { apiVersion: 'extensions.agents.x-k8s.io/v1beta1', kind: 'SandboxClaim', name: names.claim, uid: 'fixture-claim-uid', controller: true };
 const sandboxOwner = { apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox', name: names.claim, uid: 'fixture-sandbox-uid', controller: true };
-if (args.includes('create')) {
+if (args.includes('--as')) {
   assert.equal(args[args.indexOf('--as') + 1], 'system:serviceaccount:smoke:smoke-opencrane-server');
+  assert.deepEqual(args.flatMap((argument, index) => argument === '--as-group' ? [args[index + 1]] : []).sort(),
+    ['system:authenticated', 'system:serviceaccounts', 'system:serviceaccounts:smoke']);
+}
+if (args.includes('auth')) {
+  assert(args.includes('--as'));
+  assert.equal(args[args.indexOf('auth') + 1], 'can-i');
+  const verb = args[args.indexOf('can-i') + 1];
+  const resource = args[args.indexOf('can-i') + 2];
+  const namespace = args[args.indexOf('-n') + 1];
+  assert(['smoke', 'kube-system'].includes(namespace));
+  assert.equal(resource, ['get', 'update', 'patch', 'delete'].includes(verb) ? `pods/${names.claim}` : 'pods');
+  assert(namespace !== 'smoke' || verb !== 'get');
+  const grant = namespace === 'smoke' && (
+    scenario === `server-pod-${verb}-granted` ||
+    scenario === 'server-group-pod-list-granted' && verb === 'list' && args.includes('system:serviceaccounts:smoke')) ||
+    namespace === 'kube-system' && scenario === 'foreign-pod-read-granted' && verb === 'get';
+  if (scenario === 'pod-authorization-error') {
+    process.stderr.write('The API server could not evaluate the authorization request.\n');
+    process.exit(1);
+  }
+  process.stdout.write(grant ? 'yes\n' : 'no\n');
+  process.exit(grant ? 0 : 1);
+} else if (args.includes('create')) {
+  assert(args.includes('--as'));
   assert(!args.some(argument => argument.startsWith('--dry-run')));
   const claim = JSON.parse(fs.readFileSync(0, 'utf8'));
   assert.deepEqual(claim.spec.additionalPodMetadata.labels, labels);
@@ -54,6 +78,11 @@ if (args.includes('create')) {
       status: { service: names.service, serviceFQDN: `${names.service}.${scenario === 'foreign-address' ? 'other' : names.namespace}.svc.cluster.local` }
     }));
   } else if (resource === `pod/${names.claim}`) {
+    assert(args.includes('--as'));
+    if (scenario === 'server-pod-read-denied') {
+      process.stderr.write('Forbidden: the server cannot get the named Pod.\n');
+      process.exit(1);
+    }
     if (scenario === 'missing-pod') process.exit(0);
     if (scenario === 'wrong-pod-lease') labels['opencrane.ai/computer-lease-id'] = 'another-lease';
     process.stdout.write(JSON.stringify({
@@ -78,7 +107,7 @@ if (args.includes('create')) {
   assert(args.includes('4100'));
   if (scenario === 'dns-unreachable' || scenario === 'model-unreachable') process.exit(1);
 } else if (args.includes('delete')) {
-  assert.equal(args[args.indexOf('--as') + 1], 'system:serviceaccount:smoke:smoke-opencrane-server');
+  assert(args.includes('--as'));
   assert.equal(args[args.indexOf('--raw') + 1], `/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/smoke/sandboxclaims/${names.claim}`);
   const options = JSON.parse(fs.readFileSync(0, 'utf8'));
   assert.deepEqual(options, { apiVersion: 'v1', kind: 'DeleteOptions', propagationPolicy: 'Foreground', preconditions: { uid: 'fixture-claim-uid' } });
@@ -100,11 +129,15 @@ PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO=healthy bash "$SMOKE" k3d-contrac
 grep -Fq 'Sandbox controller lifecycle: PASS' "$FIXTURE_DIR/healthy.log"
 grep -Fq 'get sandbox/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
 grep -Fq 'get pod/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
+grep -Fq 'auth can-i list pods -n smoke' "$FIXTURE_DIR/calls"
+grep -Fq 'auth can-i create pods -n smoke' "$FIXTURE_DIR/calls"
+grep -Fq 'auth can-i delete pods/computer-controller-proof-g1 -n smoke' "$FIXTURE_DIR/calls"
+grep -Fq 'auth can-i get pods/computer-controller-proof-g1 -n kube-system' "$FIXTURE_DIR/calls"
 grep -Fq 'wait --for=delete sandbox/computer-controller-proof-g1 pod/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
 grep -Fq 'wait --for=delete service/controller-proof-service' "$FIXTURE_DIR/calls"
-[[ "$(grep -c ' delete ' "$FIXTURE_DIR/calls")" == 1 ]]
+[[ "$(grep -c ' delete --raw ' "$FIXTURE_DIR/calls")" == 1 ]]
 
-for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable model-unreachable upstream-policy missing-pod cleanup-blocked existing; do
+for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable model-unreachable upstream-policy missing-pod cleanup-blocked existing server-pod-read-denied; do
   : > "$FIXTURE_DIR/calls"
   rm -f "$FIXTURE_DIR/deleted"
   if PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO="$scenario" bash "$SMOKE" k3d-contract smoke smoke 1 > "$FIXTURE_DIR/$scenario.log" 2>&1; then
@@ -112,13 +145,25 @@ for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address p
     exit 1
   fi
   if [[ "$scenario" == existing ]]; then
-    ! grep -q ' delete ' "$FIXTURE_DIR/calls"
+    ! grep -q ' delete --raw ' "$FIXTURE_DIR/calls"
   else
-    grep -q ' delete ' "$FIXTURE_DIR/calls"
+    grep -q ' delete --raw ' "$FIXTURE_DIR/calls"
   fi
   ! grep -Fq 'Sandbox controller lifecycle: PASS' "$FIXTURE_DIR/$scenario.log"
 done
 grep -Fq 'InvalidMetadata' "$FIXTURE_DIR/invalid-metadata.log"
+grep -Fq 'Forbidden: the server cannot get the named Pod.' "$FIXTURE_DIR/server-pod-read-denied.log"
+
+for scenario in server-pod-list-granted server-pod-watch-granted server-pod-create-granted server-pod-update-granted server-pod-patch-granted server-pod-delete-granted server-pod-deletecollection-granted foreign-pod-read-granted server-group-pod-list-granted pod-authorization-error; do
+  : > "$FIXTURE_DIR/calls"
+  if PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO="$scenario" bash "$SMOKE" k3d-contract smoke smoke 1 > "$FIXTURE_DIR/$scenario.log" 2>&1; then
+    printf 'Controller smoke accepted invalid Pod authorization: %s\n' "$scenario" >&2
+    exit 1
+  fi
+  ! grep -Eq ' (create -f|delete --raw) ' "$FIXTURE_DIR/calls"
+  grep -Fq 'Expected the server to be denied' "$FIXTURE_DIR/$scenario.log"
+  ! grep -Fq 'Sandbox controller lifecycle: PASS' "$FIXTURE_DIR/$scenario.log"
+done
 
 : > "$FIXTURE_DIR/calls"
 if PATH="$FIXTURE_DIR/bin:$PATH" bash "$SMOKE" shared-production smoke smoke > "$FIXTURE_DIR/context.log" 2>&1; then

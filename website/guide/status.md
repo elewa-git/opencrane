@@ -50,17 +50,16 @@ membership repairs, a fresh employee signed in with a password in a real browser
 chat workspace with their assistant ready. Company-assistant discovery, administrator checks and
 child-request admission also pass, including audience isolation and retry checks.
 
-The computer-history and Kubernetes naming repairs are deployed. A fresh employee can now create
-a personal chat and send its first message. The Sandbox admission and controller configuration
-repairs passed remote Kubernetes qualification and are deployed. A new company-assistant request
-was selected in the real browser, and every group member can open its child chat. Its computer
-starts, but its current networking blocks private server discovery and model access. Both network
-repairs have passed independent review; the DNS repair also passed the remote Kubernetes smoke.
-Their combined qualification and deployment, complete model answers, reviewed sharing and reconnect
-remain pending live. Access
-changes, recovery and computer actions need their complete live journeys. Tool, memory and
-shared-work journeys need their own evidence as they become available. Both history restore
-modes still need a completed product fixture and measured recovery time.
+Fresh personal chats and company-assistant requests now reach their running computers. Private
+networking and activation replay have passed remote qualification and are deployed. A fresh company
+request was selected in the real browser, and all three group members can open its child chat.
+The server still lacks a Kubernetes read permission needed to verify the computer before it can
+answer. That repair is being qualified; complete personal and child answers, reviewed sharing and
+reconnect remain pending live.
+
+Access changes, recovery and computer actions need their complete live journeys. Tool, memory and
+shared-work journeys need their own evidence as they become available. Both history restore modes
+still need a completed product fixture and measured recovery time.
 
 Component tests, a chart render or a healthy process do not establish those complete journeys.
 Conversely, a pending live drill does not make already implemented code unfinished. Deployment

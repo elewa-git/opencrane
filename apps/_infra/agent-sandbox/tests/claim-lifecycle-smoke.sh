@@ -11,6 +11,8 @@ if [[ "$CONTEXT" != k3d-* || ! "$NAMESPACE" =~ ^[a-z0-9][a-z0-9-]*$ || ! "$RELEA
   exit 2
 fi
 SERVER="system:serviceaccount:${NAMESPACE}:${RELEASE}-opencrane-server"
+# Include the authenticated service-account groups so group grants cannot hide broader Pod access.
+SERVER_IDENTITY=(--as "$SERVER" --as-group system:authenticated --as-group system:serviceaccounts --as-group "system:serviceaccounts:${NAMESPACE}")
 CLAIM_NAME='computer-controller-proof-g1'
 CLAIM_UID=''
 SANDBOX_NAME=''
@@ -26,7 +28,7 @@ cleanup_claim()
   fi
   local options
   options="$(jq -n --arg uid "$CLAIM_UID" '{apiVersion:"v1",kind:"DeleteOptions",propagationPolicy:"Foreground",preconditions:{uid:$uid}}')"
-  if ! kubectl --context "$CONTEXT" --as "$SERVER" delete \
+  if ! kubectl --context "$CONTEXT" "${SERVER_IDENTITY[@]}" delete \
     --raw "/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/${NAMESPACE}/sandboxclaims/${CLAIM_NAME}" -f - <<<"$options" >/dev/null; then
     return 1
   fi
@@ -41,6 +43,32 @@ cleanup_claim()
 }
 trap 'status=$?; cleanup_claim || status=1; exit "$status"' EXIT
 
+# Authorization reviews prove denials without submitting Pod writes to the installed cluster.
+FOREIGN_NAMESPACE='kube-system'
+if [[ "$NAMESPACE" == "$FOREIGN_NAMESPACE" ]]; then
+  FOREIGN_NAMESPACE='default'
+fi
+for namespace in "$NAMESPACE" "$FOREIGN_NAMESPACE"; do
+  for verb in get list watch create update patch delete deletecollection; do
+    if [[ "$namespace" == "$NAMESPACE" && "$verb" == get ]]; then
+      continue
+    fi
+    resource='pods'
+    if [[ "$verb" == get || "$verb" == update || "$verb" == patch || "$verb" == delete ]]; then
+      resource="pods/${CLAIM_NAME}"
+    fi
+    if authorization="$(kubectl --context "$CONTEXT" "${SERVER_IDENTITY[@]}" auth can-i "$verb" "$resource" -n "$namespace")"; then
+      authorization_status=0
+    else
+      authorization_status=$?
+    fi
+    if [[ "$authorization" != no || "$authorization_status" != 1 ]]; then
+      printf 'Expected the server to be denied %s on %s in namespace %s; authorization returned %s (exit %s).\n' "$verb" "$resource" "$namespace" "$authorization" "$authorization_status" >&2
+      exit 1
+    fi
+  done
+done
+
 CLAIM="$(jq -n --arg namespace "$NAMESPACE" --arg name "$CLAIM_NAME" --argjson labels "$LEASE_LABELS" '{
   apiVersion:"extensions.agents.x-k8s.io/v1beta1",kind:"SandboxClaim",
   metadata:{name:$name,namespace:$namespace,
@@ -51,7 +79,7 @@ CLAIM="$(jq -n --arg namespace "$NAMESPACE" --arg name "$CLAIM_NAME" --argjson l
     additionalPodMetadata:{labels:$labels}}
 }')"
 # Create fails if this fixture name already exists; the smoke never adopts or overwrites it.
-CREATED="$(kubectl --context "$CONTEXT" --as "$SERVER" create -f - -o json <<<"$CLAIM")"
+CREATED="$(kubectl --context "$CONTEXT" "${SERVER_IDENTITY[@]}" create -f - -o json <<<"$CLAIM")"
 CLAIM_UID="$(jq -er '.metadata.uid | select(type == "string" and length > 0)' <<<"$CREATED")"
 while true; do
   CLAIM="$(kubectl --context "$CONTEXT" get "sandboxclaim/${CLAIM_NAME}" -n "$NAMESPACE" -o json)"
@@ -67,7 +95,7 @@ while true; do
       exit 1
     fi
     SANDBOX="$(kubectl --context "$CONTEXT" get "sandbox/${SANDBOX_NAME}" -n "$NAMESPACE" -o json --ignore-not-found)"
-    POD="$(kubectl --context "$CONTEXT" get "pod/${SANDBOX_NAME}" -n "$NAMESPACE" -o json --ignore-not-found)"
+    POD="$(kubectl --context "$CONTEXT" "${SERVER_IDENTITY[@]}" get "pod/${SANDBOX_NAME}" -n "$NAMESPACE" -o json --ignore-not-found)"
     if [[ -n "$SANDBOX" && -n "$POD" ]]; then
       jq -e --arg uid "$CLAIM_UID" --arg name "$CLAIM_NAME" --arg namespace "$NAMESPACE" --arg sandbox "$SANDBOX_NAME" --argjson labels "$LEASE_LABELS" '
         [.metadata.ownerReferences[]? | select(.controller == true)] as $owners |
@@ -130,4 +158,4 @@ if [[ -n "$template_policy" ]]; then
   exit 1
 fi
 cleanup_claim
-printf 'Sandbox controller lifecycle: PASS (owned Sandbox, running Pod, lease labels, cluster DNS, private server and model transport, Service address and foreground cleanup; no product execution or Ready proof).\n'
+printf 'Sandbox controller lifecycle: PASS (owned Sandbox, server named Pod read and Pod authorization denials, running Pod, lease labels, cluster DNS, private server and model transport, Service address and foreground cleanup; no product execution or Ready proof).\n'

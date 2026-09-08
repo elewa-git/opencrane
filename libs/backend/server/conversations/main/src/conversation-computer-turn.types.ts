@@ -1,5 +1,6 @@
 import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
+import type { Logger } from "@opencrane/backend/observability";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { BoundConversationWriter } from "./bound-conversation-writer";
 import type { BoundConversationWriterBinding } from "./bound-conversation-writer.types";
@@ -325,6 +326,8 @@ export interface ConversationComputerRawCredentialAuthority
 /** Dependencies fixed before the private conversation-computer router is mounted. */
 export interface ConversationComputerTurnRouterOptions
 {
+	/** Records the fixed operation and sanitized diagnostic when authority rejects a request; never receives request or credential data. */
+	readonly logger: Pick<Logger, "warn">;
 	/** TokenReviews the exact audience, namespace, ServiceAccount and bound Pod UID. */
 	readonly tokenReviewer: RuntimeTokenReviewer;
 	/** Owns durable lease, input, model credential and output authority. */

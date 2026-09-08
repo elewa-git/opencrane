@@ -181,6 +181,7 @@ describe("conversation computer turn integration", function _Suite() {
       .use(express.json())
       .use(
         _CreateConversationComputerTurnRouter({
+          logger: { warn: vi.fn() },
           tokenReviewer: { __Review: vi.fn().mockResolvedValue(workload) },
           authority,
         }),

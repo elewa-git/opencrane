@@ -34,8 +34,12 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 {
 	const app = express();
 
-	// 1. Apply route-specific body ceilings before the generic parser consumes the request stream.
+	// 1. Correlate requests before parsers or early computer handlers can return a response.
 	app.set("trust proxy", 1);
+	app.use(___RequestContext());
+	app.use(_CreateHttpRequestLogger(_log));
+
+	// 2. Apply route-specific body ceilings before the generic parser consumes the request stream.
 	app.use("/api/internal/skill-authoring", express.json({ limit: 64 * 1_024, strict: true }));
 	app.use("/api/internal/mcp-executor", express.json({ limit: 4_456_448, strict: true }));
 	app.use("/api/internal/artifact-scanner", express.json({ limit: 16 * 1_024, strict: true }));
@@ -45,10 +49,6 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 		app.use("/api/internal/conversation-computer/checkpoint", express.json({ limit: 16 * 1_024, strict: true }), conversationComputerCheckpoint);
 	app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: config.artifactPreprocessorMaximumOutputBytes }));
 	app.use(express.json());
-
-	// 2. Correlate every internal request without treating correlation as authentication.
-	app.use(___RequestContext());
-	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
 	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime, workflowExecution);
