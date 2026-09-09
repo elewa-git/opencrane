@@ -167,12 +167,24 @@
 				"contractImportPath": "./elicitation.types",
 				"constructs": [
 					{
-						"adapter": "PrismaToolInvocationElicitationRepository",
-						"importPath": "@opencrane/backend/server/iam/authorization"
-					},
-					{
 						"adapter": "PrismaElicitationProductAuthorizationRepository",
 						"importPath": "./elicitation-product-authorization"
+					},
+					{
+						"adapter": "PrismaRuntimeInputPurposeAuthority",
+						"importPath": "./purposes/runtime-input/prisma-runtime-input-purpose"
+					},
+					{
+						"adapter": "PrismaToolApprovalPurposeAuthority",
+						"importPath": "./purposes/tool-approval/prisma-tool-approval-purpose"
+					},
+					{
+						"adapter": "PrismaA2uiActionPurposeAuthority",
+						"importPath": "./purposes/a2ui-action/prisma-a2ui-action-purpose"
+					},
+					{
+						"adapter": "PrismaPersonalMemoryPermissionPurposeAuthority",
+						"importPath": "./purposes/personal-memory/prisma-personal-memory-permission-purpose"
 					}
 				]
 			},
@@ -1190,6 +1202,39 @@
 				"constructs": [
 					{
 						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/agents/execution/elicitation/main/src/purposes/runtime-input/prisma-runtime-input-purpose.ts",
+				"adapter": "PrismaRuntimeInputPurposeAuthority",
+				"contract": "ElicitationPurposeStrategy",
+				"contractImportPath": "../elicitation-purpose.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/elicitation/main/src/purposes/tool-approval/prisma-tool-approval-purpose.ts",
+				"adapter": "PrismaToolApprovalPurposeAuthority",
+				"contract": "ElicitationPurposeStrategy",
+				"contractImportPath": "../elicitation-purpose.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/elicitation/main/src/purposes/a2ui-action/prisma-a2ui-action-purpose.ts",
+				"adapter": "PrismaA2uiActionPurposeAuthority",
+				"contract": "ElicitationPurposeStrategy",
+				"contractImportPath": "../elicitation-purpose.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/agents/execution/elicitation/main/src/purposes/personal-memory/prisma-personal-memory-permission-purpose.ts",
+				"adapter": "PrismaPersonalMemoryPermissionPurposeAuthority",
+				"contract": "PersonalMemoryPermissionPurpose",
+				"contractImportPath": "../elicitation-purpose.types",
+				"constructs": [
+					{
+						"adapter": "PrismaToolInvocationElicitationRepository",
 						"importPath": "@opencrane/backend/server/iam/authorization"
 					}
 				]

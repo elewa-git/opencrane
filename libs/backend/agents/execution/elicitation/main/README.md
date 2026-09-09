@@ -46,9 +46,31 @@ That unit constructs one repository from the same transaction and reuses it for 
 keeps the run lock, request change, candidate acceptance, and expiry decision in one commit without
 letting a generic function carry a Prisma client across the boundary.
 
-The internal personal-memory payload module owns construction, reconstruction, and receipt matching
-for the protected memory-permission envelope. The Prisma repository supplies the live invocation,
-snapshot, and receipt; the module never opens a transaction or reads remembered facts.
+The personal-memory payload module builds the permission request and compares it with a saved
+receipt. The personal-memory purpose supplies the live invocation, snapshot and receipt; neither
+module opens a transaction or reads remembered facts.
+
+The request repository owns attribution, response retries, request state and run resumption. Each
+purpose has a transaction-bound implementation under `src/purposes/`: `runtime-input/` writes ordinary
+answers, `tool-approval/` delegates decisions to IAM, `personal-memory/` checks and writes permission
+receipts, and `a2ui-action/` binds a response to the displayed action. They never open a transaction
+or call back into private request-repository methods.
+
+Purpose and lifecycle are separate decisions. The request repository applies these existing rules
+before and after calling the selected purpose implementation:
+
+| Current state and event | Guard and result | Atomic owner |
+| --- | --- | --- |
+| Running run receives a new question | Same run attempt and current participant access; pause as WaitingForInput and save the request. | Request repository |
+| Requested request receives a valid response | Assigned participant, current access, required step-up and central permission; record the response and mark Answered or Declined. | Request repository |
+| Resolved request receives the same response key and digest | Return the saved resolution without applying its purpose twice. A changed digest conflicts. | Request repository |
+| Resolved request receives a new response key | Return a conflict without changing the request. | Request repository |
+| Requested request reaches its deadline | Apply purpose expiry, then mark Expired. | Request repository and selected purpose |
+| WaitingForInput run finishes a response or expiry | Resume only when both requested-input and pending-approval counts are zero. | Request repository |
+| A conditional request/run write loses, or a purpose refuses after a response write | Throw so the whole transaction rolls back. | Enclosing Serializable unit of work |
+
+These changes do not introduce another lifecycle planner. Tool-invocation transitions continue to
+belong to IAM; purpose implementations cannot claim or dispatch a provider request.
 
 ## Dependency direction
 
@@ -58,7 +80,7 @@ conversation, authorization, authentication, agent-model, utility, and shared co
 ## Data & persistence
 
 `elicitation.prisma` owns requests, response attempts, runtime result deliveries, and one-use
-personal-memory permission receipts. The clean baseline and adjacent upgrade SQL enforce exact
+personal-memory permission receipts. The clean baseline enforces exact
 coordinates, terminal finality, and one accepted response.
 
 Ordinary input answers are delivered to the exact runtime attempt once. Protected tool, memory, and

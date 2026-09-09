@@ -2,7 +2,7 @@
 
 Snapshot: 2026-09-09, during the working-tree refactor based on `45e0c6b7`.
 
-Status: **recommendations only; the five changes below are not implemented by this audit**.
+Status: recommendation 3 is implemented in PR #843. The other four remain recommendations.
 The audit establishes source organization findings, not runtime defects or passing validation.
 
 ## Scope and method
@@ -59,16 +59,16 @@ distinct service responsibility justifies a library boundary, subject to archite
 
 Product role: pause a run for an answer or approval, apply that answer, and resume or expire the request.
 
-[prisma-elicitation-unit-of-work.ts](../../libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-unit-of-work.ts)
-contains request lifecycle, tool decisions, personal-memory permission checks and receipts,
-A2UI delivery, and transaction ownership. Its purpose registry delegates back to private methods
-on the same repository. The 488-line size is a signal; those distinct purpose rules are the evidence
-that the existing abstraction has not yet separated implementation ownership.
+Implemented in the existing elicitation project. The
+[request coordinator](../../libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-unit-of-work.ts)
+keeps response attribution, request lifecycle and run resumption together. Four transaction-bound
+owners now contain runtime-input delivery, tool approval, personal-memory permission and A2UI
+behavior. The old registry that forwarded decisions back into the coordinator is removed.
 
-Recommended folders within the current project: `requests/`, `purposes/`, `persistence/`, and `http/`.
-Put runtime-input, tool-approval, personal-memory-permission, and A2UI behavior under purpose owners
-bound to the same transaction. Preserve the serializable unit of work and existing authorization
-owners. Move the actual behavior; additional forwarding helpers would leave the problem intact.
+The same Serializable transaction covers each purpose effect and the request transition. A failed
+purpose rolls back the operation. A run resumes only when neither pending requests nor approvals
+remain. The personal-memory owner retains the existing protected payload and permission receipt;
+it introduces no fact storage or direct Cognee access. The package README records the state changes.
 
 ### 4. Finish the artifact service's read-use-case extraction
 

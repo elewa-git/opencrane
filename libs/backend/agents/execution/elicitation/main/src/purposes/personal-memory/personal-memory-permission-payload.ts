@@ -48,8 +48,7 @@ const _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
  * invocation is still at AwaitingApproval, because a payload built from an already-approved or failed
  * invocation would record its revision wrongly and no receipt would ever match it.
  *
- * Called by: `PrismaElicitationRepository.openMemoryPermission` in
- * prisma-elicitation-unit-of-work.ts, which turns the payload into the question shown to the user.
+ * Called by: `PrismaPersonalMemoryPermissionPurposeAuthority.createOpenCommand`, which turns the payload into the question shown to the user.
  *
  * @param invocation - The `memory:recall` invocation asking for permission.
  * @param snapshot - The frozen inputs of the run that made the request.
@@ -77,8 +76,7 @@ export function _BuildMemoryPermissionPayload(invocation: ToolInvocationRecord, 
  * Refuses unless the invocation is Claimed, and unless its revision is at least 2, since a lower
  * revision cannot have passed through both transitions.
  *
- * Called by: `PrismaElicitationRepository.verifyMemoryPermission` in
- * prisma-elicitation-unit-of-work.ts.
+ * Called by: `PrismaPersonalMemoryPermissionPurposeAuthority.verify`.
  *
  * @param invocation - The claimed `memory:recall` invocation about to be dispatched.
  * @param snapshot - The frozen inputs of its run, which must still agree with the invocation.
@@ -101,7 +99,7 @@ export function _BuildMemoryPermissionPayloadForClaimedInvocation(invocation: To
  * permission stops matching — while keeping the text itself out of the permission tables.
  *
  * Called by: `_BuildMemoryPermissionPayloadAtRevision` below, and
- * `PrismaElicitationRepository._applyMemoryPermission` in prisma-elicitation-unit-of-work.ts, which
+ * `PrismaPersonalMemoryPermissionPurposeAuthority.apply`, which
  * recomputes it when the user answers to confirm the arguments have not changed since the ask.
  *
  * @param argumentsValue - The invocation's effective arguments, as stored JSON.
@@ -131,8 +129,7 @@ export function _MemoryQueryDigest(argumentsValue: JsonValue): string | null
  * so an invocation can never collect a second receipt, and the caller requires `state` Active with
  * `consumedAt` still null.
  *
- * Called by: `PrismaElicitationRepository.verifyMemoryPermission` in
- * prisma-elicitation-unit-of-work.ts, as the last of its checks.
+ * Called by: `PrismaPersonalMemoryPermissionPurposeAuthority.verify`, as the last of its checks.
  *
  * @param value - The stored `purposePayload` JSON, re-parsed here rather than trusted.
  * @param receipt - The receipt's coordinates. See {@link PersonalMemoryPermissionReceiptCoordinates}.
