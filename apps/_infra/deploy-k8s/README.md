@@ -9,8 +9,8 @@
 ## What it owns
 
 This is the **install root** for one **silo** — one customer's isolated slice of OpenCrane. The
-trusted services run in the release namespace; conversation computers run in
-two restricted sibling namespaces owned by the same release. Nothing is shared with other customers. Everything else under `apps/` ships a small
+trusted services run in the release namespace; the release's Agent Sandbox profile fixes where
+conversation computers run and which network paths they can use. Nothing is shared with other customers. Everything else under `apps/` ships a small
 Helm chart; this app is the **umbrella chart** (`opencrane-silo`) that pulls those deployment
 contracts together into one release, plus `deploy.sh`, the entrypoint that installs and upgrades it.
 
@@ -60,14 +60,13 @@ against the checked-out in-repo `file://` sources. The commit is the version aut
 `Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
-identity, bounded scratch, and no ArtifactStore route. The `conversation-computer` image runs in
-two fixed warm Deployments rather than one Job per attempt. Each generic Pod has only DNS and
-same-silo OpenCrane reachability. An admitted run claims one Pod once; that fixed profile additionally
-admits the exact controller binding path and same-silo LiteLLM. The release owns both namespaces,
-their zero-RBAC ServiceAccount, default-deny and profile-specific standard `NetworkPolicy` objects,
-and a release-scoped admission policy that permits only the exact generic-to-claimed label change or
-discard. Aggregate quotas bound each Deployment, its Pods, CPU, and memory. The admission boundary
-requires Kubernetes 1.30+.
+identity, bounded scratch, and no ArtifactStore route. Conversation computers start from a
+release-owned `SandboxTemplate` and a zero-replica `SandboxWarmPool`. OpenCrane admits each claim
+with its computer lease and generation; the external Agent Sandbox controller creates and deletes
+the Pod. The profile fixes the image digest, RuntimeClass, service account and resource limits.
+Release-owned claim admission keeps the computer identity and lease generation fixed, while
+`NetworkPolicy` allows the computer to reach DNS and the private OpenCrane server. The server owns
+model requests. These admission checks require Kubernetes 1.30+.
 
 ## Public surface
 
@@ -122,14 +121,20 @@ package imports it.
   `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
-- `testv5` — the first 0.11 target silo additionally requires immutable KurrentDB and bootstrap
-  image digests; immutable TLS, administrator, operations, and `opencrane-history` service
-  Secrets; the ready Agent Sandbox controller with extensions enabled; and each Sandbox,
-  SandboxClaim, SandboxTemplate, and SandboxWarmPool CRD served and stored as `v1beta1`. The
-  deploy script rejects a missing Secret key, a different service username, or a CRD that does not
-  meet both API conditions before it changes the silo.
+- Every silo requires the complete conversation profile: KurrentDB history and Agent Sandbox
+  execution. `deploy.sh` enables both after checking immutable history, bootstrap and computer
+  image digests; immutable TLS, administrator, operations and `opencrane-history` service Secrets;
+  the ready Agent Sandbox controller with extensions enabled; an approved `gvisor` RuntimeClass;
+  and each Sandbox, SandboxClaim, SandboxTemplate and SandboxWarmPool custom resource definition
+  (CRD) served and stored as `v1beta1`. A missing Secret key, a different service username or an
+  unsupported CRD version stops installation before the silo changes.
+- `historyStore.kurrentdb.enabled=false` and `agentSandbox.enabled=false` are generic Helm-rendering
+  defaults for component checks. They do not describe a supported silo installation. The shared
+  deploy engine rejects disabled or incomplete conversation configuration before installation or
+  successful install preflight, including calls that bypass `deploy.sh`. Separate credential,
+  prerequisite and recovery commands remain available before a complete install profile exists.
 - `platform/provision-kurrentdb-bootstrap-secrets.sh` — creates the namespace-local immutable TLS,
-  administrator, operations, and `opencrane-history` Secrets for one fresh testv5 silo. Reruns
+  administrator, operations, and `opencrane-history` Secrets for a fresh silo. Reruns
   validate the existing authorities and never rotate them.
 - `--kurrentdb-replay-parked` — replays the installed silo's parked computer activations through a
   separate bounded Job derived from its verified KurrentDB bootstrap template. It leaves the

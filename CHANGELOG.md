@@ -102,6 +102,11 @@ The [development status](website/guide/status.md) separates implemented work fro
 
 ### Fixed
 
+- **Operators cannot install an incomplete conversation silo under any tenant name.** Installation
+  requires KurrentDB history and Agent Sandbox execution; a disabled or incomplete profile stops
+  before silo changes or successful install preflight. Immutable images, TLS, bootstrap and service
+  credentials, and approved runtime prerequisites remain required.
+
 - **Browser login can survive server replacement and requests reaching different servers.** The
   follow-up stores encrypted sessions in PostgreSQL, preserves fixed expiry and prevents delayed
   saves from undoing logout. Fresh PostgreSQL CI passes. It requires the matching fresh baseline;

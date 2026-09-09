@@ -89,6 +89,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | F1 — documents and durable output | SOURCE GAP IDENTIFIED — reuse uploads/scanning but connect authorized document content to immutable model input. Generated-file finalization and complete recovery remain open. |
 | D1/S1 — delegation and schedules | PLANNED — depend on bounded action, cancellation and durable result contracts. |
 | A2/Q1 — administration and operational acceptance | PLANNED THROUGHOUT — configuration APIs are incremental; product controls and full journey/recovery qualification remain. |
+| Q1 — required conversation install profile | IMPLEMENTED — every supported silo install requires KurrentDB history and Agent Sandbox execution; generic Helm render defaults remain available for component checks. Full CI and live installation qualification remain pending. |
 
 The [dated overnight handoff](docs/design/overnight-delivery-2026-09-09.md) records commits, review
 surfaces, exact CI/live boundaries and the next concrete actions.

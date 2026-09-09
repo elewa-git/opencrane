@@ -18,6 +18,7 @@ for contract in \
   current-chart-sources-contract.sh \
   provision-contract.sh \
   preflight-cni-contract.sh \
+  required-conversation-profile-contract.sh \
   kubernetes-api-helm-args-contract.sh \
   pooler-deploy-contract.sh \
   postgres-release-contract.sh \
