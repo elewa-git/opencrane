@@ -9,12 +9,19 @@ conversations, authorization, contracts, workload identity, providers, auth, and
 folders. Conversation history and computer projections have separate library boundaries. Frontend
 pages compose focused components and stores, with agent rules preserving reusable component contracts.
 
-Local validation passed across 125 affected projects (260 build/test/lint tasks), the final 149-story
-browser/accessibility catalogue, and independent architecture, code, and component reviews. The visual
+Local validation passed across 125 affected projects (260 build/test/lint tasks), 149 component
+browser/accessibility tests, and independent architecture, code, and component reviews. The visual
 follow-up records 20 new macOS screenshot candidates and two heading candidates matching the
 already-committed typography; the no-update comparison passes all three visual tests. The candidates
-require human visual review. Native Linux captures and draft PR publication remain pending explicit
-publication approval in the current task; no deployment or live qualification is included.
+require human visual review. [Draft PR #843](https://github.com/elewa-git/opencrane/pull/843) targets
+`develop` after #829 merged. Native Linux CI passed all 149 component tests and preserved all 117
+existing screenshot baselines. Its 20 missing baselines are now native screenshot candidates, verified
+against [run 34334101619](https://github.com/elewa-git/opencrane/actions/runs/34334101619), tested merge
+`6bc6ded617bfa3dcdc3e60ec627b28a1b88e2c97` of source candidate `82610c925c0407c18012f4ac27c17659f5f64916`.
+The [capture artifact](https://github.com/elewa-git/opencrane/actions/runs/34334101619/artifacts/10097168689)
+has SHA-256 `f1f9a17cdd074f513273657ed5f1ba34ab411a9d7305a7dbea56971deb1b088b`; all 20 committed
+candidate images match it byte for byte. Linux comparison with the new candidates and human visual
+acceptance remain pending. No deployment or live qualification is included.
 
 ## Delivery focus — 2026-09-09
 
