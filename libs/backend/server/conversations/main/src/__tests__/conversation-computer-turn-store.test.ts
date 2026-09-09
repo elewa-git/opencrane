@@ -1,3 +1,4 @@
+import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -130,7 +131,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       recordedAt: new Date(),
       id: outputId,
       type: "opencrane.conversation-computer-turn-output.v1",
-      data: { bootstrapId: _ID, sourceCommandId: outputId, blockId: "block-1", payloadRef: "payload-1", ciphertextDigest: "sha256:ciphertext" },
+      data: { bootstrapId: _ID, intent: await _PrepareConversationOutputIntent(_TURN, outputId) },
       metadata: { bootstrapId: _ID },
     };
     const history = {
@@ -153,8 +154,8 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
     await expect(
       new KurrentConversationComputerTurnStore(history).markOutput(
         _ID,
-        { sourceCommandId: outputId, blockId: "block-1", payloadRef: "payload-1", ciphertextDigest: "sha256:ciphertext" },
+        await _PrepareConversationOutputIntent(_TURN, outputId),
       ),
-    ).resolves.toBe("idempotent");
+    ).resolves.toMatchObject({ outcome: "idempotent" });
   });
 });

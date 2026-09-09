@@ -7,6 +7,12 @@
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/conversations/main" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/conversations/main" } },
+    "test:integration": {
+      "executor": "nx:run-commands",
+      "options": { "command": "vitest run --config vitest.integration.config.ts", "cwd": "libs/backend/server/conversations/main" },
+      "cache": false,
+      "inputs": ["{projectRoot}/**/*", { "env": "KURRENTDB_INTEGRATION_URL" }]
+    },
     "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../scripts/run-postgres-authority-tests.sh src/__tests__/group-child-authority.sql", "cwd": "libs/backend/server/conversations/main" } }
   }
 }

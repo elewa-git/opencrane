@@ -441,6 +441,9 @@ jobs:
       - name: Prove the KurrentDB client against the live server
         run: npx nx run backend-server-infra-history-store:test:integration
 
+      - name: Prove conversation conflicts and saved answer recovery
+        run: npx nx run backend-server-conversations:test:integration
+
   # The API contract check builds the full server, so when the contract changed it added
   # minutes to the test job. It only needs the prepare outputs and runs beside it instead.
   api_contract:

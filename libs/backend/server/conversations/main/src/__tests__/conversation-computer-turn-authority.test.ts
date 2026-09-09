@@ -1,3 +1,6 @@
+import { _PrepareBoundDraft } from "./conversation-output-intent.fixture";
+import type { BoundConversationWriterAppend } from "../bound-conversation-writer.types";
+import type { ConversationComputerTurnOutputReceipt } from "../conversation-computer-turn.types";
 import { describe, expect, it, vi } from "vitest";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
@@ -109,16 +112,16 @@ function _Harness() {
       }),
       markOutput: vi.fn(async function _Mark(
         _id: string,
-        receipt: { readonly sourceCommandId: string; readonly blockId: string; readonly payloadRef: string; readonly ciphertextDigest: string },
+        receipt: ConversationComputerTurnOutputReceipt,
       ) {
-        if (stored?.outputSourceCommandId === receipt.sourceCommandId)
-          return "idempotent" as const;
-        stored = { ...stored!, outputSourceCommandId: receipt.sourceCommandId, outputReceipt: receipt };
-        return "accepted" as const;
+        if (stored?.outputSourceCommandId === receipt.event.id)
+          return { outcome: "idempotent" as const, receipt };
+        stored = { ...stored!, outputSourceCommandId: receipt.event.id, outputReceipt: receipt };
+        return { outcome: "accepted" as const, receipt };
       }),
       settle: vi.fn(async function _Settle() { active = false; }),
     },
-    writers: { create: vi.fn(() => ({ append })) },
+    writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ append, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) },
   };
   return {
     authority: new ConversationComputerTurnAuthority(dependencies),
@@ -196,9 +199,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     );
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        entry: expect.objectContaining({
-          blocks: [expect.objectContaining({ payloadRef: "payload-1" })],
-        }),
+        event: expect.objectContaining({ data: expect.objectContaining({ entry: expect.objectContaining({ blocks: [expect.objectContaining({ payloadRef: "payload-1" })] }) }) }),
       }),
     );
   });
@@ -225,8 +226,8 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const restartedWorker = new ConversationComputerTurnAuthority(dependencies);
     await expect(restartedWorker.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD })).resolves.toBeNull();
     expect(append).toHaveBeenCalledTimes(2);
-    expect(append.mock.calls[0]?.[0].sourceCommandId).toBe(
-      append.mock.calls[1]?.[0].sourceCommandId,
+    expect(append.mock.calls[0]?.[0].event.id).toBe(
+      append.mock.calls[1]?.[0].event.id,
     );
     expect(dependencies.runLifecycle.complete).toHaveBeenCalledTimes(2);
     expect(dependencies.store.settle).toHaveBeenCalledTimes(1);

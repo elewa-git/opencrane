@@ -5,6 +5,7 @@ import {
   ConversationComputerStates,
 } from "@opencrane/contracts";
 import {
+  BoundConversationWriter,
   ConversationComputerActivationAuthorityAdapter,
   ConversationComputerHistory,
   ConversationComputerTurnAuthorityService,
@@ -167,11 +168,15 @@ describe("conversation computer turn integration", function _Suite() {
         reserveTool: vi.fn().mockResolvedValue(undefined),
         createOrRead: vi.fn(async (turn) => (frozen ??= turn)),
         load: vi.fn(async () => frozen),
-        markOutput: vi.fn().mockResolvedValue("accepted"),
+        markOutput: vi.fn(async function _Mark(_bootstrapId, receipt) { return { outcome: "accepted" as const, receipt }; }),
         loadActive: vi.fn().mockResolvedValue(null),
         settle: vi.fn().mockResolvedValue(undefined),
       },
-      writers: { create: vi.fn(() => ({ append })) },
+      writers: { create: vi.fn((turn) => ({ append, prepare: async function _Prepare(command: Parameters<BoundConversationWriter["prepare"]>[0])
+      {
+        const writer = new BoundConversationWriter({} as never, turn.binding, { now: function _Now() { return new Date(); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility() {} }, { assertMayAppend: async function _Fence() {} });
+        return writer.prepare(command);
+      } })) },
     });
     const workload = {
       subject: "system:serviceaccount:testv5:computer",
@@ -205,10 +210,7 @@ describe("conversation computer turn integration", function _Suite() {
       .expect(202);
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        entry: expect.objectContaining({
-          kind: "message",
-          blocks: [expect.objectContaining({ payloadRef: "payload-one" })],
-        }),
+        event: expect.objectContaining({ data: expect.objectContaining({ entry: expect.objectContaining({ kind: "message", blocks: [expect.objectContaining({ payloadRef: "payload-one" })] }) }) }),
       }),
     );
   });

@@ -31,7 +31,10 @@ current review work and its evidence.
   admission to the model, tool results and conversation history remains in progress.
   Reserved tool work also blocks final completion; automatic recovery of an abandoned proposal
   remains unfinished. The audit path now identifies the verified computer or executor behind a tool
-  request; fresh-database qualification of that repair is pending.
+  request. Fresh PostgreSQL qualification now passes, including concurrent identical requests,
+  rejected changes and rollback. Answer recovery also saves the exact prepared answer before
+  posting it, so a restart can recognise its original content and timestamp. Local restart and
+  conflict tests pass; qualification against the real history server is pending in CI.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
   across conversations.
 - **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete

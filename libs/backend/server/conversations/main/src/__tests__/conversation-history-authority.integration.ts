@@ -14,7 +14,7 @@ import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAp
  * real `@kurrent/kurrentdb-client` raise the error for a stale conversation head and for a stale activation queue
  * head, and checks that posting reports `ExpectedHeadConflict` instead of throwing (which would be a 500).
  *
- * Set `KURRENTDB_INTEGRATION_URL` to run it; the history-store `test:integration` target collects this file.
+ * Set `KURRENTDB_INTEGRATION_URL` to run it through backend-server-conversations:test:integration.
  * @see ../../../../infra/history-store/src/__tests__/kurrent-history-store.integration.ts for the adapter-level proofs.
  */
 

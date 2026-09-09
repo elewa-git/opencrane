@@ -145,12 +145,12 @@ Each warning identifies the fixed operation and a recognized error class and cod
 credentials, model input or output, request coordinates and upstream error text. The internal
 listener supplies request correlation and logging before these early handlers run.
 
-Every bootstrap, including a retry of a stored turn, recomputes the remaining original run deadline
+Every new or retried model-input handoff recomputes the remaining original run deadline
 and execution/requester membership expiry, then shortens that bound to the current lease. Key
 issuance uses this absolute limit and a maximum five-minute lifetime. Encrypted custody records the
 provider's reported expiry, and a reused key beyond the refreshed bound is revoked before a new key
 is handed out. A key without a valid, sufficiently short reported expiry is rejected and revoked.
-Grant revocation closes the next bootstrap, output and participant read; an already issued provider
+Grant revocation closes the next input handoff, new output append and participant read; an already issued provider
 key can remain usable until its verified expiry or explicit revocation. There is no separate live
 permission check on every model request.
 
@@ -158,20 +158,25 @@ Attempt-key issuance uses the configured silo authority independently of the Kub
 It commits encrypted custody before a separate ready-state promotion. If promotion and immediate
 provider cleanup both fail, the custodied row remains decryptable for a later cleanup or retry.
 
-Before appending assistant history, the turn store records a receipt containing only the already
-encrypted payload coordinates and the source command identifier. It also maintains one active-turn
-pointer per exact computer lease. If the process restarts between those durable steps and run
-completion, the next bootstrap replays the same history event idempotently, completes the fenced run,
-revokes its model key, and settles the pointer before another turn can start.
+Before appending assistant history, the turn store saves the complete prepared event: its author,
+timestamp, position, metadata and encrypted payload reference. This intent contains no answer text
+or credential. Concurrent preparation returns the stored winner, including its original timestamp.
+After a restart, the current Pod can recover that exact answer, complete the fenced run, revoke its
+model key, and settle the active-turn pointer before another turn starts. Reusing an output identifier
+with different text is refused by the encrypted payload owner.
 
 `BoundConversationWriter` is the KurrentDB-facing computer boundary. A caller mints one binding for
 one silo, conversation, computer lease generation, agent identity, run, and expected stream
-revision; the writer then stamps its agent author, stream position, timestamp, and Kurrent event
-metadata before one append. It accepts only opaque participant-entry references, checks the
+revision; the writer prepares its agent author, stream position, timestamp, and Kurrent event
+metadata for the turn store to save before one append. It accepts only opaque participant-entry references, checks the
 requested audience through a current visibility policy, rejects an attestation from the computer,
-enforces a byte and rate budget, rechecks the active lease before each physical append, and cannot
-read history, select a different stream, or append a second distinct entry. A response-lost retry
-reuses the originally stamped source command and entry bytes. The conversation-computer turn composition supplies this writer only after current lease and run admission.
+and enforces byte and rate limits during preparation. Recovery reads only the frozen next position
+and requires the complete stored event to match; an event identifier alone cannot prove acceptance.
+An empty position still requires current visibility and the original lease/run/input fence before
+append. A matching answer can finish bookkeeping without recompiling input that its own append
+already advanced. The turn coordinator verifies the current Pod and lease before either path.
+The writer cannot select another stream or append a second distinct entry. A different event,
+unavailable history, or a replaced lease leaves the turn unresolved.
 
 `ConversationComputerHistory` owns the separate deterministic KurrentDB stream for the logical
 computer itself. It accepts complete, closed computer and lease snapshots only through the narrow
@@ -249,7 +254,7 @@ Persisted and wire shapes keep their own flat names (`generation` on Kurrent eve
 | **admission** | The server-side decision that lets work start: run admission compiles the pending human entry into an immutable run input after rechecking the requester, computer, agent and lease. | `ConversationComputerRunAdmissionCommand` = `computer` + `agent` + `lease` + requester fields |
 | **fence** | Any comparison that stops a stale actor: the lease generation on every durable write, the active-lease row on PostgreSQL approvals, the claim fence on a credential row. `_AssertFencedRowCount` documents the row-count form once. | Field of whichever bundle is being compared |
 | **checkpoint** | The verified immutable workspace archive captured before a lease is released and restored into the next realization. | `ComputerWorkspaceCheckpoint`; restore is addressed by `siloId` + `computerId` + `LeaseScope` |
-| **receipt** | The durable record that an output was stored: the encrypted payload reference and source command id, replayed after a restart. | `ConversationComputerTurnOutputReceipt` |
+| **receipt** | The saved intent for one complete answer event, including its encrypted payload reference. Exact conversation readback separately proves that event was accepted. | `ConversationComputerTurnOutputReceipt` |
 | **envelope** | The immutable turn handed to the Pod at bootstrap: compiled input plus the model credential. Also the Kurrent event metadata that repeats the lease coordinates. | `ConversationComputerBootstrap`; event `metadata` |
 
 The bundles themselves: `ComputerScope` (`siloId`, `conversationId`, `computerId`, `agentIdentityId`)
@@ -360,6 +365,20 @@ access require current `Use`. Those effect routes currently remain denied: their
 uses the read-entitlement port, which rejects effect actions. They need concrete argument-bound
 effect admission before execution can be enabled. The group child's reviewed text-sharing path
 already has its own transaction-bound admission and is separate from these computer actions.
+
+## Runtime & config
+
+The live history proofs belong to this package and run against an explicitly configured server:
+
+```sh
+KURRENTDB_INTEGRATION_URL='kurrentdb://localhost:2113?tls=false' \
+  npx nx run backend-server-conversations:test:integration
+```
+
+They cover conversation append conflicts and saved-answer recovery through fresh KurrentDB clients,
+including a competing event with the same identifier but different content. Without the URL, the
+target reports explicit skip markers; that run does not qualify recovery. CI runs these proofs after
+the adapter suite against the same pinned KurrentDB service. Neither target starts a local database.
 
 ## See also
 

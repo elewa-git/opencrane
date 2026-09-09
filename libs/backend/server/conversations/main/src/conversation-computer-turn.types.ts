@@ -4,7 +4,7 @@ import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane
 import type { Logger } from "@opencrane/backend/observability";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { BoundConversationWriter } from "./bound-conversation-writer";
-import type { BoundConversationWriterBinding } from "./bound-conversation-writer.types";
+import type { BoundConversationWriterBinding, BoundConversationWriterIntent } from "./bound-conversation-writer.types";
 import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
 import type { ConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review.types";
 
@@ -160,17 +160,16 @@ export interface ConversationComputerToolReservation
 	readonly requestFingerprint: string;
 }
 
-/** Durable material that lets a restarted worker finish an output without retaining plaintext. */
-export interface ConversationComputerTurnOutputReceipt
+/** Keeps the complete server-stamped output intent in the existing durable turn decision. */
+export type ConversationComputerTurnOutputReceipt = BoundConversationWriterIntent;
+
+/** Returns the stored winning intent, whose timestamp may differ from a concurrent preparation. */
+export interface ConversationComputerOutputDecision
 {
-	/** UUID the Pod supplied with the output; it becomes the Kurrent event id. */
-	readonly sourceCommandId: string;
-	/** Identifies the text block that references the encrypted payload. */
-	readonly blockId: string;
-	/** References the encrypted payload row. */
-	readonly payloadRef: string;
-	/** Digest of the stored ciphertext, checked before the block is appended. */
-	readonly ciphertextDigest: string;
+	/** Reports whether this call newly recorded the decision or recovered an existing winner. */
+	readonly outcome: "accepted" | "idempotent";
+	/** Retains the exact stored envelope that completion must append or recognize. */
+	readonly receipt: ConversationComputerTurnOutputReceipt;
 }
 
 /** Resolves only a currently active, Pod-bound computer and its next pending input. */
@@ -244,7 +243,7 @@ export interface ConversationComputerTurnStore
 	/** Loads the unsettled turn on this lease, or null when the lease has no open turn. */
 	loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>;
 	/** Appends the output receipt, or recognizes the same receipt on an uncertain retry. */
-	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<"accepted" | "idempotent">;
+	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<ConversationComputerOutputDecision>;
 	/** Reserves one exact proposal against the same turn revision as terminal output, before database admission. */
 	reserveTool(bootstrapId: string, reservation: ConversationComputerToolReservation): Promise<void>;
 	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
@@ -290,7 +289,7 @@ export interface ConversationComputerOutputPayloadStore
 /** Creates the single-use writer whose binding was frozen with the bootstrap. */
 export interface ConversationComputerBoundWriterFactory
 {
-	create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Pick<BoundConversationWriter, "append">;
+	create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Pick<BoundConversationWriter, "prepare" | "append">;
 }
 
 /** Dependencies of the durable computer-turn product authority. */

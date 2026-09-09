@@ -2,8 +2,11 @@ import { createHash } from "node:crypto";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+
+import { _ReadBoundConversationWriterIntent } from "./bound-conversation-writer";
 import { _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";
-import type { ConversationComputerToolReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerToolReservation, ConversationComputerOutputDecision, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
@@ -55,8 +58,8 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 					frozen = { ...current, toolReservation: _ToolReservation(event, bootstrapId) };
 				else
 				{
-					const receipt = _Output(event, bootstrapId);
-					frozen = { ...current, outputSourceCommandId: receipt.sourceCommandId, outputReceipt: receipt };
+					const receipt = _Output(event, current);
+					frozen = { ...current, outputSourceCommandId: receipt.event.id, outputReceipt: receipt };
 				}
 			}
 			else throw new Error("Conversation computer turn history is noncontiguous");
@@ -111,13 +114,18 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		return active === null ? null : await this.load(active);
 	}
 
-	/** Verify the stored output receipt after append; an event-ID acknowledgement alone cannot defeat a tool reservation. */
-	public async markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<"accepted" | "idempotent">
+	/** Save the full intent before history append, then return the exact stored winner for this command. */
+	public async markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<ConversationComputerOutputDecision>
 	{
-		let outcome: "accepted" | "idempotent" = "accepted";
+		const requested = structuredClone(receipt);
+		const turn = await this.load(bootstrapId);
+		if (turn === null || turn.toolReservation !== null)
+			throw new Error("Conversation computer turn does not record this output decision");
+		const intent = _OutputIntent(turn, requested);
+		let outcome: ConversationComputerOutputDecision["outcome"] = turn.outputReceipt === null ? "accepted" : "idempotent";
 		try
 		{
-			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: 0n, events: [{ id: receipt.sourceCommandId, type: _OUTPUT_EVENT, data: { bootstrapId, ...receipt }, metadata: { bootstrapId } }] });
+			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: 0n, events: [{ id: intent.event.id, type: _OUTPUT_EVENT, data: { bootstrapId, intent }, metadata: { bootstrapId } }] });
 		}
 		catch (error)
 		{
@@ -126,26 +134,32 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			outcome = "idempotent";
 		}
 		const existing = await this.load(bootstrapId);
-		if (existing === null || existing.toolReservation !== null || existing.outputReceipt === null || !_SameReceipt(existing.outputReceipt, receipt))
+		if (existing === null || existing.toolReservation !== null || existing.outputReceipt === null || !_SameReceipt(existing.outputReceipt, intent))
 			throw new Error("Conversation computer turn does not record this output decision");
-		return outcome;
+		return { outcome, receipt: existing.outputReceipt };
 	}
 
 	/** Release the active-turn pointer only after run completion and credential revocation converge. */
 	public async settle(turn: FrozenConversationComputerTurn): Promise<void>
 	{
-		const events = await _Events(this.history, _ActiveStream(turn));
-		if (events.at(-1)?.type === _SETTLED_EVENT)
+		const streamName = _ActiveStream(turn);
+		const events = await _Events(this.history, streamName);
+		if (_HasSettlement(events, turn))
 			return;
+		const last = events.at(-1);
+		if (last?.type !== _ACTIVE_EVENT || _ActiveBootstrap(last, turn) !== turn.bootstrapId)
+			throw new Error("Conversation computer cannot settle a different active turn");
 		try
 		{
-			await this.history.append({ streamName: _ActiveStream(turn), expectedRevision: BigInt(events.length - 1), events: [{ id: _Uuid("settled", turn.bootstrapId), type: _SETTLED_EVENT, data: { bootstrapId: turn.bootstrapId }, metadata: _Metadata(turn) }] });
+			await this.history.append({ streamName, expectedRevision: last.revision, events: [{ id: _Uuid("settled", turn.bootstrapId), type: _SETTLED_EVENT, data: { bootstrapId: turn.bootstrapId }, metadata: _Metadata(turn) }] });
 		}
 		catch (error)
 		{
-			if (!(error instanceof WrongExpectedVersionError) || await this.loadActive(turn) !== null)
+			if (!(error instanceof WrongExpectedVersionError))
 				throw error;
 		}
+		if (!_HasSettlement(await _Events(this.history, streamName), turn))
+			throw new Error("Conversation computer cannot confirm its own settlement");
 	}
 
 	private async _Activate(turn: FrozenConversationComputerTurn): Promise<void>
@@ -168,6 +182,22 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 				throw error;
 		}
 	}
+}
+
+/** Recognise this turn's exact settlement even after another turn has taken the lease pointer. */
+function _HasSettlement(events: readonly HistoryRecordedEvent[], turn: FrozenConversationComputerTurn): boolean
+{
+	const metadata = Object.fromEntries(Object.entries(_Metadata(turn)).map(([key, value]) => [key, String(value)]));
+	return events.some(function _Matches(event, index)
+	{
+		if (event.type !== _SETTLED_EVENT || event.id !== _Uuid("settled", turn.bootstrapId))
+			return false;
+		const prior = events[index - 1];
+		return prior?.type === _ACTIVE_EVENT && _ActiveBootstrap(prior, turn) === turn.bootstrapId
+			&& event.streamName === _ActiveStream(turn) && event.revision === prior.revision + 1n
+			&& ___DigestCanonicalJson(event.data as JsonValue) === ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId })
+			&& ___DigestCanonicalJson(event.metadata as JsonValue) === ___DigestCanonicalJson(metadata);
+	});
 }
 
 async function _Events(history: Pick<HistoryStore, "readStream">, streamName: string): Promise<HistoryRecordedEvent[]>
@@ -200,9 +230,16 @@ function _Uuid(domain: string, value: string): string
 	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }
 
+/** Only independent server timestamps may differ for concurrent preparations of one command. */
 function _SameReceipt(left: ConversationComputerTurnOutputReceipt, right: ConversationComputerTurnOutputReceipt): boolean
 {
-	return left.sourceCommandId === right.sourceCommandId && left.blockId === right.blockId && left.payloadRef === right.payloadRef && left.ciphertextDigest === right.ciphertextDigest;
+	return _OutputCommandDigest(left) === _OutputCommandDigest(right);
+}
+
+/** Compare all saved event fields except the preparation clock; the stored clock always wins. */
+function _OutputCommandDigest(intent: ConversationComputerTurnOutputReceipt): string
+{
+	return ___DigestCanonicalJson({ ...intent, event: { ...intent.event, data: { entry: { ...intent.event.data.entry, occurredAt: null } } } } as unknown as JsonValue);
 }
 
 function _Stream(bootstrapId: string): string
@@ -294,13 +331,25 @@ function _AssertSameReservation(existing: ConversationComputerToolReservation, r
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Conflict);
 }
 
-function _Output(event: HistoryRecordedEvent, bootstrapId: string): ConversationComputerTurnOutputReceipt
+/** Read one complete output decision and validate it against this frozen turn. */
+function _Output(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerTurnOutputReceipt
 {
-	const sourceCommandId = event.data["sourceCommandId"];
-	const blockId = event.data["blockId"];
-	const payloadRef = event.data["payloadRef"];
-	const ciphertextDigest = event.data["ciphertextDigest"];
-	if (event.type !== _OUTPUT_EVENT || event.streamName !== _Stream(bootstrapId) || event.data["bootstrapId"] !== bootstrapId || event.metadata["bootstrapId"] !== bootstrapId || typeof sourceCommandId !== "string" || typeof blockId !== "string" || typeof payloadRef !== "string" || typeof ciphertextDigest !== "string" || event.id !== sourceCommandId)
+	if (event.type !== _OUTPUT_EVENT || event.streamName !== _Stream(turn.bootstrapId) || event.data["bootstrapId"] !== turn.bootstrapId || event.metadata["bootstrapId"] !== turn.bootstrapId)
 		throw new Error("Conversation computer turn received an invalid output event");
-	return { sourceCommandId, blockId, payloadRef, ciphertextDigest };
+	const intent = _OutputIntent(turn, event.data["intent"]);
+	if (event.id !== intent.event.id)
+		throw new Error("Conversation computer output decision has a different event identity");
+	return intent;
+}
+
+/** Require the exact completed text answer shape owned by the private output route. */
+function _OutputIntent(turn: FrozenConversationComputerTurn, value: unknown): ConversationComputerTurnOutputReceipt
+{
+	const intent = _ReadBoundConversationWriterIntent(turn.binding, value);
+	const entry = intent.event.data.entry;
+	if (entry.kind !== "message" || entry.state !== "completed" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
+		|| entry.replyToEntryId !== turn.latestPendingEntryId || entry.addressedAgentIdentityId !== null || entry.activation !== "none"
+		|| entry.visibility.audience !== "conversation" || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
+		throw new Error("Conversation computer output decision has a different answer shape");
+	return intent;
 }

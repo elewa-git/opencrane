@@ -1,3 +1,5 @@
+import { _PrepareBoundDraft, _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
+import type { BoundConversationWriterAppend } from "../bound-conversation-writer.types";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,7 +9,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerTurnAuthority } from "../conversation-computer-turn-authority";
 import { KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
-import type { ConversationComputerTurnCandidate, ConversationComputerTurnAuthorityDependencies } from "../conversation-computer-turn.types";
+import type { ConversationComputerTurnCandidate, ConversationComputerTurnAuthorityDependencies, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { _PrepareConversationToolProposal } from "../conversation-tool-proposal";
 import { ConversationToolProposalRefusal } from "../conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals } from "../conversation-tool-proposal.types";
@@ -32,7 +34,7 @@ class _MemoryHistory implements Pick<HistoryStore, "append" | "readStream">
 			throw new WrongExpectedVersionError(undefined, { streamName: command.streamName, expected, current });
 		}
 		for (const event of command.events)
-			events.push({ ...event, data: structuredClone(event.data), metadata: structuredClone(event.metadata), streamName: command.streamName, revision: BigInt(events.length), recordedAt: new Date() });
+			events.push({ ...event, data: structuredClone(event.data), metadata: Object.fromEntries(Object.entries(event.metadata).map(([key, value]) => [key, String(value)])), streamName: command.streamName, revision: BigInt(events.length), recordedAt: new Date() });
 		this.streams.set(command.streamName, events);
 		await this.afterAppend(command);
 		return { streamName: command.streamName, revision: BigInt(events.length - 1) };
@@ -71,7 +73,7 @@ async function _Harness()
 		return { proposalId: prepared.proposalId, outcome };
 	});
 	const writer = vi.fn().mockResolvedValue({});
-	const dependencies = { siloId: "silo", endpoint: "http://model.test", candidates: { admit: vi.fn(), resolve: vi.fn().mockResolvedValue(candidate), assertCurrent: vi.fn().mockResolvedValue(candidate) }, store: new KurrentConversationComputerTurnStore(history), toolProposals: { admit: admission }, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, credentials: { issueOrRotate: vi.fn().mockResolvedValue({ key: "test-only", credentialDigest: "sha256:test" }), revoke: vi.fn() }, outputPayloads: { store: vi.fn().mockResolvedValue({ blockId: "block", payloadRef: "opaque-payload", ciphertextDigest: "sha256:ciphertext" }) }, runLifecycle: { start: vi.fn(), complete: vi.fn() }, writers: { create: vi.fn(() => ({ append: writer })) } };
+	const dependencies = { siloId: "silo", endpoint: "http://model.test", candidates: { admit: vi.fn(), resolve: vi.fn().mockResolvedValue(candidate), assertCurrent: vi.fn().mockResolvedValue(candidate) }, store: new KurrentConversationComputerTurnStore(history), toolProposals: { admit: admission }, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, credentials: { issueOrRotate: vi.fn().mockResolvedValue({ key: "test-only", credentialDigest: "sha256:test" }), revoke: vi.fn() }, outputPayloads: { store: vi.fn().mockResolvedValue({ blockId: "block", payloadRef: "opaque-payload", ciphertextDigest: "sha256:ciphertext" }) }, runLifecycle: { start: vi.fn(), complete: vi.fn() }, writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ append: writer, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) } };
 	const restart = () => new ConversationComputerTurnAuthority({ ...dependencies, store: new KurrentConversationComputerTurnStore(history) });
 	const authority = restart();
 	const workload = { subject: "system:serviceaccount:silo:computer", namespace: "silo", serviceAccountName: "computer", podUid: "pod" };
@@ -221,7 +223,8 @@ describe("one durable decision between a tool proposal and final output", functi
 		const f = await _Harness();
 		await f.authority.proposeTool(f.proposal);
 		const reserved = f.history.streams.get(f.stream)![1];
-		const receipt = { sourceCommandId: reserved.id, blockId: "block", payloadRef: "opaque-payload", ciphertextDigest: "sha256:ciphertext" };
+		const turn = (await f.dependencies.store.load(f.proposal.bootstrapId))!;
+		const receipt = await _PrepareConversationOutputIntent(turn, reserved.id);
 		await expect(f.dependencies.store.markOutput(f.proposal.bootstrapId, receipt)).rejects.toThrow("output decision");
 		expect(f.history.streams.get(f.stream)![1].type).toContain("tool-reserved");
 		expect(f.writer).not.toHaveBeenCalled();
@@ -235,7 +238,8 @@ describe("one durable decision between a tool proposal and final output", functi
 			if (!command.events[0].type.endsWith("tool-reserved.v1"))
 				return;
 			const sourceCommandId = command.events[0].id;
-			f.history.streams.get(f.stream)!.push({ id: sourceCommandId, type: "opencrane.conversation-computer-turn-output.v1", streamName: f.stream, revision: 1n, recordedAt: new Date(), data: { bootstrapId: f.proposal.bootstrapId, sourceCommandId, blockId: "block", payloadRef: "payload", ciphertextDigest: "sha256:cipher" }, metadata: { bootstrapId: f.proposal.bootstrapId } });
+			const intent = await _PrepareConversationOutputIntent((await f.dependencies.store.load(f.proposal.bootstrapId))!, sourceCommandId);
+			f.history.streams.get(f.stream)!.push({ id: sourceCommandId, type: "opencrane.conversation-computer-turn-output.v1", streamName: f.stream, revision: 1n, recordedAt: new Date(), data: { bootstrapId: f.proposal.bootstrapId, intent }, metadata: { bootstrapId: f.proposal.bootstrapId } });
 		};
 		await expect(f.authority.proposeTool(f.proposal)).rejects.toThrow("denied");
 		expect(f.admission).not.toHaveBeenCalled();
@@ -262,9 +266,10 @@ describe("one durable decision between a tool proposal and final output", functi
 	it("compares every output receipt field after event-ID replay acknowledgement", async function _ChangedReceipt()
 	{
 		const f = await _Harness();
-		const receipt = { sourceCommandId: f.output.sourceCommandId, blockId: "block", payloadRef: "opaque-payload", ciphertextDigest: "sha256:ciphertext" };
+		const turn = (await f.dependencies.store.load(f.proposal.bootstrapId))!;
+		const receipt = await _PrepareConversationOutputIntent(turn, f.output.sourceCommandId);
 		await f.dependencies.store.markOutput(f.proposal.bootstrapId, receipt);
-		await expect(f.dependencies.store.markOutput(f.proposal.bootstrapId, { ...receipt, payloadRef: "other-payload" })).rejects.toThrow("output decision");
+		await expect(f.dependencies.store.markOutput(f.proposal.bootstrapId, await _PrepareConversationOutputIntent(turn, f.output.sourceCommandId, "other-payload"))).rejects.toThrow("output decision");
 	});
 
 	it.each(["fingerprint", "bootstrap", "metadata", "event-id", "unknown", "extra-event"])("rejects malformed or mixed stored decisions: %s", async function _Malformed(kind)
