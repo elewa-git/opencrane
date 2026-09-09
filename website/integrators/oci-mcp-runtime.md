@@ -24,6 +24,16 @@ the control plane; an uploaded image never runs inside the generic agent runtime
 An MCP registration does not grant an agent access. The acting subject and agent service must pass
 membership and grant resolution before a tool revision enters the run's frozen capability set.
 
+::: info Conversation integration status
+The atomic handoff between conversation proposal admission and the existing executor has passed
+fresh PostgreSQL proofs and full CI. The continuation implementation lets the model select one frozen
+tool requiring no approval, saves its declaration privately and uses the verified result for one
+final text request. This later implementation in PR #830 awaits CI and live qualification.
+It adds no intermediate participant tool progress and does not enable company tool assignments,
+approvals or recovery controls. See [development status](/guide/status) for checkpoints and the
+remaining permitted-integration proof.
+:::
+
 ## Admission is not execution permission
 
 ```text
@@ -48,17 +58,20 @@ grant cannot make an unready revision executable.
 ## Execution flow
 
 ```text
-runtime proposes an allowed tool call
+server admits a permitted tool call
        │
        ▼
 OpenCrane validates assignment, current authorization, arguments and approval
        │
        ▼
-save invocation + issue claim for exact OCI digest
+save invocation + readiness + executor work in one transaction
        │
        ▼
 agent-controller creates suspended two-container Job
        │  save Job UID before release
+       ▼
+companion rechecks current authority and claims one bounded command
+       │
        ▼
 fixed companion calls uploaded MCP server over loopback
        │
@@ -66,8 +79,20 @@ fixed companion calls uploaded MCP server over loopback
 companion reports one checked result through the active fence
        │
        ▼
-OpenCrane saves the result and resumes the runtime
+OpenCrane saves the result; conversation resumption remains pending
 ```
+
+For a conversation proposal, one PostgreSQL transaction checks the frozen tool and arguments,
+rechecks current access, prepares the invocation and saves its executor work. An exact retry
+recovers that work after it progresses; changed arguments cannot replace it. The private route
+returns a proposal receipt, without returning a tool result.
+
+Before dispatch, the current conversation guard supplies the earliest original run deadline,
+computer lease expiry and frozen/current membership-trust expiry. The invocation claim also respects
+the configured claim duration. The MCP write must match that claim's exact fence and revision;
+PostgreSQL caps its expiry to the saved invocation deadline and refuses an elapsed claim. The
+companion receives the same persisted deadline, so delayed writes cannot renew authority. Public
+task-owned calls and discovery keep their existing claim-duration policy.
 
 The uploaded server receives no projected OpenCrane token, Service, ingress, registry credential or
 Kubernetes mutation permission. The fixed companion owns the short-lived audience-bound token and

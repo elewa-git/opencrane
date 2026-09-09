@@ -1,3 +1,6 @@
+import { _ConversationModelReservationEvent } from "../conversation-computer-model-reservation";
+import { _ModelReservationFixture } from "./conversation-output-intent.fixture";
+import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,6 +19,7 @@ const _TURN = {
   credentialLifetimeSeconds: 300,
   outputSourceCommandId: null,
   outputReceipt: null,
+  toolSelection: null, continuationReservation: null, modelReservation: null,
   binding: {
     siloId: "testv5",
     conversationId: "conversation-1",
@@ -123,14 +127,16 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       data: { turn: _STORED_TURN },
       metadata: {},
     };
+    const reservation = _ModelReservationFixture(_TURN, outputId);
+    const modelEvent = { ..._ConversationModelReservationEvent(_TURN, reservation), streamName: frozenEvent.streamName, revision: 1n, recordedAt: new Date() };
     const outputEvent = {
       streamName: `conversation-computer-turn-${_ID}`,
-      revision: 1n,
+      revision: 2n,
       recordedAt: new Date(),
       id: outputId,
-      type: "opencrane.conversation-computer-turn-output.v1",
-      data: { bootstrapId: _ID, sourceCommandId: outputId, blockId: "block-1", payloadRef: "payload-1", ciphertextDigest: "sha256:ciphertext" },
-      metadata: {},
+      type: "opencrane.conversation-computer-turn-output.v2",
+      data: { bootstrapId: _ID, modelInvocationFence: outputId, intent: await _PrepareConversationOutputIntent(_TURN, outputId) },
+      metadata: { bootstrapId: _ID },
     };
     const history = {
       append: vi
@@ -145,6 +151,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       readStream: vi.fn(() =>
         (async function* _Events() {
           yield frozenEvent;
+          yield modelEvent;
           yield outputEvent;
         })(),
       ),
@@ -152,8 +159,8 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
     await expect(
       new KurrentConversationComputerTurnStore(history).markOutput(
         _ID,
-        { sourceCommandId: outputId, blockId: "block-1", payloadRef: "payload-1", ciphertextDigest: "sha256:ciphertext" },
+        await _PrepareConversationOutputIntent(_TURN, outputId),
       ),
-    ).resolves.toBe("idempotent");
+    ).resolves.toMatchObject({ outcome: "idempotent" });
   });
 });

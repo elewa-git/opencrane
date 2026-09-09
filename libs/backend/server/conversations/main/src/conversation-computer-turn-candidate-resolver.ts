@@ -45,12 +45,13 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 	}
 
 	/** Recheck lease, generation, Pod binding and the exact conversation revision before output. */
-	public async assertCurrent(turn: FrozenConversationComputerTurn, workload: ConversationComputerBootstrapCommand["workload"]): Promise<void>
+	public async assertCurrent(turn: FrozenConversationComputerTurn, workload: ConversationComputerBootstrapCommand["workload"]): Promise<ConversationComputerTurnCandidate>
 	{
 		if (turn.siloId !== this.siloId)
 			throw new Error("Conversation computer output crossed its admitted silo");
 		const candidate = await this.resolve({ computerId: turn.computerId, lease: turn.lease, workload });
 		if (candidate === null || candidate.binding.expectedRevision !== turn.binding.expectedRevision || candidate.latestPendingEntryId !== turn.latestPendingEntryId || candidate.compiledInput.digest !== turn.compile.digest || candidate.modelAlias !== turn.modelAlias)
 			throw new Error("Conversation computer output requires rebootstrap after conversation history changed");
+		return candidate;
 	}
 }

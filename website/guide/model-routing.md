@@ -3,8 +3,8 @@
 Instead of wiring each agent to one hard-coded model, register the models your organisation is
 allowed to use, and let OpenCrane resolve which one a given run actually calls. Every model call
 goes through **LiteLLM**, a self-hosted proxy that fronts your chosen providers, so a raw provider
-API key never reaches a runtime container — agents only ever hold a short-lived key scoped to one
-model and one spending limit.
+API key never reaches a runtime container. In the server model-step path, the server also
+keeps the short-lived LiteLLM key; conversation Pods request work by turn id and receive status.
 
 ## Register models
 
@@ -46,8 +46,20 @@ Global defaults are operator-only. Organisation-scoped defaults require the matc
 authorisation boundary.
 
 When OpenCrane admits a run, it resolves the model route and records it in the
-`RunInputSnapshot`. The controller then receives an attempt-scoped LiteLLM key limited to the
-selected alias, budget and expiry.
+`RunInputSnapshot`. The server reserves each model request within that run's original allowance.
+The prompt and attempt-scoped LiteLLM key stay server-side, and a saved answer can be completed
+after restart without another model request.
+
+The continuation implementation may let the first request select one frozen tool requiring no approval,
+then use its verified result for a second request that accepts text only. Both use the same key,
+allowed alias, original spend limit and actual expiry. The first token reservation is fully deducted
+before the second is made; retries cannot reset the budget or mint a replacement key.
+
+The preceding text checkpoint has passed full CI. The continuation implementation in PR #830
+awaits CI and live qualification. Neither replacement is installed on testv5. An unrecoverable
+response leaves the run pending for future recovery controls without another paid dispatch.
+LiteLLM and provider-internal retries have not been qualified as exactly-once execution.
+See [development status](/guide/status).
 
 ::: tip
 Changing a default affects future admissions. It does not change the model route frozen into

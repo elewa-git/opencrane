@@ -1,4 +1,4 @@
-import type { A2UIEntry, ConversationEntryVisibility, LogEntry, MessageEntry } from "@opencrane/contracts";
+import type { A2UIEntry, ConversationEntry, ConversationEntryVisibility, LogEntry, MessageEntry } from "@opencrane/contracts";
 
 /**
  * Describes the one server-minted stream and execution scope a writer may use.
@@ -120,4 +120,30 @@ export interface BoundConversationWriterClock
 {
 	/** Returns the current server time. */
 	now(): Date;
+}
+
+/**
+ * Retains the complete server-stamped event before the turn owner permits its physical append.
+ * The private answer route stores text only behind encrypted payload references. Runtime
+ * credentials are not part of this intent; other entry variants can contain their safe summaries.
+ * The expected revision is a decimal string so the existing turn stream can persist it as JSON.
+ * Called by: the conversation turn store and BoundConversationWriter.append.
+ */
+export interface BoundConversationWriterIntent
+{
+	/** Names the immutable conversation stream derived from the writer binding. */
+	readonly streamName: string;
+	/** Preserves the original checked history revision without advancing it on retry. */
+	readonly expectedRevision: string;
+	/** Contains the exact event to append or recognize after a lost response. */
+	readonly event: {
+		/** Uses the UUID source command as the stable event identifier. */
+		readonly id: string;
+		/** Names the computer-entry event schema. */
+		readonly type: string;
+		/** Retains the complete entry, including the first server timestamp. */
+		readonly data: { readonly entry: ConversationEntry };
+		/** Retains application metadata in the string representation returned by KurrentDB. */
+		readonly metadata: Readonly<Record<string, string>>;
+	};
 }

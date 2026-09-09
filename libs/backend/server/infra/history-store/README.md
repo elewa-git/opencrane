@@ -84,8 +84,7 @@ database.
 
 The unit tests under `src/__tests__/*.test.ts` mock the client. ADR 0016 also requires proof that
 the real `@kurrent/kurrentdb-client` and a real KurrentDB 26.x support every operation on the port,
-so `src/__tests__/kurrent-history-store.integration.ts` (and the conversations-level
-`conversation-history-authority.integration.ts`) run the adapter against a live server. They prove
+so `src/__tests__/kurrent-history-store.integration.ts` runs the adapter against a live server. It proves
 checked single-stream appends, the atomic multi-stream append used for genesis and for
 message+activation, the exact `WrongExpectedVersionError` the authorities catch (including a
 two-writer race and a stale head that rolls the whole atomic append back), reads, catch-up
@@ -105,6 +104,10 @@ block per file. The default `test` target never runs these files. CI starts Kurr
 service container in the "KurrentDB history-store proofs" job of `.github/workflows/docker.yml`;
 that container runs insecure on purpose because TLS, credentials, and the ACL are proven by the
 Helm contract test and bootstrap Job under `apps/_infra/kurrentdb`.
+
+The conversation package owns its higher-level conflict and saved-answer recovery proofs in
+`backend-server-conversations:test:integration`. CI runs that target against the same server after
+this adapter target. The history-store target does not collect another package's tests.
 
 ## See also
 

@@ -84,17 +84,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
-          podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: litellm
-      ports:
-        - protocol: TCP
-          port: {{ .Values.litellm.service.port }}
     - ports:
         - protocol: UDP
           port: 53

@@ -21,12 +21,12 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 	/** Transaction shared with the authorization-owned invocation participant. */
 	private readonly _transaction: Prisma.TransactionClient;
 	/** Authorization operations bound to this exact transaction. */
-	private readonly _toolInvocations: McpToolInvocationTransactionParticipant;
+	private readonly _toolInvocations: Pick<McpToolInvocationTransactionParticipant, "findById">;
 	/** Fixed deployment policy for newly admitted MCP work. */
 	private readonly _options: McpRuntimeAuthorityOptions;
 
 	/** Binds invocation admission to one serializable MCP transaction. */
-	constructor(transaction: Prisma.TransactionClient, toolInvocations: McpToolInvocationTransactionParticipant, options: McpRuntimeAuthorityOptions)
+	constructor(transaction: Prisma.TransactionClient, toolInvocations: Pick<McpToolInvocationTransactionParticipant, "findById">, options: McpRuntimeAuthorityOptions)
 	{
 		this._transaction = transaction;
 		this._toolInvocations = toolInvocations;
@@ -34,12 +34,14 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 	}
 
 	/**
-	 * Admits one ready, manual-recovery MCP ToolInvocation into runtime work.
+	 * Recovers matching executor work or admits one ready, manual-recovery MCP ToolInvocation.
 	 *
-	 * A disabled server, an unready revision, or another recovery mode returns `not_ready`; an
-	 * existing execution is idempotent only when it names the same server revision. This prevents an
-	 * invocation from being dispatched under a different revision than the one authorization selected.
-	 * Called by: `PrismaMcpRuntimeUnitOfWork` through {@link McpToolInvocationAdmissionRepository}.
+	 * An existing execution must match the silo, invocation, server revision, profile and idempotency
+	 * key. Recovery acknowledges that saved work without resetting its state. New work also requires
+	 * a published active server, a ready revision and manual recovery; the companion rechecks current
+	 * dispatch authority before receiving a command.
+	 * Called by: PrismaMcpRuntimeUnitOfWork and the app-composed conversation proposal transaction.
+	 * @see McpToolInvocationAdmissionRepository
 	 *
 	 * @param toolInvocationRowId - Authorization-owned invocation row selected for admission.
 	 * @returns The admission result that tells the authority whether work was created, already exists, or is blocked.
@@ -49,7 +51,7 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 		const invocation = await this._toolInvocations.findById(toolInvocationRowId);
 		if (invocation === null || invocation.siloId !== this._options.siloId)
 			return "not_mcp";
-		const existing = await this._transaction.mcpRuntimeExecution.findUnique({ where: { toolInvocationId: invocation.id }, select: { id: true, serverRevisionId: true } });
+		const existing = await this._transaction.mcpRuntimeExecution.findUnique({ where: { toolInvocationId: invocation.id }, select: { siloId: true, kind: true, toolInvocationId: true, serverRevisionId: true, profileName: true, idempotencyKey: true } });
 
 		const tool = await this._transaction.mcpToolRevision.findFirst({
 			where: { id: invocation.toolRevisionId, siloId: invocation.siloId },
@@ -60,14 +62,16 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 		});
 		if (tool === null)
 			return "not_mcp";
+		if (existing !== null)
+			return existing.siloId === invocation.siloId && existing.kind === McpRuntimeExecutionKind.Invocation
+				&& existing.toolInvocationId === invocation.id && existing.serverRevisionId === tool.serverRevisionId
+				&& existing.profileName === this._options.profileName && existing.idempotencyKey === `mcp-invocation:${invocation.id}` ? "idempotent" : "not_mcp";
 		if (invocation.state !== ToolInvocationStates.Ready
 			|| invocation.recoveryMode !== ExternalActionRecoveryModes.Manual
 			|| tool.serverRevision.state !== McpServerRevisionState.Ready
 			|| tool.serverRevision.server.status !== McpServerStatus.Active
 			|| tool.serverRevision.server.approvalStatus !== McpApprovalStatus.Published)
 			return "not_ready";
-		if (existing !== null)
-			return existing.serverRevisionId === tool.serverRevisionId ? "idempotent" : "not_mcp";
 
 		await this._transaction.mcpRuntimeExecution.create({
 			data: {

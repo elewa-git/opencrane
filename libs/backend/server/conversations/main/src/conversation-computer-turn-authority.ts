@@ -1,6 +1,9 @@
+import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus } from "./conversation-computer-model-flow";
+import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
+import { ConversationComputerModelStepOutcomes, type ConversationComputerModelStepCommand, type ConversationComputerModelStepResult } from "./conversation-computer-model.types";
+import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
 import { createHash } from "node:crypto";
-
-import type { CompiledRunInput, ComputerScope } from "@opencrane/contracts";
+import type { CompiledRunInput } from "@opencrane/contracts";
 
 import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
@@ -23,11 +26,13 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	}
 
 	/**
-	 * Freeze the next pending turn's coordinates, recompile against them, and issue the attempt-scoped model credential.
+	 * Freeze the next pending turn or recover its saved model status without revealing credentials.
 	 *
-	 * Every bootstrap, first or retried, compiles the input again from the admitted run snapshot. The frozen
-	 * Kurrent record holds only coordinates and a digest, so the recompiled digest must match before the Pod
-	 * receives any content.
+	 * Saved output is recovered before recompilation because its own history append may already have
+	 * changed the conversation head. An unreserved turn must still reproduce the frozen input digest.
+	 * A reserved request reports status without creating another allowance or handing a key to the Pod.
+	 * Saved tool content may report ready so the server can continue admission and result handling;
+	 * that status never permits the first model request to dispatch again.
 	 */
 	public async bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>
 	{
@@ -36,6 +41,13 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		{
 			await this._FinishOutput(active, command.workload);
 			return null;
+		}
+		if (active?.modelReservation !== null && active !== null)
+		{
+			await this._AdmitOutputPod(active, command.workload);
+			if (active.continuationReservation === null && (active.toolSelection !== null || await this.dependencies.modelCustody.loadDeclaration(active) !== null))
+				return { bootstrapId: active.bootstrapId, outcome: "ready" };
+			return { bootstrapId: active.bootstrapId, outcome: _ConversationModelReservationStatus(active.continuationReservation ?? active.modelReservation).outcome as "pending" | "response_unavailable" };
 		}
 		const candidate = await this.dependencies.candidates.resolve(command);
 		if (candidate === null)
@@ -49,56 +61,97 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		if (turn.outputSourceCommandId !== null)
 			return null;
 		await this.dependencies.runLifecycle.start(_RunLifecycleCommand(turn));
-		const keyAlias = `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`;
-		const snapshotBudget = candidate.compiledInput.budget.maxCostUsdMicros;
-		const maxBudgetUsd = snapshotBudget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, snapshotBudget / 1_000_000);
-		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, computer: _ComputerScope(turn), lease: turn.lease, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: candidate.credentialExpiresAt });
-		return { bootstrapId: turn.bootstrapId, compiledInput: candidate.compiledInput, modelCredential: { endpoint: this.dependencies.endpoint, key: credential.key, model: turn.modelAlias }, outcome: "ready" };
+		return { bootstrapId: turn.bootstrapId, outcome: "ready" };
 	}
 
-	/** Persist assistant text as an encrypted payload and append its non-secret reference through the frozen writer. */
+	/** Advance the saved model/tool protocol after proving the current Pod; failures never retry paid work. */
+	public async modelStep(command: ConversationComputerModelStepCommand): Promise<ConversationComputerModelStepResult>
+	{
+		const turn = await this.dependencies.store.load(command.bootstrapId);
+		if (turn === null)
+			return { outcome: ConversationComputerModelStepOutcomes.AuthorityEnded };
+		await this._AdmitOutputPod(turn, command.workload);
+		if (turn.outputReceipt !== null)
+		{
+			await this._FinishOutput(turn, command.workload);
+			return { outcome: ConversationComputerModelStepOutcomes.Completed };
+		}
+		try
+		{
+			return await _AdvanceConversationComputerModel(turn, command.workload, this.dependencies, this.appendOutput.bind(this));
+		}
+		catch (error)
+		{
+			this.dependencies.logger.warn({ operation: "conversation.computer.model_step", err: _ConversationFailureDiagnostic(error) }, "Conversation model step has no completed answer receipt");
+			const saved = await this.dependencies.store.load(turn.bootstrapId);
+			if (saved?.continuationReservation !== null && saved !== null)
+				return _ConversationModelReservationStatus(saved.continuationReservation);
+			if (saved?.toolSelection !== null && saved !== null)
+				return { outcome: ConversationComputerModelStepOutcomes.Pending };
+			return saved?.modelReservation !== null && saved !== null ? _ConversationModelReservationStatus(saved.modelReservation) : { outcome: ConversationComputerModelStepOutcomes.AuthorityEnded };
+		}
+	}
+
+	/** Save only the winning server model response; the Pod has no output-submission route. */
 	public async appendOutput(command: ConversationComputerOutputCommand): Promise<"accepted" | "idempotent">
 	{
 		const turn = await this.dependencies.store.load(command.bootstrapId);
 		if (turn === null)
 			throw new Error("Conversation computer output requires an admitted bootstrap");
-		await this.dependencies.candidates.assertCurrent(turn, command.workload);
+		await this._AdmitOutputPod(turn, command.workload);
+		const reservation = turn.continuationReservation ?? turn.modelReservation;
+		if (turn.toolSelection !== null && turn.continuationReservation === null || reservation === null || reservation.invocationFence !== command.modelInvocationFence || command.sourceCommandId !== command.modelInvocationFence || !Number.isSafeInteger(command.modelNotAfterEpochMs) || command.modelNotAfterEpochMs > reservation.dispatchDeadlineEpochMs)
+			throw new Error("Conversation computer output cannot finish unresolved tool work");
 		if (turn.outputSourceCommandId !== null)
 		{
-			if (turn.outputSourceCommandId !== command.sourceCommandId)
+			if (turn.outputSourceCommandId !== command.sourceCommandId || turn.outputReceipt === null)
 				throw new Error("Conversation computer turn already has a different output");
+			const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
+			const entry = turn.outputReceipt.event.data.entry;
+			if (entry.kind !== "message" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
+				|| entry.blocks[0].id !== payload.blockId || entry.blocks[0].payloadRef !== payload.payloadRef || entry.blocks[0].ciphertextDigest !== payload.ciphertextDigest)
+				throw new Error("Conversation computer output retry has a different saved payload");
 			await this._FinishOutput(turn, command.workload);
 			return "idempotent";
 		}
+		const notAfter = Math.min(command.modelNotAfterEpochMs, await __AssertConversationComputerAnswerAuthority(turn, command.workload, this.dependencies));
 		const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
-		const receipt = { sourceCommandId: command.sourceCommandId, ...payload };
-		const outcome = await this.dependencies.store.markOutput(turn.bootstrapId, receipt);
-		await this._FinishOutput({ ...turn, outputSourceCommandId: command.sourceCommandId, outputReceipt: receipt }, command.workload);
-		return outcome;
+		const writer = this.dependencies.writers.create(turn, command.workload);
+		const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: payload.blockId, kind: "text", payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+		if (Date.now() >= Math.min(reservation.dispatchDeadlineEpochMs, notAfter))
+			throw new Error("Conversation computer model response missed its fixed dispatch deadline");
+		const decision = await this.dependencies.store.markOutput(turn.bootstrapId, receipt);
+		await this._FinishOutput({ ...turn, outputSourceCommandId: decision.receipt.event.id, outputReceipt: decision.receipt }, command.workload);
+		return decision.outcome;
 	}
 
+	/** Verify the current Pod without recompiling history that may already contain its accepted answer. */
+	private async _AdmitOutputPod(turn: FrozenConversationComputerTurn, workload: ConversationComputerBootstrapCommand["workload"]): Promise<void>
+	{
+		if (turn.siloId !== this.dependencies.siloId)
+			throw new Error("Conversation computer output crossed its admitted silo");
+		await this.dependencies.candidates.admit({ computerId: turn.computerId, lease: turn.lease, workload });
+	}
+
+	/** Confirm the saved event before completing idempotent run, credential and active-pointer work. */
 	private async _FinishOutput(turn: FrozenConversationComputerTurn, workload: ConversationComputerBootstrapCommand["workload"]): Promise<void>
 	{
 		if (turn.outputReceipt === null)
 			throw new Error("Conversation computer output receipt is missing");
+		await this._AdmitOutputPod(turn, workload);
 		const writer = this.dependencies.writers.create(turn, workload);
-		await writer.append({ sourceCommandId: turn.outputReceipt.sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: turn.outputReceipt.blockId, kind: "text", payloadRef: turn.outputReceipt.payloadRef, ciphertextDigest: turn.outputReceipt.ciphertextDigest }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+		await writer.append(turn.outputReceipt);
 		await this.dependencies.runLifecycle.complete(_RunLifecycleCommand(turn));
 		await this.dependencies.credentials.revoke(turn.bootstrapId);
 		await this.dependencies.store.settle(turn);
 	}
+
 }
 
 /** Copies only the immutable attempt and lease fence needed by run lifecycle. */
 function _RunLifecycleCommand(turn: FrozenConversationComputerTurn): ConversationComputerRunLifecycleCommand
 {
 	return { runId: turn.compile.runId, siloId: turn.siloId, attempt: turn.compile.attempt, computerId: turn.computerId, lease: { leaseId: turn.lease.leaseId, leaseGeneration: turn.lease.leaseGeneration } };
-}
-
-/** Reads the computer's ownership coordinates back out of the frozen turn and its writer binding. */
-function _ComputerScope(turn: FrozenConversationComputerTurn): ComputerScope
-{
-	return { siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId };
 }
 
 /**
@@ -123,10 +176,13 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		compile: { runId: input.runId, attempt: input.attempt, promptCompilerVersion: input.promptCompilerVersion, digest: input.digest },
 		outputSourceCommandId: null,
 		outputReceipt: null,
+		toolSelection: null,
+		continuationReservation: null,
+		modelReservation: null,
 	};
 }
 
-/** Fail closed when a fresh compile does not reproduce the frozen anchor; the Pod never sees drifted input. */
+/** Reject changed compiled input before server-side model dispatch. */
 function _AssertRecompiledInput(turn: FrozenConversationComputerTurn, compiledInput: CompiledRunInput): void
 {
 	const anchor = turn.compile;

@@ -75,12 +75,33 @@ the ordinary exact boundary-matching rules.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
 - `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
-  `PrismaToolInvocationUnitOfWork`, and their lifecycle contracts own durable human approval and
+  `PrismaMcpToolInvocationParticipantUnitOfWork`, and their lifecycle contracts own durable human approval and
   provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
   invocation carry the same immutable execution subject, including the active conversation-computer
   lease id and generation; released or replaced leases fail closed.
+- `__AdmitPreparingToolInvocationInTransaction` and `__PrepareToolInvocationInTransaction` let the
+  conversation owner save and prepare a permitted call in the transaction that queues its MCP
+  executor. The existing lifecycle still enforces approval requirements and observed revisions.
+- Run-owned MCP dispatch requires the injected current-authority check before a provider claim.
+  Its returned absolute deadline caps the claim to the original run budget, current computer lease
+  and frozen/current membership trust, within the configured claim duration. MCP stores the same
+  cap before returning a command to the executor; neither retries nor a delayed write renew it.
+  A known denial closes only the observed Ready revision and saves one failed result delivery
+  after the lifecycle fence accepts it. Durable KurrentDB tool history remains pending.
+  A read outage propagates so the transaction rolls back.
+  Task-owned calls retain their distinct task projection. The unused external-action transaction
+  wrapper is removed; the MCP runtime owns production dispatch.
 - `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
   tool work inside the runs domain's cancellation transaction.
+
+Run-owned tool result reads use `__ReadRunToolResultInTransaction`. The caller supplies all saved
+run, attempt, computer, command, public invocation and fingerprint coordinates. IAM checks the
+current run and the full immutable terminal payload and digest, then returns the existing invocation
+record for a current-authority check in the same transaction. Pending or inconsistent work exposes
+no result content. `__ConsumeRunToolResultInTransaction` acknowledges only that exact payload;
+the conversation owner must first prove the saved second-model-request reservation and current
+permission. An exact replay preserves its first acknowledgement time, and consumed results remain
+readable for restart verification. Neither API grants model dispatch or starts a provider call.
 
 ## Boundary
 
@@ -93,6 +114,11 @@ eligibility are rechecked before each new external effect.
 Catalogue reads may be batch-filtered without one receipt per visible row. A mutation must record
 decision evidence in the same transaction. An external effect must use the durable `ToolInvocation`
 or another typed one-use command; workers cannot list grants or choose a different target.
+
+Workload effect admission requires the identity verified by the transport owner. The authority
+rejects missing or inconsistent Pod coordinates before grant reads, binds that identity and any
+saved run coordinates into its evidence digest, and records them in the same transaction. The
+Principal still determines whose permissions are checked; the audit actor names the requesting Pod.
 
 ## Dependency direction
 

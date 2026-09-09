@@ -11,7 +11,7 @@
       "executor": "nx:run-commands",
       "options": { "command": "vitest run --config vitest.integration.config.ts", "cwd": "libs/backend/server/infra/history-store" },
       "cache": false,
-      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/libs/backend/server/conversations/main/src/**/*", { "env": "KURRENTDB_INTEGRATION_URL" }]
+      "inputs": ["{projectRoot}/**/*", { "env": "KURRENTDB_INTEGRATION_URL" }]
     }
   }
 }

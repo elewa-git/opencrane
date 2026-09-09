@@ -4,6 +4,7 @@ import { McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionK
 
 import { McpCompanionCommandKinds, type McpCompanionClaimResponse, type McpCompanionCompletionRequest, type McpCompanionFailureRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
 import { ExternalActionClaimKinds, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolInvocationStates, type McpToolInvocationTransactionParticipant, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -59,9 +60,10 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 		let invocation: ToolInvocationRecord | null = null;
 		if (execution.kind === McpRuntimeExecutionKind.Invocation)
 		{
-			if (execution.toolInvocationId === null)
+			if (execution.toolInvocationId === null || typeof execution.workloadUid !== "string" || execution.workloadUid.trim().length === 0)
 				return null;
-			const claimed = await this._toolInvocations.claim(execution.toolInvocationId, now, this._options.companionClaimLeaseMilliseconds);
+			const workload = { audience: MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, workloadKind: "job" as const, workloadUid: execution.workloadUid, podUid: identity.podUid };
+			const claimed = await this._toolInvocations.claim(execution.toolInvocationId, now, this._options.companionClaimLeaseMilliseconds, workload);
 			if (claimed.outcome === ToolInvocationClaimOutcomes.Missing)
 			{
 				await this._CloseBeforeDispatch(execution, null);

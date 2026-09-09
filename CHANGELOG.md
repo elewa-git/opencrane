@@ -47,6 +47,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   `POST /api/v1/organization/company-assistant` selects its model and the people allowed to invoke
   it. Setup retries preserve the existing assistant and do not restore revoked grants.
 
+- **Conversation workloads can store a proposed tool call without dispatching it.** The private
+  route accepts one frozen tool revision and validated arguments, checks current permission and
+  preserves the same proposal across retries. Connecting it to model execution and durable
+  conversation results remains in development.
+  A durable reservation prevents unresolved tool work from being accepted as a final answer.
+  Exact proposal retries are supported; automatic recovery of an abandoned reservation is pending.
+
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
   while the authenticated web workspace reads and posts through the same typed backend conversation
@@ -91,12 +98,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 - **Browser login can survive server replacement and requests reaching different servers.** The
   follow-up stores encrypted sessions in PostgreSQL, preserves fixed expiry and prevents delayed
-  saves from undoing logout. It requires the matching fresh baseline. CI and fresh PostgreSQL proofs pass; installation
-  qualification remains pending.
+  saves from undoing logout. Fresh PostgreSQL CI passes. It requires the matching fresh baseline;
+  live installation proof remains pending.
 
 - **People can find newly admitted personal assistant work in their activity.** Admission saves the
   owner’s run-read permission with the run and its inputs. Reads still check current membership and
-  permission; retries cannot restore revoked access. CI, image publication and the two-employee live journey pass; earlier runs receive no backfill.
+  permission; retries cannot restore revoked access. CI, image publication and two-employee
+  live qualification pass on testv5. Earlier runs receive no backfill.
 
 - **People can start distinct personal chats and retry creation safely.** A new command starts a
   separate conversation; retrying the same command returns its existing session without reopening
@@ -137,6 +145,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   isolated builds, and published PreviewApps likewise remain outside 0.11.0.
 
 ### Security
+
+- **Queued run-owned tool calls recheck current access before execution.** The MCP executor
+  refuses a revoked permission or stale conversation lease before contacting the tool. A definite
+  refusal stores one failed result; an unavailable authority leaves the call unclaimed for retry.
+  The admitted run's original deadline and tool allowance remain binding through retries.
+  Connecting the conversation model loop to this guarded path remains in development.
 
 - **Company assistants execute with their own model authority and a separately checked human
   requester.** Current membership, service permission, and parent and child access are checked at

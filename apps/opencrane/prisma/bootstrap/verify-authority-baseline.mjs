@@ -5,6 +5,8 @@ const _MINIMUM_FUNCTIONS = 79;
 const _MINIMUM_TRIGGERS = 89;
 const _MINIMUM_CONSTRAINTS = 227;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'CREATE TYPE "WorkloadKind" AS ENUM (\'pod\', \'job\', \'deployment\');',
+	'ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_check"',
 	'CREATE TABLE "oidc_sessions"',
 	'CONSTRAINT "oidc_sessions_pkey" PRIMARY KEY ("namespace","id_digest")',
 	'CREATE INDEX "oidc_sessions_namespace_retain_until_idx" ON "oidc_sessions"("namespace", "retain_until")',
@@ -66,6 +68,9 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_mcp_runtime_execution_authority"()',
 	'McpRuntimeExecution controller claim requires an expired prior fence and a bounded lease proposal',
 	'McpRuntimeExecution companion fence is immutable outside claim or expired discovery reset',
+	'McpRuntimeExecution companion claim requires the exact run-owned invocation fence',
+	'NEW."companion_claim_expires_at" := LEAST(NEW."companion_claim_expires_at", bounded_invocation."claim_expires_at");',
+	'McpRuntimeExecution companion claim cannot outlive its run authority',
 	'CREATE TRIGGER "mcp_runtime_executions_authority"',
 	'CREATE FUNCTION "enforce_mcp_server_revision_runtime_completion"()',
 	'CREATE TRIGGER "mcp_server_revisions_runtime_completion"',

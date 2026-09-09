@@ -10,7 +10,7 @@
     "emit-openapi": "tsx scripts/emit-openapi.mts",
     "dev": "tsx watch src/index.ts",
     "start": "node ../../dist/apps/opencrane/index.js",
-    "test": "vitest run",
+    "test": "vitest run --exclude '**/*.sql.test.ts'",
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:regenerate-target-baseline": "node prisma/bootstrap/regenerate-target-baseline.mjs",
@@ -66,13 +66,13 @@
     "targets": {
       "container": {
         "executor": "nx:run-commands",
-      "metadata": {
-        "release": {
-          "image": "opencrane-server",
-          "dockerfile": "apps/opencrane/deploy/Dockerfile"
-        }
-      },
-      "options": {
+        "metadata": {
+          "release": {
+            "image": "opencrane-server",
+            "dockerfile": "apps/opencrane/deploy/Dockerfile"
+          }
+        },
+        "options": {
           "command": "docker build -f apps/opencrane/deploy/Dockerfile ."
         }
       },
@@ -113,9 +113,15 @@
       "test:sql": {
         "executor": "nx:run-commands",
         "options": {
-          "command": "sh ../../scripts/run-postgres-authority-tests.sh prisma/tests/authorization-active-grant-uniqueness.sql prisma/tests/phase-d-authority-integration.sql prisma/tests/skill-authoring-validation-authority.sql",
-          "cwd": "apps/opencrane"
-        }
+          "cwd": "apps/opencrane",
+          "commands": [
+            "sh ../../scripts/run-postgres-authority-tests.sh prisma/tests/authorization-active-grant-uniqueness.sql prisma/tests/phase-d-authority-integration.sql prisma/tests/skill-authoring-validation-authority.sql",
+            "vitest run src/__tests__/conversation-tool-proposal.sql.test.ts",
+            "vitest run src/__tests__/conversation-tool-result.sql.test.ts"
+          ],
+          "parallel": false
+        },
+        "cache": false
       },
       "emit-openapi": {
         "outputs": [

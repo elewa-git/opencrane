@@ -31,6 +31,12 @@ The invariant is atomic evidence: a caller cannot commit the product change with
 and a rolled-back change leaves no misleading row behind. The package never opens a transaction
 and never decides whether an action is allowed.
 
+Workload decisions identify the Pod that requested the operation. A conversation computer records
+its actual Pod as the workload object; an MCP executor records its controller-verified Job and
+TokenReviewed Pod. PostgreSQL requires the complete audience, namespace, ServiceAccount and UID
+coordinates. These physical actor coordinates are separate from the Principal whose grants allow
+the operation.
+
 ## Public surface
 
 - `PrismaAuditDecisionWriterRepository` writes one immutable decision through a transaction the caller owns.

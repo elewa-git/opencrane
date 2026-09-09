@@ -77,6 +77,10 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   recognisable capability names and categorical availability, never internal topology or errors.
 - `ConversationHistoryResponse`, `ConversationEntry`, and the conversation-computer contracts — the
   immutable history and generation-fenced computer vocabulary shared by server and browser.
+- `ConversationToolProposal`, `___ConversationToolProposalSchema` and
+  `ConversationToolProposalReceipt` — the private workload request for one frozen tool revision
+  and bounded JSON arguments. It accepts no caller-selected identity or approval. A receipt
+  confirms storage only; it contains no provider result or execution claim.
 - `___ConversationComputerSchema` validates the existing public computer shape, lease generation,
   and checkpoint metadata without admitting private extensions. Readers still bind its conversation
   coordinate to the authenticated request.
@@ -98,6 +102,12 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   model-routing types, memory-gateway constants, `ThirdPartySource*`,
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
+- `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall` and
+  `ConversationModelContinuation` — shared server-only model transport contracts. Adjacent strict
+  schemas preserve the original assistant call and validate the combined saved call/result bound.
+  Tool modes distinguish a first selection from text-only continuation. These types grant no tool
+  permission; endpoint and credential fields stay in server memory and must never become workload
+  or browser payloads.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by
