@@ -68,7 +68,7 @@ describe("company assistant tool assignment persistence", function _Suite()
 			promptPolicyVersion: "policy-original", personaRevisionId: "persona-original", modelDefinition: { connect: { id_siloId: { id: "model-original", siloId: _CALLER.siloId } } }, budget: _POLICY.budget,
 			skillAssignments: { create: [{ skillId: "skill-original", skillRevisionId: "skill-revision-original" }] },
 			boundaryAttachments: { create: [{ siloId: _CALLER.siloId, boundaryKind: AuthorizationBoundaryKind.Group, boundaryGroupId: "group-original", boundaryCoverage: AuthorizationBoundaryCoverage.Descendants }] },
-			mcpToolAssignments: { create: ["tool-new", "tool-retained"].map(toolRevisionId => ({ toolRevisionId, siloId: _CALLER.siloId, agentServiceId: _SERVICE_ID })) },
+			mcpToolAssignments: { create: ["tool-new", "tool-retained"].map(toolRevisionId => ({ toolRevisionId, siloId: _CALLER.siloId })) },
 		}) }));
 		const reconciled = f.reconcileManagedResourceGrants.mock.calls.map(call => call[0]);
 		expect(reconciled.map(call => call.resource.id)).toEqual(["tool-new", "tool-old", "tool-retained"]);
