@@ -11,7 +11,8 @@ time, restores that draft after verified sign-in, and adopts only the server's r
 It also maps canonical request references and safe tool histories into Activity rows. It never
 creates a run, chooses the respondent, interprets protected A2UI actions, or reads personal memory.
 Its shared `ConversationActivityRow` also accepts a personal-run status row with an optional answer
-target. The workspace feature derives that row from its authorized run read and currently rendered
+target and a nullable public tool phase containing no tool identity or private payload. The
+workspace feature derives that row from its authorized run read and currently rendered
 transcript. The target grants no access and does not copy an answer into this state package.
 
 ## Public surface

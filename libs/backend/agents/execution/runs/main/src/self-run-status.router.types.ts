@@ -1,4 +1,5 @@
 import type { Request } from "express";
+import type { RunToolProgress } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/backend/observability";
 
 /** Session-derived owner identity for the self-only run status surface. */
@@ -19,6 +20,8 @@ export interface SelfRunStatus
 	readonly attempt: number;
 	/** Product lifecycle state. */
 	readonly state: string;
+	/** Latest tool phase in this attempt; null means no invocation, not a failed read. */
+	readonly latestTool: RunToolProgress | null;
 	/** Linked conversation conversation when the run began from one. */
 	readonly conversationId: string | null;
 	/** Immutable revision selected when the run was accepted. */

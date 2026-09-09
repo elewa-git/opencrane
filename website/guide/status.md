@@ -32,6 +32,11 @@ current review work and its evidence.
   It adds no intermediate tool progress to participant history. This follow-up exposes protected
   company-tool assignment through the API and checks the assistant's own permissions. Assignment
   CI and live proof are pending, and testv5 has no installed integration for the retrieval proof.
+- **Personal tool progress:** the follow-up reads the latest tool phase into Recent activity after
+  checking the employee's current run access. It shows queued, running, result received or needs
+  attention while preserving overall work status and the saved-answer link. It exposes no tool
+  payload, and does not add conversation-history events. CI and live qualification are pending;
+  company-child progress, longer-lived updates and action controls remain separate work.
 - **Recovery controls:** when a model response cannot be recovered, preserve the pending run and
   show the person what happened and what they can do next. The current server keeps the spent
   request reservation and does not send another paid request. That restraint is implemented in
@@ -98,8 +103,9 @@ delegation journeys.
 
 The requested file-copy recovery and snapshot-backup checks have passed. Restoring a volume snapshot
 would be a separate qualification. Member removal and clearing private browser state after access loss are implemented in parallel
-[#831](https://github.com/elewa-git/opencrane/pull/831). Its independent review, unit and browser
-checks pass; installation and real-account revocation remain unproven live.
+[#831](https://github.com/elewa-git/opencrane/pull/831). Its independent review and
+[full CI](https://github.com/elewa-git/opencrane/actions/runs/34307836688) pass, including the real
+database cases and Linux browser checks. Installation and real-account revocation remain unproven live.
 Computer actions need their complete journeys as their effect admissions become available.
 
 Component tests, a chart render or a healthy process do not establish those complete journeys.

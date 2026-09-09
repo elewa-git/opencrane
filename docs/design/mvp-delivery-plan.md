@@ -67,6 +67,15 @@ It does not install tools, activate credentials or complete the real-integration
 Member removal is a parallel review surface, [#831](https://github.com/elewa-git/opencrane/pull/831),
 with its own CI and live qualification. It is not a prerequisite for reviewing the assignment API.
 
+The first U1 increment reads only the latest tool phase for a currently authorized personal run.
+The IAM owner selects state for the exact silo, run and current attempt; the existing run read
+transaction checks ownership and central Read before requesting that projection. Recent activity
+renders a fixed label alongside the overall run state and saved-answer link. This changes no
+conversation event or tool invocation. In particular, inserting cosmetic progress events into the
+frozen conversation head would invalidate the current answer-acceptance fence. Company-child
+progress needs a separate participant-authorized read; it must not widen the personal run filter.
+Approval, cancellation and uncertain-effect recovery keep their existing separate acceptance rows.
+
 Long-term memory and autonomous delegation are not prerequisites for the first useful tool action.
 The existing #320 issue is closed but retains unfinished and obsolete runtime wording; refresh or
 replace its delivery issue before D1, using ADR 0016 as the current architecture. A closed issue or

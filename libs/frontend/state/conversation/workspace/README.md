@@ -46,6 +46,9 @@ invalidate the read; cancelled or late responses cannot restore an earlier selec
 and inputs awaiting admission refresh every five seconds for up to one minute, then require an
 explicit refresh. Failed reads clear rows; access denial stops retries until the chat is reopened.
 This store reads status and never starts, cancels or retries assistant execution.
+Each run carries a required nullable latest-tool phase from the public API. The strict shared
+validator rejects unknown phases and private extra fields before adoption. Tool progress uses
+the same bounded refresh and selection, identity and access fences as the overall run state.
 
 ## Public surface
 

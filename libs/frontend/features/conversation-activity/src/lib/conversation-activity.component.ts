@@ -6,7 +6,7 @@ import { MessageModule } from "primeng/message";
 import { ScopeChipComponent } from "@opencrane/elements/ui";
 import { ConversationActivityKinds, type ConversationActivityRow, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 
-import { _ConversationActivityRunStatus } from "./conversation-activity-status.mapper";
+import { _ConversationActivityRunStatus, _ConversationActivityToolPhase } from "./conversation-activity-status.mapper";
 import { ConversationActivityReadStates } from "./conversation-activity.types";
 
 /**
@@ -39,4 +39,6 @@ export class ConversationActivityComponent
 	protected readonly readStates = ConversationActivityReadStates;
 	/** Supplies participant labels and shared chip tones. */
 	protected readonly runStatus = _ConversationActivityRunStatus;
+	/** Supplies fixed tool-phase copy separately from the overall work status. */
+	protected readonly toolPhase = _ConversationActivityToolPhase;
 }

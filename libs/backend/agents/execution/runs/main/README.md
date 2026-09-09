@@ -57,6 +57,14 @@ does not grant permission to use a run.
 - `PrismaRunAdmissionUnitOfWork` saves a new run and its first lease-bound input snapshot together.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status
   only after the current exact `AgentRun/Read` grant is checked in the same database snapshot.
+  Each returned status includes required nullable `latestTool: { phase }`. After authorization,
+  IAM reads only the latest invocation state for that exact silo, run and current attempt, excluding
+  independent MCP tasks. Lists load phases only for their final at-most-50 entitled runs. The phase
+  is queued, running, result received or needs attention; it includes no tool identity, payload or
+  controls. A received result leaves the overall run status unchanged until its actual lifecycle
+  completes. No invocation returns null; a failed read fails the status response. These reads append
+  no conversation history and never acknowledge or consume tool results. Company-child progress
+  requires a separate participant-authorized surface; personal run ownership is unchanged.
 
 ## Boundary
 

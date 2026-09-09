@@ -112,6 +112,7 @@ function _ActivityFixture()
 	const snapshots: StoredSnapshot[] = [];
 	const transaction = {
 		...grants.transaction,
+		toolInvocation: { findFirst: vi.fn().mockResolvedValue({ state: "Succeeded" }) },
 		principal: { findUnique: vi.fn(async function _Principal({ where }: { where: Prisma.PrincipalWhereUniqueInput })
 		{
 			const coordinates = where.id_siloId!;
@@ -160,15 +161,17 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 		f.runs[0].state = "Completed";
 		f.runs[0].finishedAt = new Date("2026-09-01T00:01:00.000Z");
 		const caller = { siloId: "silo-1", principalId: "principal-1" };
-		const expected = { runId: "run-1", state: "completed", conversationId: "conversation-1", finishedAt: "2026-09-01T00:01:00.000Z" };
+		const expected = { runId: "run-1", state: "completed", latestTool: { phase: "result_received" }, conversationId: "conversation-1", finishedAt: "2026-09-01T00:01:00.000Z" };
 		await expect(f.status.listOwned(caller)).resolves.toEqual([expect.objectContaining(expected)]);
 		await expect(f.status.readOwned(caller, "run-1")).resolves.toMatchObject(expected);
 		await expect(f.admission.admit({ ..._Command(), runId: "retry-id" }, _VerifyExisting, _BuildPersonal)).resolves.toMatchObject({ outcome: "idempotent" });
 		expect([f.runs.length, f.snapshots.length, f.grants.length]).toEqual([1, 1, 1]);
+		f.transaction.toolInvocation.findFirst.mockClear();
 		for (const other of [{ ...caller, principalId: "principal-2" }, { ...caller, siloId: "silo-2" }])
 		{
 			await expect(f.status.listOwned(other)).resolves.toEqual([]);
 			await expect(f.status.readOwned(other, "run-1")).resolves.toBeNull();
+			expect(f.transaction.toolInvocation.findFirst).not.toHaveBeenCalled();
 			await expect(f.authority.listPrincipalEntitled({ ...other, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.AgentRun, id: "run-1" }], nowEpochMs: Date.now() })).resolves.toEqual([]);
 		}
 	});
@@ -189,6 +192,7 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 		const caller = { siloId: "silo-1", principalId: "principal-1" };
 		await expect(f.status.listOwned(caller)).resolves.toEqual([]);
 		await expect(f.status.readOwned(caller, "run-1")).resolves.toBeNull();
+		expect(f.transaction.toolInvocation.findFirst).not.toHaveBeenCalled();
 	});
 
 	it("does not grant company activity to its human requester", async function _CompanyActivity()
@@ -198,6 +202,7 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 		expect(f.runs[0].principalId).toBe("company-principal");
 		expect(f.grants).toEqual([]);
 		await expect(f.status.listOwned({ siloId: "silo-1", principalId: "principal-1" })).resolves.toEqual([]);
+		expect(f.transaction.toolInvocation.findFirst).not.toHaveBeenCalled();
 	});
 
 	it.each(["compiler denial", "different personal owner"])("leaves no activity permission after %s", async function _DeniedAdmission(reason)

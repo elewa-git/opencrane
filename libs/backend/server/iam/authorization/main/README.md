@@ -33,6 +33,14 @@ domain lifecycle rules, and writes the change plus required evidence before comm
 membership, [audit](../../audit/main/README.md) retains decision evidence, and the owning product
 domain supplies lifecycle facts and performs the protected change.
 
+`__ReadRunToolProgressInTransaction` provides a separate phase-only read for an already-authorized
+personal run. The runs owner checks exact ownership and current AgentRun Read before invoking it
+on the same transaction. IAM selects only the latest ToolInvocation state for the trusted silo,
+run and current attempt, excluding independent MCP tasks, and maps it to the four shared public
+phases. It never loads arguments, results, identifiers or recovery details. Null means no matching
+invocation; unknown state and database errors propagate. This helper grants no permission, appends
+no event and does not acknowledge a result delivery.
+
 Transaction binding prevents a check-then-write gap: authorization reads and the protected write
 share one Serializable commit boundary. The shared Prisma transaction runner repeats the complete
 operation at most three times, and only after a P2034 proves PostgreSQL rolled back every write in

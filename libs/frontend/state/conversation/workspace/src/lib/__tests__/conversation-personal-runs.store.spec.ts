@@ -5,6 +5,7 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { RunToolProgressPhases } from "@opencrane/contracts";
 import { __CreateConversationHistoryProjection } from "@opencrane/state/conversation/stream";
 import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 
@@ -24,7 +25,7 @@ function _Detail(id = "chat-1"): ConversationWorkspaceDetail
 /** Creates a current API projection with no copied transcript or internal authority fields. */
 function _Run(conversationId = "chat-1", state: ConversationPersonalRun["state"] = "completed"): ConversationPersonalRun
 {
-	return { runId: `run-${conversationId}`, conversationId, state, attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00.000Z", finishedAt: state === "completed" ? "2026-09-08T12:00:02.000Z" : null };
+	return { runId: `run-${conversationId}`, conversationId, state, attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00.000Z", latestTool: null, finishedAt: state === "completed" ? "2026-09-08T12:00:02.000Z" : null };
 }
 
 /** Provides signals that can change independently while an uncancellable request is pending. */
@@ -72,8 +73,8 @@ describe("personal recent work", function _Suite()
 
 	it.each(["subject", "selection", "access", "route"])("clears rows immediately when %s changes", async function _Invalidation(kind)
 	{
-		const fixture = _Store();
-		await vi.waitFor(() => expect(fixture.store.runs()).toHaveLength(1));
+		const fixture = _Store(vi.fn().mockResolvedValue([{ ..._Run(), latestTool: { phase: RunToolProgressPhases.ResultReceived } }]));
+		await vi.waitFor(() => expect(fixture.store.runs()[0]?.latestTool?.phase).toBe(RunToolProgressPhases.ResultReceived));
 		if (kind === "subject")
 			fixture.subject.set("user-2");
 		if (kind === "selection")
@@ -95,7 +96,7 @@ describe("personal recent work", function _Suite()
 		await vi.waitFor(() => expect(fixture.listPersonalRuns).toHaveBeenCalledTimes(2));
 		fixture.selected.set(_Detail());
 		await vi.waitFor(() => expect(fixture.listPersonalRuns).toHaveBeenCalledTimes(3));
-		first.resolve([_Run()]);
+		first.resolve([{ ..._Run(), latestTool: { phase: RunToolProgressPhases.Running } }]);
 		await _Settle();
 		expect(signal.aborted).toBe(true);
 		expect(fixture.store.runs()).toEqual([]);
@@ -104,7 +105,7 @@ describe("personal recent work", function _Suite()
 	it("clears failed refresh rows and stops access-denied retries until reopening", async function _Denied()
 	{
 		const denied = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "private server detail");
-		const fixture = _Store(vi.fn().mockResolvedValueOnce([_Run()]).mockRejectedValueOnce(denied).mockResolvedValue([]));
+		const fixture = _Store(vi.fn().mockResolvedValueOnce([{ ..._Run(), latestTool: { phase: RunToolProgressPhases.ResultReceived } }]).mockRejectedValueOnce(denied).mockResolvedValue([]));
 		await vi.waitFor(() => expect(fixture.store.runs()).toHaveLength(1));
 		fixture.store.refresh();
 		await vi.waitFor(() => expect(fixture.store.accessChanged()).toBe(true));
@@ -144,6 +145,24 @@ describe("personal recent work", function _Suite()
 		fixture.store.refresh();
 		await _Settle();
 		expect(fixture.listPersonalRuns).toHaveBeenCalledTimes(13);
+	});
+
+	it("refreshes the tool phase without completing the run or extending the read window", async function _ToolPhaseRefresh()
+	{
+		vi.useFakeTimers();
+		const run = _Run("chat-1", "running");
+		const fixture = _Store(vi.fn().mockResolvedValueOnce([{ ...run, latestTool: { phase: RunToolProgressPhases.Queued } }]).mockResolvedValue([{ ...run, latestTool: { phase: RunToolProgressPhases.ResultReceived } }]));
+		await _Settle();
+		expect(fixture.store.runs()[0]?.latestTool?.phase).toBe(RunToolProgressPhases.Queued);
+		await vi.advanceTimersByTimeAsync(5_000);
+		await _Settle();
+		expect(fixture.store.runs()[0]).toMatchObject({ state: "running", latestTool: { phase: RunToolProgressPhases.ResultReceived } });
+		await vi.advanceTimersByTimeAsync(60_000);
+		await _Settle();
+		const reads = fixture.listPersonalRuns.mock.calls.length;
+		await vi.advanceTimersByTimeAsync(20_000);
+		await _Settle();
+		expect(fixture.listPersonalRuns).toHaveBeenCalledTimes(reads);
 	});
 
 	it("refreshes a status that completes after the answer's history checkpoint", async function _LateCompletion()
