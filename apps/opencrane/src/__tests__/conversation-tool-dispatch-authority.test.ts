@@ -19,10 +19,10 @@ const _NOW = new Date("2026-09-09T00:00:00.000Z");
 const _MEMBERSHIP = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.test", subjectId: "user-1", membershipId: "membership-1", membershipUpdatedAt: new Date(_NOW.getTime() - 2_000).toISOString(), observedAt: _NOW.toISOString(), trustedUntil: new Date(_NOW.getTime() + 60_000).toISOString() } as const;
 
 /** Build persisted grants consumed by the real central authority, rather than mocking allow decisions. */
-function _Grant(kind: ProductAuthorizationResourceKinds, id: string, action: ProductAuthorizationActions)
+function _Grant(kind: ProductAuthorizationResourceKinds, id: string, action: ProductAuthorizationActions, principalId = "principal-1")
 {
 	const capability = __ProductAuthorizationCapability(kind, action)!;
-	return { id: `grant-${kind}-${action}`, siloId: "silo-1", subjectKind: "Principal", subjectPrincipalId: "principal-1", subjectGroupId: null, boundaryKind: "Personal", boundaryPrincipalId: "principal-1", boundaryGroupId: null, boundaryCoverage: "Exact", catalogId: capability.catalog.catalogId, catalogRevision: capability.catalog.revision, catalogDigest: capability.catalog.digest, capabilityId: capability.capabilityId, resourceKind: kind, resourceId: id, effect: "Allow", priority: 0, validFrom: new Date(0), expiresAt: null as Date | null, revokedAt: null as Date | null };
+	return { id: `grant-${principalId}-${kind}-${action}`, siloId: "silo-1", subjectKind: "Principal", subjectPrincipalId: principalId, subjectGroupId: null, boundaryKind: "Personal", boundaryPrincipalId: principalId, boundaryGroupId: null, boundaryCoverage: "Exact", catalogId: capability.catalog.catalogId, catalogRevision: capability.catalog.revision, catalogDigest: capability.catalog.digest, capabilityId: capability.capabilityId, resourceKind: kind, resourceId: id, effect: "Allow", priority: 0, validFrom: new Date(0), expiresAt: null as Date | null, revokedAt: null as Date | null };
 }
 
 /** Exercise real service, membership, authorization and MCP assignment owners over mutable database rows. */
@@ -67,7 +67,42 @@ function _Fixture()
 	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.test", maximumStalenessMs: 5_000 } as const;
 	const dependencies = { ..._CreateConversationToolDispatchDependencies({} as never, config), identities, computers };
 	const authority = new PrismaConversationToolDispatchAuthority(transaction as never, dependencies);
-	return { authority, dependencies, transaction, invocation, subject, identityHead, computer, grants, membership, identities, computers };
+	return { authority, dependencies, transaction, invocation, subject, identityHead, computer, grants, membership, principal, identities, computers };
+}
+
+/** Keep company and human grants separate while exercising the real managed evidence owner. */
+function _ManagedFixture()
+{
+	const f = _Fixture();
+	const subject = { ...f.subject, principalId: "managed-1", identity: { ...f.subject.identity, principalId: "managed-1" }, membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "managed-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", agentRevisionDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "managed-evidence", trustedUntil: _MEMBERSHIP.trustedUntil } } as const;
+	const identity = { ...f.identityHead.identity, kind: "managed", principalId: "managed-1" };
+	f.identities.load.mockResolvedValue({ ...f.identityHead, identity });
+	f.transaction.agentRun.findFirst.mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject, inputSnapshotDigest: `sha256:${"e".repeat(64)}` });
+	const service = { id: "service-1", principalId: "managed-1", name: "Company assistant", workloadProfile: {}, activeRevisionId: "revision-1", activeRevision: { id: "revision-1", siloId: "silo-1", agentServiceId: "service-1", state: "Published", digest: `sha256:${"a".repeat(64)}`, personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxDurationMs: 60_000 }, skillAssignments: [], mcpToolAssignments: [{ toolRevisionId: "tool-1" }], boundaryAttachments: [] } };
+	const managedPrincipal = { ...f.principal, id: "managed-1", subject: "company-assistant", provenance: PrincipalProvenance.Internal };
+	const managedToolGrant = _Grant(ProductAuthorizationResourceKinds.McpToolRevision, "tool-1", ProductAuthorizationActions.Invoke, "managed-1");
+	f.grants.push(_Grant(ProductAuthorizationResourceKinds.ModelDefinition, "model-1", ProductAuthorizationActions.Use, "managed-1"), managedToolGrant);
+	const transaction = { ...f.transaction, agentService: { findFirst: vi.fn().mockResolvedValue(service) }, principal: {
+		findFirst: vi.fn(async function _PrincipalById(query: { where: { id: string } })
+		{
+			if (query.where.id === "managed-1")
+				return managedPrincipal;
+			if (query.where.id === f.principal.id)
+				return f.principal;
+			return null;
+		}),
+		findUnique: vi.fn(async function _PrincipalByScope(query: { where: { id_siloId: { id: string } } })
+		{
+			if (query.where.id_siloId.id === "managed-1")
+				return managedPrincipal;
+			if (query.where.id_siloId.id === f.principal.id)
+				return f.principal;
+			return null;
+		}),
+	}, authorizationGrant: { findMany: vi.fn(async function _GrantsForSubjects(query: { where: { OR: { subjectPrincipalId?: string }[] } }) { return f.grants.filter(grant => query.where.OR.some(subject => subject.subjectPrincipalId === grant.subjectPrincipalId)); }) } };
+	const invocation = { ...f.invocation, authorizationEvidence: { ...f.invocation.authorizationEvidence, executionSubject: subject } } as ToolInvocationRecord;
+	const authority = new PrismaConversationToolDispatchAuthority(transaction as never, f.dependencies);
+	return { ...f, authority, invocation, transaction, service, managedToolGrant };
 }
 
 afterEach(function _ResetClock() { vi.useRealTimers(); });
@@ -190,20 +225,33 @@ describe("current conversation tool dispatch authority", function _Suite()
 		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
-	it("preserves the managed revision owner's current exclusion of tool assignments", async function _ManagedToolsRemainUnavailable()
+	it("admits an assigned company tool through the assistant's own principal", async function _ManagedToolAdmission()
 	{
-		const f = _Fixture();
-		const subject = { ...f.subject, principalId: "managed-1", identity: { ...f.subject.identity, principalId: "managed-1" } };
-		const identity = { ...f.identityHead.identity, kind: "managed", principalId: "managed-1" };
-		f.identities.load.mockResolvedValue({ ...f.identityHead, identity });
-		f.transaction.agentRun.findFirst.mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject });
-		const service = { id: "service-1", principalId: "managed-1", name: "Company assistant", workloadProfile: {}, activeRevisionId: "revision-1", activeRevision: { id: "revision-1", siloId: "silo-1", agentServiceId: "service-1", state: "Published", digest: `sha256:${"a".repeat(64)}`, personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxDurationMs: 60_000 }, skillAssignments: [], mcpToolAssignments: [{ toolRevisionId: "tool-1" }], boundaryAttachments: [] } };
-		const transaction = { ...f.transaction, agentService: { findFirst: vi.fn().mockResolvedValue(service) } };
-		const invocation = { ...f.invocation, authorizationEvidence: { ...f.invocation.authorizationEvidence, executionSubject: subject } } as ToolInvocationRecord;
-		const authority = new PrismaConversationToolDispatchAuthority(transaction as never, f.dependencies);
-		await expect(authority.admitUntil(invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
-		expect(transaction.agentService.findFirst).toHaveBeenCalledOnce();
-		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
+		const f = _ManagedFixture();
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(_NOW.getTime() + 5_000);
+		expect(f.transaction.agentService.findFirst).toHaveBeenCalledOnce();
+		expect(f.transaction.authorizationGrant.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { siloId: "silo-1", OR: [{ subjectKind: "Principal", subjectPrincipalId: "managed-1", subjectGroupId: null }] } }));
+		expect(f.transaction.auditDecision.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ actorKind: "Workload", actorId: _WORKLOAD.podUid, resourceKind: ProductAuthorizationResourceKinds.McpToolRevision, resourceId: "tool-1" }) });
+	});
+
+	it("does not borrow the human tool grant after the company grant is revoked", async function _ManagedGrantRevoked()
+	{
+		const f = _ManagedFixture();
+		f.managedToolGrant.revokedAt = _NOW;
+		expect(f.grants[2]!.revokedAt).toBeNull();
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
+	});
+
+	it.each(["revision", "requester", "assignment"])("denies company dispatch after current %s changes", async function _ManagedCurrentAuthority(change)
+	{
+		const f = _ManagedFixture();
+		if (change === "revision")
+			f.service.activeRevisionId = "revision-2";
+		else if (change === "requester")
+			f.membership.status = OrgMemberStatus.Suspended;
+		else
+			f.transaction.agentRevisionMcpToolAssignment.findFirst.mockResolvedValue(null);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 });

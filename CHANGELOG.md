@@ -42,12 +42,16 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   `POST /api/v1/organization/company-assistant` selects its model and the people allowed to invoke
   it. Setup retries preserve the existing assistant and do not restore revoked grants.
 
-- **Conversation workloads can store a proposed tool call without dispatching it.** The private
-  route accepts one frozen tool revision and validated arguments, checks current permission and
-  preserves the same proposal across retries. Connecting it to model execution and durable
-  conversation results remains in development.
-  A durable reservation prevents unresolved tool work from being accepted as a final answer.
-  Exact proposal retries are supported; automatic recovery of an abandoned reservation is pending.
+- **An assistant can finish one permitted tool call before answering.** The model may select one
+  frozen tool that needs no approval; the server admits execution, retains its result privately
+  and reserves one final text request within the original allowance. CI passes. Installation,
+  real-integration proof and visible tool progress remain pending.
+
+- **Administrators can assign existing tools to the company assistant through the API.** An update
+  publishes a new immutable assistant revision and changes only that assistant's tool permissions.
+  A stale edit returns a conflict. Removing a tool prevents new dispatch through its old revision;
+  the assistant never borrows the requesting employee's tool grant or private credentials.
+  Company assignment awaits CI and live qualification.
 
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,

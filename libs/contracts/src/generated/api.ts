@@ -1456,6 +1456,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organization/company-assistant/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the company assistant's current tool selection
+         * @description Requires current Organization Administer. Returns the exact active immutable revision and sorted tool revision IDs. This read does not record effect admission or supply external credentials.
+         */
+        get: operations["getCompanyAssistantTools"];
+        /**
+         * Replace the company assistant's tool selection
+         * @description Requires current Organization Administer and Assign on every selected same-silo ready tool revision of an active published server. Publishes an immutable successor and reconciles only the company's own Use/Invoke grants for removed and selected tools. A current unchanged selection is a no-op after fresh authorization. A stale expected revision always returns 409, including a retry after an uncertain successful commit; GET the authoritative selection before editing again. Empty selection removes all tools. This API creates no install or external credential binding and cannot borrow human private credentials.
+         */
+        put: operations["setCompanyAssistantTools"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organization/company-assistant": {
         parameters: {
             query?: never;
@@ -8007,6 +8031,131 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    getCompanyAssistantTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current administrator permission denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active published company assistant unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setCompanyAssistantTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedActiveRevisionId: string;
+                    toolRevisionIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Committed successor or unchanged current selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Invalid tool selection. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current assignment permission or selected tool unavailable. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active published company assistant unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active revision changed; read current selection before another edit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Assignment dependency unavailable; a failed response may follow a commit, so read current selection. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

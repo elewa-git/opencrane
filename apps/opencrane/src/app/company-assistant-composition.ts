@@ -14,8 +14,9 @@ import { _log } from "./log";
  * Composes the administrator's company assistant setup under the deployed computer profile.
  *
  * Called by: public route composition after browser authentication is installed.
- * The first shared assistant performs one bounded text turn per request. Its service owner rejects
- * personal memory, skills and tool assignments until those paths have their own product proof.
+ * New assistants have two model calls within the original total token and time ceilings, so one
+ * selected tool can be followed by a final answer. Tool edits preserve existing revision budgets;
+ * personal memory, skills and boundary assignments remain unsupported.
  * @see PrismaCompanyAssistantProvisioningUnitOfWork for current permission checks and recoverable creation.
  */
 export function _CreateCompanyAssistantComposition(prisma: PrismaClient, history: HistoryStore, profile: AgentSandboxReleaseProfileConfig): Router
@@ -23,7 +24,7 @@ export function _CreateCompanyAssistantComposition(prisma: PrismaClient, history
 	const authority = new PrismaCompanyAssistantProvisioningUnitOfWork(prisma, {
 		workloadProfile: profile.profileName,
 		promptPolicyVersion: PROMPT_COMPILER_VERSION,
-		budget: { maxTurns: 1, maxTokens: 32_000, maxDurationMs: 120_000 },
+		budget: { maxTurns: 2, maxTokens: 32_000, maxDurationMs: 120_000 },
 	}, new AgentIdentityHistory(history));
 	return _CreateCompanyAssistantProvisioningRouter(authority, function _ResolveAdministrator(request)
 	{
