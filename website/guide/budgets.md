@@ -65,16 +65,24 @@ The model-routing service mints an attempt-scoped LiteLLM virtual key. The key c
 - an expiry aligned with the workload assignment; and
 - no upstream provider secret.
 
-The current text model-step source rechecks the computer lease generation, AgentIdentity,
-membership and claimed Pod UID, then keeps the attempt key on the server. Bootstrap returns only
-the turn id and status. Before model I/O, the server reserves one OpenAI-compatible gateway request
-within the original call allowance and the smaller of the response and run completion-token limits.
-Restart does not replenish those limits or permit another dispatch.
+The server rechecks the computer lease generation, AgentIdentity, membership and claimed Pod UID,
+then keeps the attempt key itself. Bootstrap returns only the turn id and status. Each model request
+needs a saved reservation within the original call, completion-token and authority limits; restart
+does not replenish those limits or permit that request to dispatch again.
+
+The continuation implementation may reserve a first request that can select one tool requiring no
+approval, followed by a final text request after the exact result is available. The whole first
+token reservation is subtracted before the second is reserved, even if the provider reports less
+usage. Both requests reuse the same key and spend ceiling. The key's original authority window,
+capped at 300 seconds, is separate from each request's at-most-25-second deadline; actual key expiry
+or shorter current authority ends further work. Expired, missing or uncertain key custody cannot
+produce a replacement allowance. Cleanup clears secret material and retains a spent-attempt marker.
 
 A saved answer is completed from its original event. An uncertain response keeps the spent request
 reservation and pending run for future recovery controls. This does not establish exactly-once
-execution inside LiteLLM or a provider; their internal retry policies remain unqualified. The
-replacement is under review and is not yet CI-qualified or installed on testv5.
+execution inside LiteLLM or a provider; their internal retry policies remain unqualified. The text
+checkpoint has passed full CI, while the continuation implementation in PR #830 awaits CI and live
+qualification. Neither replacement is installed on testv5. See [development status](/guide/status).
 
 ## When a spending limit is reached
 

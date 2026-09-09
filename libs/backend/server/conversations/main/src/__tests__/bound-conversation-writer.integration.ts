@@ -1,3 +1,5 @@
+import { ConversationModelToolModes } from "@opencrane/contracts";
+import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
 import { _ModelReservationFixture, _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { randomUUID } from "node:crypto";
 
@@ -50,7 +52,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 			bootstrapId: randomUUID(), siloId, computerId,
 			lease: { leaseId: randomUUID(), leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` },
 			latestPendingEntryId: randomUUID(), modelAlias: "proof-model", maximumBudgetUsd: 0.05,
-			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolReservation: null, modelReservation: null,
+			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null,
 			binding: { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId: randomUUID(), agentServiceId: randomUUID(), agentName: "Ada", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 },
 			compile: { runId, attempt: 1, promptCompilerVersion: "proof-v1", digest: `sha256:${"a".repeat(64)}` },
 		};
@@ -73,7 +75,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 	}
 
 	/** Hold two independent clients until both decision appends reach the same expected revision. */
-	function _RacingStores()
+	function _RacingStores(expectedRevision = 0n)
 	{
 		let arrivals = 0;
 		let release!: () => void;
@@ -85,7 +87,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 				readStream: history.readStream.bind(history),
 				append: async function _AtSameRevision(command: HistoryAppend)
 				{
-					expect(command.expectedRevision).toBe(0n);
+					expect(command.expectedRevision).toBe(expectedRevision);
 					arrivals += 1;
 					if (arrivals === 2)
 						release();
@@ -110,27 +112,47 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		await expect(restarted.reserveModel(turn.bootstrapId, _ModelReservationFixture(turn, randomUUID()))).resolves.toBe(false);
 	});
 
-	it("elects either the model request or tool reservation at the same live revision", async function ()
+	it("elects either a direct answer or saved tool declaration at the same live revision", async function ()
 	{
-		const turn = await _Freeze(_Connect());
-		const model = _ModelReservationFixture(turn, randomUUID());
-		const tool = { proposalId: "11111111-1111-4111-8111-111111111111", requestFingerprint: `sha256:${"b".repeat(64)}` };
-		const [modelStore, toolStore] = _RacingStores();
-		const [modelResult, toolResult] = await Promise.allSettled([modelStore!.reserveModel(turn.bootstrapId, model), toolStore!.reserveTool(turn.bootstrapId, tool)]);
+		const history = _Connect();
+		const turn = await _Freeze(history);
+		const first = _ModelReservationFixture(turn, randomUUID(), ConversationModelToolModes.Select);
+		await new KurrentConversationComputerTurnStore(history).reserveModel(turn.bootstrapId, first);
+		const tool = { proposalId: randomUUID(), requestFingerprint: `sha256:${"b".repeat(64)}`, payloadRef: randomUUID(), ciphertextDigest: `sha256:${"c".repeat(64)}` };
+		const answer = await _PrepareConversationOutputIntent(turn, first.invocationFence);
+		const [answerStore, toolStore] = _RacingStores(1n);
+		const results = await Promise.allSettled([answerStore!.markOutput(turn.bootstrapId, answer), toolStore!.selectTool(turn.bootstrapId, tool)]);
+		expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
 		const winner = (await new KurrentConversationComputerTurnStore(_Connect()).load(turn.bootstrapId))!;
-		if (winner.modelReservation !== null)
-		{
-			expect(winner.modelReservation).toEqual(model);
-			expect(winner.toolReservation).toBeNull();
-			expect(modelResult).toEqual({ status: "fulfilled", value: true });
-			expect(toolResult.status).toBe("rejected");
-		}
-		else
-		{
-			expect(winner.toolReservation).toEqual(tool);
-			expect(modelResult).toEqual({ status: "fulfilled", value: false });
-			expect(toolResult).toEqual({ status: "fulfilled", value: undefined });
-		}
+		expect(winner.outputReceipt !== null).not.toBe(winner.toolSelection !== null);
+	});
+
+	it("reserves one post-tool request and recovers its final answer across independent clients", async function ()
+	{
+		const history = _Connect();
+		const turn = await _Freeze(history);
+		const store = new KurrentConversationComputerTurnStore(history);
+		const first = _ModelReservationFixture(turn, randomUUID(), ConversationModelToolModes.Select);
+		await store.reserveModel(turn.bootstrapId, first);
+		const selection = { proposalId: randomUUID(), requestFingerprint: `sha256:${"b".repeat(64)}`, payloadRef: randomUUID(), ciphertextDigest: `sha256:${"c".repeat(64)}` };
+		await store.selectTool(turn.bootstrapId, selection);
+		const selected = (await store.load(turn.bootstrapId))!;
+		const facts = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: turn.compile.digest, maxCompletionTokens: 50, authorityExpiresAtEpochMs: first.authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: first.dispatchDeadlineEpochMs, continuation: { payloadRef: randomUUID(), ciphertextDigest: `sha256:${"d".repeat(64)}` }, proposalId: selection.proposalId, resultDigest: `sha256:${"e".repeat(64)}` };
+		const contenders = [0, 1].map(() => ({ ...facts, invocationFence: randomUUID(), requestDigest: _ConversationModelRequestDigest(selected, facts) }));
+		const stores = _RacingStores(2n);
+		const results = await Promise.all(stores.map((client, index) => client.reserveContinuation(turn.bootstrapId, contenders[index]!)));
+		expect(results.filter(Boolean)).toHaveLength(1);
+		const winner = contenders[results.indexOf(true)]!;
+		const restarted = new KurrentConversationComputerTurnStore(_Connect());
+		await expect(restarted.reserveContinuation(turn.bootstrapId, winner)).resolves.toBe(false);
+		const intent = await _PrepareConversationOutputIntent(turn, winner.invocationFence);
+		await restarted.markOutput(turn.bootstrapId, intent);
+		const restored = (await new KurrentConversationComputerTurnStore(_Connect()).load(turn.bootstrapId))!;
+		expect(restored.toolSelection).toEqual(selection);
+		expect(restored.continuationReservation).toEqual(winner);
+		expect(restored.outputReceipt).toEqual(intent);
+		await _Writer(_Connect(), restored).append(restored.outputReceipt!);
+		expect(await _Outputs(history, intent)).toHaveLength(1);
 	});
 
 	it("persists the complete prepared answer and recovers it across fresh clients before and after append", async function ()

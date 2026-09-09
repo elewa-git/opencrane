@@ -1,6 +1,7 @@
+import type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolResults, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
 import type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";
-import type { ConversationToolProposalAdmission, ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
-import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ConversationToolProposalReceipt, ComputerScope, LeaseScope } from "@opencrane/contracts";
+import type { ConversationToolProposalAdmission } from "./conversation-tool-proposal.types";
+import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
@@ -68,10 +69,8 @@ export interface ConversationComputerTurnAuthority
 	reviewCredential(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerReviewCredentialGrant>;
 	/** Return turn status, or null after saved-output recovery or while no work is admitted. */
 	bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>;
-	/** Reserve and execute the single server-owned model request, or report its existing status. */
+	/** Advance one server-owned model/tool step, or report its existing status. */
 	modelStep(command: ConversationComputerModelStepCommand): Promise<ConversationComputerModelStepResult>;
-	/** Save one tool proposal after current Pod, lease and frozen-input checks, without executing it. */
-	proposeTool(command: ConversationToolProposalCommand): Promise<ConversationToolProposalReceipt>;
 }
 
 /** Server-resolved coordinates shared by a freshly compiled candidate and its frozen record. */
@@ -139,19 +138,12 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly outputSourceCommandId: string | null;
 	/** Receipt of the durable output, or null while the turn is still open. */
 	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
-	/** Blocks terminal output while the exact proposed call remains unresolved. */
-	readonly toolReservation: ConversationComputerToolReservation | null;
-	/** Consumes the single text-only model allowance across retries and process restarts. */
+	/** Identifies the saved model-selected tool; unresolved work cannot produce final output. */
+	readonly toolSelection: ConversationComputerToolSelection | null;
+	/** Consumes the second and final model allowance after the exact tool result is saved. */
+	readonly continuationReservation: ConversationComputerContinuationReservation | null;
+	/** Consumes the first model allowance across retries and process restarts. */
 	readonly modelReservation: ConversationComputerModelReservation | null;
-}
-
-/** Durable decision to pursue one proposal; PostgreSQL remains the authority for its admission and outcome. */
-export interface ConversationComputerToolReservation
-{
-	/** Server-derived single slot for the frozen run attempt. */
-	readonly proposalId: string;
-	/** Binds the slot to the exact frozen assignment, tool and argument digest without storing content. */
-	readonly requestFingerprint: string;
 }
 
 /** Keeps the complete server-stamped output intent in the existing durable turn decision. */
@@ -239,7 +231,9 @@ export interface ConversationComputerTurnStore
 	/** Appends the output receipt, or recognizes the same receipt on an uncertain retry. */
 	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<ConversationComputerOutputDecision>;
 	/** Reserves a proposal against the same turn revision as model dispatch, before database admission. */
-	reserveTool(bootstrapId: string, reservation: ConversationComputerToolReservation): Promise<void>;
+	selectTool(bootstrapId: string, selection: ConversationComputerToolSelection): Promise<void>;
+	/** Reserve the final request after exact result custody; only the live winner may send. */
+	reserveContinuation(bootstrapId: string, reservation: ConversationComputerContinuationReservation): Promise<boolean>;
 	/** Return true only when this call stored and read back its fresh model fence; false never permits dispatch. */
 	reserveModel(bootstrapId: string, reservation: ConversationComputerModelReservation): Promise<boolean>;
 	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
@@ -267,12 +261,38 @@ export interface ConversationComputerCredentialIssueCommand
 	readonly notAfter: string;
 }
 
-/** Mints a short-lived virtual key restricted to one model alias and attempt budget. */
+/** Returns server-held key material and the receipt a later model step must match. */
+export interface ConversationComputerCredentialReceipt
+{
+	/** Carries the raw key in server memory; never persist it in the turn stream. */
+	readonly key: string;
+	/** Binds a later step to the same issued key. */
+	readonly credentialDigest: string;
+	/** Preserves the actual provider-reported expiry rather than a newly calculated lifetime. */
+	readonly expiresAt: string;
+}
+
+/**
+ * Requires existing custody to match the first accepted model response's credential receipt.
+ * Supply the original issue coordinates and authority limit; reuse ignores the relative lifetime
+ * and never resets the spend ceiling or actual key expiry.
+ */
+export interface ConversationComputerCredentialReuseCommand extends ConversationComputerCredentialIssueCommand
+{
+	/** Requires the digest saved with the accepted response; a replacement key is refused. */
+	readonly expectedCredentialDigest: string;
+	/** Requires the actual expiry saved with that digest; reuse never renews this deadline. */
+	readonly expectedExpiresAt: string;
+}
+
+/** Keeps one attempt key across model steps without replacing spent or uncertain custody. */
 export interface ConversationComputerCredentialIssuer
 {
-	/** Atomically return the current credential or revoke it before installing a replacement. */
-	issueOrRotate(input: ConversationComputerCredentialIssueCommand): Promise<{ readonly key: string; readonly credentialDigest: string }>;
-	/** Revoke and forget the attempt credential after terminal output. */
+	/** Mint for the live first-reservation owner or recover its usable custody; refusal never grants another dispatch. */
+	issueOnce(input: ConversationComputerCredentialIssueCommand): Promise<ConversationComputerCredentialReceipt>;
+	/** Read the same unexpired key under current lease authority; missing or mismatched custody never mints a key. */
+	reuseExact(input: ConversationComputerCredentialReuseCommand): Promise<ConversationComputerCredentialReceipt>;
+	/** Revoke and clear secret custody while retaining the spent attempt marker. */
 	revoke(bootstrapId: string): Promise<void>;
 }
 
@@ -297,6 +317,10 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly endpoint: string;
 	/** Performs one request; credentials remain behind this server-only port. */
 	readonly model: ConversationComputerModelTransport;
+	/** Keeps accepted tool declarations and result pairs encrypted until the turn refers to them. */
+	readonly modelCustody: ConversationComputerModelCustody;
+	/** Reads and acknowledges the exact original tool result under current authority. */
+	readonly toolResults: ConversationComputerToolResults;
 	/** Receives closed diagnostics only, never prompts, keys or provider response data. */
 	readonly logger: Pick<Logger, "warn">;
 	/** Derives the review gateway secret under the server-only key. */

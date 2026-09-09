@@ -74,14 +74,14 @@ class ConfigurationTests(unittest.TestCase):
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request")
     def test_requests_only_the_reserved_first_server_model_step(self, exchange: MagicMock, _token: MagicMock) -> None:
-        """Send only the bootstrap and ordinal with the current projected token."""
+        """Send only the bootstrap identifier with the current projected token."""
         config = {"internalEndpoint": "http://server:8081", "tokenPath": "/token"}
         for outcome in ("completed", "pending", "response_unavailable", "authority_ended"):
             with self.subTest(outcome=outcome):
                 exchange.reset_mock()
                 exchange.return_value = {"outcome": outcome}
                 self.assertEqual(_execute_turn(config, {"bootstrapId": "bootstrap-1", "outcome": "ready"}), outcome)
-                exchange.assert_called_once_with("http://server:8081/api/internal/conversation-computer/model-step", "projected-token", {"bootstrapId": "bootstrap-1", "ordinal": 1})
+                exchange.assert_called_once_with("http://server:8081/api/internal/conversation-computer/model-step", "projected-token", {"bootstrapId": "bootstrap-1"})
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request")
@@ -179,7 +179,7 @@ class ConfigurationTests(unittest.TestCase):
             server.server_close()
         self.assertEqual(received, [
             ("/api/internal/conversation-computer/bootstrap?computerId=computer-1&generation=1&leaseId=lease-1", "Bearer bootstrap-token", {}),
-            ("/api/internal/conversation-computer/model-step", "Bearer model-step-token", {"bootstrapId": "bootstrap-1", "ordinal": 1}),
+            ("/api/internal/conversation-computer/model-step", "Bearer model-step-token", {"bootstrapId": "bootstrap-1"}),
         ])
 
 

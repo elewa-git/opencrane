@@ -44,3 +44,6 @@ export { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 export { ConversationToolProposalOutcomes } from "./conversation-tool-proposal.types";
 export type { ConversationToolProposal, ConversationToolProposalReceipt } from "./conversation-tool-proposal.types";
 export { ___ConversationToolProposalSchema } from "./conversation-tool-proposal.validator";
+
+export * from "./conversation-model.types";
+export { ___ConversationModelToolCallSchema, ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema } from "./conversation-model.validator";

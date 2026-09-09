@@ -1,3 +1,8 @@
+export { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
+export { PrismaConversationModelCustodyUnitOfWork } from "./db/prisma-conversation-model-custody";
+export { PrismaConversationToolResultsUnitOfWork } from "./db/prisma-conversation-tool-results";
+export { ConversationComputerToolResultOutcomes } from "./conversation-computer-continuation.types";
+export type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolSelection, ConversationComputerToolResults } from "./conversation-computer-continuation.types";
 /**
  * Public entry point for `@opencrane/backend/server/conversations`.
  *
@@ -40,7 +45,7 @@ export { ActiveConversationComputerTurnCandidateResolver } from "./conversation-
 export { KurrentConversationComputerTurnStore } from "./conversation-computer-turn-store";
 export { PrismaConversationComputerTurnUnitOfWork } from "./db/prisma-conversation-computer-turn-unit-of-work";
 export { PrismaConversationComputerCredentialUnitOfWork } from "./db/prisma-conversation-computer-credential-issuer";
-export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPrePersistedMessageInput, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnCompileAnchor, ConversationComputerTurnCompileCommand, ConversationComputerTurnCoordinates, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPrePersistedMessageInput, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnCompileAnchor, ConversationComputerTurnCompileCommand, ConversationComputerTurnCoordinates, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 export type { ConversationComputerRawCredentialAuthority } from "./conversation-computer-turn.types";
 export { ConversationComputerHistory } from "./conversation-computers";
 export type { ActiveConversationComputerLease, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerLeaseCoordinates, CurrentConversationComputer } from "./conversation-computers";
@@ -74,7 +79,7 @@ export type { ConversationToolDispatchAuthority, ConversationToolDispatchDepende
 export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./db/prisma-conversation-tool-proposal";
 export { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 export { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
-export type { ConversationToolProposalAdmission, ConversationToolProposalCommand, ConversationToolProposalRuntimeAdmission } from "./conversation-tool-proposal.types";
+export type { ConversationToolProposalAdmission, ConversationToolProposalRuntimeAdmission } from "./conversation-tool-proposal.types";
 
 export { ConversationComputerModelStepOutcomes } from "./conversation-computer-model.types";
 export type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";

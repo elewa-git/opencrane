@@ -1,4 +1,4 @@
-import { PrismaConversationToolProposalUnitOfWork } from "@opencrane/backend/server/conversations";
+import { __AssertConversationComputerAnswerAuthority, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork } from "@opencrane/backend/server/conversations";
 import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { _CreateConversationToolDispatchDependencies } from "./mcp-runtime-composition";
 import type * as k8s from "@kubernetes/client-node";
@@ -6,7 +6,7 @@ import type { PrismaClient } from "@prisma/client";
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import { AesGcmConversationPrivatePayloadCipher, ActiveConversationComputerTurnCandidateResolver, BoundConversationWriter, ConversationComputerHistory, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, KurrentConversationComputerTurnStore, PrismaConversationComputerCredentialUnitOfWork, PrismaConversationComputerTurnUnitOfWork, _CreateConversationComputerTurnRouter } from "@opencrane/backend/server/conversations";
 import type { ConversationComputerRunAdmissionPort, ConversationToolProposalRuntimeAdmission, FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
-import { __RequestConversationModelText, _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "@opencrane/backend/server/gateways/model-routing";
+import { __RequestConversationModel, _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "@opencrane/backend/server/gateways/model-routing";
 import { AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { _CreateConversationComputerTokenReviewer, type RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
@@ -35,9 +35,12 @@ export function _CreateConversationComputerTurnComposition(prisma: PrismaClient,
 		{
 			if (visibility.audience !== "conversation")
 				throw new Error("Conversation computer output requires conversation visibility");
-		} }, { assertMayAppend: async function _RecheckLeaseAtAppend() { await candidates.assertCurrent(turn, workload); } });
+		} }, { assertMayAppend: async function _RecheckLeaseAtAppend() { await __AssertConversationComputerAnswerAuthority(turn, workload, { candidates, toolResults }); } });
 	} };
-	const toolProposals = new PrismaConversationToolProposalUnitOfWork(prisma, _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig()), runtimeAdmission);
-	const authority = new ConversationComputerTurnAuthorityService({ logger: _log, model: { request: __RequestConversationModelText }, toolProposals, siloId, candidates, credentials, endpoint: process.env.LITELLM_ENDPOINT ?? "", outputPayloads: unitOfWork, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
+	const toolDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
+	const toolProposals = new PrismaConversationToolProposalUnitOfWork(prisma, toolDependencies, runtimeAdmission);
+	const toolResults = new PrismaConversationToolResultsUnitOfWork(prisma, siloId, turnStore, candidates, toolDependencies);
+	const modelCustody = new PrismaConversationModelCustodyUnitOfWork(prisma, cipher);
+	const authority = new ConversationComputerTurnAuthorityService({ logger: _log, model: { request: __RequestConversationModel }, modelCustody, toolResults, toolProposals, siloId, candidates, credentials, endpoint: process.env.LITELLM_ENDPOINT ?? "", outputPayloads: unitOfWork, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
 	return _CreateConversationComputerTurnRouter({ logger: _log, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName), authority });
 }

@@ -1,8 +1,9 @@
+import { __AssertConversationComputerAnswerAuthority } from "../conversation-computer-answer-authority";
 import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { vi } from "vitest";
 
-import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { ConversationModelResponseKinds, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { BoundConversationWriter } from "../bound-conversation-writer";
@@ -44,7 +45,7 @@ class _History implements Pick<HistoryStore, "append" | "readStream">
 }
 
 /** Recreate the actual store, writer, Pod/lease resolver and coordinator against shared durable state. */
-export async function _OutputRecoveryHarness(reserveOutput = true)
+export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Partial<ConversationComputerTurnAuthorityDependencies> = {})
 {
 	const history = new _History();
 	const stream = "conversation-conversation-1";
@@ -74,8 +75,8 @@ export async function _OutputRecoveryHarness(reserveOutput = true)
 		const saved = payloads.get(source)!;
 		return { blockId: saved.blockId, payloadRef: saved.payloadRef, ciphertextDigest: saved.ciphertextDigest };
 	}) };
-	const model = { request: vi.fn().mockResolvedValue({ text: "A private chosen answer" }) };
-	const credentials = { issueOrRotate: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: "sha256:test" }), revoke: vi.fn().mockResolvedValue(undefined) };
+	const model = { request: vi.fn().mockResolvedValue({ kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" }) };
+	const credentials = { issueOnce: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" }), reuseExact: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" }), revoke: vi.fn().mockResolvedValue(undefined) };
 	const runLifecycle = { start: vi.fn().mockResolvedValue(undefined), complete: vi.fn(async function _Complete()
 	{
 		if (flags.runState === "failed")
@@ -85,15 +86,15 @@ export async function _OutputRecoveryHarness(reserveOutput = true)
 	function _Restart()
 	{
 		const store = new KurrentConversationComputerTurnStore(history);
-		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { create: function _Writer(turn, workload)
+		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { create: function _Writer(turn, workload)
 		{
 			return new BoundConversationWriter(history, turn.binding, { now: function _Now() { return new Date(Date.parse("2026-09-08T23:00:00.000Z") + flags.stamp++ * 1_000); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility()
 			{
 				if (!flags.mayUseVisibility)
 					throw new Error("visibility denied");
-			} }, { assertMayAppend: async function _Fence() { await candidates.assertCurrent(turn, workload); } });
+			} }, { assertMayAppend: async function _Fence() { await __AssertConversationComputerAnswerAuthority(turn, workload, { candidates, toolResults: overrides.toolResults ?? dependencies.toolResults }); } });
 		} } };
-		return new ConversationComputerTurnAuthority(dependencies);
+		return new ConversationComputerTurnAuthority({ ...dependencies, ...overrides });
 	}
 	const command = { computerId: "computer-1", lease, workload: { subject: "system:serviceaccount:computers:computer", namespace: "computers", serviceAccountName: "computer", podUid: "pod-1" } };
 	const authority = _Restart();
@@ -101,5 +102,5 @@ export async function _OutputRecoveryHarness(reserveOutput = true)
 	const output = { bootstrapId: bootstrap!.bootstrapId, sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"), text: "A private chosen answer", workload: command.workload };
 	if (reserveOutput)
 		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(history), bootstrap!.bootstrapId, output.sourceCommandId);
-	return { model, history, stream, current, flags, compiler, pods, candidates, payloads, outputPayloads, credentials, runLifecycle, command, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
+	return { candidate, model, history, stream, current, flags, compiler, pods, candidates, payloads, outputPayloads, credentials, runLifecycle, command, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
 }

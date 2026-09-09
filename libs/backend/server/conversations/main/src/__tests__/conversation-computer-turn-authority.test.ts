@@ -1,3 +1,4 @@
+import type { ConversationComputerToolSelection } from "../conversation-computer-continuation.types";
 import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import type { ConversationComputerModelReservation } from "../conversation-computer-model.types";
 import { _PrepareBoundDraft } from "./conversation-output-intent.fixture";
@@ -7,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerTurnAuthority } from "../conversation-computer-turn-authority";
-import type { ConversationComputerToolReservation, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 
 const _WORKLOAD = {
   subject: "system:serviceaccount:testv5:conversation-computer",
@@ -55,7 +56,7 @@ function _Harness() {
   let active = false;
   const append = vi.fn().mockResolvedValue({});
   const dependencies = {
-    logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ text: "Hi" }) },
+    logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "Hi" }) },
     siloId: "testv5",
     toolProposals: { admit: vi.fn() },
     candidates: {
@@ -76,14 +77,18 @@ function _Harness() {
     },
     reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") },
     credentials: {
-      issueOrRotate: vi
+      issueOnce: vi
         .fn()
         .mockResolvedValue({
           key: "sk-attempt",
           credentialDigest: `sha256:${"b".repeat(64)}`,
+          expiresAt: "2099-01-01T00:00:00.000Z",
         }),
+      reuseExact: vi.fn(),
       revoke: vi.fn().mockResolvedValue(undefined),
     },
+    modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() },
+    toolResults: { read: vi.fn(), consume: vi.fn() },
     endpoint: "http://litellm.testv5.svc.cluster.local:4000",
     outputPayloads: {
       store: vi
@@ -99,14 +104,15 @@ function _Harness() {
       complete: vi.fn().mockResolvedValue(undefined),
     },
     store: {
+      reserveContinuation: vi.fn(),
       reserveModel: vi.fn(async function _ReserveModel(_id: string, reservation: ConversationComputerModelReservation)
       {
-        if (stored?.modelReservation !== null || stored?.toolReservation !== null)
+        if (stored?.modelReservation !== null || stored?.toolSelection !== null)
           return false;
         stored = { ...stored!, modelReservation: reservation };
         return true;
       }),
-      reserveTool: vi.fn(async function _Reserve(_id: string, reservation: ConversationComputerToolReservation) { stored = { ...stored!, toolReservation: reservation }; }),
+      selectTool: vi.fn(async function _Reserve(_id: string, reservation: ConversationComputerToolSelection) { stored = { ...stored!, toolSelection: reservation }; }),
       createOrRead: vi.fn(async function _Create(
         turn: FrozenConversationComputerTurn,
       ) {
@@ -174,7 +180,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       promptCompilerVersion: "conversation-computer-v1",
       digest: `sha256:${"a".repeat(64)}`,
     });
-    expect(dependencies.credentials.issueOrRotate).not.toHaveBeenCalled();
+    expect(dependencies.credentials.issueOnce).not.toHaveBeenCalled();
   });
 
   it("appends one safe encrypted payload reference and makes the retry idempotent", async function _Output() {
@@ -257,7 +263,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     await expect(authority.bootstrap(command)).rejects.toThrow(
       /recompiled input .* does not match the frozen turn digest/,
     );
-    expect(dependencies.credentials.issueOrRotate).not.toHaveBeenCalled();
+    expect(dependencies.credentials.issueOnce).not.toHaveBeenCalled();
   });
 
   it("rejects stale or cross-silo workload evidence before credential or output use", async function _Fence() {
@@ -272,7 +278,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
         workload: { ..._WORKLOAD, namespace: "foreign" },
       }),
     ).rejects.toThrow(/stale lease/);
-    expect(dependencies.credentials.issueOrRotate).not.toHaveBeenCalled();
+    expect(dependencies.credentials.issueOnce).not.toHaveBeenCalled();
   });
   it("uses the current absolute authority bound when reserving the model request", async function () {
     const { authority, dependencies } = _Harness();
@@ -281,47 +287,9 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const candidate = await dependencies.candidates.resolve(command);
     const notAfter = new Date(Date.now() + 20_000).toISOString();
     dependencies.candidates.resolve.mockResolvedValue({ ...candidate, credentialLifetimeSeconds: 20, credentialExpiresAt: notAfter });
-    expect(await authority.modelStep({ bootstrapId: bootstrap!.bootstrapId, ordinal: 1, workload: _WORKLOAD })).toEqual({ outcome: "completed" });
-    expect(dependencies.credentials.issueOrRotate).toHaveBeenLastCalledWith(expect.objectContaining({ expirySeconds: 20, notAfter }));
+    expect(await authority.modelStep({ bootstrapId: bootstrap!.bootstrapId, workload: _WORKLOAD })).toEqual({ outcome: "completed" });
+    expect(dependencies.credentials.issueOnce).toHaveBeenLastCalledWith(expect.objectContaining({ expirySeconds: 20, notAfter }));
     expect(dependencies.model.request).toHaveBeenCalledWith(expect.objectContaining({ maxCompletionTokens: 512, notAfterEpochMs: Date.parse(notAfter) }));
   });
 
-});
-
-/** Proposal admission reuses the exact current Pod and turn checks before its database owner runs. */
-describe("conversation tool proposal turn ownership", function _Suite()
-{
-	it("passes the frozen turn and its verified current candidate to the proposal owner", async function _CurrentProposal()
-	{
-		const { authority, dependencies } = _Harness();
-		const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD };
-		const bootstrap = await authority.bootstrap(command);
-		const candidate = await dependencies.candidates.resolve(command);
-		const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
-		const ready = { ...candidate, compiledInput: { ...candidate.compiledInput, tools: [{ name: "records.read", toolRevisionId: "tool-1", description: "Read", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }], budget: { ...candidate.compiledInput.budget, maxToolInvocations: 1, wallClockDeadlineEpochMs: Date.now() + 60_000 } } };
-		dependencies.candidates.assertCurrent.mockResolvedValue(ready);
-		dependencies.toolProposals.admit.mockResolvedValue({ proposalId: "server-slot", outcome: "recorded" });
-		const proposal = { bootstrapId: bootstrap!.bootstrapId, toolRevisionId: "tool-1", arguments: { query: "record" } };
-		expect(await authority.proposeTool({ ...proposal, workload: _WORKLOAD })).toEqual({ proposalId: "server-slot", outcome: "recorded" });
-		expect(dependencies.toolProposals.admit).toHaveBeenCalledWith(dependencies.store.createOrRead.mock.calls[0][0], ready, proposal, { audience: "opencrane-conversation-computer", namespace: _WORKLOAD.namespace, serviceAccountName: _WORKLOAD.serviceAccountName, workloadKind: "pod", workloadUid: _WORKLOAD.podUid, podUid: _WORKLOAD.podUid });
-		expect(dependencies.candidates.assertCurrent).toHaveBeenLastCalledWith(dependencies.store.createOrRead.mock.calls[0][0], _WORKLOAD);
-	});
-	it("refuses missing and output-started turns before proposal admission", async function _ClosedTurn()
-	{
-		const { authority, dependencies } = _Harness();
-		const proposal = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", toolRevisionId: "tool-1", arguments: {}, workload: _WORKLOAD };
-		await expect(authority.proposeTool(proposal)).rejects.toThrow("denied");
-		const bootstrap = await authority.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD });
-		await authority.modelStep({ bootstrapId: bootstrap!.bootstrapId, ordinal: 1, workload: _WORKLOAD });
-		await expect(authority.proposeTool({ ...proposal, bootstrapId: bootstrap!.bootstrapId })).rejects.toThrow("denied");
-		expect(dependencies.toolProposals.admit).not.toHaveBeenCalled();
-	});
-	it("does not admit a proposal when current lease, Pod or input verification fails", async function _CurrentFence()
-	{
-		const { authority, dependencies } = _Harness();
-		const bootstrap = await authority.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD });
-		dependencies.candidates.assertCurrent.mockRejectedValue(new Error("current Pod or input refused"));
-		await expect(authority.proposeTool({ bootstrapId: bootstrap!.bootstrapId, toolRevisionId: "tool-1", arguments: {}, workload: _WORKLOAD })).rejects.toThrow("current Pod or input refused");
-		expect(dependencies.toolProposals.admit).not.toHaveBeenCalled();
-	});
 });

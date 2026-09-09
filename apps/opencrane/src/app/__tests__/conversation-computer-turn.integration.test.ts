@@ -137,7 +137,7 @@ describe("conversation computer turn integration", function _Suite() {
             lease: { leaseId: "lease-one", leaseGeneration: 1, sandboxClaimId: "computer-one-g1" },
           };
     const authority = new ConversationComputerTurnAuthorityService({
-      logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ text: "assistant answer" }) },
+      logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) },
       toolProposals: { admit: vi.fn() },
 		siloId: "testv5",
 		runLifecycle: { start: vi.fn(), complete: vi.fn() },
@@ -147,12 +147,16 @@ describe("conversation computer turn integration", function _Suite() {
         admit: vi.fn(),
       },
       reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") },
+      modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() },
+      toolResults: { read: vi.fn(), consume: vi.fn() },
       credentials: {
-        issueOrRotate: vi
+        reuseExact: vi.fn(),
+        issueOnce: vi
           .fn()
           .mockResolvedValue({
             key: "sk-turn",
             credentialDigest: "sha256:key",
+            expiresAt: "2099-01-01T00:00:00.000Z",
           }),
         revoke: vi.fn(),
       },
@@ -168,7 +172,8 @@ describe("conversation computer turn integration", function _Suite() {
       },
       store: {
         reserveModel: vi.fn(async (_id, reservation) => { frozen = { ...frozen, modelReservation: reservation }; return true; }),
-        reserveTool: vi.fn().mockResolvedValue(undefined),
+        reserveContinuation: vi.fn(),
+        selectTool: vi.fn().mockResolvedValue(undefined),
         createOrRead: vi.fn(async (turn) => (frozen ??= turn)),
         load: vi.fn(async () => frozen),
         markOutput: vi.fn(async function _Mark(_bootstrapId, receipt) { frozen = { ...frozen, outputReceipt: receipt, outputSourceCommandId: receipt.event.id }; return { outcome: "accepted" as const, receipt }; }),
@@ -200,7 +205,7 @@ describe("conversation computer turn integration", function _Suite() {
       .get("/bootstrap?computerId=computer-one&generation=1&leaseId=lease-one")
       .set("authorization", "Bearer projected");
     expect(bootstrap.body).toEqual({ bootstrapId: bootstrap.body.bootstrapId, outcome: "ready" });
-    await request(app).post("/model-step").set("authorization", "Bearer projected").send({ bootstrapId: bootstrap.body.bootstrapId, ordinal: 1 }).expect(200, { outcome: "completed" });
+    await request(app).post("/model-step").set("authorization", "Bearer projected").send({ bootstrapId: bootstrap.body.bootstrapId }).expect(200, { outcome: "completed" });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
         event: expect.objectContaining({ data: expect.objectContaining({ entry: expect.objectContaining({ kind: "message", blocks: [expect.objectContaining({ payloadRef: "payload-one" })] }) }) }),

@@ -102,6 +102,12 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   model-routing types, memory-gateway constants, `ThirdPartySource*`,
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
+- `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall` and
+  `ConversationModelContinuation` — shared server-only model transport contracts. Adjacent strict
+  schemas preserve the original assistant call and validate the combined saved call/result bound.
+  Tool modes distinguish a first selection from text-only continuation. These types grant no tool
+  permission; endpoint and credential fields stay in server memory and must never become workload
+  or browser payloads.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by

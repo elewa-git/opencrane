@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __RequestConversationModelText } from "../core/conversation-model-text";
-import { ConversationModelTextError, ConversationModelTextFailureCodes, type ConversationModelTextRequest } from "../core/conversation-model-text.types";
+import { ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
+import { ___DigestCanonicalJson } from "@opencrane/util";
+
+import { __RequestConversationModel } from "../core/conversation-model";
+import { ConversationModelError, ConversationModelFailureCodes } from "../core/conversation-model.types";
 
 const _telemetry = vi.hoisted(function _captureTelemetry()
 {
@@ -25,7 +28,7 @@ vi.mock("@opencrane/backend/observability", function _observabilityContract()
 const _NOW = Date.parse("2026-09-09T02:00:00.000Z");
 
 /** Supplies frozen inputs whose different ceilings expose accidental widening. */
-function _request(overrides: Partial<ConversationModelTextRequest> = {}): ConversationModelTextRequest
+function _request(overrides: Partial<ConversationModelRequest> = {}): ConversationModelRequest
 {
 	return {
 		compiledInput: {
@@ -36,7 +39,7 @@ function _request(overrides: Partial<ConversationModelTextRequest> = {}): Conver
 			digest: "sha256:test",
 		},
 		endpoint: "http://litellm.release.svc.cluster.local", key: "sk-private-attempt", modelAlias: "admitted-model",
-		maxCompletionTokens: 200, notAfterEpochMs: _NOW + 25_000, ...overrides,
+		maxCompletionTokens: 200, notAfterEpochMs: _NOW + 25_000, tools: ConversationModelToolModes.None, continuation: null, ...overrides,
 	};
 }
 
@@ -74,7 +77,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn().mockResolvedValue(_response());
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request())).resolves.toEqual({ text: "  Saved answer.\n" });
+		await expect(__RequestConversationModel(_request())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Saved answer.\n" });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
 		expect(url.toString()).toBe("http://litellm.release.svc.cluster.local/v1/chat/completions");
@@ -94,7 +97,7 @@ describe("one conversation model text exchange", function _transportSuite()
 			const fetchMock = vi.fn().mockResolvedValue(_response());
 			vi.stubGlobal("fetch", fetchMock);
 			const input = _request();
-			await __RequestConversationModelText({ ...input, maxCompletionTokens: reserved!, compiledInput: { ...input.compiledInput,
+			await __RequestConversationModel({ ...input, maxCompletionTokens: reserved!, compiledInput: { ...input.compiledInput,
 				model: { ...input.compiledInput.model, maxOutputTokens: route! }, budget: { ...input.compiledInput.budget, maxCompletionTokens: budget! },
 			} });
 			expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1].body)).max_tokens).toBe(expected);
@@ -105,7 +108,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		{
 			const fetchMock = vi.fn();
 			vi.stubGlobal("fetch", fetchMock);
-			await expect(__RequestConversationModelText(_request({ endpoint }))).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.InvalidRequest });
+			await expect(__RequestConversationModel(_request({ endpoint }))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 			expect(fetchMock).not.toHaveBeenCalled();
 		});
 
@@ -116,7 +119,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request(overrides))).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.InvalidRequest });
+		await expect(__RequestConversationModel(_request(overrides))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -136,7 +139,7 @@ describe("one conversation model text exchange", function _transportSuite()
 			replacement.model.maxOutputTokens = 0;
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText({ ...input, compiledInput: replacement })).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.InvalidRequest });
+		await expect(__RequestConversationModel({ ...input, compiledInput: replacement })).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -145,7 +148,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		const input = _request();
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText({ ...input, compiledInput: { ...input.compiledInput, instructions } })).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.RequestTooLarge });
+		await expect(__RequestConversationModel({ ...input, compiledInput: { ...input.compiledInput, instructions } })).rejects.toMatchObject({ code: ConversationModelFailureCodes.RequestTooLarge });
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -153,7 +156,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request({ notAfterEpochMs: _NOW }))).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.DeadlineExceeded });
+		await expect(__RequestConversationModel(_request({ notAfterEpochMs: _NOW }))).rejects.toMatchObject({ code: ConversationModelFailureCodes.DeadlineExceeded });
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -172,7 +175,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		const input = _request({ notAfterEpochMs: _NOW + 100_000 });
 		const request = { ...input, notAfterEpochMs: bound === "reserved" ? _NOW + 10 : input.notAfterEpochMs,
 			compiledInput: { ...input.compiledInput, budget: { ...input.compiledInput.budget, wallClockDeadlineEpochMs: bound === "compiled" ? _NOW + 10 : _NOW + 100_000 } } };
-		const outcome = expect(__RequestConversationModelText(request)).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.DeadlineExceeded });
+		const outcome = expect(__RequestConversationModel(request)).rejects.toMatchObject({ code: ConversationModelFailureCodes.DeadlineExceeded });
 		await vi.advanceTimersByTimeAsync(bound === "transport-cap" ? 25_000 : 10);
 		await outcome;
 		expect(seenSignal?.aborted).toBe(true);
@@ -186,7 +189,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode("{\"choices\":")); }, cancel });
 		const fetchMock = vi.fn().mockResolvedValue(new Response(stream, { headers: { "content-type": "application/json" } }));
 		vi.stubGlobal("fetch", fetchMock);
-		const outcome = expect(__RequestConversationModelText(_request({ notAfterEpochMs: _NOW + 10 }))).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.DeadlineExceeded });
+		const outcome = expect(__RequestConversationModel(_request({ notAfterEpochMs: _NOW + 10 }))).rejects.toMatchObject({ code: ConversationModelFailureCodes.DeadlineExceeded });
 		await vi.advanceTimersByTimeAsync(10);
 		await outcome;
 		expect(cancel).toHaveBeenCalledTimes(1);
@@ -201,7 +204,7 @@ describe("one conversation model text exchange", function _transportSuite()
 			return _response();
 		});
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request())).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.DeadlineExceeded });
+		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.DeadlineExceeded });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -215,7 +218,7 @@ describe("one conversation model text exchange", function _transportSuite()
 			return new Promise<Response>(function _captureResponse(accept) { resolve = accept; });
 		});
 		vi.stubGlobal("fetch", fetchMock);
-		const result = __RequestConversationModelText({ ...input, compiledInput: { ...input.compiledInput, messages: mutableMessages } });
+		const result = __RequestConversationModel({ ...input, compiledInput: { ...input.compiledInput, messages: mutableMessages } });
 		mutableMessages[0]!.content = "Changed after dispatch.";
 		resolve(_response());
 		await result;
@@ -228,7 +231,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn().mockResolvedValue(new Response("secret remote error", { status, headers: { location: "https://other.example" } }));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request())).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.HttpRejected });
+		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.HttpRejected });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(fetchMock.mock.calls[0]?.[1].redirect).toBe("error");
 	});
@@ -238,9 +241,9 @@ describe("one conversation model text exchange", function _transportSuite()
 		const secret = "sk-private-attempt Private question. remote raw body";
 		const fetchMock = vi.fn().mockRejectedValue(new Error(secret));
 		vi.stubGlobal("fetch", fetchMock);
-		const failure = await __RequestConversationModelText(_request()).catch(function _capture(error: unknown) { return error; });
-		expect(failure).toBeInstanceOf(ConversationModelTextError);
-		expect(failure).toMatchObject({ code: ConversationModelTextFailureCodes.TransportFailed });
+		const failure = await __RequestConversationModel(_request()).catch(function _capture(error: unknown) { return error; });
+		expect(failure).toBeInstanceOf(ConversationModelError);
+		expect(failure).toMatchObject({ code: ConversationModelFailureCodes.TransportFailed });
 		expect(failure).not.toHaveProperty("cause");
 		expect(_telemetry.errors).toEqual([failure]);
 		expect(String(failure)).not.toContain(secret);
@@ -260,7 +263,7 @@ describe("one conversation model text exchange", function _transportSuite()
 			headers["content-length"] = "1048577";
 		const fetchMock = vi.fn().mockResolvedValue(new Response(stream, { headers }));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request())).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.ResponseTooLarge });
+		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.ResponseTooLarge });
 		expect(cancel).toHaveBeenCalledTimes(1);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -276,7 +279,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn().mockResolvedValue(_response(body));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request())).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.UnsupportedResponse });
+		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -284,7 +287,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn().mockResolvedValue(new Response(body, { headers: { "content-type": "application/json" } }));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request())).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.UnsupportedResponse });
+		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -292,7 +295,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(_answer()), { headers: { "content-type": contentType } }));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModelText(_request())).rejects.toMatchObject({ code: ConversationModelTextFailureCodes.UnsupportedResponse });
+		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -300,6 +303,165 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const text = "é".repeat(32_768);
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response(_answer(text))));
-		await expect(__RequestConversationModelText(_request())).resolves.toEqual({ text });
+		await expect(__RequestConversationModel(_request())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text });
+	});
+});
+
+
+/** Creates a frozen tool revision whose schema is independently pinned by its digest. */
+function _tool(overrides: Partial<CompiledToolDefinition> = {}): CompiledToolDefinition
+{
+	const parametersSchema = { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false };
+	return { name: "read_file", toolRevisionId: "revision-read-1", description: "Read a file.", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...overrides };
+}
+
+/** Supplies two-call budgets; their durable aggregate reservation remains the conversation owner's job. */
+function _selection(tools: readonly CompiledToolDefinition[] = [_tool()]): ConversationModelRequest
+{
+	const input = _request({ tools: ConversationModelToolModes.Select });
+	return { ...input, compiledInput: { ...input.compiledInput, tools, budget: { ...input.compiledInput.budget, maxModelTurns: 2, maxToolInvocations: 1 } } };
+}
+
+/** Preserves the provider id and original argument text for a paired continuation. */
+function _toolCall(overrides: Partial<ConversationModelToolCall> = {}): ConversationModelToolCall
+{
+	return { id: "call_provider-1", name: "read_file", arguments: '{ "path" : "notes.txt" }', content: null, ...overrides };
+}
+
+/** Builds the actual upstream tool envelope without hiding its transport shape behind a model cast. */
+function _toolAnswer(call = _toolCall()): Record<string, unknown>
+{
+	return { choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: call.content,
+		tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }] };
+}
+
+describe("one selected tool and its paired continuation", function _toolExchange()
+{
+	it("offers only frozen nonapproval definitions and accepts one exact original declaration", async function _firstCall()
+	{
+		const call = _toolCall({ content: "  Looking it up.\n" });
+		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(call)));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "write_file", requiresApproval: true })]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(body.tools).toEqual([{ type: "function", function: { name: "read_file", description: "Read a file.", parameters: _tool().parametersSchema } }]);
+		expect(body).toMatchObject({ tool_choice: "auto", parallel_tool_calls: false, n: 1, stream: false });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(_telemetry.fields).toEqual([{}]);
+	});
+
+	it("accepts text when a first call chooses not to propose a tool", async function _textInstead()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response()));
+		await expect(__RequestConversationModel(_selection())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Saved answer.\n" });
+	});
+
+	it("offers multiple unambiguous frozen names but still accepts exactly one selection", async function _oneOfMany()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response(_toolAnswer(_toolCall({ name: "read_notes" })))));
+		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "read_notes", toolRevisionId: "revision-notes" })]))).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Tool, call: { name: "read_notes" } });
+	});
+
+	it("pairs the saved assistant declaration and result after the unchanged compiled messages", async function _secondCall()
+	{
+		const first = _selection();
+		const call = _toolCall({ content: "Checking." });
+		const fetchMock = vi.fn().mockResolvedValue(_response());
+		vi.stubGlobal("fetch", fetchMock);
+		await __RequestConversationModel({ ...first, tools: ConversationModelToolModes.None, continuation: { call, resultContent: '{"result":"Ready"}' } });
+		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(body.messages).toEqual([
+			{ role: "system", content: first.compiledInput.instructions }, ...first.compiledInput.messages,
+			{ role: "assistant", content: "Checking.", tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] },
+			{ role: "tool", tool_call_id: call.id, content: '{"result":"Ready"}' },
+		]);
+		for (const field of ["tools", "tool_choice", "parallel_tool_calls"])
+			expect(body).not.toHaveProperty(field);
+		expect(first.compiledInput.messages).toHaveLength(2);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		[], [_tool({ requiresApproval: true })], [_tool(), _tool()], [_tool(), _tool({ requiresApproval: true })],
+		[_tool({ name: "not.legal" })], [_tool({ parametersSchemaDigest: "sha256:changed" })],
+		[_tool({ parametersSchema: [] })], [_tool({ description: "\ud800" })],
+	].map(tools => ({ tools })))("rejects unusable frozen offer %# before dispatch", async function _badOffer({ tools })
+	{
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection(tools))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		_toolCall({ name: "not_offered" }), _toolCall({ id: "" }), _toolCall({ arguments: "[]" }),
+		_toolCall({ arguments: '{"path":"\\ud800"}' }), _toolCall({ content: "\ud800" }),
+		_toolCall({ arguments: " ".repeat(65_537) }),
+	])("rejects invalid or unoffered response %# without retry", async function _badDeclaration(call)
+	{
+		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(call)));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection())).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it.each(["parallel", "extra-call-field", "extra-function-field", "stop-with-tool", "refusal", "partial"])("rejects unsupported tool envelope %s", async function _toolEnvelope(kind)
+	{
+		const body = _toolAnswer() as { choices: Array<{ finish_reason: string; message: { tool_calls: Array<Record<string, unknown>>; refusal?: string } }> };
+		const choice = body.choices[0]!;
+		const call = choice.message.tool_calls[0]!;
+		if (kind === "parallel")
+			choice.message.tool_calls.push(call);
+		if (kind === "extra-call-field")
+			call["index"] = 0;
+		if (kind === "extra-function-field")
+			(call["function"] as Record<string, unknown>)["extra"] = "hidden";
+		if (kind === "stop-with-tool")
+			choice.finish_reason = "stop";
+		if (kind === "refusal")
+			choice.message.refusal = "No";
+		if (kind === "partial")
+			choice.finish_reason = "length";
+		const fetchMock = vi.fn().mockResolvedValue(_response(body));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection())).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it.each(["approval", "unknown", "changed-schema", "select", "oversized", "unicode"])("rejects unusable continuation %s before dispatch", async function _badContinuation(kind)
+	{
+		const input = _selection([_tool({ requiresApproval: kind === "approval", parametersSchemaDigest: kind === "changed-schema" ? "bad" : _tool().parametersSchemaDigest })]);
+		let resultContent = "result";
+		if (kind === "oversized")
+			resultContent = "x".repeat(65_536);
+		if (kind === "unicode")
+			resultContent = "\ud800";
+		const continuation = { call: _toolCall({ name: kind === "unknown" ? "different" : "read_file" }), resultContent };
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel({ ...input, tools: kind === "select" ? ConversationModelToolModes.Select : ConversationModelToolModes.None, continuation })).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true])("rejects a tool response with tools None, continuation %s", async function _noThirdCall(continuation)
+	{
+		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer()));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel({ ..._selection(), tools: ConversationModelToolModes.None, continuation: continuation ? { call: _toolCall(), resultContent: "result" } : null })).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("captures the offered names before caller mutation can authorize a different returned name", async function _offerMutation()
+	{
+		const tool = { ..._tool() };
+		let accept!: (response: Response) => void;
+		const fetchMock = vi.fn(function _pendingResponse(_url: URL, _init: RequestInit) { return new Promise<Response>(function _save(resolve) { accept = resolve; }); });
+		vi.stubGlobal("fetch", fetchMock);
+		const outcome = expect(__RequestConversationModel(_selection([tool]))).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
+		tool.name = "changed_after_dispatch";
+		accept(_response(_toolAnswer(_toolCall({ name: tool.name }))));
+		await outcome;
+		expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("read_file");
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });

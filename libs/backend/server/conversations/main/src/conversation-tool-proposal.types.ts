@@ -1,15 +1,7 @@
 import type { CompiledToolDefinition, ConversationToolProposal, ConversationToolProposalReceipt } from "@opencrane/contracts";
 import type { ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
-import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
-
-/** Reviewed workload identity accompanies the untrusted tool selection only inside the server. */
-export interface ConversationToolProposalCommand extends ConversationToolProposal
-{
-	/** Contains the identity obtained from the exact audience-bound TokenReview. */
-	readonly workload: RuntimeWorkloadIdentity;
-}
 
 /** Owns atomic proposal preparation and executor admission after the turn authority verifies the bound Pod. */
 export interface ConversationToolProposalAdmission

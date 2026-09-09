@@ -156,34 +156,44 @@ dataset, and a conflicting correction must fail closed.
 
 ## Outbound and return boundaries
 
-The current conversation-computer source reads bootstrap status and requests a server-owned text
-model step. It receives no compiled prompt or model key and has no direct LiteLLM network path.
-The server reserves the request within the original run limits and saves the accepted answer.
+The conversation-computer reads bootstrap status and requests the next server-owned model step.
+It receives no compiled prompt or model key and has no direct LiteLLM network path. The server
+reserves each request within the original run limits and retains accepted content privately.
 
 ```text
 conversation-computer Pod
-      │ turn id + ordinal 1              ▲ outcome only
-      ▼                                 │
-OpenCrane server ────────────────────────┘
-      │ durable reservation before dispatch
+      │ bootstrapId only                 ▲ outcome only
+      ▼                                  │
+OpenCrane server ─────────────────────────┘
+      │ saved reservation before each dispatch
       ├──► LiteLLM ──► selected provider
-      │       │ validated text response
+      │       │ text or one permitted tool declaration
       │       ▼
+      ├──► encrypted declaration → authorised tool → encrypted result pair
+      │       └──► final reserved text request, same key and remaining allowance
       └──► encrypted answer + saved event ──► conversation history
 ```
 
 ### Model provider
 
-🔶 The text model-step source sends one admitted OpenAI-compatible gateway request from the server.
-Bootstrap cannot create a fresh allowance after reservation. A saved answer is recovered through its
-original event; an uncertain response stays pending, then unavailable, without paid redispatch.
-The run remains pending for future recovery controls. LiteLLM and provider-internal retries have not
-been qualified as exactly-once execution. This replacement awaits its own CI and live qualification.
+The text checkpoint keeps the admitted gateway request on the server and has passed full CI.
+The continuation implementation may select one frozen tool requiring no approval, then use the exact
+terminal result for a final text-only request. The original assistant declaration and result are
+stored as encrypted content, and the second reservation must commit before delivery is acknowledged.
+No intermediate participant entry changes the original compiled conversation head. Both requests
+use the same key; the second deducts the entire first token reservation from the original allowance.
 
-Tool responses are rejected in this slice. The authorities described below provide separate
-governance primitives; connecting their results to a continuing conversation model loop remains
-unfinished. They do not give the text model-step direct access to people, integration providers,
-child agents or durable storage.
+Bootstrap cannot create a fresh allowance after reservation. A saved answer recovers through its
+original event, and a saved declaration may resume tool admission without repeating its model call.
+An uncertain model response stays pending, then unavailable, without paid redispatch. The run remains
+pending for future recovery controls. LiteLLM and provider-internal retries have not been qualified
+as exactly-once execution.
+
+The continuation implementation in PR #830 awaits CI and live qualification.
+Neither replacement is installed on testv5. A permitted integration fixture, company tool support,
+approvals and visible recovery remain outstanding. The authorities below are separate governance
+primitives; this continuation does not enable personal memory, direct provider access or delegation.
+See [development status](/guide/status).
 
 ### Participant elicitation
 

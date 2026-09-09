@@ -13,7 +13,7 @@ function _Gate()
 /** The private transport accepts only these request coordinates and supplies the reviewed workload. */
 function _Command(f: Awaited<ReturnType<typeof _OutputRecoveryHarness>>)
 {
-	return { bootstrapId: f.output.bootstrapId, ordinal: 1 as const, workload: f.command.workload };
+	return { bootstrapId: f.output.bootstrapId, workload: f.command.workload };
 }
 
 describe("one server-owned model request across process restarts", function _Suite()
@@ -24,10 +24,10 @@ describe("one server-owned model request across process restarts", function _Sui
 	{
 		const f = await _OutputRecoveryHarness(false);
 		expect(await f.restart().bootstrap(f.command)).toEqual({ bootstrapId: f.output.bootstrapId, outcome: "ready" });
-		expect(f.credentials.issueOrRotate).not.toHaveBeenCalled();
+		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 		expect(await f.authority.modelStep(_Command(f))).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledOnce();
-		expect(f.credentials.issueOrRotate).toHaveBeenCalledOnce();
+		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		const turn = (await f.store.load(f.output.bootstrapId))!;
 		expect(turn.modelReservation).toMatchObject({ ordinal: 1, maxCompletionTokens: 100, compiledInputDigest: turn.compile.digest });
 		expect(turn.outputReceipt?.event.id).toBe(turn.modelReservation?.invocationFence);
@@ -43,12 +43,12 @@ describe("one server-owned model request across process restarts", function _Sui
 		const f = await _OutputRecoveryHarness(false);
 		const entered = _Gate();
 		const proceed = _Gate();
-		f.model.request.mockImplementationOnce(async function _HeldRequest() { entered.release(); await proceed.promise; return { text: "A private chosen answer" }; });
+		f.model.request.mockImplementationOnce(async function _HeldRequest() { entered.release(); await proceed.promise; return { kind: "text", text: "A private chosen answer" }; });
 		const first = f.authority.modelStep(_Command(f));
 		await entered.promise;
 		expect(await f.restart().modelStep(_Command(f))).toEqual({ outcome: "pending" });
 		expect(await f.restart().bootstrap(f.command)).toEqual({ bootstrapId: f.output.bootstrapId, outcome: "pending" });
-		expect(f.credentials.issueOrRotate).toHaveBeenCalledOnce();
+		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.model.request).toHaveBeenCalledOnce();
 		proceed.release();
 		expect(await first).toEqual({ outcome: "completed" });
@@ -62,9 +62,9 @@ describe("one server-owned model request across process restarts", function _Sui
 			if (command.events[0].type.endsWith("model-reserved.v1"))
 				throw new Error("reservation response lost");
 		};
-		await expect(f.authority.modelStep(_Command(f))).rejects.toThrow("response lost");
+		expect(await f.authority.modelStep(_Command(f))).toEqual({ outcome: "pending" });
 		expect(await f.restart().modelStep(_Command(f))).toEqual({ outcome: "pending" });
-		expect(f.credentials.issueOrRotate).not.toHaveBeenCalled();
+		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 		expect(f.model.request).not.toHaveBeenCalled();
 		const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
 		vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
@@ -83,7 +83,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		for (let retry = 0; retry < 3; retry++)
 			expect(await f.restart().modelStep(_Command(f))).toEqual({ outcome: "response_unavailable" });
 		expect(f.model.request).toHaveBeenCalledOnce();
-		expect(f.credentials.issueOrRotate).toHaveBeenCalledOnce();
+		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.outputPayloads.store).not.toHaveBeenCalled();
 		expect(await f.store.loadActive({ siloId: "silo-1", ...f.command })).not.toBeNull();
 	});
@@ -104,10 +104,10 @@ describe("one server-owned model request across process restarts", function _Sui
 	{
 		const f = await _OutputRecoveryHarness(false);
 		const shorter = Date.now() + 5_000;
-		f.credentials.issueOrRotate.mockImplementationOnce(async function _LeaseShortenedDuringKeyIssue()
+		f.credentials.issueOnce.mockImplementationOnce(async function _LeaseShortenedDuringKeyIssue()
 		{
 			f.current.lease.expiresAt = new Date(shorter).toISOString();
-			return { key: "test-only-key", credentialDigest: "sha256:test" };
+			return { key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" };
 		});
 		expect(await f.authority.modelStep(_Command(f))).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledWith(expect.objectContaining({ notAfterEpochMs: shorter }));
@@ -118,10 +118,10 @@ describe("one server-owned model request across process restarts", function _Sui
 	{
 		const f = await _OutputRecoveryHarness(false);
 		const shorter = Date.now() + 5_000;
-		f.credentials.issueOrRotate.mockImplementationOnce(async function _Shorten()
+		f.credentials.issueOnce.mockImplementationOnce(async function _Shorten()
 		{
 			f.current.lease.expiresAt = new Date(shorter).toISOString();
-			return { key: "test-only-key", credentialDigest: "sha256:test" };
+			return { key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" };
 		});
 		const persist = f.outputPayloads.store.getMockImplementation()!;
 		f.outputPayloads.store.mockImplementationOnce(async function _SlowPayload(...args)
@@ -143,7 +143,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		{
 			const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
 			vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
-			return { text: "A private chosen answer" };
+			return { kind: "text", text: "A private chosen answer" };
 		});
 		expect(await f.authority.modelStep(_Command(f))).toEqual({ outcome: "response_unavailable" });
 		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
@@ -154,7 +154,7 @@ describe("one server-owned model request across process restarts", function _Sui
 	it("rechecks the original history after the gateway responds before publishing its answer", async function _ForeignHistory()
 	{
 		const f = await _OutputRecoveryHarness(false);
-		f.model.request.mockImplementationOnce(async function _ChangedHistory() { f.flags.mayAppend = false; return { text: "A private chosen answer" }; });
+		f.model.request.mockImplementationOnce(async function _ChangedHistory() { f.flags.mayAppend = false; return { kind: "text", text: "A private chosen answer" }; });
 		expect(await f.authority.modelStep(_Command(f))).toEqual({ outcome: "pending" });
 		expect(f.outputPayloads.store).not.toHaveBeenCalled();
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
@@ -182,9 +182,9 @@ describe("one server-owned model request across process restarts", function _Sui
 		if (kind === "expired")
 			budget.wallClockDeadlineEpochMs = Date.now() - 1;
 		f.compiler.compile.mockResolvedValue({ ...candidate, compiledInput: { ...input, model, budget } });
-		await expect(f.authority.modelStep(_Command(f))).rejects.toThrow("allowance");
+		expect(await f.authority.modelStep(_Command(f))).toEqual({ outcome: "authority_ended" });
 		expect((await f.store.load(f.output.bootstrapId))!.modelReservation).toBeNull();
-		expect(f.credentials.issueOrRotate).not.toHaveBeenCalled();
+		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 		expect(f.model.request).not.toHaveBeenCalled();
 	});
 
@@ -193,7 +193,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		const f = await _OutputRecoveryHarness();
 		await expect(f.restart().modelStep({ ..._Command(f), workload: { ...f.command.workload, podUid: "other-pod" } })).rejects.toThrow("lease-bound");
 		expect(f.model.request).not.toHaveBeenCalled();
-		expect(f.credentials.issueOrRotate).not.toHaveBeenCalled();
+		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 	});
 
 	it.each(["fence", "request", "tokens", "metadata", "event-id", "extra-field", "budget-drift", "deadline-renewal", "request-drift"])("rejects a corrupted saved reservation before gateway use: %s", async function _CorruptReservation(kind)

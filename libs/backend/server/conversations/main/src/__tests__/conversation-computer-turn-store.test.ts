@@ -19,7 +19,7 @@ const _TURN = {
   credentialLifetimeSeconds: 300,
   outputSourceCommandId: null,
   outputReceipt: null,
-  toolReservation: null, modelReservation: null,
+  toolSelection: null, continuationReservation: null, modelReservation: null,
   binding: {
     siloId: "testv5",
     conversationId: "conversation-1",

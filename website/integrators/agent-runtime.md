@@ -4,9 +4,10 @@ OpenCrane gives each Agent chat one logical **ConversationComputer**. Its durabl
 KurrentDB; a Kubernetes Pod is only the temporary machine that realises one active lease.
 
 The 0.11 review baseline implements personal and explicit company-child text turns, computer
-inspection, activation recovery and workspace checkpoint/restore. The current text model-step source
-moves model requests and answer storage to the server. It does not yet invoke governed tools or
-continue from their results; managed-agent scheduling and autonomous delegation remain unfinished. See
+inspection, activation recovery and workspace checkpoint/restore. The server owns model requests and
+answer storage. The continuation implementation also connects one tool requiring no approval to a final
+answer, while its qualification, visible progress and recovery controls remain outstanding.
+Managed-agent scheduling and autonomous delegation remain unfinished. See
 [development status](/guide/status) for implementation and live-qualification boundaries.
 
 > See also: [Central authorization authority](/integrators/authorization-authority) (product action
@@ -29,7 +30,7 @@ conversation-computer
       │ private bootstrap status + model-step request
       ▼
 OpenCrane server
-      │ reserve one request → LiteLLM → save exact answer
+      │ reserve request → LiteLLM → retain response or tool result
       ▼
 assistant entry appended through the bound writer
 ```
@@ -38,8 +39,9 @@ The server validates the activation command against the conversation stream and 
 history before it creates or observes an Agent Sandbox claim. The claimed Pod exchanges its
 projected service-account token for bootstrap status. The server fixes the silo, conversation,
 computer id, generation, lease, AgentIdentity and model route; the Pod receives only `bootstrapId`
-and `ready`, `pending` or `response_unavailable`. It requests ordinal 1 through the private
-`/api/internal/conversation-computer/model-step` route. No prompt or model key enters the Pod.
+and `ready`, `pending` or `response_unavailable`. A ready Pod sends exactly `{bootstrapId}` to the
+private `/api/internal/conversation-computer/model-step` route; the server selects the next step.
+The Pod cannot submit ordinals, tool proposals or output, and receives no prompt or model key.
 
 ## Authority boundaries
 
@@ -55,11 +57,17 @@ can be checkpointed before cooling and restored when a later generation starts. 
 private OpenCrane server; NetworkPolicy denies direct LiteLLM access. New output appends recheck the
 active lease, while retries recognise an already accepted, identical event.
 
-The server reserves one request within the original run's call, token and authority limits before
-dispatch. Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`.
-An uncertain response keeps its reservation, with no paid redispatch on restart. The adapter accepts
-completed text only and rejects tool responses. LiteLLM and provider-internal retries have not been
-qualified as exactly-once execution.
+The server reserves each request within the original run's call, token and authority limits before
+dispatch. The first may select one frozen tool requiring no approval. Its original declaration enters
+encrypted custody before private selection and tool admission. After current IAM checks release the
+exact terminal result, the server encrypts the paired messages and reserves a final request before
+acknowledging delivery. That request offers no tools, reuses the saved key receipt and deducts the
+entire first token reservation. No intermediate tool entry changes the participant conversation head.
+
+Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`. An uncertain
+response keeps its reservation, with no paid redispatch on restart. Expired or missing key custody
+cannot create a fresh allowance. LiteLLM and provider-internal retries have not been qualified as
+exactly-once execution.
 
 ## Review surface
 
@@ -98,9 +106,12 @@ without a saved answer becomes `response_unavailable` after its fixed deadline a
 pending. The worker remains degraded without resubmitting that model step; user-facing recovery
 controls are still planned.
 
-The text model-step source awaits its own CI and live qualification and is not installed on testv5.
-The preceding atomic tool handoff has passed full CI, while the completed file-copy restore and
-remaining snapshot-restore drill are recorded in [development status](/guide/status). Follow the
+Text checkpoint `378a755b6` has passed full CI, including seven conversation and 17 adapter cases
+against real KurrentDB and all seven fresh PostgreSQL targets. The later continuation implementation
+in PR #830 awaits CI and live qualification. Neither replacement is installed on testv5, and a
+permitted integration fixture is still needed. Company tools, approvals and visible
+recovery remain unfinished. The completed file-copy restore and remaining snapshot-restore drill
+are recorded in [development status](/guide/status). Follow the
 [operator runbook](/operators/runbook) for those procedures and the
 [architecture map](/advanced/architecture) for the store and controller owners.
 

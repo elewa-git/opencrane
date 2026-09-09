@@ -94,6 +94,15 @@ the ordinary exact boundary-matching rules.
 - `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
   tool work inside the runs domain's cancellation transaction.
 
+Run-owned tool result reads use `__ReadRunToolResultInTransaction`. The caller supplies all saved
+run, attempt, computer, command, public invocation and fingerprint coordinates. IAM checks the
+current run and the full immutable terminal payload and digest, then returns the existing invocation
+record for a current-authority check in the same transaction. Pending or inconsistent work exposes
+no result content. `__ConsumeRunToolResultInTransaction` acknowledges only that exact payload;
+the conversation owner must first prove the saved second-model-request reservation and current
+permission. An exact replay preserves its first acknowledgement time, and consumed results remain
+readable for restart verification. Neither API grants model dispatch or starts a provider call.
+
 ## Boundary
 
 The authority decides product permission; it does not authenticate a browser or Pod, own another

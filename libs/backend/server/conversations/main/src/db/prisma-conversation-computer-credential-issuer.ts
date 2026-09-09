@@ -2,8 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { ConversationPrivatePayloadCipher } from "../conversation-private-payload.types";
-import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerRawCredentialAuthority } from "../conversation-computer-turn.types";
-import type { ConversationComputerCredentialCustody, ConversationComputerCredentialPersistenceRepository } from "./conversation-computer-credential-persistence.types";
+import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerRawCredentialAuthority } from "../conversation-computer-turn.types";
+import { ConversationComputerCredentialStates, type ConversationComputerCredentialCustody, type ConversationComputerCredentialPersistenceRepository } from "./conversation-computer-credential-persistence.types";
 import { _AssertFencedRowCount } from "./prisma-fenced-write";
 
 type _Input = ConversationComputerCredentialIssueCommand;
@@ -14,23 +14,27 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 {
 	public constructor(private readonly prisma: Prisma.TransactionClient, private readonly siloId: string) {}
 
-	/** Claim missing custody or return custody already bound to this bootstrap. */
+	/** Claim the first mint or recover usable custody; retained failure states never become a new claim. */
 	public async prepare(input: _Input): Promise<{ readonly outcome: "claim"; readonly fence: string } | { readonly outcome: "alias_cleanup" | "custody" | "ready" | "expired"; readonly row: _Custody }>
 	{
 		this._AssertSilo(input);
 		await this._TouchActiveLease(input, "Conversation computer credential requires the current active lease");
-		const existing = await this.prisma.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId: input.bootstrapId } }) as _Custody | null;
-		if (existing !== null && (existing.siloId !== input.computer.siloId || existing.conversationId !== input.computer.conversationId || existing.keyAlias !== input.keyAlias || existing.modelAlias !== input.modelAlias))
-			throw new Error("Conversation computer credential retry changed its frozen coordinates");
-		if (existing !== null && _HasCustody(existing))
+		const existing = await this._ReadCoordinates(input);
+		if (existing?.state === ConversationComputerCredentialStates.Revoked)
+			throw new Error("Conversation computer credential attempt was already revoked");
+		if (existing?.state === ConversationComputerCredentialStates.Revoking)
+			return { outcome: "expired", row: existing };
+		if (existing !== null && (existing.state === ConversationComputerCredentialStates.Ready || existing.state === ConversationComputerCredentialStates.Custodied))
 		{
-			if (existing.state === "revoking" || existing.expiresAt.getTime() <= Date.now() || existing.expiresAt.getTime() > Date.parse(input.notAfter))
+			if (!_HasCustody(existing))
+				throw new Error("Conversation computer credential is missing encrypted custody");
+			if (existing.expiresAt.getTime() <= Date.now() || existing.expiresAt.getTime() > Date.parse(input.notAfter))
 				return { outcome: "expired", row: existing };
-			return { outcome: existing.state === "ready" ? "ready" : "custody", row: existing };
+			return { outcome: existing.state === ConversationComputerCredentialStates.Ready ? "ready" : "custody", row: existing };
 		}
-		if (existing?.state === "alias_cleanup" || (existing?.state === "pending" && existing.claimExpiresAt.getTime() <= Date.now()))
+		if (existing?.state === ConversationComputerCredentialStates.AliasCleanup || (existing?.state === ConversationComputerCredentialStates.Pending && existing.claimExpiresAt.getTime() <= Date.now()))
 			return { outcome: "alias_cleanup", row: existing };
-		if (existing?.state === "pending" && existing.claimExpiresAt.getTime() > Date.now())
+		if (existing?.state === ConversationComputerCredentialStates.Pending && existing.claimExpiresAt.getTime() > Date.now())
 			throw new Error("Conversation computer credential issuance is already in progress");
 		const fence = randomUUID();
 		const claimExpiresAt = new Date(Date.now() + 30_000);
@@ -38,7 +42,7 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 		{
 			try
 			{
-				await this.prisma.conversationComputerAttemptCredential.create({ data: { bootstrapId: input.bootstrapId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, siloId: input.computer.siloId, conversationId: input.computer.conversationId, state: "pending", claimFence: fence, claimExpiresAt, expiresAt: new Date(0) } });
+				await this.prisma.conversationComputerAttemptCredential.create({ data: { bootstrapId: input.bootstrapId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, siloId: input.computer.siloId, conversationId: input.computer.conversationId, state: ConversationComputerCredentialStates.Pending, claimFence: fence, claimExpiresAt, expiresAt: new Date(0) } });
 			}
 			catch
 			{
@@ -46,17 +50,32 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 			}
 		}
 		else
-		{
-			_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, claimFence: existing.claimFence }, data: { state: "pending", claimFence: fence, claimExpiresAt } }), 1, "Conversation computer credential issuance lost its claim");
-		}
+			throw new Error("Conversation computer credential has an unsupported custody state");
 		return { outcome: "claim", fence };
+	}
+
+	/** Recheck current lease and the saved receipt without creating or promoting custody. */
+	public async reuseExact(input: ConversationComputerCredentialReuseCommand): Promise<_Custody>
+	{
+		this._AssertSilo(input);
+		await this._TouchActiveLease(input, "Conversation computer credential reuse requires the current active lease");
+		const row = await this._ReadCoordinates(input);
+		if (row === null)
+			throw new Error("Conversation computer credential custody is missing");
+		if (row.state !== ConversationComputerCredentialStates.Ready || !_HasCustody(row))
+			throw new Error("Conversation computer credential custody is not ready for reuse");
+		if (row.expiresAt.getTime() <= Date.now() || row.expiresAt.getTime() > Date.parse(input.notAfter))
+			throw new Error("Conversation computer credential reuse exceeds its actual or current authority expiry");
+		if (row.credentialDigest !== input.expectedCredentialDigest || row.expiresAt.toISOString() !== input.expectedExpiresAt)
+			throw new Error("Conversation computer credential reuse changed its saved receipt");
+		return row;
 	}
 
 	/** Commit encrypted provider-key custody before caller-visible finalization. */
 	public async storeCustody(input: _Input, fence: string, encrypted: ReturnType<ConversationPrivatePayloadCipher["encrypt"]>, credentialDigest: string, expiresAt: string): Promise<void>
 	{
 		this._AssertSilo(input);
-		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, state: "pending", claimFence: fence }, data: { state: "custodied", keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest, credentialDigest, expiresAt: new Date(expiresAt) } }), 1, "Conversation computer credential lost custody before persistence");
+		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, state: ConversationComputerCredentialStates.Pending, claimFence: fence }, data: { state: ConversationComputerCredentialStates.Custodied, keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest, credentialDigest, expiresAt: new Date(expiresAt) } }), 1, "Conversation computer credential lost custody before persistence");
 	}
 
 	/** Promote exact committed custody to ready state. */
@@ -64,33 +83,46 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	{
 		this._AssertSilo(input);
 		await this._TouchActiveLease(input, "Conversation computer credential finalization requires the current active lease");
-		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: "custodied", claimFence: fence, expiresAt: { gt: new Date(), lte: new Date(input.notAfter) } }, data: { state: "ready" } }), 1, "Conversation computer credential custody could not be finalized");
+		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: ConversationComputerCredentialStates.Custodied, claimFence: fence, expiresAt: { gt: new Date(), lte: new Date(input.notAfter) } }, data: { state: ConversationComputerCredentialStates.Ready } }), 1, "Conversation computer credential custody could not be finalized");
 	}
 
 	/** Mark a pre-custody mint for deterministic alias cleanup on every later retry. */
 	public async markAliasCleanup(bootstrapId: string, fence: string): Promise<_Custody | null>
 	{
-		const marked = await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId, state: "pending", claimFence: fence }, data: { state: "alias_cleanup", claimExpiresAt: new Date(0) } });
+		const marked = await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId, state: ConversationComputerCredentialStates.Pending, claimFence: fence }, data: { state: ConversationComputerCredentialStates.AliasCleanup, claimExpiresAt: new Date(0) } });
 		if (marked.count !== 1)
 			return null;
 		return await this.prisma.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId } }) as _Custody | null;
 	}
 
-	/** Delete only custody whose raw provider key was revoked. */
-	public async forget(bootstrapId: string, fence: string): Promise<void>
+	/** Clear revoked secrets while retaining the attempt marker so no later caller can mint again. */
+	public async finishRevocation(bootstrapId: string, fence: string): Promise<void>
 	{
-		await this.prisma.conversationComputerAttemptCredential.deleteMany({ where: { bootstrapId, claimFence: fence } });
+		await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId, claimFence: fence, state: { in: [ConversationComputerCredentialStates.Revoking, ConversationComputerCredentialStates.AliasCleanup] } }, data: { state: ConversationComputerCredentialStates.Revoked, keyId: null, nonce: null, authTag: null, ciphertext: null, ciphertextDigest: null, credentialDigest: null, claimExpiresAt: new Date(0) } });
 	}
 
 	/** Fence one durable key for idempotent revocation. */
 	public async claimRevocation(bootstrapId: string): Promise<_Custody | null>
 	{
 		const existing = await this.prisma.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId } }) as _Custody | null;
-		if (existing === null || !_HasCustody(existing))
+		if (existing === null || existing.state === ConversationComputerCredentialStates.Revoked)
 			return null;
+		if (!Object.values(ConversationComputerCredentialStates).includes(existing.state))
+			throw new Error("Conversation computer credential has an unsupported custody state");
+		if (existing.state === ConversationComputerCredentialStates.Pending && existing.claimExpiresAt.getTime() > Date.now())
+			throw new Error("Conversation computer credential issuance is still in progress");
 		const fence = randomUUID();
-		const claimed = await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId, claimFence: existing.claimFence }, data: { state: "revoking", claimFence: fence } });
-		return claimed.count === 1 ? { ...existing, state: "revoking", claimFence: fence } : null;
+		const claimed = await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId, claimFence: existing.claimFence }, data: { state: ConversationComputerCredentialStates.Revoking, claimFence: fence } });
+		return claimed.count === 1 ? { ...existing, state: ConversationComputerCredentialStates.Revoking, claimFence: fence } : null;
+	}
+
+	/** Load the bootstrap's custody and reject changed server-owned identity or model coordinates. */
+	private async _ReadCoordinates(input: _Input): Promise<_Custody | null>
+	{
+		const row = await this.prisma.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId: input.bootstrapId } }) as _Custody | null;
+		if (row !== null && (row.siloId !== input.computer.siloId || row.conversationId !== input.computer.conversationId || row.keyAlias !== input.keyAlias || row.modelAlias !== input.modelAlias))
+			throw new Error("Conversation computer credential retry changed its frozen coordinates");
+		return row;
 	}
 
 	/** Touch the active-lease row for this exact computer and lease so the transaction fails if lifecycle cleared or replaced it. */
@@ -113,8 +145,8 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 {
 	public constructor(private readonly prisma: PrismaClient, private readonly cipher: ConversationPrivatePayloadCipher, private readonly raw: ConversationComputerRawCredentialAuthority, private readonly siloId: string) {}
 
-	/** Issue only after encrypted custody commits, then finalize in a separate transaction. */
-	public async issueOrRotate(command: _Input): Promise<{ readonly key: string; readonly credentialDigest: string }>
+	/** Return the first key after custody and promotion; cleanup never restarts issuance for this attempt. */
+	public async issueOnce(command: _Input): Promise<ConversationComputerCredentialReceipt>
 	{
 		const input = _BoundInput(command);
 		const prepared = await this._Run(repository => repository.prepare(input));
@@ -122,14 +154,13 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 			return this._Unwrap(prepared.row);
 		if (prepared.outcome === "expired")
 		{
-			await this._RevokeCustody(prepared.row);
-			return await this.issueOrRotate(input);
+			await this.revoke(input.bootstrapId);
+			throw new Error("Conversation computer credential cannot replace expired or revoking custody");
 		}
 		if (prepared.outcome === "alias_cleanup")
 		{
-			await this.raw.revokeByAlias({ keyAlias: prepared.row.keyAlias });
-			await this._Run(repository => repository.forget(prepared.row.bootstrapId, prepared.row.claimFence));
-			return await this.issueOrRotate(input);
+			await this.revoke(input.bootstrapId);
+			throw new Error("Conversation computer credential cannot replace uncertain issuance");
 		}
 		if (prepared.outcome === "custody")
 		{
@@ -162,12 +193,21 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 			await this._RetainAliasCleanup(input.bootstrapId, prepared.fence, input.keyAlias, minted.key);
 			throw error;
 		}
-		const custody: _Custody = { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: "custodied", claimFence: prepared.fence, claimExpiresAt: new Date(0), expiresAt: new Date(expiresAt), keyId: encrypted.keyId, nonce: encrypted.nonce, authTag: encrypted.authTag, ciphertext: encrypted.ciphertext, ciphertextDigest: encrypted.ciphertextDigest, credentialDigest };
+		const custody: _Custody = { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: ConversationComputerCredentialStates.Custodied, claimFence: prepared.fence, claimExpiresAt: new Date(0), expiresAt: new Date(expiresAt), keyId: encrypted.keyId, nonce: encrypted.nonce, authTag: encrypted.authTag, ciphertext: encrypted.ciphertext, ciphertextDigest: encrypted.ciphertextDigest, credentialDigest };
 		await this._FinalizeOrRetain(input, custody);
-		return { key: minted.key, credentialDigest };
+		return { key: minted.key, credentialDigest, expiresAt: custody.expiresAt.toISOString() };
 	}
 
-	/** Revoke a raw key before forgetting its durable encrypted custody. */
+	/** Return the first key's receipt without issuing, rotating or renewing a credential. */
+	public async reuseExact(input: ConversationComputerCredentialReuseCommand): Promise<ConversationComputerCredentialReceipt>
+	{
+		if (!Number.isFinite(Date.parse(input.notAfter)) || Date.parse(input.notAfter) <= Date.now())
+			throw new Error("Conversation computer credential reuse requires unexpired authority");
+		const row = await this._Run(repository => repository.reuseExact(input));
+		return this._Unwrap(row);
+	}
+
+	/** Revoke the provider key and clear secret custody, retaining the spent attempt marker. */
 	public async revoke(bootstrapId: string): Promise<void>
 	{
 		const custody = await this._Run(repository => repository.claimRevocation(bootstrapId));
@@ -212,7 +252,7 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 		{
 			await this.raw.revoke({ keyAlias, key });
 			if (cleanup !== null)
-				await this._Run(repository => repository.forget(bootstrapId, cleanup.claimFence));
+				await this._Run(repository => repository.finishRevocation(bootstrapId, cleanup.claimFence));
 		}
 		catch
 		{
@@ -222,18 +262,22 @@ export class PrismaConversationComputerCredentialUnitOfWork implements Conversat
 
 	private async _RevokeCustody(custody: _Custody): Promise<void>
 	{
-		await this.raw.revoke({ keyAlias: custody.keyAlias, key: this._Unwrap(custody).key });
-		await this._Run(repository => repository.forget(custody.bootstrapId, custody.claimFence));
+		if (_HasCustody(custody))
+			await this.raw.revoke({ keyAlias: custody.keyAlias, key: this._Unwrap(custody).key });
+		else
+			await this.raw.revokeByAlias({ keyAlias: custody.keyAlias });
+		await this._Run(repository => repository.finishRevocation(custody.bootstrapId, custody.claimFence));
 	}
 
-	private _Unwrap(row: _Custody): { readonly key: string; readonly credentialDigest: string }
+	/** Verify the saved key digest; callers decide expiry because cleanup must also decrypt expired keys. */
+	private _Unwrap(row: _Custody): ConversationComputerCredentialReceipt
 	{
 		if (!_HasCustody(row))
 			throw new Error("Conversation computer credential is not in durable custody");
 		const key = this.cipher.decrypt({ keyId: row.keyId, nonce: row.nonce, authTag: row.authTag, ciphertext: row.ciphertext, ciphertextDigest: row.ciphertextDigest }, _Coordinates(row.siloId, row.conversationId, row.bootstrapId));
 		if (`sha256:${createHash("sha256").update(key).digest("hex")}` !== row.credentialDigest)
 			throw new Error("Conversation computer attempt credential digest does not match");
-		return { key, credentialDigest: row.credentialDigest };
+		return { key, credentialDigest: row.credentialDigest, expiresAt: row.expiresAt.toISOString() };
 	}
 
 	private _Run<TResult>(operation: (repository: PrismaConversationComputerCredentialRepository) => Promise<TResult>): Promise<TResult>

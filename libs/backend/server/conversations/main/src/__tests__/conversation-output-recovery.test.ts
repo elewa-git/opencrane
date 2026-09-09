@@ -42,7 +42,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		expect(f.history.streams.get(f.stream)![2].data).toEqual(saved.event.data);
 		expect(f.flags.runState).toBe("completed");
 		expect(await f.store.loadActive({ siloId: "silo-1", computerId: f.command.computerId, lease: f.command.lease })).toBeNull();
-		expect(f.credentials.issueOrRotate).not.toHaveBeenCalled();
+		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 		expect(f.flags.payloadWrites).toBe(1);
 		expect(f.outputPayloads.store).toHaveBeenCalledOnce();
 		if (step !== "intent" && step !== "settle")

@@ -545,6 +545,13 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-model-custody.ts",
+				"adapter": "PrismaConversationModelCustodyRepository",
+				"contract": "ConversationComputerModelCustody",
+				"contractImportPath": "../conversation-computer-continuation.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 				"adapter": "PrismaUserOnboardingRepository",
 				"contract": "UserOnboardingRepository",
@@ -1116,6 +1123,30 @@
 						"importPath": "./prisma-conversation-tool-dispatch-authority"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-tool-results.ts",
+				"adapter": "PrismaConversationToolResultsRepository",
+				"contract": "ConversationComputerToolResults",
+				"contractImportPath": "../conversation-computer-continuation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationToolDispatchAuthority",
+						"importPath": "./prisma-conversation-tool-dispatch-authority"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/iam/authorization/main/src/prisma-run-tool-result-delivery-repository.ts",
+				"adapter": "PrismaRunToolResultDeliveryRepository",
+				"contract": "RunToolResultDeliveryRepository",
+				"contractImportPath": "./run-tool-result-delivery.types",
+				"constructs": [
+					{
+						"adapter": "PrismaRunToolResultDeliveryRepository",
+						"importPath": "<same-file>"
+					}
+				]
 			}
 		],
 		"unitsOfWork": [
@@ -1207,6 +1238,18 @@
 				"constructs": [
 					{
 						"adapter": "PrismaConversationComputerCredentialRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-model-custody.ts",
+				"adapter": "PrismaConversationModelCustodyUnitOfWork",
+				"contract": "ConversationComputerModelCustody",
+				"contractImportPath": "../conversation-computer-continuation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationModelCustodyRepository",
 						"importPath": "<same-file>"
 					}
 				]
@@ -1875,6 +1918,18 @@
 				"constructs": [
 					{
 						"adapter": "PrismaConversationToolProposalRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-tool-results.ts",
+				"adapter": "PrismaConversationToolResultsUnitOfWork",
+				"contract": "ConversationComputerToolResults",
+				"contractImportPath": "../conversation-computer-continuation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationToolResultsRepository",
 						"importPath": "<same-file>"
 					}
 				]

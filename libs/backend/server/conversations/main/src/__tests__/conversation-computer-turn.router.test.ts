@@ -1,6 +1,3 @@
-import { ConversationToolProposalOutcomes } from "@opencrane/contracts";
-import { ConversationToolProposalRefusal } from "../conversation-tool-proposal-refusal";
-import { ConversationToolProposalRefusals } from "../conversation-tool-proposal.types";
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
@@ -11,7 +8,7 @@ import { _CreateConversationComputerTurnRouter } from "../conversation-computer-
 function _App()
 {
 	const workload = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" };
-	const authority = { proposeTool: vi.fn(), reviewCredential: vi.fn().mockResolvedValue({ reviewCredential: "keyed-review-secret" }), bootstrap: vi.fn().mockResolvedValue({ outcome: "ready", bootstrapId: "bootstrap-1",  }), modelStep: vi.fn().mockResolvedValue({ outcome: "completed" }) };
+	const authority = { reviewCredential: vi.fn().mockResolvedValue({ reviewCredential: "keyed-review-secret" }), bootstrap: vi.fn().mockResolvedValue({ outcome: "ready", bootstrapId: "bootstrap-1",  }), modelStep: vi.fn().mockResolvedValue({ outcome: "completed" }) };
 	const logger = { warn: vi.fn() };
 	const app = express();
 	app.use(express.json({ limit: 70_000 }));
@@ -42,18 +39,19 @@ describe("conversation computer private turn router", function _Suite()
 		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token")).status).toBe(409);
 	});
 
-	it("accepts only a bootstrap and ordinal and removes Pod-authored output", async function _ModelStep()
+	it("accepts only a bootstrap identifier and removes Pod-authored output and proposals", async function _ModelStep()
 	{
 		const fixture = _App();
-		const body = { bootstrapId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", ordinal: 1 };
+		const body = { bootstrapId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651" };
 		const response = await request(fixture.app).post("/model-step").set("authorization", "Bearer projected-token").send(body);
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ outcome: "completed" });
 		expect(fixture.authority.modelStep).toHaveBeenCalledWith({ ...body, workload: fixture.workload });
-		for (const invalid of [{ ...body, text: "forged" }, { ...body, key: "forged" }, { ...body, ordinal: 2 }, { bootstrapId: body.bootstrapId }, { ...body, bootstrapId: "invalid" }])
+		for (const invalid of [{ ...body, text: "forged" }, { ...body, key: "forged" }, { ...body, ordinal: 2 }, { ...body, ordinal: 1 }, { ...body, bootstrapId: "invalid" }])
 			expect((await request(fixture.app).post("/model-step").set("authorization", "Bearer projected-token").send(invalid)).status).toBe(400);
 		expect((await request(fixture.app).post("/model-step").send(body)).status).toBe(401);
 		expect((await request(fixture.app).post("/output").set("authorization", "Bearer projected-token").send({ text: "forged" })).status).toBe(404);
+		expect((await request(fixture.app).post("/tool-proposal").set("authorization", "Bearer projected-token").send({ bootstrapId: body.bootstrapId, arguments: {} })).status).toBe(404);
 		expect(fixture.authority.modelStep).toHaveBeenCalledOnce();
 	});
 
@@ -69,7 +67,7 @@ describe("conversation computer private turn router", function _Suite()
 		fixture.authority.bootstrap.mockRejectedValue(failure);
 		fixture.authority.modelStep.mockRejectedValue(failure);
 		const pending = route === "model-step"
-			? request(fixture.app).post("/model-step").send({ bootstrapId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", ordinal: 1 })
+			? request(fixture.app).post("/model-step").send({ bootstrapId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651" })
 			: request(fixture.app).get(`/${route}?computerId=PRIVATE_COMPUTER&generation=2&leaseId=PRIVATE_LEASE`);
 		const response = await pending.set("authorization", "Bearer PRIVATE_PROJECTED_TOKEN");
 
@@ -94,46 +92,5 @@ describe("conversation computer private turn router", function _Suite()
 		expect(fixture.logger.warn.mock.calls[0]?.[0].err).toEqual({ type: "Error", message: "Conversation history operation failed" });
 		expect(getter).not.toHaveBeenCalled();
 		expect(JSON.stringify(fixture.logger.warn.mock.calls)).not.toContain("PRIVATE_");
-	});
-});
-
-/** Private proposal transport must not mistake a saved selection for provider execution. */
-describe("conversation computer private tool proposal", function _Suite()
-{
-	const body = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", toolRevisionId: "tool-1", arguments: { query: "record" } };
-	it.each([ConversationToolProposalOutcomes.Recorded, ConversationToolProposalOutcomes.Existing])("returns the server's stable %s receipt", async function _Receipt(outcome)
-	{
-		const f = _App();
-		f.authority.proposeTool.mockResolvedValue({ proposalId: "server-proposal", outcome });
-		const response = await request(f.app).post("/tool-proposal").set("authorization", "Bearer token").send(body);
-		expect(response.status).toBe(outcome === ConversationToolProposalOutcomes.Recorded ? 202 : 200);
-		expect(response.body).toEqual({ proposalId: "server-proposal", outcome });
-		expect(f.authority.proposeTool).toHaveBeenCalledWith({ ...body, workload: f.workload });
-	});
-	it.each([{ ...body, principalId: "forged" }, { ...body, arguments: { query: "\ud800" } }, { ...body, arguments: { ["\udfff"]: "invalid key" } }])("rejects forged authority or malformed Unicode before admission", async function _Invalid(proposal)
-	{
-		const f = _App();
-		const response = await request(f.app).post("/tool-proposal").set("authorization", "Bearer token").set("content-type", "application/json").send(JSON.stringify(proposal));
-		expect(response.status).toBe(400);
-		expect(f.authority.proposeTool).not.toHaveBeenCalled();
-	});
-	it.each([[ConversationToolProposalRefusals.Invalid, 400], [ConversationToolProposalRefusals.Conflict, 409], [ConversationToolProposalRefusals.Denied, 403]] as const)("exposes only the closed %s refusal", async function _Refusal(refusal, status)
-	{
-		const f = _App();
-		f.authority.proposeTool.mockRejectedValue(new ConversationToolProposalRefusal(refusal));
-		const response = await request(f.app).post("/tool-proposal").set("authorization", "Bearer token").send(body);
-		expect(response.status).toBe(status);
-		expect(response.body).toEqual({ error: refusal });
-	});
-	it("requires TokenReview and makes dependency failures retryable without private details", async function _Unavailable()
-	{
-		const f = _App();
-		expect((await request(f.app).post("/tool-proposal").send(body)).status).toBe(401);
-		expect(f.authority.proposeTool).not.toHaveBeenCalled();
-		f.authority.proposeTool.mockRejectedValue(new Error("PRIVATE_PROVIDER_DETAIL"));
-		const response = await request(f.app).post("/tool-proposal").set("authorization", "Bearer PRIVATE_TOKEN").send(body);
-		expect(response.status).toBe(503);
-		expect(response.headers["retry-after"]).toBe("1");
-		expect(JSON.stringify([response.body, f.logger.warn.mock.calls])).not.toContain("PRIVATE_");
 	});
 });

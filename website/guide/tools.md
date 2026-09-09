@@ -6,12 +6,13 @@ integrations.
 
 ::: info Current scope
 The catalogue, immutable package import and governed MCP execution services are implemented.
-The current follow-up source also queues a permitted conversation-tool proposal together with its
-saved invocation. Repeating that proposal recovers the original work, within the original run's
-time and access limits. The handoff has passed fresh database proofs and full CI; live qualification
-remains outstanding. The current model-step accepts text only and rejects tool responses. The
-conversation model loop does not yet request tools or resume from their results, so installing a
-tool does not make it usable from assistant chat. See [development status](/guide/status).
+The continuation implementation lets the first model request select one frozen tool that requires
+no approval. The server retains the declaration privately, checks the exact result and may request
+a final text answer using the same key and remaining original allowance. This implementation in
+PR #830 awaits CI and live qualification. Company assistant revisions still exclude tool
+assignments, and testv5 has no installed integration for a complete retrieval proof. Installing a
+tool alone does not make this journey available. Approvals, visible tool progress and recovery
+controls remain unfinished. See [development status](/guide/status).
 :::
 
 ## Prepare an integration

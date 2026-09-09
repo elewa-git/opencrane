@@ -1,8 +1,9 @@
+import type { ConversationModelRequest, ConversationModelResponse } from "@opencrane/contracts";
 import { ___DoWithTrace, ___DoWithoutTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import { ConversationModelTextError, ConversationModelTextFailureCodes, type ConversationModelTextRequest, type ConversationModelTextResult, type PreparedConversationModelTextRequest } from "./conversation-model-text.types";
-import { _CONVERSATION_MODEL_MAX_BYTES, _PrepareConversationModelTextRequest, _ValidateConversationModelTextResponse } from "./conversation-model-text.validator";
+import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
+import { _CONVERSATION_MODEL_MAX_BYTES, _PrepareConversationModelRequest, _ValidateConversationModelResponse } from "./conversation-model.validator";
 
 /** Cancels an unused response without exposing a remote stream's error or waiting for its cleanup. */
 function _discardBody(response: Response): void
@@ -17,10 +18,10 @@ async function _readResponse(response: Response, signal: AbortSignal): Promise<s
 	if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > _CONVERSATION_MODEL_MAX_BYTES))
 	{
 		_discardBody(response);
-		throw new ConversationModelTextError(ConversationModelTextFailureCodes.ResponseTooLarge);
+		throw new ConversationModelError(ConversationModelFailureCodes.ResponseTooLarge);
 	}
 	if (response.body === null)
-		throw new ConversationModelTextError(ConversationModelTextFailureCodes.UnsupportedResponse);
+		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	const reader = response.body.getReader();
 	/** Stops reading even when a stream has stalled after its headers arrived. */
 	function _cancelResponse(): void
@@ -35,7 +36,7 @@ async function _readResponse(response: Response, signal: AbortSignal): Promise<s
 		while (true)
 		{
 			if (signal.aborted)
-				throw new ConversationModelTextError(ConversationModelTextFailureCodes.DeadlineExceeded);
+				throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
 			const chunk = await reader.read();
 			if (chunk.done)
 			{
@@ -45,12 +46,12 @@ async function _readResponse(response: Response, signal: AbortSignal): Promise<s
 				}
 				catch
 				{
-					throw new ConversationModelTextError(ConversationModelTextFailureCodes.UnsupportedResponse);
+					throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 				}
 			}
 			length += chunk.value.byteLength;
 			if (length > _CONVERSATION_MODEL_MAX_BYTES)
-				throw new ConversationModelTextError(ConversationModelTextFailureCodes.ResponseTooLarge);
+				throw new ConversationModelError(ConversationModelFailureCodes.ResponseTooLarge);
 			chunks.push(chunk.value);
 		}
 	}
@@ -62,8 +63,8 @@ async function _readResponse(response: Response, signal: AbortSignal): Promise<s
 	}
 }
 
-/** Sends the prepared text request once and validates its complete response before returning. */
-async function _exchange(prepared: PreparedConversationModelTextRequest, signal: AbortSignal): Promise<ConversationModelTextResult>
+/** Sends the prepared request once and validates its complete response before returning. */
+async function _exchange(prepared: PreparedConversationModelRequest, signal: AbortSignal): Promise<ConversationModelResponse>
 {
 	const response = await ___DoWithoutTrace(function _sendSensitiveRequest()
 	{
@@ -76,43 +77,43 @@ async function _exchange(prepared: PreparedConversationModelTextRequest, signal:
 	if (!response.ok || response.redirected)
 	{
 		_discardBody(response);
-		throw new ConversationModelTextError(ConversationModelTextFailureCodes.HttpRejected);
+		throw new ConversationModelError(ConversationModelFailureCodes.HttpRejected);
 	}
 	if (response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json")
 	{
 		_discardBody(response);
-		throw new ConversationModelTextError(ConversationModelTextFailureCodes.UnsupportedResponse);
+		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	}
 	const text = await _readResponse(response, signal);
-	let result: ConversationModelTextResult;
+	let result: ConversationModelResponse;
 	try
 	{
-		result = ___ParseAndValidateJson(text, "Conversation model response", _ValidateConversationModelTextResponse);
+		result = ___ParseAndValidateJson(text, "Conversation model response", _ValidateConversationModelResponse, prepared.offeredToolNames);
 	}
 	catch
 	{
-		throw new ConversationModelTextError(ConversationModelTextFailureCodes.UnsupportedResponse);
+		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	}
 	if (signal.aborted || Date.now() >= prepared.deadlineEpochMs)
-		throw new ConversationModelTextError(ConversationModelTextFailureCodes.DeadlineExceeded);
+		throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
 	return result;
 }
 
 /**
- * Sends one admitted gateway request for text and never retries an uncertain paid operation.
+ * Sends one admitted model request and never retries an uncertain paid operation.
  * The caller must reserve dispatch durably before calling and retain the result before acknowledging
  * it. A transport failure does not prove that the provider rejected or did not charge the request.
  * The deadline covers headers and the entire response; automatic HTTP tracing is suppressed so the
  * server credential, destination and prompt cannot appear in child spans. This operation's span
  * contains no request fields, and failures carry a fixed category without the original exception.
- * @returns A completed assistant answer; no tool request or provider metadata crosses this boundary.
- * @throws ConversationModelTextError for invalid inputs, expired authority or an unusable exchange.
+ * @returns Completed text or one offered tool declaration. Tool admission remains the caller's responsibility.
+ * @throws ConversationModelError for invalid inputs, expired authority or an unusable exchange.
  */
-export async function __RequestConversationModelText(input: ConversationModelTextRequest): Promise<ConversationModelTextResult>
+export async function __RequestConversationModel(input: ConversationModelRequest): Promise<ConversationModelResponse>
 {
-	return ___DoWithTrace("conversation.model.text", {}, async function _requestText()
+	return ___DoWithTrace("conversation.model.request", {}, async function _requestModel()
 	{
-		const prepared = _PrepareConversationModelTextRequest(input);
+		const prepared = _PrepareConversationModelRequest(input);
 		const controller = new AbortController();
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const deadline = new Promise<never>(function _expireRequest(_resolve, reject)
@@ -120,22 +121,22 @@ export async function __RequestConversationModelText(input: ConversationModelTex
 			timer = setTimeout(function _abortRequest()
 			{
 				controller.abort();
-				reject(new ConversationModelTextError(ConversationModelTextFailureCodes.DeadlineExceeded));
+				reject(new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded));
 			}, Math.max(0, prepared.deadlineEpochMs - Date.now()));
 		});
 		try
 		{
 			if (Date.now() >= prepared.deadlineEpochMs)
-				throw new ConversationModelTextError(ConversationModelTextFailureCodes.DeadlineExceeded);
+				throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
 			return await Promise.race([_exchange(prepared, controller.signal), deadline]);
 		}
 		catch (error)
 		{
 			if (controller.signal.aborted || Date.now() >= prepared.deadlineEpochMs)
-				throw new ConversationModelTextError(ConversationModelTextFailureCodes.DeadlineExceeded);
-			if (error instanceof ConversationModelTextError)
+				throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
+			if (error instanceof ConversationModelError)
 				throw error;
-			throw new ConversationModelTextError(ConversationModelTextFailureCodes.TransportFailed);
+			throw new ConversationModelError(ConversationModelFailureCodes.TransportFailed);
 		}
 		finally
 		{

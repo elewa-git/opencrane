@@ -25,11 +25,13 @@ An MCP registration does not grant an agent access. The acting subject and agent
 membership and grant resolution before a tool revision enters the run's frozen capability set.
 
 ::: info Conversation integration status
-The current follow-up source connects an accepted private conversation proposal to the existing
-executor. That atomic handoff has passed fresh PostgreSQL proofs and full CI; live qualification
-remains outstanding. The current text model-step rejects tool responses. The conversation model
-loop does not yet request tools, continue from results or publish durable tool progress.
-See [development status](/guide/status) for the source and live checkpoints.
+The atomic handoff between conversation proposal admission and the existing executor has passed
+fresh PostgreSQL proofs and full CI. The continuation implementation lets the model select one frozen
+tool requiring no approval, saves its declaration privately and uses the verified result for one
+final text request. This later implementation in PR #830 awaits CI and live qualification.
+It adds no intermediate participant tool progress and does not enable company tool assignments,
+approvals or recovery controls. See [development status](/guide/status) for checkpoints and the
+remaining permitted-integration proof.
 :::
 
 ## Admission is not execution permission

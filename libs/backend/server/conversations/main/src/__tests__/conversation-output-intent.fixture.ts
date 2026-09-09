@@ -1,3 +1,4 @@
+import { ConversationModelToolModes } from "@opencrane/contracts";
 import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
 import type { ConversationComputerModelReservation } from "../conversation-computer-model.types";
 import type { ConversationComputerTurnStore } from "../conversation-computer-turn.types";
@@ -19,9 +20,9 @@ export function _PrepareConversationOutputIntent(turn: FrozenConversationCompute
 }
 
 /** Represent a model request already dispatched before a storage/restart proof begins. */
-export function _ModelReservationFixture(turn: Pick<FrozenConversationComputerTurn, "bootstrapId" | "compile" | "modelAlias">, invocationFence: string): ConversationComputerModelReservation
+export function _ModelReservationFixture(turn: Pick<FrozenConversationComputerTurn, "bootstrapId" | "compile" | "modelAlias">, invocationFence: string, tools = ConversationModelToolModes.None): ConversationComputerModelReservation
 {
-	const facts = { ordinal: 1 as const, compiledInputDigest: turn.compile.digest, maxCompletionTokens: 100, authorityExpiresAtEpochMs: Date.parse("2099-01-01T00:00:00Z"), dispatchDeadlineEpochMs: Date.parse("2099-01-01T00:00:00Z") };
+	const facts = { ordinal: 1 as const, tools, compiledInputDigest: turn.compile.digest, maxCompletionTokens: 100, authorityExpiresAtEpochMs: Date.parse("2099-01-01T00:00:00Z"), dispatchDeadlineEpochMs: Date.parse("2099-01-01T00:00:00Z") };
 	return { invocationFence, ...facts, requestDigest: _ConversationModelRequestDigest(turn, facts) };
 }
 

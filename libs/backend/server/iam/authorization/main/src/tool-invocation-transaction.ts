@@ -1,6 +1,8 @@
 import type { JsonValue } from "@opencrane/util";
 
+import { PrismaRunToolResultDeliveryRepository } from "./prisma-run-tool-result-delivery-repository";
 import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository";
+import type { ConsumeRunToolResultCommand, ReadRunToolResultCommand, ReadRunToolResultResult } from "./run-tool-result-delivery.types";
 import { TOOL_INVOCATION_PREPARATION_POLICY } from "./tool-invocation-lifecycle.types";
 import type { ToolInvocationAdmissionResult, ToolInvocationIntent, ToolInvocationPreparationPolicy, ToolInvocationRecord } from "./tool-invocation.types";
 
@@ -45,6 +47,37 @@ export async function __PrepareToolInvocationInTransaction(transaction: ToolInvo
 export async function __FindToolInvocationInTransaction(transaction: ToolInvocationTransaction, invocationId: string): Promise<ToolInvocationRecord | null>
 {
 	return PrismaToolInvocationRepository.findByIdInTransaction(transaction, invocationId);
+}
+
+/**
+ * Read the exact result of a saved run-owned proposal without acknowledging its delivery.
+ * The caller derives every coordinate from admitted server state and must recheck current Pod,
+ * lease, membership, tool permission and original deadline in this same transaction before using
+ * Available content. The returned invocation supports that existing authority check; this read
+ * grants no permission by itself. Consumed results remain readable for exact restart verification.
+ * @param transaction - Existing transaction that owns the caller's current-authority checks.
+ * @returns Pending, a detached validated result, or Unavailable without result content.
+ * @throws Database errors remain errors; an uncertain read must not be reported as pending work.
+ */
+export async function __ReadRunToolResultInTransaction(transaction: ToolInvocationTransaction, command: ReadRunToolResultCommand): Promise<ReadRunToolResultResult>
+{
+	return PrismaRunToolResultDeliveryRepository.inTransaction(transaction).read(command);
+}
+
+/**
+ * Acknowledge a result only after the caller proves that its exact continuation was saved durably.
+ * The caller must verify that evidence and current permission before this call in the same
+ * transaction, then roll back if its deadline or result changes before commit. IAM checks every
+ * invocation coordinate and the full payload digest, and reads back the unchanged consumed result.
+ * Repeated acknowledgement preserves the original timestamp. This API never grants model dispatch.
+ * @param transaction - Transaction holding the caller's current-authority decision.
+ * @param command - Saved invocation coordinates and the durably retained result digest.
+ * @param now - Trusted server timestamp for the first acknowledgement.
+ * @throws Database errors remain errors, including uncertainty after a write.
+ */
+export async function __ConsumeRunToolResultInTransaction(transaction: ToolInvocationTransaction, command: ConsumeRunToolResultCommand, now: Date): Promise<ReadRunToolResultResult>
+{
+	return PrismaRunToolResultDeliveryRepository.inTransaction(transaction).consume(command, now);
 }
 
 /**

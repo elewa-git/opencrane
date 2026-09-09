@@ -1,4 +1,4 @@
-import type { CompiledRunInput } from "@opencrane/contracts";
+import type { ConversationModelRequest, ConversationModelResponse, ConversationModelToolModes } from "@opencrane/contracts";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 /**
@@ -10,19 +10,18 @@ export enum ConversationComputerModelStepOutcomes
 {
 	/** The saved answer, run completion and cleanup have finished; the turn is complete. */
 	Completed = "completed",
-	/** Reserved model or tool work has not confirmed completion; poll without dispatching again. */
+	/** Reserved model or tool work has not completed; poll without redispatching a reserved request. */
 	Pending = "pending",
-	/** Completion was not confirmed before the deadline; saved output may still recover, but no new request is allowed. */
+	/** Completion is unconfirmed after the deadline; saved content may recover, but this reservation cannot dispatch again. */
 	ResponseUnavailable = "response_unavailable",
 	/** The turn is missing or authority has ended; stop this request without treating the run as completed. */
 	AuthorityEnded = "authority_ended",
 }
 
-/** Identifies the sole text-only request without accepting prompts, credentials or limits from a Pod. */
+/** Advances the saved turn without accepting prompts, credentials, ordinals or limits from a Pod. */
 export interface ConversationComputerModelStepCommand
 {
 	readonly bootstrapId: string;
-	readonly ordinal: 1;
 	readonly workload: RuntimeWorkloadIdentity;
 }
 
@@ -42,6 +41,7 @@ export interface ConversationComputerModelReservation
 {
 	readonly invocationFence: string;
 	readonly ordinal: 1;
+	readonly tools: ConversationModelToolModes;
 	readonly compiledInputDigest: string;
 	/** Binds the frozen run, model, ordinal, token ceiling and absolute deadlines. */
 	readonly requestDigest: string;
@@ -53,23 +53,11 @@ export interface ConversationComputerModelReservation
 	readonly dispatchDeadlineEpochMs: number;
 }
 
-/** Carries one server-built, bounded request to the existing model-routing transport. */
-export interface ConversationComputerModelRequest
-{
-	readonly compiledInput: CompiledRunInput;
-	readonly endpoint: string;
-	readonly key: string;
-	readonly modelAlias: string;
-	readonly maxCompletionTokens: number;
-	readonly notAfterEpochMs: number;
-}
+/** Reuses the shared server-only request contract at the conversation's transport port. */
+export type ConversationComputerModelRequest = ConversationModelRequest;
 
-/**
- * Sends at most one admitted gateway request and returns completed text without tool requests.
- * The caller must reserve first. Any failure leaves that allowance consumed; an implementation must
- * not retry, follow redirects or infer that a missing response means the provider did no paid work.
- */
+/** Sends one already reserved request; no failure grants an automatic retry. */
 export interface ConversationComputerModelTransport
 {
-	request(input: ConversationComputerModelRequest): Promise<{ readonly text: string }>;
+	request(input: ConversationModelRequest): Promise<ConversationModelResponse>;
 }

@@ -44,10 +44,12 @@ projections.
 
 Network reachability is not authority. OpenCrane separately verifies the projected token
 audience, namespace, ServiceAccount, Pod UID, computer id, lease id and generation.
-The current text model-step bootstrap returns only a turn id and status. The server keeps compiled
-prompts and attempt-scoped model credentials, and appends accepted output itself. The computer has
-no direct LiteLLM egress allowance; LiteLLM ingress admits the same-release server and Cognee.
-These replacement policies are source under review and are not yet deployed on testv5.
+Bootstrap returns only a turn id and status; model-step accepts exactly `{bootstrapId}`. The server
+keeps compiled prompts and attempt-scoped model credentials, selects any permitted tool and appends
+accepted output itself. The computer has no direct LiteLLM egress allowance; LiteLLM ingress admits
+the same-release server and Cognee. The text checkpoint and these policies have passed full CI but
+are not deployed on testv5. The continuation implementation in PR #830 preserves this network
+boundary and awaits CI and live qualification. See [development status](/guide/status) for qualification.
 
 ::: tip
 Treat `NetworkPolicy` as the portable L3/L4 floor and workload proof as the application

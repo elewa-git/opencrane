@@ -128,10 +128,10 @@ def _bootstrap_id(bootstrap: dict[str, Any]) -> str:
 
 
 def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> str:
-    """Ask the server to execute or recover its first reserved model step."""
+    """Ask the server to advance or recover the conversation's reserved work."""
     if bootstrap.get("outcome") != "ready":
         raise RuntimeError("model step requires a ready bootstrap")
-    payload = {"bootstrapId": _bootstrap_id(bootstrap), "ordinal": 1}
+    payload = {"bootstrapId": _bootstrap_id(bootstrap)}
     token = _read_token(config["tokenPath"])
     result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/model-step", token, payload)
     outcome = result.get("outcome")

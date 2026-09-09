@@ -23,38 +23,36 @@ and fails closed when asked for Use; this message repair does not enable them th
 check. Human-reviewed group-child text sharing uses its separate recorded admission and remains
 available through that existing path.
 
-For assistant text turns, the server keeps the compiled prompt and model credential. Bootstrap gives
+For assistant turns, the server keeps the compiled prompt and model credential. Bootstrap gives
 the verified Pod a turn id and `ready`, `pending` or `response_unavailable`. A ready Pod requests
-`POST /api/internal/conversation-computer/model-step` with that id and ordinal 1; it cannot choose
-the prompt, model, budget or output text. The server reserves the request in the existing turn stream
-before model I/O. That reservation consumes one admitted OpenAI-compatible gateway request across competing callers and
-restarts, within the original run's model-call, completion-token and authority limits.
+`POST /api/internal/conversation-computer/model-step` with exactly `{bootstrapId}`. The server
+chooses the next step from saved progress; the Pod cannot submit an ordinal, tool proposal, prompt,
+model, budget or output. The former private `/tool-proposal` and `/output` routes are removed.
 
-The model-routing port accepts completed text only and rejects tool responses. The server saves the
-encrypted answer and its complete event intent before appending conversation history. A restart
-finishes that saved answer without asking the model again. If no answer was saved, the reservation
-reports pending until its dispatch deadline and then response unavailable; it never grants another
-paid dispatch. The run remains pending for future recovery controls. This does not prove exactly-once
-provider execution: LiteLLM and provider-internal retries have not been qualified.
+The first model request may return text or select one unambiguous, frozen tool that requires no
+approval, provided the original run allows a tool and two model calls. Before tool admission, the
+server encrypts the accepted declaration, including the original call id and argument text, and
+records its private selection. The existing PostgreSQL transaction saves the invocation and its MCP
+(Model Context Protocol) executor work together. Identical retries recover that work; changed
+arguments are refused. Proposal audits use the verified conversation Pod and saved run, while
+execution audits use the current executor Job and Pod.
 
-The private tool-proposal route lets a verified conversation Pod request one permitted call for its
-current turn. The server validates the frozen tool and arguments, rechecks current access, and saves
-the invocation, its readiness and existing MCP (Model Context Protocol) executor work in one
-PostgreSQL transaction. A failure rolls back those changes together. Identical retries recover the
-original invocation and executor work without resetting their progress; changed arguments are
-refused. The route returns a proposal receipt. Connecting model tool requests, saved tool results
-and durable conversation progress remains unfinished; the text model-step does not invoke tools.
+A saved declaration can recover after a restart without another first model request. The server
+checks current authority and the exact terminal result through the IAM (identity and access
+management) result owner, then encrypts the original assistant declaration paired with that result.
+It reserves the second request before acknowledging result delivery. Only the live caller that wins
+that reservation may dispatch, using the same model key and the original token allowance minus the
+entire first reservation. The second request offers no tools and must return text. Intermediate tool
+progress is not appended to participant history, so the original conversation head and compiled
+input remain unchanged until the final answer.
 
-Proposal audits name the verified conversation-computer Pod and the saved run. Later tool-dispatch
-audits name the current MCP executor Job and Pod instead. The transport owners supply those
-coordinates; a proposal body cannot choose an audience, actor or namespace.
-
-Before database admission, the turn stream reserves that exact proposal against the same revision
-used to reserve model dispatch. Stored-decision readback confirms which command won. A tool-reserved
-turn cannot reserve a model request or accept an answer; bootstrap retries wait. Admission errors keep the
-reservation because an earlier request may already have committed. An exact client retry can
-recover it; an abandoned reservation remains pending until outcome reconciliation is implemented.
-The reservation contains only identity and digests, so it cannot reconstruct missing arguments.
+Each reservation consumes its gateway request across competing callers and restarts. The server
+saves the encrypted answer and complete event intent before appending conversation history; recovery
+finishes that same answer. An unsaved response reports pending until its fixed deadline, then
+unavailable without another paid dispatch. The run remains pending for future recovery controls.
+This bounds OpenCrane's admitted requests; LiteLLM and provider-internal retries have not been
+qualified as exactly-once execution. The continuation implementation in PR #830 awaits CI and live
+qualification; it does not complete the first permitted retrieval journey.
 
 Before an MCP executor claims a saved run-owned tool call, this package rechecks its current
 Running run, unchanged execution subject, conversation participation, identity and exact active
@@ -296,8 +294,9 @@ shared group-child journey and its durable recovery worker. The public routes ar
   leased computer. Its supporting binding, clock, rate-limit, visibility-policy, and lease-fence
   contracts keep the computer unable to select a target stream or stamp a trusted entry coordinate.
 - `ConversationComputerTurnAuthority` serves private bootstrap and model-step requests. It reserves
-  a text request durably, calls the server-only model-routing port and completes or recovers the
-  saved output. Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`;
+  the first request, retains any accepted tool declaration, and may reserve one final request from
+  the verified result. The server-only model-routing port and saved output remain behind this owner.
+  Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`;
   none of those outcomes reveals model input, credentials or response content to the Pod.
 - `__RunConversationComputerActivationListener` consumes one silo-scoped, persistent KurrentDB
   activation subscription in delivery order. It validates the stream-bound command before calling
@@ -380,6 +379,27 @@ same authorised write snapshot. Agent-session turn compilation delegates durable
 persistence through its injected admission port after local authority checks. All paths depend on
 current active `OrgMembership` in the caller's host-selected silo; participant rows alone never
 preserve authority after revocation.
+
+The same encrypted payload table stores accepted model declarations and assistant/tool pairs under
+separate deterministic references. These private rows do not append participant history. The turn
+stream records the first request at revision 1, tool selection at revision 2 and the second request
+at revision 3; its final-answer intent is revision 4, or revision 2 for a direct text answer.
+
+`ConversationComputerAttemptCredential` holds the first key's encrypted custody and actual expiry.
+`issueOnce` may recover that key but cannot replace expired or uncertain issuance. `reuseExact`
+requires the saved digest and expiry and never creates or renews a key. The original attempt window,
+with the existing 300-second ceiling, is separate from each request's at-most-25-second deadline.
+Successful revocation clears secrets and retains a non-secret spent-attempt marker without resetting
+any budget.
+
+| Credential state | Issuance or reuse | Cleanup |
+| --- | --- | --- |
+| `pending` | An active claim refuses another issuance; an expired claim cannot mint again. | An expired claim needs alias cleanup because its provider outcome may be unknown. |
+| `custodied` | `issueOnce` may finish current-lease promotion of the original key; `reuseExact` refuses. | A failed promotion retains custody until revocation succeeds. |
+| `ready` | Return the original key only while its receipt, current lease and authority remain valid. | Revoke the key before clearing encrypted fields. |
+| `alias_cleanup` | Neither operation may mint or return a key. | Revoke by alias, then retain `revoked`. |
+| `revoking` | Neither operation may mint or return a key. | Retry cleanup of the original custody. |
+| `revoked` | Both operations refuse; the attempt is spent. | Repeated cleanup is idempotent. |
 
 The computer-review router keeps sandbox routes and the keyed review credential server-side (the lease id is a public label, never a bearer): file, diff, and
 browser discovery require current `Read`, while commands, page creation, screenshots, and preview
