@@ -9,8 +9,8 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult, type ConversationComputerToolResults } from "../conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
-import type { ConversationToolDispatchDependencies } from "../conversation-tool-dispatch.types";
-import { PrismaConversationToolDispatchAuthority } from "./prisma-conversation-tool-dispatch-authority";
+import type { ConversationToolDispatchDependencies } from "../computers/tools/dispatch/conversation-tool-dispatch.types";
+import { PrismaConversationToolDispatchAuthority } from "../computers/tools/dispatch/prisma-conversation-tool-dispatch-authority";
 
 /** Signals that the complete transaction must roll back before reporting unavailable content. */
 class _ResultAuthorityEnded extends Error {}

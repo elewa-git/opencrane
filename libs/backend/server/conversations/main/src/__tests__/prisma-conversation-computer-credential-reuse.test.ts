@@ -20,11 +20,14 @@ function _Ready()
 function _Fixture(initial: Record<string, any> | null = _Ready())
 {
 	let row = initial;
-	const lease = { updateMany: vi.fn().mockResolvedValue({ count: 1 }) };
+	let transactionDepth = 0;
+	const events: string[] = [];
+	const lease = { updateMany: vi.fn(async function _TouchLease() { events.push("lease"); return { count: 1 }; }) };
 	const credential = {
-		findUnique: vi.fn(async () => row === null ? null : { ...row }),
+		findUnique: vi.fn(async function _ReadCustody() { events.push("read"); return row === null ? null : { ...row }; }),
 		create: vi.fn(async ({ data }) =>
 		{
+			events.push("create:pending");
 			if (row !== null)
 				throw new Error("unique conflict");
 			row = { keyId: null, nonce: null, authTag: null, ciphertext: null, ciphertextDigest: null, credentialDigest: null, ...data };
@@ -32,6 +35,7 @@ function _Fixture(initial: Record<string, any> | null = _Ready())
 		}),
 		updateMany: vi.fn(async ({ where, data }) =>
 		{
+			events.push(`write:${data.state}`);
 			if (row === null || row.bootstrapId !== where.bootstrapId || where.claimFence !== undefined && row.claimFence !== where.claimFence)
 				return { count: 0 };
 			if (typeof where.state === "string" && row.state !== where.state || where.state?.in && !where.state.in.includes(row.state))
@@ -40,19 +44,45 @@ function _Fixture(initial: Record<string, any> | null = _Ready())
 			return { count: 1 };
 		}),
 	};
-	const prisma = { $transaction: vi.fn(async (operation) => await operation({ conversationComputerActiveLease: lease, conversationComputerAttemptCredential: credential })) };
-	const raw = { issue: vi.fn().mockResolvedValue({ key: "original-key", expiresAt: _EXPIRES }), revoke: vi.fn().mockResolvedValue(undefined), revokeByAlias: vi.fn().mockResolvedValue(undefined) };
+	const prisma = { $transaction: vi.fn(async function _Transaction(operation)
+	{
+		const prior = row === null ? null : { ...row };
+		events.push("transaction:begin");
+		transactionDepth += 1;
+		try
+		{
+			const result = await operation({ conversationComputerActiveLease: lease, conversationComputerAttemptCredential: credential });
+			events.push("transaction:commit");
+			return result;
+		}
+		catch (error)
+		{
+			row = prior;
+			events.push("transaction:rollback");
+			throw error;
+		}
+		finally
+		{
+			transactionDepth -= 1;
+		}
+	}) };
+	const raw = {
+		issue: vi.fn(async function _Issue() { expect(transactionDepth).toBe(0); events.push("provider:issue"); return { key: "original-key", expiresAt: _EXPIRES }; }),
+		revoke: vi.fn(async function _Revoke() { expect(transactionDepth).toBe(0); events.push("provider:revoke"); }),
+		revokeByAlias: vi.fn(async function _RevokeAlias() { expect(transactionDepth).toBe(0); events.push("provider:revoke-alias"); }),
+	};
 	const cipher = {
-		encrypt: vi.fn((key: string) => ({ keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from(key), ciphertextDigest: _DIGEST })),
+		encrypt: vi.fn(function _Encrypt(key: string) { events.push("encrypt"); return { keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from(key), ciphertextDigest: _DIGEST }; }),
 		decrypt: vi.fn((value: { readonly ciphertext: Uint8Array; readonly ciphertextDigest: string }) =>
 		{
+			events.push("decrypt");
 			if (`sha256:${createHash("sha256").update(value.ciphertext).digest("hex")}` !== value.ciphertextDigest)
 				throw new Error("ciphertext digest mismatch");
 			return Buffer.from(value.ciphertext).toString();
 		}),
 	};
 	const authority = new PrismaConversationComputerCredentialUnitOfWork(prisma as never, cipher as never, raw, "silo-1");
-	return { authority, credential, lease, prisma, raw, cipher, row: () => row };
+	return { authority, credential, lease, prisma, raw, cipher, events, row: () => row };
 }
 
 	describe("attempt credential receipt reuse", function _CredentialReuse()
@@ -161,4 +191,73 @@ function _Fixture(initial: Record<string, any> | null = _Ready())
 		expect(f.raw.revokeByAlias).toHaveBeenCalledWith({ keyAlias: "attempt-1" });
 		expect(f.row()).toMatchObject({ state: "revoked", ciphertext: null });
 	});
+	it("commits claims and custody before provider use or key disclosure", async function _TransactionOrder()
+	{
+		const f = _Fixture(null);
+		const issued = await f.authority.issueOnce(_COMMAND);
+		expect(f.events).toEqual([
+			"transaction:begin", "lease", "read", "create:pending", "transaction:commit",
+			"provider:issue", "encrypt", "transaction:begin", "write:custodied", "transaction:commit",
+			"transaction:begin", "lease", "write:ready", "transaction:commit",
+		]);
+		f.events.length = 0;
+		await expect(f.authority.reuseExact(_REUSE)).resolves.toEqual(issued);
+		expect(f.events).toEqual(["transaction:begin", "lease", "read", "transaction:commit", "decrypt"]);
+		f.events.length = 0;
+		await f.authority.revoke(_COMMAND.bootstrapId);
+		expect(f.events).toEqual([
+			"transaction:begin", "read", "write:revoking", "transaction:commit", "decrypt", "provider:revoke",
+			"transaction:begin", "write:revoked", "transaction:commit",
+		]);
+		expect(f.raw.issue).toHaveBeenCalledTimes(1);
+	});
+
+	it("shortens elapsed issue authority after claim commit while preserving the original budget", async function _ElapsedClaim()
+	{
+		const f = _Fixture(null);
+		const create = f.credential.create.getMockImplementation()!;
+		f.credential.create.mockImplementationOnce(async function _DelayedClaim(input)
+		{
+			const result = await create(input);
+			vi.mocked(Date.now).mockReturnValue(_NOW + 2_000);
+			return result;
+		});
+		await f.authority.issueOnce(_COMMAND);
+		expect(f.raw.issue).toHaveBeenCalledWith(expect.objectContaining({ maxBudgetUsd: 0.1, expirySeconds: 298, notAfter: _EXPIRES }));
+		expect(f.raw.issue).toHaveBeenCalledTimes(1);
+	});
+
+	it("recovers a rolled-back custody write through alias cleanup without a second provider issue", async function _RollbackCleanup()
+	{
+		const f = _Fixture(null);
+		f.credential.updateMany.mockRejectedValueOnce(new Error("custody transaction lost"));
+		f.raw.revoke.mockRejectedValueOnce(new Error("provider cleanup unavailable"));
+		await expect(f.authority.issueOnce(_COMMAND)).rejects.toThrow("custody transaction lost");
+		expect(f.row()).toMatchObject({ state: "alias_cleanup", ciphertext: null });
+		expect(f.events).toContain("transaction:rollback");
+		await expect(f.authority.issueOnce(_COMMAND)).rejects.toThrow("cannot replace uncertain issuance");
+		expect(f.row()).toMatchObject({ state: "revoked", ciphertext: null });
+		expect(f.raw.issue).toHaveBeenCalledTimes(1);
+		expect(f.raw.revokeByAlias).toHaveBeenCalledWith({ keyAlias: "attempt-1" });
+	});
+
+	it("re-reads the spent state after another cleanup wins the revocation claim", async function _ObservedCleanupWinner()
+	{
+		const f = _Fixture();
+		const update = f.credential.updateMany.getMockImplementation()!;
+		f.credential.updateMany.mockImplementationOnce(async function _CompetingCleanup()
+		{
+			await update({ where: { bootstrapId: _COMMAND.bootstrapId }, data: { state: "revoked", keyId: null, nonce: null, authTag: null, ciphertext: null, ciphertextDigest: null, credentialDigest: null } });
+			return { count: 0 };
+		});
+		await f.authority.revoke(_COMMAND.bootstrapId);
+		expect(f.raw.revoke).not.toHaveBeenCalled();
+		await expect(f.authority.issueOnce(_COMMAND)).rejects.toThrow("already revoked");
+		await expect(f.authority.reuseExact(_REUSE)).rejects.toThrow("not ready");
+		await f.authority.revoke(_COMMAND.bootstrapId);
+		expect(f.raw.issue).not.toHaveBeenCalled();
+		expect(f.raw.revoke).not.toHaveBeenCalled();
+		expect(f.raw.revokeByAlias).not.toHaveBeenCalled();
+	});
+
 });

@@ -538,10 +538,10 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-computer-credential-issuer.ts",
+				"path": "libs/backend/server/conversations/main/src/computers/turns/credentials/prisma-conversation-computer-credential-repository.ts",
 				"adapter": "PrismaConversationComputerCredentialRepository",
 				"contract": "ConversationComputerCredentialPersistenceRepository",
-				"contractImportPath": "./conversation-computer-credential-persistence.types",
+				"contractImportPath": "../../../db/conversation-computer-credential-persistence.types",
 				"constructs": []
 			},
 			{
@@ -1089,22 +1089,22 @@
 				]
 			},
 			{
-				"path": "libs/backend/server/conversations/main/src/db/prisma-conversation-tool-dispatch-authority.ts",
+				"path": "libs/backend/server/conversations/main/src/computers/tools/dispatch/prisma-conversation-tool-dispatch-authority.ts",
 				"adapter": "PrismaConversationToolDispatchAuthority",
 				"contract": "ConversationToolDispatchAuthority",
-				"contractImportPath": "../conversation-tool-dispatch.types",
+				"contractImportPath": "./conversation-tool-dispatch.types",
 				"constructs": [
 					{
+						"adapter": "PrismaConversationToolRunEvidenceRepository",
+						"importPath": "./prisma-conversation-tool-run-evidence"
+					},
+					{
 						"adapter": "PrismaConversationComputerLifecycleProjectionRepository",
-						"importPath": "./prisma-conversation-computer-lifecycle-projection-repository"
+						"importPath": "../../../db/prisma-conversation-computer-lifecycle-projection-repository"
 					},
 					{
-						"adapter": "PrismaGroupChildAccessRepository",
-						"importPath": "./prisma-group-child-access-repository"
-					},
-					{
-						"adapter": "PrismaAuthorizationAuthority",
-						"importPath": "@opencrane/backend/server/iam/authorization"
+						"adapter": "PrismaConversationToolAccessAuthority",
+						"importPath": "./prisma-conversation-tool-access"
 					}
 				]
 			},
@@ -1115,12 +1115,16 @@
 				"contractImportPath": "../conversation-tool-proposal.types",
 				"constructs": [
 					{
-						"adapter": "PrismaAuthorizationAuthority",
-						"importPath": "@opencrane/backend/server/iam/authorization"
+						"adapter": "PrismaConversationToolProposalRunRepository",
+						"importPath": "../computers/tools/proposal/prisma-conversation-tool-proposal-run-reader"
+					},
+					{
+						"adapter": "PrismaConversationToolProposalPreparationAuthority",
+						"importPath": "../computers/tools/proposal/prisma-conversation-tool-proposal-preparation"
 					},
 					{
 						"adapter": "PrismaConversationToolDispatchAuthority",
-						"importPath": "./prisma-conversation-tool-dispatch-authority"
+						"importPath": "../computers/tools/dispatch/prisma-conversation-tool-dispatch-authority"
 					}
 				]
 			},
@@ -1132,7 +1136,7 @@
 				"constructs": [
 					{
 						"adapter": "PrismaConversationToolDispatchAuthority",
-						"importPath": "./prisma-conversation-tool-dispatch-authority"
+						"importPath": "../computers/tools/dispatch/prisma-conversation-tool-dispatch-authority"
 					}
 				]
 			},
@@ -1145,6 +1149,48 @@
 					{
 						"adapter": "PrismaRunToolResultDeliveryRepository",
 						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/dispatch/prisma-conversation-tool-run-evidence.ts",
+				"adapter": "PrismaConversationToolRunEvidenceRepository",
+				"contract": "ConversationToolRunEvidenceReader",
+				"contractImportPath": "./conversation-tool-dispatch-evidence.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/dispatch/prisma-conversation-tool-access.ts",
+				"adapter": "PrismaConversationToolAccessAuthority",
+				"contract": "ConversationToolCurrentAccess",
+				"contractImportPath": "./conversation-tool-dispatch-evidence.types",
+				"constructs": [
+					{
+						"adapter": "PrismaGroupChildAccessRepository",
+						"importPath": "../../../db/prisma-group-child-access-repository"
+					},
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/proposal/prisma-conversation-tool-proposal-run-reader.ts",
+				"adapter": "PrismaConversationToolProposalRunRepository",
+				"contract": "ConversationToolProposalRunReader",
+				"contractImportPath": "./conversation-tool-proposal-run.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/proposal/prisma-conversation-tool-proposal-preparation.ts",
+				"adapter": "PrismaConversationToolProposalPreparationAuthority",
+				"contract": "ConversationToolProposalPreparation",
+				"contractImportPath": "./conversation-tool-proposal-run.types",
+				"constructs": [
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
 					}
 				]
 			}
@@ -1238,7 +1284,7 @@
 				"constructs": [
 					{
 						"adapter": "PrismaConversationComputerCredentialRepository",
-						"importPath": "<same-file>"
+						"importPath": "../computers/turns/credentials/prisma-conversation-computer-credential-repository"
 					}
 				]
 			},

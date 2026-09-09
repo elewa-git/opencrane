@@ -37,6 +37,24 @@ records its private selection. The existing PostgreSQL transaction saves the inv
 arguments are refused. Proposal audits use the verified conversation Pod and saved run, while
 execution audits use the current executor Job and Pod.
 
+Tool permission checks live in `src/computers/tools/dispatch/`. The dispatch authority orders three
+checks: the saved run and its original budget, the current identity and computer lease, then current
+membership, conversation access and tool permission. Each reader has its own contract and tests.
+They share the caller's database transaction; none opens another transaction or sends a provider
+request. The same checks protect proposal admission, executor claims and completed-result reads.
+Missing or inactive facts refuse the operation. A history failure throws so tentative database work
+rolls back. The final expiry is the shortest original or current limit, checked again after all reads.
+
+`src/computers/tools/proposal/` separates saved-input and one-call-slot checks from permission evidence
+and invocation preparation. The proposal coordinator keeps those steps and executor admission in one
+Serializable transaction. A refusal after any tentative write rolls the complete proposal back.
+
+`src/computers/turns/credentials/` separates stored credential state, encrypted receipt verification,
+provider issuance and cleanup. A missing row may win one key-creation claim; a saved row can only
+recover that key or finish cleanup. Expired, revoked or uncertain work cannot mint a replacement.
+Provider calls stay outside database transactions, while conditional writes decide which caller owns
+each state change.
+
 A saved declaration can recover after a restart without another first model request. The server
 checks current authority and the exact terminal result through the IAM (identity and access
 management) result owner, then encrypts the original assistant declaration paired with that result.

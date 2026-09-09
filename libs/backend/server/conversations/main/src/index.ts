@@ -73,8 +73,8 @@ export { _CreateGroupChildRouter } from "./group-child.router";
 export type { GroupChildAgentCandidate, GroupChildAgentResolver, GroupChildAuthority, GroupChildTaskInput } from "./group-child.types";
 export type { CompanyAssistantDirectory } from "./conversation-metadata.types";
 
-export { PrismaConversationToolDispatchAuthority } from "./db/prisma-conversation-tool-dispatch-authority";
-export type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies, ConversationToolExecutionEvidence, ConversationToolAssignmentAuthority, ConversationToolAssignmentCommand } from "./conversation-tool-dispatch.types";
+export { PrismaConversationToolDispatchAuthority } from "./computers/tools/dispatch/prisma-conversation-tool-dispatch-authority";
+export type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies, ConversationToolExecutionEvidence, ConversationToolAssignmentAuthority, ConversationToolAssignmentCommand } from "./computers/tools/dispatch/conversation-tool-dispatch.types";
 
 export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./db/prisma-conversation-tool-proposal";
 export { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";

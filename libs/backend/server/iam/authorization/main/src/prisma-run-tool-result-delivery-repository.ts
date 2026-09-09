@@ -1,6 +1,6 @@
 import { AgentRunState, ToolInvocationState, ToolResultDeliveryState, type Prisma } from "@prisma/client";
 
-import { _ToolInvocationRecord } from "./prisma-tool-invocation-repository";
+import { _ToolInvocationRecord } from "./tool-invocation-persistence-mapping";
 import { RunToolResultReadOutcomes, type ConsumeRunToolResultCommand, type ReadRunToolResultCommand, type ReadRunToolResultResult, type RunToolResultDeliveryRepository } from "./run-tool-result-delivery.types";
 import { _CopyReadRunToolResultCommand, _ReadExactRunToolResultPayload } from "./run-tool-result-delivery.validator";
 import type { ToolInvocationRecord } from "./tool-invocation.types";
