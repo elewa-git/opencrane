@@ -3,7 +3,7 @@
 ## The vision
 
 OpenCrane is building a company workspace where every employee has a private AI assistant and
-teams can delegate repeatable work to shared agents. Assistants should understand how people work,
+teams can ask a company assistant for help and automate repeatable work. Assistants should understand how people work,
 use the right company tools and knowledge, and carry useful context between conversations.
 
 The organisation chooses where OpenCrane runs, which models it uses, what each assistant may
@@ -16,8 +16,8 @@ organisation's chosen configuration.
 OpenCrane brings five things together:
 
 - **People and teams:** company membership and permissions determine who may use or manage each resource.
-- **Assistants:** a personal assistant works privately for one employee; a shared agent is intended
-  to carry out a defined company task with its own permissions.
+- **Assistants:** a personal assistant works privately for one employee; a company assistant serves a shared task
+  with its own permissions. Scheduled and autonomous work remain part of the vision.
 - **Conversations:** a place to ask for work, follow progress and return to its history. An assistant
   and a conversation are different things: the assistant helps; the conversation records the work.
 - **Tools, knowledge and files:** tools act in other systems, knowledge supplies context, and files
@@ -36,9 +36,11 @@ and ask a company assistant for help in a linked chat. They can review and edit 
 returning it to the group. These text-conversation journeys have passed live testing in the 0.11
 review baseline, including saved answers after a browser reload.
 
-The wider vision still needs work: assistants do not yet perform governed tool actions, remember
-information across conversations, run shared schedules or delegate autonomously to other assistants.
-Administration and recovery have their own remaining product and qualification work.
+A tested implementation now connects one permitted tool call to an assistant answer. Company tool
+assignment and personal tool-progress display are also implemented, but the complete journey still
+needs installation and a live integration test. Remembering information across conversations,
+approved actions, shared schedules and autonomous delegation remain unfinished. Administration
+and recovery also have remaining product and live-verification work.
 
 See [what is built and what remains](https://opencrane.ai/guide/status) for the current distinction,
 [CHANGELOG.md](CHANGELOG.md) for capability changes, and [plan.md](plan.md) for active work.

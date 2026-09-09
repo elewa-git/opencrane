@@ -14,10 +14,10 @@ saved configuration and the company's permissions determine how it may help.
    inspect them and continue the work later.
 
 ::: info Current scope
-Durable conversation history, bounded personal model turns and computer inspection are implemented
-in the 0.11 review baseline. Agent-driven tool use, the complete approval journey and durable
-created-output journeys remain unfinished. See [development status](/guide/status) before treating
-the sequence above as an available end-to-end workflow.
+Personal and group text conversations, company-assistant replies and saved-answer activity have
+passed live testing. One permitted tool call followed by an answer is implemented and tested, but
+still needs a live integration proof. The complete approval and durable created-output journeys
+remain unfinished. [Development status](/guide/status) separates source, tests and live availability.
 :::
 
 ## Returning to work
@@ -29,7 +29,7 @@ its workspace recoverable. Live recovery testing remains part of qualification.
 ## Follow assistant work
 
 Open **Recent activity** in a personal assistant conversation to see its work and reopen a saved
-answer. The tool-progress follow-up adds a short description of the latest tool in the current
+answer. The implemented tool-progress display adds a short description of the latest tool in the current
 attempt: **Tool queued**, **Tool running**, **Tool result received** or **Tool needs attention**.
 The overall work status remains visible separately. A received tool result means the assistant has
 input to work with; it may still be preparing its answer.
@@ -47,8 +47,8 @@ do not ask an assistant to run. You can explicitly [ask the company assistant](/
 from one of your group messages, continue in a linked chat, and review a result before sharing it back.
 Delegation between assistants remains planned.
 
-A shared agent is intended for a repeatable company task with its own access. Its scheduled and
-triggered execution is not yet part of the current working product. Read
+The company assistant is a shared assistant with its own access. Running shared assistants on a
+schedule or from automatic triggers is not yet part of the current working product. Read
 [shared agents](/guide/first-agent) for that distinction.
 
 > See also: [Set up your personal assistant](/guide/persona) ·

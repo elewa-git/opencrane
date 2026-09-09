@@ -14,7 +14,7 @@ tracks, and the deployment ledger owns live evidence.
 
 | Milestone | Outcome | Required evidence |
 | --- | --- | --- |
-| Finish the 0.11 review baseline | People can onboard and use durable personal and group text chats. | Repair the remaining replay-contract CI failure; retain the existing live journey and recovery evidence. Review remains on #826. |
+| Finish the 0.11 review baseline | People can onboard and use durable personal and group text chats. | Replay-contract CI repair is complete; retain the existing live journey and recovery evidence. Review remains on #826. |
 | First follow-up PR | People can return to their assistant without losing login or completed activity. | Server replacement preserves a valid login, completed personal runs appear for their owner, and other people cannot read them. |
 | 0.12.0 | An assistant retrieves permitted company data and completes a human-approved action. | One real integration works through personal and company-child chats; activity, approval, cancellation, retry, result and current access remain correct after interruption. |
 | Remaining MVP tracks | People can use memory, files, delegation, scheduled work and understandable administration. | Each track below has its own complete user journey and negative/recovery proof. Assign later version numbers when its release scope is selected. |
@@ -42,8 +42,8 @@ actual authority prerequisite; it is not a reason to serialize independent imple
 | U1 | People can follow and control assistant work. Extend the existing workspace event mapping and approved UI components. | T1 contract; T2/T3 states before final proof | Show proposed/running/waiting/failed/cancelled/completed work, approval details and result links. Reload and SSE resume preserve the state. Accessible approval, choice and free-text interactions use server-issued contracts. |
 | M1 | An employee explicitly remembers, corrects and forgets information. Complete dataset provisioning and the existing memory gateway/catalog path. | Current identity contracts; T1 only if memory uses the tool proposal path | Remember a fact, recall it in another conversation, correct it, then forget it. Dataset selection comes from admitted authority; provenance, consent and sensitivity are visible. Another employee, silo or unentitled group cannot recall it. New runs capture the authorized dataset; immutable old snapshots are not patched. |
 | F1 | People attach documents and receive durable files. Complete existing artifact upload, scan, model-input and output-finalization owners. | Current artifact contracts; T1 when generation uses tools | Upload an allowed document, answer using its contents, create a downloadable result, then reload/retry/close the conversation. Infected or unscanned content stays unavailable; unauthorized readers and stale workers cannot retrieve or finalize it. |
-| D1 | An assistant delegates a bounded task and receives the result. Compose existing child admission, reservation and completion ownership with a model-visible spawn operation. | T1 and T3; F1 or M1 only when delegated context includes those resources | One child uses explicitly selected authorized context, narrower capabilities and bounded depth/fan-out/spend. Its terminal result returns once; parent cancellation propagates. Siblings cannot read each other and child failures remain visible. Prove one level before recursive cases. |
-| S1 | Teams schedule useful work. Restore scheduling/trigger execution against the current identity, admission and lease contracts. | T3; D1 only for workflows that delegate | One scheduled company task runs with current authority. Pause/resume, overlap policy, retry, cancellation and missed triggers have explicit outcomes. Removing its permission prevents the next effect. Retired runtime routes remain deleted. |
+| D1 | An assistant delegates a bounded task and receives the result. Extend the current run and conversation owners with explicit parent/child admission, bounded reservations and durable completion; those autonomous contracts are absent from the current baseline. | T1 and T3; F1 or M1 only when delegated context includes those resources | One child uses explicitly selected authorized context, narrower capabilities and bounded depth/fan-out/spend. Its terminal result returns once; parent cancellation propagates. Siblings cannot read each other and child failures remain visible. Prove one level before recursive cases. |
+| S1 | Teams schedule useful work. Implement scheduled admission against current identity and lease contracts, with a product-owned recurrence policy; the retired managed scheduler is absent. | T3; D1 only for workflows that delegate | One scheduled company task runs with current authority. Pause/resume, overlap policy, retry, cancellation and missed triggers have explicit outcomes. Removing its permission prevents the next effect. Retired runtime routes remain deleted. |
 | A2 | Administrators configure assistants, integrations and spending in the product. Extend existing protected APIs and settings owners. | Relevant capability contracts from T1/T2/M1/S1 | A company operator configures one agent, provider/model, tool grant and budget, reviews effective access and usage, and revokes the grant. Ordinary employees cannot perform those changes or view secrets. Figures are actual recorded usage, with unknown cost stated explicitly. |
 | Q1 | The complete product recovers predictably under normal failures. Maintain focused operational proofs throughout delivery. | Run as each capability lands; final acceptance after selected tracks | Prove fresh-install readiness, cold computer startup, controller/consumer failure, provider failure, long-history cost, access changes, backup recovery and usage accounting on exact qualified images. Separate measured recovery intervals from user-visible outage and repair-deploy timings. |
 
@@ -55,8 +55,10 @@ explicit authorization. The runtime proposes work; it never becomes the authorit
 
 The MCP public task API is caller-owned and does not supply the conversation run binding. Do not
 impersonate a human through that API to avoid adding the required run/lease-bound admission. The
-current lifecycle reporter validates fences but does not persist participant history; T1 must
-connect real tool activity/results to KurrentDB rather than treating log output as conversation proof.
+current lifecycle reporter validates fences but does not persist participant history. T1 now saves
+its private selection/result evidence in the conversation-turn stream and retains durable invocation
+state in IAM. Personal Recent activity reads the permitted phase from that state. Additional
+participant progress requires its own read/update contract; logs are not conversation proof.
 
 The internal continuation is CI-qualified in [#830](https://github.com/elewa-git/opencrane/pull/830)
 at `ada28f1f7`. The company-tool follow-up retains the existing assistant provisioning owner:
@@ -77,9 +79,22 @@ progress needs a separate participant-authorized read; it must not widen the per
 Approval, cancellation and uncertain-effect recovery keep their existing separate acceptance rows.
 
 Long-term memory and autonomous delegation are not prerequisites for the first useful tool action.
-The existing #320 issue is closed but retains unfinished and obsolete runtime wording; refresh or
-replace its delivery issue before D1, using ADR 0016 as the current architecture. A closed issue or
-an old implementation narrative is not evidence of live functionality.
+The closed #320 issue describes child reservations, parent/root run coordinates and completion
+repositories that are absent from the current baseline. D1 must design those missing contracts
+inside the existing run/conversation ownership. The current group-child flow requires a human's
+source message and authority; it cannot serve autonomous work by impersonating that human. Current
+run admission records an interactive trigger and the compiler requires a human-authored request.
+D1 and S1 therefore need an explicit cause and requester contract for non-human work. The surviving workflow scheduler helper supplies no cron, product model, API or worker loop, and the
+retired managed scheduler is absent. S1 must supply its own current-authority admission and
+recurrence policy. Refresh or replace the delivery issue before D1, using ADR 0016 as the current
+architecture. A closed issue or an old implementation narrative is not evidence of functionality.
+
+For A2, start with a company-assistant settings page that displays authoritative configuration,
+edits existing tool assignments and links to the existing provider-key administration screen.
+Provider-key UI already exists. The tools read API lacks model and budget details, so extend the
+protected company configuration read instead of showing browser defaults. Editing an existing
+assistant's model or budget needs a separate revision command; repeating initial setup deliberately
+preserves those choices. Keep model/budget read-only until that command is implemented.
 
 ## Owners and parallel waves
 
@@ -124,8 +139,9 @@ plan. They recover work between working turns; active runs continue directly bet
    the next exact action, report here, and pause the overnight schedule. A late wake produces the
    handoff instead of silently extending the run.
 
-The desired morning result is a repaired baseline, a reviewable continuity follow-up and concrete
-progress toward the first governed action, with every other MVP track planned. Progress depends
+The [dated handoff](overnight-delivery-2026-09-09.md) records the resulting review surfaces, evidence
+and remaining decisions. The desired morning result is a repaired baseline, a reviewable continuity
+follow-up and concrete progress toward the first governed action, with every other MVP track planned. Progress depends
 on review, CI and external test availability; none of these targets are a promise that all MVP
 features will be complete by morning.
 

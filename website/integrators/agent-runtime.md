@@ -6,8 +6,9 @@ KurrentDB; a Kubernetes Pod is only the temporary machine that realises one acti
 The 0.11 review baseline implements personal and explicit company-child text turns, computer
 inspection, activation recovery and workspace checkpoint/restore. The server owns model requests and
 answer storage. The continuation implementation also connects one tool requiring no approval to a final
-answer, while its qualification, visible progress and recovery controls remain outstanding.
-Managed-agent scheduling and autonomous delegation remain unfinished. See
+answer. Company tool assignment and personal tool-phase reads are also implemented; installation
+and live integration proof remain separate from automated checks. Approval and recovery controls,
+managed-agent scheduling and autonomous delegation remain unfinished. See
 [development status](/guide/status) for implementation and live-qualification boundaries.
 
 > See also: [Central authorization authority](/integrators/authorization-authority) (product action
@@ -57,17 +58,46 @@ can be checkpointed before cooling and restored when a later generation starts. 
 private OpenCrane server; NetworkPolicy denies direct LiteLLM access. New output appends recheck the
 active lease, while retries recognise an already accepted, identical event.
 
-The server reserves each request within the original run's call, token and authority limits before
-dispatch. The first may select one frozen tool requiring no approval. Its original declaration enters
-encrypted custody before private selection and tool admission. After current IAM checks release the
-exact terminal result, the server encrypts the paired messages and reserves a final request before
-acknowledging delivery. That request offers no tools, reuses the saved key receipt and deducts the
-entire first token reservation. No intermediate tool entry changes the participant conversation head.
+## Model requests and tool continuation
+
+Admission freezes the approved configuration, original conversation head, model choice, permitted
+tools and aggregate budget. The current product response limit is 4,096 output tokens; each request
+uses the smaller of that ceiling and its remaining allowance. Personal memory is excluded until
+its provisioning and recall journey is complete.
+
+Before each model request, the server records a reservation in the existing private turn stream.
+Only the handler that wins a fresh reservation may send the request. The original run's call,
+token and authority limits remain binding after restart.
+
+| Private turn revision | Recorded decision |
+|---|---|
+| 0 | Freeze the original input and conversation head. |
+| 1 | Reserve the first model request. |
+| 2 | Select the encrypted tool declaration, or accept a direct text answer. |
+| 3 | Reserve the final model request against the saved assistant/tool pair. |
+| 4 | Accept the final answer after the tool result. |
+
+The first request may select one unambiguous tool from the frozen set that requires no approval,
+provided the original budget allows two model calls. Its exact declaration enters encrypted
+custody before selection is recorded. Tool admission saves the proposal and existing MCP executor
+work in one PostgreSQL transaction. Current permission checks still apply when the executor claims
+that work, and its claim cannot outlive the original run, active lease or workload trust.
+
+After current IAM checks release the exact terminal result, the server encrypts the paired
+assistant declaration and tool result. The second reservation must commit before result delivery
+is acknowledged. The final request offers no tools. It uses the original key, verifies its saved
+digest and expiry, and subtracts the entire first token reservation from the original allowance.
+Each HTTP request lasts at most 25 seconds and cannot outlive the key or current authority.
+
+No intermediate tool event changes the participant conversation head. Personal Recent activity
+reads a separate, permission-checked run projection containing only a nullable latest-tool phase.
+Company-child progress and execution controls remain separate work.
 
 Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`. An uncertain
-response keeps its reservation, with no paid redispatch on restart. Expired or missing key custody
-cannot create a fresh allowance. LiteLLM and provider-internal retries have not been qualified as
-exactly-once execution.
+response keeps its reservation, with no paid redispatch on restart. Key cleanup retains a
+non-secret spent marker; expired or missing custody cannot create a fresh allowance. These rules
+bound OpenCrane's admitted requests. They do not establish exactly-once execution or retry behaviour
+inside LiteLLM or the provider.
 
 ## Review surface
 
@@ -100,20 +130,19 @@ Activation delivery supports competing consumers, reconnect backoff and parked-m
 Lease renewal and loss handling prevent replaced compute from retaining authority. Checkpoint and
 restore code preserves workspace bytes while conversation history remains in KurrentDB.
 
-The current text path also saves the exact prepared answer before history append. A restarted
-server finishes that saved event and run bookkeeping before admitting another turn. A reservation
-without a saved answer becomes `response_unavailable` after its fixed deadline and leaves the run
-pending. The worker remains degraded without resubmitting that model step; user-facing recovery
+The server saves the exact prepared history event before appending an answer, including its
+original content, coordinates and timestamp. Recovery finishes that saved event before recompiling
+a conversation head that may already contain the answer, then completes the run bookkeeping.
+A saved encrypted tool declaration can resume admission even before its selection append, without
+repeating the first model request. A reservation without a saved response becomes
+`response_unavailable` after its fixed deadline and leaves the run pending. The worker remains degraded without resubmitting that model step; user-facing recovery
 controls are still planned.
 
-Text checkpoint `378a755b6` has passed full CI, including seven conversation and 17 adapter cases
-against real KurrentDB and all seven fresh PostgreSQL targets. The later continuation implementation
-in PR #830 awaits CI and live qualification. Neither replacement is installed on testv5, and a
-permitted integration fixture is still needed. Company tools, approvals and visible
-recovery remain unfinished. The completed file-copy restore and remaining snapshot-restore drill
-are recorded in [development status](/guide/status). Follow the
-[operator runbook](/operators/runbook) for those procedures and the
-[architecture map](/advanced/architecture) for the store and controller owners.
+Automated persistence and replay tests cover these server responsibilities. A real integration,
+installation and user-facing recovery remain separate qualification work. The single current
+[development status](/guide/status) page records CI checkpoints, live conversation proof and the
+completed file-copy recovery drill. Follow the [operator runbook](/operators/runbook) for deployment
+procedures and the [architecture map](/advanced/architecture) for the store and controller owners.
 
 ## Source
 

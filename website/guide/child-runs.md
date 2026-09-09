@@ -5,9 +5,9 @@ open a linked chat with the company assistant, follow its answer there, and revi
 to bring back to the group.
 
 ::: info Development baseline
-This flow is implemented in the 0.11 review branch. Complete testing with real employees on a
-fresh installation remains part of [live qualification](/guide/status). An administrator must
-first [set up the company assistant](/guide/first-agent) and permit you to use it.
+This text-conversation flow has passed live testing with three employees in the test installation.
+The newer tool and login-continuity changes have separate [qualification status](/guide/status).
+An administrator must first [set up the company assistant](/guide/first-agent) and permit you to use it.
 :::
 
 ## Start work from a message
