@@ -2,15 +2,19 @@ import { z } from "zod";
 
 import { OrganizationMemberRoles, OrganizationMemberStatuses, type OrganizationMember, type OrganizationMemberDirectory } from "./directory.types";
 import { OrganizationInvitationStatuses, OrganizationInviteRecipientReasons, type AcceptOrganizationInvitationResult, type CreateOrganizationInvitationsResult, type OrganizationInvitation, type OrganizationInviteValidationResult, type ResendOrganizationInvitationResult } from "./invitations.types";
+import { OrganizationMemberRemovalStates, OrganizationMemberRemovalUnavailableReasons } from "./removal.types";
 
 /** This validator is the trust boundary for Fleet responses and must change with the domain models. */
-const _OrganizationMemberSchema: z.ZodType<OrganizationMember> = z.object({ membershipId: z.string().min(1), displayName: z.string().min(1), email: z.string().email(), role: z.nativeEnum(OrganizationMemberRoles), status: z.nativeEnum(OrganizationMemberStatuses), joinedAt: z.string().datetime(), isCurrentUser: z.boolean() }).strict();
+const _OrganizationMemberSchema = z.object({ membershipId: z.string().min(1), displayName: z.string().min(1), email: z.string().email(), role: z.nativeEnum(OrganizationMemberRoles), status: z.nativeEnum(OrganizationMemberStatuses), joinedAt: z.string().datetime(), isCurrentUser: z.boolean() }).strict().transform(function _UnsupportedRemoval(member): OrganizationMember
+{
+	return { ...member, removal: { state: OrganizationMemberRemovalStates.Unavailable, reason: OrganizationMemberRemovalUnavailableReasons.AuthorityUnsupported } };
+});
 
 /** Validates one invitation without admitting a browser-authored owner role. */
 const _OrganizationInvitationSchema: z.ZodType<OrganizationInvitation> = z.object({ invitationId: z.string().min(1), email: z.string().email(), role: z.union([z.literal(OrganizationMemberRoles.Admin), z.literal(OrganizationMemberRoles.Member)]), status: z.nativeEnum(OrganizationInvitationStatuses), expiresAt: z.string().datetime(), invitedAt: z.string().datetime(), invitedByDisplayName: z.string().min(1), inviteLink: z.string().url().optional() }).strict();
 
 /** Validates the Fleet directory response before it becomes local API data. */
-const _OrganizationMemberDirectorySchema: z.ZodType<OrganizationMemberDirectory> = z.object({ members: z.array(_OrganizationMemberSchema), invitations: z.array(_OrganizationInvitationSchema), activeCount: z.number().int().nonnegative(), pendingCount: z.number().int().nonnegative() }).strict();
+const _OrganizationMemberDirectorySchema: z.ZodType<OrganizationMemberDirectory, z.ZodTypeDef, unknown> = z.object({ members: z.array(_OrganizationMemberSchema), invitations: z.array(_OrganizationInvitationSchema), activeCount: z.number().int().nonnegative(), pendingCount: z.number().int().nonnegative() }).strict();
 
 /** Validates every Fleet recipient decision. */
 const _OrganizationInviteValidationSchema: z.ZodType<OrganizationInviteValidationResult> = z.object({ recipients: z.array(z.object({ email: z.string(), normalizedEmail: z.string(), valid: z.boolean(), reason: z.nativeEnum(OrganizationInviteRecipientReasons).optional() }).strict()) }).strict();
@@ -22,7 +26,7 @@ const _CreateOrganizationInvitationsResultSchema: z.ZodType<CreateOrganizationIn
 const _ResendOrganizationInvitationResultSchema: z.ZodType<ResendOrganizationInvitationResult> = z.object({ invitation: _OrganizationInvitationSchema, inviteLink: z.string().url() }).strict();
 
 /** Validates a Fleet acceptance result. */
-const _AcceptOrganizationInvitationResultSchema: z.ZodType<AcceptOrganizationInvitationResult> = z.object({ member: _OrganizationMemberSchema }).strict();
+const _AcceptOrganizationInvitationResultSchema: z.ZodType<AcceptOrganizationInvitationResult, z.ZodTypeDef, unknown> = z.object({ member: _OrganizationMemberSchema }).strict();
 
 /** Parses an untrusted Fleet directory response or throws closed. */
 export function _ParseOrganizationMemberDirectory(value: unknown): OrganizationMemberDirectory { return _OrganizationMemberDirectorySchema.parse(value); }

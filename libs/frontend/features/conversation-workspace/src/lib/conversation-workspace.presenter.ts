@@ -94,6 +94,8 @@ export class ConversationWorkspacePresenter
 	private readonly _loadEffect = effect(this._Load.bind(this));
 	/** Open existing asset and elicitation state whenever stream coordinates change. */
 	private readonly _selectionEffect = effect(this._OpenComposedState.bind(this));
+	/** Closes the local creation dialog when loading or access loss replaces the ready workspace. */
+	private readonly _creationAvailabilityEffect = effect(this._CloseUnavailableCreation.bind(this));
 	/** Last selected coordinate used to purge composed state before changing scope. */
 	private _composedConversationId: string | null = null;
 
@@ -133,6 +135,13 @@ export class ConversationWorkspacePresenter
 	}
 	/** Start the initial parallel directory/list read. */
 	private _Load(): void { void this.store.load(); }
+
+	/** Prevent a dismissed workspace dialog from reopening after authority is rechecked. */
+	private _CloseUnavailableCreation(): void
+	{
+		if (this.store.routeState() !== ConversationWorkspaceRouteStates.Ready)
+			this.creating.set(false);
+	}
 
 	/** Open the asset state whenever the selected conversation changes. */
 	private _OpenComposedState(): void

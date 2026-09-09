@@ -15,6 +15,22 @@ function _Gateway(post: ReturnType<typeof vi.fn>, get: ReturnType<typeof vi.fn> 
 
 describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGateway()
 {
+	it.each([401, 403, 404])("maps directory and list HTTP %s to access loss without exposing server details", async function _DirectoryAccessLoss(status)
+	{
+		const get = vi.fn().mockResolvedValue({ error: { message: "private server details" }, response: { status } });
+		const gateway = _Gateway(vi.fn(), get);
+		await expect(gateway.directory()).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+		await expect(gateway.list()).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+	});
+
+	it("keeps malformed directory and list success responses distinct from authority loss", async function _MalformedDirectory()
+	{
+		const get = vi.fn().mockResolvedValue({ data: {}, response: { status: 200 } });
+		const gateway = _Gateway(vi.fn(), get);
+		await expect(gateway.directory()).rejects.toThrow("invalid conversation response");
+		await expect(gateway.list()).rejects.toThrow("invalid conversation response");
+	});
+
 	it("reads recent personal work with cancellation and rejects unknown status or duplicate rows", async function _PersonalRuns()
 	{
 		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: "2026-09-08T12:00:01Z" };

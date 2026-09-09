@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from "@angular/core";
 
+import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors";
 import { CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway";
 import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHistoryProjection } from "./conversation-workspace.types";
 
@@ -33,12 +34,17 @@ export class ConversationOnboardingHistoryStore
 	 *
 	 * Called by: {@link ConversationWorkspaceStore.load} as part of the parallel workspace read.
 	 *
-	 * @returns The validated projection, or `Unavailable` when the optional request fails.
+	 * @returns The validated projection, or `Unavailable` for a temporary failure; access denial still rejects the workspace read.
 	 */
 	public async load(): Promise<ConversationOnboardingHistoryProjection>
 	{
 		try { return await this._gateway.onboardingHistory(); }
-		catch { return _UNAVAILABLE_ONBOARDING_HISTORY; }
+		catch (error)
+		{
+			if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged)
+				throw error;
+			return _UNAVAILABLE_ONBOARDING_HISTORY;
+		}
 	}
 
 	/**
@@ -51,7 +57,8 @@ export class ConversationOnboardingHistoryStore
 	public adopt(projection: ConversationOnboardingHistoryProjection): void
 	{
 		this._projection.set(projection);
-		if (this._projection().status !== ConversationOnboardingHistoryStatuses.Ready) this._selected.set(false);
+		if (this._projection().status !== ConversationOnboardingHistoryStatuses.Ready)
+			this._selected.set(false);
 	}
 
 	/**
@@ -63,7 +70,8 @@ export class ConversationOnboardingHistoryStore
 	 */
 	public select(): boolean
 	{
-		if (this._projection().status !== ConversationOnboardingHistoryStatuses.Ready) return false;
+		if (this._projection().status !== ConversationOnboardingHistoryStatuses.Ready)
+			return false;
 		this._selected.set(true);
 		return true;
 	}
@@ -74,4 +82,11 @@ export class ConversationOnboardingHistoryStore
 	 * Called by: {@link ConversationWorkspaceStore.open} and its selection cleanup paths.
 	 */
 	public clearSelection(): void { this._selected.set(false); }
+
+	/** Erase the retained private transcript when workspace authority is lost. */
+	public purge(): void
+	{
+		this._selected.set(false);
+		this._projection.set(_UNAVAILABLE_ONBOARDING_HISTORY);
+	}
 }

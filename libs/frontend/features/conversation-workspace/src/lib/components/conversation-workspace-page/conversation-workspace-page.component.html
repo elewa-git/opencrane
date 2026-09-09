@@ -219,7 +219,7 @@
   <wo-conversation-group-request [source]="groupStore.requestSource()" [assistants]="store.directory()?.companyAssistants ?? []" [selectedId]="groupStore.agentServiceId()" [state]="groupStore.requestState()" [error]="groupStore.requestError()" (assistantSelected)="groupStore.chooseAssistant($event)" (submitted)="groupStore.create()" (dismissed)="groupStore.dismissRequest()" />
   <wo-conversation-group-share [visible]="groupStore.shareSource() !== null" [text]="groupStore.shareText()" [state]="groupStore.shareState()" [error]="groupStore.shareError()" (textChanged)="groupStore.editShare($event)" (submitted)="groupStore.share()" (dismissed)="groupStore.dismissShare()" (groupRequested)="backToGroup()" />
   <wo-conversation-create
-    [visible]="creating()"
+    [visible]="creating() && store.routeState() === routeStates.Ready"
     [directory]="store.directory()"
     [mode]="store.creationMode()"
     [selectedParticipantRefs]="store.selectedParticipantRefs()"

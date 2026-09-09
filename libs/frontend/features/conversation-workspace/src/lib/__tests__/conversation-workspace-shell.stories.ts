@@ -1,13 +1,13 @@
 import { Router } from "@angular/router";
 import { type Decorator, type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import type { MessageEntry } from "@opencrane/contracts";
 import { ConversationModes, ConversationLifecycles } from "@opencrane/models/conversations";
 import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationHistoryProjection, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
-import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
 import { ConversationWorkspaceRouteComponent } from "../conversation-workspace-route/conversation-workspace-route.component";
 
@@ -120,4 +120,27 @@ export const SharedCompanyChild: Story = { decorators: [_Providers({ ..._HISTORY
 	const canvas = within(canvasElement);
 	expect(await canvas.findByText("Shared assistant chat · 3 participants")).toBeVisible();
 	expect(canvas.getByRole("button", { name: "Back to group" })).toBeVisible();
+} };
+
+/** Proves that access loss closes creation and releases focus to the real workspace explanation. */
+export const AccessLostDuringCreation: Story = { decorators: [_Providers(_HISTORY, {
+	..._WORKSPACE_GATEWAY,
+	create: async function _Denied() { throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available."); }
+})], play: async function _CreationAccessLoss({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	const body = within(canvasElement.ownerDocument.body);
+	await userEvent.click(await canvas.findByRole("button", { name: "New session" }));
+	const dialog = await body.findByRole("dialog", { name: "New conversation" });
+	await userEvent.click(within(dialog).getByRole("button", { name: "Create conversation" }));
+	const heading = await canvas.findByRole("heading", { name: "Access changed" });
+	await waitFor(function _Closed()
+	{
+		expect(body.queryByRole("dialog", { name: "New conversation" })).not.toBeInTheDocument();
+		expect(body.queryByText("No personal Agent is assigned. Ask an administrator to finish Agent setup before starting this mode.")).not.toBeInTheDocument();
+		expect(heading).toHaveFocus();
+	});
+	await userEvent.click(canvas.getByRole("button", { name: "Back to chats" }));
+	await canvas.findByRole("button", { name: "New session" });
+	expect(body.queryByRole("dialog", { name: "New conversation" })).not.toBeInTheDocument();
 } };

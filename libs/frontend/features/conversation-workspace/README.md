@@ -53,6 +53,9 @@ server-stamped message author. The page owns composition and existing navigation
 covers the choice, empty, pending, retry, ready-child, and accepted-share states, including a narrow
 request dialog. None of these presentation hints replace server source or permission checks.
 
+Creation closes when loading or access loss replaces the ready workspace. Its local visibility
+is reset, so reloading cannot reopen a stale modal over the access-change explanation.
+
 ## Public surface
 
 - `CONVERSATION_WORKSPACE_ROUTES` is the child route table the app mounts at `/chats`.

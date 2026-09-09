@@ -14,7 +14,7 @@ tracks, and the deployment ledger owns live evidence.
 
 | Milestone | Outcome | Required evidence |
 | --- | --- | --- |
-| Finish the 0.11 review baseline | People can onboard and use durable personal and group text chats. | Repair the remaining replay-contract CI failure; retain the existing live journey and recovery evidence. Review remains on #826. |
+| Finish the 0.11 review baseline | People can onboard and use durable personal and group text chats. | Replay-contract CI is repaired; retain the existing live journey and recovery evidence. Review remains on #826. |
 | First follow-up PR | People can return to their assistant without losing login or completed activity. | Server replacement preserves a valid login, completed personal runs appear for their owner, and other people cannot read them. |
 | 0.12.0 | An assistant retrieves permitted company data and completes a human-approved action. | One real integration works through personal and company-child chats; activity, approval, cancellation, retry, result and current access remain correct after interruption. |
 | Remaining MVP tracks | People can use memory, files, delegation, scheduled work and understandable administration. | Each track below has its own complete user journey and negative/recovery proof. Assign later version numbers when its release scope is selected. |
@@ -62,6 +62,25 @@ Long-term memory and autonomous delegation are not prerequisites for the first u
 The existing #320 issue is closed but retains unfinished and obsolete runtime wording; refresh or
 replace its delivery issue before D1, using ADR 0016 as the current architecture. A closed issue or
 an old implementation narrative is not evidence of live functionality.
+
+## Source-grounded follow-through
+
+The internal T1 continuation in [#830](https://github.com/elewa-git/opencrane/pull/830) passes CI at
+`ada28f1f7`. Finish its user journey by assigning an explicitly permitted tool to a company
+assistant, installing a dedicated authorised test integration, and exposing the tool's progress
+and result. The existing company-assistant revision writer can own tool assignment; configuration
+must not inherit a requesting employee's private credentials. Credential activation still needs
+its own explicit contract. The current test installation has no suitable integration.
+
+M1 preflight found that the pinned memory service's chunk recall path does not establish dataset
+isolation and that its result identifiers cannot be treated as deletion handles. Keep personal
+memory disabled until the gateway proves two-dataset isolation, stable record identity and safe
+forget/correction recovery. A dataset UUID alone is not that proof.
+
+F1 should extend the existing conversation-asset upload, quarantine, scan and download owners.
+Document contents still need a model-input path, and generated files need current-authority
+finalisation. Remove stale output-ticket descriptions when this slice opens; retired runtime
+routes are not an implementation template.
 
 ## Owners and parallel waves
 

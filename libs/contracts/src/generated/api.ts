@@ -1015,6 +1015,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organization/members/{membershipId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove another non-Owner member's current access
+         * @description Standalone retains the suspended membership and records removal atomically. Authorized retries return that state. Self-removal and Owner removal are refused. Fleet removal is unsupported and never falls back to local writes.
+         */
+        post: operations["removeOrganizationMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organization/members": {
         parameters: {
             query?: never;
@@ -1638,6 +1658,15 @@ export interface components {
             /** @enum {string} */
             status: "created" | "updated" | "deleted";
         };
+        OrganizationMemberRemovalCapability: {
+            /** @constant */
+            state: "available";
+        } | {
+            /** @constant */
+            state: "unavailable";
+            /** @enum {string} */
+            reason: "self" | "owner" | "inactive" | "authority_unsupported" | "not_authorized";
+        };
         OrganizationMember: {
             membershipId: string;
             displayName: string;
@@ -1650,6 +1679,7 @@ export interface components {
             /** Format: date-time */
             joinedAt: string;
             isCurrentUser: boolean;
+            removal: components["schemas"]["OrganizationMemberRemovalCapability"];
         };
         OrganizationInvitation: {
             invitationId: string;
@@ -1693,6 +1723,9 @@ export interface components {
             inviteLink: string;
         };
         AcceptOrganizationInvitationResult: {
+            member: components["schemas"]["OrganizationMember"];
+        };
+        RemoveOrganizationMemberResult: {
             member: components["schemas"]["OrganizationMember"];
         };
         /** @description An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists. */
@@ -6475,6 +6508,77 @@ export interface operations {
                 };
             };
             /** @description Personal asset metadata could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    removeOrganizationMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Removed access or recovered an authorized retry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoveOrganizationMemberResult"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -22,6 +22,11 @@ The adapter sends a caller-supplied idempotency key on create and refresh-link c
 manufactures invitation links, retries writes on its own, or interprets billing plans and seat
 counts in the browser.
 
+Removal posts only an exact membership path and `{}` through the generated API. Its returned
+member carries server-authored availability or a protected-target reason. The adapter requires a
+Suspended removal result, rejects unknown status or capability shapes, preserves 401/403 as access denial, and maps 404/503 without inferring authority
+from role labels or error prose.
+
 ## Public surface
 
 - `OpenCraneOrganizationMembersGateway` — live implementation bound by the app composition root.

@@ -14,3 +14,5 @@ export { _CreateOrganizationProductAccessMiddleware } from "./product-access.mid
 export { _CreateOrganizationMembersRouter } from "./organization-members.router";
 export { PrismaOrganizationMemberUnitOfWork } from "./prisma-organization-member-unit-of-work";
 export { StandaloneOrganizationMembershipAuthority } from "./standalone-organization-membership-authority";
+export { OrganizationMemberRemovalStates, OrganizationMemberRemovalUnavailableReasons } from "./removal.types";
+export type { OrganizationMemberRemovalCapability, RemoveOrganizationMemberCommand, RemoveOrganizationMemberResult } from "./removal.types";
