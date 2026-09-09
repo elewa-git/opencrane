@@ -2,15 +2,19 @@
 
 ## Library and component decomposition — 2026-09-09
 
-In progress against local review base `45e0c6b7f2f461b8f9ed9549035fe052933887e6`.
-Keep the server app as bootstrap and declarative composition. Move concrete adapters and use cases
-into their existing capability libraries. Organise inputs, agent services, authorization, contracts,
-and workload identity by responsibility. Give conversation history and computer projections their
-own dependency boundaries, and separate conversation metadata reads, creation, and lifecycle writes.
-On the frontend, split tools-page commands and workspace presentation into stores and cohesive
-components. Preserve reusable component contracts and require an explicit replacement inventory
-before agents remove or inline them. Completion requires focused checks, affected validation, and
-independent architecture/component review; it does not include deployment.
+Core implementation and independent review are complete on `41129ad01c725bffd1d7b9598c18e83337a3fd3f`,
+against review base `45e0c6b7f2f461b8f9ed9549035fe052933887e6`. The server app contains bootstrap and
+declarative composition; functional libraries own its adapters and use cases. Inputs, agent services,
+conversations, authorization, contracts, workload identity, providers, auth, and skills use capability
+folders. Conversation history and computer projections have separate library boundaries. Frontend
+pages compose focused components and stores, with agent rules preserving reusable component contracts.
+
+Local validation passed across 125 affected projects (260 build/test/lint tasks), the final 149-story
+browser/accessibility catalogue, and independent architecture, code, and component reviews. The visual
+follow-up records 20 new macOS screenshot candidates and two heading candidates matching the
+already-committed typography; the no-update comparison passes all three visual tests. The candidates
+require human visual review. Native Linux captures and draft PR publication remain pending explicit
+publication approval in the current task; no deployment or live qualification is included.
 
 ## Delivery focus — 2026-09-09
 
