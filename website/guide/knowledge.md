@@ -1,7 +1,12 @@
-# Company knowledge and personal memory
+# Knowledge and personal preferences
 
-**Company knowledge** gives an assistant information it may use for work. **Personal memory** is
-useful context it retains about one person's preferences or ongoing tasks between conversations.
+**Knowledge** is information an assistant may use for work: project decisions, contract terms,
+documents or the context of an ongoing task. Knowledge can be private to one person or shared with
+an authorized audience.
+
+**Personal preferences** describe how you want your personal assistant to work: language, tone,
+answer length or working style. Remembering information and personalizing behaviour are different
+product capabilities, even when both persist between conversations.
 
 ::: info Still being completed
 OpenCrane has memory metadata, permission and gateway foundations, but the current personal
@@ -9,13 +14,21 @@ conversation path does not provide a complete remember, recall, correct and forg
 Shared organisation-memory workflows also remain product work. See [development status](/guide/status).
 :::
 
-## Keep the two purposes separate
+## Give shared agents their own configuration
 
-Company knowledge might include product information or approved internal documentation.
-Personal memory might include a person's preferred answer format or the context of their work.
+Group and shared agents use their own approved role, instructions and permissions, together with
+knowledge they are allowed to read. They must not inherit the personal preferences of their
+creator, requester or group members, including when a personal assistant delegates work to them.
 
-Neither should become available just because it was uploaded or mentioned. The completed product
-must make clear who can use the information, what was retained and how to change or remove it.
+For example, a shared agent may use an authorized project deadline. It does not also receive your
+preference for informal, short answers. Asking it in the group to “summarize this in three bullets”
+is an instruction for that task; it does not load or update your personal profile. An authorized
+owner can separately configure a team-wide style for the shared agent.
+
+Sharing knowledge or a connection does not share personal preferences. A preference cannot become
+shared-agent behaviour merely by being labelled as knowledge. The completed product must show
+what was retained, who can use it and how to correct or remove it. This distinction does not
+authorize automatic storage or publication into a group.
 
 ## Source inventory
 

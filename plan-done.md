@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-09-09 — tool continuation, company assignment, progress and member removal pass CI
+
+A personal turn can select one permitted tool, preserve its declaration and exact result privately,
+and produce a saved final answer inside the original model/token/time allowance. The internal
+continuation in [#830](https://github.com/elewa-git/opencrane/pull/830) passes full CI at `ada28f1f7`,
+including fresh PostgreSQL, actual KurrentDB and image validation. A real integration journey and
+installation remain pending; this completes the internal implementation checkpoint, not T1's full
+product acceptance.
+
+Administrators can remove member access through Settings. The server rechecks current authority,
+protects self-removal and Owners, and retains the suspended member's record. Current access denial
+clears private workspace and member settings state; delayed responses cannot restore it.
+[#831](https://github.com/elewa-git/opencrane/pull/831) passes full CI at `e5b8c8c72`, including five
+new real PostgreSQL cases, 123 browser/accessibility checks and the reviewed Linux states. Its live
+installation and real-account removal journey remain active qualification work.
+
+Administrators can assign existing tools to the company assistant through the protected API,
+using its own permissions and an immutable configuration revision. Personal Recent activity can
+show the latest tool phase separately from the overall work status. Company assignment
+[#832](https://github.com/elewa-git/opencrane/pull/832) at `ce3f1a4a9` and personal progress
+[#833](https://github.com/elewa-git/opencrane/pull/833) at `998fe433d` each pass full CI. Neither
+capability is installed on testv5. The [dated handoff](docs/design/overnight-delivery-2026-09-09.md) records their exact
+qualification and the source-grounded approval, memory and document follow-ups. No merge, tag or
+new-baseline installation is implied by these completed code/CI checkpoints.
+
 ## 2026-09-08 — personal activity and saved-answer navigation qualified on testv5
 
 Employees can follow newly admitted personal work in Recent activity, refresh its status and open

@@ -1,14 +1,14 @@
 # Architecture
 
-OpenCrane separates the **saved company workspace** from the computers that execute assistant work.
-This page maps the current 0.11 owners; [the introduction](/guide/introduction) explains the product
-without implementation detail.
+OpenCrane keeps a **saved company workspace** separate from the temporary computers that help
+with the work. People use conversations; the server checks access, coordinates assistants and
+saves accepted results.
 
-> See also: [Conversation computers](/integrators/agent-runtime) (execution and review) ·
-> [Central authorisation](/integrators/authorization-authority) (permission checks) ·
-> [Development status](/guide/status) (implementation and qualification)
+> See also: [What is OpenCrane?](/guide/introduction) (the product) ·
+> [Conversation computers](/integrators/agent-runtime) (execution and recovery contracts) ·
+> [Development status](/guide/status) (implemented, tested and live)
 
-## The current system
+## The system at a glance
 
 ```text
                        ┌────────────────────────────┐
@@ -37,156 +37,93 @@ without implementation detail.
                                       │
                          ┌────────────▼────────────┐
                          │ Conversation computer   │
-                         │ turn request, workspace │
-                         │ and private review      │
+                         │ requests the next step  │
+                         │ and holds the workspace │
                          └─────────────────────────┘
 ```
 
-The arrows show responsibility and coordination. The server consumes the activation queue and
-authorises a claim before Agent Sandbox creates compute; KurrentDB does not make permission
-decisions. The conversation computer requests work from the private server. The server keeps the
-prompt and model key, reserves each request, calls LiteLLM and saves accepted content. Current
-continuation implementation also connects one permitted tool result to a final answer. The Pod receives
-status only; [development status](/guide/status) separates qualified checkpoints from work under review.
+The arrows show coordination. The server consumes activation requests and authorises a claim
+before Agent Sandbox creates compute. KurrentDB stores evidence; it does not make permission
+decisions. The computer asks the server for the next step and receives status. Model input and keys
+stay on the server.
+
+## One request through the system
+
+1. **Save the request.** A participant posts a message in an authorised conversation. A personal
+   assistant request, or an explicit company-assistant request from a group, can start assistant work.
+2. **Set its limits.** The server checks current membership and grants, then records the assistant's
+   configuration, conversation input, model, permitted tools and budget for that task.
+3. **Prepare a computer.** Agent Sandbox starts or replaces the temporary computer admitted for the
+   conversation. Its current lease prevents a replaced computer from submitting new work.
+4. **Ask the model.** The server records each request before calling the configured model. The
+   current continuation can use one permitted tool that needs no approval and return its checked
+   result to one final model request.
+5. **Save the answer.** The server stores the answer before posting its history entry. A restart can
+   finish that same saved answer. If a paid response was lost before it could be saved, OpenCrane
+   keeps the request pending instead of silently sending it again.
+6. **Return to the work.** The browser reads the authorised history and recent personal activity.
+   Tool phase and overall work status are separate; a received tool result is not a completed answer.
+
+This describes implemented responsibilities. It does not establish that every step has been
+installed and proved against a real integration; the [status page](/guide/status) records that boundary.
 
 ## What each part owns
 
-| Part | Current owner and responsibility |
+| Part | Responsibility and source owner |
 |---|---|
-| Web workspace | `apps/opencrane-ui` and `libs/frontend`: conversations, input, history and computer review. |
-| Product server | `apps/opencrane` composes the backend libraries. They check current access, admit work and persist protected changes. |
-| PostgreSQL | Current memberships, groups, grants, agent configuration, transactional product records and rebuildable conversation directory/read projections. Private message payloads are stored separately from immutable history. |
-| KurrentDB | Ordered `conversation-{id}` history, computer lifecycle evidence and durable activation delivery. History entries reference encrypted message payloads. |
-| Conversation compute | `apps/conversation-computer` requests the next server-owned step, polls its outcome and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
-| Models | LiteLLM routes requests to configured providers and brokers scoped model credentials. Providers may be external to the organisation. |
-| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. The atomic handoff saves a permitted conversation proposal and its executor work together, with claims bounded by the original run and current access. The continuation implementation connects one permitted model-selected tool and its result to a final answer; qualification, approvals and visible progress remain open. |
-| Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Complete personal-memory journeys remain unfinished. |
-| Files | The artifact catalogue, `apps/artifact-service`, scanner and preprocessor own stored files, validation and processing. Computer workspace checkpoints use ArtifactStore. |
+| Web workspace | Conversations, input, saved history and review, in `apps/opencrane-ui` and `libs/frontend`. |
+| Product server | Current access checks and coordination of work, composed by `apps/opencrane` from backend libraries. |
+| PostgreSQL | Current memberships, groups, grants, assistant configuration, transactional records and conversation read projections. Private message content is stored separately from immutable history. |
+| KurrentDB | Ordered conversation history, computer lifecycle evidence, private turn decisions and durable activation delivery. History references encrypted message content. |
+| Conversation compute | `apps/conversation-computer` requests server-owned steps and provides workspace review. `apps/_infra/agent-sandbox` supplies the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
+| Models | LiteLLM routes requests to the organisation's configured providers and brokers scoped credentials. Providers may be external. |
+| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` own tool definitions, permission checks and isolated execution. Accepted proposals and executor work commit together in PostgreSQL. |
+| Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns metadata and permission decisions. The complete personal-memory journey remains unfinished. |
+| Files | The artifact catalogue, `apps/artifact-service`, scanner and preprocessor own stored files and processing. Computer workspace checkpoints use ArtifactStore. |
 
-Source paths are relative to the repository root. The
-[repository map](https://github.com/elewa-git/opencrane/blob/main/README.md#repository-map)
-links the applications and libraries.
+The [repository map](https://github.com/elewa-git/opencrane/blob/main/README.md#repository-map)
+links these source locations. The [runtime guide](/integrators/agent-runtime) explains the exact
+request reservations, result acknowledgement and restart rules.
 
-## One conversation, recoverable compute
+## Personal and shared work
 
-Every conversation has ordered history. An assistant conversation also has one logical computer.
-Its temporary Pod may be idle, active or absent. A lease identifies the one currently admitted
-computer generation, so a replaced Pod cannot continue submitting work as its successor.
+A personal assistant uses the employee's approved settings and the current conversation. Personal
+memory is explicitly unavailable until dataset provisioning and recall are complete.
 
-The server checks current membership and grants in PostgreSQL before protected operations.
-KurrentDB records history and lifecycle evidence. A historical permission decision is not current
-permission.
+A **company assistant** is a shared assistant with its own published configuration and permissions.
+A person selects **Ask company assistant** on one of their group messages. OpenCrane creates a linked
+assistant conversation with a fixed audience; ordinary group messages do not start the assistant.
+The requester must retain access to the conversation, while the assistant must hold its own model
+and tool permissions. An administrator can assign company tools through the API.
 
-Checkpoint and restore preserve the computer's workspace across cooling and replacement.
-Conversation history does not depend on the Pod or browser surviving. Ordinary direct and group
-messages do not activate an assistant computer.
+Members need current access to both the group and linked conversation before reading the work.
+The person sharing a result reviews and edits it, then posts it back under their own name.
+Rejoining a group does not reveal older linked requests beyond the participant's access boundary.
+Scheduled work and autonomous delegation between assistants remain planned.
 
-For a personal text turn, admission resolves the employee's verified internal identity to the
-sign-in identity used during onboarding, then freezes their approved persona, ordered conversation
-history and model choice. Personal memory is explicitly unavailable in this baseline: provisioning
-a dataset and recalling its content remain separate product work. This does not prevent a person
-from using their approved instructions and the current conversation.
+## Why work survives a computer
 
-Admission also freezes a 4,096-token output cap for each text response. The server takes the
-smaller of that limit and the run's token budget, so a generous aggregate budget does not become
-an oversized request for one answer. Provider capability discovery remains separate from this
-product response limit.
+The conversation and its logical computer have durable identities. A Kubernetes Pod is temporary;
+its lease identifies the one generation currently allowed to work. The browser and Pod can disappear
+without becoming the only copy of the conversation. Checkpoint and restore preserve workspace bytes
+across computer replacement.
 
-Before each model request, the server records a reservation in the existing private turn stream.
-Only the live handler that wins a fresh reservation may dispatch. The original call allowance,
-token ceilings and run/lease authority remain binding across restart. Bootstrap carries a turn id
-and status; model-step accepts exactly `{bootstrapId}`. The Pod receives no prompt or model key and
-has no direct LiteLLM network path or private tool-proposal/output route.
+PostgreSQL remains the only current authorisation authority. A saved grant decision or historical
+membership is evidence of the past, not permission to act now. Models and computers cannot grant
+themselves extra access.
 
-The continuation implementation lets the first request select at most one unambiguous tool from the
-frozen set that requires no approval, when the original allowance permits two model calls. The server
-encrypts the original declaration before recording its selection. It then admits the existing MCP
-executor work, checks current authority and the exact terminal result, and encrypts the original
-assistant declaration paired with that result. The second reservation must commit before result
-delivery is acknowledged.
+Each organisation has its own installation boundary. Its identity, databases, storage and network
+controls restrict access within and across installations. An external model or integration can
+receive the data required by an authorised request; self-hosting OpenCrane does not make that
+provider local.
 
-| Private turn revision | Recorded decision |
-| --- | --- |
-| 0 | Freeze the original input and conversation head. |
-| 1 | Reserve the first model request. |
-| 2 | Select the encrypted tool declaration, or accept a direct text answer. |
-| 3 | Reserve the final model request against the saved assistant/tool pair. |
-| 4 | Accept the final answer after the tool result. |
-
-The final request offers no tools. It uses the original key, matching its saved digest and actual
-expiry, and subtracts the whole first token reservation from the original allowance. Key cleanup
-retains a non-secret spent marker; missing, expired or uncertain custody cannot reset the budget.
-Each HTTP request remains at most 25 seconds and cannot outlive the key or current authority.
-Intermediate tool progress is not appended to participant history, so the compiled conversation
-head stays unchanged until the final answer.
-
-The server saves the encrypted answer and full prepared history event before appending it. Recovery
-finishes that same answer before recompiling current history, which may already contain it. A saved
-tool declaration can resume admission without repeating the first request. If a reserved model
-response never reached durable storage, its request becomes unavailable after the fixed deadline,
-without paid redispatch. The run remains pending for future recovery controls. This bounds
-OpenCrane's admitted gateway requests without claiming exactly-once execution inside LiteLLM or a
-provider.
-
-The requester and executor are distinct roles. The human must own the input message and retain
-access to the conversation. A company assistant executes with its own identity and resource
-permissions. Retrying the same request preserves both identities and the original frozen input.
-
-## Shared work from a group
-
-A group remains a conversation between people. Selecting **Ask company assistant** creates one
-linked assistant conversation from an explicitly chosen, caller-authored group request.
-
-```text
-Group message
-    │ explicit request, selected company assistant, fixed audience
-    ▼
-PostgreSQL admission + durable creation task
-    │ recoverable, idempotent work across the two stores
-    ▼
-Kurrent child history + cold computer → activation → bounded model answer
-    │ a participant reviews and edits the result
-    ▼
-New parent message, authored by the person who shares it
-```
-
-The transaction saves the immutable command and its workflow task together. A worker creates the
-child history and computer, then the current product projections and first request. Retries reuse
-the same identifiers; no transaction is claimed across PostgreSQL, KurrentDB and Kubernetes.
-
-The company assistant has an Internal Principal and a managed identity. It uses its own published
-revision and model grant. The human requester supplies separate, current membership and Invoke
-evidence. Personal configuration, private memory and tools are not copied to the company assistant.
-
-The child's audience is frozen at admission. Current membership and both parent and child access
-are checked before metadata, plaintext or execution is released. Rejoining the parent cannot
-reveal a request from before the participant's join boundary. Returning text to the group is an
-explicit human write bound to the source child; there is no generic upward-delivery engine.
-
-## Isolation and external actions
-
-Each organisation has its own installation boundary. Identity, database, storage and network
-controls restrict access within and across those boundaries. An assistant cannot grant itself
-additional tools or read another person's private work just because it shares infrastructure.
-
-Tool execution is a separate governed service. The continuation implementation connects a single
-model-selected tool that needs no approval; it still needs qualification with a permitted retrieval
-fixture. Company revisions do not support tool assignments yet. Approved actions, visible tool
-progress and recovery controls remain unfinished, as do shared-agent scheduling and autonomous
-delegation between assistants.
-
-## Baseline and evidence
+## Architecture and qualification
 
 [ADR 0016](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0016-conversation-history-and-computers.md)
-is the architecture of record for 0.11. It supersedes the run-owned warm-Pod lifecycle and
-PostgreSQL transcript. OpenCrane does not add another Kubernetes Pod controller beside Agent Sandbox.
+is the architecture of record for the fresh 0.11 baseline. KurrentDB owns conversation history and
+Agent Sandbox owns Pod lifecycle; there is no parallel OpenCrane Pod controller.
 
-Implemented recovery and backup machinery still needs the live drills listed in
-[development status](/guide/status). Operator inputs and procedures belong in
-[deployment configuration](/operators/deployment-configuration) and the [runbook](/operators/runbook).
-
-Text checkpoint `378a755b6` has passed full CI, including all seven fresh PostgreSQL targets and
-24 real KurrentDB cases. The later continuation implementation in PR #830 awaits CI and live
-qualification. Neither replacement is installed on testv5, which has no integration installed for
-the retrieval proof. T1 remains in progress, and approved actions and
-user-facing recovery retain their separate completion criteria.
+The [status page](/guide/status) holds the current test and installation evidence, including the
+remaining tool-retrieval, approval, memory, file-output and recovery journeys. Deployment procedures
+belong in [deployment configuration](/operators/deployment-configuration) and the
+[operator runbook](/operators/runbook).

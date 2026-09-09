@@ -14,8 +14,8 @@ status belongs in the code, tests, and release notes.
 | Agents and revisions | Keep agent definitions stable and configuration immutable per revision. A run binds one exact revision. |
 | Conversations and runs | Provide immutable `agent_session`, `direct`, and `group` modes with a canonical timeline. Agent sessions add governed serial runs; ordinary direct and group messages create no runs. |
 | Run input | Persist one immutable `RunInputSnapshot` before dispatch. It binds identity, conversation context, persona, memory references, tools, model route, and budget. |
-| Persona and preferences | Store reviewable, versioned persona and preference facts. Changes affect later snapshots only. |
-| Memory | Apply explicit dataset identity, scope, provenance, and authorization to durable personal and organisation memory. |
+| Persona and preferences | Store reviewable, versioned personal preferences for the personal assistant. Group and shared agents use their own approved configuration and never inherit personal preferences. Changes affect later snapshots only. |
+| Knowledge and memory | Retain facts and work context separately in meaning from behavioural preferences. Apply explicit dataset identity, scope, provenance, and authorization to private and shared knowledge. |
 | Artifacts | Store immutable bytes and revision metadata with ownership, hashes, media type, provenance, and run links. |
 | Models and budgets | Govern provider credentials, public model aliases, routes, quotas, and usage through control-plane policy. |
 | Integrations and tools | Bind immutable tool revisions to assignments and grants. Execute approved external actions server-side. |
@@ -88,6 +88,17 @@ restart the result.
 
 The runtime receives only the approved revision through the compiled input. It does not own or
 mutate durable persona files.
+
+Knowledge describes facts and work context; personal preferences describe how a person's assistant
+should behave. Group and shared agents must not load a creator's, requester's or member's personal
+preferences through persona configuration, memory recall, copied context or delegation. Sharing a
+knowledge item or connection does not transfer those preferences. Retrieval must not turn a
+preference into shared-agent instructions by treating it as knowledge.
+
+An explicit instruction for the current group task may guide that task within the shared agent's
+approved configuration and permissions. It neither imports nor updates a personal profile.
+Authorized owners configure shared-agent behaviour separately. This boundary does not change the
+consent required for retention or the review required for sharing results.
 
 ## Storage and retention
 

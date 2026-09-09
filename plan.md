@@ -77,16 +77,21 @@ their own completion track; they are not silently bundled into the first tool PR
 
 | Slice | Current state |
 | --- | --- |
-| C0 — close the replay-contract CI failure on #826 | ✅ COMPLETE in `77a1cdaa6` — focused replay contracts and independent review pass; [Linux CI](https://github.com/elewa-git/opencrane/actions/runs/34267589926), k3d and publication are green. |
-| R2 — visible personal activity | ✅ COMPLETE in [#829](https://github.com/elewa-git/opencrane/pull/829). UI `6692b2e59` and server `e50cdcc5b` are installed on testv5. Linux CI and publication pass. Two employees see their completed work, open its saved answer by keyboard, refresh without starting work, and recover activity after reload. Narrow-screen focus and cross-employee API isolation pass. See [completed work](plan-done.md) and the [deploy ledger](docs/agents/deploy-ledger.md). |
-| R1 — reliable login | IMPLEMENTED, CI GREEN at `44fd8f328` — encrypted PostgreSQL sessions, fixed deadlines, revision-checked saves and logout markers. All 52 auth tests and [CI](https://github.com/elewa-git/opencrane/actions/runs/34274625541) pass, including all seven SQL targets on fresh PostgreSQL and six real-client session proofs. Fresh-install live qualification remains pending; testv5 retains the earlier database baseline. |
-| A1 — membership revocation and closed-work proof | IMPLEMENTED in parallel [#831](https://github.com/elewa-git/opencrane/pull/831), based on #829. Settings member removal, current server authority and browser privacy cleanup pass independent review, 208 focused unit tests and 123 browser checks. Its [full CI](https://github.com/elewa-git/opencrane/actions/runs/34307836688) passes at `e5b8c8c72`, including eight PostgreSQL targets, KurrentDB, Linux browser checks and six image validations. Publication and real-account live qualification remain pending on that separate review surface. |
-| T1 — first permitted tool retrieval | INTERNAL CONTINUATION CI GREEN in [#830](https://github.com/elewa-git/opencrane/pull/830) at `ada28f1f7`. [Full CI](https://github.com/elewa-git/opencrane/actions/runs/34303700943) passes all seven fresh PostgreSQL targets, 25 actual Kurrent cases, affected checks and image validation. One frozen tool requiring no approval can complete within the original model allowance and produce a saved final answer. This follow-up adds the protected API for an administrator to assign existing tools to the company assistant's own principal, with immutable revisions and current dispatch checks. Company assignment CI and live proof remain pending. Neither slice is installed on testv5. The installation has no suitable integration for the real retrieval proof; participant tool progress, approved actions and recovery controls remain unfinished. |
-| U1 — visible personal tool progress | IMPLEMENTED, IN REVIEW — a current-authority read projects the latest current-attempt tool phase into personal Recent activity. No payload or new conversation event is exposed; overall state and the canonical answer link remain separate. All 512 focused unit tests and 118 browser/accessibility checks pass, with architecture and component review. CI and live proof remain pending; company-child progress, longer-lived updates and controls are separate work. |
-| T2/T3 — approved actions and recovery controls | DEPENDS ON T1 — exact approval, cancellation, uncertain outcomes, retries and accessible workspace controls. |
-| M1/F1 — explicit memory and durable files | MEMORY PREFLIGHT COMPLETE — recall transport exists, but dataset preparation and remote write/correct/forget are unimplemented. Verify pinned Cognee record identity and idempotency before completing gateway writes. Files retain their independent artifact and reload acceptance track. |
-| D1/S1 — autonomous delegation and shared schedules | DEPENDS ON ACTION CONTRACTS — bounded authority, budgets, cancellation and durable results. |
-| A2/Q1 — administration and operational acceptance | PLANNED THROUGHOUT — extend protected product surfaces and prove each newly landed journey. |
+| C0 — baseline CI repair | COMPLETE — replay-contract repair and exact CI; existing live proofs retained. |
+| R2 — visible personal activity | COMPLETE — two employees can find completed work, open its answer and recover after reload on testv5. |
+| R1 — reliable login | IMPLEMENTED, CI GREEN — fresh-install server-replacement proof remains pending. |
+| A1 — member removal and closed-work proof | IMPLEMENTED, CI GREEN in [#831](https://github.com/elewa-git/opencrane/pull/831); installation and real-account removal/closure remain to qualify. |
+| C1 — connection ownership, sharing and revocation | PLANNED — registry and personal install metadata exist, but personal/company credential custody and execution binding are absent. Each connection needs a Shared access list and revocation. Task startup must check required credentials and executor access, persist Waiting for secret when needed, and let an authorized person grant a compatible source through the UI. Resume only after current checks; preserve account binding, approvals, expiry and cancellation. Setup, waiting and resume remain unimplemented. See the [connection requirements](docs/design/mvp-delivery-plan.md#c1-owned-connections-with-visible-revocable-sharing). |
+| T1 — first permitted retrieval | Internal continuation is CI-qualified in [#830](https://github.com/elewa-git/opencrane/pull/830). Company-tool configuration is also CI-qualified in [#832](https://github.com/elewa-git/opencrane/pull/832). Credential-bearing integrations depend on C1; one dedicated integration and complete personal/company retrieval proof remain missing. |
+| U1 — personal tool progress | IMPLEMENTED, CI GREEN in [#833](https://github.com/elewa-git/opencrane/pull/833); live progress remains to qualify. Company-child progress, longer-lived updates and controls remain separate. |
+| T2/T3 — approved actions and recovery | PERSONAL APPROVAL PREFLIGHT COMPLETE — connect exact reviewed values, waiting/ready/terminal handling and one existing executor. Company reviewers and cancellation/uncertain-effect recovery need separate contracts. |
+| M1 — explicit knowledge retention | PREFLIGHT COMPLETE — repair native document identity and dataset isolation before remember/correct/forget. Keep knowledge distinct from personal preferences; group and shared agents must not inherit personal preferences. Prove the pinned process; do not infer safety from a dataset identifier. |
+| F1 — documents and durable output | SOURCE GAP IDENTIFIED — reuse uploads/scanning but connect authorized document content to immutable model input. Generated-file finalization and complete recovery remain open. |
+| D1/S1 — delegation and schedules | PLANNED — depend on bounded action, cancellation and durable result contracts. |
+| A2/Q1 — administration and operational acceptance | PLANNED THROUGHOUT — configuration APIs are incremental; product controls and full journey/recovery qualification remain. |
+
+The [dated overnight handoff](docs/design/overnight-delivery-2026-09-09.md) records commits, review
+surfaces, exact CI/live boundaries and the next concrete actions.
 
 The overnight run on 8–9 September continues these slices in dependency order and hands off at
 08:00 Nairobi time. It commits and pushes reviewed progress, maintains incremental PRs and records
@@ -121,11 +126,16 @@ inherit a person's private tools or memory.
 Existing foundations are reused where they still match the current contracts. These are completion
 tracks, not instructions to rebuild everything named here:
 
-- **Memory and preferences:** finish durable remember/correct/forget operations through the memory
+- **Knowledge and memory:** finish durable remember/correct/forget operations through the memory
   gateway, consent and sensitivity controls, recoverable writes, and cross-conversation recall proof.
   Dataset identity comes from admitted authority, never from a guessed subject ID. See
   [ADR 0015](docs/adr/0015-central-durable-authorization-authority.md) and
   [#318](https://github.com/elewa-git/opencrane/issues/318).
+- **Personal preferences:** keep approved language, tone, answer style and working habits scoped to
+  the personal assistant. Group and shared agents use their own approved configuration and permitted
+  knowledge; they never inherit private preferences through creation, invocation, recall or delegation.
+  Explicit task instructions do not import a personal profile. See the
+  [knowledge and preferences contract](docs/design/mvp-delivery-plan.md#m1-knowledge-and-personal-preferences).
 - **Tools and skills:** complete model-loop integration, scoped credentials, approvals, cancellation,
   replay and uncertain-outcome recovery. Reuse immutable OCI MCP execution and the ToolInvocation
   authority. See [#592](https://github.com/elewa-git/opencrane/issues/592),

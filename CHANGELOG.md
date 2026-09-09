@@ -15,7 +15,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 Personal and group-assistant text journeys and recent personal activity have passed integration
 CI and live testv5 checks.
-The 0.11 baseline remains under review; this is not a release or a completed MVP.
+The 0.11 baseline and follow-ups remain under review; this is not a release or a completed MVP.
+The [development status](website/guide/status.md) separates implemented work from CI and live proof.
 
 ### Added
 
@@ -23,7 +24,7 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   received and needs-attention descriptions appear beside the overall assistant-work status.
   Refresh reads the persisted phase without starting work or exposing tool payloads. A returned
   tool result does not mark the assistant's answer complete; the existing saved-answer link remains
-  authoritative. This follow-up awaits CI and live qualification.
+  authoritative. This follow-up passes CI; live qualification remains pending.
 
 - **People can follow recent personal-assistant work and reopen a loaded answer.** The activity
   pane shows current status and an explicit refresh control. Changing chats, signing out or losing
@@ -51,13 +52,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 - **An assistant can finish one permitted tool call before answering.** The model may select one
   frozen tool that needs no approval; the server admits execution, retains its result privately
   and reserves one final text request within the original allowance. CI passes. Installation,
-  real-integration proof and visible tool progress remain pending.
+  real-integration proof and live tool progress remain pending.
 
 - **Administrators can assign existing tools to the company assistant through the API.** An update
   publishes a new immutable assistant revision and changes only that assistant's tool permissions.
   A stale edit returns a conflict. Removing a tool prevents new dispatch through its old revision;
   the assistant never borrows the requesting employee's tool grant or private credentials.
-  Company assignment awaits CI and live qualification.
+  Company assignment passes CI; live qualification remains pending.
 
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
@@ -155,7 +156,8 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   refuses a revoked permission or stale conversation lease before contacting the tool. A definite
   refusal stores one failed result; an unavailable authority leaves the call unclaimed for retry.
   The admitted run's original deadline and tool allowance remain binding through retries.
-  Connecting the conversation model loop to this guarded path remains in development.
+  The conversation model loop now uses this guarded path for one permitted tool; live
+  integration qualification remains pending.
 
 - **Company assistants execute with their own model authority and a separately checked human
   requester.** Current membership, service permission, and parent and child access are checked at
