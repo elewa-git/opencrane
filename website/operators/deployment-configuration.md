@@ -92,14 +92,23 @@ membership and permission checks, and refreshing evidence cannot extend an alrea
 
 ## Conversation execution profile
 
-Generic defaults disable `historyStore.kurrentdb` and `agentSandbox`. The current wrapper enables
-and checks the conversation profile for the named `testv5` target. Other tenant names require an
-explicitly reviewed values profile and the same prerequisites; do not rename a real tenant to
-select development defaults.
+Every supported silo installation requires KurrentDB conversation history and an Agent Sandbox
+execution profile. `deploy.sh` enables and checks both for every tenant name. The shared deploy
+engine also rejects a disabled or incomplete profile before installing or reporting successful
+install preflight, so calling the engine directly preserves the same requirement.
 
-For `testv5`, the wrapper reads these additional environment variables (equivalent CLI flags are
-listed in the source). Store the non-secret configuration in your environment profile and supply
-only Secret names here:
+The generic Helm defaults keep `historyStore.kurrentdb.enabled` and `agentSandbox.enabled` false
+so individual chart components can be rendered and checked without a complete installation
+profile. Those defaults do not define a reduced silo mode. Credential preparation, shared
+prerequisite provisioning and recovery commands remain separate from install admission.
+
+Use the deployment flags to select the target. Raw `--helm-arg` passthrough accepts Helm value
+flags and supported release controls, but rejects target, schema-validation and post-renderer
+overrides that could change the validated installation.
+
+For every silo, the wrapper reads these additional environment variables (equivalent CLI flags
+are listed in the source). Store the non-secret configuration in your environment profile and
+supply only Secret names here:
 
 | Inputs | Variables |
 |---|---|

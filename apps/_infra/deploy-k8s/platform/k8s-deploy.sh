@@ -83,9 +83,9 @@
 # limited to a disposable `.test` install that deliberately uses local imported tags.
 #
 # Raw Helm-arg passthrough: --helm-arg ARG (or OPENCRANE_HELM_EXTRA_ARGS='ARG1 ARG2 …')
-# appends verbatim arguments to the final helm upgrade invocation. Useful for sanctioned
-# one-time fixes like --take-ownership (e.g. when a Certificate loses ownership across versions).
-# Repeatable: --helm-arg --take-ownership --helm-arg --force-fields-order.
+# accepts Helm value flags and supported release controls such as --take-ownership. Target,
+# schema-validation and post-renderer overrides are rejected before installation so the final
+# release uses the validated profile. Repeatable: --helm-arg --take-ownership --helm-arg --force-conflicts.
 #
 # --base-domain is the platform BASE domain (e.g. dev.opencrane.ai). It is
 # a first-class, VALIDATED install input (lowercase FQDN, ≥2 labels) that drives a single
@@ -173,6 +173,7 @@ source "$SCRIPT_DIR/database-release-finalization.sh"
 source "$SCRIPT_DIR/kurrentdb-restore.sh"
 source "$SCRIPT_DIR/kurrentdb-bootstrap.sh"
 source "$SCRIPT_DIR/kurrentdb-replay.sh"
+source "$SCRIPT_DIR/required-conversation-profile.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -517,6 +518,28 @@ _resolve_release_images
 resolve_qualified_workflow_image_digests || exit $?
 preflight_qualified_release_tag_images || exit $?
 
+# Conversation resources are required by every real silo. Validate the same value sources and
+# preservation mode before preflight can succeed or installation publishes its first ConfigMap.
+# The KurrentDB snapshot Job needs these only in volumeSnapshot mode; the chart ignores them otherwise.
+_load_kubernetes_api_helm_args historyStore.kurrentdb.backup.volumeSnapshot "KurrentDB backup"
+KURRENTDB_BACKUP_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
+CONVERSATION_PROFILE_ARGS=("${KURRENTDB_BACKUP_KUBERNETES_API_ARGS[@]}")
+[[ -n "$VALUES_FILE" ]] && CONVERSATION_PROFILE_ARGS+=(--values "$VALUES_FILE")
+if [[ ${#EXTRA_SET[@]} -gt 0 ]]; then
+  CONVERSATION_PROFILE_ARGS+=("${EXTRA_SET[@]}")
+fi
+if [[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]]; then
+  CONVERSATION_PROFILE_ARGS+=("${EXTRA_HELM_ARGS[@]}")
+fi
+if [[ -n "$REUSE_VALUES" ]]; then
+  CONVERSATION_PROFILE_ARGS+=(--reuse-values)
+elif [[ -n "$RESET_VALUES" ]]; then
+  CONVERSATION_PROFILE_ARGS+=(--reset-values)
+elif helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
+  CONVERSATION_PROFILE_ARGS+=(--reset-then-reuse-values)
+fi
+require_conversation_deployment_profile "${CONVERSATION_PROFILE_ARGS[@]}" || exit $?
+
 # --preflight runs before any cluster mutation and accumulates every failure in PF_FAILS, so the
 # operator can repair the environment once. It reads cloud and cluster state but never mutates it.
 _run_preflight() {
@@ -761,9 +784,6 @@ _load_kubernetes_api_helm_args memoryGateway "memory gateway"
 MEMORY_GATEWAY_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 _load_kubernetes_api_helm_args agentController "agent controller"
 AGENT_CONTROLLER_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
-# The KurrentDB snapshot Job needs these only in volumeSnapshot mode; the chart ignores them otherwise.
-_load_kubernetes_api_helm_args historyStore.kurrentdb.backup.volumeSnapshot "KurrentDB backup"
-KURRENTDB_BACKUP_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 
 _copy_cnpg_uri_secret() {
   local source_secret="$1"

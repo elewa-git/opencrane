@@ -4,7 +4,7 @@
 #
 # A thin profile over the shared install core (k8s-deploy.sh). It installs ONE
 # per-ClusterTenant silo — the dedicated stack a single ClusterTenant runs on shared
-# nodes: its own operator + channel proxy + LiteLLM + Cognee + opencrane-ui,
+# nodes: its own OpenCrane server, conversation history, computers, LiteLLM, Cognee and browser,
 # per-CT networking, and one app-owned PostgreSQL server with isolated logical databases
 # and credentials for OpenCrane and LiteLLM.
 #
@@ -44,7 +44,7 @@
 # the disposable local k3d smoke.
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
-# Secrets already present in the target namespace. testv5 also requires a ready Agent Sandbox
+# Secrets already present in the target namespace. Every silo requires a ready Agent Sandbox
 # controller with its extensions; each Sandbox, SandboxClaim, SandboxTemplate, and SandboxWarmPool
 # CRD serving and storing v1beta1; the gvisor RuntimeClass; and KurrentDB TLS keys (tls.crt,
 # tls.key, ca.crt), administrator and operations password keys, and an `opencrane-history`
@@ -144,86 +144,85 @@ EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
 [[ -n "$RELEASE" ]] || RELEASE="$EXPECTED_RELEASE"
 [[ "$RELEASE" == "$EXPECTED_RELEASE" ]] || { err "--release must be '$EXPECTED_RELEASE' for ClusterTenant '$CLUSTER_TENANT'."; exit 1; }
 
-if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
-  command -v jq >/dev/null 2>&1 || { err "jq is required to validate the testv5 Agent Sandbox controller."; exit 1; }
-  [[ "$KURRENTDB_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "testv5 requires --kurrentdb-image-digest with an immutable sha256 digest."; exit 1; }
-  [[ "$KURRENTDB_TLS_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "testv5 requires --kurrentdb-tls-secret."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "testv5 requires --kurrentdb-bootstrap-admin-secret."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_OPS_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "testv5 requires --kurrentdb-bootstrap-ops-secret."; exit 1; }
-  [[ "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "testv5 requires --kurrentdb-service-credential-secret."; exit 1; }
-  [[ -n "$KURRENTDB_BOOTSTRAP_IMAGE_REPOSITORY" ]] || { err "testv5 requires --kurrentdb-bootstrap-image-repository for the purpose-built bootstrap image."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "testv5 requires --kurrentdb-bootstrap-image-digest with an immutable sha256 digest."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_IMAGE_PULL_POLICY" =~ ^(Always|IfNotPresent|Never)$ ]] || { err "testv5 requires --kurrentdb-bootstrap-image-pull-policy (Always, IfNotPresent, or Never)."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_CPU_REQUEST" =~ ^[1-9][0-9]*m?$ ]] || { err "testv5 requires --kurrentdb-bootstrap-cpu-request."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_MEMORY_REQUEST" =~ ^[1-9][0-9]*(Ki|Mi|Gi)$ ]] || { err "testv5 requires --kurrentdb-bootstrap-memory-request."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_CPU_LIMIT" =~ ^[1-9][0-9]*m?$ ]] || { err "testv5 requires --kurrentdb-bootstrap-cpu-limit."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_MEMORY_LIMIT" =~ ^[1-9][0-9]*(Ki|Mi|Gi)$ ]] || { err "testv5 requires --kurrentdb-bootstrap-memory-limit."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS" =~ ^[1-9][0-9]*$ ]] || { err "testv5 requires --kurrentdb-bootstrap-active-deadline-seconds."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT" =~ ^[0-9]+$ ]] || { err "testv5 requires --kurrentdb-bootstrap-backoff-limit."; exit 1; }
-  [[ "$KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || { err "testv5 requires --kurrentdb-bootstrap-timeout-seconds."; exit 1; }
-  [[ "$AGENT_SANDBOX_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "testv5 requires --agent-sandbox-image-digest with an immutable sha256 digest."; exit 1; }
-  [[ "$AGENT_SANDBOX_IMAGE_PULL_POLICY" =~ ^(Always|IfNotPresent|Never)$ ]] || { err "testv5 requires --agent-sandbox-image-pull-policy (Always, IfNotPresent, or Never)."; exit 1; }
-  for crd in sandboxes.agents.x-k8s.io sandboxclaims.extensions.agents.x-k8s.io sandboxtemplates.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io; do
-    kubectl get crd "$crd" >/dev/null 2>&1 || { err "testv5 requires the Kubernetes Agent Sandbox CRD '$crd'."; exit 1; }
-    AGENT_SANDBOX_V1BETA1_STATE="$(kubectl get crd "$crd" -o 'jsonpath={range .spec.versions[?(@.name=="v1beta1")]}{.served}:{.storage}{end}')"
-    [[ "$AGENT_SANDBOX_V1BETA1_STATE" == "true:true" ]] || { err "testv5 requires Agent Sandbox CRD '$crd' to serve and store v1beta1 resources."; exit 1; }
-  done
-  AGENT_SANDBOX_IMAGE="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
-  [[ "$AGENT_SANDBOX_IMAGE" == *@sha256:* ]] || { err "testv5 requires the Agent Sandbox controller to use an immutable image digest."; exit 1; }
-  AGENT_SANDBOX_DEPLOYMENT="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o json 2>/dev/null)" || { err "testv5 could not read the Agent Sandbox controller Deployment."; exit 1; }
-  jq -e '.spec.template.spec.containers[0].args | type == "array" and any(.[]; . == "--extensions")' >/dev/null 2>&1 <<<"$AGENT_SANDBOX_DEPLOYMENT" || { err "testv5 requires the Agent Sandbox extensions reconciler."; exit 1; }
-  kubectl rollout status deployment/agent-sandbox-controller --namespace agent-sandbox-system --timeout=120s >/dev/null || { err "testv5 requires a Ready Agent Sandbox controller."; exit 1; }
-  kubectl get sandboxwarmpools.extensions.agents.x-k8s.io --all-namespaces >/dev/null 2>&1 || { err "testv5 requires the Agent Sandbox extensions API to respond."; exit 1; }
-  kubectl get runtimeclass gvisor >/dev/null 2>&1 || { err "testv5 requires the approved gvisor RuntimeClass."; exit 1; }
-  kubectl get secret "$KURRENTDB_TLS_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "testv5 KurrentDB TLS Secret '$KURRENTDB_TLS_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
-  kubectl get secret "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "testv5 KurrentDB bootstrap Secret '$KURRENTDB_BOOTSTRAP_ADMIN_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
-  kubectl get secret "$KURRENTDB_BOOTSTRAP_OPS_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "testv5 KurrentDB bootstrap operations Secret '$KURRENTDB_BOOTSTRAP_OPS_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
-  kubectl get secret "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "testv5 KurrentDB service credential Secret '$KURRENTDB_SERVICE_CREDENTIAL_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
-  for required_immutable_secret in "$KURRENTDB_TLS_SECRET" "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" "$KURRENTDB_BOOTSTRAP_OPS_SECRET" "$KURRENTDB_SERVICE_CREDENTIAL_SECRET"; do
-    [[ "$(kubectl get secret "$required_immutable_secret" --namespace "$NAMESPACE" -o jsonpath='{.immutable}')" == "true" ]] || { err "testv5 KurrentDB Secret '$required_immutable_secret' must set immutable: true."; exit 1; }
-  done
-  for required_tls_key in tls.crt tls.key ca.crt; do
-    [[ -n "$(kubectl get secret "$KURRENTDB_TLS_SECRET" --namespace "$NAMESPACE" -o "go-template={{ index .data \"$required_tls_key\" }}")" ]] || { err "testv5 KurrentDB TLS Secret '$KURRENTDB_TLS_SECRET' requires key '$required_tls_key'."; exit 1; }
-  done
-  [[ -n "$(kubectl get secret "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" --namespace "$NAMESPACE" -o 'go-template={{ index .data "password" }}')" ]] || { err "testv5 KurrentDB bootstrap Secret '$KURRENTDB_BOOTSTRAP_ADMIN_SECRET' requires key 'password'."; exit 1; }
-  [[ -n "$(kubectl get secret "$KURRENTDB_BOOTSTRAP_OPS_SECRET" --namespace "$NAMESPACE" -o 'go-template={{ index .data "password" }}')" ]] || { err "testv5 KurrentDB bootstrap operations Secret '$KURRENTDB_BOOTSTRAP_OPS_SECRET' requires key 'password'."; exit 1; }
-  for required_service_key in username password; do
-    [[ -n "$(kubectl get secret "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" --namespace "$NAMESPACE" -o "go-template={{ index .data \"$required_service_key\" }}")" ]] || { err "testv5 KurrentDB service credential Secret '$KURRENTDB_SERVICE_CREDENTIAL_SECRET' requires key '$required_service_key'."; exit 1; }
-  done
-  KURRENTDB_SERVICE_USERNAME="$(kubectl get secret "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" --namespace "$NAMESPACE" -o 'jsonpath={.data.username}' | base64 -d)"
-  [[ "$KURRENTDB_SERVICE_USERNAME" == "opencrane-history" ]] || { err "testv5 KurrentDB service credential Secret '$KURRENTDB_SERVICE_CREDENTIAL_SECRET' must use username 'opencrane-history'."; exit 1; }
-  PASSTHROUGH+=(
-    --set "historyStore.kurrentdb.enabled=true"
-    --set-string "historyStore.kurrentdb.image.digest=$KURRENTDB_IMAGE_DIGEST"
-    --set-string "historyStore.kurrentdb.tls.existingSecret=$KURRENTDB_TLS_SECRET"
-    --set-string "historyStore.kurrentdb.bootstrapAdmin.existingSecret=$KURRENTDB_BOOTSTRAP_ADMIN_SECRET"
-    --set-string "historyStore.kurrentdb.bootstrapOps.existingSecret=$KURRENTDB_BOOTSTRAP_OPS_SECRET"
-    --set-string "historyStore.kurrentdb.serviceCredential.existingSecret=$KURRENTDB_SERVICE_CREDENTIAL_SECRET"
-    --set-string "historyStore.kurrentdb.bootstrap.image.repository=$KURRENTDB_BOOTSTRAP_IMAGE_REPOSITORY"
-    --set-string "historyStore.kurrentdb.bootstrap.image.digest=$KURRENTDB_BOOTSTRAP_IMAGE_DIGEST"
-    --set-string "historyStore.kurrentdb.bootstrap.image.pullPolicy=$KURRENTDB_BOOTSTRAP_IMAGE_PULL_POLICY"
-    --set-string "historyStore.kurrentdb.bootstrap.resources.requests.cpu=$KURRENTDB_BOOTSTRAP_CPU_REQUEST"
-    --set-string "historyStore.kurrentdb.bootstrap.resources.requests.memory=$KURRENTDB_BOOTSTRAP_MEMORY_REQUEST"
-    --set-string "historyStore.kurrentdb.bootstrap.resources.limits.cpu=$KURRENTDB_BOOTSTRAP_CPU_LIMIT"
-    --set-string "historyStore.kurrentdb.bootstrap.resources.limits.memory=$KURRENTDB_BOOTSTRAP_MEMORY_LIMIT"
-    --set "historyStore.kurrentdb.bootstrap.activeDeadlineSeconds=$KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS"
-    --set "historyStore.kurrentdb.bootstrap.backoffLimit=$KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT"
-    --set "historyStore.kurrentdb.bootstrap.timeoutSeconds=$KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS"
-    --set "agentSandbox.enabled=true"
-    --set-string "agentSandbox.namespace=$NAMESPACE"
-    --set-string "agentSandbox.runtimeClassName=gvisor"
-    --set-string "agentSandbox.serviceAccountName=${RELEASE}-agent-sandbox"
-    --set-string "agentSandbox.profiles[0].name=developer"
-    --set-string "agentSandbox.profiles[0].poolName=developer-pool"
-    --set "agentSandbox.profiles[0].warmReplicas=0"
-    --set-string "agentSandbox.profiles[0].image.repository=$AGENT_SANDBOX_IMAGE_REPOSITORY"
-    --set-string "agentSandbox.profiles[0].image.digest=$AGENT_SANDBOX_IMAGE_DIGEST"
-    --set-string "agentSandbox.profiles[0].image.pullPolicy=$AGENT_SANDBOX_IMAGE_PULL_POLICY"
-    --set-string "agentSandbox.profiles[0].resources.requests.cpu=100m"
-    --set-string "agentSandbox.profiles[0].resources.requests.memory=128Mi"
-    --set-string "agentSandbox.profiles[0].resources.limits.cpu=500m"
-    --set-string "agentSandbox.profiles[0].resources.limits.memory=512Mi")
-fi
+# Every silo needs conversation history and an admitted computer profile before installation.
+command -v jq >/dev/null 2>&1 || { err "jq is required to validate the Agent Sandbox controller."; exit 1; }
+[[ "$KURRENTDB_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "Conversation deployment requires --kurrentdb-image-digest with an immutable sha256 digest."; exit 1; }
+[[ "$KURRENTDB_TLS_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "Conversation deployment requires --kurrentdb-tls-secret."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-admin-secret."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_OPS_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-ops-secret."; exit 1; }
+[[ "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "Conversation deployment requires --kurrentdb-service-credential-secret."; exit 1; }
+[[ -n "$KURRENTDB_BOOTSTRAP_IMAGE_REPOSITORY" ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-image-repository for the purpose-built bootstrap image."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-image-digest with an immutable sha256 digest."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_IMAGE_PULL_POLICY" =~ ^(Always|IfNotPresent|Never)$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-image-pull-policy (Always, IfNotPresent, or Never)."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_CPU_REQUEST" =~ ^[1-9][0-9]*m?$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-cpu-request."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_MEMORY_REQUEST" =~ ^[1-9][0-9]*(Ki|Mi|Gi)$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-memory-request."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_CPU_LIMIT" =~ ^[1-9][0-9]*m?$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-cpu-limit."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_MEMORY_LIMIT" =~ ^[1-9][0-9]*(Ki|Mi|Gi)$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-memory-limit."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS" =~ ^[1-9][0-9]*$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-active-deadline-seconds."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT" =~ ^[0-9]+$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-backoff-limit."; exit 1; }
+[[ "$KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || { err "Conversation deployment requires --kurrentdb-bootstrap-timeout-seconds."; exit 1; }
+[[ "$AGENT_SANDBOX_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { err "Conversation deployment requires --agent-sandbox-image-digest with an immutable sha256 digest."; exit 1; }
+[[ "$AGENT_SANDBOX_IMAGE_PULL_POLICY" =~ ^(Always|IfNotPresent|Never)$ ]] || { err "Conversation deployment requires --agent-sandbox-image-pull-policy (Always, IfNotPresent, or Never)."; exit 1; }
+for crd in sandboxes.agents.x-k8s.io sandboxclaims.extensions.agents.x-k8s.io sandboxtemplates.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io; do
+  kubectl get crd "$crd" >/dev/null 2>&1 || { err "Conversation deployment requires the Kubernetes Agent Sandbox CRD '$crd'."; exit 1; }
+  AGENT_SANDBOX_V1BETA1_STATE="$(kubectl get crd "$crd" -o 'jsonpath={range .spec.versions[?(@.name=="v1beta1")]}{.served}:{.storage}{end}')"
+  [[ "$AGENT_SANDBOX_V1BETA1_STATE" == "true:true" ]] || { err "Conversation deployment requires Agent Sandbox CRD '$crd' to serve and store v1beta1 resources."; exit 1; }
+done
+AGENT_SANDBOX_IMAGE="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
+[[ "$AGENT_SANDBOX_IMAGE" == *@sha256:* ]] || { err "Conversation deployment requires the Agent Sandbox controller to use an immutable image digest."; exit 1; }
+AGENT_SANDBOX_DEPLOYMENT="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o json 2>/dev/null)" || { err "Conversation deployment could not read the Agent Sandbox controller Deployment."; exit 1; }
+jq -e '.spec.template.spec.containers[0].args | type == "array" and any(.[]; . == "--extensions")' >/dev/null 2>&1 <<<"$AGENT_SANDBOX_DEPLOYMENT" || { err "Conversation deployment requires the Agent Sandbox extensions reconciler."; exit 1; }
+kubectl rollout status deployment/agent-sandbox-controller --namespace agent-sandbox-system --timeout=120s >/dev/null || { err "Conversation deployment requires a Ready Agent Sandbox controller."; exit 1; }
+kubectl get sandboxwarmpools.extensions.agents.x-k8s.io --all-namespaces >/dev/null 2>&1 || { err "Conversation deployment requires the Agent Sandbox extensions API to respond."; exit 1; }
+kubectl get runtimeclass gvisor >/dev/null 2>&1 || { err "Conversation deployment requires the approved gvisor RuntimeClass."; exit 1; }
+kubectl get secret "$KURRENTDB_TLS_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "KurrentDB TLS Secret '$KURRENTDB_TLS_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
+kubectl get secret "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "KurrentDB bootstrap Secret '$KURRENTDB_BOOTSTRAP_ADMIN_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
+kubectl get secret "$KURRENTDB_BOOTSTRAP_OPS_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "KurrentDB bootstrap operations Secret '$KURRENTDB_BOOTSTRAP_OPS_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
+kubectl get secret "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "KurrentDB service credential Secret '$KURRENTDB_SERVICE_CREDENTIAL_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
+for required_immutable_secret in "$KURRENTDB_TLS_SECRET" "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" "$KURRENTDB_BOOTSTRAP_OPS_SECRET" "$KURRENTDB_SERVICE_CREDENTIAL_SECRET"; do
+  [[ "$(kubectl get secret "$required_immutable_secret" --namespace "$NAMESPACE" -o jsonpath='{.immutable}')" == "true" ]] || { err "KurrentDB Secret '$required_immutable_secret' must set immutable: true."; exit 1; }
+done
+for required_tls_key in tls.crt tls.key ca.crt; do
+  [[ -n "$(kubectl get secret "$KURRENTDB_TLS_SECRET" --namespace "$NAMESPACE" -o "go-template={{ index .data \"$required_tls_key\" }}")" ]] || { err "KurrentDB TLS Secret '$KURRENTDB_TLS_SECRET' requires key '$required_tls_key'."; exit 1; }
+done
+[[ -n "$(kubectl get secret "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" --namespace "$NAMESPACE" -o 'go-template={{ index .data "password" }}')" ]] || { err "KurrentDB bootstrap Secret '$KURRENTDB_BOOTSTRAP_ADMIN_SECRET' requires key 'password'."; exit 1; }
+[[ -n "$(kubectl get secret "$KURRENTDB_BOOTSTRAP_OPS_SECRET" --namespace "$NAMESPACE" -o 'go-template={{ index .data "password" }}')" ]] || { err "KurrentDB bootstrap operations Secret '$KURRENTDB_BOOTSTRAP_OPS_SECRET' requires key 'password'."; exit 1; }
+for required_service_key in username password; do
+  [[ -n "$(kubectl get secret "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" --namespace "$NAMESPACE" -o "go-template={{ index .data \"$required_service_key\" }}")" ]] || { err "KurrentDB service credential Secret '$KURRENTDB_SERVICE_CREDENTIAL_SECRET' requires key '$required_service_key'."; exit 1; }
+done
+KURRENTDB_SERVICE_USERNAME="$(kubectl get secret "$KURRENTDB_SERVICE_CREDENTIAL_SECRET" --namespace "$NAMESPACE" -o 'jsonpath={.data.username}' | base64 -d)"
+[[ "$KURRENTDB_SERVICE_USERNAME" == "opencrane-history" ]] || { err "KurrentDB service credential Secret '$KURRENTDB_SERVICE_CREDENTIAL_SECRET' must use username 'opencrane-history'."; exit 1; }
+PASSTHROUGH+=(
+  --set "historyStore.kurrentdb.enabled=true"
+  --set-string "historyStore.kurrentdb.image.digest=$KURRENTDB_IMAGE_DIGEST"
+  --set-string "historyStore.kurrentdb.tls.existingSecret=$KURRENTDB_TLS_SECRET"
+  --set-string "historyStore.kurrentdb.bootstrapAdmin.existingSecret=$KURRENTDB_BOOTSTRAP_ADMIN_SECRET"
+  --set-string "historyStore.kurrentdb.bootstrapOps.existingSecret=$KURRENTDB_BOOTSTRAP_OPS_SECRET"
+  --set-string "historyStore.kurrentdb.serviceCredential.existingSecret=$KURRENTDB_SERVICE_CREDENTIAL_SECRET"
+  --set-string "historyStore.kurrentdb.bootstrap.image.repository=$KURRENTDB_BOOTSTRAP_IMAGE_REPOSITORY"
+  --set-string "historyStore.kurrentdb.bootstrap.image.digest=$KURRENTDB_BOOTSTRAP_IMAGE_DIGEST"
+  --set-string "historyStore.kurrentdb.bootstrap.image.pullPolicy=$KURRENTDB_BOOTSTRAP_IMAGE_PULL_POLICY"
+  --set-string "historyStore.kurrentdb.bootstrap.resources.requests.cpu=$KURRENTDB_BOOTSTRAP_CPU_REQUEST"
+  --set-string "historyStore.kurrentdb.bootstrap.resources.requests.memory=$KURRENTDB_BOOTSTRAP_MEMORY_REQUEST"
+  --set-string "historyStore.kurrentdb.bootstrap.resources.limits.cpu=$KURRENTDB_BOOTSTRAP_CPU_LIMIT"
+  --set-string "historyStore.kurrentdb.bootstrap.resources.limits.memory=$KURRENTDB_BOOTSTRAP_MEMORY_LIMIT"
+  --set "historyStore.kurrentdb.bootstrap.activeDeadlineSeconds=$KURRENTDB_BOOTSTRAP_ACTIVE_DEADLINE_SECONDS"
+  --set "historyStore.kurrentdb.bootstrap.backoffLimit=$KURRENTDB_BOOTSTRAP_BACKOFF_LIMIT"
+  --set "historyStore.kurrentdb.bootstrap.timeoutSeconds=$KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS"
+  --set "agentSandbox.enabled=true"
+  --set-string "agentSandbox.namespace=$NAMESPACE"
+  --set-string "agentSandbox.runtimeClassName=gvisor"
+  --set-string "agentSandbox.serviceAccountName=${RELEASE}-agent-sandbox"
+  --set-string "agentSandbox.profiles[0].name=developer"
+  --set-string "agentSandbox.profiles[0].poolName=developer-pool"
+  --set "agentSandbox.profiles[0].warmReplicas=0"
+  --set-string "agentSandbox.profiles[0].image.repository=$AGENT_SANDBOX_IMAGE_REPOSITORY"
+  --set-string "agentSandbox.profiles[0].image.digest=$AGENT_SANDBOX_IMAGE_DIGEST"
+  --set-string "agentSandbox.profiles[0].image.pullPolicy=$AGENT_SANDBOX_IMAGE_PULL_POLICY"
+  --set-string "agentSandbox.profiles[0].resources.requests.cpu=100m"
+  --set-string "agentSandbox.profiles[0].resources.requests.memory=128Mi"
+  --set-string "agentSandbox.profiles[0].resources.limits.cpu=500m"
+  --set-string "agentSandbox.profiles[0].resources.limits.memory=512Mi")
 
 # Human APIs are fail-closed without OIDC. Require the exact org client rather than deploying an
 # intentionally inaccessible or tokenless development setup.
