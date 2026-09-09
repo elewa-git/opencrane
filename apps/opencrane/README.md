@@ -75,63 +75,31 @@ proxy workload or routing registry is involved.
 
 ## Public surface
 
-`Entrypoint: src/index.ts` — a short, telemetry-first `_Main()` that composes the process and hands
-its resources to the lifecycle owner.
+`Entrypoint: src/index.ts` starts telemetry first, freezes configuration, composes the functional
+libraries, and hands their resources to the process lifecycle.
 
-- `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
-  the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
-- `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
-- `src/app/public-app.ts` builds the browser-session-authenticated API.
-- The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
-  the deployment-selected human membership reader used by both admission paths. Fleet verifies
-  signed assertions; Standalone checks the configured silo, trusted OIDC Principal and active local
-  membership row. A failed Fleet proof never selects Standalone.
-- `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
-- `src/app/conversation-computer-turn-composition.ts` binds the private tool-proposal route to
-  the existing turn, membership, service and tool authorities. Kubernetes TokenReview checks the
-  `opencrane-conversation-computer` audience and the current Pod assignment before admission.
-  Accepted proposals stay Preparing in PostgreSQL; this route does not dispatch a provider call.
-- `src/app/routes.ts` contains named per-area route lists and app-owned transport composition. The
-  sharing authority is mounted behind the shared per-IP limiter before identity or database work.
-- `src/app/runtime-composition.ts` binds controller, task-owned validation, runtime, and optional-worker
-  authorities by caller plane without choosing transport paths.
-- `src/app/mcp-workflow-composition.ts` creates one Absurd worker for remote MCP protocol checks
-  and OCI image admission. A workflow is saved work that may continue after the server restarts.
-  Here it checks a registered server, validates a saved OCI Image Layout ZIP, imports the accepted
-  image into the configured registry, and saves its immutable digest without keeping the request open.
-- `src/app/mcp-runtime-composition.ts` turns that immutable image into a separate MCP executor Job.
-  It shares one database authority across the administrator promotion route, public durable tool
-  tasks, controller claims, Pod-bound companion reports, and saved tool calls, so no generic worker
-  can also run the call. Before a run-owned claim, it binds current identity, lease, membership,
-  conversation permission and tool assignment checks to the existing authority owners.
-- `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
-  approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
-  AgentRevision persistence.
-- `src/app/user-onboarding-composition.ts` binds onboarding completion, configured-default model
-  resolution, personal-agent persistence, managed grants, and the central `AuthorizationAuthority`
-  to one Serializable transaction. Owner identity remains onboarding eligibility; the app does not
-  provide a parallel permission evaluator. It supplies `OPENCRANE_COMPUTER_PROFILE_NAME` from the
-  same release configuration used by conversation creation and activation. Missing profile
-  configuration prevents startup, and existing services with another profile remain unavailable.
-- `src/infra/artifacts/*` is one app-only artifact-broker composition slice. It binds the server's
-  mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
-  source, read, upload, and output brokers; those pieces are inseparable from this process's private
-  configuration and do not expose a reusable ArtifactStore client.
-- `src/app/background-workers.ts` owns the Absurd worker and MCP completion recovery.
-  Shutdown lets active work finish before Prisma closes.
-- `src/app/lifecycle.ts` starts workers before both listeners, aborts active external exchanges during
-  shutdown, closes conversation sockets, drains requests and workers, disconnects Prisma, and
-  flushes telemetry.
-- `prisma/schema/*.prisma` defines the product's durable domain models.
-- `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. The baseline publisher
-  installs the pinned `pg_cron` prerequisite before it switches to the application owner, then this
-  file installs the pinned Absurd workflow-task schema and its control-plane queue. The server runs
-  one worker for registered workflow tasks. Its focused source verifiers prove the seeded
-  persona and onboarding-bootstrap content against the reviewed files in
-  `docs/design/persona-archetypes/`.
-- There is no `prisma/migrations/` upgrade path pre-1.0: the baseline is the only schema authority,
-  existing dev silos are rebuilt rather than upgraded, and server startup never becomes a
-  schema-migration authority. Upgrade contracts return at MVP.
+All other production source lives in `src/bootstrap/`:
+
+| Source | Responsibility |
+| --- | --- |
+| `configuration/` | Read and type deployment configuration once. |
+| `http/` | Assemble authenticated public and workload-facing routers. |
+| `conversations/` | Connect conversation history, computer lifecycle, and turn ports. |
+| `workflows/` | Compose MCP transport and declare workflow tasks. |
+| `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
+
+The [conversation library](../../libs/backend/server/conversations/main/README.md) owns admission and
+compile-before-commit orchestration. [Onboarding](../../libs/backend/server/agents/onboarding/main/README.md)
+and [personas](../../libs/backend/agents/personal/personas/main/README.md) own their publication adapters.
+[Artifacts](../../libs/backend/server/agents/artifacts/main/README.md) owns lease signing, service
+transport and preprocessing brokers; [conversation assets](../../libs/backend/server/conversation-assets/main/README.md)
+owns its participant-file broker. [HTTP infrastructure](../../libs/backend/server/infra/http/README.md)
+owns health probes and request-log sanitisation, and [history-store infrastructure](../../libs/backend/server/infra/history-store/README.md)
+owns authenticated connections and the silo guard.
+
+`prisma/schema/` defines persisted product state. `prisma/bootstrap/target-baseline.sql` is the clean
+installation authority; startup does not modify the schema. Container, Helm and database-generation
+metadata stay with this deployable.
 
 ## Boundary
 
@@ -163,9 +131,9 @@ ConversationComputer admission synchronously combines three existing product aut
 
 The reusable authorities live in
 [`execution/runs`](../../libs/backend/agents/execution/runs/main/README.md) and
-[`execution/inputs`](../../libs/backend/agents/execution/inputs/main/README.md). The app owns a
-process-wide capacity gate plus Kurrent-backed personal execution-subject, conversation-context, and
-encrypted prompt-message authorities. The production compiler repository resolves persona
+[`execution/inputs`](../../libs/backend/agents/execution/inputs/main/README.md). The conversation library owns the admission capacity gate and composes Kurrent-backed execution-subject,
+conversation-context, and encrypted prompt-message authorities. The app supplies process configuration
+and the shared history client. The production compiler repository resolves persona
 instructions, tools, artifacts, skills, and the model route through a transaction-bound Prisma read
 snapshot and refuses any missing or mismatched immutable reference. Personal ConversationComputer
 admission is mounted; managed run-now and scheduler paths remain absent by design.

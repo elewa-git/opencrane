@@ -1,0 +1,42 @@
+{
+  "name": "backend-server-conversation-history",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/backend/server/conversations/history/src",
+  "projectType": "library",
+  "tags": [
+    "type:lib",
+    "layer:backend",
+    "scope:conversations"
+  ],
+  "// targets": "to see all targets run: nx show project backend-server-conversation-history --web",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.json --noEmit",
+        "cwd": "libs/backend/server/conversations/history"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run",
+        "cwd": "libs/backend/server/conversations/history"
+      }
+    },
+    "test:integration": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --config vitest.integration.config.ts",
+        "cwd": "libs/backend/server/conversations/history"
+      },
+      "cache": false,
+      "inputs": [
+        "{projectRoot}/**/*",
+        {
+          "env": "KURRENTDB_INTEGRATION_URL"
+        }
+      ]
+    }
+  }
+}

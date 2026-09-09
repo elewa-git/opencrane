@@ -107,7 +107,7 @@ function _CreateServerTokenReader(tokenFile: string): () => Promise<string>
  * gateway is the only thing that ever authorizes a search. Every fetch runs with automatic child
  * tracing switched off so the bearer header and the remote address cannot become span attributes;
  * the caller's own memory-gateway span stays active. The token audience is
- * `MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE` in libs/contracts/src/memory.types.ts.
+ * `MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE` in libs/contracts/src/memory/memory.types.ts.
  *
  * Called by: http-cognee-memory-gateway-client.ts, which builds one session per client.
  *

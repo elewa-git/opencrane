@@ -116,8 +116,8 @@
           "cwd": "apps/opencrane",
           "commands": [
             "sh ../../scripts/run-postgres-authority-tests.sh prisma/tests/authorization-active-grant-uniqueness.sql prisma/tests/phase-d-authority-integration.sql prisma/tests/skill-authoring-validation-authority.sql",
-            "vitest run src/__tests__/conversation-tool-proposal.sql.test.ts",
-            "vitest run src/__tests__/conversation-tool-result.sql.test.ts"
+            "vitest run src/bootstrap/conversations/__tests__/conversation-tool-proposal.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-tool-result.sql.test.ts"
           ],
           "parallel": false
         },

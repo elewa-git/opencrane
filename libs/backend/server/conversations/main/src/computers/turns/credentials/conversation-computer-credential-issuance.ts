@@ -1,5 +1,5 @@
-import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerRawCredentialAuthority } from "../../../conversation-computer-turn.types";
-import { ConversationComputerCredentialPreparationOutcomes } from "../../../db/conversation-computer-credential-persistence.types";
+import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerRawCredentialAuthority } from "../conversation-computer-turn.types";
+import { ConversationComputerCredentialPreparationOutcomes } from "../db/conversation-computer-credential-persistence.types";
 import { ConversationComputerCredentialCleanup } from "./conversation-computer-credential-cleanup";
 import { _AssertCredentialIssueExpiry, _BoundCredentialIssue } from "./conversation-computer-credential-expiry";
 import { ConversationComputerCredentialReceiptCodec } from "./conversation-computer-credential-receipt";

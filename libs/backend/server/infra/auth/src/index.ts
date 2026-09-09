@@ -1,6 +1,6 @@
 /**
  * `@opencrane/backend/server/infra/auth` — how the OpenCrane server logs a human in and
- * decides what that human may do.
+ * attaches the verified identity to a request.
  *
  * What is in here:
  *   - OIDC settings read from environment variables ({@link ___LoadOidcAuthConfig}).
@@ -13,29 +13,28 @@
  *   - The authentication middleware ({@link ___AuthMiddleware}).
  *
  * A newcomer should read {@link OidcAuthServiceBase} first (the login flow) and then
- * {@link AuthUser} (what ends up in the session cookie).
+ * {@link AuthUser} (what the server stores in the authenticated session).
  *
- * IMPORTANT: importing this package also runs `./session.types.js` for its side effect,
- * and that is what adds `authUser`, `idToken`, and `oidcFlow` to the `express-session`
- * `SessionData` type. Without the import on line 9 `req.session.authUser` stops
- * type-checking in every consumer, so do not remove it as an unused import.
+ * The `./sessions/session.types` import adds `authUser`, `idToken`, and `oidcFlow` to
+ * the `express-session` `SessionData` type. The public barrel loads this augmentation
+ * so consumers can type-check authenticated requests without importing session internals.
  *
  * @see https://openid.net/specs/openid-connect-core-1_0.html — the OIDC Authorization
  *      Code flow this package implements (login redirect, callback, ID-token claims).
  * @see https://github.com/expressjs/session — `express-session` (^1.19.0), whose
  *      `SessionData` interface this package augments.
  */
-import "./session.types";
+import "./sessions/session.types";
 
-export type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput, AuthenticatedRequestPrincipal } from "./authenticated-principal-admission.types";
-export { ___LoadOidcAuthConfig } from "./oidc-config";
-export type { OidcAuthConfig } from "./oidc-config.types";
-export { _RequestHost } from "./request-host";
-export { _ResolveRequestPrincipal } from "./request-principal";
-export type { RequestPrincipal } from "./request-principal.types";
-export { _CreateMountedPublicKeySource } from "./mounted-public-key";
-export type { MountedPublicKeySource } from "./mounted-public-key.types";
-export { _ResolveIdentityClaims, _ReadStringArrayClaim } from "./identity-claims";
+export type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput, AuthenticatedRequestPrincipal } from "./requests/authenticated-principal-admission.types";
+export { ___LoadOidcAuthConfig } from "./configuration/oidc-config";
+export type { OidcAuthConfig } from "./configuration/oidc-config.types";
+export { _RequestHost } from "./requests/request-host";
+export { _ResolveRequestPrincipal } from "./requests/request-principal";
+export type { RequestPrincipal } from "./requests/request-principal.types";
+export { _CreateMountedPublicKeySource } from "./keys/mounted-public-key";
+export type { MountedPublicKeySource } from "./keys/mounted-public-key.types";
+export { _ResolveIdentityClaims, _ReadStringArrayClaim } from "./login/identity-claims";
 export {
   _buildCurrentUrl,
   _buildPostLogoutRedirectUri,
@@ -44,19 +43,19 @@ export {
   _regenerateSession,
   _sanitizeReturnTo,
   _saveSession,
-} from "./session";
-export type { AuthUser } from "./session.types";
+} from "./sessions/session";
+export type { AuthUser } from "./sessions/session.types";
 export {
   _ResolveOwnedOrgSummaries,
-} from "./org-membership";
-export type { OwnedOrgSummaryFacts, OwnedOrgSummaryRepository, OwnedOrgSummaryRow, OwnedOrg } from "./org-membership.types";
-export { OidcAuthServiceBase } from "./oidc-service";
-export { PrismaOwnedOrgSummaryRepository } from "./prisma-owned-org-summary-repository";
-export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types";
-export { ___AuthMiddleware } from "./auth-middleware";
-export * from "./per-org-client";
-export type * from "./per-org-client.types";
-export * from "./request-silo";
+} from "./organizations/org-membership";
+export type { OwnedOrgSummaryFacts, OwnedOrgSummaryRepository, OwnedOrgSummaryRow, OwnedOrg } from "./organizations/org-membership.types";
+export { OidcAuthServiceBase } from "./login/oidc-service";
+export { PrismaOwnedOrgSummaryRepository } from "./organizations/prisma-owned-org-summary-repository";
+export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./login/oidc-service.types";
+export { ___AuthMiddleware } from "./requests/auth-middleware";
+export * from "./login/per-org-client";
+export type * from "./login/per-org-client.types";
+export * from "./requests/request-silo";
 
-export { PrismaOidcSessionUnitOfWork } from "./prisma-oidc-session-repository";
-export type { OidcSessionRepository } from "./oidc-session-repository.types";
+export { PrismaOidcSessionUnitOfWork } from "./sessions/prisma-oidc-session-repository";
+export type { OidcSessionRepository } from "./sessions/oidc-session-repository.types";

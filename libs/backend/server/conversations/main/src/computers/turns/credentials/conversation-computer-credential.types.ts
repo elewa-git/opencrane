@@ -1,5 +1,5 @@
-import type { ConversationComputerCredentialIssueCommand, ConversationComputerRawCredentialAuthority } from "../../../conversation-computer-turn.types";
-import type { ConversationComputerCredentialCustody, ConversationComputerCredentialPersistenceRepository, ConversationComputerCredentialPreparation } from "../../../db/conversation-computer-credential-persistence.types";
+import type { ConversationComputerCredentialIssueCommand, ConversationComputerRawCredentialAuthority } from "../conversation-computer-turn.types";
+import type { ConversationComputerCredentialCustody, ConversationComputerCredentialPersistenceRepository, ConversationComputerCredentialPreparation } from "../db/conversation-computer-credential-persistence.types";
 
 /** Preserves the provider's issued key and reported expiry without duplicating its return contract. */
 export type IssuedConversationComputerCredential = Awaited<ReturnType<ConversationComputerRawCredentialAuthority["issue"]>>;

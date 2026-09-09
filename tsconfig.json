@@ -16,6 +16,8 @@
       "@opencrane/backend/server/agents/agent-services": [
         "./libs/backend/server/agents/agent-services/main/src/index.ts"
       ],
+      "@opencrane/backend/server/conversations/history": ["./libs/backend/server/conversations/history/src/index.ts"],
+      "@opencrane/backend/server/conversations/computers": ["./libs/backend/server/conversations/computers/src/index.ts"],
       "@opencrane/backend/server/conversations": [
         "./libs/backend/server/conversations/main/src/index.ts"
       ],

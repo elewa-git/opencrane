@@ -39,6 +39,13 @@ partially widened result.
 
 ## Public surface
 
+`_ResolveSkillAuthoringValidationCaller` maps the verified browser principal to the domain caller in `src/validation/admission/skill-authoring-validation-caller-resolver.ts`.
+
+The source keeps browser discovery in `catalogue/`. Validation is grouped into `validation/admission/`
+for starting work, `validation/controller/` for binding and tracking the job, and `validation/worker/`
+for its input and completion protocol. Contracts and tests stay with each responsibility.
+`src/index.ts` remains the public entrypoint.
+
 - `__CreateSkillCatalogueRouter` — serves `GET /api/v1/skills`, a bounded catalogue of skill name,
   description, lifecycle, and current-revision state in the trusted host silo.
 - `_CreateSkillCatalogueRouter` — the ready-to-mount Prisma composition that authenticates through

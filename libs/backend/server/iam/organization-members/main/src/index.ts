@@ -16,3 +16,5 @@ export { PrismaOrganizationMemberUnitOfWork } from "./prisma-organization-member
 export { StandaloneOrganizationMembershipAuthority } from "./standalone-organization-membership-authority";
 export { OrganizationMemberRemovalStates, OrganizationMemberRemovalUnavailableReasons } from "./removal.types";
 export type { OrganizationMemberRemovalCapability, RemoveOrganizationMemberCommand, RemoveOrganizationMemberResult } from "./removal.types";
+
+export { _ResolveOrganizationMembershipCaller } from "./http/organization-membership-caller";

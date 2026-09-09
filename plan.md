@@ -1,5 +1,17 @@
 # OpenCrane — Active Plan
 
+## Library and component decomposition — 2026-09-09
+
+In progress against local review base `45e0c6b7f2f461b8f9ed9549035fe052933887e6`.
+Keep the server app as bootstrap and declarative composition. Move concrete adapters and use cases
+into their existing capability libraries. Organise inputs, agent services, authorization, contracts,
+and workload identity by responsibility. Give conversation history and computer projections their
+own dependency boundaries, and separate conversation metadata reads, creation, and lifecycle writes.
+On the frontend, split tools-page commands and workspace presentation into stores and cohesive
+components. Preserve reusable component contracts and require an explicit replacement inventory
+before agents remove or inline them. Completion requires focused checks, affected validation, and
+independent architecture/component review; it does not include deployment.
+
 ## Delivery focus — 2026-09-09
 
 OpenCrane gives people and teams assistants that can work with company knowledge and tools,

@@ -151,6 +151,12 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 
 ## Boundary
 
+Hand-written contracts are grouped by capability under `src/`: `api`, `agents`, `artifacts`,
+`conversations`, `inputs`, `knowledge`, `mcp`, `memory`, `model-routing`, `organization`, and `skills`.
+Tests live with their capability; cross-contract acceptance tests stay in `src/__tests__`.
+`generated/api.ts` remains generated output. The public `src/index.ts` composes these owners, so
+callers keep importing `@opencrane/contracts` without depending on internal file layout.
+
 The one contract surface for public control-plane calls and first-party workload protocols; callers
 import it instead of duplicating wire shapes. It defines types, validates first-party wire models,
 and builds a client — it holds no business policy, persistence, or server state. Runtime and controller frames remain private workload

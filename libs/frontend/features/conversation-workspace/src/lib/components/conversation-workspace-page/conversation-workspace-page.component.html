@@ -1,21 +1,21 @@
 <main
   class="conversation-workspace"
   [class.conversation-workspace--context-hidden]="
-    store.selected() === null || !contextPanelOpen()
+    vm.store.selected() === null || !contextPanelOpen()
   "
-  [attr.data-route-state]="store.routeState()"
+  [attr.data-route-state]="vm.store.routeState()"
   [attr.data-context-panel-open]="
-    store.selected() !== null && contextPanelOpen()
+    vm.store.selected() !== null && contextPanelOpen()
   "
 >
   <p class="sr-only" role="status" aria-live="polite">{{ activityAnnouncement() }}</p>
-  @switch (store.routeState()) {
-    @case (routeStates.Loading) {
+  @switch (vm.store.routeState()) {
+    @case (vm.routeStates.Loading) {
       <section class="conversation-workspace__route-state" role="status">
         Loading your workspace…
       </section>
     }
-    @case (routeStates.Unavailable) {
+    @case (vm.routeStates.Unavailable) {
       <section class="conversation-workspace__route-state">
         <h1>Chats are unavailable</h1>
         <p>
@@ -25,144 +25,54 @@
         <p-button
           label="Try again"
           icon="pi pi-refresh"
-          (onClick)="store.load()"
+          (onClick)="vm.store.load()"
         />
       </section>
     }
-    @case (routeStates.AccessChanged) {
+    @case (vm.routeStates.AccessChanged) {
       <section class="conversation-workspace__route-state">
         <h1 #accessChangedHeading tabindex="-1">Access changed</h1>
         <p>
           This conversation is no longer available. Its messages, files,
           questions, and drafts have been removed from this screen.
         </p>
-        <p-button label="Back to chats" (onClick)="store.load()" />
+        <p-button label="Back to chats" (onClick)="vm.store.load()" />
       </section>
     }
-    @case (routeStates.Ready) {
+    @case (vm.routeStates.Ready) {
       <wo-conversation-list
-        [items]="sessionRailItems()"
-        [selectedKey]="selectedSessionKey()"
-        [identity]="railIdentity()"
-        (createRequested)="showCreate()"
+        [items]="vm.sessionRailItems()"
+        [selectedKey]="vm.selectedSessionKey()"
+        [identity]="vm.railIdentity()"
+        (createRequested)="vm.showCreate()"
         (itemSelected)="selectSession($event)"
       />
       <section class="conversation-workspace__main">
         @if (
-          store.onboardingHistorySelected() && onboardingHistoryPresentation();
+          vm.store.onboardingHistorySelected() && vm.onboardingHistoryPresentation();
           as history
         ) {
           <wo-conversation-onboarding-history
             [presentation]="history"
-            [entries]="onboardingDialogue()"
-            [availability]="availabilityNotice()"
-            [continuation]="onboardingContinuation()"
-            (newChatRequested)="showCreate()"
+            [entries]="vm.onboardingDialogue()"
+            [availability]="vm.availabilityNotice()"
+            [continuation]="vm.onboardingContinuation()"
+            (newChatRequested)="vm.showCreate()"
           />
-        } @else if (store.selected(); as selected) {
-          <div class="conversation-workspace__top">
-            @if (availabilityNotice(); as notice) {
-              <div class="conversation-workspace__availability" role="status">
-                <strong>{{ notice.heading }}</strong
-                ><span>{{ notice.detail }}</span>
-              </div>
-            }
-            <header class="conversation-workspace__header">
-              <div>
-                @if (selected.parent !== null) { <p-button label="Back to group" icon="pi pi-arrow-left" severity="secondary" [text]="true" (onClick)="backToGroup()" /> }
-                <small>{{ selectedSummary()?.modeLabel }}</small>
-                <h1>{{ selectedSummary()?.title }}</h1>
-                <p>{{ selectedSummary()?.participantLabel }}</p>
-              </div>
-              <div class="conversation-workspace__header-actions">
-                <button
-                  #contextPanelToggle
-                  type="button"
-                  class="conversation-workspace__context-toggle"
-                  aria-controls="conversation-workspace-context-panel"
-                  [attr.aria-expanded]="contextPanelOpen()"
-                  (click)="openContextPanel()"
-                >
-                  <i class="pi pi-window-maximize" aria-hidden="true"></i
-                  >{{ contextPanelLabel() }}</button
-                ><p-button
-                  label="Archive"
-                  icon="pi pi-inbox"
-                  severity="secondary"
-                  [text]="true"
-                  [disabled]="store.conversationCommandBusy()"
-                  (onClick)="archiveConversation()"
-                /><p-button
-                  label="Close"
-                  icon="pi pi-lock"
-                  severity="danger"
-                  [text]="true"
-                  [disabled]="
-                    store.conversationCommandBusy() ||
-                    selected.lifecycle === lifecycles.Closed
-                  "
-                  (onClick)="store.close()"
-                />
-              </div>
-            </header>
-          </div>
-          <section
-            class="conversation-workspace__transcript"
-            aria-label="Conversation messages"
-            aria-live="polite"
-            tabindex="0"
-          >
-            @if (messages().length === 0) {
-              <div class="conversation-workspace__empty">
-                <h2>Start the conversation</h2>
-                <p>
-                  Messages, tool activity, files, and Agent-created interfaces
-                  will appear here.
-                </p>
-              </div>
-            }
-            @for (entry of messages(); track entry.message.id) {
-              <div
-                class="conversation-workspace__message"
-                [id]="entry.message.id"
-                tabindex="-1"
-              >
-                <wo-conversation-message [message]="entry.message"
-                  ><wo-conversation-rich-text
-                    conversation-message-rich-card
-                    [presentation]="entry.richText"
-                /></wo-conversation-message>
-                @if (entry.requestSource !== null || entry.shareSource !== null || entry.children.length > 0) { <wo-conversation-group-message-actions [canAsk]="entry.requestSource !== null" [canShare]="entry.shareSource !== null" [children]="entry.children" (askRequested)="askAssistant(entry.message.id)" (shareRequested)="reviewGroupShare(entry.message.id)" (childRequested)="openChild($event)" /> }
-              </div>
-            }
-          </section>
-          <footer class="conversation-workspace__composer">
-            @if (groupStore.error(); as groupError) { <p-message severity="error" [text]="groupError" /> }
-            @if (selected.mode === modes.Group && (groupStore.children().length > 0 || groupStore.error() !== null)) { <p-button label="Refresh assistant requests" severity="secondary" [text]="true" [loading]="groupStore.loading()" (onClick)="groupStore.refresh()" /> }
-            @if (computerStatus(); as status) {
-              <p-message severity="info" [text]="status.label" />
-            }
-            @if (connectionStatus(); as connection) {
-              <wo-conversation-workspace-connection-status
-                [status]="connection.status"
-                [reconnectAvailable]="connection.reconnectAvailable"
-                [reconnectPending]="store.manualReconnectPending()"
-                (reconnectRequested)="reconnect()"
-              />
-            }
-            @if (store.error(); as error) {
-              <p-message severity="error" [text]="error" />
-            }
-            <wo-conversation-composer
-              fieldId="workspace-message"
-              label="Message conversation"
-              placeholder="Write a message…"
-              [draft]="store.draft()"
-              [state]="composerState()"
-              (draftChange)="updateDraft($event)"
-              (submitted)="send()"
-            />
-          </footer>
+        } @else if (vm.store.selected(); as selected) {
+          <wo-conversation-workspace-header
+            [summary]="vm.selectedSummary()" [availabilityNotice]="vm.availabilityNotice()"
+            [hasParent]="selected.parent !== null" [busy]="vm.store.conversationCommandBusy()"
+            [closed]="selected.lifecycle === vm.lifecycles.Closed" [contextPanelOpen]="contextPanelOpen()"
+            [contextPanelLabel]="vm.contextPanelLabel()" (backRequested)="backToGroup()"
+            (archiveRequested)="archiveConversation()" (closeRequested)="vm.store.close()" (contextRequested)="openContextPanel()" />
+          <wo-conversation-workspace-transcript [entries]="vm.messages()" (askRequested)="vm.askAssistant($event)" (shareRequested)="vm.reviewGroupShare($event)" (childRequested)="openChild($event)" />
+          <wo-conversation-workspace-composer
+            [draft]="vm.store.draft()" [composerState]="vm.composerState()" [error]="vm.store.error()"
+            [groupError]="vm.groupStore.error()" [groupRefreshing]="vm.groupStore.loading()"
+            [groupRefreshAvailable]="selected.mode === vm.modes.Group && (vm.groupStore.children().length > 0 || vm.groupStore.error() !== null)"
+            [computerStatus]="vm.computerStatus()" [connectionStatus]="vm.connectionStatus()" [reconnectPending]="vm.store.manualReconnectPending()"
+            (draftChanged)="vm.updateDraft($event)" (submitted)="vm.send()" (groupRefreshRequested)="vm.groupStore.refresh()" (reconnectRequested)="vm.reconnect()" />
         } @else {
           <section
             class="conversation-workspace__empty conversation-workspace__empty--page"
@@ -172,62 +82,62 @@
             <p-button
               label="New session"
               icon="pi pi-plus"
-              (onClick)="showCreate()"
+              (onClick)="vm.showCreate()"
             />
           </section>
         }
       </section>
-      @if (store.selected(); as selected) {
+      @if (vm.store.selected(); as selected) {
         @if (contextPanelOpen()) {
           <wo-conversation-workspace-context-panel
-            [activityVisible]="personalRuns.eligible()"
-            [activityRows]="activityRows()"
-            [activityReadState]="activityReadState()"
-            [activityError]="personalRuns.error()"
-            [activityRefreshAvailable]="!personalRuns.accessChanged()"
-            (activityRefreshRequested)="personalRuns.refresh()"
-            [assets]="assets()"
-            [computerReviewVisible]="computerReviewVisible()"
-            [computerReviewBusy]="reviewStore.busy()"
-            [computerReviewError]="reviewStore.error()"
-            [computerFile]="reviewStore.file()"
-            [computerDiff]="reviewStore.diff()"
-            [computerCommand]="reviewStore.command()"
-            [computerBrowserTargets]="reviewStore.browserTargets()"
-            [computerScreenshotUrl]="reviewStore.screenshotUrl()"
-            [computerPreview]="reviewStore.preview()"
+            [activityVisible]="vm.personalRuns.eligible()"
+            [activityRows]="vm.activityRows()"
+            [activityReadState]="vm.activityReadState()"
+            [activityError]="vm.personalRuns.error()"
+            [activityRefreshAvailable]="!vm.personalRuns.accessChanged()"
+            (activityRefreshRequested)="vm.personalRuns.refresh()"
+            [assets]="vm.assets()"
+            [computerReviewVisible]="vm.computerReviewVisible()"
+            [computerReviewBusy]="vm.reviewStore.busy()"
+            [computerReviewError]="vm.reviewStore.error()"
+            [computerFile]="vm.reviewStore.file()"
+            [computerDiff]="vm.reviewStore.diff()"
+            [computerCommand]="vm.reviewStore.command()"
+            [computerBrowserTargets]="vm.reviewStore.browserTargets()"
+            [computerScreenshotUrl]="vm.reviewStore.screenshotUrl()"
+            [computerPreview]="vm.reviewStore.preview()"
             (closed)="closeContextPanel()"
             (activityTargetRequested)="focusActivity($event)"
-            (assetActionRequested)="assetAction($event)"
-            (computerInspectRequested)="reviewStore.inspect($event)"
-            (computerCommandRequested)="reviewStore.run($event)"
-            (computerBrowserRefreshRequested)="reviewStore.refreshBrowser()"
+            (assetActionRequested)="vm.assetAction($event)"
+            (computerInspectRequested)="vm.reviewStore.inspect($event)"
+            (computerCommandRequested)="vm.reviewStore.run($event)"
+            (computerBrowserRefreshRequested)="vm.reviewStore.refreshBrowser()"
             (computerPageRequested)="
-              reviewStore.openPage($event.port, $event.path)
+              vm.reviewStore.openPage($event.port, $event.path)
             "
             (computerScreenshotRequested)="
-              reviewStore.screenshot($event.port, $event.path)
+              vm.reviewStore.screenshot($event.port, $event.path)
             "
             (computerPreviewRequested)="
-              reviewStore.loadPreview($event.port, $event.path)
+              vm.reviewStore.loadPreview($event.port, $event.path)
             "
           />
         }
       }
     }
   }
-  <wo-conversation-group-request [source]="groupStore.requestSource()" [assistants]="store.directory()?.companyAssistants ?? []" [selectedId]="groupStore.agentServiceId()" [state]="groupStore.requestState()" [error]="groupStore.requestError()" (assistantSelected)="groupStore.chooseAssistant($event)" (submitted)="groupStore.create()" (dismissed)="groupStore.dismissRequest()" />
-  <wo-conversation-group-share [visible]="groupStore.shareSource() !== null" [text]="groupStore.shareText()" [state]="groupStore.shareState()" [error]="groupStore.shareError()" (textChanged)="groupStore.editShare($event)" (submitted)="groupStore.share()" (dismissed)="groupStore.dismissShare()" (groupRequested)="backToGroup()" />
+  <wo-conversation-group-request [source]="vm.groupStore.requestSource()" [assistants]="vm.store.directory()?.companyAssistants ?? []" [selectedId]="vm.groupStore.agentServiceId()" [state]="vm.groupStore.requestState()" [error]="vm.groupStore.requestError()" (assistantSelected)="vm.groupStore.chooseAssistant($event)" (submitted)="vm.groupStore.create()" (dismissed)="vm.groupStore.dismissRequest()" />
+  <wo-conversation-group-share [visible]="vm.groupStore.shareSource() !== null" [text]="vm.groupStore.shareText()" [state]="vm.groupStore.shareState()" [error]="vm.groupStore.shareError()" (textChanged)="vm.groupStore.editShare($event)" (submitted)="vm.groupStore.share()" (dismissed)="vm.groupStore.dismissShare()" (groupRequested)="backToGroup()" />
   <wo-conversation-create
-    [visible]="creating() && store.routeState() === routeStates.Ready"
-    [directory]="store.directory()"
-    [mode]="store.creationMode()"
-    [selectedParticipantRefs]="store.selectedParticipantRefs()"
-    [canCreate]="store.canCreate()"
-    [busy]="store.creationState() === creationStates.Creating"
-    (dismissed)="hideCreate()"
-    (modeSelected)="store.selectCreationMode($event)"
-    (participantToggled)="store.toggleParticipant($event)"
+    [visible]="vm.creating() && vm.store.routeState() === vm.routeStates.Ready"
+    [directory]="vm.store.directory()"
+    [mode]="vm.store.creationMode()"
+    [selectedParticipantRefs]="vm.store.selectedParticipantRefs()"
+    [canCreate]="vm.store.canCreate()"
+    [busy]="vm.store.creationState() === vm.creationStates.Creating"
+    (dismissed)="vm.hideCreate()"
+    (modeSelected)="vm.store.selectCreationMode($event)"
+    (participantToggled)="vm.store.toggleParticipant($event)"
     (createRequested)="create()"
   />
 </main>

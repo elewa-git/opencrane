@@ -1,5 +1,5 @@
-import type { ConversationComputerCredentialIssueCommand } from "../../../conversation-computer-turn.types";
-import { ConversationComputerCredentialPreparationOutcomes, ConversationComputerCredentialStates, type ConversationComputerCredentialCustody, type ConversationComputerCredentialPreparation } from "../../../db/conversation-computer-credential-persistence.types";
+import type { ConversationComputerCredentialIssueCommand } from "../conversation-computer-turn.types";
+import { ConversationComputerCredentialPreparationOutcomes, ConversationComputerCredentialStates, type ConversationComputerCredentialCustody, type ConversationComputerCredentialPreparation } from "../db/conversation-computer-credential-persistence.types";
 import { _HasEncryptedCredentialCustody } from "./conversation-computer-credential-receipt";
 import type { ConversationComputerCredentialStatePolicy } from "./conversation-computer-credential.types";
 

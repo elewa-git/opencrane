@@ -75,7 +75,7 @@ the ordinary exact boundary-matching rules.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
 - `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
-  `PrismaMcpToolInvocationParticipantUnitOfWork`, and their lifecycle contracts own durable human approval and
+  `__CreatePrismaMcpToolInvocationParticipantFactory`, and their lifecycle contracts own durable human approval and
   provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
   invocation carry the same immutable execution subject, including the active conversation-computer
   lease id and generation; released or replaced leases fail closed.
@@ -104,6 +104,18 @@ permission. An exact replay preserves its first acknowledgement time, and consum
 readable for restart verification. Neither API grants model dispatch or starts a provider call.
 
 ## Boundary
+
+Source is grouped into `authority/`, `grants/`, `approvals/`, and `tool-invocations/`. Each keeps
+its contracts and tests beside its owner, with database adapters in `persistence/`. The public
+entrypoint remains `src/index.ts`; consumers never import these internal folders.
+Run-result reads, delivery acknowledgement, and invocation row mapping belong to `tool-invocations/`.
+The row mapper translates stored values without importing Prisma; its database callers live in
+`tool-invocations/persistence/`.
+
+Approval opening, reviewer decisions, deadline expiry, reviewer grants, and run-batch completion
+have separate command owners. They receive the caller's transaction and preserve the same atomic
+approval/invocation/run changes. The split introduces no independent commit, policy authority,
+retry loop, or network call.
 
 The authority decides product permission; it does not authenticate a browser or Pod, own another
 domain's lifecycle, execute a provider call, or grant Kubernetes access. The caller derives the silo

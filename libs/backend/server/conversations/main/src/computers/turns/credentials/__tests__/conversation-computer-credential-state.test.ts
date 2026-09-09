@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationComputerCredentialPreparationOutcomes as Outcomes, ConversationComputerCredentialStates as States, type ConversationComputerCredentialCustody } from "../../../../db/conversation-computer-credential-persistence.types";
+import { ConversationComputerCredentialPreparationOutcomes as Outcomes, ConversationComputerCredentialStates as States, type ConversationComputerCredentialCustody } from "../../db/conversation-computer-credential-persistence.types";
 import { _AssertCredentialReusable, _CredentialRequiresRevocation, _PrepareExistingCredential } from "../conversation-computer-credential-state";
 
 const _NOW = Date.parse("2026-09-07T00:00:00.000Z");

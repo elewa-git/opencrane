@@ -148,7 +148,7 @@ export interface MemoryForgetCommand
  * `__AssertMemoryProvenanceComplete` in memory-provenance.ts is where that check happens, and
  * `__DecodeScopedEnvelope` in cognee-payloads.ts re-checks the same five fields on the way back out.
  *
- * NOTE: this is NOT the same type as `MemoryProvenance` in libs/contracts/src/memory.types.ts, which
+ * NOTE: this is NOT the same type as `MemoryProvenance` in libs/contracts/src/memory/memory.types.ts, which
  * describes stored-fact provenance in the API contract. Import the one that matches the boundary you
  * are working on.
  */
@@ -245,7 +245,7 @@ export interface ScopedMemoryInjectionCommand
  * Called by: run-input compilation and personal-memory authorities,
  * gateway-memory-fact-selector.ts, memory-external-action-executor.ts, and
  * external-action-executor.types.ts; composed in
- * apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts.
+ * apps/opencrane/src/bootstrap/process/memory-gateway-client.factory.ts.
  */
 export interface MemoryGatewayClient
 {

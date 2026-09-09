@@ -4,6 +4,10 @@
 
 ## What it owns
 
+`src/composition/` connects persona evidence, initial model selection and personal-agent readiness
+inside the existing onboarding completion transaction. The app only supplies the deployment profile,
+caller resolver and logger; `src/http/` supplies the verified-session owner resolver.
+
 This package owns the server-tracked workflow that routes one authenticated person through persona
 survey and bootstrap chat before the main product. Authentication supplies the silo and stable OIDC
 subject; the persona package supplies interview, approval, display-name, and primary-colour
@@ -55,6 +59,11 @@ single onboarding-first lock order and requires approval to match the current pi
 
 ## Public surface
 
+`_ResolveUserOnboardingOwner` maps the verified browser principal to the domain caller in `src/http/user-onboarding-owner-resolver.ts`.
+
+- `_CreateUserOnboardingComposition` builds the onboarding routes and persona notifications.
+- `_CreatePersonaOnboardingWorkflow` translates persona lifecycle notifications into onboarding events.
+
 - `__UserOnboardingAuthority` reads/creates route state and admits interview-start and approved-persona transitions.
 - `__UserOnboardingChatAuthority` selects reviewed content, renders the deterministic transcript,
   appends answers only against exact projected coordinates, and delegates server conclusion to the
@@ -97,16 +106,17 @@ publication, audit row, and onboarding completion either commit together or all 
 Callers must derive `UserOnboardingOwner` from the verified request principal. Persona survey
 questions, scores, drafts, compiled instructions, and approval remain owned by the persona package.
 Bootstrap answers remain ordinary evidence: they grant no memory retention or action authority.
-The app may construct the exported agent-services bootstrap repository inside onboarding's
-transaction, but onboarding cannot reproduce model selection, AgentService/revision persistence,
-publication, or audit.
+The composition binds the exported agent-services bootstrap repository to onboarding's
+transaction. The agent-services package owns model selection, AgentService/revision persistence,
+publication, and audit.
 
 ## Dependency direction
 
-The project uses `scope:user-onboarding`. Its completion unit of work depends only on the narrow
-personal-bootstrap capability port owned by this package. The app constructs the agent-services
+The project uses `scope:user-onboarding`; its HTTP owner resolver consumes the narrow `scope:auth`
+request-principal seam. Its completion unit of work depends only on the narrow
+personal-bootstrap capability port owned by this package. The composition constructs the agent-services
 adapter with the current transaction client and composes the public HTTP boundary. This package
-never imports agent-services, app code, or frontend state.
+imports public agent-services ports and never imports app code or frontend state.
 
 ## Data & persistence
 

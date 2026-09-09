@@ -1,0 +1,27 @@
+          <section class="conversation-workspace__composer" aria-label="Conversation composer">
+            @if (groupError(); as groupError) { <p-message severity="error" [text]="groupError" /> }
+            @if (groupRefreshAvailable()) { <p-button label="Refresh assistant requests" severity="secondary" [text]="true" [loading]="groupRefreshing()" (onClick)="groupRefreshRequested.emit()" /> }
+            @if (computerStatus(); as status) {
+              <p-message severity="info" [text]="status.label" />
+            }
+            @if (connectionStatus(); as connection) {
+              <wo-conversation-workspace-connection-status
+                [status]="connection.status"
+                [reconnectAvailable]="connection.reconnectAvailable"
+                [reconnectPending]="reconnectPending()"
+                (reconnectRequested)="reconnectRequested.emit()"
+              />
+            }
+            @if (error(); as error) {
+              <p-message severity="error" [text]="error" />
+            }
+            <wo-conversation-composer
+              fieldId="workspace-message"
+              label="Message conversation"
+              placeholder="Write a message…"
+              [draft]="draft()"
+              [state]="composerState()"
+              (draftChange)="draftChanged.emit($event)"
+              (submitted)="submitted.emit()"
+            />
+          </section>

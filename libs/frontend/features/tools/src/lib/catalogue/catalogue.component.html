@@ -5,13 +5,14 @@
 			subtitle="Servers your administrator has approved for you. Install one to make its tools available to your agent."
 		/>
 
+		<wo-resource-feedback [loading]="store.loading()" [error]="store.error() ?? store.readError()" [retryAvailable]="store.readError() !== null" (retryRequested)="store.refresh()" />
 		<div class="wo-cat__toolbar">
 			<div class="wo-cat__search">
 				<i class="pi pi-search"></i>
-				<input class="wo-text-input" type="text" placeholder="Search tools…" [value]="search()" (input)="onSearch($event)" />
+				<input class="wo-text-input" type="text" aria-label="Search tools" placeholder="Search tools…" [value]="store.search()" (input)="onSearch($event)" />
 			</div>
-			<select class="wo-select" (change)="onTypeFilter($event)">
-				<option value="all">All types</option>
+			<select aria-label="Connection type" class="wo-select" [value]="store.typeFilter()" (change)="onTypeFilter($event)">
+				<option [value]="filters.All">All types</option>
 				<option [value]="serverType.RemoteOauth">OAuth</option>
 				<option [value]="serverType.SingleUser">API token</option>
 				<option [value]="serverType.MultiUser">Shared key</option>
@@ -19,31 +20,15 @@
 		</div>
 
 		<div class="wo-cat__grid">
-			@for (server of servers(); track server.id) {
-				<div class="wo-cat__card">
-					<div class="wo-cat__card-top">
-						<span class="wo-cat__glyph wo-mono">{{ server.glyph }}</span>
-						<div class="wo-cat__card-text">
-							<p class="wo-cat__name wo-mono">{{ server.name }}</p>
-							<p class="wo-cat__desc">{{ server.description }}</p>
-						</div>
-					</div>
-					<div class="wo-cat__card-foot">
-						<wo-scope-chip [label]="typeChips[server.type].label" [tone]="typeChips[server.type].tone" />
-						@if (isInstalled(server.id)) {
-							<span class="wo-cat__installed"><i class="pi pi-check"></i> Installed</span>
-						} @else {
-							<button type="button" class="wo-tools__act" (click)="install(server)">Install</button>
-						}
-					</div>
-				</div>
+			@for (server of store.servers(); track server.id) {
+				<wo-tool-card [server]="server" [installed]="store.installedIds().has(server.id)" [busy]="store.busy().has(server.id)" (installRequested)="store.install(server.id)" />
 			} @empty {
 				<p class="wo-cat__empty">No tools match your search.</p>
 			}
 		</div>
 
 		<div class="wo-callout wo-callout--info wo-cat__note">
-			You're seeing the {{ total() }} servers your administrator has approved and assigned to you. You can't see or
+			You're seeing the {{ store.total() }} servers your administrator has approved and assigned to you. You can't see or
 			install servers that haven't been approved — <a [routerLink]="['/tools']">manage your installed tools →</a>
 		</div>
 	</div>

@@ -4,7 +4,7 @@ import type { AgentIdentity } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
-import { PrismaGroupChildAccessRepository } from "../../../db/prisma-group-child-access-repository";
+import { PrismaGroupChildAccessRepository } from "../../../children/db/prisma-group-child-access-repository";
 import type { ConversationToolDispatchDependencies } from "./conversation-tool-dispatch.types";
 import type { ConversationToolCurrentAccess, ConversationToolCurrentMembership, ConversationToolRunEvidence } from "./conversation-tool-dispatch-evidence.types";
 

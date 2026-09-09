@@ -62,8 +62,8 @@ lifecycle and child-chat requirements. ADR 0016 replaces its older runtime and s
 
 Source contracts:
 
-- [`libs/contracts/src/run-input-snapshot.types.ts`](../../libs/contracts/src/run-input-snapshot.types.ts)
-- [`libs/contracts/src/conversation-computer.types.ts`](../../libs/contracts/src/conversation-computer.types.ts)
+- [`libs/contracts/src/inputs/run-input-snapshot.types.ts`](../../libs/contracts/src/inputs/run-input-snapshot.types.ts)
+- [`libs/contracts/src/conversations/conversation-computer.types.ts`](../../libs/contracts/src/conversations/conversation-computer.types.ts)
 - [`apps/opencrane/prisma/schema/runs.prisma`](../../apps/opencrane/prisma/schema/runs.prisma)
 - [`libs/backend/agents/execution/inputs/main`](../../libs/backend/agents/execution/inputs/main)
 

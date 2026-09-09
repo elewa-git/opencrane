@@ -72,6 +72,19 @@ for example `libs/backend/agents/main`, `libs/frontend/features/agents`, or
 Promote code to a wider library only when at least two consumers need the same contract or the code
 is independently coherent and testable.
 
+Inside a library, organise source by bounded responsibility rather than collecting every file in
+`src/`. Keep each capability's contracts, implementation, and `__tests__/` close; use a nested
+`persistence/`, `http/`, or `composition/` folder when that role has several files. `main` is an
+entrypoint name, not permission to accumulate unrelated capabilities. Keep its public barrel
+deliberate. Split a separate Nx project when a coherent owner needs an enforceable dependency or
+test boundary; use folders when the pieces still share one authority and lifecycle. Do not create
+one-file projects or layers of forwarding barrels merely for symmetry.
+
+For `apps/opencrane`, production code belongs in startup/instrumentation and declarative bootstrap
+composition. Health probes, storage clients, broker adapters, admission rules, publication flows,
+and reusable factories belong in their capability libraries even when the server is their sole
+consumer. A file named `composition` still violates this rule if it implements those operations.
+
 The existing singular `libs/util/` name remains valid until a deliberate whole-repo rename; do not
 create `libs/utils/` beside it just to satisfy this document.
 

@@ -1,4 +1,4 @@
-import type { ConversationComputerCredentialIssueCommand } from "../../../conversation-computer-turn.types";
+import type { ConversationComputerCredentialIssueCommand } from "../conversation-computer-turn.types";
 
 /** Shortens the request to its remaining authority before each provider issue. It never raises a budget. */
 export function _BoundCredentialIssue(input: ConversationComputerCredentialIssueCommand): ConversationComputerCredentialIssueCommand

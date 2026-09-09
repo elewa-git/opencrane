@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
-import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialReceipt } from "../../../conversation-computer-turn.types";
-import type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadCoordinates } from "../../../conversation-private-payload.types";
-import { ConversationComputerCredentialStates, type ConversationComputerCredentialCustody } from "../../../db/conversation-computer-credential-persistence.types";
+import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialReceipt } from "../conversation-computer-turn.types";
+import type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadCoordinates } from "@opencrane/backend/server/conversations/history";
+import { ConversationComputerCredentialStates, type ConversationComputerCredentialCustody } from "../db/conversation-computer-credential-persistence.types";
 import type { EncryptedConversationComputerCredentialCustody, IssuedConversationComputerCredential } from "./conversation-computer-credential.types";
 
 /** Encrypts and checks the first provider key without deciding whether the caller may use it. */
