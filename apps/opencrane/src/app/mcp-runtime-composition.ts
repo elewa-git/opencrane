@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
-import { __CreateMcpOciServerPromotionRouter, __CreateMcpRuntimeCompanionRouter, __CreateMcpRuntimeControllerRouter, __CreateMcpTaskWorkflow, PrismaMcpRuntimeUnitOfWork, PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/server/gateways/mcp";
+import { __CreateMcpOciServerPromotionRouter, __CreateMcpRuntimeCompanionRouter, __CreateMcpRuntimeControllerRouter, __CreateMcpTaskWorkflow, PrismaMcpRuntimeUnitOfWork, PrismaMcpToolInvocationAdmissionRepository, PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/server/gateways/mcp";
 import { ManagedExecutionEvidenceAuthority, PersonalExecutionEvidenceAuthority, PrismaManagedExecutionEvidenceRepository, PrismaPersonalExecutionEvidenceRepository } from "@opencrane/backend/server/agents/agent-services";
 import { ConversationComputerHistory, PrismaConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "@opencrane/backend/server/conversations";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
@@ -31,28 +31,32 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.
 		new PrismaToolRecoveryEventReporter(),
 		new PrismaToolInvocationRunRecoveryAuthority(),
 		{
-			async isCurrentlyEligibleInTransaction(transaction, invocation, now, workload)
+			async admitUntilInTransaction(transaction, invocation, now, workload)
 			{
 				const authority = new PrismaConversationToolDispatchAuthority(transaction as Prisma.TransactionClient, dispatchDependencies);
-				return authority.isCurrentlyEligible(invocation, now, workload);
+				return authority.admitUntil(invocation, now, workload);
 			},
 		},
 	);
-	const authority = new PrismaMcpRuntimeUnitOfWork(prisma, {
-		toolInvocations: participantFactory,
-		options: {
-			siloId: config.siloId,
-			executorNamespace,
-			executorServiceAccountName: MCP_EXECUTOR_SERVICE_ACCOUNT_NAME,
-			profileName: MCP_EXECUTOR_PROFILE_NAME,
-			controllerClaimLeaseMilliseconds: config.mcpControllerClaimLeaseMilliseconds,
-			companionClaimLeaseMilliseconds: config.mcpCompanionClaimLeaseMilliseconds,
-			log: _log,
-		},
-	});
+	const options = {
+		siloId: config.siloId,
+		executorNamespace,
+		executorServiceAccountName: MCP_EXECUTOR_SERVICE_ACCOUNT_NAME,
+		profileName: MCP_EXECUTOR_PROFILE_NAME,
+		controllerClaimLeaseMilliseconds: config.mcpControllerClaimLeaseMilliseconds,
+		companionClaimLeaseMilliseconds: config.mcpCompanionClaimLeaseMilliseconds,
+		log: _log,
+	};
+	const authority = new PrismaMcpRuntimeUnitOfWork(prisma, { toolInvocations: participantFactory, options });
 	const taskWorkflow = __CreateMcpTaskWorkflow({ execution: workflows.execution, unitOfWork: workflows.unitOfWork, runtime: authority, statusPollMilliseconds: _MCP_TASK_STATUS_POLL_MILLISECONDS });
 	return {
 		authority,
+		async admitToolInvocationInTransaction(transaction, invocationRowId)
+		{
+			const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as Prisma.TransactionClient, participantFactory.__ForTransaction(transaction), options);
+			const result = await repository.admitInvocation(invocationRowId);
+			return result === "admitted" || result === "idempotent";
+		},
 		taskWorkflow,
 		promotion: __CreateMcpOciServerPromotionRouter({
 			authority,

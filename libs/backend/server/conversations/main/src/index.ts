@@ -74,4 +74,4 @@ export type { ConversationToolDispatchAuthority, ConversationToolDispatchDepende
 export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./db/prisma-conversation-tool-proposal";
 export { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 export { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
-export type { ConversationToolProposalAdmission, ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
+export type { ConversationToolProposalAdmission, ConversationToolProposalCommand, ConversationToolProposalRuntimeAdmission } from "./conversation-tool-proposal.types";

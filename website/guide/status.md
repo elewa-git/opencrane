@@ -25,16 +25,13 @@ current review work and its evidence.
 ## Still to complete
 
 - **Useful work across tools:** connect the conversation model loop to governed tool execution,
-  approvals and durable results, then prove a real business task from start to finish. The
-  follow-up can store one proposed call with its arguments, preserve it across retries and
-  recheck current permission and the original run budget before execution. Connecting this
-  admission to the model, tool results and conversation history remains in progress.
-  Reserved tool work also blocks final completion; automatic recovery of an abandoned proposal
-  remains unfinished. The audit path now identifies the verified computer or executor behind a tool
-  request. Fresh PostgreSQL qualification now passes, including concurrent identical requests,
-  rejected changes and rollback. Answer recovery also saves the exact prepared answer before
-  posting it, so a restart can recognise its original content and timestamp. Local restart and
-  conflict tests pass; qualification against the real history server is pending in CI.
+  approvals and durable results, then prove a real business task from start to finish. The current
+  follow-up source saves a permitted proposal and queues its existing executor in the same database
+  transaction. Exact repeats recover that work, and its claim cannot exceed the original run,
+  computer lease or membership-trust deadline. The earlier admission and audit changes passed
+  fresh PostgreSQL proofs; this new handoff still awaits fresh SQL CI and live qualification.
+  Model requests, result resumption and conversation progress remain unfinished. Reserved tool
+  work blocks final completion, and an abandoned proposal still needs outcome reconciliation.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
   across conversations.
 - **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete
@@ -56,6 +53,12 @@ current review work and its evidence.
 
 Durable application source, builds and published apps are later work. Temporary computer previews
 do not publish an application.
+
+Answer recovery saves the exact prepared answer before posting it, so a restart can recognise its
+original content and timestamp. At `b06bd0473`, all five conversation-history cases ran against
+the real KurrentDB service in [CI](https://github.com/elewa-git/opencrane/actions/runs/34294502393/job/102288255050),
+including changed-content conflicts and recovery after a newer turn starts. This is source
+qualification; the new recovery and tool-handoff code has not been rolled out to testv5.
 
 ## Proven in the test installation
 

@@ -26,6 +26,16 @@ export async function __AdmitPreparingToolInvocationInTransaction(transaction: T
 }
 
 /**
+ * Prepare the observed invocation in the transaction that also admits its executor work.
+ * The lifecycle owner preserves approval requirements and leaves progressed revisions unchanged.
+ * Called by: PrismaConversationToolProposalRepository after its current authority checks.
+ */
+export async function __PrepareToolInvocationInTransaction(transaction: ToolInvocationTransaction, invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>
+{
+	return PrismaToolInvocationRepository.markPreparedInTransaction(transaction, invocationId, expectedRevision, now);
+}
+
+/**
  * Reads one tool call by database id using the transaction that is deciding an approval.
  * Called by: ./deferred-tool-approval.ts and ./prisma-tool-invocation-elicitation-repository.ts.
  * @param transaction - Transaction that owns the surrounding approval decision.

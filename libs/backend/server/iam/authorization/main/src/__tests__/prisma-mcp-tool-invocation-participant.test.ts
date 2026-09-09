@@ -24,14 +24,27 @@ function _Row(overrides: Readonly<Record<string, unknown>> = {}): Record<string,
 }
 
 /** Build the transaction participant with runs-owned event fakes. */
-function _Participant(transaction: Prisma.TransactionClient, appendLifecycle = vi.fn().mockResolvedValue(true), mcpTasks?: McpTaskToolInvocationLifecycleParticipant, eligible = vi.fn().mockResolvedValue(true))
+function _Participant(transaction: Prisma.TransactionClient, appendLifecycle = vi.fn().mockResolvedValue(true), mcpTasks?: McpTaskToolInvocationLifecycleParticipant, eligible = vi.fn().mockResolvedValue(Date.parse("2026-08-26T10:05:00.000Z")))
 {
-	const factory = __CreatePrismaMcpToolInvocationParticipantFactory({ appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Entered), resumeRunningInTransaction: vi.fn().mockResolvedValue(true) }, { isCurrentlyEligibleInTransaction: eligible });
+	const factory = __CreatePrismaMcpToolInvocationParticipantFactory({ appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Entered), resumeRunningInTransaction: vi.fn().mockResolvedValue(true) }, { admitUntilInTransaction: eligible });
 	return { participant: factory.__ForTransaction(transaction, mcpTasks), appendLifecycle, eligible };
 }
 
 describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 {
+	/** The absolute bound survives the participant's conversion to a repository claim duration. */
+	it("shortens the persisted run-owned claim to its admitted deadline", async function _BoundedClaim()
+	{
+		const now = new Date("2026-08-26T10:00:01.000Z");
+		const expiresAt = new Date(now.getTime() + 2_000);
+		const ready = _Row();
+		const claimed = _Row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 1, claimAttempt: 1, claimExpiresAt: expiresAt, revision: 5 });
+		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(ready).mockResolvedValueOnce(claimed), updateMany } } as unknown as Prisma.TransactionClient;
+		const { participant } = _Participant(transaction, vi.fn(), undefined, vi.fn().mockResolvedValue(expiresAt.getTime()));
+		await expect(participant.claim("invocation-row-1", now, 30_000, _WORKLOAD)).resolves.toMatchObject({ outcome: "claimed", invocation: { claimExpiresAt: expiresAt } });
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ claimExpiresAt: expiresAt }) }));
+	});
 	it("claims provider dispatch inside the transaction supplied by the MCP authority", async function _ClaimsDispatch()
 	{
 		const ready = _Row();
@@ -53,7 +66,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
 		const create = vi.fn().mockResolvedValue({});
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(failed), updateMany }, toolResultDelivery: { create } } as unknown as Prisma.TransactionClient;
-		const { participant, appendLifecycle } = _Participant(transaction, vi.fn().mockResolvedValue(true), undefined, vi.fn().mockResolvedValue(false));
+		const { participant, appendLifecycle } = _Participant(transaction, vi.fn().mockResolvedValue(true), undefined, vi.fn().mockResolvedValue(null));
 		const result = await participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD);
 		expect(result).toEqual({ outcome: "winner", invocation: expect.objectContaining({ state: ToolInvocationStates.Failed }) });
 		expect(updateMany).toHaveBeenCalledTimes(1);
@@ -68,7 +81,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const winner = _Row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, revision: 5 });
 		const create = vi.fn();
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(winner), updateMany: vi.fn().mockResolvedValue({ count: 0 }) }, toolResultDelivery: { create } } as unknown as Prisma.TransactionClient;
-		const { participant, appendLifecycle } = _Participant(transaction, vi.fn(), undefined, vi.fn().mockResolvedValue(false));
+		const { participant, appendLifecycle } = _Participant(transaction, vi.fn(), undefined, vi.fn().mockResolvedValue(null));
 		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD)).resolves.toEqual({ outcome: "winner", invocation: expect.objectContaining({ state: ToolInvocationStates.Claimed }) });
 		expect(create).not.toHaveBeenCalled();
 		expect(appendLifecycle).not.toHaveBeenCalled();
@@ -175,7 +188,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 	{
 		const failed = _Row({ state: ToolInvocationState.Failed, failureCode: "tool_dispatch_authority_denied", revision: 5 });
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(_Row()).mockResolvedValueOnce(failed), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, toolResultDelivery: { create: vi.fn().mockResolvedValue({}) } } as unknown as Prisma.TransactionClient;
-		const { participant } = _Participant(transaction, vi.fn().mockResolvedValue(false), undefined, vi.fn().mockResolvedValue(false));
+		const { participant } = _Participant(transaction, vi.fn().mockResolvedValue(false), undefined, vi.fn().mockResolvedValue(null));
 		await expect(participant.claim("invocation-row-1", new Date("2026-08-26T10:00:01.000Z"), 30_000, _WORKLOAD)).rejects.toThrow("tool invocation transition requires its canonical lifecycle event");
 	});
 
@@ -185,7 +198,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const recovery = _Row({ state: ToolInvocationState.RecoveryRequired, claimKind: null, claimFence: 3, revision: 6 });
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(recovery), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } } as unknown as Prisma.TransactionClient;
 		const appendRecovery = vi.fn();
-		const factory = __CreatePrismaMcpToolInvocationParticipantFactory({ appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Conflict), resumeRunningInTransaction: vi.fn() }, { isCurrentlyEligibleInTransaction: vi.fn() });
+		const factory = __CreatePrismaMcpToolInvocationParticipantFactory({ appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Conflict), resumeRunningInTransaction: vi.fn() }, { admitUntilInTransaction: vi.fn() });
 		const participant = factory.__ForTransaction(transaction);
 		await expect(participant.completeAmbiguous({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-26T10:00:01.000Z"))).rejects.toThrow("tool recovery state conflicts with its owning run attempt");
 		expect(appendRecovery).not.toHaveBeenCalled();

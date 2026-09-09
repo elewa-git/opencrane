@@ -57,7 +57,7 @@ to the server.
 | KurrentDB | Ordered `conversation-{id}` history, computer lifecycle evidence and durable activation delivery. History entries reference encrypted message payloads. |
 | Conversation compute | `apps/conversation-computer` performs bounded model work and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
 | Models | LiteLLM routes requests to configured providers and brokers scoped model credentials. Providers may be external to the organisation. |
-| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. Connecting them to the conversation model loop remains product work. |
+| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. Current follow-up source saves a permitted conversation proposal and its executor work together, with claims bounded by the original run and current access. Model requests and resuming from tool results remain product work. |
 | Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Complete personal-memory journeys remain unfinished. |
 | Files | The artifact catalogue, `apps/artifact-service`, scanner and preprocessor own stored files, validation and processing. Computer workspace checkpoints use ArtifactStore. |
 

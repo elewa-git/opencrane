@@ -8,14 +8,15 @@ import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationComp
  *
  * PostgreSQL decisions share the claim transaction. History checks observe the current lease and
  * identity separately; they do not make revocation atomic across PostgreSQL and KurrentDB.
- * A known denial returns false. An unavailable dependency throws so the transaction can retry
+ * A known denial returns null. An allowance returns its absolute expiry in epoch milliseconds.
+ * An unavailable dependency throws so the transaction can retry
  * without recording a policy denial or starting the provider request.
  * Called by: PrismaMcpToolInvocationParticipantUnitOfWork.claim.
  */
 export interface RunToolInvocationDispatchAuthority
 {
-	/** Check the saved run-owned invocation through the caller's open transaction. */
-	isCurrentlyEligibleInTransaction(transaction: unknown, invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<boolean>;
+	/** Admit the saved run-owned invocation and preserve its earliest original/current authority deadline. */
+	admitUntilInTransaction(transaction: unknown, invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<number | null>;
 }
 
 /**

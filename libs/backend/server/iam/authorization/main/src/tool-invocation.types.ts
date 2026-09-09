@@ -295,8 +295,6 @@ export interface ToolInvocationTransactionRepository
 	findById(invocationId: string): Promise<ToolInvocationRecord | null>;
 	/** Load one invocation from its accepted candidate coordinates. */
 	findByCandidate(runId: string, attempt: number, candidateId: string): Promise<ToolInvocationRecord | null>;
-	/** Return one invocation the worker may act on now, or null; only the run's current attempt qualifies. */
-	findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>;
 	/** Record provider-free preparation success under the observed lifecycle revision. */
 	markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>;
 	/** Consume one failed provider-free preparation attempt. */

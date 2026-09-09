@@ -57,6 +57,6 @@ export interface ConversationToolAssignmentAuthority
 /** Evaluate current conversation tool authority inside the caller's already-bound transaction. */
 export interface ConversationToolDispatchAuthority
 {
-	/** Return a known permission refusal or propagate an unavailable dependency. */
-	isCurrentlyEligible(invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<boolean>;
+	/** Return the admitted absolute expiry in epoch milliseconds, null for refusal, or throw on unavailable evidence. */
+	admitUntil(invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<number | null>;
 }

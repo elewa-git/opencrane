@@ -68,6 +68,32 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		expect(transaction.mcpRuntimeExecution.create).not.toHaveBeenCalled();
 	});
 
+	it.each([ToolInvocationStates.Ready, ToolInvocationStates.Claimed, ToolInvocationStates.Succeeded, ToolInvocationStates.Failed, ToolInvocationStates.RecoveryRequired])("recovers existing executor work after invocation progression to %s", async function _RecoverProgressed(state)
+	{
+		const invocation = { id: "invocation-row-1", siloId: "silo-1", toolRevisionId: "tool-1", state, recoveryMode: ExternalActionRecoveryModes.Manual };
+		const existing = { siloId: "silo-1", kind: McpRuntimeExecutionKind.Invocation, toolInvocationId: invocation.id, serverRevisionId: "revision-1", profileName: "mcp-default", idempotencyKey: `mcp-invocation:${invocation.id}` };
+		const transaction = {
+			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(existing), create: vi.fn() },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Disabled } } }) },
+		};
+		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, { findById: vi.fn().mockResolvedValue(invocation) }, _Options());
+		await expect(repository.admitInvocation(invocation.id)).resolves.toBe("idempotent");
+		expect(transaction.mcpRuntimeExecution.create).not.toHaveBeenCalled();
+		transaction.mcpRuntimeExecution.findUnique.mockResolvedValue({ ...existing, serverRevisionId: "different-revision" });
+		await expect(repository.admitInvocation(invocation.id)).resolves.toBe("not_mcp");
+	});
+
+	it.each([ToolInvocationStates.Claimed, ToolInvocationStates.Succeeded, ToolInvocationStates.Failed, ToolInvocationStates.RecoveryRequired])("never recreates missing executor work for %s", async function _NoResurrection(state)
+	{
+		const transaction = {
+			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } } }) },
+		};
+		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, { findById: vi.fn().mockResolvedValue({ id: "invocation-row-1", siloId: "silo-1", toolRevisionId: "tool-1", state, recoveryMode: ExternalActionRecoveryModes.Manual }) }, _Options());
+		await expect(repository.admitInvocation("invocation-row-1")).resolves.toBe("not_ready");
+		expect(transaction.mcpRuntimeExecution.create).not.toHaveBeenCalled();
+	});
+
 	it("returns a database-fenced controller claim with the immutable imported image", async function _ClaimsForController()
 	{
 		const claimedAt = new Date("2026-08-26T00:00:00.000Z");

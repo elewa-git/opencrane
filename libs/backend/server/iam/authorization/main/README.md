@@ -79,7 +79,13 @@ the ordinary exact boundary-matching rules.
   provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
   invocation carry the same immutable execution subject, including the active conversation-computer
   lease id and generation; released or replaced leases fail closed.
+- `__AdmitPreparingToolInvocationInTransaction` and `__PrepareToolInvocationInTransaction` let the
+  conversation owner save and prepare a permitted call in the transaction that queues its MCP
+  executor. The existing lifecycle still enforces approval requirements and observed revisions.
 - Run-owned MCP dispatch requires the injected current-authority check before a provider claim.
+  Its returned absolute deadline caps the claim to the original run budget, current computer lease
+  and frozen/current membership trust, within the configured claim duration. MCP stores the same
+  cap before returning a command to the executor; neither retries nor a delayed write renew it.
   A known denial closes only the observed Ready revision and saves one failed result delivery
   after the lifecycle fence accepts it. Durable KurrentDB tool history remains pending.
   A read outage propagates so the transaction rolls back.

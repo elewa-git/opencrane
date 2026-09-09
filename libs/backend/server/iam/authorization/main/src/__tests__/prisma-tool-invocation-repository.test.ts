@@ -82,15 +82,6 @@ describe("PrismaToolInvocationRepository", function _suite()
 		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", createdAt: new Date("2026-08-11T10:00:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z") }) });
 	});
 
-	it("selects current-attempt work only when central authorization evidence is present", async function _findRunnable()
-	{
-		const stale = { ..._row({ id: "stale", attempt: 1 }), run: { attempt: 2 } };
-		const current = { ..._row({ id: "current", attempt: 2 }), run: { attempt: 2 } };
-		const findMany = vi.fn().mockResolvedValue([stale, current]);
-		const repository = new PrismaToolInvocationRepository({ toolInvocation: { findMany } } as unknown as Prisma.TransactionClient);
-		await expect(repository.findNextRunnable(new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ id: "current" }));
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ mcpRuntimeExecution: { is: null }, authorizationEvidenceDigest: { not: null }, OR: [expect.objectContaining({ run: { is: { state: AgentRunState.Running } } })] }) }));
-	});
 
 	it("allows successful first preparation after the retry deadline because only retries expire", async function _latePreparationSuccess()
 	{

@@ -11,12 +11,15 @@ export interface ConversationToolProposalCommand extends ConversationToolProposa
 	readonly workload: RuntimeWorkloadIdentity;
 }
 
-/** Owns durable provider-free admission after the turn authority verifies the bound Pod. */
+/** Owns atomic proposal preparation and executor admission after the turn authority verifies the bound Pod. */
 export interface ConversationToolProposalAdmission
 {
 	/** Save one exact proposal or recover its winner; current authority is checked before commit. */
 	admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: ConversationToolProposal, workload: ProductAuthorizationWorkloadContext): Promise<ConversationToolProposalReceipt>;
 }
+
+/** Create existing executor work in the proposal's transaction; never open another transaction or call a provider. */
+export type ConversationToolProposalRuntimeAdmission = (transaction: unknown, invocationRowId: string) => Promise<boolean>;
 
 /** Server-derived immutable facts passed into the proposal's transactional admission owner. */
 export interface PreparedConversationToolProposal

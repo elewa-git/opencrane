@@ -6,8 +6,11 @@ integrations.
 
 ::: info Current scope
 The catalogue, immutable package import and governed MCP execution services are implemented.
-The 0.11 personal-conversation model loop does not yet invoke them. Installing a tool does not
-make it usable from assistant chat. See [development status](/guide/status).
+The current follow-up source also queues a permitted conversation-tool proposal together with its
+saved invocation. Repeating that proposal recovers the original work, within the original run's
+time and access limits. The handoff still needs fresh database and live qualification. The
+conversation model loop does not yet request tools or resume from their results, so installing a
+tool does not make it usable from assistant chat. See [development status](/guide/status).
 :::
 
 ## Prepare an integration

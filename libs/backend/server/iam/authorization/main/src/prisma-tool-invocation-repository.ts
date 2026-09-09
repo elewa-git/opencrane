@@ -241,36 +241,16 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		return row === null ? null : _record(row);
 	}
 
-	/** Return the oldest runnable invocation whose owning run attempt remains dispatchable. */
-	async findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>
-	{
-		const rows = await this._transaction.toolInvocation.findMany({
-			where: {
-				mcpRuntimeExecution: { is: null },
-				authorizationEvidenceDigest: { not: null },
-				OR: [
-					{
-						run: { is: { state: "Running" } },
-						OR: [
-							{ state: ToolInvocationState.Preparing, nextPreparationAttemptAt: { lte: now } },
-							{ state: ToolInvocationState.AwaitingApproval, claimKind: null },
-							{ state: ToolInvocationState.Ready, claimKind: null, claimExpiresAt: null },
-							{ state: ToolInvocationState.Reconciling, claimKind: null, claimExpiresAt: null },
-							{ state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, claimExpiresAt: { lte: now } },
-						],
-					},
-				],
-			},
-			include: { run: { select: { attempt: true } } },
-			orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-		});
-		const current = rows.find(function _currentAttempt(row) { return row.run !== null && row.attempt === row.run.attempt; });
-		return current === undefined ? null : _record(current);
-	}
 	/** Record provider-free preparation success and select approval or dispatch readiness. */
 	async markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>
 	{
-		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
+		return PrismaToolInvocationRepository.markPreparedInTransaction(this._transaction, invocationId, expectedRevision, now);
+	}
+
+	/** Prepare the observed revision in the caller's existing executor-admission transaction. */
+	static async markPreparedInTransaction(transaction: Prisma.TransactionClient, invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>
+	{
+		const invocation = await transaction.toolInvocation.findUnique({ where: { id: invocationId } });
 		if (invocation === null)
 			return null;
 		if (invocation.runId === null || invocation.attempt === null)
@@ -279,11 +259,11 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		const state = _targetState(_ToolInvocationPlan(invocation, event, now));
 		if (state === null)
 			return _record(invocation);
-		await this._transaction.toolInvocation.updateMany({
+		await transaction.toolInvocation.updateMany({
 			where: { id: invocationId, state: ToolInvocationState.Preparing, revision: expectedRevision, run: { is: { attempt: invocation.attempt, state: "Running" } } },
 			data: { state, preparationAttempt: { increment: 1 }, failureCode: null, nextPreparationAttemptAt: now, revision: { increment: 1 } },
 		});
-		return this._winner(invocationId);
+		return PrismaToolInvocationRepository.findByIdInTransaction(transaction, invocationId);
 	}
 
 	/** Consume one provider-free preparation failure under the three-in-five-minutes policy. */

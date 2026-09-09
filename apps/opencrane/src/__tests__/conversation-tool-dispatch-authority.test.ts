@@ -77,7 +77,7 @@ describe("current conversation tool dispatch authority", function _Suite()
 	it("rechecks central permission, membership and assignment for the saved execution principal", async function _AllowsCurrentWork()
 	{
 		const f = _Fixture();
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(true);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(_NOW.getTime() + 5_000);
 		expect(f.transaction.agentRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Running", attempt: 1, principalId: "principal-1" }) }));
 		expect(f.transaction.orgMembership.findUnique).toHaveBeenCalledOnce();
 		expect(f.transaction.agentRevisionMcpToolAssignment.findFirst).toHaveBeenCalledOnce();
@@ -89,24 +89,36 @@ describe("current conversation tool dispatch authority", function _Suite()
 	{
 		const f = _Fixture();
 		f.grants[index]!.revokedAt = _NOW;
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
+	});
+
+	it.each(["run", "lease"])("returns the shorter %s deadline instead of the configured dispatch lease", async function _ShortDeadline(bound)
+	{
+		const f = _Fixture();
+		const deadline = _NOW.getTime() + 2_000;
+		if (bound === "run")
+			f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: deadline, maxToolInvocations: 1 } });
+		else
+			f.computer.lease.expiresAt = new Date(deadline).toISOString();
+		f.computers.load.mockImplementation(async function _DelayedHistory() { vi.setSystemTime(_NOW.getTime() + 1_000); return f.computer; });
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(deadline);
 	});
 
 	it("denies current membership removal and tool assignment removal", async function _CurrentRows()
 	{
 		const f = _Fixture();
 		f.membership.status = OrgMemberStatus.Suspended;
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 		f.membership.status = OrgMemberStatus.Active;
 		f.transaction.agentRevisionMcpToolAssignment.findFirst.mockResolvedValue(null);
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it.each([null, { conversationId: "conversation-1", executionSubject: {} }])("denies a missing, stale or substituted run row %j", async function _RunFence(row)
 	{
 		const f = _Fixture();
 		f.transaction.agentRun.findFirst.mockResolvedValue(row);
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 		expect(f.identities.load).not.toHaveBeenCalled();
 	});
 
@@ -114,14 +126,14 @@ describe("current conversation tool dispatch authority", function _Suite()
 	{
 		const f = _Fixture();
 		f.computers.load.mockResolvedValue({ ...f.computer, lease: { ...f.computer.lease, ...patch } });
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it.each([null, { budgetPolicy: {} }, { budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() } }, { budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 60_000, maxToolInvocations: 0 } }])("denies absent, expired or exhausted frozen input %j", async function _OriginalBudget(snapshot)
 	{
 		const f = _Fixture();
 		f.transaction.runInputSnapshot.findFirst.mockResolvedValue(snapshot);
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it("keeps the original deadline across an awaited authority read", async function _BudgetExpiresDuringHistory()
@@ -129,21 +141,21 @@ describe("current conversation tool dispatch authority", function _Suite()
 		const f = _Fixture();
 		f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 1_000, maxToolInvocations: 1 } });
 		f.computers.load.mockImplementation(async function _DelayedHistory() { vi.setSystemTime(_NOW.getTime() + 2_000); return f.computer; });
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it("counts all admitted invocations against the frozen limit", async function _ToolBudget()
 	{
 		const f = _Fixture();
 		f.transaction.toolInvocation.count.mockResolvedValue(2);
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it("propagates history transport failure without writing an admission", async function _HistoryFailure()
 	{
 		const f = _Fixture();
 		f.identities.load.mockRejectedValue(new Error("history unavailable"));
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).rejects.toThrow("history unavailable");
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).rejects.toThrow("history unavailable");
 		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
 	});
 
@@ -152,30 +164,30 @@ describe("current conversation tool dispatch authority", function _Suite()
 		const f = _Fixture();
 		f.grants[2]!.expiresAt = new Date(_NOW.getTime() + 1_000);
 		f.computers.load.mockImplementation(async function _DelayedHistory() { vi.setSystemTime(_NOW.getTime() + 2_000); return f.computer; });
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it("does not extend short current membership to the frozen evidence deadline", async function _CurrentMembershipExpires()
 	{
 		const f = _Fixture();
 		f.transaction.agentRevisionMcpToolAssignment.findFirst.mockImplementation(async function _DelayedAssignment() { vi.setSystemTime(_NOW.getTime() + 6_000); return { agentRevisionId: "revision-1" }; });
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it("refuses an effective argument digest that no longer matches its saved content", async function _ChangedArguments()
 	{
 		const f = _Fixture();
-		await expect(f.authority.isCurrentlyEligible({ ...f.invocation, effectiveArguments: { query: "substituted" } }, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil({ ...f.invocation, effectiveArguments: { query: "substituted" } }, _NOW, _WORKLOAD)).resolves.toBeNull();
 		expect(f.transaction.agentRun.findFirst).not.toHaveBeenCalled();
 	});
 	it("denies an identity head change and a removed conversation participant", async function _IdentityAndParticipant()
 	{
 		const f = _Fixture();
 		f.identities.load.mockResolvedValue({ ...f.identityHead, headDigest: `sha256:${"b".repeat(64)}` });
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 		f.identities.load.mockResolvedValue(f.identityHead);
 		f.transaction.conversationParticipant.findFirst.mockResolvedValue(null);
-		await expect(f.authority.isCurrentlyEligible(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it("preserves the managed revision owner's current exclusion of tool assignments", async function _ManagedToolsRemainUnavailable()
@@ -189,7 +201,7 @@ describe("current conversation tool dispatch authority", function _Suite()
 		const transaction = { ...f.transaction, agentService: { findFirst: vi.fn().mockResolvedValue(service) } };
 		const invocation = { ...f.invocation, authorizationEvidence: { ...f.invocation.authorizationEvidence, executionSubject: subject } } as ToolInvocationRecord;
 		const authority = new PrismaConversationToolDispatchAuthority(transaction as never, f.dependencies);
-		await expect(authority.isCurrentlyEligible(invocation, _NOW, _WORKLOAD)).resolves.toBe(false);
+		await expect(authority.admitUntil(invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 		expect(transaction.agentService.findFirst).toHaveBeenCalledOnce();
 		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
 	});

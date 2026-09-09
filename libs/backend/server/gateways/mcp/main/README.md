@@ -57,11 +57,20 @@ run the upload. It does not treat a valid layout as evidence that the image is a
 that evidence must come from the actual `server/discover` exchange after a governed runtime starts
 the imported image.
 
-Run-owned calls pass through the authorization participant before the companion receives provider
-arguments. The participant rechecks current conversation authority and can close denied Ready work
-with a failed result. A terminal winner closes the MCP execution without contacting the provider.
+An accepted conversation-tool proposal saves its invocation, readiness and executor work in one
+PostgreSQL transaction. An exact repeated proposal recovers that executor even after it has
+progressed; it cannot queue another call or reset the first one.
+
+Before the companion receives provider arguments, the authorization participant rechecks current
+conversation authority and can close denied Ready work with a failed result. A terminal winner
+closes the MCP execution without contacting the provider. The claim is capped by the original run
+deadline, active computer lease and frozen/current membership trust, within the configured claim
+duration. PostgreSQL checks the paired invocation claim and preserves its absolute expiry even if
+the MCP write is delayed; the returned command uses that saved expiry.
+
 History reads happen before the claim inside its bounded SQL transaction, while provider I/O stays
-after commit. The history read does not create a cross-store lock or enable the pending model loop.
+after commit. The history read does not create a cross-store lock. Conversation model requests,
+result resumption and participant-visible tool history remain unfinished.
 
 An installed server can then run a tool through a public task. The task keeps its state, input,
 result, and failure in the database, so a server restart does not repeat the tool call.
@@ -143,8 +152,11 @@ external effect. Missing Job coordinates cannot reach the provider claim.
   release, Pod-registration, and terminal-cleanup routes used by the agent controller.
 - `__CreateMcpRuntimeCompanionRouter` — exposes the three TokenReview-protected claim, completion,
   and failure routes used by one exact MCP companion Pod.
-- `PrismaMcpRuntimeAuthority` — owns the database transactions and delivery fences behind those
+- `PrismaMcpRuntimeUnitOfWork` — owns the database transactions and delivery fences behind those
   public, controller, and companion routes.
+- `PrismaMcpToolInvocationAdmissionRepository` — saves or recovers executor work inside the caller's
+  existing transaction, including the conversation proposal transaction. It never opens a second
+  transaction or contacts a provider.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`, and
   `publishServer`. Catalogue server responses include the newest Ready OCI tool revisions in stable
   order. Generic central grant administration owns MCP sharing; this package has no separate access

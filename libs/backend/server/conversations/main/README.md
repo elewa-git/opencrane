@@ -23,13 +23,13 @@ and fails closed when asked for Use; this message repair does not enable them th
 check. Human-reviewed group-child text sharing uses its separate recorded admission and remains
 available through that existing path.
 
-The private tool-proposal route lets a verified conversation Pod save one proposed call for its
-current turn. The server selects the frozen tool revision, validates the complete arguments and
-rechecks current access inside the transaction that saves it. Identical retries recover the same
-proposal; changed arguments cannot replace it. New proposals enter Preparing; identical retries
-recover the stored proposal without resetting its lifecycle. The route neither dispatches a tool
-nor returns a result. The model loop and durable
-conversation progress remain the next integration steps.
+The private tool-proposal route lets a verified conversation Pod request one permitted call for its
+current turn. The server validates the frozen tool and arguments, rechecks current access, and saves
+the invocation, its readiness and existing MCP (Model Context Protocol) executor work in one
+PostgreSQL transaction. A failure rolls back those changes together. Identical retries recover the
+original invocation and executor work without resetting their progress; changed arguments are
+refused. The route returns a proposal receipt. Connecting model requests, tool results and durable
+conversation progress remains unfinished.
 
 Proposal audits name the verified conversation-computer Pod and the saved run. Later tool-dispatch
 audits name the current MCP executor Job and Pod instead. The transport owners supply those
@@ -42,15 +42,17 @@ reservation because an earlier request may already have committed. An exact clie
 recover it; an abandoned reservation remains pending until outcome reconciliation is implemented.
 The reservation contains only identity and digests, so it cannot reconstruct missing arguments.
 
-Before an MCP (Model Context Protocol) executor claims a saved run-owned tool call, this package rechecks its current
+Before an MCP executor claims a saved run-owned tool call, this package rechecks its current
 Running run, unchanged execution subject, conversation participation, identity and exact active
 computer lease. Existing service and membership owners supply fresh evidence; the central
 authority re-admits Conversation Use and every saved tool coordinate. Revoked permission becomes
 a definite failed invocation before provider dispatch. An unavailable history store leaves the
 transaction uncommitted for retry. Kurrent reads and PostgreSQL decisions remain separate
 observations. The original run deadline and tool allowance remain binding at both proposal and
-dispatch, and retries cannot extend them. This guard does not enable the
-model tool loop; company revisions with tool assignments remain refused by their current owner.
+dispatch. The executor claim expires at the earliest run, lease or membership-trust deadline, or
+sooner if its configured claim duration ends first. The saved invocation, executor command and
+returned command share that deadline; delayed writes and retries cannot extend it. Company
+revisions with tool assignments remain refused by their current owner.
 
 The creation directory lists active members in the current silo with their stored display names.
 Missing names use a generic label; login subjects and email addresses never become fallback names.
@@ -316,9 +318,10 @@ shared group-child journey and its durable recovery worker. The public routes ar
 - `PrismaConversationComputerTurnUnitOfWork` rechecks the pending human author's current authority
   before handing server-derived lease, identity, revision, and requester coordinates to the injected
   run-admission port. It accepts compiled input only for the deterministic first attempt.
-- `PrismaConversationToolProposalUnitOfWork` saves one Preparing tool proposal through the
-  existing invocation authority, with the original run budget and current access checks in one
-  transaction. Its repository retains identical retries and rejects changed proposal content.
+- `PrismaConversationToolProposalUnitOfWork` saves and prepares one permitted proposal, then queues
+  its existing executor in the same transaction. The app supplies a
+  `ConversationToolProposalRuntimeAdmission` callback bound to that transaction. Its repository
+  retains identical retries, rejects changed content and keeps the original run budget binding.
 - `KurrentConversationHistoryAdmissionReader` re-reads one exact stream revision and returns its
   completed message order plus the immutable final human author to durable run admission.
 - `PrismaKurrentConversationPromptMessageRepository` resolves that admitted message set through

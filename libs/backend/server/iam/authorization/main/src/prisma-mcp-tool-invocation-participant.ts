@@ -66,18 +66,23 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 		const invocation = await this._repository.findById(invocationId);
 		if (invocation === null)
 			return { outcome: ToolInvocationClaimOutcomes.Missing };
-		if (!_IsMcpTaskOwned(invocation) && invocation.state === ToolInvocationStates.Ready
-			&& !await this.runDispatch.isCurrentlyEligibleInTransaction(this._transaction, invocation, now, workload))
+		let boundedLeaseMilliseconds = leaseMilliseconds;
+		if (!_IsMcpTaskOwned(invocation) && invocation.state === ToolInvocationStates.Ready)
 		{
-			const unused = new PrismaRunUnusedToolInvocationRepository(this._transaction);
-			const transition = await unused.complete(invocation, now);
-			if (transition.changed && transition.invocation !== null)
-				await _AppendMcpToolInvocationFailed(this._lifecycleEvents, this._transaction, transition.invocation, _RUN_TOOL_DISPATCH_DENIED, false);
-			if (transition.invocation === null)
-				return { outcome: ToolInvocationClaimOutcomes.Missing };
-			return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: transition.invocation };
+			const notAfter = await this.runDispatch.admitUntilInTransaction(this._transaction, invocation, now, workload);
+			if (notAfter === null || !Number.isSafeInteger(notAfter) || notAfter <= now.getTime())
+			{
+				const unused = new PrismaRunUnusedToolInvocationRepository(this._transaction);
+				const transition = await unused.complete(invocation, now);
+				if (transition.changed && transition.invocation !== null)
+					await _AppendMcpToolInvocationFailed(this._lifecycleEvents, this._transaction, transition.invocation, _RUN_TOOL_DISPATCH_DENIED, false);
+				if (transition.invocation === null)
+					return { outcome: ToolInvocationClaimOutcomes.Missing };
+				return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: transition.invocation };
+			}
+			boundedLeaseMilliseconds = Math.min(leaseMilliseconds, notAfter - now.getTime());
 		}
-		const claimed = await this._repository.claim(invocationId, ExternalActionClaimKinds.Dispatch, now, leaseMilliseconds);
+		const claimed = await this._repository.claim(invocationId, ExternalActionClaimKinds.Dispatch, now, boundedLeaseMilliseconds);
 		if (claimed.outcome === ToolInvocationClaimOutcomes.Claimed && _IsMcpTaskOwned(claimed.invocation))
 		{
 			if (this._mcpTasks === null || !await this._mcpTasks.markClaimed(claimed.invocation, now))
