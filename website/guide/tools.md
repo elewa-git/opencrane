@@ -45,6 +45,27 @@ Revocation will prevent the revoked share from authorizing new use, and queued w
 access before execution. Requests already sent to an external system may finish; revocation does
 not undo their effects. The access list and revocation are required parts of the connection feature.
 
+## Waiting for a secret is planned
+
+Before an assistant starts work that requires a connection, OpenCrane will check that its credential
+is usable and that the assistant has permission for the required actions. Missing credentials or
+permission will put that work in **Waiting for secret**, with a clear reason and a card in the
+conversation and Activity. Unused optional tools will not block other work. An unavailable provider
+will be shown as a connection problem, not falsely described as a missing secret.
+
+From the waiting card, an authorized person will be able to choose an existing personal or shared
+connection, **Grant access** from another compatible source, or **Connect / reconnect an account**.
+Someone without grant authority can request access. The UI will show only connections they may
+discover; requesting access will not grant it. Credential entry will stay outside chat and the
+assistant's input. Any new share will appear in the connection's Shared access list and be revocable.
+
+The confirmation will identify the external account, assistant, permitted use and expiry. OpenCrane
+will recheck the assistant's access and all outstanding requirements before resuming the pending
+work once. Choosing a different account will require fresh admission and any affected action
+approval. Providing a secret will not approve an external action, restart cancelled or expired work,
+or repeat effects already completed. Waiting and recovery will survive reload. This complete flow
+is required for usable connections and is not implemented yet.
+
 ## From a request to an answer
 
 The server limits the model to the tools admitted for that task. When it selects one, OpenCrane

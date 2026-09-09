@@ -37,7 +37,7 @@ actual authority prerequisite; it is not a reason to serialize independent imple
 | R1 | Login survives server replacement. Extend the existing session owner and storage; remove the process-local store as an authority. | C0 for branch handoff | A fresh sign-in remains valid after a server replacement and across two server instances; logout, expiry and membership loss still deny access. Stored session secrets are protected and expiry cleanup is bounded. |
 | R2 | Completed personal work is visible. Create the verified personal owner’s exact run-read grant during admission; preserve current read authorization. | Current run contracts; coordinate any shared R1 files | A completed run appears to its owner with correct conversation/status links; another employee and another silo cannot discover it. Do not grant broader rights merely to make a list nonempty. |
 | A1 | Administrators can remove access and people cannot reopen revoked work. Extend existing membership/participant operations and their current UI owner. | R1 for live session continuity; current authority contract | A real member is removed through the product, subsequent reads/actions fail, selected private history/drafts clear, reconnect and late responses cannot restore them, and closed work stays closed. |
-| C1 | People own connections, share their use and revoke access. Extend the existing MCP catalogue and IAM owners with credential custody, connection ownership and a visible shared-access list. | Current registry and authorization; settle the connection contract before UI consumers | A personal or company-owned connection works with its own credential. Its owner can list recipients, access sources, allowed tools/actions, expiry and status, then revoke a share. Current access governs credential release and execution; other surviving grants remain visible. No raw secret reaches recipients or model input. |
+| C1 | People own connections, share their use and revoke access. Extend the existing MCP catalogue and IAM owners with credential custody, connection ownership, a visible shared-access list and a recoverable credential wait. | Current registry and authorization; settle the connection and waiting/resume contracts before UI consumers | A personal or company-owned connection works with its own credential. Its owner can list and revoke shares. Required connection checks either permit work or show Waiting for secret; an authorized person supplies or shares a compatible source through the UI, then the server rechecks and resumes eligible work once. Current access governs credential release and execution; surviving grants remain visible. No raw secret reaches recipients or model input. |
 | T1 | An assistant retrieves one permitted record and explains it. Connect compiled tool definitions to the conversation runtime, a run/lease-bound tool proposal/result contract and the existing MCP invocation owner. | C0; C1 for credential-bearing integrations; define shared contract before consumers | One installed read-only integration returns real data in both personal and company-child chats. Current grants, frozen tool revisions, credentials and budgets are checked. Retry/restart preserves invocation identity; tool activity/result and the final answer survive reload. |
 | T2 | People approve a precise external change. Connect the existing approval and effect-admission owners to T1 and the conversation UI. | T1; A1 before live revocation acceptance | The person reviews the exact target and arguments. Approval is bound to that action, denial executes nothing, changed arguments need a new decision, and a company assistant does not inherit private human credentials. |
 | T3 | Interrupted actions remain understandable. Complete cancellation, durable completion and uncertain-outcome handling in the same invocation owner. | T1 and T2 | Cancellation fences future effects; stale leases cannot execute; retry does not duplicate a write. A provider timeout after submission is shown as uncertain until reconciled, never as fabricated success or an automatic unsafe retry. |
@@ -99,6 +99,55 @@ grant truthfully; deny a stale or unauthorized management request; and preserve 
 already-submitted request. Personal secrets, another group's connection metadata and raw credential
 material remain unavailable to unauthorized readers. Mount the setup and sharing UI with the
 backed API and verified connection status, rather than adding a scope selector to install metadata.
+
+#### Start, wait for a secret and resume
+
+Before starting an agent task, the server checks its declared required connections: a configured
+credential must be usable and the exact executing principal must currently be allowed to use it
+for the admitted tools/actions. Check a newly needed connection again before its tool dispatch.
+Unused optional integrations do not block unrelated work. Secret existence or the requester's own
+access alone is insufficient, especially when a company assistant executes as a different principal.
+
+If a required credential is missing, expired or revoked, or the executor lacks its use grant,
+persist **Waiting for secret** as a reason within the existing work lifecycle. Explain the safe,
+actionable cause: connect an account, reconnect an expired account, or obtain permission. The
+status and outstanding requirements survive reload and appear in the conversation and Activity
+to authorized readers. Reveal no undiscoverable connection names, owners or secret material.
+Provider outages and failed availability checks remain connection errors; do not mislabel them
+as proof that a secret is missing. Waiting requires neither repeated model calls nor a new scheduler.
+
+The waiting card names the integration and permitted purpose, and offers the authorized paths:
+
+- **Use an existing connection:** select a discoverable personal connection or one shared through
+  a group or the company. Recheck eligibility for the executor; the viewer's access is not a grant.
+- **Grant access:** a person with current management authority can share a compatible connection
+  with the exact recipient and required actions, with an explicit expiry. Show the resulting grant
+  in that connection's Shared access list, including its source and any remaining access paths.
+- **Connect or reconnect an account:** complete protected credential setup outside the conversation
+  text and model input. A viewer who cannot grant access can request it from an authorized owner
+  through the product; requesting alone never grants access or reveals private connections.
+
+Before confirming a source, show the external account/target, assistant, allowed use and expiry.
+Do not silently substitute a different account or provider when another source becomes available.
+Bind the selected source to durable server-owned admission evidence. If the new selection falls
+outside frozen run inputs or changes an approval-bound account, target, purpose or action, obtain
+fresh admission and any required approval; never edit the old snapshot or reuse a mismatched approval.
+
+After the grant or setup commits, the server rechecks every outstanding requirement, current
+membership/grants, connection validity, admitted limits, approval, cancellation and expiry before
+resuming. A successful grant resolves only its own wait reason. Repeated UI submissions, grant
+events or reconnects resume the same pending work at most once and do not replay completed effects.
+Granting access does not override a separate action approval or extend the task's lifetime. A
+cancelled, closed, expired or denied task stays terminal; only a new authorized request can start work.
+If access is revoked again before dispatch, that grant cannot authorize execution. Existing rules
+for surviving grants and already-submitted external requests continue to apply.
+
+Acceptance must prove startup without a required credential, the persisted waiting card after
+reload, grant from another authorized source, correct executor/account binding and one resumption;
+also prove no unrelated optional tool blocks startup, partial resolution of multiple requirements,
+unauthorized grant/source discovery denial, expiry/revocation during the wait, a provider outage,
+duplicate grant events and cancellation before credentials arrive. C1 includes this whole recovery
+journey; a setup screen or a status label alone does not complete it. It remains unimplemented.
 
 ### T1: connect admitted tools to useful work
 
