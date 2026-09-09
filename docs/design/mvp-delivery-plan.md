@@ -5,7 +5,8 @@ company control. The conversation baseline proves that people can join, approve 
 receive answers, collaborate in a group and review a company assistant's response. The next product
 step is to complete useful work and make returning to that work dependable.
 
-This plan covers all remaining gaps identified on 2026-09-08. The user authorized planning and
+This plan covers the gaps identified on 2026-09-08 and the connection-sharing requirements added
+on 2026-09-09. The user authorized planning and
 overnight execution, with intermittent commits and reviewable PRs. It does not claim that the
 whole MVP can be delivered in one night. `plan.md` owns current status, `plan-done.md` owns completed
 tracks, and the deployment ledger owns live evidence.
@@ -36,7 +37,8 @@ actual authority prerequisite; it is not a reason to serialize independent imple
 | R1 | Login survives server replacement. Extend the existing session owner and storage; remove the process-local store as an authority. | C0 for branch handoff | A fresh sign-in remains valid after a server replacement and across two server instances; logout, expiry and membership loss still deny access. Stored session secrets are protected and expiry cleanup is bounded. |
 | R2 | Completed personal work is visible. Create the verified personal owner’s exact run-read grant during admission; preserve current read authorization. | Current run contracts; coordinate any shared R1 files | A completed run appears to its owner with correct conversation/status links; another employee and another silo cannot discover it. Do not grant broader rights merely to make a list nonempty. |
 | A1 | Administrators can remove access and people cannot reopen revoked work. Extend existing membership/participant operations and their current UI owner. | R1 for live session continuity; current authority contract | A real member is removed through the product, subsequent reads/actions fail, selected private history/drafts clear, reconnect and late responses cannot restore them, and closed work stays closed. |
-| T1 | An assistant retrieves one permitted record and explains it. Connect compiled tool definitions to the conversation runtime, a run/lease-bound tool proposal/result contract and the existing MCP invocation owner. | C0; define shared contract before consumers | One installed read-only integration returns real data in both personal and company-child chats. Current grants, frozen tool revisions, credentials and budgets are checked. Retry/restart preserves invocation identity; tool activity/result and the final answer survive reload. |
+| C1 | People own connections, share their use and revoke access. Extend the existing MCP catalogue and IAM owners with credential custody, connection ownership and a visible shared-access list. | Current registry and authorization; settle the connection contract before UI consumers | A personal or company-owned connection works with its own credential. Its owner can list recipients, access sources, allowed tools/actions, expiry and status, then revoke a share. Current access governs credential release and execution; other surviving grants remain visible. No raw secret reaches recipients or model input. |
+| T1 | An assistant retrieves one permitted record and explains it. Connect compiled tool definitions to the conversation runtime, a run/lease-bound tool proposal/result contract and the existing MCP invocation owner. | C0; C1 for credential-bearing integrations; define shared contract before consumers | One installed read-only integration returns real data in both personal and company-child chats. Current grants, frozen tool revisions, credentials and budgets are checked. Retry/restart preserves invocation identity; tool activity/result and the final answer survive reload. |
 | T2 | People approve a precise external change. Connect the existing approval and effect-admission owners to T1 and the conversation UI. | T1; A1 before live revocation acceptance | The person reviews the exact target and arguments. Approval is bound to that action, denial executes nothing, changed arguments need a new decision, and a company assistant does not inherit private human credentials. |
 | T3 | Interrupted actions remain understandable. Complete cancellation, durable completion and uncertain-outcome handling in the same invocation owner. | T1 and T2 | Cancellation fences future effects; stale leases cannot execute; retry does not duplicate a write. A provider timeout after submission is shown as uncertain until reconciled, never as fabricated success or an automatic unsafe retry. |
 | U1 | People can follow and control assistant work. Extend the existing workspace event mapping and approved UI components. | T1 contract; T2/T3 states before final proof | Show proposed/running/waiting/failed/cancelled/completed work, approval details and result links. Reload and SSE resume preserve the state. Accessible approval, choice and free-text interactions use server-issued contracts. |
@@ -52,6 +54,53 @@ record the missing test integration and prepare the internal contract and determ
 do not install a marketplace or invent credentials. T2's live effect must use a dedicated test
 record/system with existing authorization. Real customer messages or writes require their own
 explicit authorization. The runtime proposes work; it never becomes the authority that approves it.
+
+### C1: owned connections with visible, revocable sharing
+
+This is planned product work. The existing registry stores silo-owned MCP definitions and
+per-principal installation records. It does not store or activate MCP credentials. `SharedKey`
+is currently derived from server type, not verified secret presence. Personal Tools routes are
+unmounted; the routed administrator catalogue governs existing entries. External registry records
+hold metadata without an automated discovery/import path. An authenticated integration therefore
+needs implementation work before its live test.
+
+A connection names the external account and binds its protected credential to an admitted MCP
+definition. Its owner may be a person or the company. Groups and assistants receive permission to
+use that connection; sharing does not copy the secret or transfer ownership. Reuse current
+principals, groups and central authorization for these decisions. A personal assistant stays within
+its owner's approved configuration and task limits. A company assistant needs its own execution
+authority; a human request does not donate that person's connection. An access group such as
+Finance is distinct from a group chat; chat membership alone grants no connection access.
+
+Each connection must have a **Shared access** list beside **Share connection with…**:
+
+| Visible field or action | Required behaviour |
+| --- | --- |
+| Recipient | Identify the person, access group or assistant receiving use permission. |
+| Access source | Show the direct share and any group-derived access; do not present inherited access as a separately revocable direct grant. |
+| Allowed use | Show the permitted tools/actions and any approval requirement. |
+| Expiry and status | Show active, expired or revoked state and the applicable expiry. |
+| Revoke access | An authorized owner or administrator can revoke the exact share after a confirmation naming the recipient and affected connection. Recheck current management authority on the server. |
+
+Refresh the list from the committed result. Revoking one share removes that access path; if another
+valid share still permits use, display the remaining source rather than claiming all access ended.
+Revoking a group share affects its recipients through that share without changing their company or
+group membership. Keep granted/revoked-by audit metadata without exposing credential material.
+
+After revocation commits, the revoked grant cannot authorize a new credential release or effect
+admission. Queued work rechecks current access before dispatch. An external request already sent
+may finish; the UI must not promise to undo it. A repeated revoke rechecks current management
+authority and cannot recreate the grant. Company-owned connections remain manageable when the
+employee who configured them leaves; personal sharing does not silently transfer ownership.
+
+Acceptance includes: share with an assistant and an access group; list the exact resulting access;
+revoke and reload; prove later use is denied when no other grant applies; show a surviving second
+grant truthfully; deny a stale or unauthorized management request; and preserve the outcome of an
+already-submitted request. Personal secrets, another group's connection metadata and raw credential
+material remain unavailable to unauthorized readers. Mount the setup and sharing UI with the
+backed API and verified connection status, rather than adding a scope selector to install metadata.
+
+### T1: connect admitted tools to useful work
 
 The MCP public task API is caller-owned and does not supply the conversation run binding. Do not
 impersonate a human through that API to avoid adding the required run/lease-bound admission. The
@@ -101,7 +150,7 @@ preserves those choices. Keep model/budget read-only until that command is imple
 | Lane | Ownership | First useful assignment |
 | --- | --- | --- |
 | Reliability | Existing authentication/session and personal activity packages; corresponding schema only if required | R1 and R2, with independent discovery and one coordinator for shared contracts |
-| Actions | Conversation-computer runtime, conversation turn transport, MCP invocation boundary and their contracts | T1 preflight, then one retrieval journey |
+| Actions | Conversation-computer runtime, conversation turn transport, MCP catalogue/connections, invocation boundary and their contracts | C1 credential and sharing contract for authenticated integrations, then the T1 retrieval journey |
 | Workspace | Existing Angular workspace/settings stores, mappers and approved components | U1 contract mapping; A1 product operation after authority preflight |
 | Memory | Memory gateway client, personal memory catalog and shared memory contracts | M1 source-grounded preflight; no direct Cognee calls outside the gateway |
 | Operations and review | Owning deploy/test scripts, CI evidence, scoped independent review | C0, then Q1 for each landed capability |

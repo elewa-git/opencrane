@@ -6,16 +6,19 @@ may use them.
 
 ::: info Current scope
 The implementation can connect one permitted tool call that needs no approval to a final assistant
-answer. Its automated tests pass; installation and a live retrieval from a real integration remain
-pending. Administrators can assign tools to a company assistant through the API. Personal chats
+answer. Its automated tests pass; connection credentials and a live retrieval from a real integration
+remain pending. Administrators can assign tools to a company assistant through the API. Personal chats
 also have an implemented tool-phase display. These follow-ups have their own verification status.
 See [development status](/guide/status) before treating the full journey as available in an installation.
 :::
 
 ## Prepare an integration
 
-OpenCrane uses the **Model Context Protocol (MCP)** to describe integrations. Administrators use the
-authenticated `/api/v1/mcp` surface to browse, install and manage MCP definitions. Consult the
+OpenCrane uses the **Model Context Protocol (MCP)** to describe integrations. Its internal catalogue
+stores definitions, immutable executable revisions and discovered tools. Administrators register and
+govern definitions through the authenticated `/api/v1/mcp` surface. An entitled person can install a
+catalogue entry for themselves through the API; the personal Tools screens are currently unmounted.
+Consult the
 [API reference](/reference/api) for current payloads and the [OCI MCP guide](/integrators/oci-mcp-runtime)
 for the supported package format.
 
@@ -23,6 +26,24 @@ Choose the tools needed for the task, then grant access and assign them to the a
 Installation alone grants no access. A company assistant uses its own permissions; it does not
 inherit everything the person asking the question may do. Its administrator can replace the
 assigned tool set through the company-assistant API.
+
+## Connection sharing is planned
+
+A connection will identify the external account and keep its credential in protected storage. A
+person can share use of a connection with an access group or assistant. Company-owned connections
+will support shared accounts that remain manageable when an employee leaves. These connections,
+credential handling and sharing controls are not implemented yet; current credential labels do not
+establish that a secret has been configured.
+
+Each connection must show a **Shared access** list beside **Share connection with…**. It will show
+the recipient, direct or group-derived access, permitted tools/actions, expiry and status. An
+authorized owner or administrator can **Revoke access** after confirming the connection and
+recipient. The refreshed list must identify any access that remains through another valid share.
+Sharing permits use without exposing the secret. Joining a group chat will not grant connection use.
+
+Revocation will prevent the revoked share from authorizing new use, and queued work will recheck
+access before execution. Requests already sent to an external system may finish; revocation does
+not undo their effects. The access list and revocation are required parts of the connection feature.
 
 ## From a request to an answer
 

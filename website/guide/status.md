@@ -19,6 +19,7 @@ dedicated testv5 installation. A passed build neither publishes nor installs a c
 | Server-owned model requests and answer recovery | Private input/key custody, bounded requests and saved-answer recovery after restart | Full CI, including real PostgreSQL and KurrentDB proofs | Replacement not installed |
 | One permitted tool and a final answer | One model-selected tool requiring no approval, current permission checks and checked result continuation | Full CI and persistence/retry proofs | Real integration retrieval pending |
 | Company tool assignment | Protected API assigns tools to the assistant's own published configuration and permissions | Full CI, including database, API, history and browser checks | Not installed |
+| Connection credentials and sharing | MCP catalogue and personal install records exist; personal/company credential custody, connection binding and sharing controls are unimplemented | Source audit identifies the missing connection path; install metadata does not prove credentials work | No authenticated connection-sharing journey proven |
 | Personal tool phases | Queued, running, result received or needs attention, separate from overall work status | Full CI, owner tests and reviewed desktop/narrow Linux states | Not installed |
 | Remove organisation access | Protected member removal and clearing private state in the affected browser | Full CI, database and Linux browser checks | Installation and real-account revocation pending |
 | Login continuity | Encrypted database sessions, fixed expiry and logout protection | CI and fresh PostgreSQL tests pass | Replacement not installed |
@@ -32,8 +33,13 @@ that server requires signing in again. Existing older personal runs receive no n
 
 ## Remaining product work
 
-- **Useful tool work:** install a permitted integration and prove retrieval in personal and company
-  conversations. Then complete approval-dependent actions and the full result-review journey.
+- **Connections and access:** implement personal/company credential custody and usable setup.
+  Each connection needs a Shared access list with recipients, access sources, permitted use,
+  expiry/status and a revoke action. Personal Tools routes are currently unmounted; the administrator
+  catalogue governs existing entries. External registry discovery/import also remains unfinished.
+- **Useful tool work:** connect a permitted integration and prove retrieval in personal and company
+  conversations. Authenticated integrations need the missing credential path first. Then complete
+  approval-dependent actions and the full result-review journey.
 - **Recovery and progress:** explain a lost model response and offer safe next steps. The server
   already avoids silently repeating a paid request; user-facing recovery, company-chat progress,
   longer-lived updates, approval, retry and cancellation controls remain unfinished.
