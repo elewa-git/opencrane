@@ -22,6 +22,11 @@ The conversation domain contributes the participant-owned list, create, open, me
 close, and replay paths. Generated clients therefore receive `conversationId` as the durable API
 coordinate; the immutable history API uses `conversationId` throughout.
 
+The personal run schema requires nullable `latestTool`. Its only field is a phase from the shared
+`RunToolProgressPhases` enum: queued, running, result received or needs attention. The closed object
+exposes no tool identity, payload, secrets or action controls, and remains separate from the overall
+run state. Contract generation and the website's public OpenAPI copy must be refreshed together.
+
 Used by the running server, which serves this document at `/openapi.json`, and by the SDK/client
 generation step, which reads it to emit the typed contracts client. Editing a route means editing its
 domain's fragment, then regenerating the client from this composed spec.

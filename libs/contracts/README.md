@@ -24,6 +24,12 @@ Two halves:
   schemas keep runtime acceptance, strict request fields, and TypeScript
   models in one package.
 
+`RunToolProgress` is the strict public phase-only summary for the latest governed tool in a personal
+run's current attempt. `SelfRunStatus.latestTool` is required and nullable: no invocation is `null`,
+while queued, running, result received and needs attention have fixed shared enum values. The shape
+contains no tool name, identifier, arguments, result, secrets or action controls. Receiving a tool
+result does not mean that the assistant's overall run has completed.
+
 Personal-session, ordinary chat, group-child and reviewed-share requests require an `idempotencyKey` UUID. Clients reuse it after an
 uncertain response and supply a new UUID for a new command. Group-child responses identify their
 parent request and Pending, Ready or Unavailable state; parent metadata never grants child access.

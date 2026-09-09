@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { MessageEntry } from "@opencrane/contracts";
+import { RunToolProgressPhases, type MessageEntry } from "@opencrane/contracts";
 import type { ConversationPersonalRun } from "@opencrane/state/conversation/workspace";
 
 import { _PersonalRunActivity } from "../conversation-personal-run-activity.mapper";
 
 /** Models a completed API run without implying that its answer is loaded. */
-const _RUN: ConversationPersonalRun = { runId: "run", conversationId: "chat", state: "completed", attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: "2026-09-08T12:00:01Z" };
+const _RUN: ConversationPersonalRun = { runId: "run", conversationId: "chat", state: "completed", attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", latestTool: null, finishedAt: "2026-09-08T12:00:01Z" };
 /** Models an authorized completed agent answer before the feature maps its private payload. */
 const _ANSWER: MessageEntry = { schemaVersion: 1, id: "answer", conversationId: "chat", position: "9", author: { kind: "agent", agentIdentityId: "identity", agentServiceId: "service", name: "Assistant", avatarArtifactRevisionId: null }, provenance: "agent-authored", visibility: { audience: "conversation" }, runId: "run", causationId: "run", correlationId: "chat", idempotencyKey: "answer", occurredAt: "2026-09-08T12:00:01Z", attestation: null, kind: "message", state: "completed", blocks: [], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
 
@@ -18,6 +18,21 @@ describe("recent activity answer links", function _Suite()
 		const row = _PersonalRunActivity([_RUN], "chat", [later, _ANSWER], new Set(["answer", "later"]))[0]!;
 		expect(row.target).toEqual({ conversationId: "chat", runId: "run", entryId: "later" });
 		expect(row.label).toBe("Assistant work");
+	});
+
+	it.each(Object.values(RunToolProgressPhases))("keeps %s separate from run completion and saved answer availability", function _ToolPhase(phase)
+	{
+		const run: ConversationPersonalRun = { ..._RUN, state: "running", finishedAt: null, latestTool: { phase } };
+		const row = _PersonalRunActivity([run], "chat", [], new Set())[0]!;
+		expect(row).toMatchObject({ status: "running", latestTool: { phase }, target: null });
+		expect(_PersonalRunActivity([run], "other", [_ANSWER], new Set(["answer"]))).toEqual([]);
+	});
+
+	it("keeps the canonical answer link when a completed run also has a received tool result", function _CompletedToolAnswer()
+	{
+		const run = { ..._RUN, latestTool: { phase: RunToolProgressPhases.ResultReceived } };
+		const row = _PersonalRunActivity([run], "chat", [_ANSWER], new Set(["answer"]))[0]!;
+		expect(row).toMatchObject({ status: "completed", latestTool: { phase: RunToolProgressPhases.ResultReceived }, target: { conversationId: "chat", runId: "run", entryId: "answer" } });
 	});
 
 	it("does not invent a link from a completed run or an unrendered answer", function _MissingAnswer()

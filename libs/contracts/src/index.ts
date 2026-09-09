@@ -25,6 +25,8 @@ export * from "./personal-configuration.types";
 export * from "./public-health.types";
 export * from "./skill-authoring-validation-bootstrap-reference";
 export * from "./run-input-snapshot.types";
+export * from "./run-tool-progress.types";
+export * from "./run-tool-progress.validator";
 export * from "./agent-controller-identity.types";
 export * from "./agent-identity.types";
 export * from "./agent-capability-grant.types";

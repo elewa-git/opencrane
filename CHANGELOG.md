@@ -19,6 +19,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **People can see the latest tool phase in personal Recent activity.** Queued, running, result
+  received and needs-attention descriptions appear beside the overall assistant-work status.
+  Refresh reads the persisted phase without starting work or exposing tool payloads. A returned
+  tool result does not mark the assistant's answer complete; the existing saved-answer link remains
+  authoritative. This follow-up awaits CI and live qualification.
+
 - **People can follow recent personal-assistant work and reopen a loaded answer.** The activity
   pane shows current status and an explicit refresh control. Changing chats, signing out or losing
   access clears its rows; answer links refer to the selected transcript. New runs grant their

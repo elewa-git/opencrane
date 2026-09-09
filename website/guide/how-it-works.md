@@ -26,6 +26,20 @@ The browser displays a saved conversation. Closing a tab does not make the brows
 remembering it. An assistant's computer can also stop when idle; checkpoint and restore code keeps
 its workspace recoverable. Live recovery testing remains part of qualification.
 
+## Follow assistant work
+
+Open **Recent activity** in a personal assistant conversation to see its work and reopen a saved
+answer. The tool-progress follow-up adds a short description of the latest tool in the current
+attempt: **Tool queued**, **Tool running**, **Tool result received** or **Tool needs attention**.
+The overall work status remains visible separately. A received tool result means the assistant has
+input to work with; it may still be preparing its answer.
+
+Activity refreshes briefly while it is open. Use **Refresh activity** to check again later. The description
+contains no tool inputs or results, and **Open answer** continues to refer to a saved answer in
+that conversation. Signing out, changing conversations or losing access clears the activity.
+Approval, retry and cancellation controls remain separate work; a needs-attention label does not
+supply those controls. See [development status](/guide/status) for installation and live proof.
+
 ## Working with other people
 
 The conversation model also supports direct and group messages. Ordinary messages between people

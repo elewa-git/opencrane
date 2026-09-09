@@ -71,7 +71,7 @@ const _ROUTER = { navigate: async function _Navigate() { return true; } };
 /** Keeps desktop and sign-in capabilities unavailable in the browser story. */
 const _PLATFORM = { isDesktop: false, bindFolder: async function _BindFolder() { throw new Error("Story command unavailable."); }, openAuthenticationWindow: function _OpenAuthenticationWindow() { return null; } };
 /** Supplies a completed personal status that links to the rendered history fixture. */
-const _PERSONAL_RUNS = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "completed", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", finishedAt: _ENTRY.occurredAt }]; } };
+const _PERSONAL_RUNS = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "completed", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: _ENTRY.occurredAt }]; } };
 
 /** Supplies explicit test-only ports around the real routed workspace shell. */
 function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY): Decorator

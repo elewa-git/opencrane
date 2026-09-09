@@ -1137,6 +1137,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/iam/authorization/main/src/prisma-run-tool-progress-repository.ts",
+				"adapter": "PrismaRunToolProgressRepository",
+				"contract": "RunToolProgressRepository",
+				"contractImportPath": "./run-tool-progress.types",
+				"constructs": [
+					{
+						"adapter": "PrismaRunToolProgressRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/iam/authorization/main/src/prisma-run-tool-result-delivery-repository.ts",
 				"adapter": "PrismaRunToolResultDeliveryRepository",
 				"contract": "RunToolResultDeliveryRepository",

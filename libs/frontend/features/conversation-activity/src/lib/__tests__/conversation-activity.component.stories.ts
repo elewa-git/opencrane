@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
-import { ConversationActivityKinds, ElicitationRequestStates, type ConversationActivityRow, type ConversationActivityRunState } from "@opencrane/state/conversation/elicitation";
+import { RunToolProgressPhases, ConversationActivityKinds, ElicitationRequestStates, type ConversationActivityRow, type ConversationActivityRunState } from "@opencrane/state/conversation/elicitation";
 
 import { ConversationActivityComponent } from "../conversation-activity.component";
 import { ConversationActivityReadStates } from "../conversation-activity.types";
@@ -29,7 +29,7 @@ export const RequestsAndRetryingFailure: Story = { args: { rows: _ROWS } };
 export const Empty: Story = { args: { rows: [] } };
 
 /** Shows every public run state without internal identifiers or a fabricated answer link. */
-export const RecentWork: Story = { args: { title: "Recent activity", refreshAvailable: true, rows: _RUN_STATES.map((status, index) => ({ kind: ConversationActivityKinds.Run, id: `run-${index}`, label: "Assistant work", occurredAt: "2026-09-08T12:00:00.000Z", status, target: status === "completed" ? { conversationId: "chat", runId: `run-${index}`, entryId: "answer" } : null })) } };
+export const RecentWork: Story = { args: { title: "Recent activity", refreshAvailable: true, rows: _RUN_STATES.map((status, index) => ({ kind: ConversationActivityKinds.Run, id: `run-${index}`, label: "Assistant work", occurredAt: "2026-09-08T12:00:00.000Z", status, latestTool: null, target: status === "completed" ? { conversationId: "chat", runId: `run-${index}`, entryId: "answer" } : null })) } };
 
 /** Keeps recent activity readable in the narrow context overlay. */
 export const RecentWorkNarrow: Story = { ...RecentWork, tags: ["visual-test-narrow"] };
@@ -51,3 +51,19 @@ export const ReadFailure: Story = { args: { title: "Recent activity", rows: [], 
 
 /** Explains access loss after the store has cleared all private activity rows. */
 export const AccessChanged: Story = { args: { title: "Recent activity", rows: [], readState: ConversationActivityReadStates.Error, error: "Recent activity is no longer available. Reopen the chat to check access.", refreshAvailable: false } };
+
+/** Shows tool progress while the assistant's overall work and answer remain unfinished. */
+export const ToolProgress: Story = { args: { title: "Recent activity", refreshAvailable: true, rows: Object.values(RunToolProgressPhases).map(phase => ({ kind: ConversationActivityKinds.Run, id: `run-${phase}`, label: "Assistant work", occurredAt: "2026-09-08T12:00:00.000Z", status: "running", latestTool: { phase }, target: null })) }, play: async function _ToolPhases({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	for (const label of ["Tool queued", "Tool running", "Tool result received", "Tool needs attention"])
+		expect(canvas.getByText(label, { exact: true })).toBeVisible();
+	expect(canvas.getAllByText("Working", { exact: true })).toHaveLength(4);
+	expect(canvas.queryByText("Completed", { exact: true })).not.toBeInTheDocument();
+	expect(canvas.queryByRole("button", { name: "Open answer" })).not.toBeInTheDocument();
+	expect(canvas.getAllByRole("button")).toHaveLength(1);
+	expect(canvas.getByRole("button", { name: "Refresh activity" })).toBeVisible();
+} };
+
+/** Keeps every tool phase readable in a narrow context panel without introducing execution controls. */
+export const ToolProgressNarrow: Story = { ...ToolProgress, tags: ["visual-test-narrow"] };

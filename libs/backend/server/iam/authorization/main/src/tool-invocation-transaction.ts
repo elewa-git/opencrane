@@ -1,5 +1,8 @@
+import type { RunToolProgress } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
+import { PrismaRunToolProgressRepository } from "./prisma-run-tool-progress-repository";
+import type { ReadRunToolProgressCommand } from "./run-tool-progress.types";
 import { PrismaRunToolResultDeliveryRepository } from "./prisma-run-tool-result-delivery-repository";
 import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository";
 import type { ConsumeRunToolResultCommand, ReadRunToolResultCommand, ReadRunToolResultResult } from "./run-tool-result-delivery.types";
@@ -100,4 +103,16 @@ export async function __MarkToolInvocationApprovedInTransaction(transaction: Too
 export async function __MarkToolInvocationApprovalRejectedInTransaction(transaction: ToolInvocationTransaction, invocationId: string, now: Date, failureCode: string): Promise<boolean>
 {
 	return PrismaToolInvocationRepository.markApprovalRejectedInTransaction(transaction, invocationId, now, failureCode);
+}
+
+
+/**
+ * Reads phase-only tool progress after the caller authorizes the exact run in this transaction.
+ * Called by: the personal run-status repository after owner and AgentRun Read filtering.
+ * Null means no invocation in the current attempt; database and malformed-state errors propagate.
+ * @see RunToolProgress for the deliberately limited public result.
+ */
+export async function __ReadRunToolProgressInTransaction(transaction: ToolInvocationTransaction, command: ReadRunToolProgressCommand): Promise<RunToolProgress | null>
+{
+	return PrismaRunToolProgressRepository.inTransaction(transaction).readLatest(command);
 }

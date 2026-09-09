@@ -1,6 +1,7 @@
 import { Injector, runInInjectionContext } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
 
+import { RunToolProgressPhases } from "@opencrane/contracts";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { ConversationModes } from "@opencrane/models/conversations";
 
@@ -17,7 +18,7 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 {
 	it("reads recent personal work with cancellation and rejects unknown status or duplicate rows", async function _PersonalRuns()
 	{
-		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: "2026-09-08T12:00:01Z" };
+		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", latestTool: null, finishedAt: "2026-09-08T12:00:01Z" };
 		const get = vi.fn().mockResolvedValueOnce({ data: { runs: [run] } }).mockResolvedValueOnce({ data: { runs: [{ ...run, state: "unknown" }] } }).mockResolvedValueOnce({ data: { runs: [run, run] } }).mockResolvedValueOnce({ error: { message: "server secret" }, response: { status: 403 } });
 		const gateway = _Gateway(vi.fn(), get);
 		const signal = new AbortController().signal;
@@ -26,6 +27,20 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 		await expect(gateway.listPersonalRuns(signal)).rejects.toThrow("invalid conversation response");
 		await expect(gateway.listPersonalRuns(signal)).rejects.toThrow("invalid conversation response");
 		await expect(gateway.listPersonalRuns(signal)).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+	});
+
+	it.each(Object.values(RunToolProgressPhases))("accepts only the public %s tool phase", async function _ToolPhase(phase)
+	{
+		const run = { runId: "run", attempt: 1, state: "running", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: null, latestTool: { phase } };
+		const gateway = _Gateway(vi.fn(), vi.fn().mockResolvedValue({ data: { runs: [run] } }));
+		await expect(gateway.listPersonalRuns(new AbortController().signal)).resolves.toEqual([run]);
+	});
+
+	it.each([undefined, { phase: "unknown" }, { phase: RunToolProgressPhases.Running, name: "private tool" }, { phase: RunToolProgressPhases.ResultReceived, result: "private result" }])("rejects missing or unsafe tool progress %j", async function _UnsafeToolPhase(latestTool)
+	{
+		const run = { runId: "run", attempt: 1, state: "running", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: null, latestTool };
+		const gateway = _Gateway(vi.fn(), vi.fn().mockResolvedValue({ data: { runs: [run] } }));
+		await expect(gateway.listPersonalRuns(new AbortController().signal)).rejects.toThrow("invalid conversation response");
 	});
 
 	it("binds a child request to the selected parent and preserves its retry command and abort signal", async function _ChildRequest()
