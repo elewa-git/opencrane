@@ -9,6 +9,13 @@ People sign in through the configured OIDC provider. The server derives their su
 organisation context from the authenticated session; request bodies cannot override either.
 Management UI calls use the same-origin session cookie.
 
+The persistent-session follow-up stores encrypted identity and login-flow data in PostgreSQL,
+with only a signed random identifier and fixed expiry in the browser cookie. Server replacement
+can then preserve login. Logout blocks delayed saves, and each read still passes the current
+issuer, host, identity-expiry and membership checks. See the
+[installation settings](/operators/deployment-configuration#preserve-browser-login-during-server-replacement)
+and [qualification status](/guide/status).
+
 Current organisation membership is checked before a run is admitted. The resulting
 `ExecutionSubject` records the resolved AgentIdentity and Principal, current membership and
 capability evidence, current computer lease, and requester provenance.

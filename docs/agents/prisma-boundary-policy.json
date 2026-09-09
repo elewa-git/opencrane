@@ -349,6 +349,13 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/infra/auth/src/prisma-oidc-session-repository.ts",
+				"adapter": "PrismaOidcSessionRepository",
+				"contract": "OidcSessionRepository",
+				"contractImportPath": "./oidc-session-repository.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/infra/auth/src/prisma-owned-org-summary-repository.ts",
 				"adapter": "PrismaOwnedOrgSummaryRepository",
 				"contract": "OwnedOrgSummaryRepository",
@@ -1077,11 +1084,27 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/infra/auth/src/prisma-oidc-session-repository.ts",
+				"adapter": "PrismaOidcSessionUnitOfWork",
+				"contract": "OidcSessionRepository",
+				"contractImportPath": "./oidc-session-repository.types",
+				"constructs": [
+					{
+						"adapter": "PrismaOidcSessionRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-run-admission-unit-of-work.ts",
 				"adapter": "PrismaRunAdmissionUnitOfWork",
 				"contract": "RunAdmissionRepository",
 				"contractImportPath": "./run-admission.types",
 				"constructs": [
+					{
+						"adapter": "PrismaManagedAuthorizationGrantRepository",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
 					{
 						"adapter": "PrismaRunAdmissionRepository",
 						"importPath": "<same-file>"

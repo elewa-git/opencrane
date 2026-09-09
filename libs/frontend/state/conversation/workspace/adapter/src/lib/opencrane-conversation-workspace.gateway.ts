@@ -3,7 +3,7 @@ import { Injectable, inject } from "@angular/core";
 import type { GroupChildCreateCommand, GroupChildShareCommand, GroupChildView } from "@opencrane/models/conversations";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
+import { _ParseConversationPersonalRuns, type ConversationPersonalRun, type ConversationPersonalRunsGateway, _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationComputerBrowserPage, _ConversationComputerBrowserTargets, _ConversationComputerCommandResult, _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
@@ -29,10 +29,20 @@ import { _ConversationComputerBrowserPage, _ConversationComputerBrowserTargets, 
  * @see ConversationWorkspaceGatewayErrorKinds — the four categories every failure is reduced to.
  */
 @Injectable()
-export class OpenCraneConversationWorkspaceGateway implements ConversationWorkspaceGateway
+export class OpenCraneConversationWorkspaceGateway implements ConversationWorkspaceGateway, ConversationPersonalRunsGateway
 {
 	/** Generated client whose requests carry the browser session cookie; it supplies the caller's identity. */
 	private readonly _api = inject(ControlPlaneApiService);
+
+	/** Reads the caller's bounded recent work without accepting an identity from browser state. */
+	public async listPersonalRuns(signal: AbortSignal): Promise<readonly ConversationPersonalRun[]>
+	{
+		const result = await this._api.client.GET("/me/runs", { signal });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ParseConversationPersonalRuns(result.data); }
+		catch { throw _InvalidResponse(); }
+	}
 
 	/** Reads currently visible children and rejects a response for another parent. */
 	public async listChildren(parentConversationId: string, signal: AbortSignal): Promise<readonly GroupChildView[]>

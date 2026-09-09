@@ -36,6 +36,10 @@ coordinates only to the exact generated endpoint that accepts them. It does not 
 building errors and does not own the live history connection; the separate conversation event adapter owns streaming.
 The same generated-client adapter implements the narrow computer-review port without releasing sandbox
 network coordinates or lease credentials to the browser.
+It also implements `ConversationPersonalRunsGateway` through `GET /me/runs`. The model-adjacent
+validator rejects unknown states, malformed timestamps, duplicate rows and oversized lists before
+the selected-chat store adopts them. The existing cookie supplies identity and an AbortSignal
+cancels obsolete reads; response bodies never become error copy.
 The same adapter implements the group-child port. Child reads and creation responses must match the
 requested parent and source; shares forward the reviewed text and UUID unchanged and accept only a
 validated accepted/idempotent acknowledgement. Every request carries the existing session cookie

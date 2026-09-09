@@ -4,6 +4,8 @@ import type { RequestHandler } from "express";
 import session from "express-session";
 
 import type { OidcAuthConfig } from "./oidc-config.types";
+import type { OidcSessionRepository } from "./oidc-session-repository.types";
+import { OidcSessionStore } from "./oidc-session-store";
 
 /**
  * Creates the session and CSRF middleware for one OIDC deployment.
@@ -14,14 +16,22 @@ import type { OidcAuthConfig } from "./oidc-config.types";
  *
  * Called by: {@link OidcAuthServiceBase.createSessionMiddleware} during Express composition.
  * @param config - The deployment's OIDC and session-cookie settings.
+ * @param repository - Stores encrypted sessions in the deployment database; required when enabled.
+ * @throws When enabled without persistent storage or with invalid session-secret/lifetime settings.
  * @returns A pass-through handler when disabled, otherwise the session and CSRF handlers.
  */
-export function ___CreateOidcSessionMiddleware(config: OidcAuthConfig): RequestHandler[]
+export function ___CreateOidcSessionMiddleware(config: OidcAuthConfig, repository?: OidcSessionRepository): RequestHandler[]
 {
-	if (!config.enabled) return [function _skipSession(_request, _response, next) { next(); }];
+	if (!config.enabled)
+		return [function _skipSession(_request, _response, next) { next(); }];
+	if (repository === undefined)
+		throw new Error("OIDC requires persistent session storage");
+	const store = new OidcSessionStore(config, repository);
 	return [
 		session({
 			name: config.cookieName,
+			store,
+			genid: function _SessionId() { return store.generateId(); },
 			secret: config.sessionSecret,
 			resave: false,
 			saveUninitialized: false,

@@ -3,10 +3,12 @@ import { computed, effect, inject, signal } from "@angular/core";
 import { ConversationComputerStates } from "@opencrane/contracts";
 import { ConversationComposerStates, ConversationStatusTones, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
+import { ConversationActivityReadStates } from "@opencrane/features/conversation-activity";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
-import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, ConversationComputerReviewStore, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, ConversationComputerReviewStore, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { _GroupRequestSource, _GroupShareSource } from "./conversation-group.mapper";
+import { _PersonalRunActivity } from "./conversation-personal-run-activity.mapper";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
 import type { ConversationOnboardingContinuationPresentation, ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
@@ -33,6 +35,8 @@ export class ConversationWorkspacePresenter
 	protected readonly assetsStore = inject(ConversationAssetsStore);
 	/** Component-scoped active-computer review state. */
 	protected readonly reviewStore = inject(ConversationComputerReviewStore);
+	/** Reads recent personal work independently from the selected transcript. */
+	protected readonly personalRuns = inject(ConversationPersonalRunsStore);
 	/** Whether immutable-mode creation is visible. */
 	protected readonly creating = signal(false);
 	/** Stable route state vocabulary used by the template switch. */
@@ -70,6 +74,10 @@ export class ConversationWorkspacePresenter
 	protected readonly selectedSummary = computed(() => this.summaries().find(summary => summary.id === this.store.selected()?.id) ?? null);
 	/** Canonical and live transcript rows mapped through the shared sanitizer. */
 	protected readonly messages = computed(this._Messages.bind(this));
+	/** Links recent work only to answers currently rendered in this selection. */
+	protected readonly activityRows = computed(() => _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, new Set(this.messages().map(entry => entry.message.id))));
+	/** Presents read progress separately from the server's run lifecycle. */
+	protected readonly activityReadState = computed(this._ActivityReadState.bind(this));
 	/** Existing asset presentations for transcript and Files views. */
 	protected readonly assets = computed(this._Assets.bind(this));
 	/** Participant-facing name for the selected context panel. */
@@ -251,7 +259,15 @@ export class ConversationWorkspacePresenter
 	}
 
 	/** Name the context panel after the capabilities its selected mode can expose. */
-	private _ContextPanelLabel(): string { return "Files"; }
+	private _ContextPanelLabel(): string { return this.personalRuns.eligible() ? "Activity and files" : "Files"; }
+
+	/** Marks rows as refreshing until the current permission-checked read completes. */
+	private _ActivityReadState(): ConversationActivityReadStates
+	{
+		if (this.personalRuns.loading())
+			return this.activityRows().length > 0 ? ConversationActivityReadStates.Refreshing : ConversationActivityReadStates.Loading;
+		return this.personalRuns.error() === null ? ConversationActivityReadStates.Ready : ConversationActivityReadStates.Error;
+	}
 
 	/** Derive composer state without mixing run lifecycle into ordinary chats. */
 	private _ComposerState(): ConversationComposerStates

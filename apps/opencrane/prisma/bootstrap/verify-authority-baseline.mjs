@@ -5,6 +5,9 @@ const _MINIMUM_FUNCTIONS = 79;
 const _MINIMUM_TRIGGERS = 89;
 const _MINIMUM_CONSTRAINTS = 227;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'CREATE TABLE "oidc_sessions"',
+	'CONSTRAINT "oidc_sessions_pkey" PRIMARY KEY ("namespace","id_digest")',
+	'CREATE INDEX "oidc_sessions_namespace_retain_until_idx" ON "oidc_sessions"("namespace", "retain_until")',
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
 	'CREATE TABLE "provider_effect_commands"',
 	'"desired_generation" INTEGER NOT NULL',

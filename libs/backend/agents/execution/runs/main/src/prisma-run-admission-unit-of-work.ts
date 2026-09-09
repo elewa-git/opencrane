@@ -1,8 +1,10 @@
 import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
-import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import { ___ExecutionSubjectSchema, type RunInputSnapshot } from "@opencrane/contracts";
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
@@ -131,7 +133,8 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 	{
 		return this._prisma.$transaction(async function _Run(transaction)
 		{
-			const repository = new PrismaRunAdmissionRepository(transaction);
+			const managedGrants = new PrismaManagedAuthorizationGrantRepository(transaction);
+			const repository = new PrismaRunAdmissionRepository(transaction, managedGrants);
 			const authorization = new PrismaAuthorizationAuthority(transaction);
 			return operation(repository, transaction, authorization);
 		}, { isolationLevel });
@@ -149,11 +152,14 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 {
 	/** Transaction shared by every duplicate read and admission write. */
 	private readonly _transaction: Prisma.TransactionClient;
+	/** Writes the new personal run's owner grant in the admission transaction. */
+	private readonly _managedGrants: ManagedAuthorizationGrantRepository;
 
 	/** Bind persistence to the unit of work's exact transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, managedGrants: ManagedAuthorizationGrantRepository)
 	{
 		this._transaction = transaction;
+		this._managedGrants = managedGrants;
 	}
 
 	/** Return an exact duplicate, an authority conflict, or null when this key remains unused. */
@@ -176,6 +182,28 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 		const subject = _ExecutionSubject(value.snapshot.executionSubject, value.snapshot.executionSubject.agentIdentityId, value.snapshot.executionSubject.principalId);
 		await this._transaction.agentRun.create({ data: { id: command.runId, siloId: command.siloId, agentServiceId: value.authority.agentServiceId, agentRevisionId: value.authority.agentRevisionId, conversationId: command.conversationId, trigger: "Interactive", agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), requestIdempotencyKey: command.requestIdempotencyKey, inputSnapshotDigest: value.snapshot.digest, acceptedAt: admittedAt } });
 		await this._transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(value.snapshot) });
+		await this._GrantPersonalOwnerRead(value, admittedAt);
+	}
+
+	/**
+	 * Gives the verified personal owner read access when the run is first created.
+	 * Company runs retain their managed identity. Duplicate admission never calls this method,
+	 * so retrying a request cannot restore a revoked grant. Any grant failure rolls back the run.
+	 * @see PersonalConversationExecutionSubjectAuthority for personal ownership verification.
+	 */
+	private async _GrantPersonalOwnerRead(value: RunAdmissionBuild, admittedAt: Date): Promise<void>
+	{
+		const subject = value.snapshot.executionSubject;
+		if (subject.membership.kind === ExecutionSubjectMembershipKinds.Managed)
+			return;
+		const principalId = subject.principalId;
+		if (principalId !== subject.requester.requesterPrincipalId)
+			throw new _AdmissionDenied(RunAdmissionDenialReasons.AuthorityConflict);
+		const resource = { kind: ProductAuthorizationResourceKinds.AgentRun, id: value.snapshot.runId } as const;
+		const capability = __ProductAuthorizationCapability(resource.kind, ProductAuthorizationActions.Read);
+		if (capability === null)
+			throw new Error("Personal run read capability is unavailable");
+		await this._managedGrants.reconcileManagedResourceGrants({ siloId: value.snapshot.siloId, managerId: "personal-run-owner", resource, now: admittedAt, grants: [{ subject: { kind: AuthorizationSubjectKinds.Principal, principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: principalId }] });
 	}
 }
 

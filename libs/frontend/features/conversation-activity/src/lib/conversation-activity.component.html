@@ -1,15 +1,20 @@
 <section class="activity" aria-labelledby="conversation-activity-title">
-	<header><h2 id="conversation-activity-title">Activity</h2><ng-content select="[conversation-activity-header-action]" /></header>
-	@if (rows().length === 0) { <p class="activity__empty">No open requests or tool failures.</p> }
+	<header><h2 id="conversation-activity-title">{{ title() }}</h2><ng-content select="[conversation-activity-header-action]" /></header>
+	@if (refreshAvailable()) { <p-button label="Refresh activity" [text]="true" size="small" [disabled]="readState() === readStates.Loading || readState() === readStates.Refreshing" (onClick)="refreshRequested.emit()" /> }
+	@if (readState() === readStates.Loading) { <p role="status">Loading recent activity…</p> }
+	@if (readState() === readStates.Refreshing) { <p role="status">Refreshing activity. Previous status is shown.</p> }
+	@if (readState() === readStates.Error) { <p-message severity="error" [text]="error() ?? 'Activity could not be loaded.'" /> }
+	@if (readState() === readStates.Ready && rows().length === 0) { <p class="activity__empty">No recent work is visible in this chat.</p> }
 	<ul>
 		@for (row of rows(); track row.id) {
 			<li>
 				<div class="activity__summary">
 					<span class="activity__marker" [class.activity__marker--failed]="row.kind === kinds.ToolFailure" aria-hidden="true"></span>
-					<div><strong>{{ row.label }}</strong><small>{{ row.occurredAt }}</small></div>
+					<div><strong>{{ row.label }}</strong><time [attr.datetime]="row.occurredAt">{{ row.occurredAt | date:'medium' }}</time></div>
 					@if (row.kind === kinds.ToolFailure && row.retrying) { <span class="activity__retrying">Retrying</span> }
 					@if (row.kind === kinds.Elicitation) { <span class="activity__state">{{ row.status }}</span> }
-					<p-button label="Open" [text]="true" size="small" (onClick)="targetRequested.emit(row.target)" />
+					@if (row.kind === kinds.Run) { <wo-scope-chip [label]="runStatus(row.status).label" [tone]="runStatus(row.status).tone" /> }
+					@if (row.target; as target) { <p-button [label]="row.kind === kinds.Run ? 'Open answer' : 'Open'" [text]="true" size="small" (onClick)="targetRequested.emit(target)" /> }
 				</div>
 				@if (row.kind === kinds.ToolFailure) {
 					<details>

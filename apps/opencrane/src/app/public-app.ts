@@ -5,7 +5,7 @@ import express, { type Express } from "express";
 import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit-writer";
 import { ___AuthRouter, ___CreateOidcAuthService, PrismaAuthenticatedPrincipalAdmissionUnitOfWork, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___RequestContext } from "@opencrane/backend/observability";
-import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
+import { ___AuthMiddleware, PrismaOidcSessionUnitOfWork } from "@opencrane/backend/server/infra/auth";
 import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type PublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "./log";
@@ -34,7 +34,8 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
 {
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
-	return { authService, sessionMiddleware: authService.createSessionMiddleware(), authMiddleware: ___AuthMiddleware(admission) };
+	const sessions = new PrismaOidcSessionUnitOfWork(prisma);
+	return { authService, sessionMiddleware: authService.createSessionMiddleware(sessions), authMiddleware: ___AuthMiddleware(admission) };
 }
 
 /**

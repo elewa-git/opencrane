@@ -1,7 +1,7 @@
 import { computed, inject, type Provider, type Signal } from "@angular/core";
 
 import { SessionStore } from "@opencrane/state/core";
-import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "@opencrane/state/conversation/workspace";
 import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace/adapter";
 import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from "@opencrane/state/conversation/assets";
@@ -39,6 +39,7 @@ export function provideConversationWorkspaceComposition(): Provider[]
 		OpenCraneConversationEventStream,
 		OpenCraneConversationWorkspaceGateway,
 		{ provide: CONVERSATION_WORKSPACE_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
+		{ provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 		{ provide: CONVERSATION_GROUP_CHILD_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 		{ provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 		// The stream remains shared by direct, group, and Agent-session conversations so every mode

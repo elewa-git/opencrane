@@ -10,6 +10,8 @@ A **deployable app** composes shared code and ships as one container. This one i
 workspace where people set up their personal assistant, talk with colleagues and ask company
 assistants to help. Administrators also manage members and tools here. It is a single-page app
 (SPA — the UI loads once, then updates without full page reloads), built with Angular.
+The browser composition binds personal activity reads to the existing generated API adapter.
+The conversation feature owns recent status and loaded-answer links; the app adds no run authority.
 
 ## What it owns
 

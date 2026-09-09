@@ -1233,3 +1233,71 @@ Full run reports belong in the corresponding pull request or issue.
   `snapshot-restore-232d55d5a-approval-blocked.json`, `filecopy-restore-232d55d5a-receipt.json`,
   `recovery-filecopy-verified.json` and the source-attributed journey results. Credentials remain
   outside Git in the ignored dedicated test fixture. No release tag or merge was performed.
+
+## 2026-09-08 · testv5 · personal activity access · PASS for API, UI pending
+
+- source: server `e50cdcc5b0f383943ee00407c43224696e68747c`, from the continuity follow-up.
+  [CI](https://github.com/elewa-git/opencrane/actions/runs/34272913336) passed. The PR's image job
+  builds without publishing; separate [publication](https://github.com/elewa-git/opencrane/actions/runs/34274318726)
+  passed before rollout. Verified OCI index
+  `sha256:926144872c251d5167a718228ea84bfa8d70c5f5c1f5e1b3a627c524e87155d7`, amd64 manifest
+  `sha256:dcc056aa454f89bbc5d1d544b0977b6f3470cafdbbdbb2050bc7035f4e492fdb`;
+  the image source label matches the qualified commit.
+- deployment: the app-owned deploy script ran from a clean isolated checkout of that commit.
+  Preflight passed at 20:33:22.060–20:34:24.653 UTC, 62.593 seconds; installation passed at
+  20:35:11.470–20:39:33.645 UTC, 262.176 seconds. At 20:41:46.790 UTC all eleven service Pods
+  were ready and public TLS health returned 200. The server reports the verified image digest.
+  Companion images, bootstrap image, complete OIDC secret, PostgreSQL baseline and volume identities
+  were retained. Daily 02:00 UTC volume-snapshot backups still use `opencrane-pd-snapshots`.
+  No database migration, restore, volume replacement or teardown ran.
+- authenticated work: two dedicated employees completed fresh real Zitadel password verification
+  and OIDC code/PKCE sign-in. New personal inputs and exact retries were accepted at history
+  position 3. Runs `49b8a657-4b55-4a93-84b3-ee578331aa8a` and
+  `ae0ca252-a7c1-4b5b-83bb-8aad517ec9db` completed. At 20:48:55 and 20:49:00 UTC, each owner
+  read their run directly and found exactly one matching completed entry in `GET /me/runs`.
+  Both had a completion timestamp and the correct conversation. Each other employee received 404
+  for the run and conversation and could not find the run in their personal index. Fresh history
+  reads recovered answers `c6ac00b5-cf5c-5882-be52-7deae5f10aed` and
+  `8da03ccc-67c8-5718-a03d-55ab3897df0e`. Old runs receive no grant backfill.
+- remaining product proof: the workspace still disabled its Activity component. A separate UI
+  slice now connects recent personal status and loaded-answer links; publication and authenticated
+  browser acceptance are pending. This entry proves the API and history journey, not that new pane.
+  The later encrypted-session change at `44fd8f328` passed all CI, including seven fresh PostgreSQL
+  targets, but is not installed here because it requires its new clean baseline.
+- receipts: private `server-e50cdcc5b-publication.json`, `installed-e50cdcc5b-verify.json` and
+  `r2-e50cdcc5b-activity-receipt.json`, plus source-attributed preflight/install logs. Credentials
+  and private test inputs remain outside Git. No release tag or merge was performed.
+
+## 2026-09-08 · testv5 · personal activity browser journey · PASS
+
+- source: UI `6692b2e59750c228b05082dbf3c2fe2c7825331a`, with green
+  [Linux CI](https://github.com/elewa-git/opencrane/actions/runs/34280567808) and separate
+  [image publication](https://github.com/elewa-git/opencrane/actions/runs/34281386958).
+  The OCI source label matches that commit. Verified index
+  `sha256:285e8f2fca5a96424849a154bba30dac7d432145a71efde6e4a770b561beda4e`, installed amd64
+  manifest `sha256:456b2f5a49b2f2d2d7dc27e8bfe5a7834f2fc13624a384fb6982ae3eb84ed818`.
+  The server remains the separately qualified `e50cdcc5b` on the earlier PostgreSQL baseline.
+- deployment: the owning app script ran from the clean `e50cdcc5b` checkout with the verified UI
+  digest and existing qualified companion pins. Preflight passed at 21:55:59.012–21:57:04.013 UTC,
+  65.001 seconds. Installation passed at 21:58:16.674–22:01:55.791 UTC, 219.117 seconds.
+  Independent verification at 22:02:44.913 UTC found all eleven service Pods ready, TLS health 200
+  and the exact UI manifest running with zero restarts. The server Pod, PostgreSQL cluster and all
+  data claims kept their previous UIDs. OIDC settings and daily 02:00 UTC volume-snapshot backups
+  were preserved. No restore, baseline replacement or teardown ran.
+- browser proof: two dedicated employees completed fresh real Zitadel password and OIDC sign-ins
+  in isolated browsers. Both saw the new completed run recorded in the preceding API entry.
+  Open answer, activated by keyboard, focused the existing saved answer. Manual Refresh activity
+  left the run index unchanged. Reload recovered the activity and answer. At 390-pixel width the
+  activity overlay closed and focus moved to the answer. The other employee's direct run and
+  history reads both returned 404. Checks finished at 22:03:33.983 and 22:03:35.923 UTC.
+- verification correction: containerd reported a config hash in the UI status `image` display
+  field. The independent observer was corrected to check the Pod specification's requested image
+  and the running `imageID`, which both bind the verified manifest. No deployment change was needed.
+- scope: recent personal activity and saved-answer navigation are now live-qualified. Older runs
+  receive no backfill. Login continuity across server replacement remains unqualified on this
+  installation; the new session baseline and unfinished tool, memory and delegation journeys are
+  separate. All 116 component-browser checks and final Linux screenshots pass; two unchanged local
+  Darwin heading comparisons remain different and their baselines are retained.
+- receipts: private `ui-6692b2e59-publication.json`, `installed-ui-6692b2e59-verify.json`,
+  `colleague-d-browser-activity-6692b2e59.json`, `colleague-e-browser-activity-6692b2e59.json` and
+  source-attributed preflight/install logs. No credentials entered Git, and no merge or tag ran.

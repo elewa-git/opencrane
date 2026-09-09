@@ -22,6 +22,13 @@ An ordinary selected conversation may compose one feature-local context panel fr
 Files components. The page owns whether that panel is open and restores keyboard focus to the header trigger
 when it closes. Direct and group conversations can expose Files but never adopt stale Agent-run Activity.
 
+Personal chats show **Recent activity** with readable work statuses and a **Refresh activity**
+control. The presenter maps the personal-run store without exposing execution identifiers. **Open
+answer** appears only when a completed agent answer for that run is rendered in the selected
+transcript. The page checks that link again before focusing it, closes the narrow overlay and
+respects reduced-motion preferences. Company-assistant children keep their existing shared-chat
+surface; this personal index does not claim complete tool history or run controls.
+
 ```
  bounded snapshot ──► workspace store ──► feature presenter ──► thin page
                            ▲                       │                 │

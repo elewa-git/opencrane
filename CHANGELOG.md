@@ -13,10 +13,16 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
-Personal and group-assistant text journeys have passed integration CI and live testv5 checks.
+Personal and group-assistant text journeys and recent personal activity have passed integration
+CI and live testv5 checks.
 The 0.11 baseline remains under review; this is not a release or a completed MVP.
 
 ### Added
+
+- **People can follow recent personal-assistant work and reopen a loaded answer.** The activity
+  pane shows current status and an explicit refresh control. Changing chats, signing out or losing
+  access clears its rows; answer links refer to the selected transcript. New runs grant their
+  verified owner read access without restoring previously revoked permissions.
 
 - **Operators can back up conversation history and recover it from a scheduled file copy.**
   Live recovery preserved completed personal and group chats and allowed new messages and an
@@ -77,6 +83,15 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   only rebuildable transaction projections.
 
 ### Fixed
+
+- **Browser login can survive server replacement and requests reaching different servers.** The
+  follow-up stores encrypted sessions in PostgreSQL, preserves fixed expiry and prevents delayed
+  saves from undoing logout. It requires the matching fresh baseline; CI and installation proof
+  remain pending.
+
+- **People can find newly admitted personal assistant work in their activity.** Admission saves the
+  owner’s run-read permission with the run and its inputs. Reads still check current membership and
+  permission; retries cannot restore revoked access. CI passes on `e50cdcc5b`; image publication and live qualification remain pending.
 
 - **People can start distinct personal chats and retry creation safely.** A new command starts a
   separate conversation; retrying the same command returns its existing session without reopening

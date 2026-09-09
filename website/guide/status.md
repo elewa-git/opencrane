@@ -33,11 +33,17 @@ current review work and its evidence.
 - **Inputs and outputs:** complete the user journeys for attachments, generated files and their
   recovery across refresh, retry and conversation closure.
 - **Administration:** complete the product surfaces for permissions, activity and cost without
-  requiring an employee to understand internal execution concepts. Personal activity listings
-  still omit completed runs that are present in the conversation history.
+  requiring an employee to understand internal execution concepts. The follow-up implementation
+  gives people read access to each new personal run when it starts. Two new testv5 runs now appear
+  in their owners' activity API and remain invisible to the other employee. The follow-up UI adds
+  recent status, refresh and links to loaded answers. Fresh browser checks now pass for both
+  employees, including keyboard navigation, narrow screens and recovery after reload.
+  Existing older runs receive no backfill. Revoked access is checked on every read.
 - **Login continuity:** preserve authenticated sessions across server replacement and support
-  multiple servers consistently. The current server stores sessions in its own process, so a
-  replacement requires people to sign in again even though their saved conversations remain.
+  multiple servers consistently. The follow-up implements encrypted PostgreSQL sessions with
+  fixed expiry and logout protection. CI and fresh PostgreSQL tests pass; fresh-install live
+  qualification remains pending. The current
+  testv5 server uses process-local sessions and requires a new sign-in after replacement.
 
 Durable application source, builds and published apps are later work. Temporary computer previews
 do not publish an application.
@@ -48,6 +54,11 @@ Five test employees completed sign-in and guided onboarding with approved assist
 Two employees independently received personal-assistant answers and recovered those saved answers
 after signing in through a fresh browser and reloading the page. The completed runs used each
 employee's approved settings and the configured model.
+
+Each employee can also see a newly completed run in Recent activity and open its saved answer.
+Refreshing activity does not start another run. The answer and activity survive reload; keyboard
+navigation focuses the answer and closes the activity overlay on a narrow screen. Each employee's
+private activity and history remain inaccessible to the other employee.
 
 Three colleagues exchanged ordered group messages. The owner selected a company assistant on a
 group message, and all three members could open its linked chat. The assistant answered the request

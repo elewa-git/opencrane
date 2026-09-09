@@ -28,6 +28,24 @@ LiteLLM and administrator credentials; KurrentDB also gets immutable TLS trust a
 credentials. Pass their generated Secret names into the install profile. Ordinary installation
 validates these inputs and does not invoke either provisioning action automatically.
 
+## Preserve browser login during server replacement
+
+The session-storage follow-up uses the existing PostgreSQL database to share encrypted login state.
+Keep the same randomly generated `OIDC_SESSION_SECRET` on every server and across replacement;
+it must contain at least 32 bytes. Replacing it signs everyone out. The server will not start OIDC
+without persistent session storage, and database failures do not fall back to process memory.
+
+`OIDC_SESSION_MAX_AGE_SECONDS` defaults to 12 hours and allows at most seven days. Each new session
+keeps its original deadline, even if that setting changes later. Verified identity-token expiry
+may end it sooner. An anonymous sign-in flow expires after ten minutes; reauthentication while signed in remains
+bounded by the existing identity expiry. Logout clears stored secrets and
+keeps a small marker until delayed requests can no longer revive the session; active servers remove
+expired markers in bounded batches.
+
+This change adds a technical session table and requires a fresh installation from the matching
+baseline. Its source and CI evidence remain separate from the existing testv5 deployment. See
+[development status](/guide/status) and [identity](/security/identity).
+
 ## Use the deploy entrypoint
 
 Use the app-owned deploy command. Populate these variables from your target configuration and

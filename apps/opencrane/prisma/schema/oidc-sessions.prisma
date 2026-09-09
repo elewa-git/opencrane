@@ -1,0 +1,20 @@
+/// Stores encrypted browser sessions for server replacement and multiple replicas.
+/// A null payload records logout until the signed session identifier has expired.
+model OidcSession {
+  /// Selects the trusted deployment's session configuration.
+  namespace   String   @db.VarChar(64)
+  /// Stores a digest, never the identifier carried by the browser cookie.
+  idDigest    String   @map("id_digest") @db.VarChar(64)
+  /// Rejects writes from requests that loaded an earlier session state.
+  revision    Int      @default(1)
+  /// Holds a versioned authenticated-encryption envelope; null means logged out.
+  payload     String?
+  /// Bounds the active login flow or verified identity.
+  validUntil  DateTime @map("valid_until")
+  /// Preserves logout markers until this identifier's immutable deadline.
+  retainUntil DateTime @map("retain_until")
+
+  @@id([namespace, idDigest])
+  @@index([namespace, retainUntil])
+  @@map("oidc_sessions")
+}

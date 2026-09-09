@@ -67,6 +67,31 @@ route, or second Pod controller. [ADR 0016](docs/adr/0016-conversation-history-a
 supersedes older runtime, storage and upgrade descriptions. Source completion, CI, deployment and
 live product acceptance remain separate evidence.
 
+## 0.12 and remaining MVP delivery
+
+The accepted [delivery plan](docs/design/mvp-delivery-plan.md) turns the remaining scope into
+bounded PRs, owners, dependencies and acceptance criteria. 0.12 aims to let a personal or company
+assistant retrieve permitted company data and complete a precise human-approved action. Memory,
+files, autonomous delegation, schedules, administration and operational qualification each retain
+their own completion track; they are not silently bundled into the first tool PR.
+
+| Slice | Current state |
+| --- | --- |
+| C0 — close the replay-contract CI failure on #826 | ✅ COMPLETE in `77a1cdaa6` — focused replay contracts and independent review pass; [Linux CI](https://github.com/elewa-git/opencrane/actions/runs/34267589926), k3d and publication are green. |
+| R2 — visible personal activity | ✅ COMPLETE in [#829](https://github.com/elewa-git/opencrane/pull/829). UI `6692b2e59` and server `e50cdcc5b` are installed on testv5. Linux CI and publication pass. Two employees see their completed work, open its saved answer by keyboard, refresh without starting work, and recover activity after reload. Narrow-screen focus and cross-employee API isolation pass. See [completed work](plan-done.md) and the [deploy ledger](docs/agents/deploy-ledger.md). |
+| R1 — reliable login | IMPLEMENTED, CI GREEN at `44fd8f328` — encrypted PostgreSQL sessions, fixed deadlines, revision-checked saves and logout markers. All 52 auth tests and [CI](https://github.com/elewa-git/opencrane/actions/runs/34274625541) pass, including all seven SQL targets on fresh PostgreSQL and six real-client session proofs. Fresh-install live qualification remains pending; testv5 retains the earlier database baseline. |
+| A1 — membership revocation and closed-work proof | PLANNED — current authority operation and product surface, followed by real-account browser proof. |
+| T1 — first permitted tool retrieval | PREFLIGHT COMPLETE — reuse invocation admission/execution; add the private run/lease-bound proposal/result contract, current authority checks before dispatch and durable tool history. The live installed integration and catalogue lists are empty; internal contract work can proceed, while real integration acceptance needs a dedicated permitted fixture. |
+| T2/T3/U1 — approved actions and visible recovery | DEPENDS ON T1 — exact approval, cancellation, uncertain outcomes, retries and accessible workspace controls. |
+| M1/F1 — explicit memory and durable files | MEMORY PREFLIGHT COMPLETE — recall transport exists, but dataset preparation and remote write/correct/forget are unimplemented. Verify pinned Cognee record identity and idempotency before completing gateway writes. Files retain their independent artifact and reload acceptance track. |
+| D1/S1 — autonomous delegation and shared schedules | DEPENDS ON ACTION CONTRACTS — bounded authority, budgets, cancellation and durable results. |
+| A2/Q1 — administration and operational acceptance | PLANNED THROUGHOUT — extend protected product surfaces and prove each newly landed journey. |
+
+The overnight run on 8–9 September continues these slices in dependency order and hands off at
+08:00 Nairobi time. It commits and pushes reviewed progress, maintains incremental PRs and records
+blockers without treating the whole MVP as a one-night promise. See the delivery plan for the
+morning checkpoint and operating boundaries.
+
 ## Extend the proven text journeys
 
 The completed personal and group-assistant text path is recorded in [plan-done.md](plan-done.md).
@@ -74,7 +99,7 @@ The remaining acceptance work is broader than producing a first answer:
 
 | Journey | Remaining work | Acceptance |
 | --- | --- | --- |
-| Keep login and activity continuous | Replace process-local sessions and repair personal activity visibility. | Server replacement preserves login; people can find the completed runs already present in their conversations. |
+| Keep login and activity continuous | Qualify the implemented PostgreSQL sessions on a fresh installation; new personal activity is proven. | Server replacement preserves login; people can find newly admitted completed work, with current access checked on every read. |
 | Preserve access changes and closed work | Expose the required membership/participant operation and qualify revocation, browser purge and closure with real accounts. | Revoked or closed work stays inaccessible; late responses cannot restore its private history or draft. |
 | Follow long conversations efficiently | Measure initial-history and periodic computer replay cost after the completed [#827](https://github.com/elewa-git/opencrane/issues/827) stream. | Long history has bounded read cost; reconnect retains ordered delivery and current access checks. |
 | Perform a useful external action | Connect model tool requests to existing server-owned tool admission, approvals, execution and durable results. | One real task succeeds with a chosen integration; denied/revoked/ambiguous actions never execute or claim success. |
