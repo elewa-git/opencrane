@@ -86,9 +86,9 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 			}),
 		},
 		mcpToolAssignments: {
-			create: command.content.mcpToolRevisionIds.map(function _MapMcpTool(toolRevisionId)
+			create: command.content.mcpToolRevisionIds.map(function _MapMcpTool(toolRevisionId): Prisma.AgentRevisionMcpToolAssignmentUncheckedCreateWithoutAgentRevisionInput
 			{
-				return { toolRevisionId, agentServiceId: command.agentServiceId, siloId: command.siloId };
+				return { toolRevisionId, siloId: command.siloId };
 			}),
 		},
 		boundaryAttachments: {

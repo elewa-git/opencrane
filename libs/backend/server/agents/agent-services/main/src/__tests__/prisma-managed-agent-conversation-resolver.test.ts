@@ -17,7 +17,7 @@ afterEach(function _Restore() { vi.restoreAllMocks(); });
 /** Supplies separate current service, identity, human assertion and grant authorities. */
 function _Fixture()
 {
-	vi.spyOn(PrismaManagedExecutionEvidenceRepository.prototype, "loadCurrent").mockResolvedValue({ agentServiceId: _SERVICE, agentRevisionId: "revision-1", agentRevisionDigest: "sha256:revision", principalId: "company-principal", name: "Company", workloadProfile: "company", modelDefinitionId: "model-1", budget: { maxDurationMs: 60_000 } });
+	vi.spyOn(PrismaManagedExecutionEvidenceRepository.prototype, "loadCurrent").mockResolvedValue({ agentServiceId: _SERVICE, agentRevisionId: "revision-1", agentRevisionDigest: "sha256:revision", principalId: "company-principal", name: "Company", workloadProfile: "company", modelDefinitionId: "model-1", mcpToolRevisionIds: [], budget: { maxDurationMs: 60_000 } });
 	const membership = vi.spyOn(PrismaManagedExecutionEvidenceRepository.prototype, "verifyRequesterMembership").mockResolvedValue({ kind: "fleet", revision: 7 } as never);
 	const admit = vi.spyOn(PrismaAuthorizationAuthority.prototype, "admitPrincipal");
 	const decide = vi.spyOn(PrismaAuthorizationAuthority.prototype, "decidePrincipal");
@@ -106,7 +106,7 @@ describe("managed run admission through the central audit writer", function _Sui
 	function _RunFixture()
 	{
 		const f = _Fixture();
-		const revision = { agentServiceId: _SERVICE, agentRevisionId: "revision-1", agentRevisionDigest: `sha256:${"a".repeat(64)}`, principalId: "company-principal", name: "Company", workloadProfile: "company", modelDefinitionId: "model-1", budget: { maxDurationMs: 60_000 } };
+		const revision = { agentServiceId: _SERVICE, agentRevisionId: "revision-1", agentRevisionDigest: `sha256:${"a".repeat(64)}`, principalId: "company-principal", name: "Company", workloadProfile: "company", modelDefinitionId: "model-1", mcpToolRevisionIds: [], budget: { maxDurationMs: 60_000 } };
 		const human = { kind: "fleet", principalId: "human-1", siloId: "silo-1", decisionEvidenceId: "human-assertion", revision: 7, assertionId: "human-assertion", payloadDigest: `sha256:${"b".repeat(64)}`, trustedUntil: new Date(6_000).toISOString() };
 		const repository = { loadCurrent: vi.fn().mockResolvedValue(revision), verifyRequesterMembership: vi.fn().mockResolvedValue(human) };
 		const command = { identity: { schemaVersion: 1, kind: "managed", id: __ManagedAgentIdentityId(_SERVICE), siloId: "silo-1", agentServiceId: _SERVICE, principalId: "company-principal", name: "Company", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "human-1", createdAt: new Date(1_000).toISOString() } as const, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" };

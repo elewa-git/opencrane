@@ -12691,6 +12691,154 @@
         }
       }
     },
+    "/organization/company-assistant/tools": {
+      "get": {
+        "operationId": "getCompanyAssistantTools",
+        "summary": "Read the company assistant's current tool selection",
+        "tags": [
+          "Organization assistants"
+        ],
+        "description": "Requires current Organization Administer. Returns the exact active immutable revision and sorted tool revision IDs. This read does not record effect admission or supply external credentials.",
+        "responses": {
+          "200": {
+            "description": "Current selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "agentServiceId",
+                    "activeRevisionId",
+                    "toolRevisionIds"
+                  ],
+                  "properties": {
+                    "agentServiceId": {
+                      "type": "string"
+                    },
+                    "activeRevisionId": {
+                      "type": "string"
+                    },
+                    "toolRevisionIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Current administrator permission denied."
+          },
+          "404": {
+            "description": "Active published company assistant unavailable."
+          },
+          "503": {
+            "description": "Selection dependency unavailable."
+          }
+        }
+      },
+      "put": {
+        "operationId": "setCompanyAssistantTools",
+        "summary": "Replace the company assistant's tool selection",
+        "tags": [
+          "Organization assistants"
+        ],
+        "description": "Requires current Organization Administer and Assign on every selected same-silo ready tool revision of an active published server. Publishes an immutable successor and reconciles only the company's own Use/Invoke grants for removed and selected tools. A current unchanged selection is a no-op after fresh authorization. A stale expected revision always returns 409, including a retry after an uncertain successful commit; GET the authoritative selection before editing again. Empty selection removes all tools. This API creates no install or external credential binding and cannot borrow human private credentials.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedActiveRevisionId",
+                  "toolRevisionIds"
+                ],
+                "properties": {
+                  "expectedActiveRevisionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  },
+                  "toolRevisionIds": {
+                    "type": "array",
+                    "maxItems": 32,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "^\\S(?:.*\\S)?$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed successor or unchanged current selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "agentServiceId",
+                    "activeRevisionId",
+                    "toolRevisionIds"
+                  ],
+                  "properties": {
+                    "agentServiceId": {
+                      "type": "string"
+                    },
+                    "activeRevisionId": {
+                      "type": "string"
+                    },
+                    "toolRevisionIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tool selection."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Current assignment permission or selected tool unavailable."
+          },
+          "404": {
+            "description": "Active published company assistant unavailable."
+          },
+          "409": {
+            "description": "Active revision changed; read current selection before another edit."
+          },
+          "503": {
+            "description": "Assignment dependency unavailable; a failed response may follow a commit, so read current selection."
+          }
+        }
+      }
+    },
     "/organization/company-assistant": {
       "post": {
         "operationId": "provisionCompanyAssistant",

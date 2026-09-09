@@ -24,7 +24,7 @@ describe("PrismaCompanyAssistantProvisioningUnitOfWork", function _Suite()
 		}), append: vi.fn(), loadActive: vi.fn().mockResolvedValue({ identity: { kind: "managed" } }) };
 		const authority = new PrismaCompanyAssistantProvisioningUnitOfWork({ $transaction } as never, _POLICY, identities as never);
 		await expect(authority.provision(_CALLER, _COMMAND)).resolves.toEqual(_RESULT);
-		expect($transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+		expect($transaction).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 		expect(identities.load).toHaveBeenCalledTimes(1);
 		expect(identities.append).not.toHaveBeenCalled();
 	});
@@ -36,6 +36,46 @@ describe("PrismaCompanyAssistantProvisioningUnitOfWork", function _Suite()
 		const authority = new PrismaCompanyAssistantProvisioningUnitOfWork({ $transaction } as never, _POLICY, identities as never);
 		await expect(authority.provision(_CALLER, _COMMAND)).rejects.toThrow();
 		expect($transaction).toHaveBeenCalledTimes(3);
+		expect(identities.load).not.toHaveBeenCalled();
+		expect(identities.append).not.toHaveBeenCalled();
+	});
+});
+
+describe("company assistant tool assignment transaction boundary", function _ToolsSuite()
+{
+	it.each(["P2002", "P2034"])("rechecks current assignment authority after a proven %s rollback without identity writes", async function _RetriesAssignment(code)
+	{
+		const selection = { agentServiceId: "company", activeRevisionId: "revision-2", toolRevisionIds: ["tool-1"] };
+		const setTools = vi.spyOn(PrismaCompanyAssistantProvisioningRepository.prototype, "setTools").mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("rolled back", { code, clientVersion: "test" })).mockResolvedValue(selection);
+		const $transaction = vi.fn().mockImplementation(async operation => await operation({}));
+		const identities = { load: vi.fn(), append: vi.fn(), loadActive: vi.fn() };
+		const authority = new PrismaCompanyAssistantProvisioningUnitOfWork({ $transaction } as never, _POLICY, identities as never);
+		const command = { expectedActiveRevisionId: "revision-1", toolRevisionIds: ["tool-1"] };
+		await expect(authority.setTools(_CALLER, command)).resolves.toEqual(selection);
+		expect(setTools).toHaveBeenCalledTimes(2);
+		expect($transaction).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+		expect(identities.load).not.toHaveBeenCalled();
+		expect(identities.append).not.toHaveBeenCalled();
+	});
+
+	it("does not replay an uncertain commit and uses GET to read the authoritative current selection", async function _DoesNotReplayUncertainCommit()
+	{
+		const command = { expectedActiveRevisionId: "revision-1", toolRevisionIds: ["tool-1"] };
+		const selection = { agentServiceId: "company", activeRevisionId: "revision-2", toolRevisionIds: ["tool-1"] };
+		const setTools = vi.spyOn(PrismaCompanyAssistantProvisioningRepository.prototype, "setTools").mockResolvedValue(selection);
+		const getTools = vi.spyOn(PrismaCompanyAssistantProvisioningRepository.prototype, "getTools").mockResolvedValue(selection);
+		const $transaction = vi.fn().mockImplementationOnce(async function _Uncertain(operation)
+		{
+			await operation({});
+			throw new Error("commit response lost");
+		}).mockImplementation(async operation => await operation({}));
+		const identities = { load: vi.fn(), append: vi.fn(), loadActive: vi.fn() };
+		const authority = new PrismaCompanyAssistantProvisioningUnitOfWork({ $transaction } as never, _POLICY, identities as never);
+		await expect(authority.setTools(_CALLER, command)).rejects.toThrow("commit response lost");
+		expect(setTools).toHaveBeenCalledTimes(1);
+		expect($transaction).toHaveBeenCalledTimes(1);
+		await expect(authority.getTools(_CALLER)).resolves.toEqual(selection);
+		expect(getTools).toHaveBeenCalledExactlyOnceWith(_CALLER, expect.any(Date));
 		expect(identities.load).not.toHaveBeenCalled();
 		expect(identities.append).not.toHaveBeenCalled();
 	});

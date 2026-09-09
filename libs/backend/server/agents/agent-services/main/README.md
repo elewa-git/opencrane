@@ -5,7 +5,7 @@
 ## What it owns
 
 This package owns immutable `AgentService` revisions, personal-assistant configuration, and explicit
-setup of one company assistant per silo. The company assistant can be selected for a group child
+setup and exact tool assignment for one company assistant per silo. The company assistant can be selected for a group child
 conversation once its published revision, identity, model permission and the caller's access are ready.
 
 A personal service is created during onboarding with one published revision. Later persona or model
@@ -25,7 +25,7 @@ requester, and the central authority permits invocation and every frozen revisio
 result is immutable decision evidence for one run; it is not a reusable grant.
 
 A company assistant acts through its own stable Internal Principal. Its evidence binds the current
-service, published revision and model-use decision. The requesting human has separate Fleet or Standalone
+service, published revision, exact sorted tool assignments and model-use decision. The requesting human has separate Fleet or Standalone
 membership evidence and must currently be allowed to invoke the service. Internal Principals do not
 need a fabricated fleet membership assertion: PostgreSQL service authority and checked identity
 history supply their current binding. Neither evidence form grants access by itself. Both service repositories delegate human membership
@@ -38,8 +38,9 @@ creating a child conversation and when admitting a run. Human Invoke decisions r
 the requesting Principal ID. Runtime Pod identity belongs to later workload decisions.
 
 The first company revision has no persona, skills, tools, memory or knowledge-boundary assignments.
-Its deployment-owned profile and budget use a selected model. Admission rejects extended revisions
-until those capabilities have a supported company policy.
+An administrator can then assign exact published MCP tool revisions through the API below. Its
+deployment-owned profile and budget use a selected model. Admission still rejects company persona,
+skill and boundary assignments until those capabilities have a supported company policy.
 
 ## Public surface
 
@@ -60,7 +61,8 @@ until those capabilities have a supported company policy.
   admissions. Child creation separately records human Invoke and company Model Use decisions after
   the same current service, identity, profile and membership checks.
 - `PrismaCompanyAssistantProvisioningUnitOfWork` and `_CreateCompanyAssistantProvisioningRouter`
-  provide explicit administrator setup, including checked identity establishment after commit.
+  provide explicit administrator setup and tool assignment, including checked identity establishment
+  after the first setup commit.
 
 The app supplies transaction-scoped dependencies for admission and revision changes. Company setup
 owns its Serializable transaction and retries up to three unique-create or serialization conflicts.
@@ -81,6 +83,34 @@ An existing assistant returns `created: false`: changed choices are not applied,
 not restored, and paused or retired services are not revived. A failed identity append can be retried
 from the committed service and first revision; suspended or revoked identities remain unavailable.
 
+## Company assistant tools
+
+An administrator reads `GET /api/v1/organization/company-assistant/tools`, then sends
+`PUT` to the same path with `expectedActiveRevisionId` and the complete `toolRevisionIds` selection.
+The read and write return `agentServiceId`, `activeRevisionId`, and sorted `toolRevisionIds`. Select
+up to 32 unique exact tool revision IDs from the authorized tool catalogue; `[]` removes all tools.
+
+GET checks current Organization Administer without recording an effect. PUT records current
+Organization Administer and Assign on every selected tool, including for an unchanged selection.
+Each tool must belong to this silo, have a ready immutable server revision, and have an active,
+published server. The write preserves the active revision's model, budget, prompt policy and other
+content, publishes an immutable successor, and compares the active pointer before committing. It
+reconciles Use and Invoke for the assistant's own Principal on removed and selected tools only,
+under the existing company-assistant grant manager. Other managers, human grants and model grants
+are untouched. An unchanged current selection creates no revision or grant changes.
+
+A stale expected revision returns `409` before checking whether the sets are equal. If a response
+is lost after commit, retrying the old expected revision therefore conflicts: GET the authoritative
+current selection before another edit. Proven database rollbacks may be retried up to three times;
+unknown commit outcomes are not replayed automatically. Tool edits do not rewrite identity history.
+
+Assignment creates no external credential binding or installation. A company assistant never
+borrows a human's private credentials. Tools that need company credentials remain unusable until
+that separate custody contract exists. The existing run admission freezes exact tool definitions
+and schemas and checks the assistant's own current Use; dispatch checks current Invoke, revision
+assignment and requesting-human membership again. Assignment success alone does not qualify a
+live tool run or complete the T1 product journey.
+
 ## Data and persistence
 
 The package uses `AgentService`, `AgentRevision`, revision boundary attachments, skill assignments,
@@ -96,6 +126,14 @@ Tagged `scope:agent-services`, this package may depend on shared agent models, a
 authorization, membership, checked IAM identity history, the history-store append contract, and
 shared utilities. IAM identity and history-store do not depend back on this package. It does not
 depend on an app, scheduling worker, or the execution-runs package.
+
+## Validation
+
+`backend-server-agent-services:test` runs the unit and HTTP contracts; `lint` also typechecks the SQL
+proof. `backend-server-agent-services:test:sql` uses the disposable fresh PostgreSQL baseline in
+Actions. Its five cases cover immutable replacement and grant isolation, concurrent edits, rollback
+after a lost active-pointer comparison, current permissions and revoked membership, and foreign or
+unpublished tools. These database cases are CI qualification; they do not contact a tool provider.
 
 ## See also
 

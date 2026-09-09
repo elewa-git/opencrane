@@ -3,7 +3,7 @@ import type { HumanMembershipEvidenceConfig } from "@opencrane/backend/server/ia
 import type { ExecutionSubjectHumanMembershipEvidence } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-/** Contains the active company assistant and its first, deliberately unextended execution policy. */
+/** Contains the active company assistant's published model, tool selection and execution limits. */
 export interface ManagedAgentRevisionEvidence
 {
 	readonly agentServiceId: string;
@@ -13,6 +13,8 @@ export interface ManagedAgentRevisionEvidence
 	readonly name: string;
 	readonly workloadProfile: string;
 	readonly modelDefinitionId: string;
+	/** Binds the canonical exact tool assignment into the run's effective contract digest. */
+	readonly mcpToolRevisionIds: readonly string[];
 	readonly budget: JsonValue;
 }
 

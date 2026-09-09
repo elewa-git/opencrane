@@ -12,7 +12,7 @@ export class PrismaManagedExecutionEvidenceRepository implements ManagedExecutio
 	/** Binds all mutable authority reads to the transaction that admits the child or its run. */
 	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly membership: HumanMembershipEvidenceConfig) {}
 
-	/** Rejects inactive or extended revisions before a company assistant can acquire conversation authority. */
+	/** Requires an active published revision and refuses unsupported persona, skill and boundary assignments. */
 	public async loadCurrent(siloId: string, agentServiceId: string): Promise<ManagedAgentRevisionEvidence | null>
 	{
 		const service = await this.transaction.agentService.findFirst({
@@ -23,9 +23,9 @@ export class PrismaManagedExecutionEvidenceRepository implements ManagedExecutio
 		if (service === null || service.principalId === null || revision === null || revision === undefined
 			|| service.activeRevisionId !== revision.id || revision.siloId !== siloId || revision.agentServiceId !== agentServiceId
 			|| revision.state !== AgentRevisionState.Published || revision.personaRevisionId !== null
-			|| revision.skillAssignments.length !== 0 || revision.mcpToolAssignments.length !== 0 || revision.boundaryAttachments.length !== 0)
+			|| revision.skillAssignments.length !== 0 || revision.boundaryAttachments.length !== 0)
 			return null;
-		return { agentServiceId: service.id, agentRevisionId: revision.id, agentRevisionDigest: revision.digest, principalId: service.principalId, name: service.name, workloadProfile: service.workloadProfile, modelDefinitionId: revision.modelDefinitionId, budget: revision.budget as JsonValue };
+		return { agentServiceId: service.id, agentRevisionId: revision.id, agentRevisionDigest: revision.digest, principalId: service.principalId, name: service.name, workloadProfile: service.workloadProfile, modelDefinitionId: revision.modelDefinitionId, mcpToolRevisionIds: revision.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort(), budget: revision.budget as JsonValue };
 	}
 
 	/** Delegates human membership to the deployment-selected IAM authority. */

@@ -58,6 +58,15 @@ impersonate a human through that API to avoid adding the required run/lease-boun
 current lifecycle reporter validates fences but does not persist participant history; T1 must
 connect real tool activity/results to KurrentDB rather than treating log output as conversation proof.
 
+The internal continuation is CI-qualified in [#830](https://github.com/elewa-git/opencrane/pull/830)
+at `ada28f1f7`. The company-tool follow-up retains the existing assistant provisioning owner:
+an administrator reads the active revision and replaces its exact tool list under current
+Organisation/Administer and each tool's Assign permission. One immutable successor and the
+assistant's own tool grants commit together; a stale expected revision conflicts before a no-op.
+It does not install tools, activate credentials or complete the real-integration acceptance.
+Member removal is a parallel review surface, [#831](https://github.com/elewa-git/opencrane/pull/831),
+with its own CI and live qualification. It is not a prerequisite for reviewing the assignment API.
+
 Long-term memory and autonomous delegation are not prerequisites for the first useful tool action.
 The existing #320 issue is closed but retains unfinished and obsolete runtime wording; refresh or
 replace its delivery issue before D1, using ADR 0016 as the current architecture. A closed issue or
