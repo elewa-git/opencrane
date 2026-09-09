@@ -3,7 +3,7 @@ import type { AuthorizationAuthority, ProductAuthorizationWorkloadContext, ToolI
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import type { ExecutionSubject, ExecutionSubjectHumanMembershipEvidence } from "@opencrane/models/agents";
 
-import type { ConversationComputerHistory } from "./conversation-computers";
+import type { ConversationComputerHistory } from "../../../conversation-computers";
 
 /** Current execution facts needed by dispatch; agent-services owns their evaluation. */
 export interface ConversationToolExecutionEvidence
@@ -43,7 +43,7 @@ export interface ConversationToolDispatchDependencies
 
 /** Exact saved tool and revision coordinates checked by the MCP-owned assignment reader. */
 export type ConversationToolAssignmentCommand = Pick<ExecutionSubject["runScope"], "siloId" | "agentServiceId" | "agentRevisionId"> & {
-	/** Identify the immutable tool revision that the saved invocation names. */
+	/** Identify the tool revision stored on the invocation. */
 	readonly toolRevisionId: string;
 };
 

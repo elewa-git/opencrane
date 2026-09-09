@@ -1,11 +1,19 @@
-import { OrganizationInvitationStatuses, OrganizationInviteRecipientReasons, OrganizationMemberRoles, OrganizationMemberStatuses, type AcceptOrganizationInvitationResult, type CreateOrganizationInvitationsResult, type OrganizationInvitation, type OrganizationInviteValidationResult, type OrganizationMember, type OrganizationMemberDirectory, type ResendOrganizationInvitationResult } from "@opencrane/state/organization/members";
+import { ___OrganizationMemberRemovalSchema, OrganizationMembersGatewayError, OrganizationMembersGatewayErrorKinds, OrganizationInvitationStatuses, OrganizationInviteRecipientReasons, OrganizationMemberRoles, OrganizationMemberStatuses, type AcceptOrganizationInvitationResult, type CreateOrganizationInvitationsResult, type OrganizationInvitation, type OrganizationInviteValidationResult, type OrganizationMember, type OrganizationMemberDirectory, type ResendOrganizationInvitationResult } from "@opencrane/state/organization/members";
 
-import type { OrganizationInviteAcceptanceWire, OrganizationInviteCreateWire, OrganizationInviteResendWire, OrganizationInviteValidationWire, OrganizationMemberDirectoryWire } from "./organization-members-wire.types";
+import type { OrganizationInviteAcceptanceWire, OrganizationInviteCreateWire, OrganizationInviteResendWire, OrganizationInviteValidationWire, OrganizationMemberDirectoryWire, OrganizationMemberRemovalWire } from "./organization-members-wire.types";
 
 /** Map one generated directory response into the state port's documented enums. */
 export function _MapOrganizationMemberDirectory(value: OrganizationMemberDirectoryWire): OrganizationMemberDirectory
 {
 	return { members: value.members.map(_MapMember), invitations: value.invitations.map(_MapInvitation), activeCount: value.activeCount, pendingCount: value.pendingCount };
+}
+
+/** Maps the exact authoritative member returned by a removal command. */
+export function _MapOrganizationMemberRemoval(value: OrganizationMemberRemovalWire): OrganizationMember
+{
+	if (value.member.status !== "suspended")
+		throw new OrganizationMembersGatewayError(OrganizationMembersGatewayErrorKinds.Unknown, "The removal response did not confirm suspended access.");
+	return _MapMember(value.member);
 }
 
 /** Map generated recipient decisions without changing server-owned policy. */
@@ -35,7 +43,10 @@ export function _MapOrganizationInviteAcceptance(value: OrganizationInviteAccept
 /** Map one generated member row into the state enum contract. */
 function _MapMember(value: OrganizationMemberDirectoryWire["members"][number]): OrganizationMember
 {
-	return { ...value, role: _MapRole(value.role), status: _MapMemberStatus(value.status) };
+	const removal = ___OrganizationMemberRemovalSchema.safeParse(value.removal);
+	if (!removal.success)
+		throw new OrganizationMembersGatewayError(OrganizationMembersGatewayErrorKinds.Unknown, "The member removal decision was not recognized.");
+	return { ...value, removal: removal.data, role: _MapRole(value.role), status: _MapMemberStatus(value.status) };
 }
 
 /** Map one generated invitation row into the state enum contract. */
@@ -59,7 +70,12 @@ function _MapRole(value: OrganizationMemberDirectoryWire["members"][number]["rol
 /** Exhaustively map generated member status literals. */
 function _MapMemberStatus(value: OrganizationMemberDirectoryWire["members"][number]["status"]): OrganizationMemberStatuses
 {
-	return value === "active" ? OrganizationMemberStatuses.Active : OrganizationMemberStatuses.Suspended;
+	switch (value)
+	{
+		case "active": return OrganizationMemberStatuses.Active;
+		case "suspended": return OrganizationMemberStatuses.Suspended;
+		default: throw new OrganizationMembersGatewayError(OrganizationMembersGatewayErrorKinds.Unknown, "The member status was not recognized.");
+	}
 }
 
 /** Exhaustively map generated invitation status literals. */

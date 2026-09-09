@@ -1,17 +1,27 @@
-<wo-section-heading title="Members" [subtitle]="view().activeCount + ' people · ' + view().pendingCount + ' invites pending'" [level]="headingLevels.Page">
-	<p-button heading-actions label="Invite people" icon="pi pi-user-plus" (onClick)="openInvite()" />
+<wo-section-heading title="Members" [subtitle]="view().activeCount + ' active members · ' + view().pendingCount + ' invites pending'" [level]="headingLevels.Page">
+	@if (!accessDenied()) { <p-button heading-actions label="Invite people" icon="pi pi-user-plus" (onClick)="openInvite()" /> }
+	<p-button heading-actions label="Refresh" icon="pi pi-refresh" [text]="true" (onClick)="refreshRequested.emit()" />
 </wo-section-heading>
 
-@if (inviteOpen()) {
+@if (inviteOpen() && !accessDenied()) {
 	<wo-member-invite-form [state]="view().inviteState" [issues]="view().inviteIssues" [error]="view().inviteError" [links]="view().inviteLinks" (cancelled)="closeInvite()" (submitted)="inviteSubmitted.emit($event)" />
 }
 
-<div class="members-announcement" aria-live="polite">
+<!-- PrimeNG keeps empty component hosts mounted; only its named overlay represents the dialog. -->
+<p-confirmDialog key="member-removal" [pt]="{ host: { role: 'presentation' }, pcCloseButton: { root: { 'aria-label': 'Cancel removal' } } }" [style]="{ width: '28rem', maxWidth: 'calc(100vw - 2rem)' }">
+	<ng-template #message><p>Remove <strong>{{ removalTarget()?.name }}</strong> from this organization? Their organization access will end. Existing conversation records will remain.</p></ng-template>
+</p-confirmDialog>
+
+<div #outcome class="members-announcement" aria-live="polite" tabindex="-1">
+	@if (!accessDenied()) {
+	@if (view().removalMessage) { <p-message severity="success" [text]="view().removalMessage ?? ''" /> }
+	@if (view().removalError) { <p-message severity="error" [text]="view().removalError ?? ''" /> }
 	@if (view().resentInviteLink; as resentInviteLink) {
 		<p-message severity="success" text="The server-authored invitation link was refreshed. Copy and share this replacement link." />
 		<wo-member-invite-link [link]="resentInviteLink" />
 	}
 	@if (view().resendError) { <p-message severity="error" [text]="view().resendError ?? ''" /> }
+	}
 </div>
 
 @switch (view().directoryState) {
@@ -30,6 +40,6 @@
 	@default {
 		@if (view().directoryState === directoryStates.Refreshing) { <p-message severity="info" text="Refreshing members…" /> }
 		@if (view().directoryState === directoryStates.RetainedRefreshError) { <p-message severity="warn" [text]="view().refreshError ?? 'The directory may be out of date.'" /> }
-		<wo-member-directory [activeCount]="view().activeCount" [pendingCount]="view().pendingCount" [activeRows]="view().activeRows" [pendingRows]="view().pendingRows" [searchQuery]="view().searchQuery" (searchChanged)="searchChanged.emit($event)" (resendRequested)="resendRequested.emit($event)" />
+		<wo-member-directory [activeCount]="view().activeCount" [pendingCount]="view().pendingCount" [activeRows]="view().activeRows" [pendingRows]="view().pendingRows" [searchQuery]="view().searchQuery" (searchChanged)="searchChanged.emit($event)" (resendRequested)="resendRequested.emit($event)" (removalRequested)="confirmRemoval($event)" />
 	}
 }

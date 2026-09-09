@@ -29,6 +29,8 @@ export class MemberDirectoryComponent
 	public readonly searchChanged = output<string>();
 	/** Emits an opaque invitation coordinate for resend admission. */
 	public readonly resendRequested = output<string>();
+	/** Emits one exact membership coordinate for confirmation and server admission. */
+	public readonly removalRequested = output<string>();
 	/** Stable tab values exposed to the template. */
 	protected readonly tabs = MemberDirectoryTabs;
 

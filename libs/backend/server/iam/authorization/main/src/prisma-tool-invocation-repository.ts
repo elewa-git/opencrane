@@ -1,12 +1,12 @@
 import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
-import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
+import { _ToolInvocationRecord } from "./tool-invocation-persistence-mapping";
 import { __DigestCanonicalJson } from "./canonical-json-digest";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents } from "./tool-invocation-lifecycle.types";
-import { _ToolInvocationAuthorizationEvidenceIsValid, _ToolInvocationClaimKindFromPersistence, _ToolInvocationCompletionEvent, _ToolInvocationIsMcpTaskOwned, _ToolInvocationPlan, _ToolInvocationPreparationPolicyIsFixed, _ToolInvocationRecoveryKeyIsValid, _ToolInvocationRecoveryModeFromPersistence, _ToolInvocationSafeFailureCode, _ToolInvocationStateFromPersistence } from "./tool-invocation-persistence-policy";
-import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type McpTaskToolInvocationAuthorizationEvidence, type ToolInvocationAdmissionResult, type ToolInvocationAuthorizationCoordinate, type ToolInvocationAuthorizationEvidence, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
+import { _ToolInvocationAuthorizationEvidenceIsValid, _ToolInvocationCompletionEvent, _ToolInvocationIsMcpTaskOwned, _ToolInvocationPlan, _ToolInvocationPreparationPolicyIsFixed, _ToolInvocationRecoveryKeyIsValid, _ToolInvocationSafeFailureCode } from "./tool-invocation-persistence-policy";
+import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Maps package recovery modes onto Prisma's generated enum. */
 const _RECOVERY_TO_PRISMA: Readonly<Record<ExternalActionRecoveryModes, ExternalActionRecoveryMode>> = {
@@ -20,91 +20,6 @@ const _CLAIM_TO_PRISMA: Readonly<Record<ExternalActionClaimKinds, ExternalAction
 	[ExternalActionClaimKinds.Dispatch]: ExternalActionClaimKind.Dispatch,
 	[ExternalActionClaimKinds.Reconcile]: ExternalActionClaimKind.Reconcile,
 };
-
-/** Stored row shape translated without leaking generated Prisma types to callers. */
-type ToolInvocationRow = Prisma.ToolInvocationGetPayload<Record<string, never>>;
-
-/** Maps the all-or-none runtime authorization columns into the package contract. */
-function _authorizationEvidence(row: ToolInvocationRow): ToolInvocationAuthorizationEvidence | McpTaskToolInvocationAuthorizationEvidence | null
-{
-	const decisionDigests = row.authorizationDecisionDigests ?? [];
-	const hasEvidence = !_isMissing(row.authorizationActorKind)
-		|| !_isMissing(row.authorizationExecutionSubject)
-		|| !_isMissing(row.authorizationCoordinates)
-		|| decisionDigests.length > 0
-		|| !_isMissing(row.authorizationAssignmentDigest)
-		|| !_isMissing(row.authorizationEvidenceDigest);
-	if (!hasEvidence)
-		return null;
-	if (_isMissing(row.authorizationCoordinates) || decisionDigests.length === 0 || _isMissing(row.authorizationEvidenceDigest))
-		throw new Error(`ToolInvocation ${row.id} has incomplete authorization evidence`);
-	if (row.runId === null)
-	{
-		if (!_isMissing(row.agentIdentityId) || !_isMissing(row.authorizationActorKind) || !_isMissing(row.authorizationExecutionSubject) || !_isMissing(row.authorizationAssignmentDigest))
-			throw new Error(`ToolInvocation ${row.id} has invalid task authorization evidence`);
-		return {
-			principalId: row.principalId,
-			coordinates: row.authorizationCoordinates as unknown as readonly ToolInvocationAuthorizationCoordinate[],
-			decisionDigests: decisionDigests as `sha256:${string}`[],
-			evidenceDigest: row.authorizationEvidenceDigest as `sha256:${string}`,
-		};
-	}
-	if (_isMissing(row.agentIdentityId) || row.authorizationActorKind !== ToolInvocationAuthorizationActorKind.Workload || _isMissing(row.authorizationExecutionSubject) || _isMissing(row.authorizationAssignmentDigest))
-		throw new Error(`ToolInvocation ${row.id} has incomplete authorization evidence`);
-	const parsed = ___ExecutionSubjectSchema.safeParse(row.authorizationExecutionSubject);
-	if (!parsed.success || parsed.data.siloId !== row.siloId || parsed.data.agentIdentityId !== row.agentIdentityId || parsed.data.principalId !== row.principalId || parsed.data.runScope.runId !== row.runId || parsed.data.runScope.attempt !== row.attempt || parsed.data.runScope.agentServiceId !== row.agentServiceId || parsed.data.runScope.agentRevisionId !== row.agentRevisionId)
-		throw new Error(`ToolInvocation ${row.id} has invalid workload authorization evidence`);
-	return {
-		actorKind: "workload",
-		executionSubject: parsed.data,
-		coordinates: row.authorizationCoordinates as unknown as readonly ToolInvocationAuthorizationCoordinate[],
-		decisionDigests: decisionDigests as `sha256:${string}`[],
-		assignmentDigest: row.authorizationAssignmentDigest as `sha256:${string}`,
-		evidenceDigest: row.authorizationEvidenceDigest as `sha256:${string}`,
-	};
-}
-
-/** Returns whether a persistence field is absent from a row or an older test fixture. */
-function _isMissing(value: unknown): value is null | undefined
-{
-	return value === null || value === undefined;
-}
-
-/** Converts one ToolInvocation row into the package record without leaking generated types. */
-export function _ToolInvocationRecord(row: ToolInvocationRow): ToolInvocationRecord
-{
-	return {
-		id: row.id,
-		siloId: row.siloId,
-		agentRevisionId: row.agentRevisionId,
-		authorizationEvidence: _authorizationEvidence(row),
-		runId: row.runId,
-		attempt: row.attempt,
-		mcpTaskId: row.mcpTaskId,
-		candidateId: row.candidateId,
-		toolInvocationId: row.toolInvocationId,
-		toolRevisionId: row.toolRevisionId,
-		arguments: row.arguments as unknown as JsonValue,
-		argumentsDigest: row.argumentsDigest,
-		effectiveArguments: row.effectiveArguments as unknown as JsonValue,
-		effectiveArgumentsDigest: row.effectiveArgumentsDigest,
-		requestFingerprint: row.requestFingerprint,
-		approvalRequired: row.approvalRequired,
-		recoveryMode: _ToolInvocationRecoveryModeFromPersistence(row.recoveryMode),
-		recoveryKey: row.recoveryKey,
-		state: _ToolInvocationStateFromPersistence(row.state),
-		preparationAttempt: row.preparationAttempt,
-		retryDeadlineAt: row.retryDeadlineAt,
-		nextPreparationAttemptAt: row.nextPreparationAttemptAt,
-		claimAttempt: row.claimAttempt,
-		claimKind: _ToolInvocationClaimKindFromPersistence(row.claimKind),
-		claimFence: row.claimFence,
-		claimExpiresAt: row.claimExpiresAt,
-		result: row.result as unknown as JsonValue | null,
-		failureCode: row.failureCode,
-		revision: row.revision,
-	};
-}
 
 /** Returns the database state owned by one claim kind. */
 function _claimedState(kind: ExternalActionClaimKinds): ToolInvocationState

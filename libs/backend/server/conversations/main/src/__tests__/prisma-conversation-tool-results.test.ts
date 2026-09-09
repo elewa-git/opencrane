@@ -9,8 +9,8 @@ import { ConversationComputerToolResultOutcomes, type ConversationComputerContin
 import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
 import { KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
-import type { ConversationToolDispatchDependencies } from "../conversation-tool-dispatch.types";
-import { PrismaConversationToolDispatchAuthority } from "../db/prisma-conversation-tool-dispatch-authority";
+import type { ConversationToolDispatchDependencies } from "../computers/tools/dispatch/conversation-tool-dispatch.types";
+import { PrismaConversationToolDispatchAuthority } from "../computers/tools/dispatch/prisma-conversation-tool-dispatch-authority";
 import { PrismaConversationToolResultsUnitOfWork } from "../db/prisma-conversation-tool-results";
 import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
 

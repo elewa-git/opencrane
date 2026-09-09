@@ -10,3 +10,6 @@ export type OrganizationInviteCreateWire = paths["/organization/members/invitati
 export type OrganizationInviteResendWire = paths["/organization/members/invitations/{invitationId}/resend"]["post"]["responses"][200]["content"]["application/json"];
 /** Generated acceptance response projected from the shared OpenAPI contract. */
 export type OrganizationInviteAcceptanceWire = paths["/organization/members/invitations/accept"]["post"]["responses"][200]["content"]["application/json"];
+
+/** Generated exact removal result; the server retains the membership row. */
+export type OrganizationMemberRemovalWire = paths["/organization/members/{membershipId}/remove"]["post"]["responses"][200]["content"]["application/json"];

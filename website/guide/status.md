@@ -1,7 +1,7 @@
 # Development status
 
 OpenCrane is **pre-MVP**. This page distinguishes implemented capabilities in the 0.11 review
-baseline from remaining product work and live verification.
+baseline and follow-up PRs from remaining product work and live verification.
 
 ## Built in the review baseline
 
@@ -24,13 +24,10 @@ current review work and its evidence.
 
 ## Still to complete
 
-- **Useful work across tools:** prove a permitted retrieval from a real integration, then complete
-  approvals and visible results. The continuation implementation lets one model request select a frozen
-  tool that requires no approval. The server saves its declaration privately, admits the existing
-  executor work, checks the exact terminal result and may make one final text request within the
-  original allowance. This implementation in PR #830 awaits CI and live qualification. It adds no
-  intermediate tool progress to participant history. Company tool assignments remain unsupported,
-  and testv5 has no installed integration for the retrieval proof.
+- **Useful work across tools:** the internal continuation in [PR #830](https://github.com/elewa-git/opencrane/pull/830)
+  can use one permitted tool result in a final assistant answer. CI passes; this change is not yet
+  installed. A real integration, company-assistant tool assignment, visible tool progress and
+  human-approved changes still need their complete product journeys.
 - **Recovery controls:** when a model response cannot be recovered, preserve the pending run and
   show the person what happened and what they can do next. The current server keeps the spent
   request reservation and does not send another paid request. That restraint is implemented in
@@ -47,7 +44,10 @@ current review work and its evidence.
   in their owners' activity API and remain invisible to the other employee. The follow-up UI adds
   recent status, refresh and links to loaded answers. Fresh browser checks now pass for both
   employees, including keyboard navigation, narrow screens and recovery after reload.
-  Existing older runs receive no backfill. Revoked access is checked on every read.
+  Existing older runs receive no backfill. Revoked access is checked on every read. Another follow-up
+  adds standalone member removal and clears retained workspace content after access loss. Owner
+  and self-removal are protected; Fleet removal is unavailable. This work is under review and
+  remains unqualified live. See [Remove a company member](/guide/permissions#remove-a-company-member).
 - **Login continuity:** preserve authenticated sessions across server replacement and support
   multiple servers consistently. The follow-up implements encrypted PostgreSQL sessions with
   fixed expiry and logout protection. CI and fresh PostgreSQL tests pass; fresh-install live
@@ -65,9 +65,9 @@ PostgreSQL targets and 24 real KurrentDB cases (seven conversation and 17 adapte
 Its corrected PR metadata also passes
 [topology CI](https://github.com/elewa-git/opencrane/actions/runs/34301556387).
 
-The continuation implementation in PR #830 comes after that checkpoint and awaits its own CI and
-live qualification. Local checks pass with 437 conversation tests, 136 application tests and both
-lint targets, and independent review passes. The earlier green runs do not qualify it.
+The continuation implementation at `ada28f1f7` in PR #830 passes
+[full CI](https://github.com/elewa-git/opencrane/actions/runs/34303700943). Independent review also
+passes. Live qualification remains pending.
 Both paths preserve a spent request when its response is unavailable, without paid redispatch. A continuation uses the original key and subtracts the entire first token reservation
 before reserving its final request. LiteLLM and provider-internal retries have not been qualified as
 exactly-once execution. The answer-recovery, tool-handoff, server model-step and continuation changes
@@ -100,7 +100,8 @@ delegation journeys.
 
 The requested file-copy recovery and snapshot-backup checks have passed. Restoring a volume snapshot
 would be a separate qualification. Membership revocation and clearing private browser state after
-access is removed remain unproven live because the administrative operation is not yet exposed.
+access is removed remain unproven live. The administrative operation and browser clearing are
+being completed in the follow-up; they are not installed on testv5.
 Computer actions need their complete journeys as their effect admissions become available.
 
 Component tests, a chart render or a healthy process do not establish those complete journeys.

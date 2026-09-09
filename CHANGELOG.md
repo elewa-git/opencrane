@@ -19,6 +19,11 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **Standalone administrators can remove a colleague's company access from Settings.** The member
+  remains recorded as suspended; Owner and self-removal are protected. Proven access loss clears
+  retained workspace content and invitation results, and delayed requests cannot restore them.
+  Fleet removal remains unavailable. The real-account removal journey still needs live qualification.
+
 - **People can follow recent personal-assistant work and reopen a loaded answer.** The activity
   pane shows current status and an explicit refresh control. Changing chats, signing out or losing
   access clears its rows; answer links refer to the selected transcript. New runs grant their
@@ -99,7 +104,7 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 - **People can find newly admitted personal assistant work in their activity.** Admission saves the
   owner’s run-read permission with the run and its inputs. Reads still check current membership and
   permission; retries cannot restore revoked access. CI, image publication and two-employee
-  live qualification pass on testv5.
+  live qualification pass on testv5. Earlier runs receive no backfill.
 
 - **People can start distinct personal chats and retry creation safely.** A new command starts a
   separate conversation; retrying the same command returns its existing session without reopening

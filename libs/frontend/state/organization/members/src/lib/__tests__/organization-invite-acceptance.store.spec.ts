@@ -21,7 +21,7 @@ afterEach(function _ResetAngularTesting(): void
 /** Build a complete gateway mock while each test controls invitation acceptance. */
 function _Gateway(): OrganizationMembersGateway
 {
-	return { load: vi.fn(), validate: vi.fn(), invite: vi.fn(), resend: vi.fn(), accept: vi.fn() };
+	return { remove: vi.fn(), load: vi.fn().mockResolvedValue({ members: [], invitations: [], activeCount: 0, pendingCount: 0 }), validate: vi.fn(), invite: vi.fn(), resend: vi.fn(), accept: vi.fn() };
 }
 
 describe("organization invite acceptance store", function _OrganizationInviteAcceptanceStoreSuite()

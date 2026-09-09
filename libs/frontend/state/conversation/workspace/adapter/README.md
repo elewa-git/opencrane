@@ -33,7 +33,8 @@ import the gateway only from the package barrel.
 Browser-session cookies supply identity. The adapter never accepts a subject id, email, organisation role,
 or memory identity from UI code. It sends opaque conversation, participant, Agent, message, and run
 coordinates only to the exact generated endpoint that accepts them. It does not read response bodies when
-building errors and does not own the live history connection; the separate conversation event adapter owns streaming.
+building errors. Directory, list and onboarding reads map HTTP 401, 403 and 404 to access loss;
+malformed successful responses remain temporary failures. The adapter does not own the live history connection; the separate conversation event adapter owns streaming.
 The same generated-client adapter implements the narrow computer-review port without releasing sandbox
 network coordinates or lease credentials to the browser.
 It also implements `ConversationPersonalRunsGateway` through `GET /me/runs`. The model-adjacent

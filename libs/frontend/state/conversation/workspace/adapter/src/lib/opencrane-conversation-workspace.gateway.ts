@@ -78,8 +78,9 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async directory(): Promise<ConversationCreationDirectory>
 	{
 		const result = await this._api.client.GET("/me/conversations/directory");
-		if (result.data === undefined)
-			throw _InvalidResponse();
+		const status = result.response?.status;
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(status);
 		try { return _ConversationWorkspaceDirectory(result.data.directory); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -95,8 +96,9 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async list(): Promise<readonly ConversationSummary[]>
 	{
 		const result = await this._api.client.GET("/me/conversations", { params: { query: { includeArchived: true } } });
-		if (result.data === undefined)
-			throw _InvalidResponse();
+		const status = result.response?.status;
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(status);
 		try { return result.data.conversations.map(_ConversationSummary); }
 		catch { throw _InvalidResponse(); }
 	}

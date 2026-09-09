@@ -1,5 +1,6 @@
 import { OrganizationInvitationStatuses, OrganizationInviteRecipientReasons } from "./invitations.types";
 import { OrganizationMemberRoles, OrganizationMemberStatuses } from "./directory.types";
+import { OrganizationMemberRemovalStates, OrganizationMemberRemovalUnavailableReasons } from "./removal.types";
 
 /** Reusable successful response helper for package-owned paths. */
 function _ok(description: string, schema: object)
@@ -12,9 +13,15 @@ const _ErrorResponse = { description: "Organization membership authority refused
 
 /** OpenAPI schemas exported into the server's component registry. */
 export const _OrganizationMembersOpenapiSchemas = {
+	OrganizationMemberRemovalCapability: {
+		oneOf: [
+			{ type: "object", additionalProperties: false, required: ["state"], properties: { state: { type: "string", const: OrganizationMemberRemovalStates.Available } } },
+			{ type: "object", additionalProperties: false, required: ["state", "reason"], properties: { state: { type: "string", const: OrganizationMemberRemovalStates.Unavailable }, reason: { type: "string", enum: Object.values(OrganizationMemberRemovalUnavailableReasons) } } },
+		],
+	},
 	OrganizationMember: {
-		type: "object", additionalProperties: false, required: ["membershipId", "displayName", "email", "role", "status", "joinedAt", "isCurrentUser"],
-		properties: { membershipId: { type: "string" }, displayName: { type: "string" }, email: { type: "string", format: "email" }, role: { type: "string", enum: Object.values(OrganizationMemberRoles) }, status: { type: "string", enum: Object.values(OrganizationMemberStatuses) }, joinedAt: { type: "string", format: "date-time" }, isCurrentUser: { type: "boolean" } },
+		type: "object", additionalProperties: false, required: ["membershipId", "displayName", "email", "role", "status", "joinedAt", "isCurrentUser", "removal"],
+		properties: { membershipId: { type: "string" }, displayName: { type: "string" }, email: { type: "string", format: "email" }, role: { type: "string", enum: Object.values(OrganizationMemberRoles) }, status: { type: "string", enum: Object.values(OrganizationMemberStatuses) }, joinedAt: { type: "string", format: "date-time" }, isCurrentUser: { type: "boolean" }, removal: { $ref: "#/components/schemas/OrganizationMemberRemovalCapability" } },
 	},
 	OrganizationInvitation: {
 		type: "object", additionalProperties: false, required: ["invitationId", "email", "role", "status", "expiresAt", "invitedAt", "invitedByDisplayName"],
@@ -25,10 +32,14 @@ export const _OrganizationMembersOpenapiSchemas = {
 	CreateOrganizationInvitationsResult: { type: "object", additionalProperties: false, required: ["invitations", "createdCount", "inviteLinks"], properties: { invitations: { type: "array", items: { $ref: "#/components/schemas/OrganizationInvitation" } }, createdCount: { type: "integer", minimum: 0 }, inviteLinks: { type: "array", items: { type: "string", format: "uri" } } } },
 	ResendOrganizationInvitationResult: { type: "object", additionalProperties: false, required: ["invitation", "inviteLink"], properties: { invitation: { $ref: "#/components/schemas/OrganizationInvitation" }, inviteLink: { type: "string", format: "uri" } } },
 	AcceptOrganizationInvitationResult: { type: "object", additionalProperties: false, required: ["member"], properties: { member: { $ref: "#/components/schemas/OrganizationMember" } } },
+	RemoveOrganizationMemberResult: { type: "object", additionalProperties: false, required: ["member"], properties: { member: { $ref: "#/components/schemas/OrganizationMember" } } },
 } as const;
 
 /** Authenticated organisation-member paths mounted below `/api/v1`. */
 export const _OrganizationMembersOpenapiPaths = {
+	"/organization/members/{membershipId}/remove": {
+		post: { operationId: "removeOrganizationMember", summary: "Remove another non-Owner member's current access", description: "Standalone retains the suspended membership and records removal atomically. Authorized retries return that state. Self-removal and Owner removal are refused. Fleet removal is unsupported and never falls back to local writes.", tags: ["Organization members"], parameters: [{ name: "membershipId", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 128, pattern: "^\\S+$" } }], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, properties: {} } } } }, responses: { 200: _ok("Removed access or recovered an authorized retry.", { $ref: "#/components/schemas/RemoveOrganizationMemberResult" }), 400: _ErrorResponse, 403: _ErrorResponse, 404: _ErrorResponse, 409: _ErrorResponse, 503: _ErrorResponse } },
+	},
 	"/organization/members": {
 		get: { operationId: "getOrganizationMemberDirectory", summary: "Read the current organization member and invitation directory", tags: ["Organization members"], responses: { 200: _ok("Authoritative directory.", { $ref: "#/components/schemas/OrganizationMemberDirectory" }), 403: _ErrorResponse, 503: _ErrorResponse } },
 	},

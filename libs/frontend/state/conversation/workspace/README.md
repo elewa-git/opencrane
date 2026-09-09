@@ -27,10 +27,15 @@ The store keeps a creation UUID after a failed response so retry opens the same 
 in every mode. A changed member set receives a new command UUID. A successful response clears that command; the next creation receives a new UUID. Creation
 choices stay fixed while the request is in flight and become editable again after failure.
 The package-local creation-command helper compares selections and builds commands; the store owns
-the pending command's lifetime and clears it only after success or an explicit mode change.
+the pending command's lifetime and clears it after success, an explicit mode change or proven access loss.
 
-Current-access loss from the event stream purges the selected history and draft and fences any late
-updates from that connection. The event adapter owns history and computer delivery; the workspace reads metadata when a chat opens,
+Proven access loss from a workspace read, command or event stream erases the conversation list,
+creation directory, selected history, draft and onboarding transcript. It also clears pending creation
+state and rejects older read and command results. Switching between authorized chats preserves an
+in-flight creation: its result can update the list but cannot navigate away from the new selection.
+Replacing a stream releases interrupted command controls without letting their late completions
+change a newer command. The server checks live subscription authority every ten seconds; clearing
+browser state follows that signal or the next denied product request. The event adapter owns history and computer delivery; the workspace reads metadata when a chat opens,
 so newly created children and direct links do not depend on an already-loaded list.
 
 `ConversationGroupChildStore` owns requests made from an existing group message and the editable
@@ -77,8 +82,8 @@ The package also owns the Zod response validators used by its transport adapter.
 
 Opaque participant references are command coordinates, never labels. The state supplies those privacy-safe
 references, a self marker, and server-selected member display names. The directory validator labels
-the signed-in member `You` and preserves other display names; it rejects extra login-subject and email fields. On proven access loss, selected
-history and drafts are cleared before the access-changed state becomes visible.
+the signed-in member `You` and preserves other display names; it rejects extra login-subject and email fields. On proven access loss, retained
+workspace content and drafts are cleared before the access-changed state becomes visible.
 
 The package owns no server authority. It cannot admit a message, start a computer, or decide whether a
 retry is safe. Those decisions stay behind signed-in APIs.

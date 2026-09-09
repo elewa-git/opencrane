@@ -55,6 +55,8 @@ export class ConversationWorkspaceStore
 	private readonly _error = signal<string | null>(null);
 	/** Rejects late snapshot and command adoption after selection changes. */
 	private _generation = 0;
+	/** Fences directory-wide creation results after the caller loses access. */
+	private _accessGeneration = 0;
 	/** Stops the currently selected conversation stream. */
 	private _streamAbort: AbortController | null = null;
 	/** Separate onboarding-history read and selection owner. */
@@ -108,12 +110,12 @@ export class ConversationWorkspaceStore
 	/** Load the privacy-safe creation directory and current conversation list together. */
 	public async load(): Promise<void>
 	{
-		const generation = ++this._generation;
+		const generation = this._AdvanceSelection();
 		this._routeState.set(ConversationWorkspaceRouteStates.Loading);
 		this._error.set(null);
 		try
 		{
-			const [directory, conversations, onboardingHistory] = await Promise.all([this._gateway.directory(), this._gateway.list(), this.history.load()]);
+			const [directory, conversations, onboardingHistory] = await Promise.all([this._gateway.directory().catch(this._LoadFailed.bind(this, generation)), this._gateway.list().catch(this._LoadFailed.bind(this, generation)), this.history.load().catch(this._LoadFailed.bind(this, generation))]);
 			if (generation !== this._generation)
 				return;
 			this.history.adopt(onboardingHistory);
@@ -130,23 +132,26 @@ export class ConversationWorkspaceStore
 			if (generation !== this._generation)
 				return;
 			this._routeState.set(ConversationWorkspaceRouteStates.Unavailable);
-			this._error.set(_Message(error, "OpenCrane could not load conversations."));
+			this._HandleFailure(error, this._directory() !== null);
 		}
+	}
+
+	/** Prioritize each current read's access denial even after another parallel read failed first. */
+	private _LoadFailed(generation: number, error: unknown): never
+	{
+		if (generation === this._generation && error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged)
+			this._HandleFailure(error, this._directory() !== null);
+		throw error;
 	}
 
 	/** Open one authorized snapshot before tailing the same conversation live. */
 	public async open(conversationId: string): Promise<void>
 	{
-		const generation = ++this._generation;
 		const previouslyVisible = this._selected()?.id === conversationId;
-		this._Abort();
-		this.history.clearSelection();
-		this._selected.set(null);
-		this._live.set(__CreateConversationHistoryProjection());
+		this._ClearSelection();
+		const generation = this._generation;
 		this._error.set(null);
 		this._streamStatus.set(ConversationEventStreamStatuses.Connecting);
-		this._reconnectAttempt.set(0);
-		this._manualReconnectPending.set(false);
 		try
 		{
 			const detail = await this._gateway.open(conversationId);
@@ -154,8 +159,6 @@ export class ConversationWorkspaceStore
 				return;
 			this._conversations.update(current => [detail, ...current.filter(candidate => candidate.id !== detail.id)]);
 			this._selected.set(detail);
-			this._draft.set("");
-			this._pendingMessage = null;
 			this._routeState.set(ConversationWorkspaceRouteStates.Ready);
 			this._StartStream(detail.id, generation);
 		}
@@ -170,17 +173,11 @@ export class ConversationWorkspaceStore
 	/** Select the completed onboarding transcript without opening a conversation stream. */
 	public openOnboardingHistory(): void
 	{
-		if (!this.history.select())
+		if (this.history.projection().status !== ConversationOnboardingHistoryStatuses.Ready)
 			return;
-		this._generation += 1;
-		this._Abort();
-		this._selected.set(null);
-		this._live.set(__CreateConversationHistoryProjection());
-		this._draft.set("");
-		this._pendingMessage = null;
+		this._ClearSelection();
+		this.history.select();
 		this._streamStatus.set(null);
-		this._reconnectAttempt.set(0);
-		this._manualReconnectPending.set(false);
 		this._error.set(null);
 	}
 
@@ -222,11 +219,14 @@ export class ConversationWorkspaceStore
 		if (command === null || this._creationState() === ConversationCreationStates.Creating)
 			return null;
 		const generation = this._generation;
+		const accessGeneration = this._accessGeneration;
 		this._creationState.set(ConversationCreationStates.Creating);
 		this._error.set(null);
 		try
 		{
 			const detail = await this._gateway.create(command);
+			if (accessGeneration !== this._accessGeneration)
+				return null;
 			this._pendingCreation = null;
 			this._conversations.update(current => [detail, ...current.filter(candidate => candidate.id !== detail.id)]);
 			this._creationState.set(ConversationCreationStates.Idle);
@@ -236,8 +236,10 @@ export class ConversationWorkspaceStore
 		}
 		catch (error)
 		{
+			if (accessGeneration !== this._accessGeneration)
+				return null;
 			this._creationState.set(ConversationCreationStates.Failed);
-			this._error.set(_Message(error, "OpenCrane could not create this conversation."));
+			this._HandleFailure(error, true);
 			return null;
 		}
 	}
@@ -252,12 +254,7 @@ export class ConversationWorkspaceStore
 		const status = this._streamStatus();
 		if (selected === null || this._manualReconnectPending() || (status !== ConversationEventStreamStatuses.Reconnecting && status !== ConversationEventStreamStatuses.Failed))
 			return;
-		// 1. Fence late events from the failed connection before a replacement can publish its state.
-		const generation = ++this._generation;
-		// 2. Abort the old connection and release an interrupted send; its retained idempotency key makes its retry safe.
-		this._Abort();
-		this._sending.set(false);
-		// 3. Surface the new connection immediately and prevent duplicate button presses until it responds.
+		const generation = this._AdvanceSelection();
 		this._error.set(null);
 		this._streamStatus.set(ConversationEventStreamStatuses.Connecting);
 		this._reconnectAttempt.set(0);
@@ -324,9 +321,9 @@ export class ConversationWorkspaceStore
 		try
 		{
 			const archived = await this._gateway.archive(selected.id, true);
-			this._conversations.update(current => current.map(candidate => candidate.id === archived.id ? archived : candidate));
 			if (generation !== this._generation || this._selected()?.id !== selected.id)
 				return null;
+			this._conversations.update(current => current.map(candidate => candidate.id === archived.id ? archived : candidate));
 			this._ClearSelection();
 			const next = this._conversations().find(candidate => candidate.archivedAt === null);
 			return { conversationId: next?.id ?? null };
@@ -336,7 +333,11 @@ export class ConversationWorkspaceStore
 			if (generation === this._generation)
 				this._HandleFailure(error, true);
 		}
-		finally { this._conversationCommandBusy.set(false); }
+		finally
+		{
+			if (generation === this._generation)
+				this._conversationCommandBusy.set(false);
+		}
 		return null;
 	}
 
@@ -359,7 +360,11 @@ export class ConversationWorkspaceStore
 			if (generation === this._generation)
 				this._HandleFailure(error, true);
 		}
-		finally { this._conversationCommandBusy.set(false); }
+		finally
+		{
+			if (generation === this._generation)
+				this._conversationCommandBusy.set(false);
+		}
 	}
 
 	/** Start one stream scoped to the current selection generation. */
@@ -400,27 +405,28 @@ export class ConversationWorkspaceStore
 	/** Convert one failed read or command into route state and safe copy. */
 	private _HandleFailure(error: unknown, previouslyVisible: boolean): void
 	{
-		if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged && previouslyVisible)
-			{ this._PurgeAccess(); return; }
-		this._error.set(_Message(error, "OpenCrane could not complete that action."));
-		if (!previouslyVisible && error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged)
-			this._routeState.set(ConversationWorkspaceRouteStates.Unavailable);
+		if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged)
+		{
+			this._PurgeAccess();
+			if (!previouslyVisible)
+				this._routeState.set(ConversationWorkspaceRouteStates.Unavailable);
+			return;
+		}
+		this._error.set(error instanceof ConversationWorkspaceGatewayError ? error.message : "OpenCrane could not complete that action.");
 	}
 
-	/** Purge every selected projection after access changes. */
+	/** Erase protected workspace data and fence directory-wide results after access changes. */
 	private _PurgeAccess(): void
 	{
-		this._generation += 1;
-		this._Abort();
+		this._accessGeneration += 1;
+		this._ClearSelection();
 		this._streamStatus.set(ConversationEventStreamStatuses.AccessChanged);
-		this._sending.set(false);
-		this._selected.set(null);
-		this._live.set(__CreateConversationHistoryProjection());
-		this.history.clearSelection();
-		this._draft.set("");
-		this._pendingMessage = null;
-		this._reconnectAttempt.set(0);
-		this._manualReconnectPending.set(false);
+		this._directory.set(null);
+		this._conversations.set([]);
+		this.history.purge();
+		this._pendingCreation = null;
+		this._selectedParticipantRefs.set(new Set());
+		this._creationState.set(ConversationCreationStates.Idle);
 		this._routeState.set(ConversationWorkspaceRouteStates.AccessChanged);
 		this._error.set(null);
 	}
@@ -428,8 +434,7 @@ export class ConversationWorkspaceStore
 	/** Clear one selection without changing route availability. */
 	private _ClearSelection(): void
 	{
-		this._generation += 1;
-		this._Abort();
+		this._AdvanceSelection();
 		this._selected.set(null);
 		this.history.clearSelection();
 		this._live.set(__CreateConversationHistoryProjection());
@@ -437,6 +442,16 @@ export class ConversationWorkspaceStore
 		this._pendingMessage = null;
 		this._reconnectAttempt.set(0);
 		this._manualReconnectPending.set(false);
+	}
+
+	/** Invalidate selected-conversation callbacks and release their commands before another read or stream starts. */
+	private _AdvanceSelection(): number
+	{
+		this._generation += 1;
+		this._Abort();
+		this._sending.set(false);
+		this._conversationCommandBusy.set(false);
+		return this._generation;
 	}
 
 	/** Stop the current stream without changing any retained view state. */
@@ -457,8 +472,9 @@ export class ConversationWorkspaceStore
 	private _PendingMessageCommand(conversationId: string, text: string, mode: ConversationModes): SubmitConversationMessageCommand
 	{
 		const activation = mode === ConversationModes.AgentSession ? "start" : "none";
-		if (this._pendingMessage !== null && _PendingMessageMatches(this._pendingMessage, conversationId, text, activation))
-			return this._pendingMessage;
+		const pending = this._pendingMessage;
+		if (pending !== null && pending.conversationId === conversationId && pending.text === text && pending.activation === activation)
+			return pending;
 		const command: SubmitConversationMessageCommand = { conversationId, idempotencyKey: globalThis.crypto.randomUUID(), text, activation };
 		this._pendingMessage = command;
 		return command;
@@ -479,16 +495,4 @@ export class ConversationWorkspaceStore
 		return this._pendingCreation;
 	}
 
-}
-
-/** Check whether the current composer still exactly matches a command retained for an ambiguous retry. */
-function _PendingMessageMatches(command: SubmitConversationMessageCommand, conversationId: string, text: string, activation: SubmitConversationMessageCommand["activation"]): boolean
-{
-	return command.conversationId === conversationId && command.text === text && command.activation === activation;
-}
-
-/** Reduce an unknown failure to safe existing gateway copy or a fixed fallback. */
-function _Message(error: unknown, fallback: string): string
-{
-	return error instanceof ConversationWorkspaceGatewayError ? error.message : fallback;
 }

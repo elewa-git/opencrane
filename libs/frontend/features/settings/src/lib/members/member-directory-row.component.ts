@@ -13,6 +13,8 @@ export class MemberDirectoryRowComponent
 	public readonly row = input.required<MemberDirectoryRowView>();
 	/** Emits the opaque invitation coordinate when resend is requested. */
 	public readonly resendRequested = output<string>();
+	/** Emits one exact membership coordinate for confirmation and server admission. */
+	public readonly removalRequested = output<string>();
 	/** Shared avatar sizes used by directory rows. */
 	protected readonly avatarSizes = AvatarSizes;
 	/** Shared avatar tones used by accepted and pending rows. */

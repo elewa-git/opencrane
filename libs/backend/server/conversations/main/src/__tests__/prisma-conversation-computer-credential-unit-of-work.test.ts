@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PrismaConversationComputerCredentialRepository, PrismaConversationComputerCredentialUnitOfWork } from "../db/prisma-conversation-computer-credential-issuer";
+import { PrismaConversationComputerCredentialUnitOfWork } from "../db/prisma-conversation-computer-credential-issuer";
+import { PrismaConversationComputerCredentialRepository } from "../computers/turns/credentials/prisma-conversation-computer-credential-repository";
 
 const _NOW = Date.parse("2026-09-07T00:00:00.000Z");
 const _EXPIRES_AT = new Date(_NOW + 300_000).toISOString();

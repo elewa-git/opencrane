@@ -3,6 +3,7 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { OrganizationMembersGatewayError } from "../organization-members.errors";
+import { OrganizationMemberDirectoryStore } from "../organization-member-directory.store";
 import { ORGANIZATION_MEMBERS_GATEWAY } from "../organization-members.gateway";
 import { OrganizationMembersGatewayErrorKinds, type OrganizationMembersGateway } from "../organization-members-gateway.types";
 import { OrganizationInvitationCreateStore } from "../organization-invitation-create.store";
@@ -22,7 +23,7 @@ afterEach(function _ResetAngularTesting(): void
 /** Build a complete gateway mock while each test controls only validation and create. */
 function _Gateway(): OrganizationMembersGateway
 {
-	return { load: vi.fn(), validate: vi.fn(), invite: vi.fn(), resend: vi.fn(), accept: vi.fn() };
+	return { remove: vi.fn(), load: vi.fn().mockResolvedValue({ members: [], invitations: [], activeCount: 0, pendingCount: 0 }), validate: vi.fn(), invite: vi.fn(), resend: vi.fn(), accept: vi.fn() };
 }
 
 describe("organization invitation create store", function _InvitationCreateStoreSuite()
@@ -32,7 +33,7 @@ describe("organization invitation create store", function _InvitationCreateStore
 		const gateway = _Gateway();
 		vi.mocked(gateway.validate).mockResolvedValue({ recipients: [{ email: "A@example.com", normalizedEmail: "a@example.com", valid: true }] });
 		vi.mocked(gateway.invite).mockRejectedValueOnce(new Error("lost response")).mockResolvedValueOnce({ createdCount: 1, inviteLinks: ["https://example.com/invite"], invitations: [{ invitationId: "invite-1", email: "a@example.com", role: OrganizationMemberRoles.Member, status: OrganizationInvitationStatuses.Pending, expiresAt: "2026-09-01T00:00:00.000Z", invitedAt: "2026-08-17T00:00:00.000Z", invitedByDisplayName: "Jente" }] });
-		TestBed.configureTestingModule({ providers: [OrganizationInvitationCreateStore, { provide: ORGANIZATION_MEMBERS_GATEWAY, useValue: gateway }] });
+		TestBed.configureTestingModule({ providers: [OrganizationMemberDirectoryStore, OrganizationInvitationCreateStore, { provide: ORGANIZATION_MEMBERS_GATEWAY, useValue: gateway }] });
 		const store = TestBed.inject(OrganizationInvitationCreateStore);
 		await store.invite(["A@example.com"], OrganizationMemberRoles.Member);
 		await store.invite(["A@example.com"], OrganizationMemberRoles.Member);
@@ -46,7 +47,7 @@ describe("organization invitation create store", function _InvitationCreateStore
 		const gateway = _Gateway();
 		vi.mocked(gateway.validate).mockResolvedValue({ recipients: [{ email: "a@example.com", normalizedEmail: "a@example.com", valid: true }] });
 		vi.mocked(gateway.invite).mockRejectedValue(new OrganizationMembersGatewayError(OrganizationMembersGatewayErrorKinds.PaymentRequired, "payment_required"));
-		TestBed.configureTestingModule({ providers: [OrganizationInvitationCreateStore, { provide: ORGANIZATION_MEMBERS_GATEWAY, useValue: gateway }] });
+		TestBed.configureTestingModule({ providers: [OrganizationMemberDirectoryStore, OrganizationInvitationCreateStore, { provide: ORGANIZATION_MEMBERS_GATEWAY, useValue: gateway }] });
 		const store = TestBed.inject(OrganizationInvitationCreateStore);
 		await store.invite(["a@example.com"], OrganizationMemberRoles.Admin);
 		expect(store.error()).toBe("Your workspace needs an available paid seat before this invitation can be created.");

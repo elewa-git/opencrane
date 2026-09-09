@@ -14,12 +14,19 @@ const _CreateSchema = _RecipientsSchema.extend({ role: z.union([z.literal(Organi
 /** Bounds the bearer token without attempting to interpret its signed contents. */
 const _AcceptSchema = z.object({ token: z.string().min(32).max(2_048) }).strict();
 
+/** Rejects browser-supplied authority fields and requires an explicit empty removal body. */
+const _RemoveSchema = z.object({}).strict();
+
+/** Bounds the opaque membership identity without accepting caller or silo coordinates. */
+const _MembershipIdSchema = z.string().min(1).max(128).regex(/^\S+$/u);
+
 /** Maps stable domain failures to API status without exposing Fleet or database details. */
 function _status(error: OrganizationMembershipError): number
 {
 	switch (error.kind)
 	{
 		case OrganizationMembershipErrorKinds.Forbidden: return 403;
+		case OrganizationMembershipErrorKinds.NotFound: return 404;
 		case OrganizationMembershipErrorKinds.Conflict: return 409;
 		case OrganizationMembershipErrorKinds.IdentityMismatch: return 422;
 		case OrganizationMembershipErrorKinds.Expired: return 410;
@@ -77,11 +84,20 @@ function _handle(handler: RequestHandler): RequestHandler
  * Called by: apps/opencrane/src/app/routes.ts at `/api/v1/organization/members`.
  * @param authority - Startup-selected standalone or Fleet authority.
  * @param resolveCaller - Maps the verified OIDC session and trusted request host.
- * @returns Router serving directory, validation, create, resend, and acceptance.
+	 * @returns Router serving directory, removal, validation, create, resend, and acceptance.
  */
 export function _CreateOrganizationMembersRouter(authority: OrganizationMembershipAuthority, resolveCaller: OrganizationMembershipCallerResolver): Router
 {
 	const router = Router();
+	router.post("/:membershipId/remove", _handle(async function _Remove(request, response)
+	{
+		const caller = resolveCaller(request);
+		if (caller === null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "authenticated organization identity is required");
+		_RemoveSchema.parse(request.body);
+		const membershipId = _MembershipIdSchema.parse(request.params.membershipId);
+		response.json(await authority.remove({ caller, membershipId }));
+	}));
 	router.get("/", _handle(async function _Directory(request, response)
 	{
 		const caller = resolveCaller(request);

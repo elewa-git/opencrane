@@ -1,5 +1,8 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from "@angular/core";
+import { DOCUMENT } from "@angular/common";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, viewChild, type ElementRef } from "@angular/core";
+import { ConfirmationService } from "primeng/api";
 import { ButtonModule } from "primeng/button";
+import { ConfirmDialogModule } from "primeng/confirmdialog";
 import { MessageModule } from "primeng/message";
 import { SkeletonModule } from "primeng/skeleton";
 
@@ -11,36 +14,86 @@ import type { MemberInviteSubmitIntent, MembersViewModel } from "./member-direct
 import { MemberInviteFormComponent } from "./member-invite-form.component";
 import { MemberInviteLinkComponent } from "./member-invite-link.component";
 
-/** Complete presentational members screen with explicit read, refresh, and command states. */
-@Component({ selector: "wo-members-view", standalone: true, imports: [ButtonModule, MessageModule, SkeletonModule, SectionHeadingComponent, MemberDirectoryComponent, MemberInviteFormComponent, MemberInviteLinkComponent], templateUrl: "./members-view.component.html", styleUrl: "./members-view.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+/** Presents directory state and local confirmation; only the route owns commands and data access. */
+@Component({ selector: "wo-members-view", standalone: true, imports: [ButtonModule, ConfirmDialogModule, MessageModule, SkeletonModule, SectionHeadingComponent, MemberDirectoryComponent, MemberInviteFormComponent, MemberInviteLinkComponent], providers: [ConfirmationService], templateUrl: "./members-view.component.html", styleUrl: "./members-view.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class MembersViewComponent
 {
-	/** Pure presentation projection from the route mapper. */
 	public readonly view = input.required<MembersViewModel>();
-	/** Requests the independent directory read store to retry or refresh. */
 	public readonly refreshRequested = output<void>();
-	/** Sends the local form draft to the create store. */
 	public readonly inviteSubmitted = output<MemberInviteSubmitIntent>();
-	/** Requests create-store feedback reset when the form opens. */
 	public readonly inviteReset = output<void>();
-	/** Sends an opaque invitation coordinate to the resend store. */
 	public readonly resendRequested = output<string>();
-	/** Emits controlled search text for pure row mapping. */
+	public readonly removalRequested = output<string>();
 	public readonly searchChanged = output<string>();
-	/** Whether the local draft form is mounted. */
 	protected readonly inviteOpen = signal(false);
-	/** Stable page heading level. */
 	protected readonly headingLevels = SectionHeadingLevels;
-	/** Stable directory states for explicit template branching. */
 	protected readonly directoryStates = OrganizationMemberDirectoryStates;
+	private readonly _confirmation = inject(ConfirmationService);
+	private readonly _document = inject(DOCUMENT);
+	private readonly _target = signal<string | null>(null);
+	private readonly _outcome = viewChild<ElementRef<HTMLElement>>("outcome");
+	/** Reads display text from the current projection, never from unescaped dialog HTML. */
+	protected readonly removalTarget = computed(() => this.view().activeRows.find(row => row.id === this._target()) ?? null);
+	/** Controls disappear as soon as authority denies the directory. */
+	protected readonly accessDenied = computed(() => this.view().directoryState === OrganizationMemberDirectoryStates.Forbidden);
 
-	/** Open a fresh form and clear feedback from the previous draft. */
+	/** Closes private drafts and stale confirmation when the current projection changes. */
+	public constructor()
+	{
+		effect(() =>
+		{
+			if (this.accessDenied())
+				this.inviteOpen.set(false);
+			const target = this.removalTarget();
+			if (this._target() !== null && (this.accessDenied() || !target?.canRemove || target.removing))
+			{
+				this._target.set(null);
+				this._confirmation.close();
+			}
+		});
+		effect(() =>
+		{
+			if (this.view().removalMessage && !this.accessDenied())
+				queueMicrotask(() => { this._outcome()?.nativeElement.focus(); });
+		});
+	}
+
+	/** Opens only a currently offered target; acceptance rechecks that exact projected row. */
+	protected confirmRemoval(membershipId: string): void
+	{
+		const row = this.view().activeRows.find(member => member.id === membershipId);
+		if (this.accessDenied() || !row?.canRemove || row.removing || this._target() !== null)
+			return;
+		const origin = this._document.activeElement;
+		this._target.set(membershipId);
+		this._confirmation.confirm({ key: "member-removal", header: "Remove access", message: "", icon: "pi pi-exclamation-triangle", defaultFocus: "reject", acceptButtonProps: { label: "Remove access", severity: "danger" }, rejectButtonProps: { label: "Cancel", severity: "secondary", outlined: true },
+			accept: () =>
+			{
+				const current = this.removalTarget();
+				if (this._target() !== membershipId || this.accessDenied() || !current?.canRemove || current.removing)
+					return;
+				this._target.set(null);
+				this.removalRequested.emit(membershipId);
+			},
+			reject: () =>
+			{
+				const canReturn = this._target() === membershipId && !this.accessDenied() && this.removalTarget()?.canRemove;
+				this._target.set(null);
+				if (canReturn && origin instanceof HTMLElement && origin.isConnected)
+					origin.focus();
+			}
+		});
+	}
+
+	/** Opens a new local invite draft only while the current directory is not denied. */
 	protected openInvite(): void
 	{
+		if (this.accessDenied())
+			return;
 		this.inviteReset.emit();
 		this.inviteOpen.set(true);
 	}
 
-	/** Close the locally owned form after its store admits no active command. */
+	/** Discards the locally mounted form. */
 	protected closeInvite(): void { this.inviteOpen.set(false); }
 }
