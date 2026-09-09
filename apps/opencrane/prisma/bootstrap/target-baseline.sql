@@ -218,7 +218,7 @@ CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running'
 CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
 
 -- CreateEnum
-CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
+CREATE TYPE "WorkloadKind" AS ENUM ('pod', 'job', 'deployment');
 
 -- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
@@ -3375,6 +3375,7 @@ DECLARE
     transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
     requested_lease INTERVAL;
     terminal_workload "McpExecutorWorkloadState";
+    bounded_invocation "tool_invocations"%ROWTYPE;
 BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'McpRuntimeExecution rows cannot be deleted';
@@ -3481,6 +3482,25 @@ BEGIN
                 RAISE EXCEPTION 'McpRuntimeExecution companion claim requires its registered Pod and bounded lease proposal';
             END IF;
             NEW."companion_claim_expires_at" := transition_time + requested_lease;
+            IF NEW."kind" = 'invocation' THEN
+                SELECT * INTO bounded_invocation FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id";
+                IF NOT FOUND THEN
+                    RAISE EXCEPTION 'McpRuntimeExecution companion claim requires its saved invocation';
+                END IF;
+                IF bounded_invocation."run_id" IS NOT NULL THEN
+                    IF bounded_invocation."silo_id" IS DISTINCT FROM NEW."silo_id"
+                        OR bounded_invocation."state" <> 'claimed' OR bounded_invocation."claim_kind" IS DISTINCT FROM 'dispatch'
+                        OR bounded_invocation."claim_fence" IS DISTINCT FROM NEW."tool_invocation_claim_fence"
+                        OR bounded_invocation."revision" IS DISTINCT FROM NEW."tool_invocation_claim_revision"
+                        OR bounded_invocation."claim_expires_at" IS NULL THEN
+                        RAISE EXCEPTION 'McpRuntimeExecution companion claim requires the exact run-owned invocation fence';
+                    END IF;
+                    NEW."companion_claim_expires_at" := LEAST(NEW."companion_claim_expires_at", bounded_invocation."claim_expires_at");
+                    IF NEW."companion_claim_expires_at" <= transition_time THEN
+                        RAISE EXCEPTION 'McpRuntimeExecution companion claim cannot outlive its run authority';
+                    END IF;
+                END IF;
+            END IF;
         ELSIF OLD."kind" = 'discovery' AND OLD."command_state" = 'claimed' AND NEW."command_state" = 'pending'
             AND OLD."workload_state" = 'registered' AND NEW."workload_state" = 'registered'
             AND OLD."companion_claim_expires_at" IS NOT NULL AND OLD."companion_claim_expires_at" <= transition_time

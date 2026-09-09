@@ -1,8 +1,44 @@
 import type { AuthorizationBoundary, ProductAuthorizationActions, ProductAuthorizationCommand, ProductAuthorizationResourceLocator, ProductAuthorizationResult } from "@opencrane/models/authorization";
+import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit-writer";
 import type { ManagedAuthorizationGrantSpec } from "./managed-authorization-grants.types";
 
 /** Actor classes written into durable authorization evidence. */
 export type ProductAuthorizationActorKind = "user" | "agent-service" | "workload" | "system";
+
+/**
+ * Identifies the actual authenticated Pod and its verified workload object for an effect decision.
+ * The transport owner supplies these coordinates after TokenReview and exact workload binding;
+ * request bodies cannot choose them. The authorization Principal remains a separate coordinate.
+ * Called by: conversation proposal admission and the MCP executor claim owner.
+ */
+export interface ProductAuthorizationWorkloadContext
+{
+	/** Names the fixed audience accepted by the workload's TokenReview. */
+	readonly audience: string;
+	/** Names the namespace verified for this Pod. */
+	readonly namespace: string;
+	/** Names the projected ServiceAccount verified for this Pod. */
+	readonly serviceAccountName: string;
+	/** Describes the verified workload object; Sandbox-owned computers identify their actual Pod. */
+	readonly workloadKind: NonNullable<AuditDecisionRecord["workloadKind"]>;
+	/** Identifies that workload object by its immutable Kubernetes UID. */
+	readonly workloadUid: string;
+	/** Identifies the authenticated Pod that requested the effect. */
+	readonly podUid: string;
+}
+
+/** Binds an effect decision to the run and revision read by its server-side admission owner. */
+export interface ProductAuthorizationRunContext
+{
+	/** Identifies the saved run whose authority is being checked. */
+	readonly runId: string;
+	/** Names the positive attempt read with the run. */
+	readonly attempt: number;
+	/** Identifies the run's owning agent service. */
+	readonly agentServiceId: string;
+	/** Identifies the immutable agent revision used by that run. */
+	readonly agentRevisionId: string;
+}
 
 /** One product action that must commit durable authorization evidence. */
 export interface AdmitProductAuthorizationCommand extends ProductAuthorizationCommand
@@ -13,6 +49,10 @@ export interface AdmitProductAuthorizationCommand extends ProductAuthorizationCo
 	readonly actorId: string;
 	/** Digest of canonical action arguments, including an empty object for argument-free actions. */
 	readonly argumentsDigest: `sha256:${string}`;
+	/** Required for workload actors and rejected for other actors; actorId must equal this Pod UID. */
+	readonly workload?: ProductAuthorizationWorkloadContext;
+	/** Contains run coordinates loaded by the admission owner, when this decision belongs to a run. */
+	readonly run?: ProductAuthorizationRunContext;
 	/** Accepted membership revision when membership contributed to this decision. */
 	readonly membershipRevision?: number;
 }

@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { _PackageCacheDir } from "../../../../../vitest.cache";
 
-/** Resolves the repository root so this config can collect the conversations proofs as well. */
+/** Resolve the repository root for the shared TypeScript aliases. */
 const _REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../..");
 
 /**
@@ -20,7 +20,7 @@ export default defineConfig({
 	test: {
 		environment: "node",
 		dir: _REPO_ROOT,
-		include: ["libs/backend/server/infra/history-store/src/__tests__/**/*.integration.ts", "libs/backend/server/conversations/main/src/__tests__/**/*.integration.ts"],
+		include: ["libs/backend/server/infra/history-store/src/__tests__/**/*.integration.ts"],
 		passWithNoTests: true,
 		fileParallelism: false,
 		testTimeout: 60_000,

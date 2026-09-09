@@ -156,48 +156,44 @@ dataset, and a conflicting correction must fail closed.
 
 ## Outbound and return boundaries
 
-The conversation computer uses bounded bootstrap and output calls to OpenCrane, not direct access to
-people, external integration providers, child agents or durable storage. The separately fenced
-model-provider call is shown as its own boundary. Each outgoing path reaches a different server
-authority, and only an accepted, saved result may return to the same active attempt.
+The conversation-computer reads bootstrap status and requests the next server-owned model step.
+It receives no compiled prompt or model key and has no direct LiteLLM network path. The server
+reserves each request within the original run limits and retains accepted content privately.
 
 ```text
-                                model provider
-                                  ▲       │
-        attempt-scoped LiteLLM request    │ model output
-                                  │       ▼
-                           conversation-computer Pod
-                                        │
-      ┌──────────────┬──────────────────┼─────────────────┬────────────────┐
-      │              │                  │                 │                │
-      ▼              ▼                  ▼                 ▼                ▼
- elicitation    external-action    artifact output   parent delivery  terminal report
- proposal       candidate          bytes + ticket    bounded status   complete / fail
-      │              │                  │                 │                │
-      ▼              ▼                  ▼                 ▼                ▼
- exact person   server worker      ArtifactStore +   parent thread    run authority
- + purpose      + approval         quarantine scan   authority        fences attempt
-      │              │                  │                 │                │
-      ▼              ▼                  ▼                 ▼                ├──► durable outcome
- saved result   OCI MCP executor   verified receipt  saved display-   ├──► release / cleanup
-      │         or fail-closed      + ready/failed    safe delivery    └──► ordered event
-      │         memory/sandbox      state
-      │              │
-      └──────┬───────┘
-             ▼
-       saved resume_attempt ───────────────────────────────► same active Job
-
- server-side authorities ───────► durable audit evidence where instrumented
- processes ─────────────────────► redacted logs and optional OTLP traces
-                                  (operational output; no return into context)
+conversation-computer Pod
+      │ bootstrapId only                 ▲ outcome only
+      ▼                                  │
+OpenCrane server ─────────────────────────┘
+      │ saved reservation before each dispatch
+      ├──► LiteLLM ──► selected provider
+      │       │ text or one permitted tool declaration
+      │       ▼
+      ├──► encrypted declaration → authorised tool → encrypted result pair
+      │       └──► final reserved text request, same key and remaining allowance
+      └──► encrypted answer + saved event ──► conversation history
 ```
 
 ### Model provider
 
-✅ The control plane dispatches immutable compiled input and an attempt-scoped LiteLLM credential.
-The runtime uses that credential to call the selected model and returns neutral protocol events over
-its authenticated stream. The model provider does not receive OpenCrane database authority, and its
-output does not bypass the run and event authorities.
+The text checkpoint keeps the admitted gateway request on the server and has passed full CI.
+The continuation implementation may select one frozen tool requiring no approval, then use the exact
+terminal result for a final text-only request. The original assistant declaration and result are
+stored as encrypted content, and the second reservation must commit before delivery is acknowledged.
+No intermediate participant entry changes the original compiled conversation head. Both requests
+use the same key; the second deducts the entire first token reservation from the original allowance.
+
+Bootstrap cannot create a fresh allowance after reservation. A saved answer recovers through its
+original event, and a saved declaration may resume tool admission without repeating its model call.
+An uncertain model response stays pending, then unavailable, without paid redispatch. The run remains
+pending for future recovery controls. LiteLLM and provider-internal retries have not been qualified
+as exactly-once execution.
+
+The continuation implementation in PR #830 awaits CI and live qualification.
+Neither replacement is installed on testv5. A permitted integration fixture, company tool support,
+approvals and visible recovery remain outstanding. The authorities below are separate governance
+primitives; this continuation does not enable personal memory, direct provider access or delegation.
+See [development status](/guide/status).
 
 ### Participant elicitation
 

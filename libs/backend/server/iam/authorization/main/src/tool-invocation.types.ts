@@ -271,61 +271,21 @@ export interface ToolInvocationLifecycleEventSink
 	 * @param event - Event to append; carries no arguments and no provider response.
 	 * @returns True when the event was written. False means the run rejected it (wrong attempt or a
 	 *   run state that does not accept this kind), and the caller MUST abort the whole transition —
-	 *   ./prisma-tool-invocation-unit-of-work.ts throws so the transaction rolls back.
+	 *   the MCP participant throws so its caller-owned transaction rolls back.
 	 */
 	appendInTransaction(transaction: unknown, event: ToolInvocationLifecycleEvent): Promise<boolean>;
 }
 
-/** Public UnitOfWork operations for one ToolInvocation-owned external-action lifecycle. */
-interface ToolInvocationOperations
-{
-	/** Load one invocation from its accepted candidate coordinates. */
-	findByCandidate(runId: string, attempt: number, candidateId: string): Promise<ToolInvocationRecord | null>;
-	/** Return one invocation the worker may act on now, or null; only the run's current attempt qualifies. */
-	findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>;
-	/** Record provider-free preparation success under the observed lifecycle revision. */
-	markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>;
-	/** Consume one failed preparation attempt and append its canonical failure event atomically. */
-	recordPreparationFailure(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>;
-	/** Take a claim on the next provider operation, or return the stored row when another worker claimed it first. */
-	claim(invocationId: string, kind: ExternalActionClaimKinds, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>;
-	/** Complete success, delivery intent, and its canonical lifecycle event atomically. */
-	completeSucceeded(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>;
-	/** Complete failure, delivery intent, and its canonical lifecycle event atomically. */
-	completeFailed(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>;
-	/** Apply ambiguous recovery policy and append its canonical lifecycle event atomically. */
-	completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>;
-	/** Release an exact claim after a pre-dispatch failure proved that no provider request started. */
-	releaseClaimBeforeDispatch(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>;
-	/** Apply frozen recovery policy to one expired provider claim without repeating its effect. */
-	recoverExpiredClaim(invocationId: string, now: Date): Promise<ToolInvocationRecord | null>;
-}
-
-/**
- * The public way to move one tool call along; each method is its own transaction.
- *
- * Callers hold no transaction and never see Prisma. One call = one serializable transaction that
- * changes the invocation, writes its result delivery if there is one, and appends its timeline
- * event, so a partially applied transition cannot be observed. Methods that can lose a race
- * return the durable row that won instead of throwing, and the caller must accept that row rather
- * than retry its own intent.
- *
- * Called by: the external-action worker as its `invocations` dependency; composed in
- * apps/opencrane/src/app/external-action-composition.ts.
- * Implemented by: ./prisma-tool-invocation-unit-of-work.ts.
- */
-export interface ToolInvocationUnitOfWork extends ToolInvocationOperations {}
-
 /**
  * Every database write for one tool call, all bound to a single open transaction.
  *
- * Only {@link ToolInvocationUnitOfWork} may build one of these, because each method assumes it is
- * already inside a serializable transaction and enforces its own optimistic check (expected
+ * The MCP runtime binds this repository to its serializable transaction. Each method enforces
+ * its own optimistic check (expected
  * `revision`, or an exact claim `fence`) in the WHERE clause. Every method here asks the pure
  * planner first and refuses to write a transition the planner did not choose.
  *
  * Implemented by: ./prisma-tool-invocation-repository.ts (`PrismaToolInvocationRepository`).
- * @see {@link ToolInvocationUnitOfWork} for the process-level entry point callers actually use.
+ * @see McpToolInvocationTransactionParticipant for current dispatch and completion orchestration.
  */
 export interface ToolInvocationTransactionRepository
 {
@@ -335,8 +295,6 @@ export interface ToolInvocationTransactionRepository
 	findById(invocationId: string): Promise<ToolInvocationRecord | null>;
 	/** Load one invocation from its accepted candidate coordinates. */
 	findByCandidate(runId: string, attempt: number, candidateId: string): Promise<ToolInvocationRecord | null>;
-	/** Return one invocation the worker may act on now, or null; only the run's current attempt qualifies. */
-	findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>;
 	/** Record provider-free preparation success under the observed lifecycle revision. */
 	markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>;
 	/** Consume one failed provider-free preparation attempt. */

@@ -36,12 +36,12 @@ exact claimed Pod + ServiceAccount + namespace
        │  projected token
        ▼
 Kubernetes TokenReview
-       │  one-use bootstrap
+       │  bootstrap or model-step request
        ▼
 computer id + lease generation + Pod UID rechecked
 ```
 
-The conversation computer initiates bootstrap and output calls. OpenCrane checks the exact
+The conversation computer initiates bootstrap and model-step calls. OpenCrane checks the exact
 projected-token audience and Kubernetes subject, resolves the claim to the Pod, then compares the
 computer id, lease id, generation, AgentIdentity and current membership with durable authority. A
 valid token from another workload does not inherit the lease.
@@ -52,10 +52,17 @@ valid token from another workload does not inherit the lease.
 |---|---|---|
 | OIDC session cookie | Browser | Public UI and API calls |
 | Controller projected token | Agent controller | Claim and report authorised workload assignments |
-| Computer projected token | One claimed conversation-computer Pod | Bootstrap one frozen turn and submit its output |
-| Attempt-scoped model key | One computer turn | Reach the allowed model alias within its budget |
+| Computer projected token | One claimed conversation-computer Pod | Read bootstrap status and request its server-owned model step |
+| Attempt-scoped model key | OpenCrane server, bound to one computer turn | Reach the allowed model alias within the original attempt budget and actual key expiry |
 
 Provider master keys, tool credentials and durable artifact credentials never enter the runtime.
+The server model-step path also keeps the LiteLLM attempt key and compiled prompt out of the
+conversation Pod. The Pod receives status, and the server owns tool selection and answer admission.
+The continuation implementation reuses the first key only when its saved digest, expiry and current
+authority still match. It cannot replace expired, missing or uncertain custody; cleanup retains a
+non-secret spent marker. Each model request remains within 25 seconds and the current key/authority
+window. The text checkpoint has passed full CI, while the continuation implementation in PR #830
+awaits CI and live qualification. Neither replacement has been deployed on testv5. See [development status](/guide/status).
 
 ::: warning
 Do not use a Kubernetes token as evidence that a run is allowed. It proves workload identity;

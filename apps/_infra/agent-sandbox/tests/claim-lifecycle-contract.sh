@@ -105,7 +105,38 @@ if (args.includes('auth')) {
   assert(script.includes('socket.create_connection'));
   assert(args.includes('smoke-litellm.smoke.svc.cluster.local'));
   assert(args.includes('4100'));
-  if (scenario === 'dns-unreachable' || scenario === 'model-unreachable') process.exit(1);
+  const simulation = `
+import os
+import socket
+from contextlib import nullcontext
+
+os.environ["OPENCRANE_INTERNAL_ENDPOINT"] = "http://smoke-opencrane-server.smoke.svc.cluster.local:8081"
+
+def resolve(host, port, **kwargs):
+    if os.environ["FIXTURE_SCENARIO"] == "dns-unreachable":
+        raise OSError("The DNS request failed")
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (host, port))]
+
+def connect(address, **kwargs):
+    if address[1] == 8081:
+        if os.environ["FIXTURE_SCENARIO"] == "server-unreachable":
+            raise TimeoutError("The private server connection timed out")
+        return nullcontext()
+    if os.environ["FIXTURE_SCENARIO"] == "model-reachable":
+        return nullcontext()
+    if os.environ["FIXTURE_SCENARIO"] == "model-refused":
+        raise ConnectionRefusedError("No model service was listening")
+    raise TimeoutError("The model connection was denied")
+
+socket.getaddrinfo = resolve
+socket.create_connection = connect
+`;
+  const probe = require('node:child_process').spawnSync('python3', ['-', 'smoke-litellm.smoke.svc.cluster.local', '4100'], {
+    input: simulation + script, encoding: 'utf8', env: process.env
+  });
+  process.stdout.write(probe.stdout ?? '');
+  process.stderr.write(probe.stderr ?? '');
+  process.exit(probe.status ?? 1);
 } else if (args.includes('delete')) {
   assert(args.includes('--as'));
   assert.equal(args[args.indexOf('--raw') + 1], `/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/smoke/sandboxclaims/${names.claim}`);
@@ -137,7 +168,7 @@ grep -Fq 'wait --for=delete sandbox/computer-controller-proof-g1 pod/computer-co
 grep -Fq 'wait --for=delete service/controller-proof-service' "$FIXTURE_DIR/calls"
 [[ "$(grep -c ' delete --raw ' "$FIXTURE_DIR/calls")" == 1 ]]
 
-for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable model-unreachable upstream-policy missing-pod cleanup-blocked existing server-pod-read-denied; do
+for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable server-unreachable model-reachable model-refused upstream-policy missing-pod cleanup-blocked existing server-pod-read-denied; do
   : > "$FIXTURE_DIR/calls"
   rm -f "$FIXTURE_DIR/deleted"
   if PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO="$scenario" bash "$SMOKE" k3d-contract smoke smoke 1 > "$FIXTURE_DIR/$scenario.log" 2>&1; then

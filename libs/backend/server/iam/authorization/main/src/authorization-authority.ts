@@ -85,6 +85,7 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 	/** @inheritdoc */
 	async admit(command: AdmitProductAuthorizationCommand): Promise<AdmitProductAuthorizationResult>
 	{
+		_AssertAdmissionContext(command);
 		const decision = await this.decide(command);
 		if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
 		{
@@ -108,6 +109,7 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 	/** @inheritdoc */
 	async admitPrincipal(command: AdmitPrincipalProductAuthorizationCommand): Promise<AdmitProductAuthorizationResult>
 	{
+		_AssertAdmissionContext(command);
 		const allowed = await this._DecidePrincipal(command);
 		if (allowed !== null)
 		{
@@ -123,6 +125,8 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 	/** @inheritdoc */
 	async admitPrincipalBatch(commands: readonly AdmitPrincipalProductAuthorizationCommand[]): Promise<readonly AdmitProductAuthorizationResult[]>
 	{
+		for (const command of commands)
+			_AssertAdmissionContext(command);
 		// 1. Decide the complete set before writing, so a denied coordinate cannot leave partial evidence.
 		const allowed: AllowedPrincipalAdmission[] = [];
 		for (const command of commands)
@@ -297,7 +301,7 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 		const policyRevisionHash = __ProductAuthorizationCapability(command.resource.kind, command.action)?.catalog.digest;
 		if (policyRevisionHash === undefined)
 			throw new Error("authorization admission lost its catalogue capability");
-		const decisionDigest = ___DigestCanonicalJson({ siloId: command.siloId, principalId: command.principalId, actorKind: command.actorKind, actorId: command.actorId, boundary: command.boundary, requiredBoundaryCoverage: command.requiredBoundaryCoverage ?? null, resource: command.resource, action: command.action, argumentsDigest: command.argumentsDigest, policyRevisionHash, effectiveAuthorizationDigest, grantIds: [...decision.grantIds].sort(), outcome: decision.outcome, reason: decision.reason, nowEpochMs: command.nowEpochMs } as unknown as JsonValue);
+		const decisionDigest = ___DigestCanonicalJson({ siloId: command.siloId, principalId: command.principalId, actorKind: command.actorKind, actorId: command.actorId, workload: command.workload ?? null, run: command.run ?? null, boundary: command.boundary, requiredBoundaryCoverage: command.requiredBoundaryCoverage ?? null, resource: command.resource, action: command.action, argumentsDigest: command.argumentsDigest, policyRevisionHash, effectiveAuthorizationDigest, grantIds: [...decision.grantIds].sort(), outcome: decision.outcome, reason: decision.reason, nowEpochMs: command.nowEpochMs } as unknown as JsonValue);
 		return { ...decision, evidence: { decisionDigest, policyRevisionHash, effectiveAuthorizationDigest } };
 	}
 
@@ -336,4 +340,25 @@ function _NormalizeRetiringResources(resources: readonly ProductAuthorizationRes
 		const kind = left.kind.localeCompare(right.kind);
 		return kind === 0 ? left.id.localeCompare(right.id) : kind;
 	});
+}
+
+/** Refuse incomplete physical actor evidence before reading grants or writing any admission. */
+function _AssertAdmissionContext(command: AdmitPrincipalProductAuthorizationCommand): void
+{
+	const workload = command.workload;
+	if (command.actorKind === "workload")
+	{
+		if (workload === undefined || workload === null
+			|| ![workload.audience, workload.namespace, workload.serviceAccountName, workload.workloadUid, workload.podUid].every(value => typeof value === "string" && value.trim().length > 0)
+			|| !["pod", "job", "deployment"].includes(workload.workloadKind)
+			|| command.actorId !== workload.podUid
+			|| (workload.workloadKind === "pod" && workload.workloadUid !== workload.podUid))
+			throw new Error("authorization workload admission requires its complete verified Pod identity");
+	}
+	else if (workload !== undefined)
+		throw new Error("authorization workload context requires a workload actor");
+	const run = command.run;
+	if (run !== undefined && (run === null || !Number.isSafeInteger(run.attempt) || run.attempt < 1
+		|| ![run.runId, run.agentServiceId, run.agentRevisionId].every(value => typeof value === "string" && value.trim().length > 0)))
+		throw new Error("authorization run context requires its complete saved run coordinates");
 }

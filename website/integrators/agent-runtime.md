@@ -3,9 +3,11 @@
 OpenCrane gives each Agent chat one logical **ConversationComputer**. Its durable state lives in
 KurrentDB; a Kubernetes Pod is only the temporary machine that realises one active lease.
 
-The 0.11 review baseline implements bounded personal model turns with approved persona instructions,
-computer inspection, activation recovery and workspace checkpoint/restore. The model loop does not yet invoke governed tools;
-managed-agent execution and group `@agent` child conversations remain unfinished. See
+The 0.11 review baseline implements personal and explicit company-child text turns, computer
+inspection, activation recovery and workspace checkpoint/restore. The server owns model requests and
+answer storage. The continuation implementation also connects one tool requiring no approval to a final
+answer, while its qualification, visible progress and recovery controls remain outstanding.
+Managed-agent scheduling and autonomous delegation remain unfinished. See
 [development status](/guide/status) for implementation and live-qualification boundaries.
 
 > See also: [Central authorization authority](/integrators/authorization-authority) (product action
@@ -25,29 +27,47 @@ Agent Sandbox SandboxClaim
       │ projected Pod token
       ▼
 conversation-computer
-      │ bounded bootstrap + LiteLLM call
+      │ private bootstrap status + model-step request
+      ▼
+OpenCrane server
+      │ reserve request → LiteLLM → retain response or tool result
       ▼
 assistant entry appended through the bound writer
 ```
 
 The server validates the activation command against the conversation stream and logical computer
 history before it creates or observes an Agent Sandbox claim. The claimed Pod exchanges its
-projected service-account token for a bounded bootstrap. The bootstrap fixes the silo,
-conversation, computer id, generation, lease, AgentIdentity and model route; the Pod cannot select
-different authority coordinates.
+projected service-account token for bootstrap status. The server fixes the silo, conversation,
+computer id, generation, lease, AgentIdentity and model route; the Pod receives only `bootstrapId`
+and `ready`, `pending` or `response_unavailable`. A ready Pod sends exactly `{bootstrapId}` to the
+private `/api/internal/conversation-computer/model-step` route; the server selects the next step.
+The Pod cannot submit ordinals, tool proposals or output, and receives no prompt or model key.
 
 ## Authority boundaries
 
 | Component | Owns | Does not own |
 |---|---|---|
-| OpenCrane server | immutable entries, private payloads, activation admission, computer history and lease fencing | model execution or Kubernetes reconciliation |
+| OpenCrane server | immutable entries, private payloads, activation admission, model request and output, computer history and lease fencing | provider-internal execution or Kubernetes reconciliation |
 | Agent Sandbox | claim-to-Pod reconciliation for the selected template and pool | users, conversations, grants or model policy |
-| Conversation computer | one bounded model turn and output proposal | durable history, credentials, policy or a second conversation |
+| Conversation computer | model-step request, status polling and workspace review | durable history, model credentials, output admission, policy or a second conversation |
 
 The computer has no database credentials or Kubernetes mutation rights. Its private gateway is
 reachable through the server's authorised review proxy, not public ingress. Its scratch workspace
-can be checkpointed before cooling and restored when a later generation starts. Model work calls
-the bootstrap-provided OpenCrane and LiteLLM routes; every output append rechecks the active lease.
+can be checkpointed before cooling and restored when a later generation starts. Model work calls the
+private OpenCrane server; NetworkPolicy denies direct LiteLLM access. New output appends recheck the
+active lease, while retries recognise an already accepted, identical event.
+
+The server reserves each request within the original run's call, token and authority limits before
+dispatch. The first may select one frozen tool requiring no approval. Its original declaration enters
+encrypted custody before private selection and tool admission. After current IAM checks release the
+exact terminal result, the server encrypts the paired messages and reserves a final request before
+acknowledging delivery. That request offers no tools, reuses the saved key receipt and deducts the
+entire first token reservation. No intermediate tool entry changes the participant conversation head.
+
+Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`. An uncertain
+response keeps its reservation, with no paid redispatch on restart. Expired or missing key custody
+cannot create a fresh allowance. LiteLLM and provider-internal retries have not been qualified as
+exactly-once execution.
 
 ## Review surface
 
@@ -66,12 +86,12 @@ What a participant can do in 0.11:
 |---|---|---|
 | files, diff | `Read` | one workspace file (1 MiB ceiling) or a `git diff` of one path |
 | browser version, targets | `Read` | headless Chromium metadata and its open preview targets |
-| browser pages, screenshots | `Use` | opens or renders one allow-listed `127.0.0.1` preview port as a bounded PNG |
-| previews | `Use` | GET-only proxy to the same allow-listed localhost ports |
-| commands | `Use` | one argv-only command from the release allowlist (`git`, `node`, `npm`, `npx`, `python3`); no shell |
+| browser pages, screenshots | `Use` | denied pending concrete effect admission; the gateway can open or render an allow-listed localhost preview |
+| previews | `Use` | denied pending concrete effect admission; the gateway supports a GET-only localhost proxy |
+| commands | `Use` | denied pending concrete effect admission; the gateway supports bounded argv commands |
 
-Every participant with `Use` on the conversation gets every surface above; 0.11 has no
-per-participant surface selection. Not in 0.11: an interactive browser or desktop view, noVNC, a
+Current `Read` checks protect file, diff and browser discovery. The effect routes above remain
+closed until their arguments are bound to recorded admission. Not in 0.11: an interactive browser or desktop view, noVNC, a
 terminal, artifact routes, and durable CodeProject, Git, build or PreviewApp publication. Review gives a participant a fenced view of that computer; it never grants a product action or publishes an application.
 
 ## Recovery and qualification
@@ -80,8 +100,18 @@ Activation delivery supports competing consumers, reconnect backoff and parked-m
 Lease renewal and loss handling prevent replaced compute from retaining authority. Checkpoint and
 restore code preserves workspace bytes while conversation history remains in KurrentDB.
 
-These paths are implemented in the review baseline. The secure live installation, complete human
-review journey and KurrentDB backup/restore drill remain qualification work. Follow the
+The current text path also saves the exact prepared answer before history append. A restarted
+server finishes that saved event and run bookkeeping before admitting another turn. A reservation
+without a saved answer becomes `response_unavailable` after its fixed deadline and leaves the run
+pending. The worker remains degraded without resubmitting that model step; user-facing recovery
+controls are still planned.
+
+Text checkpoint `378a755b6` has passed full CI, including seven conversation and 17 adapter cases
+against real KurrentDB and all seven fresh PostgreSQL targets. The later continuation implementation
+in PR #830 awaits CI and live qualification. Neither replacement is installed on testv5, and a
+permitted integration fixture is still needed. Company tools, approvals and visible
+recovery remain unfinished. The completed file-copy restore and remaining snapshot-restore drill
+are recorded in [development status](/guide/status). Follow the
 [operator runbook](/operators/runbook) for those procedures and the
 [architecture map](/advanced/architecture) for the store and controller owners.
 

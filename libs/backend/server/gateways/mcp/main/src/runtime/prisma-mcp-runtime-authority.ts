@@ -143,7 +143,8 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority, McpTaskW
 							workflowExhaustion: new PrismaMcpTaskWorkflowExhaustionRepository(transaction, toolInvocations),
 						};
 
-						// 2. Keep only database work in this callback; routers and controllers perform network I/O after commit.
+						// 2. Run dispatch also reads current identity and lease history within this bounded transaction.
+						// Provider execution starts only after commit; these reads do not lock the Kurrent streams.
 						return work(repositories);
 					}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 				}

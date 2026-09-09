@@ -11,8 +11,8 @@ the image from a release-owned profile after OpenCrane admits a generation-bound
  KurrentDB lease event ──► SandboxClaim ──► conversation-computer ◄── HERE
                                                   │
                                                   ├── Pod-bound bootstrap
-                                                  ├── one admitted LiteLLM call
-                                                  ├── safe output append
+                                                  ├── server model-step request
+                                                  ├── turn outcome polling
                                                   └── lease-local review gateway
 ```
 
@@ -21,11 +21,20 @@ the image from a release-owned profile after OpenCrane admits a generation-bound
 
 The process refuses readiness unless it receives the computer id, lease id, computer generation and
 private server endpoint. It re-reads a short-lived, audience-bound projected token for every exchange.
-The server returns immutable compiled input and an attempt-scoped LiteLLM route only after binding the
-Pod to the current lease. The process checks that the compiled budget admits its single model call
-and sends the compiled persona and context instructions as a system message before the conversation
-history. It sends LiteLLM the lower of the frozen per-response and total-token ceilings. Output returns
-through the server-owned conversation writer.
+After binding the Pod to the current lease, the server returns a bootstrap id and its outcome. The
+process sends exactly `{bootstrapId}` to the private model-step route when that outcome is `ready`.
+The server chooses the next step from saved progress. It owns the compiled input, model credential,
+original call and token budgets, tool selection, result continuation and conversation output. The Pod
+receives none of those inputs or credentials and has no direct tool-proposal or output route.
+
+Pending work polls bootstrap at the normal two-second cadence. A `response_unavailable` or
+`authority_ended` model outcome keeps readiness degraded while the process polls for recovery; it
+does not resubmit that bootstrap's model step. Bootstrap also preserves `response_unavailable` after
+a process restart. Private HTTP requests allow 30 seconds, covering the server's 25-second model
+dispatch deadline. The server may use one permitted tool result for a second, text-only request;
+the worker neither chooses that request nor acquires a fresh model allowance. This continuation is
+implemented in PR #830 and awaits CI and live qualification. Visible tool progress,
+approvals and recovery controls remain separate product work.
 
 ## Public surface
 

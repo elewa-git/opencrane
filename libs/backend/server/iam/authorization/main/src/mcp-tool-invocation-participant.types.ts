@@ -1,6 +1,23 @@
 import type { JsonValue } from "@opencrane/util";
 
+import type { ProductAuthorizationWorkloadContext } from "./authorization-authority.types";
 import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationRecord, ToolInvocationTransitionResult } from "./tool-invocation.types";
+
+/**
+ * Rechecks a run's current authority before the MCP participant claims provider dispatch.
+ *
+ * PostgreSQL decisions share the claim transaction. History checks observe the current lease and
+ * identity separately; they do not make revocation atomic across PostgreSQL and KurrentDB.
+ * A known denial returns null. An allowance returns its absolute expiry in epoch milliseconds.
+ * An unavailable dependency throws so the transaction can retry
+ * without recording a policy denial or starting the provider request.
+ * Called by: PrismaMcpToolInvocationParticipantUnitOfWork.claim.
+ */
+export interface RunToolInvocationDispatchAuthority
+{
+	/** Admit the saved run-owned invocation and preserve its earliest original/current authority deadline. */
+	admitUntilInTransaction(transaction: unknown, invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<number | null>;
+}
 
 /**
  * Moves an MCP tool call while another package owns the open database transaction.
@@ -19,7 +36,7 @@ export interface McpToolInvocationTransactionParticipant
 	/** Return the saved invocation without copying its arguments into MCP-owned storage. */
 	findById(invocationId: string): Promise<ToolInvocationRecord | null>;
 	/** Claim the provider dispatch and return the fence that the MCP command must save atomically. */
-	claim(invocationId: string, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>;
+	claim(invocationId: string, now: Date, leaseMilliseconds: number, workload: ProductAuthorizationWorkloadContext): Promise<ToolInvocationClaimResult>;
 	/** Return the failed invocation when its Ready revision closes unused; return unchanged state when the revision lost. */
 	completeUnusedBeforeDispatch(invocationId: string, expectedRevision: number, failureCode: string, now: Date): Promise<ToolInvocationTransitionResult>;
 	/** Save a checked result and update either its MCP task or its AgentRun delivery and event. */
@@ -70,4 +87,11 @@ export interface McpToolInvocationTransactionParticipantFactory
 {
 	/** Bind the authorization operations and event writers to the supplied Prisma transaction. */
 	__ForTransaction(transaction: unknown, mcpTasks?: McpTaskToolInvocationLifecycleParticipant): McpToolInvocationTransactionParticipant;
+}
+
+/** Fails one observed Ready run-owned call without creating a provider claim. */
+export interface RunUnusedToolInvocationRepository
+{
+	/** Save a definite dispatch refusal and return the current row when the observed revision loses. */
+	complete(invocation: ToolInvocationRecord, now: Date): Promise<ToolInvocationTransitionResult>;
 }

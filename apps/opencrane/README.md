@@ -87,6 +87,10 @@ its resources to the lifecycle owner.
   signed assertions; Standalone checks the configured silo, trusted OIDC Principal and active local
   membership row. A failed Fleet proof never selects Standalone.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
+- `src/app/conversation-computer-turn-composition.ts` binds the private tool-proposal route to
+  the existing turn, membership, service and tool authorities. Kubernetes TokenReview checks the
+  `opencrane-conversation-computer` audience and the current Pod assignment before admission.
+  Accepted proposals stay Preparing in PostgreSQL; this route does not dispatch a provider call.
 - `src/app/routes.ts` contains named per-area route lists and app-owned transport composition. The
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
 - `src/app/runtime-composition.ts` binds controller, task-owned validation, runtime, and optional-worker
@@ -98,7 +102,8 @@ its resources to the lifecycle owner.
 - `src/app/mcp-runtime-composition.ts` turns that immutable image into a separate MCP executor Job.
   It shares one database authority across the administrator promotion route, public durable tool
   tasks, controller claims, Pod-bound companion reports, and saved tool calls, so no generic worker
-  can also run the call.
+  can also run the call. Before a run-owned claim, it binds current identity, lease, membership,
+  conversation permission and tool assignment checks to the existing authority owners.
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.
@@ -112,10 +117,8 @@ its resources to the lifecycle owner.
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
   configuration and do not expose a reusable ArtifactStore client.
-- `src/app/background-workers.ts` owns the Absurd worker, durable external-action
-  passes, and MCP completion recovery. Shutdown lets active work finish before Prisma closes.
-- `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
-  canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
+- `src/app/background-workers.ts` owns the Absurd worker and MCP completion recovery.
+  Shutdown lets active work finish before Prisma closes.
 - `src/app/lifecycle.ts` starts workers before both listeners, aborts active external exchanges during
   shutdown, closes conversation sockets, drains requests and workers, disconnects Prisma, and
   flushes telemetry.

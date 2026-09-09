@@ -38,11 +38,12 @@ computer lease labels must agree. Its Pod permission is limited to `get` in the 
 namespace. The Agent Sandbox controller owns Pod creation and deletion; the server cannot list,
 watch or mutate Pods. A mistake therefore denies activation instead of widening the Pod profile.
 
-The release owns the computer's NetworkPolicy: the private server, LiteLLM and DNS are its only
-outbound paths, and only the server can reach its review port. The template sets
+The release owns the computer's NetworkPolicy: the private server and DNS are its only outbound
+paths, and only the server can reach its review port. The server owns model requests; the computer
+cannot connect directly to LiteLLM. The template sets
 `networkPolicyManagement: Unmanaged` so the upstream controller does not add its default public
 internet access alongside that policy. Explicit `dnsPolicy: ClusterFirst` lets the computer resolve
-the internal server and model service. The pinned controller otherwise replaces an omitted DNS
+the internal server. The pinned controller otherwise replaces an omitted DNS
 policy with public resolvers when its default managed policy applies. Changes to the template apply
 to new claims; an existing Pod keeps its original DNS configuration.
 
@@ -93,8 +94,9 @@ claim in the disposable k3d cluster. Before creating the claim, it checks that t
 watch or mutate Pods or read Pods in a foreign namespace. Authorization reviews make these checks
 without submitting Pod writes. Every server impersonation includes its service-account groups so
 group grants are covered. It reads the named Pod as that server identity, then checks the controlling
-owner UID, Sandbox and Pod lease labels, running Pod, cluster DNS, private server and model transport
-and same-namespace Service address. It also rejects a controller-created template policy, then
+owner UID, Sandbox and Pod lease labels, running Pod, cluster DNS, private server transport, denied
+direct model access and same-namespace Service address. The model probe requires a connection timeout;
+a refused connection does not prove isolation. It also rejects a controller-created template policy, then
 deletes that exact claim and waits for
 foreground cleanup. It rejects other contexts. This proves controller reconciliation, without
 claiming PostgreSQL admission, computer readiness or an assistant answer; live journeys prove those.

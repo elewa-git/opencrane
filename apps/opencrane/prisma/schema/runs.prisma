@@ -22,6 +22,8 @@ enum AgentRunTerminalReason {
 }
 
 enum WorkloadKind {
+  /// The audited workload object is the actual authenticated Pod.
+  Pod        @map("pod")
   Job        @map("job")
   Deployment @map("deployment")
 }

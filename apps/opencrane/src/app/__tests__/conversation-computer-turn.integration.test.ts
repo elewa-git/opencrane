@@ -1,3 +1,4 @@
+import type { ConversationComputerTurnCandidate } from "@opencrane/backend/server/conversations";
 import express from "express";
 import request from "supertest";
 import {
@@ -5,6 +6,7 @@ import {
   ConversationComputerStates,
 } from "@opencrane/contracts";
 import {
+  BoundConversationWriter,
   ConversationComputerActivationAuthorityAdapter,
   ConversationComputerHistory,
   ConversationComputerTurnAuthorityService,
@@ -92,13 +94,7 @@ describe("conversation computer turn integration", function _Suite() {
 
     let frozen: any = null;
     const append = vi.fn().mockResolvedValue({});
-    const authority = new ConversationComputerTurnAuthorityService({
-		siloId: "testv5",
-		runLifecycle: { start: vi.fn(), complete: vi.fn() },
-      candidates: {
-        resolve: vi
-          .fn()
-          .mockResolvedValue({
+    const candidate: ConversationComputerTurnCandidate = {
             binding: {
               siloId: "testv5",
               conversationId: computer.conversationId,
@@ -137,18 +133,30 @@ describe("conversation computer turn integration", function _Suite() {
             modelAlias: "model-one",
             maximumBudgetUsd: 0.1,
             credentialLifetimeSeconds: 300,
+            credentialExpiresAt: "2099-01-01T00:00:00.000Z",
             lease: { leaseId: "lease-one", leaseGeneration: 1, sandboxClaimId: "computer-one-g1" },
-          }),
-        assertCurrent: vi.fn(),
+          };
+    const authority = new ConversationComputerTurnAuthorityService({
+      logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) },
+      toolProposals: { admit: vi.fn() },
+		siloId: "testv5",
+		runLifecycle: { start: vi.fn(), complete: vi.fn() },
+      candidates: {
+        resolve: vi.fn().mockResolvedValue(candidate),
+        assertCurrent: vi.fn().mockResolvedValue(candidate),
         admit: vi.fn(),
       },
       reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") },
+      modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() },
+      toolResults: { read: vi.fn(), consume: vi.fn() },
       credentials: {
-        issueOrRotate: vi
+        reuseExact: vi.fn(),
+        issueOnce: vi
           .fn()
           .mockResolvedValue({
             key: "sk-turn",
             credentialDigest: "sha256:key",
+            expiresAt: "2099-01-01T00:00:00.000Z",
           }),
         revoke: vi.fn(),
       },
@@ -163,13 +171,20 @@ describe("conversation computer turn integration", function _Suite() {
           }),
       },
       store: {
+        reserveModel: vi.fn(async (_id, reservation) => { frozen = { ...frozen, modelReservation: reservation }; return true; }),
+        reserveContinuation: vi.fn(),
+        selectTool: vi.fn().mockResolvedValue(undefined),
         createOrRead: vi.fn(async (turn) => (frozen ??= turn)),
         load: vi.fn(async () => frozen),
-        markOutput: vi.fn().mockResolvedValue("accepted"),
+        markOutput: vi.fn(async function _Mark(_bootstrapId, receipt) { frozen = { ...frozen, outputReceipt: receipt, outputSourceCommandId: receipt.event.id }; return { outcome: "accepted" as const, receipt }; }),
         loadActive: vi.fn().mockResolvedValue(null),
         settle: vi.fn().mockResolvedValue(undefined),
       },
-      writers: { create: vi.fn(() => ({ append })) },
+      writers: { create: vi.fn((turn) => ({ append, prepare: async function _Prepare(command: Parameters<BoundConversationWriter["prepare"]>[0])
+      {
+        const writer = new BoundConversationWriter({} as never, turn.binding, { now: function _Now() { return new Date(); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility() {} }, { assertMayAppend: async function _Fence() {} });
+        return writer.prepare(command);
+      } })) },
     });
     const workload = {
       subject: "system:serviceaccount:testv5:computer",
@@ -189,24 +204,11 @@ describe("conversation computer turn integration", function _Suite() {
     const bootstrap = await request(app)
       .get("/bootstrap?computerId=computer-one&generation=1&leaseId=lease-one")
       .set("authorization", "Bearer projected");
-    const modelText = {
-      choices: [{ message: { content: "assistant answer" } }],
-    }.choices[0]!.message.content;
-    await request(app)
-      .post("/output")
-      .set("authorization", "Bearer projected")
-      .send({
-        bootstrapId: bootstrap.body.bootstrapId,
-        sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
-        text: modelText,
-      })
-      .expect(202);
+    expect(bootstrap.body).toEqual({ bootstrapId: bootstrap.body.bootstrapId, outcome: "ready" });
+    await request(app).post("/model-step").set("authorization", "Bearer projected").send({ bootstrapId: bootstrap.body.bootstrapId }).expect(200, { outcome: "completed" });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        entry: expect.objectContaining({
-          kind: "message",
-          blocks: [expect.objectContaining({ payloadRef: "payload-one" })],
-        }),
+        event: expect.objectContaining({ data: expect.objectContaining({ entry: expect.objectContaining({ kind: "message", blocks: [expect.objectContaining({ payloadRef: "payload-one" })] }) }) }),
       }),
     );
   });

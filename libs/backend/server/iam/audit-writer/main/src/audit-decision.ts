@@ -6,6 +6,8 @@ function _WorkloadKind(value: AuditDecisionRecord["workloadKind"]): WorkloadKind
 {
 	if (value === undefined)
 		return undefined;
+	if (value === "pod")
+		return WorkloadKind.Pod;
 	if (value === "job")
 		return WorkloadKind.Job;
 	return WorkloadKind.Deployment;

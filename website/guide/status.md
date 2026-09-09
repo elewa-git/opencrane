@@ -12,7 +12,7 @@ baseline from remaining product work and live verification.
 | Durable conversations | Creation, posting and history reads, including ordinary direct/group messages and personal assistant conversations. History is stored in KurrentDB. All three modes distinguish a new chat from a retried creation command. |
 | Recognizable chats | Member display names in the participant picker and direct/group chat titles, with generic text for missing names. |
 | Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. The event stream supplies message history and live changes; computer inspection refreshes separately. |
-| Personal model turns | Approved persona instructions and conversation history feed a bounded model request; its assistant output is persisted against the admitted conversation computer. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
+| Personal model turns | Approved persona instructions and conversation history feed a bounded text request. The server keeps model input and keys and saves the answer for restart. Text checkpoint `378a755b6` has passed full CI; live qualification of that replacement remains outstanding. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
 | Company assistant in groups | Explicit assistant selection on an own group message, recoverable child creation, fixed audience, current parent and child access checks, follow-up answers, and human-reviewed sharing back. Administrator setup uses the API. |
 | Computer inspection | Workspace file, diff and browser discovery routes. Commands, page creation, screenshots and preview actions remain denied until their concrete effect admissions are connected. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
@@ -24,8 +24,17 @@ current review work and its evidence.
 
 ## Still to complete
 
-- **Useful work across tools:** connect the conversation model loop to governed tool execution,
-  approvals and durable results, then prove a real business task from start to finish.
+- **Useful work across tools:** prove a permitted retrieval from a real integration, then complete
+  approvals and visible results. The continuation implementation lets one model request select a frozen
+  tool that requires no approval. The server saves its declaration privately, admits the existing
+  executor work, checks the exact terminal result and may make one final text request within the
+  original allowance. This implementation in PR #830 awaits CI and live qualification. It adds no
+  intermediate tool progress to participant history. Company tool assignments remain unsupported,
+  and testv5 has no installed integration for the retrieval proof.
+- **Recovery controls:** when a model response cannot be recovered, preserve the pending run and
+  show the person what happened and what they can do next. The current server keeps the spent
+  request reservation and does not send another paid request. That restraint is implemented in
+  source; the user-facing recovery controls remain unfinished.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
   across conversations.
 - **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete
@@ -47,6 +56,23 @@ current review work and its evidence.
 
 Durable application source, builds and published apps are later work. Temporary computer previews
 do not publish an application.
+
+Answer recovery saves the exact prepared answer before posting it, so a restart can recognise its
+original content and timestamp. Text checkpoint `378a755b6` in
+[#830](https://github.com/elewa-git/opencrane/pull/830) passes
+[full CI](https://github.com/elewa-git/opencrane/actions/runs/34300559935), including all seven fresh
+PostgreSQL targets and 24 real KurrentDB cases (seven conversation and 17 adapter, excluding skips).
+Its corrected PR metadata also passes
+[topology CI](https://github.com/elewa-git/opencrane/actions/runs/34301556387).
+
+The continuation implementation in PR #830 comes after that checkpoint and awaits its own CI and
+live qualification. Local checks pass with 437 conversation tests, 136 application tests and both
+lint targets, and independent review passes. The earlier green runs do not qualify it.
+Both paths preserve a spent request when its response is unavailable, without paid redispatch. A continuation uses the original key and subtracts the entire first token reservation
+before reserving its final request. LiteLLM and provider-internal retries have not been qualified as
+exactly-once execution. The answer-recovery, tool-handoff, server model-step and continuation changes
+have not been rolled out to testv5. T1 retrieval, T2/T3 approved actions and U1 visible recovery remain
+open delivery work.
 
 ## Proven in the test installation
 

@@ -5,7 +5,7 @@ import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnosti
 
 const _UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
-/** Build the Pod-authenticated transport that hands out the review secret, bootstraps turns and submits untrusted model output. */
+/** Build the Pod-authenticated transport that hands out the review secret, bootstraps turns and requests server-owned model work. */
 export function _CreateConversationComputerTurnRouter(options: ConversationComputerTurnRouterOptions): Router
 {
 	const router = Router();
@@ -49,36 +49,31 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 		}
 		response.status(200).json(bootstrap);
 	});
-	router.post("/output", async function _Output(request: Request, response: Response): Promise<void>
+	router.post("/model-step", async function _ModelStep(request: Request, response: Response): Promise<void>
 	{
 		const workload = await _Workload(request, options);
-		const body = request.body as Record<string, unknown>;
-		const bootstrapId = _String(body?.["bootstrapId"]);
-		const sourceCommandId = _String(body?.["sourceCommandId"]);
-		const text = _String(body?.["text"]);
 		if (workload === null)
 		{
 			response.sendStatus(401);
 			return;
 		}
-		if (bootstrapId === null || sourceCommandId === null || !_UUID.test(sourceCommandId) || text === null || Buffer.byteLength(text, "utf8") > 65_536)
+		const body = request.body as Record<string, unknown>;
+		const bootstrapId = _String(body?.["bootstrapId"]);
+		if (body === null || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || bootstrapId === null || !_UUID.test(bootstrapId))
 		{
 			response.sendStatus(400);
 			return;
 		}
-		let outcome;
 		try
 		{
-			outcome = await options.authority.appendOutput({ bootstrapId, sourceCommandId, text, workload });
+			response.status(200).json(await options.authority.modelStep({ bootstrapId, workload }));
 		}
 		catch (error)
 		{
 			const diagnostic = _ConversationFailureDiagnostic(error);
-			options.logger.warn({ operation: "conversation.computer.output", err: diagnostic, errorType: diagnostic.type }, "Conversation computer output unavailable");
+			options.logger.warn({ operation: "conversation.computer.model_step", err: diagnostic, errorType: diagnostic.type }, "Conversation computer model step unavailable");
 			response.status(409).json({ error: "conversation_computer_rebootstrap_required" });
-			return;
 		}
-		response.status(outcome === "accepted" ? 202 : 200).json({ outcome });
 	});
 	return router;
 }

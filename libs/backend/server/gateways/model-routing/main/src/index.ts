@@ -3,6 +3,8 @@
  */
 export * from "./core/attempt-litellm-key";
 export type * from "./core/attempt-litellm-key.types";
+export { __RequestConversationModel } from "./core/conversation-model";
+export { ConversationModelError, ConversationModelFailureCodes } from "./core/conversation-model.types";
 export * from "./core/byok-default-models";
 export type * from "./core/byok-default-models.types";
 export { PrismaDefaultModelDefinitionResolverRepository } from "./core/prisma-default-model-definition-resolver";

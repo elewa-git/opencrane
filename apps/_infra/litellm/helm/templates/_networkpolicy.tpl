@@ -6,8 +6,6 @@ Called by apps/_infra/deploy-k8s/templates/app-rollups.yaml.
 {{- define "opencrane.litellm.networkPolicy" -}}
 {{- $localLiteLlm := and .Values.litellm.enabled (ne (include "opencrane.litellmShared" .) "true") -}}
 {{- $policyRequired := or .Values.networkPolicy.enabled .Values.agentController.enabled .Values.agentSandbox.enabled -}}
-{{- $computerProfiles := list -}}
-{{- range .Values.agentSandbox.profiles -}}{{- $computerProfiles = append $computerProfiles .name -}}{{- end -}}
 {{- if and $localLiteLlm $policyRequired .Values.litellm.redis.enabled -}}
 {{- fail "litellm.redis.enabled=true is unsupported while the app-owned LiteLLM NetworkPolicy is active because no exact Redis workload boundary is configured" -}}
 {{- end -}}
@@ -27,7 +25,7 @@ spec:
       app.kubernetes.io/component: litellm
   policyTypes: ["Ingress", "Egress"]
   ingress:
-    # The server and Cognee route models; admitted computers use their attempt-scoped model key.
+    # The server and Cognee own model requests and retain their gateway credentials.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -43,18 +41,6 @@ spec:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: cognee
-        {{- if .Values.agentSandbox.enabled }}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.agentSandbox.namespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: agent-sandbox
-            matchExpressions:
-              - key: opencrane.ai/agent-sandbox-profile
-                operator: In
-                values: {{ $computerProfiles | toJson }}
-        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
