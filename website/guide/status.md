@@ -46,8 +46,10 @@ that server requires signing in again. Existing older personal runs receive no n
 - **Recovery and progress:** explain a lost model response and offer safe next steps. The server
   already avoids silently repeating a paid request; user-facing recovery, company-chat progress,
   longer-lived updates, approval, retry and cancellation controls remain unfinished.
-- **Memory:** remember, recall, correct and forget useful context across conversations. Current
-  personal runs explicitly exclude memory until dataset provisioning and recall are complete.
+- **Knowledge and memory:** remember, recall, correct and forget facts and work context across
+  conversations. Current personal runs explicitly exclude memory until dataset provisioning and
+  recall are complete. Personal preferences remain a separate personal-assistant capability;
+  group and shared agents must use their own configuration and never inherit those preferences.
 - **Shared automation:** run company assistants on schedules or triggers, then support delegation
   between assistants. Explicit human requests in a group already have a separate working journey.
 - **Files and applications:** finish attachments, generated files and recovery across refresh,

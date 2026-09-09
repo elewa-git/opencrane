@@ -36,9 +36,14 @@ of the current product.
 
 ## Personal and shared assistants
 
-A personal assistant is configured around your work. A [shared agent](/guide/first-agent) is
-intended for a named company task and has its own permissions. Shared-agent execution is still
-being built.
+A personal assistant uses your approved preferences. A [shared agent](/guide/first-agent) uses its
+own approved role, instructions and permissions. Group and shared agents must not inherit anyone's
+personal preferences, whether that person creates the agent, requests work or delegates to it.
+
+They can use permitted [knowledge](/guide/knowledge) and follow explicit instructions for the
+current task within their own configuration and permissions. A shared style is configured
+separately by an authorized owner. The current [group-assistant journey](/guide/child-runs) already
+excludes personal assistant configuration; broader delegation remains planned.
 
 > See also: [How OpenCrane works](/guide/how-it-works) ·
 > [Knowledge and memory](/guide/knowledge) · [Access controls](/guide/permissions)

@@ -194,6 +194,27 @@ protected company configuration read instead of showing browser defaults. Editin
 assistant's model or budget needs a separate revision command; repeating initial setup deliberately
 preserves those choices. Keep model/budget read-only until that command is implemented.
 
+### M1: knowledge and personal preferences
+
+Knowledge means facts and work context, such as a project deadline or approved documentation. It
+can be private or shared according to its audience, provenance, consent and current authorization.
+Personal preferences mean language, tone, answer style and working habits for the personal
+assistant. They are not shared knowledge or permission to act.
+
+Group and shared agents use their own approved configuration. They must not inherit a creator's,
+requester's or member's personal preferences through persona loading, recall, copied context or
+delegation. Sharing knowledge or a connection does not transfer preferences, and labelling a
+preference as knowledge must not turn it into shared-agent instructions. An explicit instruction
+for a group task can guide that task within the shared configuration and permissions; it does not
+import or update a personal profile. Authorized owners configure shared behaviour separately.
+
+M1 acceptance must show that an authorized shared fact is available while the same person's
+private preferences remain excluded from shared execution. Cover direct group requests and future
+delegation as each path ships. Current company-run admission already excludes personal persona and
+memory. The complete knowledge lifecycle and future delegation still require implementation and
+proof. Reuse the existing persona owner, memory gateway and catalog; this semantic distinction does
+not require a parallel store. It changes neither retention consent nor reviewed result sharing.
+
 ## Owners and parallel waves
 
 | Lane | Ownership | First useful assignment |

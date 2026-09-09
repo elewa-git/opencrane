@@ -20,7 +20,9 @@ An administrator must first [set up the company assistant](/guide/first-agent) a
    conversation that requested the work.
 
 The child chat starts with the selected request. It does not receive the group's complete history
-or anyone's personal assistant configuration. Its audience is fixed to the group's current
+or anyone's personal assistant configuration. This includes personal preferences: the company
+assistant uses its own instructions, even when the requester has a personalized assistant.
+Sharing knowledge or delegating work must preserve that separation. Its audience is fixed to the group's current
 participants when work is requested. Everyone included must be allowed to read that request;
 a message from before somebody joined cannot be copied into a child shared with that person.
 

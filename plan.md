@@ -85,7 +85,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted retrieval | Internal continuation is CI-qualified in [#830](https://github.com/elewa-git/opencrane/pull/830). Company-tool configuration is also CI-qualified in [#832](https://github.com/elewa-git/opencrane/pull/832). Credential-bearing integrations depend on C1; one dedicated integration and complete personal/company retrieval proof remain missing. |
 | U1 — personal tool progress | IMPLEMENTED, CI GREEN in [#833](https://github.com/elewa-git/opencrane/pull/833); live progress remains to qualify. Company-child progress, longer-lived updates and controls remain separate. |
 | T2/T3 — approved actions and recovery | PERSONAL APPROVAL PREFLIGHT COMPLETE — connect exact reviewed values, waiting/ready/terminal handling and one existing executor. Company reviewers and cancellation/uncertain-effect recovery need separate contracts. |
-| M1 — explicit memory | PREFLIGHT COMPLETE — repair native document identity and dataset isolation before remember/correct/forget. Prove the pinned process; do not infer safety from a dataset identifier. |
+| M1 — explicit knowledge retention | PREFLIGHT COMPLETE — repair native document identity and dataset isolation before remember/correct/forget. Keep knowledge distinct from personal preferences; group and shared agents must not inherit personal preferences. Prove the pinned process; do not infer safety from a dataset identifier. |
 | F1 — documents and durable output | SOURCE GAP IDENTIFIED — reuse uploads/scanning but connect authorized document content to immutable model input. Generated-file finalization and complete recovery remain open. |
 | D1/S1 — delegation and schedules | PLANNED — depend on bounded action, cancellation and durable result contracts. |
 | A2/Q1 — administration and operational acceptance | PLANNED THROUGHOUT — configuration APIs are incremental; product controls and full journey/recovery qualification remain. |
@@ -126,11 +126,16 @@ inherit a person's private tools or memory.
 Existing foundations are reused where they still match the current contracts. These are completion
 tracks, not instructions to rebuild everything named here:
 
-- **Memory and preferences:** finish durable remember/correct/forget operations through the memory
+- **Knowledge and memory:** finish durable remember/correct/forget operations through the memory
   gateway, consent and sensitivity controls, recoverable writes, and cross-conversation recall proof.
   Dataset identity comes from admitted authority, never from a guessed subject ID. See
   [ADR 0015](docs/adr/0015-central-durable-authorization-authority.md) and
   [#318](https://github.com/elewa-git/opencrane/issues/318).
+- **Personal preferences:** keep approved language, tone, answer style and working habits scoped to
+  the personal assistant. Group and shared agents use their own approved configuration and permitted
+  knowledge; they never inherit private preferences through creation, invocation, recall or delegation.
+  Explicit task instructions do not import a personal profile. See the
+  [knowledge and preferences contract](docs/design/mvp-delivery-plan.md#m1-knowledge-and-personal-preferences).
 - **Tools and skills:** complete model-loop integration, scoped credentials, approvals, cancellation,
   replay and uncertain-outcome recovery. Reuse immutable OCI MCP execution and the ToolInvocation
   authority. See [#592](https://github.com/elewa-git/opencrane/issues/592),
