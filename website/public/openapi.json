@@ -172,6 +172,47 @@
           }
         }
       },
+      "OrganizationMemberRemovalCapability": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "available"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "reason"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "unavailable"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "self",
+                  "owner",
+                  "inactive",
+                  "authority_unsupported",
+                  "not_authorized"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "OrganizationMember": {
         "type": "object",
         "additionalProperties": false,
@@ -182,7 +223,8 @@
           "role",
           "status",
           "joinedAt",
-          "isCurrentUser"
+          "isCurrentUser",
+          "removal"
         ],
         "properties": {
           "membershipId": {
@@ -216,6 +258,9 @@
           },
           "isCurrentUser": {
             "type": "boolean"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/OrganizationMemberRemovalCapability"
           }
         }
       },
@@ -391,6 +436,18 @@
         }
       },
       "AcceptOrganizationInvitationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "member"
+        ],
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/OrganizationMember"
+          }
+        }
+      },
+      "RemoveOrganizationMemberResult": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -10110,6 +10167,103 @@
           },
           "503": {
             "description": "Personal asset metadata could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization/members/{membershipId}/remove": {
+      "post": {
+        "operationId": "removeOrganizationMember",
+        "summary": "Remove another non-Owner member's current access",
+        "description": "Standalone retains the suspended membership and records removal atomically. Authorized retries return that state. Self-removal and Owner removal are refused. Fleet removal is unsupported and never falls back to local writes.",
+        "tags": [
+          "Organization members"
+        ],
+        "parameters": [
+          {
+            "name": "membershipId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^\\S+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Removed access or recovered an authorized retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveOrganizationMemberResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Organization membership authority refused or could not complete the request.",
             "content": {
               "application/json": {
                 "schema": {
