@@ -3,8 +3,8 @@
 Instead of wiring each agent to one hard-coded model, register the models your organisation is
 allowed to use, and let OpenCrane resolve which one a given run actually calls. Every model call
 goes through **LiteLLM**, a self-hosted proxy that fronts your chosen providers, so a raw provider
-API key never reaches a runtime container — agents only ever hold a short-lived key scoped to one
-model and one spending limit.
+API key never reaches a runtime container. In the current text model-step source, the server also
+keeps the short-lived LiteLLM key; conversation Pods request work by turn id and receive status.
 
 ## Register models
 
@@ -46,8 +46,14 @@ Global defaults are operator-only. Organisation-scoped defaults require the matc
 authorisation boundary.
 
 When OpenCrane admits a run, it resolves the model route and records it in the
-`RunInputSnapshot`. The controller then receives an attempt-scoped LiteLLM key limited to the
-selected alias, budget and expiry.
+`RunInputSnapshot`. The server reserves one text request within that run's original allowance, then
+uses an attempt-scoped LiteLLM key limited to the selected alias, budget and expiry. The prompt and
+key stay server-side, and a saved answer can be completed after restart without another model request.
+
+The text model-step replacement is under review and awaits its own CI and live qualification. It
+rejects tool responses. If a model response cannot be recovered, the run remains pending for future
+recovery controls rather than receiving another paid request. LiteLLM and provider-internal retries
+have not been qualified as exactly-once execution. See [development status](/guide/status).
 
 ::: tip
 Changing a default affects future admissions. It does not change the model route frozen into

@@ -1,7 +1,10 @@
+import { _ConversationModelRequestDigest } from "./conversation-computer-model-reservation";
+import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
+import { ConversationComputerModelStepOutcomes, type ConversationComputerModelReservation, type ConversationComputerModelStepCommand, type ConversationComputerModelStepResult } from "./conversation-computer-model.types";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals, type ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
 import { _PrepareConversationToolProposal } from "./conversation-tool-proposal";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ___ConversationToolProposalSchema, type ConversationToolProposalReceipt, type CompiledRunInput, type ComputerScope } from "@opencrane/contracts";
 
@@ -26,11 +29,11 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	}
 
 	/**
-	 * Freeze the next pending turn's coordinates, recompile against them, and issue the attempt-scoped model credential.
+	 * Freeze the next pending turn or recover its saved model status without revealing credentials.
 	 *
-	 * First or retried input handoff recompiles the admitted snapshot and requires its frozen digest.
-	 * A saved answer instead recovers its exact history event and completes bookkeeping under the
-	 * current Pod and lease; that branch returns no model input or credential.
+	 * Saved output is recovered before recompilation because its own history append may already have
+	 * changed the conversation head. An unreserved turn must still reproduce the frozen input digest.
+	 * A reserved request reports status without creating another allowance or handing a key to the Pod.
 	 */
 	public async bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>
 	{
@@ -39,6 +42,11 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		{
 			await this._FinishOutput(active, command.workload);
 			return null;
+		}
+		if (active?.modelReservation !== null && active !== null)
+		{
+			await this._AdmitOutputPod(active, command.workload);
+			return { bootstrapId: active.bootstrapId, outcome: _ModelReservationStatus(active.modelReservation).outcome as "pending" | "response_unavailable" };
 		}
 		const candidate = await this.dependencies.candidates.resolve(command);
 		if (candidate === null)
@@ -52,11 +60,59 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		if (turn.outputSourceCommandId !== null || turn.toolReservation !== null)
 			return null;
 		await this.dependencies.runLifecycle.start(_RunLifecycleCommand(turn));
-		const keyAlias = `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`;
-		const snapshotBudget = candidate.compiledInput.budget.maxCostUsdMicros;
-		const maxBudgetUsd = snapshotBudget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, snapshotBudget / 1_000_000);
-		const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, computer: _ComputerScope(turn), lease: turn.lease, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: candidate.credentialExpiresAt });
-		return { bootstrapId: turn.bootstrapId, compiledInput: candidate.compiledInput, modelCredential: { endpoint: this.dependencies.endpoint, key: credential.key, model: turn.modelAlias }, outcome: "ready" };
+		return { bootstrapId: turn.bootstrapId, outcome: "ready" };
+	}
+
+	/**
+	 * Reserve one request before sending it and save its answer through the existing output receipt.
+	 * Only the handler that confirms its fresh reservation fence may dispatch. Response loss consumes
+	 * the allowance; later calls report status or finish saved output without another paid request.
+	 * @see ConversationComputerModelStepOutcomes
+	 */
+	public async modelStep(command: ConversationComputerModelStepCommand): Promise<ConversationComputerModelStepResult>
+	{
+		const turn = await this.dependencies.store.load(command.bootstrapId);
+		if (turn === null || command.ordinal !== 1)
+			return { outcome: ConversationComputerModelStepOutcomes.AuthorityEnded };
+		await this._AdmitOutputPod(turn, command.workload);
+		if (turn.outputReceipt !== null)
+		{
+			await this._FinishOutput(turn, command.workload);
+			return { outcome: ConversationComputerModelStepOutcomes.Completed };
+		}
+		if (turn.modelReservation !== null)
+			return _ModelReservationStatus(turn.modelReservation);
+		if (turn.toolReservation !== null)
+			return { outcome: ConversationComputerModelStepOutcomes.Pending };
+		const candidate = await this.dependencies.candidates.assertCurrent(turn, command.workload);
+		_AssertRecompiledInput(turn, candidate.compiledInput);
+		const reservation = _PrepareModelReservation(turn, candidate);
+		if (!await this.dependencies.store.reserveModel(turn.bootstrapId, reservation))
+		{
+			const winner = await this.dependencies.store.load(turn.bootstrapId);
+			return winner?.modelReservation !== null && winner !== null ? _ModelReservationStatus(winner.modelReservation) : { outcome: ConversationComputerModelStepOutcomes.Pending };
+		}
+		try
+		{
+			const keyAlias = `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`;
+			const snapshotBudget = candidate.compiledInput.budget.maxCostUsdMicros;
+			const maxBudgetUsd = snapshotBudget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, snapshotBudget / 1_000_000);
+			const credential = await this.dependencies.credentials.issueOrRotate({ bootstrapId: turn.bootstrapId, computer: _ComputerScope(turn), lease: turn.lease, keyAlias, modelAlias: turn.modelAlias, maxBudgetUsd, expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: new Date(reservation.dispatchDeadlineEpochMs).toISOString() });
+			const current = await this.dependencies.candidates.assertCurrent(turn, command.workload);
+			_AssertRecompiledInput(turn, current.compiledInput);
+			// Preserve a shorter post-issuance limit through both response receipt and output admission.
+			const requestNotAfter = Math.min(reservation.dispatchDeadlineEpochMs, Date.parse(current.credentialExpiresAt));
+			if (!Number.isSafeInteger(requestNotAfter) || Date.now() >= requestNotAfter)
+				return { outcome: ConversationComputerModelStepOutcomes.AuthorityEnded };
+			const response = await this.dependencies.model.request({ compiledInput: candidate.compiledInput, endpoint: this.dependencies.endpoint, key: credential.key, modelAlias: turn.modelAlias, maxCompletionTokens: reservation.maxCompletionTokens, notAfterEpochMs: requestNotAfter });
+			await this.appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: requestNotAfter, text: response.text, workload: command.workload });
+			return { outcome: ConversationComputerModelStepOutcomes.Completed };
+		}
+		catch (error)
+		{
+			this.dependencies.logger.warn({ operation: "conversation.computer.model_step", err: _ConversationFailureDiagnostic(error) }, "Conversation model request has no completed answer receipt");
+			return _ModelReservationStatus(reservation);
+		}
 	}
 
 	/** Admit one exact proposal for the current Pod without treating the runtime as effect authority. */
@@ -66,7 +122,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		if (!proposal.success)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 		const turn = await this.dependencies.store.load(command.bootstrapId);
-		if (turn === null || turn.outputSourceCommandId !== null || turn.outputReceipt !== null)
+		if (turn === null || turn.outputSourceCommandId !== null || turn.outputReceipt !== null || turn.modelReservation !== null)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		const candidate = await this.dependencies.candidates.assertCurrent(turn, command.workload);
 		const prepared = _PrepareConversationToolProposal(turn, candidate, proposal.data);
@@ -75,14 +131,14 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		return this.dependencies.toolProposals.admit(turn, candidate, { ...proposal.data, arguments: prepared.arguments }, workload);
 	}
 
-	/** Save an encrypted payload and a complete output intent before participant history can change. */
+	/** Save only the winning server model response; the Pod has no output-submission route. */
 	public async appendOutput(command: ConversationComputerOutputCommand): Promise<"accepted" | "idempotent">
 	{
 		const turn = await this.dependencies.store.load(command.bootstrapId);
 		if (turn === null)
 			throw new Error("Conversation computer output requires an admitted bootstrap");
 		await this._AdmitOutputPod(turn, command.workload);
-		if (turn.toolReservation !== null)
+		if (turn.toolReservation !== null || turn.modelReservation === null || turn.modelReservation.invocationFence !== command.modelInvocationFence || command.sourceCommandId !== command.modelInvocationFence || !Number.isSafeInteger(command.modelNotAfterEpochMs) || command.modelNotAfterEpochMs > turn.modelReservation.dispatchDeadlineEpochMs)
 			throw new Error("Conversation computer output cannot finish unresolved tool work");
 		if (turn.outputSourceCommandId !== null)
 		{
@@ -100,6 +156,8 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
 		const writer = this.dependencies.writers.create(turn, command.workload);
 		const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: payload.blockId, kind: "text", payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+		if (Date.now() >= Math.min(turn.modelReservation.dispatchDeadlineEpochMs, command.modelNotAfterEpochMs))
+			throw new Error("Conversation computer model response missed its fixed dispatch deadline");
 		const decision = await this.dependencies.store.markOutput(turn.bootstrapId, receipt);
 		await this._FinishOutput({ ...turn, outputSourceCommandId: decision.receipt.event.id, outputReceipt: decision.receipt }, command.workload);
 		return decision.outcome;
@@ -163,10 +221,11 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		outputSourceCommandId: null,
 		outputReceipt: null,
 		toolReservation: null,
+		modelReservation: null,
 	};
 }
 
-/** Fail closed when a fresh compile does not reproduce the frozen anchor; the Pod never sees drifted input. */
+/** Reject changed compiled input before server-side model dispatch. */
 function _AssertRecompiledInput(turn: FrozenConversationComputerTurn, compiledInput: CompiledRunInput): void
 {
 	const anchor = turn.compile;
@@ -188,4 +247,25 @@ function _AssertSameTurn(expected: FrozenConversationComputerTurn, actual: Froze
 {
 	if (actual.bootstrapId !== expected.bootstrapId || actual.siloId !== expected.siloId || actual.computerId !== expected.computerId || actual.lease.leaseGeneration !== expected.lease.leaseGeneration || actual.lease.leaseId !== expected.lease.leaseId || actual.latestPendingEntryId !== expected.latestPendingEntryId || actual.binding.expectedRevision !== expected.binding.expectedRevision || actual.modelAlias !== expected.modelAlias)
 		throw new Error("Conversation computer bootstrap conflicts with its durable turn record");
+}
+
+/** Derive finite limits from the frozen input; no Pod can choose or renew a reservation. */
+function _PrepareModelReservation(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate): ConversationComputerModelReservation
+{
+	const input = candidate.compiledInput;
+	const ceilings = [input.budget.maxCompletionTokens, input.model.maxOutputTokens];
+	const limits = ceilings.filter((value): value is number => value !== null && Number.isSafeInteger(value) && value > 0);
+	const authorityExpiresAtEpochMs = Math.min(input.budget.wallClockDeadlineEpochMs ?? Number.POSITIVE_INFINITY, Date.parse(candidate.credentialExpiresAt));
+	if (ceilings.some(value => value !== null && (!Number.isSafeInteger(value) || value <= 0)) || input.budget.maxModelTurns === null || !Number.isSafeInteger(input.budget.maxModelTurns) || input.budget.maxModelTurns < 1 || limits.length === 0 || !Number.isSafeInteger(authorityExpiresAtEpochMs) || authorityExpiresAtEpochMs <= Date.now())
+		throw new Error("Conversation computer model request has no remaining frozen allowance");
+	const maxCompletionTokens = Math.min(...limits);
+	const dispatchDeadlineEpochMs = Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000);
+	const facts = { ordinal: 1 as const, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs };
+	return { invocationFence: randomUUID(), ...facts, requestDigest: _ConversationModelRequestDigest(turn, facts) };
+}
+
+/** Classify an unconfirmed request by its saved deadline without granting another dispatch. */
+function _ModelReservationStatus(reservation: ConversationComputerModelReservation): ConversationComputerModelStepResult
+{
+	return { outcome: Date.now() < reservation.dispatchDeadlineEpochMs ? ConversationComputerModelStepOutcomes.Pending : ConversationComputerModelStepOutcomes.ResponseUnavailable };
 }

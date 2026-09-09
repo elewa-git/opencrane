@@ -12,7 +12,7 @@ baseline from remaining product work and live verification.
 | Durable conversations | Creation, posting and history reads, including ordinary direct/group messages and personal assistant conversations. History is stored in KurrentDB. All three modes distinguish a new chat from a retried creation command. |
 | Recognizable chats | Member display names in the participant picker and direct/group chat titles, with generic text for missing names. |
 | Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. The event stream supplies message history and live changes; computer inspection refreshes separately. |
-| Personal model turns | Approved persona instructions and conversation history feed a bounded model request; its assistant output is persisted against the admitted conversation computer. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
+| Personal model turns | Approved persona instructions and conversation history feed a bounded text request. The current source keeps model input and keys on the server and saves the answer for restart. This replacement is under review and awaits CI and live qualification. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
 | Company assistant in groups | Explicit assistant selection on an own group message, recoverable child creation, fixed audience, current parent and child access checks, follow-up answers, and human-reviewed sharing back. Administrator setup uses the API. |
 | Computer inspection | Workspace file, diff and browser discovery routes. Commands, page creation, screenshots and preview actions remain denied until their concrete effect admissions are connected. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
@@ -28,10 +28,15 @@ current review work and its evidence.
   approvals and durable results, then prove a real business task from start to finish. The current
   follow-up source saves a permitted proposal and queues its existing executor in the same database
   transaction. Exact repeats recover that work, and its claim cannot exceed the original run,
-  computer lease or membership-trust deadline. The earlier admission and audit changes passed
-  fresh PostgreSQL proofs; this new handoff still awaits fresh SQL CI and live qualification.
-  Model requests, result resumption and conversation progress remain unfinished. Reserved tool
-  work blocks final completion, and an abandoned proposal still needs outcome reconciliation.
+  computer lease or membership-trust deadline. The atomic handoff has passed fresh PostgreSQL
+  proofs and full CI; live qualification remains outstanding. The current model-step accepts text
+  answers only and rejects tool responses. Model tool requests, result continuation and conversation
+  progress remain unfinished. Reserved tool work blocks final completion, and an abandoned proposal
+  still needs outcome reconciliation.
+- **Recovery controls:** when a model response cannot be recovered, preserve the pending run and
+  show the person what happened and what they can do next. The current server keeps the spent
+  request reservation and does not send another paid request. That restraint is implemented in
+  source; the user-facing recovery controls remain unfinished.
 - **Personal memory:** complete remembering, recalling, correcting and forgetting information
   across conversations.
 - **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete
@@ -55,10 +60,14 @@ Durable application source, builds and published apps are later work. Temporary 
 do not publish an application.
 
 Answer recovery saves the exact prepared answer before posting it, so a restart can recognise its
-original content and timestamp. At `b06bd0473`, all five conversation-history cases ran against
-the real KurrentDB service in [CI](https://github.com/elewa-git/opencrane/actions/runs/34294502393/job/102288255050),
-including changed-content conflicts and recovery after a newer turn starts. This is source
-qualification; the new recovery and tool-handoff code has not been rolled out to testv5.
+original content and timestamp. The atomic tool handoff at `64bad5294` passes
+[full CI](https://github.com/elewa-git/opencrane/actions/runs/34297074030), including all seven fresh
+PostgreSQL targets with 17 conversation-tool cases and 22 real KurrentDB cases (17 adapter and five
+conversation cases, excluding skips). The text model-step implementation in [#830](https://github.com/elewa-git/opencrane/pull/830)
+awaits its own CI qualification. They keep one admitted OpenAI-compatible gateway request within
+the original run limits and preserve an unavailable response without paid redispatch; retries
+inside LiteLLM or the provider have not been qualified as exactly-once execution. The answer-recovery,
+tool-handoff and new model-step code has not been rolled out to testv5.
 
 ## Proven in the test installation
 

@@ -37,15 +37,16 @@ without implementation detail.
                                       │
                          ┌────────────▼────────────┐
                          │ Conversation computer   │
-                         │ model turn, workspace   │
+                         │ turn request, workspace │
                          │ and private review      │
                          └─────────────────────────┘
 ```
 
 The arrows show responsibility and coordination. The server consumes the activation queue and
 authorises a claim before Agent Sandbox creates compute; KurrentDB does not make permission
-decisions. The conversation computer calls the model through LiteLLM and returns proposed output
-to the server.
+decisions. In the current text model-step source, the conversation computer requests work from the
+private server. The server keeps the prompt and model key, reserves the request, calls LiteLLM and
+saves the answer. The Pod receives status only.
 
 ## What each part owns
 
@@ -55,9 +56,9 @@ to the server.
 | Product server | `apps/opencrane` composes the backend libraries. They check current access, admit work and persist protected changes. |
 | PostgreSQL | Current memberships, groups, grants, agent configuration, transactional product records and rebuildable conversation directory/read projections. Private message payloads are stored separately from immutable history. |
 | KurrentDB | Ordered `conversation-{id}` history, computer lifecycle evidence and durable activation delivery. History entries reference encrypted message payloads. |
-| Conversation compute | `apps/conversation-computer` performs bounded model work and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
+| Conversation compute | `apps/conversation-computer` requests a server-owned text step, polls its outcome and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
 | Models | LiteLLM routes requests to configured providers and brokers scoped model credentials. Providers may be external to the organisation. |
-| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. Current follow-up source saves a permitted conversation proposal and its executor work together, with claims bounded by the original run and current access. Model requests and resuming from tool results remain product work. |
+| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. The atomic handoff saves a permitted conversation proposal and its executor work together, with claims bounded by the original run and current access. Model tool requests and continuing from saved results remain product work. |
 | Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Complete personal-memory journeys remain unfinished. |
 | Files | The artifact catalogue, `apps/artifact-service`, scanner and preprocessor own stored files, validation and processing. Computer workspace checkpoints use ArtifactStore. |
 
@@ -85,10 +86,23 @@ history and model choice. Personal memory is explicitly unavailable in this base
 a dataset and recalling its content remain separate product work. This does not prevent a person
 from using their approved instructions and the current conversation.
 
-Admission also freezes a 4,096-token output cap for each text response. The computer takes the
+Admission also freezes a 4,096-token output cap for each text response. The server takes the
 smaller of that limit and the run's token budget, so a generous aggregate budget does not become
 an oversized request for one answer. Provider capability discovery remains separate from this
 product response limit.
+
+Before sending the text request, the server reserves its single model step in the existing turn
+stream. The original call allowance, token ceilings and run/lease authority remain binding across
+restart. Only the live handler that won that reservation may dispatch. Bootstrap carries a turn id
+and status, with no prompt or model credential, and the Pod has no direct LiteLLM network path.
+
+The server saves the encrypted answer and full prepared history event before appending it. Recovery
+finishes that same answer before recompiling current history, which may already contain it. If the
+response never reached durable storage, the reservation stays pending until its fixed deadline,
+then reports unavailable without another paid dispatch. The run remains pending for future recovery
+controls. The adapter accepts text only; tool responses and continuation from tool results are not
+enabled. This protects OpenCrane's dispatch allowance, without claiming exactly-once execution inside
+LiteLLM or a provider.
 
 The requester and executor are distinct roles. The human must own the input message and retain
 access to the conversation. A company assistant executes with its own identity and resource
@@ -144,3 +158,7 @@ PostgreSQL transcript. OpenCrane does not add another Kubernetes Pod controller 
 Implemented recovery and backup machinery still needs the live drills listed in
 [development status](/guide/status). Operator inputs and procedures belong in
 [deployment configuration](/operators/deployment-configuration) and the [runbook](/operators/runbook).
+
+The text model-step replacement is current source under review, not a CI-qualified or testv5
+deployment claim. The preceding atomic tool handoff has passed full CI; neither change makes the
+complete tool or user-facing recovery journey available yet.

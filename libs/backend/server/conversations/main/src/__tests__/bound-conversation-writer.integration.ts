@@ -1,3 +1,4 @@
+import { _ModelReservationFixture, _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { randomUUID } from "node:crypto";
 
 import { KurrentDBClient } from "@kurrent/kurrentdb-client";
@@ -49,7 +50,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 			bootstrapId: randomUUID(), siloId, computerId,
 			lease: { leaseId: randomUUID(), leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` },
 			latestPendingEntryId: randomUUID(), modelAlias: "proof-model", maximumBudgetUsd: 0.05,
-			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolReservation: null,
+			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolReservation: null, modelReservation: null,
 			binding: { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId: randomUUID(), agentServiceId: randomUUID(), agentName: "Ada", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 },
 			compile: { runId, attempt: 1, promptCompilerVersion: "proof-v1", digest: `sha256:${"a".repeat(64)}` },
 		};
@@ -71,11 +72,73 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		return events;
 	}
 
+	/** Hold two independent clients until both decision appends reach the same expected revision. */
+	function _RacingStores()
+	{
+		let arrivals = 0;
+		let release!: () => void;
+		const barrier = new Promise<void>(resolve => { release = resolve; });
+		return [0, 1].map(function _Client()
+		{
+			const history = _Connect();
+			return new KurrentConversationComputerTurnStore({
+				readStream: history.readStream.bind(history),
+				append: async function _AtSameRevision(command: HistoryAppend)
+				{
+					expect(command.expectedRevision).toBe(0n);
+					arrivals += 1;
+					if (arrivals === 2)
+						release();
+					await barrier;
+					return history.append(command);
+				},
+			});
+		});
+	}
+
+	it("elects one fresh model fence across independent clients without adopting it after restart", async function ()
+	{
+		const turn = await _Freeze(_Connect());
+		const contenders = [_ModelReservationFixture(turn, randomUUID()), _ModelReservationFixture(turn, randomUUID())];
+		const stores = _RacingStores();
+		const results = await Promise.all(stores.map((store, index) => store.reserveModel(turn.bootstrapId, contenders[index]!)));
+		expect(results.filter(Boolean)).toHaveLength(1);
+		const restarted = new KurrentConversationComputerTurnStore(_Connect());
+		const winner = contenders[results.indexOf(true)]!;
+		expect((await restarted.load(turn.bootstrapId))?.modelReservation).toEqual(winner);
+		await expect(restarted.reserveModel(turn.bootstrapId, winner)).resolves.toBe(false);
+		await expect(restarted.reserveModel(turn.bootstrapId, _ModelReservationFixture(turn, randomUUID()))).resolves.toBe(false);
+	});
+
+	it("elects either the model request or tool reservation at the same live revision", async function ()
+	{
+		const turn = await _Freeze(_Connect());
+		const model = _ModelReservationFixture(turn, randomUUID());
+		const tool = { proposalId: "11111111-1111-4111-8111-111111111111", requestFingerprint: `sha256:${"b".repeat(64)}` };
+		const [modelStore, toolStore] = _RacingStores();
+		const [modelResult, toolResult] = await Promise.allSettled([modelStore!.reserveModel(turn.bootstrapId, model), toolStore!.reserveTool(turn.bootstrapId, tool)]);
+		const winner = (await new KurrentConversationComputerTurnStore(_Connect()).load(turn.bootstrapId))!;
+		if (winner.modelReservation !== null)
+		{
+			expect(winner.modelReservation).toEqual(model);
+			expect(winner.toolReservation).toBeNull();
+			expect(modelResult).toEqual({ status: "fulfilled", value: true });
+			expect(toolResult.status).toBe("rejected");
+		}
+		else
+		{
+			expect(winner.toolReservation).toEqual(tool);
+			expect(modelResult).toEqual({ status: "fulfilled", value: false });
+			expect(toolResult).toEqual({ status: "fulfilled", value: undefined });
+		}
+	});
+
 	it("persists the complete prepared answer and recovers it across fresh clients before and after append", async function ()
 	{
 		const first = _Connect();
 		const turn = await _Freeze(first);
 		const prepared = await _PrepareConversationOutputIntent(turn, randomUUID());
+		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(first), turn.bootstrapId, prepared.event.id);
 		await new KurrentConversationComputerTurnStore(first).markOutput(turn.bootstrapId, prepared);
 		expect(await _Outputs(first, prepared)).toEqual([]);
 
@@ -109,6 +172,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		const history = _Connect();
 		const turn = await _Freeze(history);
 		const intent = await _PrepareConversationOutputIntent(turn, randomUUID());
+		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(history), turn.bootstrapId, intent.event.id);
 		await new KurrentConversationComputerTurnStore(history).markOutput(turn.bootstrapId, intent);
 		const competing = { ...structuredClone(intent.event), id: sameId ? intent.event.id : randomUUID(), data: { entry: { ...intent.event.data.entry, occurredAt: "2026-09-09T00:01:00.000Z" } } };
 		let intercepted = false;

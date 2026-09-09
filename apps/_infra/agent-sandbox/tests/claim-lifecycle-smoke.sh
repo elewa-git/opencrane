@@ -134,7 +134,7 @@ while true; do
   sleep 2
 done
 
-# Resolve both required services without presenting credentials or invoking a product or model command.
+# The computer must reach the private server while its direct model connection is denied.
 MODEL_PORT="$(kubectl --context "$CONTEXT" get "service/${RELEASE}-litellm" -n "$NAMESPACE" -o jsonpath='{.spec.ports[0].port}')"
 kubectl --context "$CONTEXT" exec -i "$SANDBOX_NAME" -n "$NAMESPACE" --container=conversation-computer -- python3 - "${RELEASE}-litellm.${NAMESPACE}.svc.cluster.local" "$MODEL_PORT" <<'PY'
 import os
@@ -148,9 +148,14 @@ for host, port in [(endpoint.hostname, endpoint.port), (sys.argv[1], int(sys.arg
     assert port is not None and 1 <= port <= 65535
     addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     assert addresses, "The computer cannot resolve a required private service"
-    with socket.create_connection((host, port), timeout=10):
-        pass
-print("Computer cluster DNS, private server and model transport: PASS")
+with socket.create_connection((endpoint.hostname, endpoint.port), timeout=10):
+    pass
+try:
+    with socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=5):
+        raise RuntimeError("The computer can reach the forbidden direct model service")
+except TimeoutError:
+    pass
+print("Computer cluster DNS, private server transport and denied direct model access: PASS")
 PY
 template_policy="$(kubectl --context "$CONTEXT" get "networkpolicy/${RELEASE}-developer-template-network-policy" -n "$NAMESPACE" --ignore-not-found -o name)"
 if [[ -n "$template_policy" ]]; then
@@ -158,4 +163,4 @@ if [[ -n "$template_policy" ]]; then
   exit 1
 fi
 cleanup_claim
-printf 'Sandbox controller lifecycle: PASS (owned Sandbox, server named Pod read and Pod authorization denials, running Pod, lease labels, cluster DNS, private server and model transport, Service address and foreground cleanup; no product execution or Ready proof).\n'
+printf 'Sandbox controller lifecycle: PASS (owned Sandbox, server named Pod read and Pod authorization denials, running Pod, lease labels, cluster DNS, private server transport and denied direct model access, Service address and foreground cleanup; no product execution or Ready proof).\n'

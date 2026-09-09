@@ -156,48 +156,34 @@ dataset, and a conflicting correction must fail closed.
 
 ## Outbound and return boundaries
 
-The conversation computer uses bounded bootstrap and output calls to OpenCrane, not direct access to
-people, external integration providers, child agents or durable storage. The separately fenced
-model-provider call is shown as its own boundary. Each outgoing path reaches a different server
-authority, and only an accepted, saved result may return to the same active attempt.
+The current conversation-computer source reads bootstrap status and requests a server-owned text
+model step. It receives no compiled prompt or model key and has no direct LiteLLM network path.
+The server reserves the request within the original run limits and saves the accepted answer.
 
 ```text
-                                model provider
-                                  ▲       │
-        attempt-scoped LiteLLM request    │ model output
-                                  │       ▼
-                           conversation-computer Pod
-                                        │
-      ┌──────────────┬──────────────────┼─────────────────┬────────────────┐
-      │              │                  │                 │                │
-      ▼              ▼                  ▼                 ▼                ▼
- elicitation    external-action    artifact output   parent delivery  terminal report
- proposal       candidate          bytes + ticket    bounded status   complete / fail
-      │              │                  │                 │                │
-      ▼              ▼                  ▼                 ▼                ▼
- exact person   server worker      ArtifactStore +   parent thread    run authority
- + purpose      + approval         quarantine scan   authority        fences attempt
-      │              │                  │                 │                │
-      ▼              ▼                  ▼                 ▼                ├──► durable outcome
- saved result   OCI MCP executor   verified receipt  saved display-   ├──► release / cleanup
-      │         or fail-closed      + ready/failed    safe delivery    └──► ordered event
-      │         memory/sandbox      state
-      │              │
-      └──────┬───────┘
-             ▼
-       saved resume_attempt ───────────────────────────────► same active Job
-
- server-side authorities ───────► durable audit evidence where instrumented
- processes ─────────────────────► redacted logs and optional OTLP traces
-                                  (operational output; no return into context)
+conversation-computer Pod
+      │ turn id + ordinal 1              ▲ outcome only
+      ▼                                 │
+OpenCrane server ────────────────────────┘
+      │ durable reservation before dispatch
+      ├──► LiteLLM ──► selected provider
+      │       │ validated text response
+      │       ▼
+      └──► encrypted answer + saved event ──► conversation history
 ```
 
 ### Model provider
 
-✅ The control plane dispatches immutable compiled input and an attempt-scoped LiteLLM credential.
-The runtime uses that credential to call the selected model and returns neutral protocol events over
-its authenticated stream. The model provider does not receive OpenCrane database authority, and its
-output does not bypass the run and event authorities.
+🔶 The text model-step source sends one admitted OpenAI-compatible gateway request from the server.
+Bootstrap cannot create a fresh allowance after reservation. A saved answer is recovered through its
+original event; an uncertain response stays pending, then unavailable, without paid redispatch.
+The run remains pending for future recovery controls. LiteLLM and provider-internal retries have not
+been qualified as exactly-once execution. This replacement awaits its own CI and live qualification.
+
+Tool responses are rejected in this slice. The authorities described below provide separate
+governance primitives; connecting their results to a continuing conversation model loop remains
+unfinished. They do not give the text model-step direct access to people, integration providers,
+child agents or durable storage.
 
 ### Participant elicitation
 

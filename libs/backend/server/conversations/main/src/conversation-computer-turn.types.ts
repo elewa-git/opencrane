@@ -1,3 +1,4 @@
+import type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";
 import type { ConversationToolProposalAdmission, ConversationToolProposalCommand } from "./conversation-tool-proposal.types";
 import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ConversationToolProposalReceipt, ComputerScope, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
@@ -19,28 +20,15 @@ export interface ConversationComputerBootstrapCommand
 	readonly workload: RuntimeWorkloadIdentity;
 }
 
-/** Attempt-scoped model credential returned only to its currently bound Pod. */
-export interface ConversationComputerModelCredential
-{
-	/** Private OpenAI-compatible LiteLLM endpoint. */
-	readonly endpoint: string;
-	/** Short-lived virtual key; it is never logged or persisted in conversation history. */
-	readonly key: string;
-	/** Sole public model alias admitted for this turn. */
-	readonly model: string;
-}
-
-/** One immutable turn envelope returned after identity and lease admission. */
+/**
+ * Returns a turn id and closed status without revealing prompt content or model credentials.
+ * Ready permits a model-step request; pending and response_unavailable permit status polling only.
+ * These wire values must match the Python worker's bootstrap validation.
+ */
 export interface ConversationComputerBootstrap
 {
-	/** Stable idempotency coordinate for bootstrap and output retry. */
 	readonly bootstrapId: string;
-	/** Recompiled input for this attempt, proven equal to the frozen digest; it travels only over the private transport. */
-	readonly compiledInput: CompiledRunInput;
-	/** Bounded route minted for only this attempt. */
-	readonly modelCredential: ConversationComputerModelCredential;
-	/** States that this Pod may execute the returned turn. */
-	readonly outcome: "ready";
+	readonly outcome: "ready" | "pending" | "response_unavailable";
 }
 
 /**
@@ -56,13 +44,17 @@ export interface ConversationComputerReviewCredentialGrant
 	readonly reviewCredential: string;
 }
 
-/** Carries untrusted computer output that still requires server stamping, encryption, and lease fencing. */
+/** Carries the validated server model response into encrypted, lease-fenced output preparation. */
 export interface ConversationComputerOutputCommand
 {
 	/** Binds output to the exact admitted bootstrap. */
 	readonly bootstrapId: string;
-	/** UUID idempotency key reused for uncertain retries. */
+	/** UUID idempotency key derived from the winning model reservation. */
 	readonly sourceCommandId: string;
+	/** Carries the reservation fence retained by the live server handler; it is not a Pod credential. */
+	readonly modelInvocationFence: string;
+	/** Retains any shorter authority deadline observed immediately before gateway dispatch. */
+	readonly modelNotAfterEpochMs: number;
 	/** Plain assistant text accepted only into encrypted private payload storage. */
 	readonly text: string;
 	/** Carries only the TokenReviewed Pod identity. */
@@ -74,10 +66,10 @@ export interface ConversationComputerTurnAuthority
 {
 	/** Return the review gateway secret after the same lease and Pod checks as bootstrap, without admitting a run. */
 	reviewCredential(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerReviewCredentialGrant>;
-	/** Return the next pending turn or null while no work is admitted. */
+	/** Return turn status, or null after saved-output recovery or while no work is admitted. */
 	bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>;
-	/** Append untrusted output through the bootstrap-bound conversation writer and encrypted payload store. */
-	appendOutput(command: ConversationComputerOutputCommand): Promise<"accepted" | "idempotent">;
+	/** Reserve and execute the single server-owned model request, or report its existing status. */
+	modelStep(command: ConversationComputerModelStepCommand): Promise<ConversationComputerModelStepResult>;
 	/** Save one tool proposal after current Pod, lease and frozen-input checks, without executing it. */
 	proposeTool(command: ConversationToolProposalCommand): Promise<ConversationToolProposalReceipt>;
 }
@@ -141,7 +133,7 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly siloId: string;
 	/** Identifies the logical computer the Pod named on its label. */
 	readonly computerId: string;
-	/** Recompile anchor checked against every fresh compile before the Pod receives input. */
+	/** Requires the server's recompiled input to match before model dispatch. */
 	readonly compile: ConversationComputerTurnCompileAnchor;
 	/** Source command of the accepted output, or null while the turn is still open. */
 	readonly outputSourceCommandId: string | null;
@@ -149,6 +141,8 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
 	/** Blocks terminal output while the exact proposed call remains unresolved. */
 	readonly toolReservation: ConversationComputerToolReservation | null;
+	/** Consumes the single text-only model allowance across retries and process restarts. */
+	readonly modelReservation: ConversationComputerModelReservation | null;
 }
 
 /** Durable decision to pursue one proposal; PostgreSQL remains the authority for its admission and outcome. */
@@ -244,8 +238,10 @@ export interface ConversationComputerTurnStore
 	loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>;
 	/** Appends the output receipt, or recognizes the same receipt on an uncertain retry. */
 	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<ConversationComputerOutputDecision>;
-	/** Reserves one exact proposal against the same turn revision as terminal output, before database admission. */
+	/** Reserves a proposal against the same turn revision as model dispatch, before database admission. */
 	reserveTool(bootstrapId: string, reservation: ConversationComputerToolReservation): Promise<void>;
+	/** Return true only when this call stored and read back its fresh model fence; false never permits dispatch. */
+	reserveModel(bootstrapId: string, reservation: ConversationComputerModelReservation): Promise<boolean>;
 	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
 	settle(turn: FrozenConversationComputerTurn): Promise<void>;
 }
@@ -299,6 +295,10 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly candidates: ConversationComputerTurnCandidateResolver;
 	readonly credentials: ConversationComputerCredentialIssuer;
 	readonly endpoint: string;
+	/** Performs one request; credentials remain behind this server-only port. */
+	readonly model: ConversationComputerModelTransport;
+	/** Receives closed diagnostics only, never prompts, keys or provider response data. */
+	readonly logger: Pick<Logger, "warn">;
 	/** Derives the review gateway secret under the server-only key. */
 	readonly reviewCredentials: ConversationComputerReviewCredentialDeriver;
 	readonly outputPayloads: ConversationComputerOutputPayloadStore;

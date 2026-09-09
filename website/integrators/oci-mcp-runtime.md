@@ -26,8 +26,9 @@ membership and grant resolution before a tool revision enters the run's frozen c
 
 ::: info Conversation integration status
 The current follow-up source connects an accepted private conversation proposal to the existing
-executor. That handoff still awaits fresh PostgreSQL CI and live qualification. The conversation
-model loop does not yet request tools, resume from results or publish durable tool progress.
+executor. That atomic handoff has passed fresh PostgreSQL proofs and full CI; live qualification
+remains outstanding. The current text model-step rejects tool responses. The conversation model
+loop does not yet request tools, continue from results or publish durable tool progress.
 See [development status](/guide/status) for the source and live checkpoints.
 :::
 

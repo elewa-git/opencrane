@@ -10,7 +10,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
@@ -22,6 +21,9 @@ _READINESS_PATH: Final = "/readyz"
 _DEFAULT_TOKEN_PATH: Final = "/var/run/secrets/opencrane/token"
 _DEFAULT_REVIEW_CREDENTIAL_PATH: Final = "/var/run/opencrane/review/credential"
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
+_BOOTSTRAP_OUTCOMES: Final = frozenset({"ready", "pending", "response_unavailable"})
+_MODEL_STEP_OUTCOMES: Final = frozenset({"completed", "pending", "response_unavailable", "authority_ended"})
+_DEGRADED_OUTCOMES: Final = frozenset({"response_unavailable", "authority_ended"})
 _LOGGER = logging.getLogger("opencrane.conversation-computer")
 _LAST_FAILURE_TYPE: str | None = None
 
@@ -94,9 +96,16 @@ def _install_review_credential(config: dict[str, str]) -> None:
 
 
 def _bootstrap(config: dict[str, str]) -> dict[str, Any]:
-    """Exchange the Pod-bound token and immutable lease coordinates for one admitted turn."""
+    """Read the current turn's status without receiving model input or credentials."""
     token = _read_token(config["tokenPath"])
-    return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/bootstrap?{_lease_query(config)}", token, empty_outcome="idle")
+    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/bootstrap?{_lease_query(config)}", token, empty_outcome="idle")
+    if result == {"outcome": "idle"}:
+        return result
+    outcome = result.get("outcome")
+    if set(result) != {"bootstrapId", "outcome"} or not isinstance(outcome, str) or outcome not in _BOOTSTRAP_OUTCOMES:
+        raise RuntimeError("bootstrap returned an invalid turn status")
+    _bootstrap_id(result)
+    return result
 
 
 def _restore(config: dict[str, str]) -> dict[str, Any]:
@@ -110,54 +119,25 @@ def _restore(config: dict[str, str]) -> dict[str, Any]:
     return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/checkpoint/restore", token, payload, empty_outcome="absent")
 
 
-def _model_text(response: dict[str, Any]) -> str:
-    """Extract only the first assistant text returned by the admitted OpenAI-compatible route."""
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        raise RuntimeError("model response has no choice")
-    first = choices[0]
-    message = first.get("message") if isinstance(first, dict) else None
-    content = message.get("content") if isinstance(message, dict) else None
-    if not isinstance(content, str) or not content.strip():
-        raise RuntimeError("model response has no assistant text")
-    return content
-
-
-def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> None:
-    """Call the admitted model route and return untrusted assistant text for server-side storage."""
-    compiled = bootstrap.get("compiledInput")
-    credential = bootstrap.get("modelCredential")
-    if not isinstance(compiled, dict) or not isinstance(credential, dict):
-        raise RuntimeError("bootstrap omitted compiled input or model credential")
-    endpoint = credential.get("endpoint")
-    key = credential.get("key")
-    model = credential.get("model")
-    instructions = compiled.get("instructions")
-    messages = compiled.get("messages")
-    route = compiled.get("model")
-    budget = compiled.get("budget")
-    if not isinstance(endpoint, str) or not isinstance(key, str) or not isinstance(model, str) or not isinstance(messages, list) or not isinstance(route, dict) or not isinstance(budget, dict):
-        raise RuntimeError("bootstrap contains an invalid model route")
-    if not isinstance(instructions, str):
-        raise RuntimeError("compiled input contains invalid instructions")
-    max_model_turns = budget.get("maxModelTurns")
-    if not isinstance(max_model_turns, int) or isinstance(max_model_turns, bool) or max_model_turns < 1:
-        raise RuntimeError("compiled budget does not admit a model turn")
-    output_limit = route.get("maxOutputTokens")
-    completion_limit = budget.get("maxCompletionTokens")
-    limits = [limit for limit in (output_limit, completion_limit) if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0]
-    request = {"model": model, "messages": [{"role": "system", "content": instructions}, *messages]}
-    if limits:
-        request["max_tokens"] = min(limits)
-    model_response = _json_request(f"{endpoint.rstrip('/')}/v1/chat/completions", key, request)
-    text = _model_text(model_response)
-    token = _read_token(config["tokenPath"])
+def _bootstrap_id(bootstrap: dict[str, Any]) -> str:
+    """Require the server's exact non-empty idempotency coordinate."""
     bootstrap_id = bootstrap.get("bootstrapId")
-    if not isinstance(bootstrap_id, str) or not bootstrap_id:
+    if not isinstance(bootstrap_id, str) or not bootstrap_id or bootstrap_id != bootstrap_id.strip():
         raise RuntimeError("bootstrap omitted its idempotency coordinate")
-    source_command_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"opencrane:conversation-output:{bootstrap_id}"))
-    output = {"bootstrapId": bootstrap_id, "sourceCommandId": source_command_id, "text": text}
-    _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/output", token, output)
+    return bootstrap_id
+
+
+def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> str:
+    """Ask the server to execute or recover its first reserved model step."""
+    if bootstrap.get("outcome") != "ready":
+        raise RuntimeError("model step requires a ready bootstrap")
+    payload = {"bootstrapId": _bootstrap_id(bootstrap), "ordinal": 1}
+    token = _read_token(config["tokenPath"])
+    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/model-step", token, payload)
+    outcome = result.get("outcome")
+    if set(result) != {"outcome"} or not isinstance(outcome, str) or outcome not in _MODEL_STEP_OUTCOMES:
+        raise RuntimeError("model step returned an invalid outcome")
+    return outcome
 
 
 def _turn_loop() -> None:
@@ -166,6 +146,8 @@ def _turn_loop() -> None:
     config = _configuration()
     credentialed = False
     restored = False
+    stopped_bootstrap: str | None = None
+    stopped_outcome: str | None = None
     retry_delay_seconds = 2
     while True:
         try:
@@ -176,13 +158,25 @@ def _turn_loop() -> None:
                 _restore(config)
                 restored = True
             bootstrap = _bootstrap(config)
-            if bootstrap.get("outcome") == "ready":
-                _execute_turn(config, bootstrap)
-            _LAST_FAILURE_TYPE = None
+            outcome = bootstrap["outcome"]
+            if bootstrap.get("bootstrapId") == stopped_bootstrap and stopped_outcome is not None:
+                outcome = stopped_outcome
+            elif outcome == "ready":
+                outcome = _execute_turn(config, bootstrap)
+            if outcome in _DEGRADED_OUTCOMES:
+                stopped_bootstrap = _bootstrap_id(bootstrap)
+                stopped_outcome = outcome
+                if _LAST_FAILURE_TYPE != outcome:
+                    _LOGGER.warning("conversation computer turn needs recovery", extra={"errorType": outcome})
+                _LAST_FAILURE_TYPE = outcome
+            else:
+                stopped_bootstrap = None
+                stopped_outcome = None
+                _LAST_FAILURE_TYPE = None
             retry_delay_seconds = 2
         except (OSError, RuntimeError, ValueError, urllib.error.URLError, json.JSONDecodeError) as error:
-            _LAST_FAILURE_TYPE = type(error).__name__
-            _LOGGER.warning("conversation computer turn retry", extra={"errorType": _LAST_FAILURE_TYPE, "retryDelaySeconds": retry_delay_seconds})
+            _LAST_FAILURE_TYPE = stopped_outcome or type(error).__name__
+            _LOGGER.warning("conversation computer turn retry", extra={"errorType": type(error).__name__, "retryDelaySeconds": retry_delay_seconds})
             retry_delay_seconds = min(retry_delay_seconds * 2, 30)
         time.sleep(retry_delay_seconds)
 

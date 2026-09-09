@@ -1,3 +1,5 @@
+import { _CONVERSATION_MODEL_RESERVED_EVENT, _ConversationModelReservationEvent, _ReadConversationModelReservation } from "./conversation-computer-model-reservation";
+import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
 import { createHash } from "node:crypto";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -12,7 +14,7 @@ import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-re
 import { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
-const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v1";
+const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v2";
 const _TOOL_RESERVED_EVENT = "opencrane.conversation-computer-turn-tool-reserved.v1";
 const _ACTIVE_EVENT = "opencrane.conversation-computer-turn-active.v1";
 const _SETTLED_EVENT = "opencrane.conversation-computer-turn-settled.v1";
@@ -43,7 +45,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		return result;
 	}
 
-	/** Load the immutable input anchor and the mutually exclusive output or tool decision. */
+	/** Load frozen input, then a model or tool reservation; only a model reservation can precede saved output. */
 	public async load(bootstrapId: string): Promise<FrozenConversationComputerTurn | null>
 	{
 		let frozen: FrozenConversationComputerTurn | null = null;
@@ -57,10 +59,13 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 				if (event.type === _TOOL_RESERVED_EVENT)
 					frozen = { ...current, toolReservation: _ToolReservation(event, bootstrapId) };
 				else
-				{
-					const receipt = _Output(event, current);
-					frozen = { ...current, outputSourceCommandId: receipt.event.id, outputReceipt: receipt };
-				}
+					frozen = { ...current, modelReservation: _ReadConversationModelReservation(event, current) };
+			}
+			else if (event.revision === 2n && frozen !== null && frozen.modelReservation !== null)
+			{
+				const current: FrozenConversationComputerTurn = frozen;
+				const receipt = _Output(event, current);
+				frozen = { ...current, outputSourceCommandId: receipt.event.id, outputReceipt: receipt };
 			}
 			else throw new Error("Conversation computer turn history is noncontiguous");
 		}
@@ -68,7 +73,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	}
 
 	/**
-	 * Reserve a proposal before database admission using the same checked revision as output.
+	 * Reserve a proposal before database admission using the same checked revision as model dispatch.
 	 *
 	 * The reservation survives response loss and database refusal. A later refusal does not prove
 	 * that an earlier request failed to commit. Only authoritative outcome reconciliation may settle
@@ -79,7 +84,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	public async reserveTool(bootstrapId: string, reservation: ConversationComputerToolReservation): Promise<void>
 	{
 		const existing = await this.load(bootstrapId);
-		if (existing === null || existing.outputReceipt !== null)
+		if (existing === null || existing.outputReceipt !== null || existing.modelReservation !== null)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		if (existing.toolReservation !== null)
 			return _AssertSameReservation(existing.toolReservation, reservation);
@@ -97,6 +102,33 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		if (winner?.toolReservation === null || winner === null)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		_AssertSameReservation(winner.toolReservation, reservation);
+	}
+
+	/**
+	 * Consume the model allowance at revision 1 and verify the complete stored reservation.
+	 * A duplicate event-id acknowledgement is not enough: the stored fields must match this call's
+	 * fresh fence. A reservation present when this method starts always returns false.
+	 * Called by: ConversationComputerTurnAuthority.modelStep.
+	 */
+	public async reserveModel(bootstrapId: string, reservation: ConversationComputerModelReservation): Promise<boolean>
+	{
+		const turn = await this.load(bootstrapId);
+		if (turn === null || turn.modelReservation !== null || turn.toolReservation !== null || turn.outputReceipt !== null)
+			return false;
+		const event = _ConversationModelReservationEvent(turn, reservation);
+		_ReadConversationModelReservation({ ...event, streamName: _Stream(bootstrapId), revision: 1n, recordedAt: new Date() } as HistoryRecordedEvent, turn);
+		try
+		{
+			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: 0n, events: [event] });
+		}
+		catch (error)
+		{
+			if (!(error instanceof WrongExpectedVersionError))
+				throw error;
+		}
+		const winner = await this.load(bootstrapId);
+		return winner?.modelReservation !== null && winner !== null
+			&& ___DigestCanonicalJson(winner.modelReservation as unknown as JsonValue) === ___DigestCanonicalJson(reservation as unknown as JsonValue);
 	}
 
 	/** Resolve the unsettled turn named by this exact computer lease. */
@@ -119,13 +151,13 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	{
 		const requested = structuredClone(receipt);
 		const turn = await this.load(bootstrapId);
-		if (turn === null || turn.toolReservation !== null)
+		if (turn === null || turn.toolReservation !== null || turn.modelReservation === null)
 			throw new Error("Conversation computer turn does not record this output decision");
 		const intent = _OutputIntent(turn, requested);
 		let outcome: ConversationComputerOutputDecision["outcome"] = turn.outputReceipt === null ? "accepted" : "idempotent";
 		try
 		{
-			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: 0n, events: [{ id: intent.event.id, type: _OUTPUT_EVENT, data: { bootstrapId, intent }, metadata: { bootstrapId } }] });
+			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: 1n, events: [{ id: intent.event.id, type: _OUTPUT_EVENT, data: { bootstrapId, modelInvocationFence: turn.modelReservation.invocationFence, intent }, metadata: { bootstrapId } }] });
 		}
 		catch (error)
 		{
@@ -252,8 +284,7 @@ function _Stream(bootstrapId: string): string
 /**
  * Copy the frozen record field by field; a spread could leak an unexpected property into the immutable event.
  *
- * The event keeps the lease flat under its original names (`generation`, `leaseId`, `sandboxClaimId`),
- * so every turn already stored in KurrentDB keeps loading unchanged.
+ * The initial event contains only immutable input and lease coordinates; later events own progress.
  */
 function _Serializable(turn: FrozenConversationComputerTurn): Record<string, unknown>
 {
@@ -279,7 +310,7 @@ function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown
 }
 
 /** Shape of the frozen event data as it is stored: the lease flattened to `generation`, `leaseId` and `sandboxClaimId`, and the stream revision as a string. */
-type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolReservation"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
+type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolReservation" | "modelReservation"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
 
 /** Rebuild the in-memory record from the stored event, gathering the flat lease fields into the `lease` bundle. */
 function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConversationComputerTurn
@@ -303,6 +334,7 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 		outputSourceCommandId: null,
 		outputReceipt: null,
 		toolReservation: null,
+		modelReservation: null,
 	};
 }
 
@@ -334,20 +366,22 @@ function _AssertSameReservation(existing: ConversationComputerToolReservation, r
 /** Read one complete output decision and validate it against this frozen turn. */
 function _Output(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerTurnOutputReceipt
 {
-	if (event.type !== _OUTPUT_EVENT || event.streamName !== _Stream(turn.bootstrapId) || event.data["bootstrapId"] !== turn.bootstrapId || event.metadata["bootstrapId"] !== turn.bootstrapId)
+	if (turn.modelReservation === null || event.data["modelInvocationFence"] !== turn.modelReservation.invocationFence || event.type !== _OUTPUT_EVENT || event.streamName !== _Stream(turn.bootstrapId) || event.data["bootstrapId"] !== turn.bootstrapId || event.metadata["bootstrapId"] !== turn.bootstrapId)
 		throw new Error("Conversation computer turn received an invalid output event");
 	const intent = _OutputIntent(turn, event.data["intent"]);
-	if (event.id !== intent.event.id)
+	if (event.id !== intent.event.id
+		|| ___DigestCanonicalJson(event.data as JsonValue) !== ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId, modelInvocationFence: turn.modelReservation.invocationFence, intent } as unknown as JsonValue)
+		|| ___DigestCanonicalJson(event.metadata as JsonValue) !== ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId }))
 		throw new Error("Conversation computer output decision has a different event identity");
 	return intent;
 }
 
-/** Require the exact completed text answer shape owned by the private output route. */
+/** Require a completed text answer whose event id matches the server's model reservation. */
 function _OutputIntent(turn: FrozenConversationComputerTurn, value: unknown): ConversationComputerTurnOutputReceipt
 {
 	const intent = _ReadBoundConversationWriterIntent(turn.binding, value);
 	const entry = intent.event.data.entry;
-	if (entry.kind !== "message" || entry.state !== "completed" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
+	if (turn.modelReservation === null || intent.event.id !== turn.modelReservation.invocationFence || entry.kind !== "message" || entry.state !== "completed" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
 		|| entry.replyToEntryId !== turn.latestPendingEntryId || entry.addressedAgentIdentityId !== null || entry.activation !== "none"
 		|| entry.visibility.audience !== "conversation" || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
 		throw new Error("Conversation computer output decision has a different answer shape");

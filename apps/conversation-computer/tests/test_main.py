@@ -1,4 +1,4 @@
-"""Test the conversation-computer readiness contract without opening a listener."""
+"""Test private model-step transport, polling, and conversation-computer readiness."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.main as computer_main
-from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _install_review_credential, _model_text, _restore
+from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _install_review_credential, _restore
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -44,12 +44,6 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "OPENCRANE_COMPUTER_GENERATION is required"):
                 _configuration()
 
-    def test_extracts_assistant_text(self) -> None:
-        """Accept only the first non-empty assistant message from the model response."""
-        self.assertEqual(_model_text({"choices": [{"message": {"content": "hello"}}]}), "hello")
-        with self.assertRaisesRegex(RuntimeError, "no assistant text"):
-            _model_text({"choices": [{"message": {"content": ""}}]})
-
     def test_reports_a_safe_degraded_readiness_after_turn_failure(self) -> None:
         """Keep liveness up while readiness exposes only the failure class."""
         server = ThreadingHTTPServer(("127.0.0.1", 0), _HealthHandler)
@@ -75,55 +69,52 @@ class ConfigurationTests(unittest.TestCase):
         open_url.return_value = response
         result = _bootstrap({"computerId": "computer-1", "generation": "1", "leaseId": "lease-1", "internalEndpoint": "http://server", "tokenPath": "/token"})
         self.assertEqual(result, {"outcome": "idle"})
+        self.assertEqual(open_url.call_args.kwargs, {"timeout": 30})
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request")
-    def test_executes_one_bound_turn(self, exchange: MagicMock, _token: MagicMock) -> None:
-        """Preserve compiled instructions before history and return assistant text to the server."""
-        exchange.side_effect = [{"choices": [{"message": {"content": "answer"}}]}, {"outcome": "accepted"}]
+    def test_requests_only_the_reserved_first_server_model_step(self, exchange: MagicMock, _token: MagicMock) -> None:
+        """Send only the bootstrap and ordinal with the current projected token."""
         config = {"internalEndpoint": "http://server:8081", "tokenPath": "/token"}
-        history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}, {"role": "user", "content": "summarise"}]
-        instructions = "Use the approved concise persona.\n\nArtifacts available for this run:\n- report"
-        bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"instructions": instructions, "messages": history, "model": {"maxOutputTokens": 512}, "budget": {"maxModelTurns": 1, "maxCompletionTokens": 256}}, "modelCredential": {"endpoint": "http://litellm:4000", "key": "sk-attempt", "model": "silo-default"}}
+        for outcome in ("completed", "pending", "response_unavailable", "authority_ended"):
+            with self.subTest(outcome=outcome):
+                exchange.reset_mock()
+                exchange.return_value = {"outcome": outcome}
+                self.assertEqual(_execute_turn(config, {"bootstrapId": "bootstrap-1", "outcome": "ready"}), outcome)
+                exchange.assert_called_once_with("http://server:8081/api/internal/conversation-computer/model-step", "projected-token", {"bootstrapId": "bootstrap-1", "ordinal": 1})
 
-        _execute_turn(config, bootstrap)
-
-        self.assertEqual(exchange.call_args_list[0].args, ("http://litellm:4000/v1/chat/completions", "sk-attempt", {"model": "silo-default", "messages": [{"role": "system", "content": instructions}, *history], "max_tokens": 256}))
-        self.assertEqual(history, [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}, {"role": "user", "content": "summarise"}])
-        self.assertEqual(exchange.call_args_list[1].args[0:2], ("http://server:8081/api/internal/conversation-computer/output", "projected-token"))
-        self.assertEqual(exchange.call_args_list[1].args[2]["text"], "answer")
+    @patch("src.main._read_token", return_value="projected-token")
+    @patch("src.main._json_request")
+    def test_rejects_invalid_model_step_outcomes(self, exchange: MagicMock, _token: MagicMock) -> None:
+        """Do not treat malformed or widened server responses as completion."""
+        for response in ({}, {"outcome": "ready"}, {"outcome": []}, {"outcome": "completed", "text": "untrusted"}):
+            with self.subTest(response=response):
+                exchange.return_value = response
+                with self.assertRaisesRegex(RuntimeError, "invalid outcome"):
+                    _execute_turn({"internalEndpoint": "http://server", "tokenPath": "/token"}, {"bootstrapId": "bootstrap-1", "outcome": "ready"})
 
     @patch("src.main._json_request")
-    def test_rejects_a_turn_before_model_request_when_budget_has_no_model_call(self, exchange: MagicMock) -> None:
-        """Refuse a missing model-turn allowance before sending credentials or prompt data."""
-        bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"instructions": "", "messages": [], "model": {"maxOutputTokens": 128}, "budget": {"maxModelTurns": 0, "maxCompletionTokens": 256}}, "modelCredential": {"endpoint": "http://litellm:4000", "key": "sk-attempt", "model": "silo-default"}}
-
-        with self.assertRaisesRegex(RuntimeError, "does not admit a model turn"):
-            _execute_turn({"internalEndpoint": "http://server", "tokenPath": "/token"}, bootstrap)
-
-        exchange.assert_not_called()
-
-    @patch("src.main._json_request")
-    def test_rejects_missing_or_malformed_instructions_before_model_request(self, exchange: MagicMock) -> None:
-        """Reject a malformed compiled payload instead of silently dropping its instructions."""
-        for invalid in (None, 42, {"text": "persona"}):
-            with self.subTest(instructions=invalid):
-                compiled = {"messages": [], "model": {}, "budget": {"maxModelTurns": 1}}
-                if invalid is not None:
-                    compiled["instructions"] = invalid
-                bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": compiled, "modelCredential": {"endpoint": "http://litellm:4000", "key": "sk-attempt", "model": "silo-default"}}
-                with self.assertRaisesRegex(RuntimeError, "invalid instructions"):
+    def test_requires_a_ready_exact_bootstrap_before_model_step(self, exchange: MagicMock) -> None:
+        """Refuse pending turns and missing or altered retry coordinates before any request."""
+        for bootstrap in ({"bootstrapId": "bootstrap-1", "outcome": "pending"}, {"outcome": "ready"}, {"bootstrapId": " ", "outcome": "ready"}, {"bootstrapId": 1, "outcome": "ready"}):
+            with self.subTest(bootstrap=bootstrap):
+                with self.assertRaises(RuntimeError):
                     _execute_turn({"internalEndpoint": "http://server", "tokenPath": "/token"}, bootstrap)
         exchange.assert_not_called()
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request")
-    def test_accepts_an_explicitly_empty_instructions_block(self, exchange: MagicMock, _token: MagicMock) -> None:
-        """Accept the compiler's empty instructions when the run has no persona or context sections."""
-        exchange.side_effect = [{"choices": [{"message": {"content": "answer"}}]}, {"outcome": "accepted"}]
-        bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"instructions": "", "messages": [{"role": "user", "content": "hi"}], "model": {}, "budget": {"maxModelTurns": 1}}, "modelCredential": {"endpoint": "http://litellm:4000", "key": "sk-attempt", "model": "silo-default"}}
-        _execute_turn({"internalEndpoint": "http://server", "tokenPath": "/token"}, bootstrap)
-        self.assertEqual(exchange.call_args_list[0].args[2]["messages"], [{"role": "system", "content": ""}, {"role": "user", "content": "hi"}])
+    def test_accepts_only_credential_free_bootstrap_statuses(self, exchange: MagicMock, _token: MagicMock) -> None:
+        """Require the closed status envelope without model content or credentials."""
+        config = {"computerId": "computer-1", "generation": "1", "leaseId": "lease-1", "internalEndpoint": "http://server", "tokenPath": "/token"}
+        for outcome in ("ready", "pending", "response_unavailable"):
+            exchange.return_value = {"bootstrapId": "bootstrap-1", "outcome": outcome}
+            self.assertEqual(_bootstrap(config), exchange.return_value)
+        for response in ({"outcome": "ready"}, {"bootstrapId": "bootstrap-1", "outcome": "ready", "modelCredential": {}}, {"bootstrapId": "bootstrap-1", "outcome": "unknown"}, {"bootstrapId": "bootstrap-1", "outcome": []}):
+            with self.subTest(response=response):
+                exchange.return_value = response
+                with self.assertRaises(RuntimeError):
+                    _bootstrap(config)
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request", return_value={"reviewCredential": "keyed-review-secret"})
@@ -150,17 +141,23 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(_restore(config), {"outcome": "restored"})
         self.assertEqual(exchange.call_args.args[2], {"computerId": "computer-1", "generation": 2, "leaseId": "lease-2"})
 
-    @patch("src.main._read_token", return_value="projected-token")
+    @patch("src.main._read_token", side_effect=["bootstrap-token", "model-step-token"])
     def test_executes_real_http_turn_boundaries(self, _token: MagicMock) -> None:
-        """Cap one HTTP response below the aggregate run budget, then append the returned text."""
+        """Use the private server for both status and model work with freshly read Pod tokens."""
         received: list[tuple[str, str, dict[str, object]]] = []
 
         class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                received.append((self.path, self.headers.get("authorization", ""), {}))
+                self.reply({"bootstrapId": "bootstrap-1", "outcome": "ready"})
+
             def do_POST(self) -> None:
                 length = int(self.headers.get("content-length", "0"))
                 body = json.loads(self.rfile.read(length))
                 received.append((self.path, self.headers.get("authorization", ""), body))
-                response = {"choices": [{"message": {"content": "real answer"}}]} if self.path == "/v1/chat/completions" else {"outcome": "accepted"}
+                self.reply({"outcome": "completed"})
+
+            def reply(self, response: dict[str, str]) -> None:
                 encoded = json.dumps(response).encode()
                 self.send_response(200)
                 self.send_header("content-type", "application/json")
@@ -171,24 +168,66 @@ class ConfigurationTests(unittest.TestCase):
             def log_message(self, _format: str, *args: object) -> None:
                 return
 
-        model = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threads = [threading.Thread(target=item.serve_forever, daemon=True) for item in (model, server)]
-        for thread in threads:
-            thread.start()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
         try:
-            bootstrap = {"bootstrapId": "bootstrap-1", "compiledInput": {"instructions": "Use the approved persona.", "messages": [{"role": "user", "content": "hi"}], "model": {"maxOutputTokens": 4096}, "budget": {"maxModelTurns": 64, "maxCompletionTokens": 256_000}}, "modelCredential": {"endpoint": f"http://127.0.0.1:{model.server_port}", "key": "sk-attempt", "model": "silo-default"}}
-            _execute_turn({"internalEndpoint": f"http://127.0.0.1:{server.server_port}", "tokenPath": "/token"}, bootstrap)
+            config = {"computerId": "computer-1", "generation": "1", "leaseId": "lease-1", "internalEndpoint": f"http://127.0.0.1:{server.server_port}", "tokenPath": "/token"}
+            self.assertEqual(_execute_turn(config, _bootstrap(config)), "completed")
         finally:
-            model.shutdown()
             server.shutdown()
-            model.server_close()
             server.server_close()
-        self.assertEqual(received[0][0:2], ("/v1/chat/completions", "Bearer sk-attempt"))
-        self.assertEqual(received[0][2]["max_tokens"], 4096)
-        self.assertEqual(received[0][2]["messages"], [{"role": "system", "content": "Use the approved persona."}, {"role": "user", "content": "hi"}])
-        self.assertEqual(received[1][0:2], ("/api/internal/conversation-computer/output", "Bearer projected-token"))
-        self.assertEqual(received[1][2]["text"], "real answer")
+        self.assertEqual(received, [
+            ("/api/internal/conversation-computer/bootstrap?computerId=computer-1&generation=1&leaseId=lease-1", "Bearer bootstrap-token", {}),
+            ("/api/internal/conversation-computer/model-step", "Bearer model-step-token", {"bootstrapId": "bootstrap-1", "ordinal": 1}),
+        ])
+
+
+class TurnPollingTests(unittest.TestCase):
+    """Keep unresolved paid work visible while polling only the server's saved status."""
+
+    def tearDown(self) -> None:
+        computer_main._LAST_FAILURE_TYPE = None
+
+    def test_pending_bootstrap_polls_at_normal_cadence_without_model_work(self) -> None:
+        """A pending reservation does not authorise another model request."""
+        with patch("src.main._configuration", return_value={}), patch("src.main._install_review_credential") as review, patch("src.main._restore") as restore, patch("src.main._bootstrap", return_value={"bootstrapId": "bootstrap-1", "outcome": "pending"}) as bootstrap, patch("src.main._execute_turn") as execute, patch("src.main.time.sleep", side_effect=[None, StopIteration]) as sleep:
+            with self.assertRaises(StopIteration):
+                computer_main._turn_loop()
+        self.assertEqual(bootstrap.call_count, 2)
+        self.assertEqual([call.args for call in sleep.call_args_list], [(2,), (2,)])
+        review.assert_called_once()
+        restore.assert_called_once()
+        execute.assert_not_called()
+        self.assertIsNone(computer_main._LAST_FAILURE_TYPE)
+
+    def test_unavailable_or_ended_step_stays_degraded_without_resubmission(self) -> None:
+        """Remember the stopped bootstrap through pending or repeated-ready status polls."""
+        for outcome in ("response_unavailable", "authority_ended"):
+            with self.subTest(outcome=outcome):
+                computer_main._LAST_FAILURE_TYPE = None
+                statuses: list[str | None] = []
+
+                def observe_sleep(_seconds: int) -> None:
+                    statuses.append(computer_main._LAST_FAILURE_TYPE)
+                    if len(statuses) == 3:
+                        raise StopIteration
+
+                polls = [{"bootstrapId": "bootstrap-1", "outcome": state} for state in ("ready", "pending", "ready")]
+                with patch("src.main._configuration", return_value={}), patch("src.main._install_review_credential"), patch("src.main._restore"), patch("src.main._bootstrap", side_effect=polls), patch("src.main._execute_turn", return_value=outcome) as execute, patch("src.main._LOGGER.warning") as warning, patch("src.main.time.sleep", side_effect=observe_sleep):
+                    with self.assertRaises(StopIteration):
+                        computer_main._turn_loop()
+                execute.assert_called_once()
+                warning.assert_called_once()
+                self.assertEqual(statuses, [outcome, outcome, outcome])
+
+    def test_restart_reads_unavailable_status_without_model_work(self) -> None:
+        """A fresh process learns the durable refusal from bootstrap and leaves its call untouched."""
+        with patch("src.main._configuration", return_value={}), patch("src.main._install_review_credential"), patch("src.main._restore"), patch("src.main._bootstrap", return_value={"bootstrapId": "bootstrap-1", "outcome": "response_unavailable"}), patch("src.main._execute_turn") as execute, patch("src.main._LOGGER.warning"), patch("src.main.time.sleep", side_effect=StopIteration):
+            with self.assertRaises(StopIteration):
+                computer_main._turn_loop()
+        execute.assert_not_called()
+        self.assertEqual(computer_main._LAST_FAILURE_TYPE, "response_unavailable")
 
 
 if __name__ == "__main__":

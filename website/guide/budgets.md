@@ -65,9 +65,16 @@ The model-routing service mints an attempt-scoped LiteLLM virtual key. The key c
 - an expiry aligned with the workload assignment; and
 - no upstream provider secret.
 
-After OpenCrane rechecks the exact computer lease generation, AgentIdentity, membership and claimed
-Pod UID, it returns the attempt key in the frozen turn bootstrap. The computer keeps it only in
-process memory and never receives the LiteLLM master key.
+The current text model-step source rechecks the computer lease generation, AgentIdentity,
+membership and claimed Pod UID, then keeps the attempt key on the server. Bootstrap returns only
+the turn id and status. Before model I/O, the server reserves one OpenAI-compatible gateway request
+within the original call allowance and the smaller of the response and run completion-token limits.
+Restart does not replenish those limits or permit another dispatch.
+
+A saved answer is completed from its original event. An uncertain response keeps the spent request
+reservation and pending run for future recovery controls. This does not establish exactly-once
+execution inside LiteLLM or a provider; their internal retry policies remain unqualified. The
+replacement is under review and is not yet CI-qualified or installed on testv5.
 
 ## When a spending limit is reached
 

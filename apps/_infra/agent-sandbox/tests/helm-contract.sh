@@ -62,7 +62,7 @@ const profile = YAML.parse(process.env.SANDBOX_RENDERED_TEMPLATE).spec;
 const pod = profile.podTemplate.spec;
 assert.equal(profile.networkPolicyManagement, "Unmanaged",
   "The release NetworkPolicy must be the sole owner of computer network access");
-assert.equal(pod.dnsPolicy, "ClusterFirst", "The computer must resolve its private server and model service");
+assert.equal(pod.dnsPolicy, "ClusterFirst", "The computer must resolve its private server");
 assert.equal(pod.dnsConfig, undefined, "The controller must not inject public DNS resolvers");
 const reviewMount = pod.containers.find(container => container.name === "conversation-computer")
   .volumeMounts.find(mount => mount.mountPath === "/var/run/opencrane/review");
@@ -93,7 +93,7 @@ for (const [label, value] of Object.entries(policy.spec.podSelector.matchLabels)
 }
 assert.deepEqual(policy.spec.policyTypes, ["Ingress", "Egress"]);
 assert.deepEqual(policy.spec.ingress.map(rule => rule.ports.map(port => port.port)), [[8090]]);
-assert.deepEqual(policy.spec.egress.map(rule => rule.ports.map(port => port.port)), [[8081], [4000], [53, 53]]);
+assert.deepEqual(policy.spec.egress.map(rule => rule.ports.map(port => port.port)), [[8081], [53, 53]]);
 for (const rule of [...policy.spec.ingress, ...policy.spec.egress]) {
   for (const peer of rule.from ?? rule.to ?? []) assert.equal(peer.ipBlock, undefined);
 }
@@ -195,7 +195,7 @@ if grep -Eq 'kind: (SandboxTemplate|SandboxWarmPool|ValidatingAdmissionPolicy|Va
   exit 1
 fi
 
-# The model service must admit only the configured computer namespace, component and profiles.
+# The model service must retain server and Cognee access while denying computer Pods.
 # Render these two owners in the disposable chart so unrelated memory requirements do not mask
 # LiteLLM's own policy switch when the broad policy and agent controller are disabled.
 printf '{{ include "opencrane.litellm.networkPolicy" . }}\n---\n{{ include "opencrane.agentSandbox.resources" . }}\n' >"$CHART_DIR/templates/app-rollups.yaml"
@@ -260,28 +260,32 @@ for (const [input, namespace, port] of [[process.env.SANDBOX_RENDERED, "opencran
     assert.deepEqual(rule.ports, [{ protocol: "TCP", port }]);
     return rule.from;
   });
-  const computers = peers.filter(peer => peer.podSelector?.matchLabels?.["app.kubernetes.io/component"] === "agent-sandbox");
-  assert.equal(computers.length, namespace === null ? 0 : 1);
+  assert.deepEqual(peers, ["opencrane-server", "cognee"].map(component => ({
+    namespaceSelector: { matchLabels: { "kubernetes.io/metadata.name": "default" } },
+    podSelector: { matchLabels: { ...policy.spec.podSelector.matchLabels, "app.kubernetes.io/component": component } }
+  })));
+  const accepts = (candidateNamespace, labels) => peers.some(peer =>
+    candidateNamespace === peer.namespaceSelector.matchLabels["kubernetes.io/metadata.name"] &&
+    Object.entries(peer.podSelector.matchLabels).every(([key, value]) => labels[key] === value));
+  for (const peer of peers) {
+    assert.ok(accepts("default", peer.podSelector.matchLabels));
+    assert.ok(!accepts("foreign-server", peer.podSelector.matchLabels));
+    assert.ok(!accepts("default", { ...peer.podSelector.matchLabels, "app.kubernetes.io/instance": "foreign-release" }));
+  }
+  for (const candidateNamespace of ["default", namespace ?? "opencrane-testv5", "foreign-computers"]) {
+    assert.ok(!accepts(candidateNamespace, {
+      ...policy.spec.podSelector.matchLabels,
+      "app.kubernetes.io/component": "agent-sandbox",
+      "opencrane.ai/agent-sandbox-profile": "developer"
+    }), "Computer Pods must not reach LiteLLM, including when they share the server namespace");
+  }
   assert.ok(!resources.some(resource => resource.metadata?.name === "opencrane-testv5-conversation-computer-egress"), "The server must not duplicate the computer policy");
   if (namespace === null) continue;
-  const [peer] = computers;
-  assert.deepEqual(peer, {
-    namespaceSelector: { matchLabels: { "kubernetes.io/metadata.name": namespace } },
-    podSelector: { matchLabels: { "app.kubernetes.io/component": "agent-sandbox" }, matchExpressions: [{ key: "opencrane.ai/agent-sandbox-profile", operator: "In", values: ["developer"] }] }
-  });
-  const accepts = (candidateNamespace, labels) =>
-    candidateNamespace === peer.namespaceSelector.matchLabels["kubernetes.io/metadata.name"] &&
-    Object.entries(peer.podSelector.matchLabels).every(([key, value]) => labels[key] === value) &&
-    peer.podSelector.matchExpressions.every(expression => expression.values.includes(labels[expression.key]));
-  const labels = { "app.kubernetes.io/component": "agent-sandbox", "opencrane.ai/agent-sandbox-profile": "developer" };
-  assert.ok(accepts(namespace, labels));
-  assert.ok(!accepts("another-silo", labels));
-  assert.ok(!accepts(namespace, { ...labels, "app.kubernetes.io/component": "unrelated" }));
-  assert.ok(!accepts(namespace, { ...labels, "opencrane.ai/agent-sandbox-profile": "unadmitted" }));
-  assert.ok(!accepts(namespace, { "app.kubernetes.io/component": "agent-sandbox" }));
   const outbound = resources.find(resource => resource.kind === "NetworkPolicy" && resource.metadata.name === "opencrane-testv5-conversation-computer");
   const modelRule = outbound.spec.egress.find(rule => rule.to?.some(destination => destination.podSelector?.matchLabels?.["app.kubernetes.io/component"] === "litellm"));
-  assert.deepEqual(modelRule.ports, [{ protocol: "TCP", port }]);
+  assert.equal(modelRule, undefined);
+  assert.deepEqual(outbound.spec.egress.map(rule => rule.ports.map(entry => entry.port)), [[8081], [53, 53]]);
+  assert.deepEqual(outbound.spec.egress[0].to, [peers[0]]);
 }
 NODE
 

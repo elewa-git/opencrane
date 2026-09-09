@@ -8,7 +8,8 @@ integrations.
 The catalogue, immutable package import and governed MCP execution services are implemented.
 The current follow-up source also queues a permitted conversation-tool proposal together with its
 saved invocation. Repeating that proposal recovers the original work, within the original run's
-time and access limits. The handoff still needs fresh database and live qualification. The
+time and access limits. The handoff has passed fresh database proofs and full CI; live qualification
+remains outstanding. The current model-step accepts text only and rejects tool responses. The
 conversation model loop does not yet request tools or resume from their results, so installing a
 tool does not make it usable from assistant chat. See [development status](/guide/status).
 :::

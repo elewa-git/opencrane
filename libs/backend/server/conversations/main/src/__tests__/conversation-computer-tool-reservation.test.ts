@@ -1,3 +1,4 @@
+import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { _PrepareBoundDraft, _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
 import type { BoundConversationWriterAppend } from "../bound-conversation-writer.types";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
@@ -73,14 +74,14 @@ async function _Harness()
 		return { proposalId: prepared.proposalId, outcome };
 	});
 	const writer = vi.fn().mockResolvedValue({});
-	const dependencies = { siloId: "silo", endpoint: "http://model.test", candidates: { admit: vi.fn(), resolve: vi.fn().mockResolvedValue(candidate), assertCurrent: vi.fn().mockResolvedValue(candidate) }, store: new KurrentConversationComputerTurnStore(history), toolProposals: { admit: admission }, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, credentials: { issueOrRotate: vi.fn().mockResolvedValue({ key: "test-only", credentialDigest: "sha256:test" }), revoke: vi.fn() }, outputPayloads: { store: vi.fn().mockResolvedValue({ blockId: "block", payloadRef: "opaque-payload", ciphertextDigest: "sha256:ciphertext" }) }, runLifecycle: { start: vi.fn(), complete: vi.fn() }, writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ append: writer, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) } };
+	const dependencies = { logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ text: "Finished" }) }, siloId: "silo", endpoint: "http://model.test", candidates: { admit: vi.fn(), resolve: vi.fn().mockResolvedValue(candidate), assertCurrent: vi.fn().mockResolvedValue(candidate) }, store: new KurrentConversationComputerTurnStore(history), toolProposals: { admit: admission }, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, credentials: { issueOrRotate: vi.fn().mockResolvedValue({ key: "test-only", credentialDigest: "sha256:test" }), revoke: vi.fn() }, outputPayloads: { store: vi.fn().mockResolvedValue({ blockId: "block", payloadRef: "opaque-payload", ciphertextDigest: "sha256:ciphertext" }) }, runLifecycle: { start: vi.fn(), complete: vi.fn() }, writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ append: writer, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) } };
 	const restart = () => new ConversationComputerTurnAuthority({ ...dependencies, store: new KurrentConversationComputerTurnStore(history) });
 	const authority = restart();
 	const workload = { subject: "system:serviceaccount:silo:computer", namespace: "silo", serviceAccountName: "computer", podUid: "pod" };
 	const command = { computerId: "computer", lease: candidate.lease, workload };
 	const bootstrap = await authority.bootstrap(command);
 	const proposal = { bootstrapId: bootstrap!.bootstrapId, toolRevisionId: "tool-1", arguments: { query: "private record" }, workload };
-	const output = { bootstrapId: bootstrap!.bootstrapId, sourceCommandId: "59f3e83d-5526-4dfc-a6d5-6c6d2d7509ee", text: "Finished", workload };
+	const output = { bootstrapId: bootstrap!.bootstrapId, ordinal: 1 as const, workload };
 	const stream = `conversation-computer-turn-${bootstrap!.bootstrapId}`;
 	return { history, authority, restart, dependencies, admission, writer, rows, candidate, command, proposal, output, stream };
 }
@@ -103,28 +104,28 @@ describe("one durable decision between a tool proposal and final output", functi
 		const proposed = f.authority.proposeTool(f.proposal);
 		const rejected = expect(proposed).rejects.toThrow("denied");
 		await entered.promise;
-		await expect(f.restart().appendOutput(f.output)).resolves.toBe("accepted");
+		await expect(f.restart().modelStep(f.output)).resolves.toEqual({ outcome: "completed" });
 		proceed.release();
 		await rejected;
 		expect(f.admission).not.toHaveBeenCalled();
 		expect(f.writer).toHaveBeenCalledTimes(1);
 	});
 
-	it("never finishes output when a reservation wins after output preparation", async function _ToolWins()
+	it("never sends a model request when a tool wins the allowance race", async function _ToolWins()
 	{
 		const f = await _Harness();
 		const entered = _Gate();
 		const proceed = _Gate();
 		f.history.beforeAppend = async command =>
 		{
-			if (command.events[0].type.endsWith("turn-output.v1"))
+			if (command.events[0].type.endsWith("turn-model-reserved.v1"))
 			{
 				entered.release();
 				await proceed.promise;
 			}
 		};
-		const output = f.authority.appendOutput(f.output);
-		const rejected = expect(output).rejects.toThrow("output decision");
+		const output = f.authority.modelStep(f.output);
+		const rejected = expect(output).resolves.toEqual({ outcome: "pending" });
 		await entered.promise;
 		await f.restart().proposeTool(f.proposal);
 		proceed.release();
@@ -165,7 +166,7 @@ describe("one durable decision between a tool proposal and final output", functi
 		await expect(f.authority.proposeTool(f.proposal)).rejects.toThrow("response lost");
 		expect(f.admission).not.toHaveBeenCalled();
 		await expect(f.restart().bootstrap(f.command)).resolves.toBeNull();
-		expect(f.dependencies.credentials.issueOrRotate).toHaveBeenCalledTimes(1);
+		expect(f.dependencies.credentials.issueOrRotate).not.toHaveBeenCalled();
 		await expect(f.restart().proposeTool(f.proposal)).resolves.toMatchObject({ outcome: "recorded" });
 		expect(f.history.streams.get(f.stream)).toHaveLength(2);
 	});
@@ -176,7 +177,7 @@ describe("one durable decision between a tool proposal and final output", functi
 		f.admission.mockRejectedValue(new Error(error));
 		await expect(f.authority.proposeTool(f.proposal)).rejects.toThrow(error);
 		expect((await f.dependencies.store.load(f.proposal.bootstrapId))?.toolReservation).not.toBeNull();
-		await expect(f.restart().appendOutput(f.output)).rejects.toThrow("unresolved tool work");
+		await expect(f.restart().modelStep(f.output)).resolves.toEqual({ outcome: "pending" });
 		expect(f.writer).not.toHaveBeenCalled();
 	});
 
@@ -188,7 +189,7 @@ describe("one durable decision between a tool proposal and final output", functi
 		await expect(f.authority.proposeTool(f.proposal)).rejects.toThrow("commit response lost");
 		f.admission.mockRejectedValueOnce(new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied));
 		await expect(f.restart().proposeTool(f.proposal)).rejects.toThrow("denied");
-		await expect(f.restart().appendOutput(f.output)).rejects.toThrow("unresolved tool work");
+		await expect(f.restart().modelStep(f.output)).resolves.toEqual({ outcome: "pending" });
 		await expect(f.restart().proposeTool(f.proposal)).resolves.toMatchObject({ outcome: "existing" });
 		expect(f.rows.size).toBe(1);
 	});
@@ -241,7 +242,7 @@ describe("one durable decision between a tool proposal and final output", functi
 			const intent = await _PrepareConversationOutputIntent((await f.dependencies.store.load(f.proposal.bootstrapId))!, sourceCommandId);
 			f.history.streams.get(f.stream)!.push({ id: sourceCommandId, type: "opencrane.conversation-computer-turn-output.v1", streamName: f.stream, revision: 1n, recordedAt: new Date(), data: { bootstrapId: f.proposal.bootstrapId, intent }, metadata: { bootstrapId: f.proposal.bootstrapId } });
 		};
-		await expect(f.authority.proposeTool(f.proposal)).rejects.toThrow("denied");
+		await expect(f.authority.proposeTool(f.proposal)).rejects.toThrow();
 		expect(f.admission).not.toHaveBeenCalled();
 	});
 
@@ -256,7 +257,7 @@ describe("one durable decision between a tool proposal and final output", functi
 		const first = f.authority.proposeTool(f.proposal);
 		await entered.promise;
 		await expect(f.restart().proposeTool(f.proposal)).rejects.toThrow("denied");
-		await expect(f.restart().appendOutput(f.output)).rejects.toThrow("unresolved tool work");
+		await expect(f.restart().modelStep(f.output)).resolves.toEqual({ outcome: "pending" });
 		proceed.release();
 		await first;
 		expect(f.rows.size).toBe(1);
@@ -266,10 +267,11 @@ describe("one durable decision between a tool proposal and final output", functi
 	it("compares every output receipt field after event-ID replay acknowledgement", async function _ChangedReceipt()
 	{
 		const f = await _Harness();
-		const turn = (await f.dependencies.store.load(f.proposal.bootstrapId))!;
-		const receipt = await _PrepareConversationOutputIntent(turn, f.output.sourceCommandId);
+		const sourceCommandId = "59f3e83d-5526-4dfc-a6d5-6c6d2d7509ee";
+		const turn = await _ReserveConversationOutputFixture(f.dependencies.store, f.proposal.bootstrapId, sourceCommandId);
+		const receipt = await _PrepareConversationOutputIntent(turn, sourceCommandId);
 		await f.dependencies.store.markOutput(f.proposal.bootstrapId, receipt);
-		await expect(f.dependencies.store.markOutput(f.proposal.bootstrapId, await _PrepareConversationOutputIntent(turn, f.output.sourceCommandId, "other-payload"))).rejects.toThrow("output decision");
+		await expect(f.dependencies.store.markOutput(f.proposal.bootstrapId, await _PrepareConversationOutputIntent(turn, sourceCommandId, "other-payload"))).rejects.toThrow("output decision");
 	});
 
 	it.each(["fingerprint", "bootstrap", "metadata", "event-id", "unknown", "extra-event"])("rejects malformed or mixed stored decisions: %s", async function _Malformed(kind)
@@ -285,7 +287,7 @@ describe("one durable decision between a tool proposal and final output", functi
 		if (kind === "metadata")
 			events[1] = { ...event, metadata: { bootstrapId: "foreign" } };
 		if (kind === "event-id")
-			events[1] = { ...event, id: f.output.sourceCommandId };
+			events[1] = { ...event, id: "59f3e83d-5526-4dfc-a6d5-6c6d2d7509ee" };
 		if (kind === "unknown")
 			events[1] = { ...event, type: "unknown.v1" };
 		if (kind === "extra-event")

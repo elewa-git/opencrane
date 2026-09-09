@@ -11,8 +11,8 @@ the image from a release-owned profile after OpenCrane admits a generation-bound
  KurrentDB lease event ──► SandboxClaim ──► conversation-computer ◄── HERE
                                                   │
                                                   ├── Pod-bound bootstrap
-                                                  ├── one admitted LiteLLM call
-                                                  ├── safe output append
+                                                  ├── server model-step request
+                                                  ├── turn outcome polling
                                                   └── lease-local review gateway
 ```
 
@@ -21,11 +21,16 @@ the image from a release-owned profile after OpenCrane admits a generation-bound
 
 The process refuses readiness unless it receives the computer id, lease id, computer generation and
 private server endpoint. It re-reads a short-lived, audience-bound projected token for every exchange.
-The server returns immutable compiled input and an attempt-scoped LiteLLM route only after binding the
-Pod to the current lease. The process checks that the compiled budget admits its single model call
-and sends the compiled persona and context instructions as a system message before the conversation
-history. It sends LiteLLM the lower of the frozen per-response and total-token ceilings. Output returns
-through the server-owned conversation writer.
+After binding the Pod to the current lease, the server returns a bootstrap id and its outcome. The
+process asks the server to perform model step 1 when that outcome is `ready`. The server owns the
+compiled input, model credentials, frozen call and token budgets, model request and conversation
+output. None of those inputs or credentials cross into the Pod.
+
+Pending work polls bootstrap at the normal two-second cadence. A `response_unavailable` or
+`authority_ended` model outcome keeps readiness degraded while the process polls for recovery; it
+does not resubmit that bootstrap's model step. Bootstrap also preserves `response_unavailable` after
+a process restart. Private HTTP requests allow 30 seconds, covering the server's 25-second model
+dispatch deadline.
 
 ## Public surface
 

@@ -1,3 +1,4 @@
+import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { vi } from "vitest";
 
@@ -43,7 +44,7 @@ class _History implements Pick<HistoryStore, "append" | "readStream">
 }
 
 /** Recreate the actual store, writer, Pod/lease resolver and coordinator against shared durable state. */
-export async function _OutputRecoveryHarness()
+export async function _OutputRecoveryHarness(reserveOutput = true)
 {
 	const history = new _History();
 	const stream = "conversation-conversation-1";
@@ -73,6 +74,7 @@ export async function _OutputRecoveryHarness()
 		const saved = payloads.get(source)!;
 		return { blockId: saved.blockId, payloadRef: saved.payloadRef, ciphertextDigest: saved.ciphertextDigest };
 	}) };
+	const model = { request: vi.fn().mockResolvedValue({ text: "A private chosen answer" }) };
 	const credentials = { issueOrRotate: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: "sha256:test" }), revoke: vi.fn().mockResolvedValue(undefined) };
 	const runLifecycle = { start: vi.fn().mockResolvedValue(undefined), complete: vi.fn(async function _Complete()
 	{
@@ -83,7 +85,7 @@ export async function _OutputRecoveryHarness()
 	function _Restart()
 	{
 		const store = new KurrentConversationComputerTurnStore(history);
-		const dependencies: ConversationComputerTurnAuthorityDependencies = { siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { create: function _Writer(turn, workload)
+		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { create: function _Writer(turn, workload)
 		{
 			return new BoundConversationWriter(history, turn.binding, { now: function _Now() { return new Date(Date.parse("2026-09-08T23:00:00.000Z") + flags.stamp++ * 1_000); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility()
 			{
@@ -96,6 +98,8 @@ export async function _OutputRecoveryHarness()
 	const command = { computerId: "computer-1", lease, workload: { subject: "system:serviceaccount:computers:computer", namespace: "computers", serviceAccountName: "computer", podUid: "pod-1" } };
 	const authority = _Restart();
 	const bootstrap = await authority.bootstrap(command);
-	const output = { bootstrapId: bootstrap!.bootstrapId, sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "A private chosen answer", workload: command.workload };
-	return { history, stream, current, flags, compiler, pods, candidates, payloads, outputPayloads, credentials, runLifecycle, command, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
+	const output = { bootstrapId: bootstrap!.bootstrapId, sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"), text: "A private chosen answer", workload: command.workload };
+	if (reserveOutput)
+		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(history), bootstrap!.bootstrapId, output.sourceCommandId);
+	return { model, history, stream, current, flags, compiler, pods, candidates, payloads, outputPayloads, credentials, runLifecycle, command, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
 }

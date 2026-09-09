@@ -34,7 +34,7 @@ export { ConversationComputerCheckpointFenceAdapter, ConversationComputerLifecyc
 export { PrismaConversationComputerActivationProjectionRepository } from "./db/prisma-conversation-computer-activation-repository";
 export { PrismaConversationComputerLifecycleProjectionRepository } from "./db/prisma-conversation-computer-lifecycle-projection-repository";
 export { _CreateConversationComputerTurnRouter } from "./conversation-computer-turn.router";
-export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerModelCredential, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";
+export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";
 export { ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityService } from "./conversation-computer-turn-authority";
 export { ActiveConversationComputerTurnCandidateResolver } from "./conversation-computer-turn-candidate-resolver";
 export { KurrentConversationComputerTurnStore } from "./conversation-computer-turn-store";
@@ -75,3 +75,6 @@ export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposa
 export { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 export { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
 export type { ConversationToolProposalAdmission, ConversationToolProposalCommand, ConversationToolProposalRuntimeAdmission } from "./conversation-tool-proposal.types";
+
+export { ConversationComputerModelStepOutcomes } from "./conversation-computer-model.types";
+export type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";

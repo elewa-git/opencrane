@@ -23,21 +23,35 @@ and fails closed when asked for Use; this message repair does not enable them th
 check. Human-reviewed group-child text sharing uses its separate recorded admission and remains
 available through that existing path.
 
+For assistant text turns, the server keeps the compiled prompt and model credential. Bootstrap gives
+the verified Pod a turn id and `ready`, `pending` or `response_unavailable`. A ready Pod requests
+`POST /api/internal/conversation-computer/model-step` with that id and ordinal 1; it cannot choose
+the prompt, model, budget or output text. The server reserves the request in the existing turn stream
+before model I/O. That reservation consumes one admitted OpenAI-compatible gateway request across competing callers and
+restarts, within the original run's model-call, completion-token and authority limits.
+
+The model-routing port accepts completed text only and rejects tool responses. The server saves the
+encrypted answer and its complete event intent before appending conversation history. A restart
+finishes that saved answer without asking the model again. If no answer was saved, the reservation
+reports pending until its dispatch deadline and then response unavailable; it never grants another
+paid dispatch. The run remains pending for future recovery controls. This does not prove exactly-once
+provider execution: LiteLLM and provider-internal retries have not been qualified.
+
 The private tool-proposal route lets a verified conversation Pod request one permitted call for its
 current turn. The server validates the frozen tool and arguments, rechecks current access, and saves
 the invocation, its readiness and existing MCP (Model Context Protocol) executor work in one
 PostgreSQL transaction. A failure rolls back those changes together. Identical retries recover the
 original invocation and executor work without resetting their progress; changed arguments are
-refused. The route returns a proposal receipt. Connecting model requests, tool results and durable
-conversation progress remains unfinished.
+refused. The route returns a proposal receipt. Connecting model tool requests, saved tool results
+and durable conversation progress remains unfinished; the text model-step does not invoke tools.
 
 Proposal audits name the verified conversation-computer Pod and the saved run. Later tool-dispatch
 audits name the current MCP executor Job and Pod instead. The transport owners supply those
 coordinates; a proposal body cannot choose an audience, actor or namespace.
 
 Before database admission, the turn stream reserves that exact proposal against the same revision
-used to accept final output. Stored-decision readback confirms which command won. A reserved turn
-cannot accept an answer; bootstrap retries that observe it wait instead of issuing another key. Admission errors keep the
+used to reserve model dispatch. Stored-decision readback confirms which command won. A tool-reserved
+turn cannot reserve a model request or accept an answer; bootstrap retries wait. Admission errors keep the
 reservation because an earlier request may already have committed. An exact client retry can
 recover it; an abandoned reservation remains pending until outcome reconciliation is implemented.
 The reservation contains only identity and digests, so it cannot reconstruct missing arguments.
@@ -142,19 +156,18 @@ server-resolved coordinates. That port owns durable run assembly and returns the
 input. A denial fails bootstrap closed; the conversation package never creates an execution subject
 or treats computer-supplied coordinates as authority.
 
-Review-credential, bootstrap and output failures keep the private transport's opaque 409 response.
+Review-credential and bootstrap failures keep the private transport's opaque 409 response.
 Each warning identifies the fixed operation and a recognized error class and code; it excludes
 credentials, model input or output, request coordinates and upstream error text. The internal
 listener supplies request correlation and logging before these early handlers run.
 
-Every new or retried model-input handoff recomputes the remaining original run deadline
-and execution/requester membership expiry, then shortens that bound to the current lease. Key
-issuance uses this absolute limit and a maximum five-minute lifetime. Encrypted custody records the
-provider's reported expiry, and a reused key beyond the refreshed bound is revoked before a new key
-is handed out. A key without a valid, sufficiently short reported expiry is rejected and revoked.
-Grant revocation closes the next input handoff, new output append and participant read; an already issued provider
-key can remain usable until its verified expiry or explicit revocation. There is no separate live
-permission check on every model request.
+Before model dispatch, the server rechecks the original run deadline, execution and requester
+membership expiry, current permission and active lease. It saves the smaller of the frozen response
+and run completion-token ceilings, and a dispatch deadline no later than 25 seconds or the remaining
+authority. Credential issuance and the HTTP exchange share that deadline; the Pod's private request
+allows 30 seconds. An unavailable response keeps the reservation instead of issuing a replacement
+allowance or key on bootstrap. Grant revocation closes new model dispatch, output append and
+participant reads; it does not prove cancellation of a request already accepted by the provider.
 
 Attempt-key issuance uses the configured silo authority independently of the Kubernetes namespace.
 It commits encrypted custody before a separate ready-state promotion. If promotion and immediate
@@ -163,9 +176,11 @@ provider cleanup both fail, the custodied row remains decryptable for a later cl
 Before appending assistant history, the turn store saves the complete prepared event: its author,
 timestamp, position, metadata and encrypted payload reference. This intent contains no answer text
 or credential. Concurrent preparation returns the stored winner, including its original timestamp.
-After a restart, the current Pod can recover that exact answer, complete the fenced run, revoke its
-model key, and settle the active-turn pointer before another turn starts. Reusing an output identifier
-with different text is refused by the encrypted payload owner.
+After a restart, the server recovers that exact answer for the current Pod, completes the fenced run,
+revokes its model key and settles the active-turn pointer before another turn starts. Saved-output
+recovery runs before recompiling current history, which may already contain the accepted answer.
+Reusing an output identifier with different text is refused by the encrypted payload owner. The
+private manual-output route is removed; output admission requires the winning server model reservation.
 
 `BoundConversationWriter` is the KurrentDB-facing computer boundary. A caller mints one binding for
 one silo, conversation, computer lease generation, agent identity, run, and expected stream
@@ -251,13 +266,13 @@ Persisted and wire shapes keep their own flat names (`generation` on Kurrent eve
 | **lease** | One sandbox realization of a logical computer. A computer has zero or one active lease; the lease id is a public label derived from the computer id and generation, never a secret. | `LeaseScope.leaseId` |
 | **generation** | The count of realizations a computer has had; it grows by one on every new claim and fences out a replaced or stale Pod. Always paired with the lease id. | `LeaseScope.leaseGeneration` (stored as `generation` on Kurrent events, Pod labels and SandboxClaim labels) |
 | **claim** | The Agent Sandbox `SandboxClaim` that realizes a lease, named `<computerId>-g<generation>`. Also: the row-level fence a credential transaction holds (`claimFence`). | `ClaimedLeaseScope.sandboxClaimId`; `claimFence` on the credential row |
-| **credential** | A secret handed to the bound Pod: the attempt-scoped LiteLLM key (`ConversationComputerCredentialIssueCommand`) or the derived review-gateway bearer (`ConversationComputerReviewCredentialGrant`). Never persisted in history. | Command fields, never a bundle |
+| **credential** | The attempt-scoped LiteLLM key stays server-side (`ConversationComputerCredentialIssueCommand`); the derived review-gateway bearer alone goes to the bound Pod (`ConversationComputerReviewCredentialGrant`). Neither is persisted in history. | Command fields, never a bundle |
 | **activation** | Waking a computer for one requested generation, from the silo activation queue through the SandboxClaim to an active lease. | `ConversationComputerActivationCommand` (flat, because it runs before the identity or lease exists) |
 | **admission** | The server-side decision that lets work start: run admission compiles the pending human entry into an immutable run input after rechecking the requester, computer, agent and lease. | `ConversationComputerRunAdmissionCommand` = `computer` + `agent` + `lease` + requester fields |
 | **fence** | Any comparison that stops a stale actor: the lease generation on every durable write, the active-lease row on PostgreSQL approvals, the claim fence on a credential row. `_AssertFencedRowCount` documents the row-count form once. | Field of whichever bundle is being compared |
 | **checkpoint** | The verified immutable workspace archive captured before a lease is released and restored into the next realization. | `ComputerWorkspaceCheckpoint`; restore is addressed by `siloId` + `computerId` + `LeaseScope` |
 | **receipt** | The saved intent for one complete answer event, including its encrypted payload reference. Exact conversation readback separately proves that event was accepted. | `ConversationComputerTurnOutputReceipt` |
-| **envelope** | The immutable turn handed to the Pod at bootstrap: compiled input plus the model credential. Also the Kurrent event metadata that repeats the lease coordinates. | `ConversationComputerBootstrap`; event `metadata` |
+| **envelope** | The Pod's bootstrap response contains a turn id and outcome. The saved output event envelope separately contains the prepared entry and metadata needed to recognise its exact history append. Neither contains model credentials or prompt text. | `ConversationComputerBootstrap`; `ConversationComputerTurnOutputReceipt` |
 
 The bundles themselves: `ComputerScope` (`siloId`, `conversationId`, `computerId`, `agentIdentityId`)
 says which computer; `LeaseScope` (`leaseId`, `leaseGeneration`, plus `sandboxClaimId` or `expiresAt`
@@ -280,6 +295,10 @@ shared group-child journey and its durable recovery worker. The public routes ar
 - `BoundConversationWriter` is a one-use, stream-bound KurrentDB append boundary for a currently
   leased computer. Its supporting binding, clock, rate-limit, visibility-policy, and lease-fence
   contracts keep the computer unable to select a target stream or stamp a trusted entry coordinate.
+- `ConversationComputerTurnAuthority` serves private bootstrap and model-step requests. It reserves
+  a text request durably, calls the server-only model-routing port and completes or recovers the
+  saved output. Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`;
+  none of those outcomes reveals model input, credentials or response content to the Pod.
 - `__RunConversationComputerActivationListener` consumes one silo-scoped, persistent KurrentDB
   activation subscription in delivery order. It validates the stream-bound command before calling
   the computer authority, parks malformed input and an explicitly parked authority outcome,
@@ -332,8 +351,8 @@ shared group-child journey and its durable recovery worker. The public routes ar
 
 The self API receives only server-derived session and host identity. It never accepts silo,
 membership, user, agent authority, or run identifiers as browser-selected trust facts. The private
-computer turn path depends on a narrow application-owned admission port; this package does not
-persist runs, select an execution subject, dispatch workloads, or execute agents.
+computer turn path depends on an application-owned run-admission port and a server-only model
+transport. This package does not assemble runs, select an execution subject or dispatch tool workloads.
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
 closed through stable denials. The replay persistence port always returns an explicit authorised or

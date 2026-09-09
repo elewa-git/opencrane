@@ -206,11 +206,12 @@ function _StandaloneComputerFixture()
 				return { binding: { siloId: "silo-1", conversationId: "child-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Company", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 }, lease: command.lease, compiledInput: result.compiledInput, latestPendingEntryId: "message-1", modelAlias: "company-model", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: result.authorityExpiresAt };
 			};
 	const computer = new ConversationComputerTurnAuthorityService({
+		logger: { warn: vi.fn() }, model: { request: vi.fn() },
 		toolProposals: { admit: vi.fn() },
 		siloId: "silo-1", endpoint: "http://gateway.test", credentials: { issueOrRotate, revoke: vi.fn() },
 		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { create: vi.fn() },
 		runLifecycle: { start: vi.fn(), complete: vi.fn() },
-		store: { reserveTool: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: vi.fn(), markOutput: vi.fn(), settle: vi.fn() },
+		store: { reserveModel: vi.fn(), reserveTool: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), settle: vi.fn() },
 		candidates: {
 			admit: vi.fn(), assertCurrent: resolveCandidate,
 			resolve: resolveCandidate
@@ -222,21 +223,19 @@ function _StandaloneComputerFixture()
 
 describe("standalone membership on actual computer bootstrap retry", function _StandaloneRetrySuite()
 {
-	it("rechecks an unchanged row before reissuing a key and retains the original deadline", async function _UnchangedRetry()
+	it("rechecks an unreserved bootstrap without issuing a model credential", async function _UnchangedRetry()
 	{
 		const f = _StandaloneComputerFixture();
 		await expect(f.computer.bootstrap(f.bootstrap)).resolves.toMatchObject({ outcome: "ready" });
 		f.advance();
 		await expect(f.computer.bootstrap(f.bootstrap)).resolves.toMatchObject({ outcome: "ready" });
-		expect(f.issueOrRotate).toHaveBeenCalledTimes(2);
-		for (const call of f.issueOrRotate.mock.calls)
-			expect(call[0].notAfter).toBe("2026-09-07T00:05:00.000Z");
+		expect(f.issueOrRotate).not.toHaveBeenCalled();
 	});
 
-	it.each(["version", "row", "inactive", "issuer", "mode"])("refuses changed %s authority before a second model credential", async function _ChangedRetry(change)
+	it.each(["version", "row", "inactive", "issuer", "mode"])("refuses changed %s authority before the first model request", async function _ChangedRetry(change)
 	{
 		const f = _StandaloneComputerFixture();
-		await f.computer.bootstrap(f.bootstrap);
+		const turn = await f.computer.bootstrap(f.bootstrap);
 		f.advance();
 		if (change === "version")
 			f.database.orgMembership.findUnique.mockResolvedValue({ ...f.row, updatedAt: new Date("2026-09-07T00:01:30.000Z") });
@@ -249,6 +248,7 @@ describe("standalone membership on actual computer bootstrap retry", function _S
 		if (change === "mode")
 			f.selectFleet();
 		await expect(f.computer.bootstrap(f.bootstrap)).rejects.toThrow("Conversation run admission was denied");
-		expect(f.issueOrRotate).toHaveBeenCalledTimes(1);
+		await expect(f.computer.modelStep({ bootstrapId: turn!.bootstrapId, ordinal: 1, workload: f.bootstrap.workload })).rejects.toThrow("Conversation run admission was denied");
+		expect(f.issueOrRotate).not.toHaveBeenCalled();
 	});
 });
