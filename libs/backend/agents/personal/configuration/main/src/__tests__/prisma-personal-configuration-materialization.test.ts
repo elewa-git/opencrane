@@ -191,7 +191,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 					}],
 				},
 				mcpToolAssignments: {
-					create: [{ toolRevisionId: "mcp-tool-revision-1", agentServiceId: "service-1", siloId: "silo-1" }],
+					create: [{ toolRevisionId: "mcp-tool-revision-1", siloId: "silo-1" }],
 				},
 				boundaryAttachments: {
 					create: [{
