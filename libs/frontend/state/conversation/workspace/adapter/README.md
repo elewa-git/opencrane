@@ -4,14 +4,13 @@
 
 ## What it owns
 
-This package translates the generated signed-in conversation, onboarding, and run APIs into the
+This package translates the generated signed-in conversation, onboarding, and company-assistant APIs into the
 transport-neutral workspace gateway. It maps only fields the browser state needs, reduces HTTP
-failures to fixed display-safe categories, and routes ordinary participant messages through the
-injected conversation event-stream port.
+failures to fixed display-safe categories, and submits ordinary participant messages through the generated HTTP client.
 
 ```
  Control Plane generated client ──► workspace gateway  ◄── HERE
- conversation event-stream port ──►       │ workspace models
+                                        │ workspace models
                                            ▼
                                 ConversationWorkspaceStore
 ```
@@ -21,7 +20,7 @@ injected conversation event-stream port.
 ## Public surface
 
 - `OpenCraneConversationWorkspaceGateway` uses the generated client for workspace reads and lifecycle
-  commands, and the injected event-stream port for ordinary participant messages. Its onboarding read
+  commands and ordinary participant messages. Its onboarding read
   projects the existing guided exchange into a separate read-only result instead of pretending that it
   is a direct, group, or Agent-session conversation.
 
@@ -34,8 +33,15 @@ import the gateway only from the package barrel.
 Browser-session cookies supply identity. The adapter never accepts a subject id, email, organisation role,
 or memory identity from UI code. It sends opaque conversation, participant, Agent, message, and run
 coordinates only to the exact generated endpoint that accepts them. It does not read response bodies when
-building errors and does not own the socket or live projection; the injected conversation event-stream
-port owns participant message delivery and streaming.
+building errors and does not own the live history connection; the separate conversation event adapter owns streaming.
+The same generated-client adapter implements the narrow computer-review port without releasing sandbox
+network coordinates or lease credentials to the browser.
+The same adapter implements the group-child port. Child reads and creation responses must match the
+requested parent and source; shares forward the reviewed text and UUID unchanged and accept only a
+validated accepted/idempotent acknowledgement. Every request carries the existing session cookie
+and selection AbortSignal. Directory company assistants contain only service IDs and display names.
+Personal-session creation forwards the store's UUID unchanged, allowing the server to distinguish a
+retry from a request for another session.
 Completed migrated accounts with no bootstrap conversation produce `NotRecorded`, never an empty success
 transcript. The adapter requests archived conversation rows so the feature can keep them in a separate list.
 

@@ -42,13 +42,11 @@ export interface ConversationBase
 	readonly siloId: string;
 	/** Current monotonic lifecycle, independent of participant-local archive visibility. */
 	readonly lifecycle: ConversationLifecycles;
-	/** Current context-revision identifier, or null before any compaction. */
-	readonly contextRevisionId: string | null;
 	/** ISO-8601 instant at which lifecycle became closed, or null while open. */
 	readonly closedAt: string | null;
 	/** ISO-8601 instant at which the conversation was created. */
 	readonly createdAt: string;
-	/** ISO-8601 instant at which the conversation was last changed. */
+	/** ISO-8601 instant of the latest participant-visible append; lists sort by it. */
 	readonly updatedAt: string;
 }
 

@@ -14,7 +14,7 @@ approvals, skills, integrations, memory, artifacts, budgets, and audit evidence;
 their concrete adapters, mounts their routers, and starts and stops them in the correct order.
 
 ```
- signed-in UI / channel proxy                cluster workloads
+ signed-in UI                                cluster workloads
               │ browser session                    │ projected identity
               ▼                                    ▼
  ┌──────────────────────────┐          ┌──────────────────────────┐
@@ -28,27 +28,24 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
                   │ runs · policy · audit │
                   └───────────┬───────────┘
                               ▼
-                     agent-controller
-                              │
-                              ▼
-                    claimed warm runtime Pod
+                   KurrentDB HistoryStore
 ```
 
 **In this flow:** [opencrane-ui](../opencrane-ui/README.md) ·
-[channel-proxy](../channel-proxy/README.md) · [agent-controller](../agent-controller/README.md) ·
-[agent-runtime](../agent-runtime/README.md) ·
+[agent-controller](../agent-controller/README.md) ·
+[conversation-computer](../conversation-computer/README.md) ·
 [backend capabilities](../../libs/backend/README.md)
 
 Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. compose one shared-capacity managed admission port and one session-derived personal admission
-   port, both over the same signed membership configuration. A standalone deployment has no Fleet
-   key but deliberately denies run admission until it has a local signed-membership issuer;
+3. compose conversation-computer transport with the bounded personal run-admission port. Admission
+   rechecks Kurrent identity, lease and message history plus every immutable compiler input; it never
+   substitutes request identity, relational conversation history, or a partial PostgreSQL authority;
 4. build the public and internal Express applications; and
-5. start the registered workflow and bounded background workers, then open both listeners and attach
-   the signed-in conversation WebSocket under one coordinated shutdown path.
+5. start the registered workflow and bounded background workers, then open both listeners under one
+   coordinated shutdown path. Signed-in conversation updates use the public SSE route.
 
 The route registry is deliberately a catalogue rather than a second application layer:
 
@@ -68,12 +65,13 @@ trusted to act. Runtime input is frozen for the accepted attempt, and events are
 before clients receive them. Missing or mismatched identity, assignment, authorization, or ordering
 evidence produces a refusal, never partial authority.
 
-Both conversation routes compose the transport-neutral
-[conversation projection package](../../libs/backend/conversations/projection/main/README.md). It
-turns authorised direct, group and agent-session timelines into the same safe, resumable browser
-stream while this app keeps authentication, Prisma and listener ownership. The browser transport is
-a same-origin WebSocket on the public listener: the app restores the existing cookie session before
-the upgrade, rejects a cross-origin request, and closes active sockets before Prisma drains.
+Conversation routes compose the server-owned KurrentDB history and private-payload authorities.
+They expose authenticated history reads, message submission and
+`GET /api/v1/me/conversations/:conversationId/events` on the existing public listener. The event
+route uses bounded SSE frames and exclusive KurrentDB revision cursors; it rechecks current
+participant access and join visibility before releasing private content. Disconnect and shutdown
+cancel stream work. This app keeps session, Prisma projection and listener ownership; no channel
+proxy workload or routing registry is involved.
 
 ## Public surface
 
@@ -85,7 +83,9 @@ its resources to the lifecycle owner.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
-  common mounted-key fleet-membership verifier configuration used by both admission paths.
+  the deployment-selected human membership reader used by both admission paths. Fleet verifies
+  signed assertions; Standalone checks the configured silo, trusted OIDC Principal and active local
+  membership row. A failed Fleet proof never selects Standalone.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/routes.ts` contains named per-area route lists and app-owned transport composition. The
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
@@ -105,12 +105,14 @@ its resources to the lifecycle owner.
 - `src/app/user-onboarding-composition.ts` binds onboarding completion, configured-default model
   resolution, personal-agent persistence, managed grants, and the central `AuthorizationAuthority`
   to one Serializable transaction. Owner identity remains onboarding eligibility; the app does not
-  provide a parallel permission evaluator.
+  provide a parallel permission evaluator. It supplies `OPENCRANE_COMPUTER_PROFILE_NAME` from the
+  same release configuration used by conversation creation and activation. Missing profile
+  configuration prevents startup, and existing services with another profile remain unavailable.
 - `src/infra/artifacts/*` is one app-only artifact-broker composition slice. It binds the server's
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
   configuration and do not expose a reusable ArtifactStore client.
-- `src/app/background-workers.ts` owns the Absurd worker, schedule ticks, durable external-action
+- `src/app/background-workers.ts` owns the Absurd worker, durable external-action
   passes, and MCP completion recovery. Shutdown lets active work finish before Prisma closes.
 - `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
   canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
@@ -137,30 +139,37 @@ transport, and external-service seams belong under
 
 The public and workload-facing APIs share a process but not an exposure boundary. Public ingress
 routes `/api` and the public-safe `/healthz` service report only to `:8080`. That report names the
-API, database, models, memory, files, channels, and optional integrations without exposing internal hosts or
+API, database, models, memory, files, and optional integrations without exposing internal hosts or
 failure details. Database loss returns 503; another service can report degradation while the API
 remains ready to serve unaffected data. The `:8081` Service is restricted by Kubernetes NetworkPolicy, and endpoints
 that grant workload authority additionally review the caller's projected Kubernetes identity and
 bind it to durable assignment evidence.
 
-### Why run admission stays in this process
+The server chart owns the server's network boundary. The
+[Agent Sandbox chart](../_infra/agent-sandbox/README.md) owns computer ingress and egress, and the
+[LiteLLM chart](../_infra/litellm/README.md) admits those computer peers at the model service.
 
-Run admission is not an agent proxy and does not execute an agent session. Managed admission
-synchronously combines three existing product authorities:
+### Run admission boundary
 
-1. verify the managed agent service and its current signed membership evidence;
+Run admission is not an agent proxy and does not execute an agent session. Personal
+ConversationComputer admission synchronously combines three existing product authorities:
+
+1. verify the personal agent service, proxied identity, active computer lease, and current deployment-selected human membership evidence;
 2. assemble one immutable input snapshot from the active revision and effective grants; and
 3. persist the run and admission outcome in the canonical transaction.
 
-Personal admission uses the same immutable snapshot transaction after deriving the caller's subject,
-silo, participant-bound `Conversation`, and personal AgentService from trusted server authorities. Its
-only browser-controlled values are its `conversationId` and retry key. One process-local capacity gate
-protects the database pool and is shared by personal and managed paths, including run-now requests
-and the scheduler. The reusable composition lives in
-[`execution/admission`](../../libs/backend/agents/execution/admission/main/README.md); this app only
-constructs and injects the port.
+The reusable authorities live in
+[`execution/runs`](../../libs/backend/agents/execution/runs/main/README.md) and
+[`execution/inputs`](../../libs/backend/agents/execution/inputs/main/README.md). The app owns a
+process-wide capacity gate plus Kurrent-backed personal execution-subject, conversation-context, and
+encrypted prompt-message authorities. The production compiler repository resolves persona
+instructions, tools, artifacts, skills, and the model route through a transaction-bound Prisma read
+snapshot and refuses any missing or mismatched immutable reference. Personal ConversationComputer
+admission is mounted; managed run-now and scheduler paths remain absent by design.
 
-Moving admission into another deployable now would add a network and availability boundary without
+Personal run status is mounted for signed-in owners.
+
+When the app composes admission, moving it into another deployable would add a network and availability boundary without
 giving it independent data, credentials, lifecycle, or scaling. A future agent-session gateway
 would become justified only when workload streams need their own rollout/scaling lifecycle,
 identity, queue or persistence boundary, and a versioned authenticated contract back to the product
@@ -175,14 +184,14 @@ another deployable's source.
 ## Data & persistence
 
 PostgreSQL owns the durable product record: agent services and revisions, runs and immutable input
-snapshots, the `Conversation -> canonical timeline` authority, approvals, artifacts, skills,
-membership, grants, provider configuration, spend, and audit evidence. An `agent_session`
-conversation conditionally owns serial `AgentRun -> ordered RunEvent` streams; direct and group
-messages create no run.
+snapshots, conversation projections and policy, approvals, artifacts, skills, membership, grants,
+provider configuration, spend, and audit evidence. KurrentDB owns the canonical conversation
+timeline. An `agent_session` conversation conditionally owns serial `AgentRun -> ordered RunEvent`
+streams; direct and group messages create no run.
 
-Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. Runtime
-Pods hold only a working model-loop copy. The server encrypts durable continuations in PostgreSQL,
-so a replacement Pod can resume a governed pause without trusting local disk.
+Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. KurrentDB
+holds canonical conversation and computer lifecycle evidence; Agent Sandbox realizes only the
+currently admitted computer generation.
 
 ## Runtime & config
 
@@ -195,29 +204,56 @@ are:
 | --- | --- | --- |
 | `PORT` / `INTERNAL_PORT` | Public and workload-facing listeners | `8080` / `8081` |
 | `DATABASE_URL` | PostgreSQL connection string | required |
+| `OPENCRANE_HISTORY_STORE_*` | TLS-only KurrentDB endpoint plus read-only CA, username, and password mounts used for checked event history | required |
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
-| `AGENT_RUNTIME_CONTINUATION_KEYRING_PATH` | Read-only mounted keyring used to encrypt and decrypt durable runtime continuations | required |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
-| `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
+| `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
-| `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal warm runtime Pod boundary | required |
-| `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed warm runtime Pod boundary | required |
-| `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
-| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
+| `AGENT_RUN_ADMISSION_*` | Active and queued personal-conversation admission limits | bounded defaults |
+| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` reads current local membership using the deployment silo and OIDC issuer | required |
 | `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |
 | `OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_*` | Fleet-owned member directory, invitations, paid-seat, and payment decisions through one silo-scoped service credential | required in Fleet mode |
-| `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |
-| `CHANNEL_TARGET_*`, `CHANNEL_PROXY_SERVICE_ACCOUNT_NAME` | Exact trusted host/silo and TokenReviewed proxy caller for channel resolution | disabled when absent |
-| `CHANNEL_REPLAY_RECEIVER_ID`, `CHANNEL_REPLAY_ENDPOINT` | Stable replay receiver plus exact internal endpoint; startup and the drained convergence worker reconcile distinct routes per AgentService | disabled when absent |
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.
+The bundle keeps npm packages external, so this app's production dependencies must include its
+runtime clients, including KurrentDB. A dependency declared only at the workspace root is absent
+from the production image's workspace-scoped install.
+The history client verifies the mounted CA and supplies its mounted service credential through
+the SDK credential provider. Passwords stay out of the connection URL: the native transport
+otherwise preserves percent-encoded password characters and rejects valid generated credentials.
+
+### Conversation-computer activation consumer
+
+Every server replica joins the silo's `conversation-computer-activation` KurrentDB consumer group as
+a competing consumer, so `clustertenantManager.replicas` can be raised and a rolling restart never
+leaves activations unread. Operator notes:
+
+- The group is created once by the KurrentDB bootstrap Job with
+  `historyStore.kurrentdb.activationSubscription.maxSubscriberCount` (default `4`) and the
+  `RoundRobin` strategy. Keep the count at or above the server replica count plus one for the extra
+  Pod a rolling update adds. The bootstrap Job does not update an existing group, so a change needs a
+  fresh silo. `Pinned` is not an option here: it hashes on the source stream, which for one activation
+  stream would send everything to a single consumer.
+- Two replicas may handle the same computer at once. That is safe without a lock: every history write
+  carries an expected revision and a deterministic event id, the SandboxClaim name is derived from the
+  computer and generation, and the PostgreSQL lease projection only accepts an identical row. The
+  loser of a race gets a revision conflict, retries the delivery, and then observes the finished
+  activation as an idempotent replay.
+- A dropped or ended subscription is logged at `warn` and reopened with jittered backoff (1 s doubling
+  to 30 s). After 20 consecutive drops without a healthy session (roughly eight minutes of a KurrentDB
+  outage) the consumer logs `fatal` with `conversation computer activation consumer gave up`, sends
+  the process SIGTERM, and shutdown exits non-zero so Kubernetes restarts only that replica. A session
+  that delivered an event or stayed open for 60 s resets the drop count.
+- On SIGTERM the consumer stops pulling deliveries, lets the delivery it holds finish or hands it back
+  to the group with a retry nack, then closes the subscription. Deliveries KurrentDB had buffered for
+  that replica are redelivered to the remaining replicas after the group's 60 s message timeout.
 
 In standalone mode, successful OIDC authentication does not itself grant product access. Existing
 active members proceed normally. A verified identity without membership can call only the signed
@@ -229,8 +265,7 @@ remote authority path.
 
 - Parent index: [apps](../README.md)
 - Composed logic: [backend capabilities](../../libs/backend/README.md) ·
-  [conversation projection](../../libs/backend/conversations/projection/main/README.md) ·
+  [conversation authority](../../libs/backend/server/conversations/main/README.md) ·
   [server infrastructure](../../libs/backend/server/infra/README.md)
 - Sibling apps: [opencrane-ui](../opencrane-ui/README.md) ·
-  [channel-proxy](../channel-proxy/README.md) ·
   [agent-controller](../agent-controller/README.md)

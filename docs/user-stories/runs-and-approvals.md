@@ -7,7 +7,7 @@ coordinates, proof keys, or internal retry machinery.
 
 Current status: run APIs are partial; the conversation-scoped elicitation API and reusable UI are
 ready, with workspace mounting owned by issue #351. Interactive runs start only through
-agent-session messages. Owner cancellation is available and public retry remains blocked.
+agent-session messages. Public cancellation and retry remain blocked.
 
 ## RUN-01 — Start a run from an authoritative agent session
 
@@ -19,15 +19,15 @@ Acceptance criteria:
 - The client submits bounded message blocks and an idempotency key to a conversation it participates
   in; the server derives silo, subject, agent service, and run coordinates.
 - Fresh and idempotent responses lead to the same canonical run.
-- The user message, immutable input snapshot, run, and first dispatch intent commit together or not
-  at all.
+- The user message commits first to canonical Kurrent history. Admission then rechecks that exact
+  history revision and persists the immutable input snapshot with its run in one database transaction.
 - Authority refusal, concurrency limit, queue saturation, and dependency unavailability are distinct.
 - The UI never asks the user to choose a silo, dataset, membership proof, persona revision, or
   workload identity.
 
 API: `WSS /api/v1/me/conversations/{conversationId}/socket` with a structured
 `conversation.message.submit` frame. The former public `POST /api/v1/me/runs` entrypoint is
-deleted; managed schedules and invocations still use the internal run-admission port.
+deleted. Managed schedules and invocations are not mounted in the 0.11 application.
 
 ## RUN-02 — See my run history and status
 
@@ -96,10 +96,8 @@ Acceptance criteria:
 - The server derives owner and silo from the signed-in session; an absent or foreign run is the same
   `not found` response.
 
-API: `POST /api/v1/me/runs/{runId}/cancellation` with the exact `expectedAttempt` last observed by
-the browser.
-
-Status: `API ready`, `UI missing`.
+Status: `API blocked`; cancellation is not exposed until the conversation-computer authority can
+durably release the exact active lease as part of the cancellation operation.
 
 ## RUN-06 — Retry a failed or cancelled run
 

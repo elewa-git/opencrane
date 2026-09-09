@@ -1,19 +1,18 @@
 import { __SelectPersonalPreferenceFactIds, type PersonalMemoryAdmissionRepository } from "@opencrane/backend/agents/personal/memory";
-import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
-import { AgentServiceKinds } from "@opencrane/models/agents";
+import { RunExecutionPersonalMemoryPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { IdentityEnvelopeInput, PreferenceFactInput, PreferenceFactSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
+import type { PreferenceFactInput, PreferenceFactSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Freezes the ids of the user's consented preference facts, chosen from the verified run identity.
  *
  * Ids only — preference text never reaches the snapshot or Postgres, so the run carries a pointer
- * to what the user agreed to rather than a copy of it. Refuses managed runs and non-user
- * identities, so a personal preference can never reach a managed run.
+ * to what the user agreed to rather than a copy of it. A run whose policy forbids personal memory
+ * receives no preference facts and never opens the personal-memory repository.
  *
  * Constructed by: `__CreatePrismaPersonalSessionAssemblyAuthorities`
- * (prisma-session-assembly-authorities.ts). Managed admission substitutes an inline empty source.
+ * (prisma-session-assembly-authorities.ts) for both personal and managed admission.
  *
  * @implements PreferenceFactSource
  */
@@ -29,19 +28,21 @@ export class PersonalMemoryPreferenceFactSource implements PreferenceFactSource
 	}
 
 	/** Loads ids only, never preference text. The snapshot keeps just the ids chosen at admission. */
-	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>
+	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>
 	{
-		// 1. Refuse managed or non-user identities, so a personal preference can never reach a managed run.
-		if (run.agentKind !== AgentServiceKinds.Personal || identity.kind !== RunInputSnapshotIdentityKinds.User)
+		// 1. An explicit policy, not identity kind inference, governs access to personal preference facts.
+		if (run.executionPolicy.personalMemory === RunExecutionPersonalMemoryPolicies.None)
+			return { outcome: "loaded", value: [] };
+		if (run.executionPolicy.personalMemory !== RunExecutionPersonalMemoryPolicies.Allowed)
 		{
 			return { outcome: "denied", reason: "memory_scope_unavailable" };
 		}
 
-		// 2. Read only the verified subject's consented facts, through the caller's admission transaction.
+		// 2. Read only the verified principal's consented facts through the caller's admission transaction.
 		const ids = await __SelectPersonalPreferenceFactIds(this.createPersonalMemory(transaction), {
 			siloId: command.siloId,
-			principalId: identity.principalId,
-			subjectId: identity.executionSubjectId,
+			principalId: executionSubject.principalId,
+			subjectId: executionSubject.principalId,
 		});
 
 		// 3. Pass the ids on for snapshot compilation. The fact text stays with the memory gateway.

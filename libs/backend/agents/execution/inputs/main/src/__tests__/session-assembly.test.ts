@@ -1,152 +1,156 @@
-import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
-import { AgentServiceKinds } from "@opencrane/models/agents";
-import { MessageContentBlockKinds } from "@opencrane/models/conversations";
-import { RunAdmissionDenialReasons, type UserRunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
+import type { RunInputSnapshot } from "@opencrane/contracts";
+import { __DigestRunInputSnapshot, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand, type RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 import { ___DigestCanonicalJson } from "@opencrane/util";
-import type { SessionAssemblyAuthorities } from "../session-assembly.types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { __AssembleRunInputSnapshot } from "../session-assembly";
+import { TransactionBoundProductResourceAuthorizationSource } from "../product-resource-authorization-source";
+import type { SessionAssemblyAuthorities } from "../session-assembly.types";
 
-/** The fixed command these tests use to check snapshot assembly is deterministic. */
-const _COMMAND: UserRunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionIssuer: "https://issuer.test", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", inputMessageId: "message-current", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
-
-/** Build one exact immutable MCP tool snapshot. */
-function _McpTool(toolRevisionId: string, name: string)
+/** Builds one command whose subject is pre-verified by the injected authority. */
+function _command(): RunAdmissionCommand
 {
-	const inputSchema = { type: "object", additionalProperties: false } as const;
-	return { toolRevisionId, name, description: `${name} description`, inputSchema, inputSchemaDigest: ___DigestCanonicalJson(inputSchema) };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "interactive", requestIdempotencyKey: "request-1", messageInput: { mode: RunAdmissionMessageInputModes.PrePersistedHistory, messageId: "message-1", historyRevision: "7", orderedMessageIds: ["message-1"], author: { principalId: "principal-1", issuer: "https://issuer.example", subjectId: "requester-subject-1", authenticatedAt: "2026-09-01T00:00:00.000Z" } }, requester: { subjectId: "requester-subject-1", issuer: "https://issuer.example", authenticatedAt: "2026-09-01T00:00:00.000Z" } };
 }
 
-/** Builds fake source ports, each replaceable on its own, that return their lists out of order on purpose. */
-function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | "idempotent" | "active_run" | "persistence_unavailable", personaRevisionId: string | null = "persona-1"): SessionAssemblyAuthorities
+/** Builds the fully fenced subject required before any identity-scoped input can load. */
+function _subject(): RunInputSnapshot["executionSubject"]
+{
+	return { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-07-20T00:00:00.000Z" }, membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-08-20T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: "2026-07-20T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-20T00:00:00.000Z", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-08-20T00:00:00.000Z" } }, admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-07-20T00:00:00.000Z" } };
+}
+
+/** Builds a complete target authority set whose sources use the one injected subject. */
+function _authorities(): SessionAssemblyAuthorities
 {
 	return {
-		admission: {
-			admit: async function _admit(_command, build)
-			{
-				const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-19T12:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-19T12:00:00.000Z") });
-				if (compiled.outcome === "denied") return { outcome: "denied", reason: compiled.reason };
-				const outcome = onAdmission(compiled.value.snapshot);
-				if (outcome === "persistence_unavailable") return { outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable } as const;
-				if (outcome === "active_run") return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun } as const;
-				return { outcome, snapshot: compiled.value.snapshot } as const;
-			},
-		},
-		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null } } as const; } },
-		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId, personaId: personaRevisionId === null ? null : "persona-profile-1" } } as const; } },
-		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-2", "message-1"], pendingUserMessage: { id: "message-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] } } } as const; } },
-		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [{ id: "preference-2" }, { id: "preference-1" }] } as const; } },
-		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" }, datasetId: "dataset-1" } } as const; } },
-		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelDefinitionId: "model-definition-1", modelRoute: { alias: "target-model" }, mcpTools: [_McpTool("mcp-tool-revision-2", "write"), _McpTool("mcp-tool-revision-1", "search")], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
+		admission: { admit: async function _admit(_command, _verifyExisting, build) { const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 }); return compiled.outcome === "denied" ? { outcome: "denied", reason: compiled.reason } : { outcome: "accepted", snapshot: compiled.value.snapshot }; } },
+		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.None }, promptCompilerVersion: "v1", trigger: "interactive" } } as const; } },
+		executionSubject: { load: async function _load() { return { outcome: "loaded", value: _subject() } as const; } },
+		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId: "persona-1", personaId: "persona-1" } } as const; } },
+		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-1"] } } as const; } },
+		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [] } as const; } },
+		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "none" }, datasetId: null } } as const; } },
+		toolPolicy: { load: async function _load() { const schema = { type: "object" } as const; return { outcome: "loaded", value: { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [{ toolRevisionId: "tool-1", name: "search", description: null, inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
-		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
-		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxTokens: 1000, maxTurns: 4 } } } as const; } },
-		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } },
+		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; }, verifyExisting: async function _VerifyExisting() { return { outcome: "loaded", value: null } as const; } },
+		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: {} } } as const; } },
 	};
 }
 
-describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
+/** Replays a frozen snapshot through the real duplicate checks without recompiling its inputs. */
+async function _DuplicateFixture(memoryQueryPolicy: RunInputSnapshot["memoryQueryPolicy"], preferenceFactIds: readonly string[] = [])
 {
-	it("sorts independently loaded inputs and produces an identical digest for the same durable facts", async function _assemblesDeterministically()
+	const admitted = await __AssembleRunInputSnapshot(_command(), _authorities());
+	if (admitted.outcome === "denied")
+		throw new Error("The fixture must assemble its initial snapshot");
+	const snapshot = { ...admitted.snapshot, memoryQueryPolicy, preferenceFactIds };
+	snapshot.digest = __DigestRunInputSnapshot(snapshot);
+	const authorities = _authorities();
+	const executionSubject = vi.fn().mockResolvedValue({ outcome: "loaded", value: _subject() });
+	authorities.executionSubject = { load: executionSubject };
+	authorities.admission = { admit: async function _Replay(_command, verifyExisting)
 	{
-		const firstSnapshots: RunInputSnapshot[] = [];
-		const secondSnapshots: RunInputSnapshot[] = [];
-		const first = await __AssembleRunInputSnapshot(_COMMAND, _Authorities(function _accept(snapshot) { firstSnapshots.push(snapshot); return "accepted"; }));
-		const second = await __AssembleRunInputSnapshot(_COMMAND, _Authorities(function _accept(snapshot) { secondSnapshots.push(snapshot); return "accepted"; }));
+		const verified = await verifyExisting(snapshot, { prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 });
+		return verified.outcome === "denied" ? verified : { outcome: "idempotent", snapshot };
+	} };
+	return { authorities, executionSubject, snapshot };
+}
 
-		expect(first.outcome).toBe("assembled");
-		expect(second.outcome).toBe("assembled");
-		expect(firstSnapshots[0]?.digest).toBe(secondSnapshots[0]?.digest);
-		expect(firstSnapshots[0]?.messageIds).toEqual(["message-2", "message-1"]);
-		expect(firstSnapshots[0]?.preferenceFactIds).toEqual(["preference-1", "preference-2"]);
-		expect(firstSnapshots[0]?.mcpTools.map(function _Revision(tool) { return tool.toolRevisionId; })).toEqual(["mcp-tool-revision-1", "mcp-tool-revision-2"]);
-	});
-
-	it("fails closed before persistence when a personal service has no active approved persona", async function _deniesMissingPersona()
+describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
+{
+	it("seals the verified execution subject into an admitted snapshot", async function _SealsExecutionSubject()
 	{
-		let admitted = false;
-		const result = await __AssembleRunInputSnapshot(_COMMAND, _Authorities(function _accept() { admitted = true; return "accepted"; }, null));
-
-		expect(result).toEqual({ outcome: "denied", reason: "persona_unavailable" });
-		expect(admitted).toBe(false);
-	});
-
-	it("fails closed before persistence when a managed service carries an approved persona", async function _deniesManagedPersona()
-	{
-		let admitted = false;
-		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
-		authorities.runAuthority = { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } } as const; } };
-		authorities.identityEnvelope = { load: async function _load() { return { outcome: "loaded", value: { kind: RunInputSnapshotIdentityKinds.Service, executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", effectiveBoundaryAttachments: [], effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } };
-
-		const result = await __AssembleRunInputSnapshot({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", requestingPrincipalId: "principal-1", trigger: "managed_invocation", requestIdempotencyKey: "request-1" }, authorities);
-
-		expect(result).toEqual({ outcome: "denied", reason: "persona_unavailable" });
-		expect(admitted).toBe(false);
-	});
-
-	it("returns a typed source refusal without accepting a partial snapshot", async function _deniesSourceRefusal()
-	{
-		let admitted = false;
-		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
-		authorities.memoryScope = { load: async function _load() { return { outcome: "denied", reason: "memory_scope_unavailable" } as const; } };
-
-		const result = await __AssembleRunInputSnapshot(_COMMAND, authorities);
-
-		expect(result).toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
-		expect(admitted).toBe(false);
-	});
-
-	it("preserves the durable active-run classification after final assembly", async function _preservesActiveRun()
-	{
-		const result = await __AssembleRunInputSnapshot(_COMMAND, _Authorities(function _denyActiveRun() { return "active_run"; }));
-
-		expect(result).toEqual({ outcome: "denied", reason: "active_run" });
-	});
-
-	it("fails closed when an assigned skill revision is no longer eligible for a future admission", async function _deniesUnavailableSkill()
-	{
-		let admitted = false;
-		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
-		authorities.skillEligibility = { load: async function _load() { return { outcome: "denied", reason: "skill_unavailable" } as const; } };
-
-		const result = await __AssembleRunInputSnapshot(_COMMAND, authorities);
-
-		expect(result).toEqual({ outcome: "denied", reason: "skill_unavailable" });
-		expect(admitted).toBe(false);
-	});
-
-	it("accepts a non-conversational run only when it has no transcript messages", async function _assemblesNonConversationalRun()
-	{
-		const authorities = _Authorities(function _accept() { return "accepted"; });
-		authorities.conversationContext = { load: async function _load() { return { outcome: "loaded", value: { messageIds: [], pendingUserMessage: null } } as const; } };
-
-		const result = await __AssembleRunInputSnapshot({ ..._COMMAND, conversationId: null }, authorities);
-
+		const result = await __AssembleRunInputSnapshot(_command(), _authorities());
 		expect(result.outcome).toBe("assembled");
-		if (result.outcome === "assembled") expect(result.snapshot.conversationId).toBeNull();
+		if (result.outcome === "assembled")
+		{
+			expect(result.snapshot.executionSubject).toEqual(_subject());
+			expect(result.snapshot.attempt).toBe(1);
+		}
 	});
 
-	it("returns the snapshot selected by an earlier admission without compiling a later request timestamp", async function _returnsIdempotentSnapshot()
+	it("freezes the deployment-selected standalone witness in the first snapshot", async function _FreezesLocal()
 	{
-		let sourceLoads = 0;
-		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
-		const authorities = _Authorities(function _accept() { return "accepted"; });
-		authorities.admission = { admit: async function _admit() { return { outcome: "idempotent", snapshot: previous } as const; } };
-		authorities.runAuthority = { load: async function _load() { sourceLoads += 1; return { outcome: "denied", reason: "run_not_admittable" } as const; } };
-
-		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toEqual({ outcome: "assembled", admissionOutcome: "idempotent", snapshot: previous });
-		expect(sourceLoads).toBe(0);
+		const membership = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.example", subjectId: "requester-subject-1", membershipId: "local-1", membershipUpdatedAt: "2026-09-01T00:00:00.000Z", observedAt: "2026-09-01T00:01:00.000Z", trustedUntil: "2026-09-01T00:06:00.000Z" } as const;
+		const subject = { ..._subject(), membership, requester: { ..._subject().requester, membership } };
+		const authorities = _authorities();
+		authorities.executionSubject = { load: async function _LocalSubject() { return { outcome: "loaded", value: subject }; } };
+		const result = await __AssembleRunInputSnapshot(_command(), authorities);
+		expect(result).toMatchObject({ outcome: "assembled", snapshot: { executionSubject: { membership, requester: { membership } } } });
 	});
 
-	it("rejects a blank execution subject before the admission repository starts", async function _deniesBlankSubject()
+	it("refuses a subject whose computer lease does not match its capability evidence", async function _RefusesWrongComputer()
 	{
-		let admitted = false;
-		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
+		const authorities = _authorities();
+		authorities.executionSubject = { load: async function _load() { return { outcome: "loaded", value: { ..._subject(), computerScope: { ..._subject().computerScope, computerId: "computer-other" } } } as const; } };
+		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
+	});
 
-		const result = await __AssembleRunInputSnapshot({ ..._COMMAND, executionSubjectId: " " }, authorities);
+	it("returns a source refusal without accepting a partial snapshot", async function _RefusesPartialSnapshot()
+	{
+		const authorities = _authorities();
+		authorities.memoryScope = { load: async function _load() { return { outcome: "denied", reason: "memory_scope_unavailable" } as const; } };
+		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+	});
 
-		expect(result).toEqual({ outcome: "denied", reason: "invalid_command" });
-		expect(admitted).toBe(false);
+	it("does not persist when final-transaction Conversation Use is denied", async function _RefusesRevokedConversationUse()
+	{
+		let persisted = false;
+		const authorities = _authorities();
+		authorities.productAuthorization = new TransactionBoundProductResourceAuthorizationSource();
+		authorities.admission = { admit: async function _Admit(_command, _verifyExisting, build)
+		{
+			const compiled = await build({ prisma: {} as never, authorization: { admitPrincipal: async function _Deny() { return { outcome: "deny", evidence: null } as never; }, admitPrincipalBatch: async function _Unexpected() { throw new Error("resource batch must not run"); } }, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 } as never);
+			if (compiled.outcome === "denied")
+				return { outcome: "denied", reason: compiled.reason };
+			persisted = true;
+			return { outcome: "accepted", snapshot: compiled.value.snapshot };
+		} };
+		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
+		expect(persisted).toBe(false);
+	});
+
+	it("rejects reordered or repeated pre-persisted message provenance before authority reads", async function _RejectsInvalidHistoryBoundary()
+	{
+		const command = { ..._command(), messageInput: { ..._command().messageInput!, orderedMessageIds: ["message-1", "message-1"] } };
+		await expect(__AssembleRunInputSnapshot(command, _authorities())).resolves.toEqual({ outcome: "denied", reason: "invalid_command" });
+	});
+
+	it.each([
+		{ memoryQueryPolicy: { scope: "none" }, personalMemory: RunExecutionPersonalMemoryPolicies.None },
+		{ memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "gateway-dataset-1" }, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed },
+	] as const)("rechecks a duplicate using its frozen $personalMemory memory policy", async function _RestoresFrozenPolicy({ memoryQueryPolicy, personalMemory })
+	{
+		const fixture = await _DuplicateFixture(memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"]);
+		const result = await __AssembleRunInputSnapshot(_command(), fixture.authorities);
+		expect(result).toMatchObject({ outcome: "assembled", admissionOutcome: "idempotent", snapshot: fixture.snapshot });
+		expect(fixture.executionSubject).toHaveBeenCalledWith(_command(), expect.objectContaining({ executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory } }), expect.anything());
+	});
+
+	it.each([
+		{ policy: null },
+		{ policy: [] },
+		{ policy: {} },
+		{ policy: "none" },
+		{ policy: { scope: "unknown" } },
+		{ policy: { scope: "none", datasetId: "dataset-1" } },
+		{ policy: { scope: "personal" } },
+		{ policy: { scope: "personal", datasetId: "", cogneeDatasetId: "gateway-dataset-1" } },
+		{ policy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "  " } },
+		{ policy: { scope: "personal", datasetId: 42, cogneeDatasetId: "gateway-dataset-1" } },
+		{ policy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "gateway-dataset-1", unexpected: true } },
+	] as const)("refuses malformed frozen memory before rechecking identity: $policy", async function _RefusesMalformedPolicy({ policy })
+	{
+		const fixture = await _DuplicateFixture(policy as RunInputSnapshot["memoryQueryPolicy"]);
+		await expect(__AssembleRunInputSnapshot(_command(), fixture.authorities)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+		expect(fixture.executionSubject).not.toHaveBeenCalled();
+	});
+
+	it("refuses a frozen no-memory scope that carries preference facts", async function _RefusesConflictingPreferences()
+	{
+		const fixture = await _DuplicateFixture({ scope: "none" }, ["preference-1"]);
+		await expect(__AssembleRunInputSnapshot(_command(), fixture.authorities)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+		expect(fixture.executionSubject).not.toHaveBeenCalled();
 	});
 });

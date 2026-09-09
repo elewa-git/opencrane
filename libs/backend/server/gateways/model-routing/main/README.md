@@ -27,7 +27,7 @@ It also holds per-tenant model allowlists and the maths for evaluating candidate
  └────────────────────────────────────┘
         │  the model id for this request  (+ routing defaults API)
         ▼
- agent runtime calls LiteLLM with the resolved model
+ conversation computer calls LiteLLM with the resolved model
 ```
 
 **In this flow:** [providers](../../providers/main/README.md) *(registers keys + models)* · LiteLLM [(vendored app)](../../../../../../apps/_infra/litellm/README.md)
@@ -42,7 +42,9 @@ off-policy-evaluation (OPE) and savings helpers are likewise pure estimators use
 shadow mode, whether a cheaper candidate model would hold quality before it ever routes live
 traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is data, tuned as providers ship models.
 
-Model registration reads LiteLLM inventory before creating anything. A durable provider command
+Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.0 proxy's
+`/v2/model/info` route returns an empty catalogue on a fresh installation, allowing its first model
+to be registered. Failed requests and malformed inventory remain errors. A durable provider command
 supplies a deterministic deployment identifier; the inventory entry must match that identifier plus
 the admitted upstream model, API base, credential reference, and mode. An absent match permits
 `POST /model/new`; a mismatch or ambiguous public name fails without accepting out-of-band state.
@@ -52,7 +54,10 @@ provider embedding slug and `auto-embedding`; provider command finalization vali
 secret-free evidence with the governed provider generation.
 
 Credential rotation never deletes before replacing. It atomically PATCHes the fixed LiteLLM
-credential name and uses POST only after PATCH confirms a 404 absence. The deployed DB-backed
+credential name and uses POST only after PATCH confirms a 404 absence. LiteLLM 1.81.0 returns some
+credential errors inside HTTP 200, so the adapter checks the explicit success flag or serialized
+error code for updates, creation, and deletion. An unknown or malformed body remains uncertain.
+The deployed DB-backed
 LiteLLM profile reloads patched credentials into memory on its pinned refresh loop. A missing
 response from PATCH or POST remains uncertain, so the durable provider command retains its barrier
 until an exact retry converges. Provider and `auto-embedding` deployments likewise use stable UUIDs
@@ -76,7 +81,18 @@ derived from their governed Global resource, so a late first POST cannot create 
   shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the per-provider default model catalogue.
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a
   single agent-run attempt (fails hard; the master key never leaves the control plane), with its
-  request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`.
+  request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`. Issuance requires an
+  absolute `notAfter` bound, leaves ten seconds for the mint request and checks the provider's
+  returned expiry before handoff. Missing, expired or excessive expiry triggers alias cleanup.
+  The key has a one-time budget and never resets its spending allowance within the attempt.
+- `_RevokeAttemptLiteLlmKeyByAlias` — reconcile an uncertain mint from its durable attempt alias when
+  encrypted custody could not retain the raw key.
+
+The pinned LiteLLM v1.81.0-stable implementation creates `expires` from a UTC clock and serializes
+it as an ISO timestamp. The adapter checks that evidence instead of storing a locally guessed
+expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.0-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
+Already issued keys still have a bounded validity window; OpenCrane does not proxy every model
+request to repeat the PostgreSQL permission check.
 
 ## Boundary
 

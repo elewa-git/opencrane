@@ -1,4 +1,5 @@
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import type { SessionAssemblyCommand, SessionAssemblyLoad, ConversationContextInput, ConversationContextRepositoryFactory, ConversationContextSource } from "./session-assembly.types";
 
@@ -23,8 +24,8 @@ export class TransactionBoundConversationContextSource implements ConversationCo
 	}
 
 	/** Returns no messages for non-conversational work; otherwise only completed messages the caller may see. */
-	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ConversationContextInput>>
+	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ConversationContextInput>>
 	{
-		return this.createRepository(transaction).load(command, run);
+		return this.createRepository(transaction).load(command, run, executionSubject);
 	}
 }

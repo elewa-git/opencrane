@@ -2,9 +2,9 @@ import { readFile } from "node:fs/promises";
 
 import type { PrismaClient } from "@prisma/client";
 
+import { GROUP_CHILD_TASK } from "@opencrane/backend/server/conversations";
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient, OciImageLayoutArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
@@ -67,12 +67,6 @@ export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine,
 	execution.declare(ArtifactPreprocessTaskDeclaration);
 }
 
-/** Declares the remote AgentRun task before a run admission may save its receipt. */
-export function __DeclareAgentRunTask(execution: Pick<IWorkflowEngine, "declare">): void
-{
-	execution.declare(AgentRunTaskDeclaration);
-}
-
 /**
  * Create the guarded Absurd engine shared by remote MCP, OCI admission, skill validation, and artifact preprocessing.
  *
@@ -85,18 +79,17 @@ export function __DeclareAgentRunTask(execution: Pick<IWorkflowEngine, "declare"
 export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpWorkflowComposition
 {
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
+		{ taskName: GROUP_CHILD_TASK.taskName, queue: "control-plane" },
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
 		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },
 		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
 		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
 		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
-		{ taskName: AgentRunTaskDeclaration.taskName, queue: "agent-runs" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	__DeclareSkillAuthoringValidation(execution);
 	__DeclareArtifactPreprocessTask(execution);
-	__DeclareAgentRunTask(execution);
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)

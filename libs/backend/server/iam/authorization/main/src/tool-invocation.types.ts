@@ -42,8 +42,6 @@ export interface ToolInvocationIntent
 	readonly agentServiceId: string;
 	/** Immutable agent revision executed by the attempt. */
 	readonly agentRevisionId: string | null;
-	/** Trusted execution subject from the immutable snapshot. */
-	readonly subjectId: string;
 	/** Current central authorization evidence bound to this run, attempt, revision, and arguments. */
 	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence;
 	/** Admitted stream, command, and candidate identity. */
@@ -75,8 +73,6 @@ export interface ToolInvocationRecord
 	readonly siloId: string;
 	/** Immutable agent revision that selected the tool. */
 	readonly agentRevisionId: string | null;
-	/** Trusted execution subject on whose behalf the action runs. */
-	readonly subjectId: string;
 	/** Central effect evidence shaped for either the owning AgentRun or caller-owned MCP task. */
 	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence | McpTaskToolInvocationAuthorizationEvidence | null;
 	/** Run owning the invocation. */
@@ -314,8 +310,7 @@ interface ToolInvocationOperations
  * return the durable row that won instead of throwing, and the caller must accept that row rather
  * than retry its own intent.
  *
- * Called by: libs/backend/agents/execution/protocol/src/external-action-worker.types.ts (as the
- * worker's `invocations` dependency); composed in
+ * Called by: the external-action worker as its `invocations` dependency; composed in
  * apps/opencrane/src/app/external-action-composition.ts.
  * Implemented by: ./prisma-tool-invocation-unit-of-work.ts.
  */
@@ -381,7 +376,7 @@ export interface ToolInvocationAdmissionUnitOfWork
  * `conflict` and writes nothing. A caller that treats `conflict` as retryable will spin forever —
  * it means the same candidate id is being reused for different arguments.
  *
- * Called by: libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-authority.ts.
+ * Called by: the transaction-bound tool dispatch authority.
  * Implemented by: `__AdmitPreparingToolInvocationInTransaction` in
  * ./tool-invocation-transaction.ts.
  * @param transaction - Prisma transaction accepting the runtime candidate, typed `unknown` to keep

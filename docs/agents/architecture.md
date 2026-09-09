@@ -10,10 +10,10 @@ The whole deployment view is in [`cluster-architecture.md`](./cluster-architectu
 OpenCrane owns the durable product record:
 
 ```text
-Conversation -> ordered ConversationTimelineEntry
+Conversation -> ordered KurrentDB conversation-{id} stream (messages, safe logs, membership)
      |
-     +-> direct/group Message (no run)
-     +-> agent_session -> AgentRun -> ordered RunEvent
+     +-> direct/group entries (no run)
+     +-> agent_session -> ConversationComputer -> AgentRun
                               |
                               +-> immutable RunInputSnapshot
                               +-> approvals and tool invocations
@@ -21,14 +21,16 @@ Conversation -> ordered ConversationTimelineEntry
                               +-> governed artifact references
 ```
 
-PostgreSQL is authoritative for agents, revisions, runs, conversations, approvals, memberships,
-grants, budgets, and audit evidence. Artifact bytes live behind `ArtifactStore`; database records
-own their identity, version, authorization, and lineage.
+The 0.11.0 target records participant-visible conversation, computer, run, effect, artifact, and
+receipt history in KurrentDB; PostgreSQL holds rebuildable projections. PostgreSQL remains
+authoritative for memberships, grants, approvals, budgets, and transaction-bound decision evidence.
+See [ADR 0016](../adr/0016-conversation-history-and-computers.md). Artifact bytes live behind
+`ArtifactStore`; database records own their identity, version, authorization, and lineage.
 
-A claimed runtime Pod is an attempt-scoped worker. It receives a frozen snapshot, reports candidates
-and events, and owns no durable product state. A generic warm Pod has no attempt authority until the
-database reserves it and the controller activates its fixed profile. Kubernetes objects project an
-already-authorised attempt; they do not authorise a run by existing.
+A conversation computer receives a frozen run snapshot, reports candidates and events, and owns no
+durable product authority. Agent Sandbox starts or replaces its Pod after the server admits a claim
+for the configured profile. The active computer lease fences the current generation. Kubernetes
+objects project that admitted work; their existence does not authorise a run.
 
 ## Organisation boundary
 
@@ -94,9 +96,10 @@ evidence for effects that already completed.
 
 ## Runtime boundary
 
-Each accepted run attempt has one fenced reservation for an exact Pod from the fixed personal or
-managed warm pool. The agent controller is the sole mutator of those Pods. Runtime service accounts
-have no Kubernetes API permission, and every used Pod is deleted instead of returning to the pool.
+Each assistant conversation has one logical computer. Its active lease identifies the admitted
+generation; the server admits serial run attempts only after that lease exists. Agent Sandbox owns
+Pod lifecycle. Runtime service accounts have no Kubernetes API permission. Cooling and replacement
+preserve workspace checkpoints and ordered conversation history, as described in ADR 0016.
 
 Runtime commands and output candidates must bind the current run, attempt, assignment, sequence,
 expiry, and proof key. Cancellation closes command, approval, and output admission before workload

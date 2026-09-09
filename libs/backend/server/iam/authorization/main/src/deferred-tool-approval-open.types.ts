@@ -38,17 +38,36 @@ export interface DeferToolRequestCommand
 }
 
 /**
+ * Reports whether a transaction created, replayed, or refused a deferred approval.
+ *
+ * The authorization layer branches on these in memory; they are not stored or sent as API values. The set is
+ * closed within this package, so callers must handle every member and must not convert an unknown string into
+ * an outcome. `Deferred` and `AlreadyDeferred` both leave the invocation waiting for a decision.
+ * `Unavailable` means the caller must fail the invocation because its run, membership, deadline, or active
+ * computer lease no longer authorizes an approval.
+ */
+export enum DeferToolRequestOutcomes
+{
+	/** The transaction created the pending approval. */
+	Deferred = "deferred",
+	/** An identical pending approval already owns the invocation. */
+	AlreadyDeferred = "already_deferred",
+	/** The transaction wrote no approval because the invocation no longer has current authority. */
+	Unavailable = "unavailable",
+}
+
+/**
  * What opening an approval did.
  *
  * `deferred` created it; `already_deferred` found the identical approval from an earlier attempt —
  * both mean the tool call is now correctly parked. `unavailable` means it could not be opened at
- * all (the run's pod is gone, its proof key expired, the deadline is already past, or the run is
- * not in a state that can pause), and the caller must fail the tool call rather than wait.
+ * all (the immutable execution subject no longer names the invocation's active computer lease, the
+ * deadline passed, or the run cannot pause), and the caller must fail the tool call rather than wait.
  */
 export type DeferToolRequestResult =
-	| { readonly outcome: "deferred"; readonly approvalRequestId: string }
-	| { readonly outcome: "already_deferred"; readonly approvalRequestId: string }
-	| { readonly outcome: "unavailable" };
+	| { readonly outcome: DeferToolRequestOutcomes.Deferred; readonly approvalRequestId: string }
+	| { readonly outcome: DeferToolRequestOutcomes.AlreadyDeferred; readonly approvalRequestId: string }
+	| { readonly outcome: DeferToolRequestOutcomes.Unavailable };
 
 /**
  * Everything needed to open an approval for one already-prepared tool call.
@@ -99,7 +118,7 @@ export interface OpenDeferredToolApprovalCommand
  */
 export interface DeferredToolApprovalOpenRepository
 {
-	/** Creates the approval, checking the run's live workload assignment and proof key on this transaction. */
+	/** Creates the approval after matching the invocation to the run's immutable computer-lease subject. */
 	defer(command: DeferToolRequestCommand): Promise<DeferToolRequestResult>;
 	/**
 	 * Fails one tool call that is still waiting for approval, and records its result delivery.

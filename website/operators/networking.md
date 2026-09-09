@@ -15,8 +15,8 @@ browser
   ▼
 Ingress ──► OpenCrane public API
 
-claimed runtime Pod
-  │ projected identity + one-use bootstrap + outbound stream
+conversation-computer Pod
+  │ projected identity + generation-bound bootstrap and output
   ▼
 OpenCrane internal runtime API
   │
@@ -33,8 +33,7 @@ Kubernetes RBAC, provider credential or unrestricted east-west access.
 | Namespace class | Ingress | Egress |
 |---|---|---|
 | Trusted server | public traffic through Ingress; explicit same-silo service callers | database, same-silo services and declared external dependencies |
-| Generic warm runtime | none | DNS and same-silo OpenCrane only |
-| Claimed personal or managed runtime | fixed controller binding port | DNS, same-silo OpenCrane and LiteLLM only |
+| Conversation computer | OpenCrane server to private review port only | DNS, same-silo OpenCrane and LiteLLM only |
 | Worker namespaces | none | only the exact broker or service required by that job class |
 
 The chart also applies aggregate Job, Pod, CPU and memory quotas. Admission rejects sidecars,
@@ -44,8 +43,8 @@ projections.
 ## Runtime authentication
 
 Network reachability is not authority. OpenCrane separately verifies the projected token
-audience, namespace, ServiceAccount, reserved Pod UID, run, attempt and agent revision.
-A one-use bootstrap binds the runtime's proof key before the command stream is admitted.
+audience, namespace, ServiceAccount, Pod UID, computer id, lease id and generation.
+The bootstrap returns only the frozen pending turn and an attempt-scoped model credential.
 
 ::: tip
 Treat `NetworkPolicy` as the portable L3/L4 floor and workload proof as the application
@@ -63,11 +62,11 @@ controller; do not install a CRD by itself.
 
 1. Confirm the CNI enforces `NetworkPolicy`.
 2. If the render contains a custom policy kind, confirm that exact API and controller are live.
-3. Confirm the trusted, personal-runtime and managed-runtime namespaces are distinct.
-4. Render the chart and inspect the runtime admission policies and quotas.
-5. Verify runtime Pods have no Service, Ingress, role binding or persistent volume.
+3. Confirm the claim policy accepts only this release's OpenCrane ServiceAccount.
+4. Render the chart and inspect the Agent Sandbox template, claim policy and resource limits.
+5. Verify the generated Service is private and the Pod has no Ingress, mutation RBAC or persistent volume.
 6. Verify only the ingress controller can reach the public API port.
 
 Source: [`apps/opencrane/helm/templates/_networkpolicy.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_networkpolicy.tpl),
-[`apps/agent-controller/helm/templates/_warm-runtime.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/agent-controller/helm/templates/_warm-runtime.tpl),
-and [`libs/backend/agents/runtime/k8s-launcher`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/runtime/k8s-launcher/README.md).
+[`apps/_infra/agent-sandbox/helm/templates/_resources.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/agent-sandbox/helm/templates/_resources.tpl),
+and [`apps/conversation-computer`](https://github.com/elewa-git/opencrane/blob/main/apps/conversation-computer/README.md).

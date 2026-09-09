@@ -4,13 +4,10 @@ import type { PrismaClient } from "@prisma/client";
 import type { Express } from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
-import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
-import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneProcessConfig } from "../config.types";
+import type { OpenCraneHistoryStoreComposition } from "../history-store-composition.types";
 
 /** Ordered lifecycle calls shared by hoisted dependency mocks and assertions. */
 const _calls = vi.hoisted(function _Calls() { return [] as string[]; });
@@ -65,25 +62,29 @@ function _App(server: Server): Express
 	return { listen: function _Listen(_port: number, callback?: () => void) { callback?.(); return server; } } as unknown as Express;
 }
 
+/** Builds one closeable HistoryStore composition that records lifecycle ownership. */
+function _HistoryStore(): OpenCraneHistoryStoreComposition
+{
+	return { close: async function _CloseHistoryStore() { _calls.push("history"); }, historyStore: {} as OpenCraneHistoryStoreComposition["historyStore"] };
+}
+
 describe("OpenCrane process lifecycle", function _LifecycleSuite()
 {
 	it("closes startup dependencies and flushes telemetry when durable workers cannot start", async function _StartupFailureCleanup()
 	{
 		_workerFailures.start = new Error("worker unavailable");
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
-		const channelTargets = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 		const workflowRuntime = { close: async function _CloseWorkflow() { _calls.push("workflow"); } } as IWorkflowWorkerRuntime;
 
 		await expect(_StartProcessLifecycle(
 			_App(_Server("public")), _App(_Server("internal")), prisma,
-			{} as ManagedRunAdmissionPort,
-			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, channelTargets,
-			{ attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer,
-			function _UnbindConsole() { _calls.push("console"); }, {} as ExternalActionWorker,
-			{ recoverExpiredInvocation: vi.fn() } as never, workflowRuntime, {} as never,
+			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
+			function _UnbindConsole() { _calls.push("console"); },
+			{ recoverExpiredInvocation: vi.fn() } as never, workflowRuntime, {} as never, _HistoryStore(),
 		)).rejects.toThrow("worker unavailable");
 
-		expect(_calls).toEqual(expect.arrayContaining(["workers.start", "routes", "workflow", "prisma", "telemetry", "console"]));
+		expect(_calls).toEqual(expect.arrayContaining(["workers.start", "workflow", "history", "prisma", "telemetry", "console"]));
+		expect(_calls.indexOf("history")).toBeLessThan(_calls.indexOf("telemetry"));
 		expect(_calls.indexOf("prisma")).toBeLessThan(_calls.indexOf("telemetry"));
 		expect(_calls.at(-1)).toBe("console");
 	});
@@ -94,21 +95,17 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		const previousInt = new Set(process.listeners("SIGINT"));
 		const exit = vi.spyOn(process, "exit").mockImplementation(function _Exit() { _calls.push("exit"); return undefined as never; });
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
-		const channelTargets = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 
 		await _StartProcessLifecycle(
 			_App(_Server("public")),
 			_App(_Server("internal")),
 			prisma,
-			{} as ManagedRunAdmissionPort,
 		{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
-		channelTargets,
-		{ attach: function _Attach() { _calls.push("socket.attach"); }, close: function _CloseSockets() { _calls.push("sockets"); } } as SelfConversationSocketServer,
 		function _UnbindConsole() { _calls.push("console"); },
-			{} as ExternalActionWorker,
 			{ recoverExpiredInvocation: vi.fn() } as never,
 			{} as IWorkflowWorkerRuntime,
 			{} as never,
+			_HistoryStore(),
 		);
 
 		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
@@ -116,14 +113,13 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		if (term === undefined || interrupt === undefined)
 			throw new Error("lifecycle did not register process signal handlers");
 		_registeredListeners.push({ signal: "SIGTERM", listener: term }, { signal: "SIGINT", listener: interrupt });
-		expect(_calls).toContain("socket.attach");
-		expect(_calls.indexOf("workers.start")).toBeLessThan(_calls.indexOf("socket.attach"));
+		expect(_calls).toContain("workers.start");
 		term("SIGTERM");
 
 		await vi.waitFor(function _Exited() { expect(exit).toHaveBeenCalledWith(0); });
-		expect(_calls.indexOf("streams")).toBeLessThan(_calls.indexOf("sockets"));
-		expect(_calls.indexOf("sockets")).toBeLessThan(_calls.indexOf("workers"));
+		expect(_calls.indexOf("streams")).toBeLessThan(_calls.indexOf("workers"));
 		expect(_calls.indexOf("workers")).toBeLessThan(_calls.indexOf("prisma"));
+		expect(_calls.indexOf("history")).toBeLessThan(_calls.indexOf("prisma"));
 		expect(_calls.indexOf("prisma")).toBeLessThan(_calls.indexOf("telemetry"));
 		expect(_calls.slice(-3)).toEqual(["telemetry", "console", "exit"]);
 	});
@@ -135,9 +131,9 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		const previousInt = new Set(process.listeners("SIGINT"));
 		const exit = vi.spyOn(process, "exit").mockImplementation(function _Exit() { _calls.push("exit"); return undefined as never; });
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
-		const routes = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 
-		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, {} as ManagedRunAdmissionPort, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, routes, { attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer, function _Unbind() { _calls.push("console"); }, {} as ExternalActionWorker, { recoverExpiredInvocation: vi.fn() } as never, {} as IWorkflowWorkerRuntime, {} as never);
+		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, function _Unbind()
+ { _calls.push("console"); }, { recoverExpiredInvocation: vi.fn() } as never, {} as IWorkflowWorkerRuntime, {} as never, _HistoryStore());
 		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
 		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
 		if (term === undefined || interrupt === undefined)

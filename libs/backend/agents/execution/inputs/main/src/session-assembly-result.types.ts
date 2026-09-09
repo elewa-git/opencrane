@@ -1,4 +1,5 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 import { RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 
 /**
@@ -7,8 +8,8 @@ import { RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/r
  * Assembly is all-or-nothing: either every source loaded and one snapshot was saved, or nothing
  * was saved at all. There is no partial outcome, so a caller never has to clean up after `Denied`.
  *
- * Used by: `managed-run-admission.ts` and `personal-run-admission.ts` in
- * execution/admission/main/src, which branch on this before reading `reason` or `snapshot`.
+ * Returned by {@link __AssembleRunInputSnapshot}; callers must branch on this before reading
+ * `reason` or `snapshot`.
  */
 export enum SessionAssemblyOutcomes
 {
@@ -36,9 +37,8 @@ export enum SessionAssemblyOutcomes
  * created that run and this one only re-read its snapshot. A caller that treats `Idempotent` as
  * `Accepted` dispatches a second runtime for a run that is already executing.
  *
- * Used by: `_CreateManagedRunAdmissionPortWithGate` (execution/admission/main/src/managed-run-admission.ts)
- * and `__CreatePersonalRunAdmissionPortWithGate` (execution/admission/main/src/personal-run-admission.ts),
- * which each map these onto their own accepted/idempotent outcome.
+ * Returned by {@link __AssembleRunInputSnapshot} so its caller can decide whether it owns the next
+ * action or must leave an already-admitted run alone.
  */
 export enum RunInputSnapshotAdmissionOutcomes
 {
@@ -116,7 +116,9 @@ export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittab
  * must stay apart. On `denied`, nothing was written and `reason` says what to do next; see
  * {@link SessionAssemblyRefusalReason}.
  *
- * Used by: `ManagedSnapshotAssembler` and `PersonalRunSnapshotAssembler` in
- * execution/admission/main/src, which are the only two shapes that call the assembler.
+ * `currentExecutionSubject` is this call's checked evidence, including refreshed trust deadlines.
+ * It is returned separately so retries cannot mutate the original snapshot or lose a shorter
+ * current credential ceiling. It must not replace the snapshot used for prompt compilation.
+ * Returned by {@link __AssembleRunInputSnapshot} to the OpenCrane conversation admission owner.
  */
-export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };
+export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot; readonly currentExecutionSubject: ExecutionSubject } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };

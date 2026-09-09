@@ -56,8 +56,7 @@ signed fleet membership proves active silo admission without carrying product sc
 
 ### Runtime execution identity kind
 
-- Duplicates: `libs/contracts/src/runtime-assignment.types.ts`,
-  `libs/contracts/src/run-input-snapshot.types.ts`, and
+- Owner: `libs/contracts/src/run-input-snapshot.types.ts` and
   `libs/backend/agents/execution/runs/main/src/run-admission.types.ts`
 - Authority consumers: execution input assembly, run admission, and runtime dispatch
 - Proposed enum: `RuntimeExecutionIdentityKind` in `@opencrane/contracts`
@@ -77,12 +76,11 @@ personal/managed `AgentServiceKind` product distinction.
 These public model contracts drive transition tables and backend lifecycle control flow. Generated
 Prisma enums remain adapter-side and map explicitly to model enums.
 
-### Runtime protocol kinds
+### Conversation computer protocol kinds
 
-- Owner: `libs/contracts/src/agent-runtime-protocol.types.ts`
-- Authority consumers: runtime protocol and Prisma runtime dispatch authorities
-- Proposed enums: `RuntimeCommandKind`, `RuntimeCandidateKind`, and
-  `RuntimeCancellationReason`; reuse model-owned `RunEventType` for event dispatch
+- Owner: `libs/contracts/src/conversation-computer.types.ts`
+- Authority consumers: conversation computer history, activation, lifecycle, and private turn authorities
+- Stable enums: `ConversationComputerStates` and `ComputerLeaseStates`
 
 These are authenticated workload-protocol discriminants. Validators and dispatch branches must use
 the same vocabulary.
@@ -95,7 +93,6 @@ the same vocabulary.
   models, backend finalization, and frontend projections.
 - Transcript enums (`ThreadState`, `MessageRole`, `MessageState`, `MessageProvenanceSource`, and
   `MessageContentBlockType`) in `@opencrane/models/agents`.
-- `AgentScheduleOverlapPolicy`, duplicated between schedule ticks and agent-service revision
   authoring.
 
 ## Priority 2: cohesive local policy vocabularies

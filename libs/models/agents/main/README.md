@@ -13,8 +13,8 @@ It owns two kinds of thing:
 - **Types** for an `AgentService` (a named, reusable agent), its immutable `AgentRevision`
   (a published, frozen version of that agent, carrying revision lineage — `parentRevisionId`,
   `sourceRevisionId`, `changeMessage` — and revision-scoped `RevisionBoundaryAttachment`s over
-  stored Group or Personal knowledge boundaries), an `AgentRun` (one durable request whose attempt
-  advances across retries), and each globally ordered `RunEvent` bound to the attempt that admitted it.
+  stored Group or Personal knowledge boundaries), an `AgentRun` (one durable interactive request),
+  and each globally ordered `RunEvent` bound to its immutable attempt.
 - A **pure revision diff** (`__DiffAgentRevisions`): line-level prompt diff plus semantic
   field-level configuration diff, flagging security-relevant widening (broader knowledge boundaries, tools,
   or budgets) for reviewer confirmation. It reads only stable references, never secrets.
@@ -24,12 +24,11 @@ It owns two kinds of thing:
 - **Pure decision functions** over those types:
   - `state-transitions` holds the small lookup tables of which state may legally follow which (for
     example a run may go `running → completed` but never `completed → running`), and answers a plain
-    yes/no for a proposed move. Cancellation is deliberately two-phase: every active state moves to
-    nonterminal `cancelling`, and only completed workload cleanup may move it to `cancelled`.
+    yes/no for a proposed move.
 
 Used by the agent-services backend, the personal-agent backends, and re-exported through
 `@opencrane/contracts`. Invariant: transitions are **fail-closed** — only an explicitly listed next
-state is allowed and cancellation cannot skip cleanup. Because it is pure, the caller owns all
+state is allowed. Because it is pure, the caller owns all
 persistence; a wrong answer here can only refuse a legal move, never invent one.
 
 ## Public surface
@@ -45,6 +44,12 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   elicitation, and execution for the built-in personal-memory recall tool.
 - `AgentRunStates` is the documented string-backed run lifecycle vocabulary used by runtime
   admission instead of repeated categorical literals.
+- `ExecutionSubjectMembershipKinds` distinguishes signed human Fleet membership, local Standalone
+  human membership and current managed service authority. `ExecutionSubject` always carries the requester's separate human membership
+  evidence. `___ExecutionSubjectSchema` and `___StandaloneMembershipSchema` validate these shapes beside
+  the model and reject unknown fields; current authority checks remain with IAM. Standalone evidence
+  freezes the local membership row/version and an observation deadline without inventing a signature
+  or Fleet revision.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
   `AgentRevisionDiff` result types.
 - `__Is…TransitionAllowed` — the guard functions over the service, revision, and run transition tables.

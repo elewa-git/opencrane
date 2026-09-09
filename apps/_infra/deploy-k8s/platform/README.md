@@ -10,19 +10,17 @@ These files help an operator install, upgrade, verify, or retire an OpenCrane si
 assemble raw Helm and Kubernetes commands by hand. Each script has one job and stops when the live
 cluster does not match the assumptions needed to do that job safely.
 
-During the exact public 0.9.2-to-0.10.0 upgrade, the deploy engine removes the six named Acorn
-resources from the retired `sms1obot-mcp-server` after the five replacement deployments are ready.
-It also reconciles the retained Obot logical database and login role to absent, proves PostgreSQL
-removed both, and deletes the two generated credential adapters. Every deletion is fenced by the
-proven UID and resource version. The externally supplied Obot bootstrap Secret remains
-operator-owned, and a retry still proves no unmanaged database or login survived before succeeding.
-
 | Path | Responsibility |
 |---|---|
 | `Chart.yaml`, `templates/` | Gives all workloads the same naming, access-control, database, identity, and monitoring conventions. The parent release reuses these Helm helpers; they do not install anything on their own. |
 | `k8s-deploy.sh` | Installs or upgrades a silo from reviewed application images. It checks the live database first, applies the matching database and application changes, restarts services when their connection details change, and waits until the intended workloads are actually ready. An optional verification step also checks pods, DNS, and public health. |
 | `invitation-signing-secret.sh` | Keeps invitation links valid across routine upgrades. It creates the silo's signing key once, checks that the saved key is usable, and reuses it instead of silently rotating it. |
-| `runtime-continuation-keyring-secret.sh` | Creates the continuation encryption keyring once through a mode-0600 temporary file and retains valid existing keys. Rotation changes the active key while keeping older keys until their saved rows are gone. |
+| `provision-postgres-bootstrap-secrets.sh` | Implements the explicit `k8s-deploy.sh --provision-postgres-bootstrap-secrets` action. It creates a fresh silo's application, LiteLLM, and database-administrator credentials and validates existing credentials on reruns. |
+| `provision-kurrentdb-bootstrap-secrets.sh` | Creates one fresh silo's immutable KurrentDB TLS, administrator, operations, and history-service Secrets. Reruns validate the existing trust and credentials without rotating them. |
+| `gke-snapshot-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-snapshot-class` prerequisite action. It creates or verifies one owned GKE Persistent Disk snapshot class without changing the cluster default or an existing foreign class. |
+| `gke-standard-storage-class.sh` | Implements the explicit `k8s-deploy.sh --provision-gke-standard-storage-class` action. It creates or verifies one non-default class for expandable standard Persistent Disks through the installed GKE storage driver. |
+| `kurrentdb-restore.sh` | Restores the KurrentDB data volume from one scheduled backup when `k8s-deploy.sh` runs with `--kurrentdb-restore`. It refuses a serving ledger without explicit confirmation, keeps a pre-restore safety copy, reuses the backup CronJob's own image and scripts, and re-runs the bootstrap verification Job afterwards. `--kurrentdb-restore-list` prints the available backups. |
+| `kurrentdb-bootstrap.sh` | Retries a failed or missing release-owned bootstrap Job from the installed Helm manifest with `--kurrentdb-bootstrap-retry`. Before an application update changes the bootstrap Pod template, `--kurrentdb-bootstrap-prepare-update` removes a completed, inactive Job so the next normal deployment can create it again. Both actions require KurrentDB to be Ready; the restore helper shares the retry's manifest extraction and Job recreation. |
 | `qualified-release-image-policy.sh` | Keeps first-party services on one reviewed build, resolves exact digests for workflow runtimes and workers, enables those completed planes, and verifies every image before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
 | `network-policy-cni.sh` | Recognises only exact known NetworkPolicy-enforcing CNI DaemonSet names. The deploy preflight treats a missing match as fatal for multi-tenant topology and advisory for a single silo. |
@@ -30,7 +28,6 @@ operator-owned, and a retry still proves no unmanaged database or login survived
 | `postgres-release.sh` | Reconciles the PostgreSQL release. The schema is created once, by CNPG `initdb` from the app-owned target baseline; there is no version-to-version migration path pre-1.0. |
 | `qualify-workflow-engine.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
 | `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
-| `retire-legacy-obot-mcp-server.sh` | Removes retained Obot MCP resources and database custody from a preexisting silo after replacement readiness and exact ownership proofs. Fresh installations never create them. |
 | `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
 | `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
 | `prerequisite-chart-lock.sh` | Pins the exact upstream controller packages accepted by the bootstrap. Checksums and expected cluster resources make downloaded dependencies reproducible and tamper-evident. |
@@ -42,16 +39,32 @@ operator-owned, and a retry still proves no unmanaged database or login survived
 
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
-digest of the last validated image set. Its sequential image lane overlaps cluster and controller
-preparation, then imports the complete image inventory in one k3d transfer. A pull request bypasses
-that cluster only when one positive proof binds its exact base SHA to a completed successful push or
+digest of the last validated image set. Its concurrent image lane overlaps cluster and controller
+preparation, then imports the tag-based service images in one k3d transfer. The KurrentDB bootstrap
+and conversation-computer images go into a disposable registry bound to loopback; their stored
+manifest digests become the exact references used inside k3d. Nothing is published to a public
+registry. A pull request bypasses that cluster only when one positive proof binds its exact base SHA to a completed successful push or
 manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
 for `develop` and reviewed feature-stack bases; unknown or unavailable evidence fails closed to
-k3d. Both tiers install pinned cert-manager and
-CloudNativePG and fail on workload, database, Certificate, or TLS health. Ordinary pull requests use
+k3d. Both tiers install pinned cert-manager, CloudNativePG, and the Agent Sandbox controller with its
+extensions. They generate immutable, release-local KurrentDB credentials and certificates through
+`provision-kurrentdb-bootstrap-secrets.sh`, then install the pinned KurrentDB 26.1.1 ledger and its
+bootstrap Job. The server must start with its real HistoryStore connection and computer profile.
+The smoke requires a ready KurrentDB StatefulSet, a completed user/ACL/subscription bootstrap, and a
+server-authenticated read of its silo sentinel. It verifies the KurrentDB certificate against the
+generated CA, accepts credential-free `/health/live`, and rejects anonymous administration and
+ledger reads while anonymous endpoint and stream access remain disabled.
+
+The Sandbox template uses an explicitly named `opencrane-smoke-runc` RuntimeClass and zero warm
+replicas. The controller and configured profile must exist, but the smoke creates no computer claim
+or assistant turn. This is a fresh service-readiness proof, not gVisor isolation, real OpenID Connect
+login, onboarding, or model-output qualification. CI supplies no real identity provider or model
+credentials. Public ingress uses a self-signed certificate and skips public trust-chain validation;
+the internal KurrentDB check does verify its own CA and hostname. Ordinary pull requests use
 fast local-path storage; `develop`, explicit k3d dispatches, and storage-sensitive changes install
-the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUSTER=1` for local
-diagnosis. Backup/restore and production storage, DNS, and transport remain separate live
+the pinned expandable hostpath CSI driver and exercise expansion. `KEEP_CLUSTER=1` retains the
+disposable cluster and its private registry for diagnosis in an authorised environment. Backup/restore
+and production storage, DNS, and transport remain separate live
 qualifications.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
@@ -60,7 +73,23 @@ belong in sibling `apps/_infra/<service>` projects.
 
 ## Database deployment
 
-Every invocation supplies `--release-version`; the engine reads the PostgreSQL operand image from
+Prepare a fresh silo's database credentials through the deploy entrypoint, using the intended
+current kubectl context:
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-postgres-bootstrap-secrets \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE"
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-kurrentdb-bootstrap-secrets \
+  --namespace "$OPENCRANE_NAMESPACE" --release "$OPENCRANE_RELEASE"
+```
+
+Each action must be the first argument. It creates the namespace if needed and generates missing
+credentials for that release; a retry validates existing credentials without rotating them.
+KurrentDB also gets an immutable certificate authority, server certificate, and service credentials.
+These actions exit before image, chart, or identity validation. An ordinary installation requires
+the prepared Secrets and never invokes either provisioning action automatically.
+
+Every install invocation supplies `--release-version`; the engine reads the PostgreSQL operand image from
 that `releases/<version>.json` manifest. The schema is created once, by CNPG `initdb` from the
 app-owned target baseline (the baseline publisher prepends the `pg_cron` prerequisite). There is no
 version-to-version migration path pre-1.0: a dev silo that needs a newer schema is rebuilt, and
@@ -69,6 +98,23 @@ upgrade contracts return at MVP (see
 
 Operational backup and restore configuration remains available in the PostgreSQL chart, but it is
 not a condition for deployment.
+
+## Bootstrap image and configuration updates
+
+Kubernetes does not allow an existing Job's Pod template to change. Before changing the KurrentDB
+bootstrap image, resources or mounts on an installed silo, run `k8s-deploy.sh` with that silo's
+release, namespace, tenant and release version plus `--kurrentdb-bootstrap-prepare-update`.
+Then run the normal silo deployment with the intended published images and configuration. Helm
+creates the new verification Job, and deployment waits for bootstrap and server readiness.
+
+Preparation checks the live Job and installed Helm manifest, then removes a completed, inactive
+Job using its observed UID and resource version as atomic deletion preconditions. It refuses a
+running, failed, foreign or deleting Job and requires the release's KurrentDB StatefulSet to be
+Ready. An absent Job is already prepared. A concurrent change fails the action; inspect the Job
+before retrying. This removes verification metadata and its finished Pods, leaving history volumes
+and credentials in place. Failed bootstrap still uses `--kurrentdb-bootstrap-retry`. Preparation
+cannot be combined with retry, restore or preflight actions. See the
+[operator example](../../../../website/operators/deployment-configuration.md#update-a-completed-history-bootstrap).
 
 ## OIDC upgrades
 
@@ -122,6 +168,44 @@ managed `kube-system` namespace. It never installs
 external-dns or DNS credentials and it does not create a cluster-wide certificate issuer. Each silo
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
 ingress Service reports the reserved address.
+
+When a fresh silo needs standard Persistent Disks, create an explicit storage class through the
+installed GKE driver:
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-gke-standard-storage-class opencrane-pd-standard \
+  --context "$OPENCRANE_KUBERNETES_CONTEXT"
+```
+
+The action checks the current context and creates or verifies one owned, non-default class with
+`pd.csi.storage.gke.io`, `type: pd-standard`, expansion enabled, `WaitForFirstConsumer` binding,
+and `Delete` reclamation. It refuses foreign, changed, default, or deleting classes. Select
+`opencrane-pd-standard` in `historyStore.kurrentdb.persistence.storageClassName` and
+`historyStore.kurrentdb.backup.archive.persistence.storageClassName` for new data and file-copy
+backup volumes. It never changes existing claims, disks, or other storage classes.
+
+For KurrentDB volume snapshots on an existing GKE Persistent Disk driver, run this separate action
+through the deploy entrypoint before installing the silo:
+
+```bash
+apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-gke-snapshot-class opencrane-pd-snapshots \
+  --context "$OPENCRANE_KUBERNETES_CONTEXT" \
+  --storage-class standard-rwo
+```
+
+The action requires the current context to match, the complete `snapshot.storage.k8s.io/v1` API,
+and a StorageClass using the installed `pd.csi.storage.gke.io` driver. It creates one named,
+non-default class with `Delete` policy, so scheduled retention removes the underlying snapshots
+when it deletes their Kubernetes objects. A retry verifies the existing OpenCrane ownership and
+policy; a foreign class, changed parameters, or default-class annotation is refused. It never
+installs a driver, changes another resource, or starts a silo, and requires no identity credentials.
+Select this name with `historyStore.kurrentdb.backup.volumeSnapshot.className` in the silo profile;
+the backup still needs `mode: volumeSnapshot` and its qualified kubectl image. Creating the class
+does not prove cloud snapshot permissions, readiness, or recovery; those require the live drill.
+Use `--storage-class opencrane-pd-standard` when selecting the standard-disk class above; the same
+snapshot class works with either storage class because both use the GKE Persistent Disk driver.
 
 The short-lived PostgreSQL privilege proof uses ordinary GKE Autopilot scheduling. Its single Job
 runs one PostgreSQL client container for each logical database, which means two containers in the

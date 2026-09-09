@@ -1,5 +1,5 @@
 export { __DigestCanonicalJson } from "./canonical-json-digest";
-export type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult, RetireProductAuthorizationResourceGrantsCommand, RetireProductAuthorizationResourceGrantsResult } from "./authorization-authority.types";
+export type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, DecidePrincipalProductAuthorizationCommand, ListEntitledProductResourcesCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult, RetireProductAuthorizationResourceGrantsCommand, RetireProductAuthorizationResourceGrantsResult } from "./authorization-authority.types";
 export type { AuthorizationResourceGrantRetirementRepository, RetireAuthorizationResourceGrantsCommand } from "./authorization-resource-grant-retirement.types";
 export { PrismaAuthorizationResourceGrantRetirementRepository } from "./prisma-authorization-resource-grant-retirement-repository";
 export type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand } from "./managed-authorization-grants.types";
@@ -8,8 +8,6 @@ export type { OrganizationAdminGrantBootstrapRepository, ReconcileOrganizationAd
 export { PrismaOrganizationAdminGrantBootstrapRepository } from "./prisma-organization-admin-grant-bootstrap-repository";
 export type { OrganizationMemberProductGrantBootstrapRepository, ReconcileOrganizationMemberProductGrantsCommand } from "./organization-member-product-grant-bootstrap.types";
 export { ORGANIZATION_MEMBER_PRODUCT_GRANT_MANAGER_ID, PrismaOrganizationMemberProductGrantBootstrapRepository } from "./prisma-organization-member-product-grant-bootstrap-repository";
-export { __CancelPendingRunApprovalAuthority } from "./run-approval-cancellation";
-export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult } from "./run-approval-cancellation.types";
 export { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "./deferred-tool-approval";
 export { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle";
 export { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";
@@ -18,6 +16,7 @@ export { DeferredToolDecisionKinds, DeferredToolDecisionOutcomes } from "./defer
 export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types";
 export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types";
 export type { DeferredToolApprovalLifecycleInput } from "./deferred-tool-approval-lifecycle.types";
+export { DeferToolRequestOutcomes } from "./deferred-tool-approval-open.types";
 export type { DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types";
 export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-opener";
 export { __AdmitPreparingToolInvocationInTransaction } from "./tool-invocation-transaction";

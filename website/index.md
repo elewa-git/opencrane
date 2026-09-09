@@ -1,44 +1,30 @@
-# Governed AI agents on your infrastructure
+# AI assistants your company controls
 
-OpenCrane is a **self-hosted platform for AI agents**, running on your own Kubernetes cluster, that
-keeps identity, tools, approvals, cost and evidence under your authority — not a vendor's.
+OpenCrane is building a **company workspace for personal assistants and shared agents**. People
+should be able to work with company tools and knowledge while their organisation controls access,
+data, model providers and spending.
 
-## Personal assistants and managed agents
+## The product
 
-- **Your personal assistant** works for you alone — only your granted tools, files and knowledge,
-  only acting as you. → [Set up your personal assistant](/guide/persona)
-- **A managed agent** is a shared worker your organisation configures for bounded, scheduled or
-  triggered work, under its own narrow identity — never inheriting anyone's personal access.
-  → [Create a managed agent](/guide/first-agent)
+Your **personal assistant** helps with your work in private conversations. **Shared agents** are
+intended for defined team tasks, such as preparing a weekly report. Tools connect that work to
+other systems; knowledge supplies context; company controls decide what is permitted.
 
-## Disposable execution, durable record
+OpenCrane runs on infrastructure your organisation operates. Your choice of external model
+providers and integrations determines which data leaves that infrastructure.
 
-```text
-define an agent (personal or managed)
-      │
-      ▼
-admit a run — freeze exactly what it may use
-      │
-      ▼
-execute in one disposable, bounded Job
-      │
-      ▼
-inspect the ordered events, actions and outcome
-```
+## Where development stands
 
-The container that runs your agent's work can be replaced or disappear; the record of what it was
-allowed to use and what it did stays with OpenCrane.
+The 0.11 review baseline has durable conversations, bounded personal model turns and recoverable
+conversation workspaces. The complete assistant-with-tools journey, memory workflows and shared
+automation are still being built. Live qualification and MVP acceptance remain separate from
+implemented code.
 
-## Build useful agents
+→ [What is built and what remains](/guide/status)
 
-- Publish reusable [skills](/guide/skills).
-- Connect governed [tools](/guide/tools).
-- Add [organisational knowledge](/guide/knowledge).
-- Apply [access rules](/guide/permissions).
-- Set [budgets](/guide/budgets) and review [audit evidence](/guide/audit).
+## Start here
 
-## Start
-
-→ [See how OpenCrane works](/guide/how-it-works) ·
-[Install OpenCrane](/guide/getting-started) ·
-[Set up your personal assistant](/guide/persona)
+- [Understand OpenCrane](/guide/introduction): the people, assistants and conversations in the product.
+- [Set up your personal assistant](/guide/persona): join an existing company instance.
+- [Install OpenCrane](/guide/getting-started): prepare a development instance.
+- [Read the architecture](/advanced/architecture): see which part owns what.

@@ -28,41 +28,6 @@
         }
       }
     },
-    "channelProxy": {
-      "type": "object",
-      "required": ["enabled", "image", "service", "targetHostSuffixes", "projectedTokenTtlSeconds"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "image": {
-          "type": "object",
-          "required": ["repository", "tag", "pullPolicy"],
-          "properties": {
-            "repository": { "type": "string", "minLength": 1 },
-            "tag": { "type": "string", "minLength": 1 },
-            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
-          }
-        },
-        "service": {
-          "type": "object",
-          "required": ["port"],
-          "properties": {
-            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
-          }
-        },
-        "allowedOrigins": {
-          "type": "array",
-          "items": { "type": "string", "pattern": "^https://[^/]+$" },
-          "uniqueItems": true
-        },
-        "targetHostSuffixes": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "pattern": "^\\.[a-z0-9.-]+$" },
-          "uniqueItems": true
-        },
-        "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 }
-      }
-    },
     "memoryGateway": {
       "type": "object",
       "required": ["image", "replicas", "service", "projectedTokenTtlSeconds", "httpTimeoutSeconds", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort"],
@@ -100,14 +65,230 @@
         "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     },
-    "agentController": {
+    "historyStore": {
       "type": "object",
-      "required": ["enabled", "image", "claimLeaseSeconds", "assignmentTtlSeconds", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort", "runtimeQuota", "runtimeProfile", "warmRuntime"],
+      "properties": {
+        "kurrentdb": {
+          "type": "object",
+          "required": ["bootstrapOps", "serviceCredential", "bootstrap", "probes", "podDisruptionBudget", "backup"],
+          "properties": {
+            "dnsResolverCidrs": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/32$|^[0-9a-fA-F:]*:[0-9a-fA-F:]*/128$"
+              }
+            },
+            "bootstrapOps": {
+              "type": "object",
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": { "type": "string", "maxLength": 253 }
+              }
+            },
+            "serviceCredential": {
+              "type": "object",
+              "required": ["existingSecret"],
+              "properties": {
+                "existingSecret": { "type": "string", "maxLength": 253 }
+              }
+            },
+            "bootstrap": {
+              "type": "object",
+              "required": ["image", "resources", "activeDeadlineSeconds", "backoffLimit", "timeoutSeconds"],
+              "properties": {
+                "image": {
+                  "type": "object",
+                  "required": ["repository", "digest", "pullPolicy"],
+                  "properties": {
+                    "repository": { "type": "string" },
+                    "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+                    "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "required": ["requests", "limits"],
+                  "properties": {
+                    "requests": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    },
+                    "limits": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    }
+                  }
+                },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+                "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
+                "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3599 }
+              }
+            },
+            "probes": {
+              "type": "object",
+              "required": ["readiness", "liveness"],
+              "properties": {
+                "readiness": { "$ref": "#/definitions/kurrentdbProbe" },
+                "liveness": { "$ref": "#/definitions/kurrentdbProbe" }
+              }
+            },
+            "podDisruptionBudget": {
+              "type": "object",
+              "required": ["enabled", "minAvailable"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "minAvailable": { "type": "integer", "minimum": 0, "maximum": 3 }
+              }
+            },
+            "backup": {
+              "type": "object",
+              "required": ["enabled", "mode", "schedule", "startingDeadlineSeconds", "activeDeadlineSeconds", "retention", "archive", "volumeSnapshot", "resources"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "mode": { "type": "string", "enum": ["fileCopy", "volumeSnapshot"] },
+                "schedule": {
+                  "type": "string",
+                  "description": "Five-field cron expression or @hourly/@daily/@midnight/@weekly/@monthly, evaluated by the CronJob controller.",
+                  "pattern": "^(@(hourly|daily|midnight|weekly|monthly)|(\\S+\\s+){4}\\S+)$"
+                },
+                "startingDeadlineSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+                "retention": {
+                  "type": "object",
+                  "required": ["keepLast"],
+                  "properties": { "keepLast": { "type": "integer", "minimum": 1, "maximum": 365 } }
+                },
+                "archive": {
+                  "type": "object",
+                  "required": ["persistence"],
+                  "properties": {
+                    "persistence": {
+                      "type": "object",
+                      "required": ["storageClassName", "size"],
+                      "properties": {
+                        "storageClassName": { "type": "string", "maxLength": 253 },
+                        "size": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$" }
+                      }
+                    }
+                  }
+                },
+                "volumeSnapshot": {
+                  "type": "object",
+                  "required": ["className", "readyTimeoutSeconds", "image", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort"],
+                  "properties": {
+                    "className": { "type": "string", "maxLength": 253 },
+                    "readyTimeoutSeconds": { "type": "integer", "minimum": 30, "maximum": 86400 },
+                    "image": {
+                      "type": "object",
+                      "required": ["repository", "digest", "pullPolicy"],
+                      "properties": {
+                        "repository": { "type": "string" },
+                        "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+                        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+                      }
+                    },
+                    "kubernetesApiServerCidrs": { "$ref": "#/definitions/exactCidrList" },
+                    "kubernetesApiServerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                    "kubernetesApiServerEndpointCidrs": { "$ref": "#/definitions/exactCidrList" },
+                    "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "required": ["requests", "limits"],
+                  "properties": {
+                    "requests": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    },
+                    "limits": {
+                      "type": "object",
+                      "required": ["cpu", "memory"],
+                      "properties": {
+                        "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                        "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "agentSandbox": {
+      "type": "object",
+      "required": ["enabled", "namespace", "runtimeClassName", "serviceAccountName", "profiles"],
       "properties": {
         "enabled": { "type": "boolean" },
-        "runtimeNamespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
-        "claimLeaseSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
-        "assignmentTtlSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+        "namespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "runtimeClassName": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "serviceAccountName": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "poolName", "warmReplicas", "image", "resources"],
+            "properties": {
+              "warmReplicas": { "type": "integer", "const": 0, "description": "Computers start only after a lease is admitted; idle prewarming is unsupported." },
+              "name": { "type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+              "poolName": { "type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+              "image": {
+                "type": "object",
+                "required": ["repository", "digest", "pullPolicy"],
+                "properties": {
+                  "repository": { "type": "string", "minLength": 1 },
+                  "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+                  "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+                }
+              },
+              "resources": {
+                "type": "object",
+                "required": ["requests", "limits"],
+                "properties": {
+                  "requests": {
+                    "type": "object",
+                    "required": ["cpu", "memory"],
+                    "properties": {
+                      "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                      "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                    }
+                  },
+                  "limits": {
+                    "type": "object",
+                    "required": ["cpu", "memory"],
+                    "properties": {
+                      "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                      "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "agentController": {
+      "type": "object",
+      "required": ["enabled", "image", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort"],
+      "properties": {
+        "enabled": { "type": "boolean" },
         "image": {
           "type": "object",
           "required": ["repository", "digest", "pullPolicy"],
@@ -128,86 +309,7 @@
           "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
           "uniqueItems": true
         },
-        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "runtimeQuota": {
-          "type": "object",
-          "required": ["pods", "deployments", "requests", "limits"],
-          "properties": {
-            "pods": { "type": "integer", "minimum": 1 },
-            "deployments": { "type": "integer", "minimum": 1 },
-            "requests": {
-              "type": "object",
-              "required": ["cpu", "memory"],
-              "properties": {
-                "cpu": { "type": "string", "minLength": 1 },
-                "memory": { "type": "string", "minLength": 1 }
-              }
-            },
-            "limits": {
-              "type": "object",
-              "required": ["cpu", "memory"],
-              "properties": {
-                "cpu": { "type": "string", "minLength": 1 },
-                "memory": { "type": "string", "minLength": 1 }
-              }
-            }
-          }
-        },
-        "runtimeProfile": {
-          "type": "object",
-          "required": ["name", "image", "scratchSize", "resources"],
-          "properties": {
-            "name": { "type": "string", "minLength": 1 },
-            "scratchSize": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" },
-            "image": {
-              "type": "object",
-              "required": ["repository", "digest", "pullPolicy"],
-              "properties": {
-                "repository": { "type": "string", "minLength": 1 },
-                "digest": { "type": "string" },
-                "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
-              }
-            },
-            "resources": {
-              "type": "object",
-              "required": ["requests", "limits"],
-              "properties": {
-                "requests": {
-                  "type": "object",
-                  "required": ["cpu", "memory"],
-                  "properties": {
-                    "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
-                    "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
-                  }
-                },
-                "limits": {
-                  "type": "object",
-                  "required": ["cpu", "memory"],
-                  "properties": {
-                    "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
-                    "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "warmRuntime": {
-          "type": "object",
-          "required": ["managedNamespace", "replicas", "serviceAccountName", "tokenAudience", "projectedTokenTtlSeconds", "bindingPort", "genericIdleSeconds", "genericProfile", "personalProfile", "managedProfile"],
-          "properties": {
-            "managedNamespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
-            "replicas": { "type": "integer", "minimum": 2, "maximum": 5 },
-            "serviceAccountName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
-            "tokenAudience": { "type": "string", "minLength": 1 },
-            "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 },
-            "bindingPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-            "genericIdleSeconds": { "type": "integer", "minimum": 1 },
-            "genericProfile": { "type": "string", "minLength": 1 },
-            "personalProfile": { "type": "string", "minLength": 1 },
-            "managedProfile": { "type": "string", "minLength": 1 }
-          }
-        }
+        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     },
     "crds": {
@@ -250,6 +352,23 @@
           }
         }
       }
+    }
+  },
+  "definitions": {
+    "kurrentdbProbe": {
+      "type": "object",
+      "required": ["initialDelaySeconds", "periodSeconds", "timeoutSeconds", "failureThreshold"],
+      "properties": {
+        "initialDelaySeconds": { "type": "integer", "minimum": 0, "maximum": 600 },
+        "periodSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 60 },
+        "failureThreshold": { "type": "integer", "minimum": 1, "maximum": 30 }
+      }
+    },
+    "exactCidrList": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+      "uniqueItems": true
     }
   },
   "allOf": [

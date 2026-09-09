@@ -1,7 +1,8 @@
 const DEVELOP_SMOKE_IMAGES = [
 	"artifact-service",
-	"channel-proxy",
 	"cognee",
+	"conversation-computer",
+	"kurrentdb",
 	"memory-gateway",
 	"opencrane",
 	"opencrane-ui",
@@ -34,7 +35,7 @@ function _ReleaseDescriptor(project)
 /**
  * Resolves a manual publication set.
  *
- * `null` delegates to the normal affected-project calculation (push and pull-request validation),
+ * `null` delegates to the normal affected-project calculation (automatic runs and manual `affected`),
  * while `none` produces no matrix entry so workflow dispatch is validation-only by default. An
  * explicit `all` selection publishes every app-owned container for one exact release candidate.
  *
@@ -47,9 +48,11 @@ function _ReleaseDescriptor(project)
 export function selectForcedContainerProjects(force, allProjects = [])
 {
 	if (!force) return null;
+	if (force === "affected")
+		return null;
 	if (force === "none") return [];
 	if (force === "all") return [...new Set(allProjects)].sort(function _ByName(left, right) { return left.localeCompare(right); });
-	if (force === "bootstrap") return ["channel-proxy", "memory-gateway"];
+	if (force === "bootstrap") return ["memory-gateway"];
 	if (force === "artifact") return ["artifact-service"];
 	if (force === "qualification") return [...DEVELOP_SMOKE_IMAGES, "postgres"];
 	if (force === "server") return ["opencrane"];

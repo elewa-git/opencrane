@@ -1,17 +1,16 @@
 {{- define "opencrane.server.deployment" -}}
-{{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
-{{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
+{{- $history := .Values.historyStore.kurrentdb -}}
+{{- $conversationPayloadKeyring := .Values.clustertenantManager.conversationPrivatePayloadKeyring -}}
 {{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
-{{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
-{{- $openCraneInternalUrl := .Values.channelProxy.openCraneInternalUrl | default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) -}}
+{{- $siloId := $firstUser.clusterTenant | default .Release.Name -}}
 {{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
 {{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
 {{- end -}}
@@ -51,11 +50,8 @@
 {{- if and $ociRegistryAuthorization.existingSecret (empty $ociRegistryAuthorization.secretKey) -}}
 {{- fail "clustertenantManager.workflows.ociRegistry.authorization.secretKey is required when an existingSecret is configured" -}}
 {{- end -}}
-{{- if empty $continuationKeyring.existingSecret -}}
-{{- fail "clustertenantManager.workflows.continuationKeyring.existingSecret is required" -}}
-{{- end -}}
-{{- if empty $continuationKeyring.secretKey -}}
-{{- fail "clustertenantManager.workflows.continuationKeyring.secretKey is required" -}}
+{{- if or (empty $conversationPayloadKeyring.existingSecret) (empty $conversationPayloadKeyring.secretKey) -}}
+{{- fail "clustertenantManager.conversationPrivatePayloadKeyring existingSecret and secretKey are required" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -105,41 +101,38 @@ spec:
             # Second (internal-only) listener for /api/internal/*.
             - name: INTERNAL_PORT
               value: {{ .Values.clustertenantManager.service.internalPort | quote }}
-            {{- if .Values.channelProxy.enabled }}
-            # Stable receiver identity and exact per-release target. Startup reconciles one distinct
-            # route row per AgentService; the receiver id is never reused as a route-row id.
-            - name: CHANNEL_PROXY_SERVICE_ACCOUNT_NAME
-              value: {{ printf "%s-channel-proxy" (include "opencrane.fullname" .) | quote }}
-            - name: CHANNEL_TARGET_TRUSTED_HOST
-              value: {{ $controlPlaneHost | quote }}
-            - name: CHANNEL_TARGET_SILO_ID
-              value: {{ $channelSiloId | quote }}
-            - name: CHANNEL_REPLAY_RECEIVER_ID
-              value: {{ required "channelProxy.replayReceiverId is required when channelProxy is enabled" .Values.channelProxy.replayReceiverId | quote }}
-            - name: CHANNEL_REPLAY_ENDPOINT
-              value: {{ printf "%s/api/internal/conversation-replay" (trimSuffix "/" $openCraneInternalUrl) | quote }}
-            - name: CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS
-              value: {{ .Values.channelProxy.invocationContextTtlSeconds | quote }}
-            - name: CHANNEL_PROXY_URL
-              value: {{ printf "http://%s-channel-proxy.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.channelProxy.service.port | quote }}
-            {{- end }}
-            - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS
-              value: {{ .Values.agentController.assignmentTtlSeconds | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_CONCURRENT
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED
               value: {{ .Values.clustertenantManager.runAdmission.maxQueued | quote }}
             # Absurd runs saved control-plane tasks from the same silo database used by product writes.
             - name: OPENCRANE_SILO_ID
-              value: {{ $channelSiloId | quote }}
+              value: {{ $siloId | quote }}
+            {{- if .Values.agentSandbox.enabled }}
+            {{- $computerProfile := first .Values.agentSandbox.profiles }}
+            - name: OPENCRANE_COMPUTER_PROFILE_REVISION_ID
+              value: {{ $computerProfile.image.digest | quote }}
+            - name: OPENCRANE_COMPUTER_PROFILE_NAME
+              value: {{ $computerProfile.name | quote }}
+            - name: OPENCRANE_COMPUTER_WARM_POOL_NAME
+              value: {{ $computerProfile.poolName | quote }}
+            - name: OPENCRANE_COMPUTER_NAMESPACE
+              value: {{ .Values.agentSandbox.namespace | quote }}
+            - name: OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME
+              value: {{ .Values.agentSandbox.serviceAccountName | quote }}
+            - name: OPENCRANE_COMPUTER_LEASE_TTL_SECONDS
+              value: {{ .Values.agentSandbox.leaseTtlSeconds | quote }}
+            - name: OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS
+              value: {{ .Values.agentSandbox.maximumTurnCostUsdMicros | quote }}
+            {{- end }}
+            - name: CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH
+              value: /var/run/opencrane/conversation-payload/keyring.json
             - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE
               value: {{ .Values.clustertenantManager.workflows.databasePoolSize | quote }}
             - name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY
               value: {{ .Values.clustertenantManager.workflows.workerConcurrency | quote }}
             - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS
               value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
-            - name: AGENT_RUNTIME_CONTINUATION_KEYRING_PATH
-              value: /var/run/opencrane/runtime-continuation/keyring.json
             - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS
               value: {{ .Values.clustertenantManager.workflows.mcpEraProbeTimeoutMilliseconds | quote }}
             - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES
@@ -190,11 +183,6 @@ spec:
             - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_TIMEOUT_SECONDS
               value: {{ $fleetMembership.billingGatewayTimeoutSeconds | quote }}
             {{- end }}
-            # The server binds each runtime identity class to its own Helm-owned restricted namespace.
-            - name: AGENT_RUNTIME_PERSONAL_NAMESPACE
-              value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
-            - name: AGENT_RUNTIME_MANAGED_NAMESPACE
-              value: {{ $managedRuntimeNamespace | quote }}
             # OCI-backed MCP calls use a separate Job class and Pod-bound companion identity.
             - name: SKILL_AUTHORING_NAMESPACE
               value: {{ $skillAuthoring.namespace | quote }}
@@ -307,7 +295,22 @@ spec:
               value: /var/run/opencrane/memory-gateway/token
             - name: MEMORY_GATEWAY_TIMEOUT_SECONDS
               value: {{ .Values.clustertenantManager.memoryGateway.httpTimeoutSeconds | quote }}
+            {{- if $history.enabled }}
+            # KurrentDB is the sole durable HistoryStore. The server receives only its scoped
+            # service identity, never an administrator or bootstrap credential.
+            - name: OPENCRANE_HISTORY_STORE_ENDPOINT
+              value: {{ printf "%s-kurrentdb.%s.svc:%v" (include "opencrane.fullname" .) .Release.Namespace $history.service.port | quote }}
+            - name: OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH
+              value: /var/run/opencrane/history-store/tls/ca.crt
+            - name: OPENCRANE_HISTORY_STORE_USERNAME_PATH
+              value: /var/run/opencrane/history-store/credentials/username
+            - name: OPENCRANE_HISTORY_STORE_PASSWORD_PATH
+              value: /var/run/opencrane/history-store/credentials/password
+            {{- end }}
           volumeMounts:
+            - name: conversation-private-payload-keyring
+              mountPath: /var/run/opencrane/conversation-payload
+              readOnly: true
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
               readOnly: true
@@ -327,9 +330,14 @@ spec:
             - name: memory-gateway-token
               mountPath: /var/run/opencrane/memory-gateway
               readOnly: true
-            - name: runtime-continuation-keyring
-              mountPath: /var/run/opencrane/runtime-continuation
+            {{- if $history.enabled }}
+            - name: history-store-tls
+              mountPath: /var/run/opencrane/history-store/tls
               readOnly: true
+            - name: history-store-credential
+              mountPath: /var/run/opencrane/history-store/credentials
+              readOnly: true
+            {{- end }}
             {{- if $ociRegistryAuthorization.existingSecret }}
             - name: oci-registry-authorization
               mountPath: /var/run/opencrane/oci-registry
@@ -353,6 +361,13 @@ spec:
           resources:
             {{- toYaml .Values.clustertenantManager.resources | nindent 12 }}
       volumes:
+        - name: conversation-private-payload-keyring
+          secret:
+            secretName: {{ $conversationPayloadKeyring.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $conversationPayloadKeyring.secretKey | quote }}
+                path: keyring.json
         - name: artifact-keys
           secret:
             secretName: {{ required "artifactService.keys.catalogExistingSecret is required" .Values.artifactService.keys.catalogExistingSecret | quote }}
@@ -400,14 +415,24 @@ spec:
                   path: token
                   audience: opencrane-memory-gateway
                   expirationSeconds: {{ .Values.clustertenantManager.memoryGateway.projectedTokenTtlSeconds }}
-        # The server re-reads this keyring for every continuation operation so rotation is live.
-        - name: runtime-continuation-keyring
+        {{- if $history.enabled }}
+        - name: history-store-tls
           secret:
-            secretName: {{ $continuationKeyring.existingSecret | quote }}
+            secretName: {{ $history.tls.existingSecret | quote }}
             defaultMode: 0440
             items:
-              - key: {{ $continuationKeyring.secretKey | quote }}
-                path: keyring.json
+              - key: ca.crt
+                path: ca.crt
+        - name: history-store-credential
+          secret:
+            secretName: {{ $history.serviceCredential.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: username
+                path: username
+              - key: password
+                path: password
+        {{- end }}
         {{- if $ociRegistryAuthorization.existingSecret }}
         # OpenCrane re-reads this file for every registry request so Secret rotation takes effect.
         - name: oci-registry-authorization

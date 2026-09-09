@@ -42,7 +42,7 @@ evidence to the owning file. Do not silently change a blocked story into fronten
 | Workspace and conversations | [workspace-and-conversations.md](workspace-and-conversations.md) | Participant list/create/open/message/archive/close and replay APIs exist; the routed workspace UI follows in later tracks. |
 | Runs and participant input | [runs-and-approvals.md](runs-and-approvals.md) | Conversation-scoped elicitation API and reusable UI are ready; workspace mounting follows in #351. |
 | Personal configuration | [personal-configuration.md](personal-configuration.md) | Proposal consent and future-run materialization exist without a UI. |
-| Managed agents | [managed-agents.md](managed-agents.md) | Revision, lifecycle, run-now, history and schedule APIs exist. |
+| Managed agents | [managed-agents.md](managed-agents.md) | The definition model remains, but its management and invocation APIs are not part of 0.11.0. |
 | Tools and integrations | [tools-and-integrations.md](tools-and-integrations.md) | Catalogue metadata exists; credential/OAuth connection is not a real handshake. |
 | Assets | [assets.md](assets.md) | Safe metadata catalogue only. |
 | Skills | [skills.md](skills.md) | Safe catalogue only; no public authoring lifecycle. |

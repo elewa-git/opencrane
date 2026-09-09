@@ -9,12 +9,12 @@ Multiple OpenCrane instances can share one Kubernetes cluster when each instance
 cluster
 ├── instance acme
 │   ├── trusted namespace
-│   ├── personal runtime namespace
-│   └── managed runtime namespace
+│   ├── KurrentDB history store
+│   └── Agent Sandbox computer profile
 └── instance globex
     ├── trusted namespace
-    ├── personal runtime namespace
-    └── managed runtime namespace
+    ├── KurrentDB history store
+    └── Agent Sandbox computer profile
 ```
 
 Each instance serves one `ClusterTenant` silo. An instance does not discover or manage the
@@ -27,7 +27,8 @@ other instance's organisations or workloads.
 | Helm release and namespaces | Unique per instance |
 | Public host and TLS Secret | Unique routing identity |
 | PostgreSQL databases and Secrets | No shared product authority |
-| Runtime profiles | Point only to that instance's runtime namespaces |
+| KurrentDB credentials | Instance-local TLS and least-privilege history identity |
+| Agent Sandbox profiles | Use only that instance's immutable image and release-owned pool |
 | ServiceAccounts and admission policies | Release-scoped names |
 | NetworkPolicy instance labels | Admit only same-instance traffic |
 

@@ -2,15 +2,11 @@ export * from "./client";
 export type * from "./client.types";
 export * from "./api-error.types";
 export * from "./api-error.validator";
-export * from "./ag-ui-projection.types";
-export * from "./ag-ui-projection.validator";
-export * from "./agent-thread-parent-delivery.types";
-export * from "./ag-ui-a2ui-envelope";
 export * from "@opencrane/models/agents";
-export * from "@opencrane/models/conversations";
+export { __CanAppendConversationTimelineEntry, __DecideConversationCommand, __HasValidConversationAgentBinding, __HasValidMessageCompletion, __IsConversationLifecycleTransitionAllowed, __IsMessageTransitionAllowed, ___ConversationCreationRequestSchema, ___ConversationParticipantSchema, ___ConversationReplayCursorSchema, ___ConversationTimelineEntrySchema, ___ConversationSchema, ___MessageSchema, ___ParticipantInputBlocksSchema, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes, ConversationSystemEventTypes, ConversationTimelineEntryKinds, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
+export type { AgentSessionConversation, AllowedConversationCommandDecision, CloseConversationCommand, Conversation, ConversationBase, ConversationCommand, ConversationCommandContext, ConversationCommandDecision, ConversationCreationRequest, ConversationId, ConversationMessageTimelineEntry, ConversationMembershipTimelineEntry, ConversationParticipant, ConversationReplayCursor, ConversationRunEventTimelineEntry, ConversationSystemTimelineEntry, ConversationTimelineEntry, ConversationTimelineEntryBase, DeniedConversationCommandDecision, DirectConversation, GroupConversation, Message, MessageId, SubmitMessageConversationCommand, AnswerElicitationConversationCommand, SteerRunConversationCommand } from "@opencrane/models/conversations";
 export * from "@opencrane/models/conversation-assets";
 export * from "./conversation-elicitation.types";
-export * from "./conversation-elicitation.validator";
 export type * from "@opencrane/models/artifacts";
 export * from "./artifact-preprocessor.types";
 export * from "./artifact-preprocess-bootstrap-reference";
@@ -30,9 +26,17 @@ export * from "./public-health.types";
 export * from "./skill-authoring-validation-bootstrap-reference";
 export * from "./run-input-snapshot.types";
 export * from "./agent-controller-identity.types";
+export * from "./agent-identity.types";
+export * from "./agent-capability-grant.types";
+export * from "./conversation-computer.types";
+export * from "./conversation-computer.validator";
+export type * from "./conversation-computer-scope.types";
+export * from "./conversation-entry.types";
+export * from "./conversation-entry.validator";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
-export * from "./agent-runtime-protocol.types";
-export type * from "./runtime-assignment.types";
 export type * from "./tenant-models.types";
 export * from "./third-party-source.types";
+
+/** Distinguishes independent human membership evidence from company execution authority. */
+export { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";

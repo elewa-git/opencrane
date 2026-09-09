@@ -1,4 +1,4 @@
-import { AgentRevisionState, AgentServiceKind, AgentServiceState, type Prisma } from "@prisma/client";
+import { AgentRevisionState, AgentServiceState, type Prisma } from "@prisma/client";
 
 import type { RuntimeAgentEffectEligibility, RuntimeAgentEffectEligibilityCommand } from "../runtime-agent-effect-eligibility.types";
 
@@ -22,19 +22,21 @@ export class PrismaRuntimeAgentEffectEligibilityAuthority implements RuntimeAgen
 	/** @inheritdoc */
 	async isEligible(command: RuntimeAgentEffectEligibilityCommand): Promise<boolean>
 	{
-		const expectedKind = command.executionKind === "personal" ? AgentServiceKind.Personal : AgentServiceKind.Managed;
+		if (command.executionSubject.siloId !== command.siloId
+			|| command.executionSubject.runScope.siloId !== command.siloId
+			|| command.executionSubject.runScope.agentServiceId !== command.agentServiceId
+			|| command.executionSubject.runScope.agentRevisionId !== command.agentRevisionId)
+			return false;
 		const service = await this.transaction.agentService.findFirst({
 			where: {
 				id: command.agentServiceId,
 				siloId: command.siloId,
-				kind: expectedKind,
 				state: AgentServiceState.Active,
 				activeRevisionId: command.agentRevisionId,
-				...(command.executionKind === "managed" ? { principalId: command.principalId } : {}),
 				activeRevision: { is: { id: command.agentRevisionId, state: AgentRevisionState.Published } },
 			},
-			select: { id: true },
+			select: { id: true, principalId: true },
 		});
-		return service !== null;
+		return service !== null && (service.principalId === null || service.principalId === command.executionSubject.principalId);
 	}
 }

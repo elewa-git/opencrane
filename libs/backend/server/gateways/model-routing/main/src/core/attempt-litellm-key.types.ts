@@ -9,7 +9,8 @@
  * rather than falling back — a run cannot proceed without its own scoped key.
  *
  * @see LiteLLM proxy `POST /key/generate`, pinned to `main-v1.81.0-stable` by `litellm.image.tag`
- *      in apps/_infra/deploy-k8s/values.yaml — NEEDS-HUMAN: add the docs URI for that release.
+ *      in apps/_infra/deploy-k8s/values.yaml.
+ * @see https://github.com/BerriAI/litellm/blob/v1.81.0-stable/litellm/proxy/management_endpoints/key_management_endpoints.py
  */
 export interface AttemptLiteLlmKeyRequest
 {
@@ -21,6 +22,8 @@ export interface AttemptLiteLlmKeyRequest
   maxBudgetUsd: number;
   /** Key lifetime in seconds, bounded to the attempt lease. */
   expirySeconds: number;
+  /** Absolute authority deadline; minting latency must not extend this instant. */
+  notAfter: string;
 }
 
 /** Requests revocation of one newly minted, unused LiteLLM virtual key. */
@@ -32,12 +35,19 @@ export interface AttemptLiteLlmKeyRevocation
 	key: string;
 }
 
+/** Requests cleanup by the deterministic attempt alias when the raw key was not retained. */
+export interface AttemptLiteLlmKeyAliasRevocation
+{
+	/** Names the exact attempt key recorded before provider issuance. */
+	keyAlias: string;
+}
+
 /**
  * A freshly minted attempt key, plus the bindings it was issued under.
  *
- * `key` is a live credential: the caller writes it into a Kubernetes Secret for the run's pod to
- * read, and it must not be logged or returned in an API response. The three echoed bindings are
- * there so the caller can name that Secret and assert what the key can do without a second lookup.
+ * `key` is a live credential. The server keeps its encrypted custody record and hands it only to
+ * the currently authenticated conversation computer over private transport. It must never enter
+ * logs, conversation history or a public response. The returned expiry is the provider's evidence.
  */
 export interface AttemptLiteLlmKey
 {
@@ -49,4 +59,6 @@ export interface AttemptLiteLlmKey
   modelAlias: string;
   /** The lifetime in seconds the key was minted with. */
   expirySeconds: number;
+  /** Provider-reported expiry, checked against the absolute authority deadline before handoff. */
+  expiresAt: string;
 }

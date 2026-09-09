@@ -1,298 +1,46 @@
-import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
+/** Links a child to the immutable group message that requested its work. */
+const _GroupChildOriginSchema = { type: "object", additionalProperties: false, required: ["requestId", "parentConversationId", "parentMessageId", "parentMessagePosition"], properties: { requestId: { type: "string", format: "uuid" }, parentConversationId: { type: "string" }, parentMessageId: { type: "string", format: "uuid" }, parentMessagePosition: { type: "string", pattern: "^[1-9][0-9]{0,19}$" } } } as const;
+/** Reports admitted creation without exposing identity or execution internals. */
+const _GroupChildViewSchema = { type: "object", additionalProperties: false, required: ["conversationId", "parentConversationId", "parentMessageId", "parentMessagePosition", "state", "agentName"], properties: { conversationId: { type: "string" }, parentConversationId: { type: "string" }, parentMessageId: { type: "string", format: "uuid" }, parentMessagePosition: { type: "string", pattern: "^[1-9][0-9]{0,19}$" }, state: { type: "string", enum: ["pending", "ready", "unavailable"] }, agentName: { type: "string" } } } as const;
+/** Uses indistinguishable absent and inaccessible failures for child commands. */
+const _GroupChildFailures = { 400: { description: "Malformed command." }, 401: { description: "Authentication required." }, 404: { description: "Conversation or selected source unavailable." }, 409: { description: "The retry key already names a different command." }, 503: { description: "Conversation dependency unavailable." } } as const;
+/** Immutable participant conversation entry schema shared by KurrentDB history responses. */
+const _ConversationEntrySchema = { type: "object", additionalProperties: true, required: ["schemaVersion", "id", "conversationId", "position", "kind", "author", "provenance", "visibility", "runId", "causationId", "correlationId", "idempotencyKey", "occurredAt", "attestation"], properties: { schemaVersion: { type: "integer", enum: [1] }, id: { type: "string", format: "uuid" }, conversationId: { type: "string" }, position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, kind: { type: "string", enum: ["message", "log", "a2ui"] }, author: { type: "object" }, provenance: { type: "string", enum: ["human-authored", "agent-authored", "service-attested"] }, visibility: { type: "object" }, runId: { type: ["string", "null"] }, causationId: { type: "string" }, correlationId: { type: "string" }, idempotencyKey: { type: "string" }, occurredAt: { type: "string", format: "date-time" }, attestation: { type: ["object", "null"] } } } as const;
+/** Projection summary schema that contains opaque membership references but no transcript. */
+const _SummarySchema = { type: "object", additionalProperties: false, required: ["id", "mode", "lifecycle", "agentServiceId", "participantRefs", "archivedAt", "readThroughPosition", "updatedAt"], properties: { id: { type: "string" }, mode: { type: "string", enum: ["agent_session", "direct", "group"] }, lifecycle: { type: "string", enum: ["open", "closed"] }, agentServiceId: { type: ["string", "null"] }, participantRefs: { type: "array", items: { type: "string" } }, archivedAt: { type: ["string", "null"], format: "date-time" }, readThroughPosition: { type: "string" }, updatedAt: { type: "string", format: "date-time" } } } as const;
+/** Projection detail adds participant bounds but deliberately has no relational messages field. */
+const _DetailSchema = { ..._SummarySchema, required: [..._SummarySchema.required, "visibleFromPosition", "accessEndedPosition", "parent"], properties: { ..._SummarySchema.properties, visibleFromPosition: { type: "string" }, accessEndedPosition: { type: ["string", "null"] }, parent: { anyOf: [_GroupChildOriginSchema, { type: "null" }] } } } as const;
+/** Exact projection detail envelope shared by lifecycle operations. */
+const _DetailEnvelopeSchema = { type: "object", additionalProperties: false, required: ["conversation"], properties: { conversation: _DetailSchema } } as const;
+/** Shared path coordinate for every active-computer review operation. */
+const _ReviewConversationParameter = { name: "conversationId", in: "path", required: true, schema: { type: "string" } } as const;
+/** Shared relative workspace path used by file and diff review. */
+const _ReviewPathParameter = { name: "path", in: "query", required: true, schema: { type: "string", minLength: 1 } } as const;
+/** Bounded command response returned by the private computer review surface. */
+const _ReviewCommandSchema = { type: "object", additionalProperties: false, required: ["exitCode", "outcome", "output", "truncated"], properties: { exitCode: { type: ["integer", "null"] }, outcome: { type: "string", enum: ["completed", "timed_out", "output_limited"] }, output: { type: "string" }, truncated: { type: "boolean" } } } as const;
 
-import { ConversationAuthorityOutcomes } from "./types/conversation-authority-result.types";
-import { PersonalAgentDirectoryStatuses } from "./types/conversation-directory.types";
+/** OpenAPI fragment for participant-authorized KurrentDB conversation history. */
+export const _SelfConversationHistoryOpenapiPaths = {
+	"/me/conversations/{conversationId}/children": {
+		get: { operationId: "listMyGroupConversationChildren", parameters: [_ReviewConversationParameter], responses: { 200: { description: "Currently visible shared child requests.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["children"], properties: { children: { type: "array", items: _GroupChildViewSchema } } } } } }, ..._GroupChildFailures } },
+		post: { operationId: "createMyGroupConversationChild", summary: "Ask the company assistant about one own group message", description: "Admits an idempotent shared child for a caller-owned conversation-audience text message. Every admitted recipient must already see the originating revision. Requires current parent Delegate, conversation creation and selected service Invoke. The child begins pending and becomes ready only after cold history and its activation are durable.", parameters: [_ReviewConversationParameter], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["parentMessageId", "parentMessagePosition", "agentServiceId", "idempotencyKey"], properties: { parentMessageId: { type: "string", format: "uuid" }, parentMessagePosition: { type: "string", pattern: "^[1-9][0-9]{0,19}$" }, agentServiceId: { type: "string", minLength: 1, maxLength: 256 }, idempotencyKey: { type: "string", format: "uuid" } } } } } }, responses: { 202: { description: "Child creation admitted or its original request recovered.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["child"], properties: { child: _GroupChildViewSchema } } } } }, ..._GroupChildFailures } }
+	},
+	"/me/conversations/{conversationId}/share": { post: { operationId: "shareMyGroupConversationChildResult", summary: "Share reviewed assistant text back to its parent group", description: "Posts as the sharing human after current parent and child access checks. The verified child source becomes causation and the originating group message becomes the reply target. A retry key binds the source and exact reviewed text; this route grants no runtime parent writer.", parameters: [_ReviewConversationParameter], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["sourceEntryId", "sourcePosition", "text", "idempotencyKey"], properties: { sourceEntryId: { type: "string", format: "uuid" }, sourcePosition: { type: "string", pattern: "^[1-9][0-9]{0,19}$" }, text: { type: "string", minLength: 1, maxLength: 65536, description: "Human-reviewed text, limited to 65536 UTF-8 bytes." }, idempotencyKey: { type: "string", format: "uuid" } } } } } }, responses: { 202: { description: "Reviewed text accepted.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "position"], properties: { outcome: { type: "string", enum: ["accepted"] }, position: { type: "string" } } } } } }, 200: { description: "The same reviewed share was already accepted.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "position"], properties: { outcome: { type: "string", enum: ["idempotent"] }, position: { type: "string" } } } } } }, ..._GroupChildFailures } } },
 
-/**
- * Shared participant conversation summary schema kept local to the owning OpenAPI fragment.
- *
- * `participantRefs` holds opaque OrgMembership row identifiers, not login subjects: the query
- * repository translates every subject through `_membershipReferences` before projecting a summary.
- * The field was called `participantUserIds` and carried the OIDC subject until this slice, so a
- * generated client that still reads that name is out of date, and the two identifier spaces must
- * not be mixed: a `participantRef` is only meaningful inside the caller's own silo.
- */
-const _ConversationSummarySchema = {
-	type: "object",
-	additionalProperties: false,
-	required: ["id", "mode", "lifecycle", "agentServiceId", "participantRefs", "archivedAt", "readThroughPosition", "updatedAt"],
-	properties: {
-		id: { type: "string" },
-		mode: { type: "string", enum: [ConversationModes.AgentSession, ConversationModes.Direct, ConversationModes.Group] },
-		lifecycle: { type: "string", enum: [ConversationLifecycles.Open, ConversationLifecycles.Closed] },
-		agentServiceId: { type: ["string", "null"] },
-		participantRefs: { type: "array", items: { type: "string" } },
-		archivedAt: { type: ["string", "null"], format: "date-time" },
-		readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-		updatedAt: { type: "string", format: "date-time" },
-	},
-} as const;
-
-/** Canonical display-safe content block returned inside participant-visible messages. */
-const _ConversationMessageBlockSchema = {
-	type: "object",
-	additionalProperties: false,
-	required: ["id", "kind", "value"],
-	properties: {
-		id: { type: "string" },
-		kind: { type: "string", enum: [MessageContentBlockKinds.Text, MessageContentBlockKinds.Artifact, MessageContentBlockKinds.ToolCall, MessageContentBlockKinds.ToolResult] },
-		value: { type: "string" },
-	},
-} as const;
-
-/** Immutable breadcrumb coordinates returned for an Agent-targeted group message. */
-const _AgentThreadOriginSchema = {
-	type: "object", additionalProperties: false,
-	required: ["childConversationId", "parentConversationId", "rootConversationId", "parentMessageId", "initiatorUserId", "agentServiceId", "personaRevisionId", "firstRunId"],
-	properties: { childConversationId: { type: "string" }, parentConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, initiatorUserId: { type: "string" }, agentServiceId: { type: "string" }, personaRevisionId: { type: "string" }, firstRunId: { type: "string" } },
-} as const;
-
-/**
- * Canonical participant-visible message schema shared by detail and submission responses.
- *
- * `participantRef` names the author with the same opaque membership reference as
- * {@link _ConversationSummarySchema}, replacing the `userId` field that used to carry the OIDC
- * subject. It is null for anything a person did not write, and never for participant input: the
- * reviewed baseline's `conversation_messages_provenance_check` requires `user_id` on `user_input`
- * rows and forbids it on model output, tool results, and platform messages. So a client may read
- * null as "the Agent or the platform wrote this", not as "unknown user".
- */
-const _ConversationMessageSchema = {
-	type: "object",
-	additionalProperties: false,
-	required: ["id", "position", "role", "state", "source", "blocks", "runId", "participantRef", "createdAt", "completedAt", "agentThread"],
-	properties: {
-		id: { type: "string" },
-		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-		role: { type: "string", enum: [MessageRoles.User, MessageRoles.Assistant, MessageRoles.Tool, MessageRoles.System] },
-		state: { type: "string", enum: [MessageStates.Pending, MessageStates.Streaming, MessageStates.Completed, MessageStates.Failed, MessageStates.Cancelled] },
-		source: { type: "string", enum: [MessageSources.UserInput, MessageSources.ModelOutput, MessageSources.ToolResult, MessageSources.Platform] },
-		blocks: { type: "array", items: _ConversationMessageBlockSchema },
-		runId: { type: ["string", "null"] },
-		participantRef: { type: ["string", "null"] },
-		createdAt: { type: "string", format: "date-time" },
-		completedAt: { type: ["string", "null"], format: "date-time" },
-		agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] },
-	},
-} as const;
-
-/** Participant-visible conversation detail including its bounded canonical history. */
-const _ConversationDetailSchema = {
-	type: "object",
-	additionalProperties: false,
-	required: [..._ConversationSummarySchema.required, "visibleFromPosition", "accessEndedPosition", "messages"],
-	properties: {
-		..._ConversationSummarySchema.properties,
-		visibleFromPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-		accessEndedPosition: { type: ["string", "null"], pattern: "^(0|[1-9][0-9]*)$" },
-		messages: { type: "array", items: _ConversationMessageSchema },
-	},
-} as const;
-
-/** Exact envelope returned when an endpoint projects one conversation detail. */
-const _ConversationDetailEnvelopeSchema = {
-	type: "object",
-	additionalProperties: false,
-	required: ["conversation"],
-	properties: { conversation: _ConversationDetailSchema },
-} as const;
-
-/** Exact accepted-message response, distinct from an idempotent replay. */
-const _AcceptedConversationMessageEnvelopeSchema = {
-	type: "object",
-	additionalProperties: false,
-	required: ["outcome", "message", "agentThread"],
-	properties: { outcome: { type: "string", enum: ["accepted"] }, message: _ConversationMessageSchema, agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] } },
-} as const;
-
-/** Exact idempotent-message response, distinct from a newly accepted write. */
-const _IdempotentConversationMessageEnvelopeSchema = {
-	type: "object",
-	additionalProperties: false,
-	required: ["outcome", "message", "agentThread"],
-	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema, agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] } },
-} as const;
-
-/** Child message schema that omits participant login identifiers and nested authority. */
-const _AgentThreadMessageSchema = {
-	type: "object",
-	additionalProperties: false,
-	required: ["id", "position", "role", "state", "source", "blocks", "runId", "createdAt", "completedAt"],
-	properties: {
-		id: { type: "string" },
-		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-		role: { type: "string", enum: [MessageRoles.User, MessageRoles.Assistant, MessageRoles.Tool, MessageRoles.System] },
-		state: { type: "string", enum: [MessageStates.Pending, MessageStates.Streaming, MessageStates.Completed, MessageStates.Failed, MessageStates.Cancelled] },
-		source: { type: "string", enum: [MessageSources.UserInput, MessageSources.ModelOutput, MessageSources.ToolResult, MessageSources.Platform] },
-		blocks: { type: "array", items: _ConversationMessageBlockSchema },
-		runId: { type: ["string", "null"] },
-		createdAt: { type: "string", format: "date-time" },
-		completedAt: { type: ["string", "null"], format: "date-time" },
-	},
-} as const;
-
-/** Bounded Agent-thread read model that omits participant login identifiers. */
-const _AgentThreadSnapshotSchema = {
-	type: "object", additionalProperties: false,
-	required: ["parentConversationId", "childConversationId", "rootConversationId", "parentMessageId", "agentServiceId", "agentName", "ask", "createdAt", "lifecycle", "participantCount", "readThroughPosition", "latestPosition", "representedThroughPosition", "messageCount", "unreadMessageCount", "cursor", "messages", "runs", "deliveries"],
-	properties: {
-		parentConversationId: { type: "string" }, childConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, agentServiceId: { type: "string" }, agentName: { type: "string" }, ask: { type: "string" }, createdAt: { type: "string", format: "date-time" }, lifecycle: { type: "string", enum: [ConversationLifecycles.Open, ConversationLifecycles.Closed] }, participantCount: { type: "integer", minimum: 1 }, readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, latestPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, representedThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, messageCount: { type: "integer", minimum: 0 }, unreadMessageCount: { type: "integer", minimum: 0 }, cursor: { type: ["string", "null"] }, messages: { type: "array", items: _AgentThreadMessageSchema },
-		runs: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "ordinal", "attempt", "state", "acceptedAt", "finishedAt"], properties: { id: { type: "string" }, ordinal: { type: "integer", minimum: 1 }, attempt: { type: "integer", minimum: 1 }, state: { type: "string", enum: ["queued", "working", "waiting", "retrying", "completed", "failed", "cancelled"] }, acceptedAt: { type: "string", format: "date-time" }, finishedAt: { type: ["string", "null"], format: "date-time" } } } },
-		deliveries: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "childConversationId", "parentConversationId", "runId", "kind", "label", "detail", "assetId", "createdAt"], properties: { id: { type: "string" }, childConversationId: { type: "string" }, parentConversationId: { type: "string" }, runId: { type: "string" }, kind: { type: "string", enum: ["status", "question", "approval", "result", "failure", "asset"] }, label: { type: "string" }, detail: { type: "string" }, assetId: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" } } } },
-	},
-} as const;
-
-/**
- * OpenAPI description of the ten conversation operations, kept beside the router that serves them.
- *
- * Merged into the full document by `_DomainOpenapiPaths`
- * (libs/backend/server/api-spec/main/src/domain-openapi-paths.ts) and used to generate the
- * frontend client, so the documented statuses must match `_STATUS_BY_DENIAL` in
- * self-conversations.router.ts. In particular the message route documents 201 for a new message
- * and 200 for an identical retry — two different bodies, distinguished by the `outcome` field.
- * The run-retry route repeats that pair, and `_runRetryDenialStatus` maps its denials.
- *
- */
-export const _SelfConversationsOpenapiPaths = {
-	// The directory is what a client must call before it can create anything: creation now accepts
-	// only references issued here, never a login subject. `openapi.test.ts` asserts this response
-	// schema contains neither `subject` nor `email`.
-	//
-	// There is no 404 and no 403. A caller whose organisation membership has been revoked makes
-	// `PrismaConversationQueryRepository.directory` throw, and the router turns any throw into 503 —
-	// so a revoked user sees "unavailable", not a distinct "you were removed" answer.
-	"/me/conversations/directory": {
-		get: {
-			operationId: "getMyConversationCreationDirectory",
-			summary: "List self-scoped conversation creation choices",
-			description: "Returns opaque active-member references and the caller's personal Agent only when exactly one active service matches their approved persona. It never returns login subjects, emails, roles, or memory identity.",
-			tags: ["Conversations"],
-			responses: { 200: { description: "Privacy-safe creation choices.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["directory"], properties: { directory: { type: "object", additionalProperties: false, required: ["participants", "personalAgentStatus", "personalAgent"], properties: { participants: { type: "array", items: { type: "object", additionalProperties: false, required: ["participantRef", "isSelf"], properties: { participantRef: { type: "string" }, isSelf: { type: "boolean" } } } }, personalAgentStatus: { type: "string", enum: Object.values(PersonalAgentDirectoryStatuses) }, personalAgent: { oneOf: [{ type: "null" }, { type: "object", additionalProperties: false, required: ["personalAgentRef", "displayName"], properties: { personalAgentRef: { type: "string" }, displayName: { type: "string" } } }] } } } } } } } }, 401: { description: "Authentication required." }, 503: { description: "Conversation directory unavailable." } },
-		},
-	},
-	"/me/conversations": {
-		get: {
-			operationId: "listMyConversations",
-			summary: "List the signed-in participant's conversations",
-			tags: ["Conversations"],
-			parameters: [{ name: "includeArchived", in: "query", required: false, schema: { type: "boolean", default: false } }],
-			responses: { 200: { description: "Participant-bound conversation summaries.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["conversations"], properties: { conversations: { type: "array", items: _ConversationSummarySchema } } } } } }, 401: { description: "Authentication required." }, 503: { description: "Conversation authority unavailable." } },
-		},
-		post: {
-			operationId: "createMyConversation",
-			summary: "Create one immutable-mode conversation",
-			tags: ["Conversations"],
-			requestBody: { required: true, content: { "application/json": { schema: { oneOf: [
-				{ type: "object", additionalProperties: false, required: ["mode", "personalAgentRef"], properties: { mode: { type: "string", enum: [ConversationModes.AgentSession] }, personalAgentRef: { type: "string" } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantRefs"], properties: { mode: { type: "string", enum: [ConversationModes.Direct] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantRefs"], properties: { mode: { type: "string", enum: [ConversationModes.Group] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
-			] } } } },
-			responses: { 201: { description: "Conversation created with its bounded canonical history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid immutable-mode request." }, 401: { description: "Authentication required." }, 404: { description: "A participant or agent service is unavailable." }, 503: { description: "Conversation authority unavailable." } },
-		},
-	},
-"/me/conversations/{conversationId}": {
-		get: {
-			operationId: "openMyConversation",
-			summary: "Open one participant-bound conversation",
-			tags: ["Conversations"],
-			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
-			responses: { 200: { description: "Conversation detail with bounded canonical message history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 503: { description: "Conversation authority unavailable." } },
-		},
-	},
-	"/me/conversations/{parentConversationId}/agent-threads/{childConversationId}": {
-		get: {
-			operationId: "openMyAgentThread",
-			summary: "Open one authorized child Agent-thread read model",
-			description: "Composes a bounded view from canonical conversation, run, and parent-delivery authorities. It creates no second ledger and requires current participant access in both parent and child.",
-			tags: ["Conversations"],
-			parameters: [{ name: "parentConversationId", in: "path", required: true, schema: { type: "string" } }, { name: "childConversationId", in: "path", required: true, schema: { type: "string" } }],
-			responses: { 200: { description: "Authorized Agent-thread snapshot.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["agentThread"], properties: { agentThread: _AgentThreadSnapshotSchema } } } } }, 401: { description: "Authentication required." }, 404: { description: "Agent thread unavailable." }, 503: { description: "Conversation authority unavailable." } },
-		},
-	},
-	"/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through": {
-		put: {
-			operationId: "markMyAgentThreadRead",
-			summary: "Advance this participant's Agent-thread read position",
-			description: "Idempotently advances one participant-local coordinate only after current parent and child access are rechecked. The observed position cannot exceed the current child timeline.",
-			tags: ["Conversations"],
-			parameters: [{ name: "parentConversationId", in: "path", required: true, schema: { type: "string" } }, { name: "childConversationId", in: "path", required: true, schema: { type: "string" } }],
-			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["observedPosition"], properties: { observedPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$", maxLength: 19 } } } } } },
-			responses: { 200: { description: "Participant read coordinate changed or was already at least this position.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "readThroughPosition"], properties: { outcome: { type: "string", enum: [ConversationAuthorityOutcomes.Changed, ConversationAuthorityOutcomes.Idempotent] }, readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" } } } } } }, 400: { description: "Malformed observed position." }, 401: { description: "Authentication required." }, 404: { description: "Agent thread unavailable." }, 409: { description: "Observed position exceeds the current child timeline." }, 503: { description: "Conversation authority unavailable." } },
-		},
-	},
-	"/me/conversations/{conversationId}/messages": {
-		post: {
-			operationId: "submitMyConversationMessage",
-			summary: "Submit participant input through the immutable mode strategy",
-			description: "Agent-session input is committed atomically with a governed run. Direct and ordinary group input is committed without creating an AgentRun.",
-			tags: ["Conversations"],
-			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
-			requestBody: {
-				required: true,
-				content: {
-					"application/json": {
-						schema: {
-							type: "object",
-							additionalProperties: false,
-							required: ["idempotencyKey", "blocks"],
-							properties: {
-								idempotencyKey: { type: "string", maxLength: 128 },
-								blocks: {
-									type: "array",
-									minItems: 1,
-									maxItems: 32,
-									items: {
-										type: "object",
-										additionalProperties: false,
-										required: ["id", "kind", "value"],
-										properties: { id: { type: "string" }, kind: { type: "string", enum: [MessageContentBlockKinds.Text, MessageContentBlockKinds.Artifact] }, value: { type: "string", maxLength: 32000 } },
-									},
-								},
-								agentTarget: { type: "object", additionalProperties: false, required: ["agentServiceId"], properties: { agentServiceId: { type: "string", maxLength: 128 } }, description: "In a group only, create a child Agent session using the caller's active approved persona." },
-							},
-						},
-					},
-				},
-			},
-			responses: { 201: { description: "Message accepted.", content: { "application/json": { schema: _AcceptedConversationMessageEnvelopeSchema } } }, 200: { description: "Exact idempotent retry returned the canonical message.", content: { "application/json": { schema: _IdempotentConversationMessageEnvelopeSchema } } }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 429: { description: "Conversation admission capacity is currently full; retry later." }, 503: { description: "Admission authority unavailable." } },
-		},
-	},
-	// Retry increases the attempt counter on the SAME run rather than creating a second one, which
-	// is why the success bodies return `attempt` with a minimum of 2 and why `expectedAttempt` is
-	// required: `__StartNextRunAttempt` uses it as a compare-and-swap guard, so two clients racing
-	// on the same failed attempt cannot both start one.
-	//
-	// 200 versus 201 is the client's only way to tell a fresh start from a replay of the same next
-	// attempt, and 404 deliberately covers both "no such run" and "that run is not in a conversation you
-	// participate in" so the route cannot be used to discover other people's runs.
-	"/me/conversations/{conversationId}/runs/{runId}/retry": {
-		post: {
-			operationId: "retryMyConversationRun",
-			summary: "Start a fresh attempt for one failed conversation run",
-			description: "Requires current organisation membership, active conversation participation, the exact terminal attempt, and the still-active Agent revision. Repeating the request for that attempt returns the same new attempt.",
-			tags: ["Conversations"],
-			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }, { name: "runId", in: "path", required: true, schema: { type: "string" } }],
-			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["expectedAttempt"], properties: { expectedAttempt: { type: "integer", minimum: 1 } } } } } },
-			responses: { 201: { description: "Fresh attempt started.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["started"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 200: { description: "The next attempt was already started.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["idempotent"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 400: { description: "Malformed retry request." }, 401: { description: "Authentication required." }, 404: { description: "Conversation run unavailable to this participant." }, 409: { description: "Attempt, terminal state, active Agent service, or revision no longer permits retry." }, 503: { description: "Retry authority unavailable." } },
-		},
-	},
-	"/me/conversations/{conversationId}/archive": {
-		patch: {
-			operationId: "archiveMyConversation",
-			summary: "Change participant-local archive visibility",
-			tags: ["Conversations"],
-			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
-			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["archived"], properties: { archived: { type: "boolean" } } } } } },
-			responses: { 200: { description: "Participant archive visibility changed.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid archive request." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 503: { description: "Conversation authority unavailable." } },
-		},
-	},
-	"/me/conversations/{conversationId}/close": {
-		post: {
-			operationId: "closeMyConversation",
-			summary: "Permanently close one conversation",
-			tags: ["Conversations"],
-			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
-			responses: { 200: { description: "Conversation permanently closed.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "An active foreground run prevents closure." }, 503: { description: "Conversation authority unavailable." } },
-		},
-	},
+	"/me/conversations/directory": { get: { operationId: "getMyConversationCreationDirectory", responses: { 200: { description: "Projection-only creation directory.", content: { "application/json": { schema: { type: "object", required: ["directory"], properties: { directory: { type: "object", required: ["participants", "personalAgentStatus", "personalAgent", "companyAssistants"], properties: { companyAssistants: { type: "array", items: { type: "object", additionalProperties: false, required: ["agentServiceId", "displayName"], properties: { agentServiceId: { type: "string" }, displayName: { type: "string" } } } }, participants: { type: "array", items: { type: "object", required: ["participantRef", "displayName", "isSelf"], properties: { participantRef: { type: "string" }, displayName: { type: "string", minLength: 1, description: "Member display name, or a generic label when no name is available. Never a login subject or email fallback." }, isSelf: { type: "boolean" } } } }, personalAgentStatus: { type: "string", enum: ["ready", "unavailable", "ambiguous"] }, personalAgent: { type: ["object", "null"] } } } } } } } } } } },
+	"/me/conversations": { get: { operationId: "listMyConversations", parameters: [{ name: "includeArchived", in: "query", required: false, schema: { type: "boolean" } }], responses: { 200: { description: "Participant conversation projections.", content: { "application/json": { schema: { type: "object", required: ["conversations"], properties: { conversations: { type: "array", items: _SummarySchema } } } } } } } }, post: { operationId: "createMyConversation", requestBody: { required: true, content: { "application/json": { schema: { oneOf: [{ type: "object", additionalProperties: false, required: ["mode", "personalAgentRef", "idempotencyKey"], properties: { mode: { const: "agent_session" }, personalAgentRef: { type: "string", minLength: 1 }, idempotencyKey: { type: "string", format: "uuid", description: "Reuse this UUID for retries of the same session creation; a new UUID starts a separate session." } } }, { type: "object", additionalProperties: false, required: ["mode", "participantRefs", "idempotencyKey"], properties: { mode: { type: "string", enum: ["direct", "group"] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 }, idempotencyKey: { type: "string", format: "uuid", description: "Reuse this UUID for retries of the same creation request; a new UUID starts a separate conversation." } } }] } } } }, responses: { 201: { description: "Conversation projection created.", content: { "application/json": { schema: _DetailEnvelopeSchema } } }, 404: { description: "Creation target unavailable." } } } },
+	"/me/conversations/{conversationId}": { get: { operationId: "openMyConversation", parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Conversation projection without transcript data.", content: { "application/json": { schema: _DetailEnvelopeSchema } } }, 404: { description: "Conversation unavailable." } } } },
+	"/me/conversations/{conversationId}/archive": { patch: { operationId: "archiveMyConversation", parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["archived"], properties: { archived: { type: "boolean" } } } } } }, responses: { 200: { description: "Participant archive projection changed.", content: { "application/json": { schema: _DetailEnvelopeSchema } } }, 404: { description: "Conversation unavailable." } } } },
+	"/me/conversations/{conversationId}/close": { post: { operationId: "closeMyConversation", parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Conversation projection closed.", content: { "application/json": { schema: _DetailEnvelopeSchema } } }, 404: { description: "Conversation unavailable." } } } },
+	"/me/conversations/{conversationId}/events": { get: { operationId: "streamMyConversationEvents", summary: "Stream participant-visible conversation updates", description: "Same-origin authenticated SSE on the public listener. History frames use event: history, id: nextPosition, and JSON data {entries,payloads,nextPosition,computer:null}; every bounded page rechecks current Conversation:Read authority. The exclusive Last-Event-ID revision overrides the initial afterPosition query on reconnect. Hidden entries advance the cursor without exposing their payload. event: unavailable carries a fixed conversation_unavailable or conversation_history_unavailable error and ends automatic replay. A normal bounded close is resumable. Limits per connection: 60 seconds, 30 seconds without new history, 10-second authority-refresh heartbeats, 512 KiB per frame, 2 MiB total, 128 history frames, and 5 seconds waiting for a slow browser. Each listener allows two concurrent streams and twelve starts per minute per authenticated silo/subject. Disconnect cancels upstream history and subscription work.", tags: ["Conversations"], parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }, { name: "afterPosition", in: "query", required: false, schema: { type: "string", pattern: "^(0|[1-9][0-9]{0,19})$", maxLength: 20 }, description: "Exclusive stream revision; defaults to zero." }, { name: "Last-Event-ID", in: "header", required: false, schema: { type: "string", pattern: "^(0|[1-9][0-9]{0,19})$", maxLength: 20 }, description: "Exclusive resume revision; overrides the original query cursor." }], responses: { 200: { description: "Bounded SSE history and terminal unavailable frames; keep-alive comments do not advance the cursor.", content: { "text/event-stream": { schema: { type: "string" } } } }, 400: { description: "Malformed or out-of-range stream revision." }, 401: { description: "Authentication required." }, 403: { description: "Same-origin browser evidence required." }, 404: { description: "Conversation unavailable to the current participant." }, 429: { description: "Subject or listener event budget exhausted; Retry-After is 60 seconds." }, 503: { description: "History unavailable before the stream opens." } } } },
+	"/me/conversations/{conversationId}/history": { get: { operationId: "readMyConversationHistory", summary: "Read participant-visible conversation history", description: "Reads immutable KurrentDB entries after an exclusive position cursor, then separately decrypts only private payloads referenced by entries visible to the currently authorized participant.", tags: ["Conversations"], parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }, { name: "afterPosition", in: "query", required: false, schema: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, description: "Exclusive immutable stream position." }], responses: { 200: { description: "Authorized immutable history and separately decrypted payloads.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["entries", "payloads", "nextPosition", "computer"], properties: { entries: { type: "array", items: _ConversationEntrySchema }, payloads: { type: "object", additionalProperties: { type: "string" } }, nextPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, computer: { type: ["object", "null"] } } } } } }, 400: { description: "Malformed position cursor." }, 401: { description: "Authentication required." }, 404: { description: "Conversation is unavailable to the current participant." }, 503: { description: "Conversation history or private payload authority unavailable." } } } },
+	"/me/conversations/{conversationId}/messages": { post: { operationId: "postMyConversationMessage", summary: "Post one encrypted participant message", description: "Encrypts plaintext before PostgreSQL persistence and appends only an opaque payload reference and ciphertext digest to KurrentDB.", tags: ["Conversations"], parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["idempotencyKey", "text", "activation"], properties: { idempotencyKey: { type: "string", format: "uuid" }, text: { type: "string", minLength: 1, maxLength: 65536 }, activation: { type: "string", enum: ["none", "start", "interrupt"] } } } } } }, responses: { 202: { description: "A new immutable entry was accepted.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "position"], properties: { outcome: { type: "string", enum: ["accepted"] }, position: { type: "string" } } } } } }, 200: { description: "The exact immutable entry was already accepted.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "position"], properties: { outcome: { type: "string", enum: ["idempotent"] }, position: { type: "string" } } } } } }, 400: { description: "Malformed message command." }, 401: { description: "Authentication required." }, 404: { description: "Conversation is unavailable to the current participant." }, 409: { description: "Idempotency or activation conflict." }, 503: { description: "Conversation history or private payload authority unavailable." } } } },
+	"/me/conversations/{conversationId}/review/files": { get: { operationId: "readMyConversationComputerFile", summary: "Read one computer workspace file", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter, _ReviewPathParameter], responses: { 200: { description: "Bounded file bytes.", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } }, 404: { description: "Active computer unavailable." }, 503: { description: "Review surface unavailable." } } } },
+	"/me/conversations/{conversationId}/review/diff": { get: { operationId: "readMyConversationComputerDiff", summary: "Read one workspace diff", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter, _ReviewPathParameter], responses: { 200: { description: "Bounded diff command result.", content: { "application/json": { schema: _ReviewCommandSchema } } }, 404: { description: "Active computer unavailable." }, 503: { description: "Review surface unavailable." } } } },
+	"/me/conversations/{conversationId}/review/commands": { post: { operationId: "runMyConversationComputerCommand", summary: "Run one allowlisted workspace command", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["argv"], properties: { argv: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } }, cwd: { type: "string" } } } } } }, responses: { 200: { description: "Bounded command result.", content: { "application/json": { schema: _ReviewCommandSchema } } }, 404: { description: "Active computer unavailable." }, 503: { description: "Review surface unavailable." } } } },
+	"/me/conversations/{conversationId}/review/browser/version": { get: { operationId: "readMyConversationComputerBrowserVersion", summary: "Read private browser metadata", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter], responses: { 200: { description: "Chromium version metadata.", content: { "application/json": { schema: { type: "object", additionalProperties: true } } } }, 404: { description: "Active computer unavailable." } } } },
+	"/me/conversations/{conversationId}/review/browser/targets": { get: { operationId: "listMyConversationComputerBrowserTargets", summary: "List private browser pages", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter], responses: { 200: { description: "Current Chromium targets.", content: { "application/json": { schema: { type: "array", items: { type: "object", additionalProperties: true } } } } }, 404: { description: "Active computer unavailable." } } } },
+	"/me/conversations/{conversationId}/review/browser/pages": { post: { operationId: "openMyConversationComputerBrowserPage", summary: "Open an allowlisted localhost page", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["port", "path"], properties: { port: { type: "integer" }, path: { type: "string" } } } } } }, responses: { 201: { description: "Created Chromium target.", content: { "application/json": { schema: { type: "object", additionalProperties: true } } } }, 404: { description: "Active computer unavailable." } } } },
+	"/me/conversations/{conversationId}/review/browser/screenshots": { post: { operationId: "captureMyConversationComputerBrowserScreenshot", summary: "Capture an allowlisted localhost page", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["port", "path", "width", "height"], properties: { port: { type: "integer" }, path: { type: "string" }, width: { type: "integer" }, height: { type: "integer" } } } } } }, responses: { 200: { description: "PNG screenshot.", content: { "image/png": { schema: { type: "string", format: "binary" } } } }, 404: { description: "Active computer unavailable." } } } },
+	"/me/conversations/{conversationId}/review/previews/{port}/{path}": { get: { operationId: "readMyConversationComputerPreview", summary: "Read an allowlisted localhost preview", tags: ["Conversation computer review"], parameters: [_ReviewConversationParameter, { name: "port", in: "path", required: true, schema: { type: "integer" } }, { name: "path", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Preview response body.", content: { "text/html": { schema: { type: "string" } }, "text/plain": { schema: { type: "string" } }, "application/json": { schema: {} } } }, 400: { description: "Preview port or path unavailable." }, 404: { description: "Active computer unavailable." } } } },
 } as const;

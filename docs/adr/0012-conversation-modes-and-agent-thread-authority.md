@@ -8,6 +8,29 @@
   [#351](https://github.com/elewa-git/opencrane/issues/351) ·
   [ADR 0010](0010-language-neutral-agent-runtime.md)
 
+## 0.11 implementation amendment — 2026-09-07
+
+[ADR 0016](0016-conversation-history-and-computers.md) supersedes the relational timeline,
+first-run atomicity and migration clauses below. The original decision is retained as history.
+The current baseline uses fresh installation and Kurrent stream revisions.
+
+The first group journey uses an explicit **Ask company assistant** action on an own, completed,
+conversation-visible group message. PostgreSQL commits its immutable request and workflow task
+together. The worker idempotently creates Kurrent child history and a cold computer, then current
+projections and the first-turn activation; it rechecks current authority before each recoverable
+effect. There is no cross-store transaction or promise of an immediately running Pod.
+
+One company assistant has its own Internal Principal, managed identity, published revision and
+model grant. The requesting human retains separately verified membership and Invoke evidence.
+The fixed child audience contains current parent participants who may all read the originating
+request. A later join cannot widen that audience, and current parent and child access are both
+required on reads and execution. Pending creation eventually becomes Ready or Unavailable.
+
+The first return path is a human-reviewed text share bound to the exact child and parent request.
+It is authored by the sharing human. Automatic status, approval, asset and agent result deliveries,
+and recursive run delegation, remain later work; they do not acquire a second delivery authority
+in this slice. Parent and child histories and lifecycle remain separate.
+
 ## Context
 
 The current `Thread` shape assumes every conversation belongs to one agent service and derives its

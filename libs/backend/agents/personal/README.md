@@ -23,19 +23,17 @@ agent can reuse the machinery without inheriting personal policy.
         └── personal memory ─ verified coordinates┘
 ```
 
-**In this flow:** [execution admission](../execution/admission/main/README.md) owns the trusted entry;
+**This composition is not wired into production in the current checkout.** The
+[conversation package](../../server/conversations/main/README.md) owns the browser-facing entry;
 [configuration](./configuration/README.md) records changes for later runs; [personas](./personas/README.md)
 makes the personality and instructions reviewable before activation; [personal memory](./memory/README.md)
 chooses already-consented coordinates; [execution inputs](../execution/inputs/main/README.md) freezes
 the accepted inputs; and [personal memory](./memory/main/README.md) owns the durable dataset and fact
 metadata admitted into that snapshot.
 
-The browser may start a personal conversation run with only its existing `conversationId` and a
-`requestIdempotencyKey` used to make retries return the same run. The server derives the person from
-the authenticated session and the silo from the trusted host, then re-resolves the participant-bound
-conversation, personal agent service, signed fleet membership, effective grants, approved persona, and
-personal-memory coordinates inside the admission flow. None of those authority coordinates can be
-supplied in the request body.
+The intended browser contract starts a personal conversation run with its existing `conversationId`
+and a `requestIdempotencyKey`, while the server derives all authority coordinates. The current
+conversation path does not yet call execution inputs, so it does not create that run or snapshot.
 
 Personal memory decides *which* verified dataset and preference facts can enter a run and owns their
 content-free catalogue metadata. Durable fact content remains behind the
@@ -54,6 +52,6 @@ domains in the OpenCrane composition root.
 
 - Parent index: [agents](../README.md)
 - Shared execution: [execution](../execution/README.md)
-- Trusted entry: [execution admission](../execution/admission/main/README.md)
+- Browser-facing entry: [conversations](../../server/conversations/main/README.md)
 - Dataset and fact catalogue: [personal memory](./memory/main/README.md)
 - Fact-content boundary: [memory gateway](../../../server/_infra/memory-gateway-client/README.md)

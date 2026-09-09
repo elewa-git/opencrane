@@ -74,10 +74,6 @@ export interface AuditDecisionRecord
 	readonly agentServiceId?: string;
 	/** Immutable AgentRevision identifier, when applicable. */
 	readonly agentRevisionId?: string;
-	/** Registered RunProofKey identifier, when applicable. */
-	readonly proofKeyId?: string;
-	/** RFC 7638 proof-key thumbprint, when applicable. */
-	readonly proofKeyThumbprint?: string;
 	/** Exact resource kind evaluated by policy. */
 	readonly resourceKind: string;
 	/** Exact resource identifier evaluated by policy. */

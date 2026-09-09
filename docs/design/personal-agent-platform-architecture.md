@@ -1,62 +1,69 @@
 # Personal-agent platform architecture
 
-OpenCrane is the durable control plane for personal and managed agents. It records the exact
-identity, configuration, input, events, external actions, and outcome of every run while keeping the
-model loop replaceable and non-authoritative.
+OpenCrane gives employees and teams assistants that use permitted company knowledge and tools.
+The company controls access, data and spending. People work in conversations; the server keeps
+their work recoverable and decides what each person and assistant may do.
+
+This page describes the 0.11 review baseline and the boundaries later capabilities must retain.
+The [active plan](../../plan.md) separates implemented work from MVP gaps and live qualification.
+The [website overview](../../website/advanced/architecture.md) introduces the same architecture
+without source-level detail. [ADR 0016](../adr/0016-conversation-history-and-computers.md) controls
+the conversation-computer replacement.
 
 ## Authority flow
 
 ```text
-OIDC subject + signed organisation membership
+Browser session + current PostgreSQL membership and grants
                     │
                     ▼
-      OpenCrane conversation and run admission
+      OpenCrane checks the requested action
                     │
                     ├──► direct/group Message (no run)
-                    ├──► canonical Conversation timeline
+                    ├──► KurrentDB conversation history
                     └──► agent_session only
                               │
-                              ├──► immutable RunInputSnapshot
                               ▼
-                    AgentRun + ordered RunEvent stream
+                    durable activation request
                     │
                     ▼
-       controller assigns one fenced attempt
+       Agent Sandbox creates and owns the computer Pod
+       OpenCrane verifies the active computer lease
                     │
                     ▼
-      outbound-only agent-runtime workload
+       recheck authority and admit the serial turn
+       freeze its immutable RunInputSnapshot
+                    │
+                    ▼
+      conversation-computer runtime
                     │
                     ├──► LiteLLM model call
                     └──► external-action candidate
                                   │
                                   ▼
-                     OpenCrane authorizes and executes
+                     governed tool executor (model-loop wiring pending)
 ```
 
 The canonical conversation and conditional run hierarchy is:
 
 ```text
-Conversation (immutable mode)
-  ├── Message + ordered ConversationTimelineEntry
+Conversation (immutable mode) -> ordered KurrentDB conversation-{id} stream
   └── agent_session only
-        └── AgentRun
+        └── ConversationComputer -> AgentRun
               ├── RunInputSnapshot
-              ├── ordered RunEvent
-              └── RuntimeAssignment
-                    └── fenced attempt commands and candidates
+              └── fenced attempt commands and candidates
 ```
 
 Direct and ordinary group messages never create runs. The database enforces that an `AgentRun` has
 its exact immutable `RunInputSnapshot`. The input compiler resolves persona, conversation, memory
 references, tool policy, model route, budget, and identity before dispatch; the runtime receives
 literal compiled input and cannot reinterpret those authorities.
-[ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the mode, timeline,
-lifecycle, and Agent-thread authority.
+[ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the mode,
+lifecycle and child-chat requirements. ADR 0016 replaces its older runtime and storage mechanisms.
 
 Source contracts:
 
 - [`libs/contracts/src/run-input-snapshot.types.ts`](../../libs/contracts/src/run-input-snapshot.types.ts)
-- [`libs/contracts/src/agent-runtime-protocol.types.ts`](../../libs/contracts/src/agent-runtime-protocol.types.ts)
+- [`libs/contracts/src/conversation-computer.types.ts`](../../libs/contracts/src/conversation-computer.types.ts)
 - [`apps/opencrane/prisma/schema/runs.prisma`](../../apps/opencrane/prisma/schema/runs.prisma)
 - [`libs/backend/agents/execution/inputs/main`](../../libs/backend/agents/execution/inputs/main)
 
@@ -66,24 +73,28 @@ OpenCrane owns every durable or security-sensitive decision:
 
 | Authority | Owner |
 |-----------|-------|
-| Organisation identity and membership evidence | OIDC plus verified, bounded signed membership evidence |
+| Current authorization | PostgreSQL membership and central authorization policy; OIDC supplies the authenticated subject |
 | Agent definitions and immutable revisions | Agent-service domain |
-| Conversation, messages, canonical timeline, conditional runs, input snapshots, and ordered run events | Conversation and run domains |
+| Ordered conversation and computer history | Separate KurrentDB streams owned by the conversation domain |
+| Turn admission and immutable inputs | Conversation and execution domains, checked against current PostgreSQL authority |
 | Persona and preference revisions | Personal-configuration domain |
 | Skill publication and assignments | Skill domains |
 | Model routes, provider credentials, and budgets | Model and execution authorities |
 | Tool grants, approvals, and external actions | IAM and tool-execution authorities |
 | Artifact metadata, revisions, and leases | Artifact catalogue and authorization domains |
-| Scheduling, retry, cancellation, and terminal state | Managed-run and execution authorities |
+| Managed scheduling | Completion track; removed execution routes are not supported in the baseline |
+| Computer lifetime | OpenCrane owns activation, leases and checkpoints; Agent Sandbox owns Pods |
 
 An unavailable authority returns a denial or an unavailable outcome. Callers cannot substitute
 cached caller input, workload state, or a permissive default.
 
 ## Runtime boundary
 
-[`apps/agent-runtime`](../../apps/agent-runtime) implements the current bounded model/tool loop with
-the exact-pinned Pydantic AI package. It opens an authenticated outbound stream and accepts fenced
-`start_attempt`, `resume_attempt`, and `cancel_attempt` commands.
+[`apps/conversation-computer`](../../apps/conversation-computer) implements a bounded model turn
+inside the computer claimed for an assistant conversation. Approved persona instructions and
+conversation history reach the model. Connecting model tool requests to the existing governed
+executor remains pending. The server admits work against the active lease generation and
+canonical history.
 
 The runtime:
 
@@ -94,24 +105,23 @@ The runtime:
 - executes no external action directly; and
 - keeps framework types, identifiers, and checkpoints behind the language-neutral protocol.
 
-The controller claims one ready Pod from the fixed personal or managed warm pool. The database claim
-binds that Pod to one run attempt, and the controller activates only that exact Pod. A claimed Pod is
-discarded after use, while its Deployment restores the generic spare. Network policy limits every
-warm Pod to the required control-plane and model-proxy paths.
+The server creates one Agent Sandbox claim for an admitted conversation computer. Cooling persists a
+checkpoint before releasing that claim; a later message either reactivates the same lease or claims
+the next fenced generation from the durable checkpoint. Network policy limits the computer to its
+required control-plane and model-proxy paths.
 
 Source implementations:
 
-- [`apps/agent-controller`](../../apps/agent-controller)
-- [`apps/agent-runtime`](../../apps/agent-runtime)
-- [`libs/backend/agents/execution/protocol`](../../libs/backend/agents/execution/protocol)
-- [`libs/backend/server/infra/agent-runtime-stream`](../../libs/backend/server/infra/agent-runtime-stream)
+- [`apps/conversation-computer`](../../apps/conversation-computer)
+- [`libs/backend/server/conversations/main`](../../libs/backend/server/conversations/main)
+- [`libs/backend/server/infra/agent-sandbox`](../../libs/backend/server/infra/agent-sandbox)
 
 ## External actions and artifacts
 
-A runtime tool call is only a candidate. OpenCrane checks the immutable snapshot, tool revision,
-grant, approval state, idempotency key, and budget before an authorized server-side executor performs
-the action. Deferred approvals resume through a single-use token and a fenced `resume_attempt`
-command.
+The tool-execution target keeps model suggestions separate from authority. OpenCrane checks the
+immutable snapshot, tool revision, grant, approval, idempotency and budget before a server-owned
+executor receives scoped credentials. The executor foundations exist; a complete model-to-tool,
+approval and durable-result journey still needs implementation and qualification.
 
 Artifact bytes are likewise brokered. The catalogue resolves the exact active revision, the
 authorization library signs a short-lived read lease, and
@@ -126,9 +136,13 @@ Each `ClusterTenant` maps to an isolated silo. Namespace, service-account, netwo
 and object-storage boundaries prevent cross-silo reachability. The control plane applies deny by
 default and validates the silo coordinate again at each storage and workload boundary.
 
-Postgres and artifact storage are authoritative durable stores. Runtime workspaces are scratch
-space: they are not backed up and may disappear when a Pod terminates. Recovery reconstructs work
-from canonical conversation, timeline, run, snapshot, event, assignment, and artifact records.
+PostgreSQL owns current authorization and relational product state. KurrentDB owns immutable
+conversation and computer history. Artifact storage owns retained file bytes. Computer checkpoints
+preserve workspace files across cooling and Pod replacement; those files never grant authority or
+replace canonical history. A successful recovery requires the related durable stores to agree.
+
+The baseline supports fresh installation only. Backup and restore scripts exist, but the requested
+testv5 recovery drill is not complete; see the [deployment ledger](../agents/deploy-ledger.md).
 
 ## Validation
 

@@ -8,12 +8,13 @@ FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finaliz
 
 source "$POLICY"
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
-ensure_umbrella_chart_dependencies
+trap cleanup_current_chart_sources EXIT
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
 
 IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
 CP_TAG="sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 AGENT_CONTROLLER_IMAGE_DIGEST="sha256:1111111111111111111111111111111111111111111111111111111111111111"
-AGENT_RUNTIME_IMAGE_DIGEST="sha256:2222222222222222222222222222222222222222222222222222222222222222"
 MCP_EXECUTOR_IMAGE_DIGEST="sha256:3333333333333333333333333333333333333333333333333333333333333333"
 SKILL_AUTHORING_IMAGE_DIGEST="sha256:4444444444444444444444444444444444444444444444444444444444444444"
 ARTIFACT_PREPROCESSOR_IMAGE_DIGEST="sha256:5555555555555555555555555555555555555555555555555555555555555555"
@@ -25,13 +26,12 @@ helm_args=(
   --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
   --set-string 'artifactService.namespace=opencrane-testv4-artifacts'
-  --set-literal 'channelProxy.image.tag=latest'
   --set-literal 'memoryGateway.image.tag=0.1.0'
   --set-literal 'artifactService.image.tag=0.1.0'
   --set-literal 'clustertenantManager.image.tag=stale-server')
 append_authoritative_qualified_release_image_helm_args
 
-rendered="$(helm template opencrane-testv4 "$ROOT_DIR/apps/_infra/deploy-k8s" \
+rendered="$(helm template opencrane-testv4 "$CHART_DIR" \
   "${helm_args[@]}" --show-only templates/app-rollups.yaml)"
 
 _deployment()
@@ -41,7 +41,6 @@ _deployment()
 }
 
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-server:${CP_TAG}\"" <<<"$(_deployment opencrane-testv4-opencrane-server)"
-grep -Fq "image: \"ghcr.io/elewa-git/opencrane-channel-proxy:${IMAGE_TAG}\"" <<<"$(_deployment opencrane-testv4-channel-proxy)"
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-memory-gateway:${IMAGE_TAG}\"" <<<"$(_deployment opencrane-testv4-memory-gateway)"
 controller_deployment="$(_deployment agent-controller)"
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-agent-controller@${AGENT_CONTROLLER_IMAGE_DIGEST}\"" <<<"$controller_deployment"
@@ -54,7 +53,7 @@ grep -Fq 'namespace: opencrane-testv4-artifacts' <<<"$artifact_deployment"
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-artifact-service:${IMAGE_TAG}\"" <<<"$artifact_deployment"
 
 preflight_calls_file="$(mktemp)"
-trap 'rm -f "$preflight_calls_file"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$preflight_calls_file"' EXIT
 ALLOW_TAG_FLOAT=0
 log()
 {
@@ -80,14 +79,13 @@ resolve_qualified_workflow_image_digests
 [[ "$AGENT_CONTROLLER_IMAGE_DIGEST" == 'sha256:7777777777777777777777777777777777777777777777777777777777777777' ]]
 [[ "$ARTIFACT_SCANNER_IMAGE_DIGEST" == 'sha256:7777777777777777777777777777777777777777777777777777777777777777' ]]
 preflight_qualified_release_tag_images
-grep -Fq "inspect docker://ghcr.io/elewa-git/opencrane-channel-proxy:${IMAGE_TAG}" "$preflight_calls_file"
 grep -Fq "inspect docker://ghcr.io/elewa-git/opencrane-memory-gateway:${IMAGE_TAG}" "$preflight_calls_file"
 grep -Fq "inspect docker://ghcr.io/elewa-git/opencrane-artifact-service:${IMAGE_TAG}" "$preflight_calls_file"
 grep -Fq "inspect docker://ghcr.io/elewa-git/opencrane-server:${CP_TAG}" "$preflight_calls_file"
-[[ "$(wc -l <"$preflight_calls_file" | tr -d ' ')" == "4" ]]
+[[ "$(wc -l <"$preflight_calls_file" | tr -d ' ')" == "3" ]]
 ALLOW_TAG_FLOAT=1
 preflight_qualified_release_tag_images
-[[ "$(wc -l <"$preflight_calls_file" | tr -d ' ')" == "4" ]]
+[[ "$(wc -l <"$preflight_calls_file" | tr -d ' ')" == "3" ]]
 ALLOW_TAG_FLOAT=0
 IMAGE_TAG=latest
 if preflight_qualified_release_tag_images; then
@@ -116,7 +114,6 @@ if (
   exit 1
 fi
 
-grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-channel-proxy"' "$DEPLOY_CORE"
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-memory-gateway"' "$DEPLOY_CORE"
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE"' "$DEPLOY_CORE"
 grep -Fq 'FINAL_RELEASE_VALUES="$(helm get values "$RELEASE" --namespace "$NAMESPACE" --all -o json)" || exit $?' "$DEPLOY_CORE"
@@ -131,7 +128,7 @@ source "$FINALIZATION"
 NAMESPACE=opencrane-testv4
 TIMEOUT=37
 rollout_calls_file="$(mktemp)"
-trap 'rm -f "$preflight_calls_file" "$rollout_calls_file"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$preflight_calls_file" "$rollout_calls_file"' EXIT
 kubectl()
 {
   printf '%s\n' "$*" >>"$rollout_calls_file"

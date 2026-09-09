@@ -9,9 +9,6 @@
 #     is workload-authenticated at each target route. Crucially the ingress controller is NOT permitted
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
-#       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
-#       - Fixed warm-runtime Pod: outbound `/api/internal/agent-runtime/*` only; its projected
-#         ServiceAccount token is TokenReviewed inside the route, so this rule only opens the network path — it proves no identity.
 #       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
 #         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
 #         each request to the registered Pod. ArtifactStore remains unreachable from worker namespaces.
@@ -42,15 +39,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
-    # Allow the channel trust boundary to request one workload-authenticated target decision.
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: channel-proxy
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
     {{- if .Values.artifactPreprocessor.enabled }}
     # The dedicated artifact preprocessor can reach only the brokered internal API.
     # TokenReview binds its projected token to the exact worker ServiceAccount and namespace.
@@ -93,31 +81,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    # Warm runtime Pods own no public listener and can only initiate this connection. TokenReview
-    # fixes each personal or managed audience to its namespace and ServiceAccount in-process.
-    {{- if .Values.agentController.enabled }}
-    {{- $personalRuntimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
-    {{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . }}
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $personalRuntimeNamespace | quote }}
-              opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace | quote }}
-              opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: warm-runtime
-              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
     # Governed skill Jobs have no general network access. Admission fixes their component,
     # ServiceAccount and projected-token audience; the route TokenReviews the registered Pod UID.
     - from:
@@ -142,6 +105,19 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- if .Values.agentSandbox.enabled }}
+    # Conversation computers exchange only their Pod-bound bootstrap and one safe output through
+    # the private listener. TokenReview and the durable lease fence remain the authority gates.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.agentSandbox.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agent-sandbox
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
     {{- end }}
     # Allow the fleet-manager to reach the PUBLIC /api/v1/* API for cross-silo operations.
     - from:
@@ -153,6 +129,31 @@ spec:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
   egress:
+    {{- if .Values.agentSandbox.enabled }}
+    # Public review requests may reach only the assigned sandbox Service review port; the route
+    # derives its DNS name from the current Kurrent lease and never accepts a caller host or port.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.agentSandbox.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agent-sandbox
+      ports:
+        - protocol: TCP
+          port: 8090
+    {{- end }}
+    {{- if .Values.historyStore.kurrentdb.enabled }}
+    # The server reaches the release-local HistoryStore through KurrentDB's TLS listener only.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: kurrentdb
+      ports:
+        - protocol: TCP
+          port: {{ .Values.historyStore.kurrentdb.service.port }}
+    {{- end }}
     {{- if .Values.agentController.kubernetesApiServerCidrs }}
     # TokenReview is the application-layer identity gate for controller and runtime calls. Keep the
     # server's API-server path on the same exact Service-IP allow-list as the controller.
@@ -223,17 +224,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
-    {{- end }}
-    {{- if .Values.channelProxy.enabled }}
-    # Release-local live conversation-event delivery lets the server check the channel proxy.
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: channel-proxy
-      ports:
-        - protocol: TCP
-          port: {{ .Values.channelProxy.service.port }}
     {{- end }}
     {{- if .Values.observability.otel.enabled }}
     # Release-local operator-supplied OTEL collector for trace export.

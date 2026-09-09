@@ -46,9 +46,8 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
  * not in the snapshot. The digest is recomputed so the returned input stays self-consistent —
  * appending without resealing would leave a digest that no longer matches the payload.
  *
- * Called by: `_CreateProductionRunInputCompiler`
- * (execution/protocol/src/production-runtime-dispatch.ts), which appends the upgrade-session tool
- * after proving in the same transaction that the run belongs to a personal AgentService.
+ * Called by: production run-input composition, which appends the upgrade-session tool after proving
+ * in the same transaction that the run belongs to a personal AgentService.
  *
  * @param input - An already compiled run input. Not modified; a new object is returned.
  * @param tool - The first-party tool to add.
@@ -60,7 +59,8 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
  */
 export function __AppendCompiledTool(input: CompiledRunInput, tool: CompiledToolDefinition): CompiledRunInput
 {
-	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.name === tool.name; })) throw new Error(`compiled input already contains tool ${tool.name} or revision ${tool.toolRevisionId}`);
+	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.name === tool.name; }))
+		throw new Error(`compiled input already contains tool ${tool.name} or revision ${tool.toolRevisionId}`);
 	const unsealed = { ...input, tools: _orderTools([...input.tools, tool]) };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
@@ -73,7 +73,14 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	{
 		throw new Error(`prompt compiler ${PROMPT_COMPILER_VERSION} cannot compile snapshot version ${snapshot.promptCompilerVersion}`);
 	}
-	if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("prompt compiler requires a positive live attempt");
+	if (!Number.isSafeInteger(snapshot.attempt) || snapshot.attempt < 1)
+	{
+		throw new Error("prompt compiler requires a positive snapshot attempt");
+	}
+	if (attempt !== snapshot.attempt)
+	{
+		throw new Error("prompt compiler requires the live attempt to match the immutable snapshot attempt");
+	}
 
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
@@ -86,7 +93,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 3. Assemble instructions and budget deterministically, then seal the payload with its digest.
 	const instructions = _assembleInstructions(personaInstructions, artifactSummaries, skillSummaries);
 	const budget = _resolveBudget(snapshot.budgetPolicy);
-	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt, instructions, messages, tools, model, budget };
+	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt: snapshot.attempt, instructions, messages, tools, model, budget };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
 
@@ -108,8 +115,10 @@ function _orderTools(tools: readonly CompiledToolDefinition[]): readonly Compile
 /** Compare two canonical text identifiers without locale-dependent ordering. */
 function _compareText(left: string, right: string): number
 {
-	if (left < right) return -1;
-	if (left > right) return 1;
+	if (left < right)
+		return -1;
+	if (left > right)
+		return 1;
 	return 0;
 }
 
@@ -117,9 +126,12 @@ function _compareText(left: string, right: string): number
 function _assembleInstructions(personaInstructions: string, artifactSummaries: readonly string[], skillSummaries: readonly string[]): string
 {
 	const sections: string[] = [];
-	if (personaInstructions.trim().length > 0) sections.push(personaInstructions.trim());
-	if (artifactSummaries.length > 0) sections.push(`Artifacts available for this run:\n${_bullets(artifactSummaries)}`);
-	if (skillSummaries.length > 0) sections.push(`Skills available for this run:\n${_bullets(skillSummaries)}`);
+	if (personaInstructions.trim().length > 0)
+		sections.push(personaInstructions.trim());
+	if (artifactSummaries.length > 0)
+		sections.push(`Artifacts available for this run:\n${_bullets(artifactSummaries)}`);
+	if (skillSummaries.length > 0)
+		sections.push(`Skills available for this run:\n${_bullets(skillSummaries)}`);
 	return sections.join("\n\n");
 }
 
@@ -134,7 +146,8 @@ function _resolveBudget(budgetPolicy: JsonValue): CompiledBudget
 {
 	const policy: { readonly [key: string]: JsonValue } = budgetPolicy && typeof budgetPolicy === "object" && !Array.isArray(budgetPolicy) ? budgetPolicy as { readonly [key: string]: JsonValue } : {};
 	return {
-		maxTotalTokens: _optionalCount(policy["maxTotalTokens"]),
+		maxModelTurns: _optionalCount(policy["maxModelTurns"]),
+		maxCompletionTokens: _optionalCount(policy["maxCompletionTokens"]),
 		maxCostUsdMicros: _optionalCount(policy["maxCostUsdMicros"]),
 		maxToolInvocations: _optionalCount(policy["maxToolInvocations"]),
 		wallClockDeadlineEpochMs: _optionalCount(policy["wallClockDeadlineEpochMs"]),

@@ -2,6 +2,19 @@ import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/serv
 import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
 import type { FleetOrganizationMembershipHttpClientConfig } from "@opencrane/backend/server/infra/organization-membership-gateway";
 
+/** TLS-only KurrentDB coordinates owned by the HistoryStore deployment boundary. */
+export interface OpenCraneHistoryStoreConfig
+{
+	/** File path of the mounted KurrentDB certificate authority bundle. */
+	readonly caCertificatePath: string;
+	/** Silo-local KurrentDB host and port without a scheme or credentials. */
+	readonly endpoint: string;
+	/** File path of the mounted least-privilege KurrentDB service password. */
+	readonly passwordPath: string;
+	/** File path of the mounted least-privilege KurrentDB service username. */
+	readonly usernamePath: string;
+}
+
 /**
  * Selects the sole authority for organisation directory, invitation, seat, and payment decisions.
  * The application composes one branch at startup, so request data cannot switch modes or trigger a
@@ -11,15 +24,23 @@ export type OpenCraneOrganizationMembershipConfig =
 	| { readonly mode: OrganizationMembershipDeploymentModes.Standalone; readonly standalone: StandaloneOrganizationMembershipConfig }
 	| { readonly mode: OrganizationMembershipDeploymentModes.Fleet; readonly fleet: FleetOrganizationMembershipHttpClientConfig };
 
-/** The channel resolver and replay receiver settings fixed by the deployment. */
-export interface ChannelTargetRuntimeConfig
+/** Release-owned Agent Sandbox profile used for every 0.11 conversation computer. */
+export interface AgentSandboxReleaseProfileConfig
 {
-	readonly channelProxyServiceAccountName: string;
-	readonly invocationContextTtlMilliseconds: number;
-	readonly receiverEndpoint: string;
-	readonly receiverId: string;
-	readonly siloId: string;
-	readonly trustedHost: string;
+	/** Immutable image digest that identifies the admitted profile revision. */
+	readonly profileRevisionId: string;
+	/** Profile name fixed by the release. */
+	readonly profileName: string;
+	/** Warm pool selected by server-created claims. */
+	readonly warmPoolName: string;
+	/** Namespace where the external Agent Sandbox controller accepts claims. */
+	readonly namespace: string;
+	/** ServiceAccount fixed on every conversation-computer Pod. */
+	readonly serviceAccountName: string;
+	/** Maximum lifetime of one fenced computer lease. */
+	readonly leaseTtlMilliseconds: number;
+	/** Hard per-turn LiteLLM spend ceiling in micro-US-dollars. */
+	readonly maximumTurnCostUsdMicros: number;
 }
 
 /** Settings read once at startup, used to compose workload identity, workflow-controller, and worker routes. */
@@ -37,16 +58,6 @@ export interface InternalRuntimeConfig
 	readonly artifactPreprocessorMaximumOutputBytes: number;
 	/** Namespace reserved for artifact-preprocessor Pods when enabled. */
 	readonly artifactPreprocessorNamespace: string | undefined;
-	/** Complete resolver and replay configuration, or null when the channel boundary is disabled. */
-	readonly channelTargets: ChannelTargetRuntimeConfig | null;
-	/** Maximum age of a runtime command before it is refused. */
-	readonly commandTtlMilliseconds: number;
-	/** Delay before recovering an unacknowledged runtime command. */
-	readonly commandRecoveryMilliseconds: number;
-	/** Absolute path of the Secret-mounted rotating continuation encryption keyring. */
-	readonly continuationKeyringPath: string;
-	/** Namespace containing the managed-agent warm Pod pool. */
-	readonly managedRuntimeNamespace: string | undefined;
 	/** Lease held by one Pod-bound companion command claim. */
 	readonly mcpCompanionClaimLeaseMilliseconds: number;
 	/** Lease held by one controller claim or release delivery. */
@@ -59,16 +70,12 @@ export interface InternalRuntimeConfig
 	readonly memoryGatewayTokenPath: string;
 	/** Release-local private memory-gateway origin; the client validates its exact shape. */
 	readonly memoryGatewayUrl: string;
-	/** Namespace containing the personal-agent warm Pod pool. */
-	readonly personalRuntimeNamespace: string | undefined;
 	/** Namespace reserved for skill-authoring validation Jobs. */
 	readonly skillAuthoringNamespace: string;
 	/** Namespace containing the OpenCrane server and agent controller. */
 	readonly serverNamespace: string;
 	/** Silo that owns every OCI MCP runtime row served by this process. */
 	readonly siloId: string;
-	/** Lifetime of one durable runtime assignment. */
-	readonly assignmentTtlMilliseconds: number;
 }
 
 /** Settings for durable control-plane tasks and the remote MCP protocol check. */
@@ -101,20 +108,31 @@ export interface OpenCraneWorkflowConfig
 /** Process-owned settings that shape the OpenCrane server lifecycle. */
 export interface OpenCraneProcessConfig
 {
+	/** Per-service process capacity applied before personal run admission reaches PostgreSQL. */
+	readonly runAdmission: RunAdmissionCapacityConfig;
 	/** Namespace in which OIDC authentication resources are resolved. */
 	readonly authWatchNamespace: string;
+	/** Absolute path of the Secret-mounted conversation private-payload encryption keyring. */
+	readonly conversationPrivatePayloadKeyringPath: string;
+	/** TLS-only KurrentDB history connection settings frozen for this process. */
+	readonly historyStore: OpenCraneHistoryStoreConfig;
 	/** Port exposed only to platform workloads. */
 	readonly internalPort: number;
 	/** Workload-facing identity and dispatch configuration. */
 	readonly runtime: InternalRuntimeConfig;
 	/** Public ingress-facing API port. */
 	readonly publicPort: number;
-	/** Whether the managed-agent schedule loop should run. */
-	readonly schedulerEnabled: boolean;
-	/** Delay between managed-agent schedule passes. */
-	readonly schedulerIntervalMilliseconds: number;
 	/** Optional verified-email contract that can claim exactly one standalone-silo owner. */
 	readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
 	/** Durable control-plane task and MCP protocol-check settings. */
 	readonly workflows: OpenCraneWorkflowConfig;
+}
+
+/** Process-local bounds that protect PostgreSQL from one service's admission burst. */
+export interface RunAdmissionCapacityConfig
+{
+	/** Largest number of admissions for one silo and AgentService that may execute together. */
+	readonly maxConcurrentAdmissions: number;
+	/** Largest number of admissions for one silo and AgentService that may wait outside PostgreSQL. */
+	readonly maxQueuedAdmissions: number;
 }

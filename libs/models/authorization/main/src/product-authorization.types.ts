@@ -58,12 +58,8 @@ export enum ProductAuthorizationResourceKinds
 	Conversation = "conversation",
 	/** Protects creation inside one silo's conversation collection before a Conversation id exists. */
 	ConversationCollection = "conversation-collection",
-	/** Protects an outbound channel destination. */
-	ChannelTarget = "channel-target",
 	/** Protects use and administration of a provider connection without exposing its secret. */
 	ProviderConnection = "provider-connection",
-	/** Protects one agent schedule. */
-	Schedule = "schedule",
 	/** Protects one technical or spending budget. */
 	Budget = "budget",
 	/** Protects the silo's append-only audit decision catalogue. */
@@ -106,14 +102,10 @@ export enum ProductAuthorizationActions
 	Publish = "publish",
 	/** Lets a Principal invoke an agent or tool. */
 	Invoke = "invoke",
-	/** Lets a Principal create or change scheduled execution. */
-	Schedule = "schedule",
 	/** Lets a Principal admit a child or delegated execution. */
 	Delegate = "delegate",
 	/** Lets a Principal grant another subject access to a resource. */
 	Share = "share",
-	/** Lets a Principal send content to a governed channel target. */
-	Send = "send",
 	/** Lets a Principal stop a published revision or grant from future use. */
 	Revoke = "revoke",
 	/** Lets a Principal move a stable product definition to its retired lifecycle. */
@@ -130,8 +122,6 @@ export enum ProductAuthorizationActions
 	Install = "install",
 	/** Lets a Principal stop a live or queued execution under its lifecycle rules. */
 	Cancel = "cancel",
-	/** Lets a Principal create a new fenced attempt for an eligible failed execution. */
-	Retry = "retry",
 	/** Lets a Principal decide a pending human approval without invoking the effect itself. */
 	Decide = "decide",
 }

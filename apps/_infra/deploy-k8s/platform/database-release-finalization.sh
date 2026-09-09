@@ -103,3 +103,32 @@ wait_for_final_deployment_if_present()
     return "$command_status"
   fi
 }
+
+wait_for_final_statefulset_if_present()
+{
+  local statefulset="$1"
+  local namespace="${2:-$NAMESPACE}"
+  local command_status
+  local statefulset_resource
+  if statefulset_resource="$(kubectl get "statefulset/$statefulset" -n "$namespace" --ignore-not-found -o name)"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  if (( command_status != 0 )); then
+    err "Unable to inventory final StatefulSet '$statefulset'."
+    return "$command_status"
+  fi
+  if [[ -z "$statefulset_resource" ]]; then
+    return 0
+  fi
+  if kubectl rollout status "statefulset/$statefulset" -n "$namespace" --timeout="${TIMEOUT}s"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  if (( command_status != 0 )); then
+    err "Final StatefulSet '$statefulset' did not complete its rollout."
+    return "$command_status"
+  fi
+}

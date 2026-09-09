@@ -2,19 +2,19 @@
 <div class="wo-onboarding__review-grid">
 	<wo-persona-summary componentId="persona-review-summary" [archetype]="persona.displayName" [tone]="tone(persona.primaryColour)" [description]="description(persona.primaryColour)" [secondaryInfluence]="label(persona.secondaryColour)" [modifier]="label(persona.modifier)" [scores]="scores(persona)" />
 	<div class="wo-onboarding__evidence">
-		<wo-collapsible-section sectionId="persona-review-insights" title="Derived insights">
+		<wo-collapsible-section sectionId="persona-review-insights" title="How your assistant will work">
 			<ul class="wo-onboarding__insights">
 				@for (insight of persona.insights; track insight) { <li>{{ insight }}</li> }
 			</ul>
 		</wo-collapsible-section>
-		<wo-collapsible-section sectionId="persona-review-answers" title="Reviewed quiz answers" [defaultOpen]="false">
+		<wo-collapsible-section sectionId="persona-review-answers" title="Your answers" [defaultOpen]="false">
 			<wo-persona-answer-list [questions]="questions()" />
 		</wo-collapsible-section>
 		@if (persona.instructionPreview; as instructionPreview) {
-			<wo-collapsible-section sectionId="persona-review-instructions" title="Exact compiled instructions" [defaultOpen]="true">
+			<wo-collapsible-section sectionId="persona-review-instructions" title="Instructions your assistant will use" [defaultOpen]="true">
 				<pre class="wo-onboarding__instructions">{{ instructionPreview }}</pre>
 			</wo-collapsible-section>
 		}
-		<p class="wo-onboarding__authority-note">OpenCrane derived this result from the reviewed choices and score policy pinned to your interview. The browser cannot edit the score or compiled persona.</p>
+		<p class="wo-onboarding__authority-note">These settings come from your answers.</p>
 	</div>
 </div>

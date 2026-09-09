@@ -8,9 +8,6 @@ support lives under [`server/infra`](./server/infra/README.md), so business capa
 server machinery. [`observability`](./observability/) is the shared logging and tracing capability for
 server-side processes. Apps remain thin entrypoints that mount routers, construct clients, and
 manage process lifecycle.
-Reusable conversation processing lives under [`conversations`](./conversations/README.md). Its
-projection package has no server transport or database authority, so participant and channel routes
-can compose the same safe stream.
 
 ## Layout
 
@@ -19,10 +16,6 @@ libs/backend/
   agents/                     agent specializations and shared execution authority
     personal/<domain>/main    personal persona, memory, and conversation domains
     execution/<domain>/main   input assembly and run-attempt domains
-    execution/protocol        language-neutral command/candidate authority
-    runtime/k8s-launcher      agent-controller Job projection
-  conversations/              transport-neutral conversation processing
-    projection/main           safe resumable browser event stream
   server/<group>/<domain>/main OpenCrane server capability
     project.json              Nx project metadata and targets
     src/index.ts              public barrel
@@ -52,10 +45,10 @@ capabilities merely because the OpenCrane app currently composes some of their p
   `@opencrane/backend/server/<group>/<domain>`, never an internal source path.
 - Server-runtime imports use `@opencrane/backend/server/infra/<runtime>`; server-side logging and tracing
   imports use `@opencrane/backend/observability`.
-- Agent runtime imports use `@opencrane/backend/agents/execution/protocol` for authority and
-  `@opencrane/backend/agents/runtime/k8s-launcher` for the controller projection.
-- Conversation transports import `@opencrane/backend/conversations/projection` for the shared
-  display-safe stream; the projection package does not import the transports back.
+- Conversation-computer execution uses the server conversation authority and the external Agent
+  Sandbox boundary; governed background Jobs use their workload-specific controller libraries.
+- Conversation transports use the server conversation authority, which reads immutable KurrentDB
+  entries and resolves separately encrypted participant payloads.
 - Database models remain in the OpenCrane app's per-domain Prisma schema files; see
   [`docs/agents/prisma.md`](../../docs/agents/prisma.md).
 
@@ -79,6 +72,5 @@ new source-only backend library does not need its own Dockerfile.
 - Parent front door: [OpenCrane](../../README.md)
 - Server capabilities: [server](./server/README.md)
 - Agent capabilities: [agents](./agents/README.md)
-- Reusable conversation processing: [conversations](./conversations/README.md)
 - Server runtime seams: [server/infra](./server/infra/README.md)
 - Telemetry: [observability](./observability/README.md)

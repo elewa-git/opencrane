@@ -1,62 +1,49 @@
 import { AgentRevisionState, AgentServiceKind } from "@prisma/client";
-import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaRunAuthoritySource } from "../prisma-run-authority-source";
+import { RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies } from "@opencrane/backend/agents/execution/runs";
 
-/** Creates the minimum command coordinates needed for a run-authority lookup. */
-function _Command(overrides: Record<string, unknown> = {})
+import { PersonalMemoryPreferenceFactSource } from "../personal-memory-preference-fact-source";
+import { PersonalMemoryScopeSource } from "../personal-memory-scope-source";
+import { PrismaRunAuthority } from "../prisma-run-authority-source";
+import { RunPolicyMemoryScopeSource } from "../run-policy-memory-scope-source";
+
+/** Loads a published service through the production policy adapter. */
+async function _LoadAuthority(kind: AgentServiceKind)
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1", ...overrides } as never;
+	const prisma = { agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", kind, activeRevisionId: "revision-1", activeRevision: { id: "revision-1", state: AgentRevisionState.Published, promptPolicyVersion: "v1" } }) } };
+	const source = new PrismaRunAuthority(prisma as never);
+	const result = await source.load({ siloId: "silo-1", agentServiceId: "service-1", trigger: "interactive" } as never, {} as never);
+	if (result.outcome === "denied")
+		throw new Error("The fixture must load a published service");
+	return result.value;
 }
 
-/** Creates the admission transaction facade with one controllable service row. */
-function _Transaction(service: unknown): RunAdmissionTransaction
+describe("PrismaRunAuthority text-chat policy", function _Suite()
 {
-	return { prisma: { agentService: { findFirst: vi.fn().mockResolvedValue(service) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
-}
-
-/** Creates one active service row with an exact active published revision. */
-function _Service(overrides: Record<string, unknown> = {})
-{
-	return {
-		id: "service-1",
-		kind: AgentServiceKind.Managed,
-		activeRevisionId: "revision-1",
-		activeRevision: { id: "revision-1", state: AgentRevisionState.Published, digest: `sha256:${"a".repeat(64)}`, promptPolicyVersion: "opencrane.prompt-compiler/1" },
-		...overrides,
-	};
-}
-
-describe("PrismaRunAuthoritySource", function _DescribePrismaRunAuthoritySource()
-{
-	it("loads only the same-silo active published revision for a managed invocation", async function _LoadsManagedInvocation()
+	it.each([
+		{ kind: AgentServiceKind.Personal, persona: RunExecutionPersonaPolicies.Required },
+		{ kind: AgentServiceKind.Managed, persona: RunExecutionPersonaPolicies.None },
+	])("admits $kind text inputs without opening memory storage", async function _SkipsUnprovisionedMemory({ kind, persona })
 	{
-		await expect(new PrismaRunAuthoritySource().load(_Command(), _Transaction(_Service()))).resolves.toEqual({ outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "managed", effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "opencrane.prompt-compiler/1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } });
+		const run = await _LoadAuthority(kind);
+		expect(run.executionPolicy).toEqual({ persona, personalMemory: RunExecutionPersonalMemoryPolicies.None });
+		const repositoryFactory = vi.fn();
+		const preferences = new PersonalMemoryPreferenceFactSource(repositoryFactory);
+		const memory = new RunPolicyMemoryScopeSource(new PersonalMemoryScopeSource(repositoryFactory));
+		await expect(preferences.load({} as never, run, {} as never, {} as never)).resolves.toEqual({ outcome: "loaded", value: [] });
+		await expect(memory.load({} as never, run, {} as never, { messageIds: [] }, {} as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "none" }, datasetId: null } });
+		expect(repositoryFactory).not.toHaveBeenCalled();
 	});
 
-	it("uses a schedule trigger only when a future command contract explicitly supplies one", async function _UsesScheduleTrigger()
+	it("still denies an explicitly enabled memory policy when its dataset is missing", async function _RefusesMissingEnabledDataset()
 	{
-		const result = await new PrismaRunAuthoritySource().load(_Command({ trigger: "schedule" }), _Transaction(_Service()));
-		if (result.outcome !== "loaded") throw new Error("expected active managed run authority");
-		expect(result.value.trigger).toBe("schedule");
-	});
-
-	it("denies a missing service or an active pointer that does not name a published revision", async function _DeniesStaleAuthority()
-	{
-		await expect(new PrismaRunAuthoritySource().load(_Command(), _Transaction(null))).resolves.toEqual({ outcome: "denied", reason: "run_not_admittable" });
-		await expect(new PrismaRunAuthoritySource().load(_Command(), _Transaction(_Service({ activeRevision: { id: "revision-1", state: AgentRevisionState.Draft, digest: `sha256:${"a".repeat(64)}`, promptPolicyVersion: "opencrane.prompt-compiler/1" } })))).resolves.toEqual({ outcome: "denied", reason: "revision_unavailable" });
-	});
-
-	it("denies a command whose tagged identity kind does not match the active service kind", async function _DeniesMismatchedIdentityKind()
-	{
-		await expect(new PrismaRunAuthoritySource().load(_Command({ identityKind: "user", trigger: "interactive", executionSubjectId: "user-1" }), _Transaction(_Service()))).resolves.toEqual({ outcome: "denied", reason: "run_not_admittable" });
-	});
-
-	it("binds a personal service to its authenticated execution subject and interactive trigger", async function _LoadsPersonal()
-	{
-		const result = await new PrismaRunAuthoritySource().load(_Command({ identityKind: "user", trigger: "interactive", executionSubjectId: "user-1" }), _Transaction(_Service({ kind: AgentServiceKind.Personal })));
-		if (result.outcome !== "loaded") throw new Error("expected active personal run authority");
-		expect(result.value).toMatchObject({ agentKind: "personal", trigger: "interactive", delegatedUserId: "user-1" });
+		const run = await _LoadAuthority(AgentServiceKind.Personal);
+		const enabled = { ...run, executionPolicy: { ...run.executionPolicy, personalMemory: RunExecutionPersonalMemoryPolicies.Allowed } };
+		const repository = { findActivePersonalDataset: vi.fn().mockResolvedValue(null), findActivePreferenceFactIds: vi.fn() };
+		const factory = vi.fn().mockReturnValue(repository);
+		const memory = new RunPolicyMemoryScopeSource(new PersonalMemoryScopeSource(factory));
+		await expect(memory.load({ siloId: "silo-1" } as never, enabled, { principalId: "principal-1" } as never, { messageIds: [] }, {} as never)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+		expect(repository.findActivePersonalDataset).toHaveBeenCalledOnce();
 	});
 });

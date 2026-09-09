@@ -27,7 +27,8 @@ const _ADDRESS = `sha256:${"a".repeat(64)}`;
 /** Active access delegates reused by focused authority tests. */
 function _Access(active: boolean)
 {
-	if (active) return { conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ id: "participant-1" }) }, orgMembership: { count: vi.fn().mockResolvedValue(1) } };
+	if (active)
+		return { conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ id: "participant-1" }) }, orgMembership: { count: vi.fn().mockResolvedValue(1) } };
 	return { conversationParticipant: { findFirst: vi.fn().mockResolvedValue(null) }, orgMembership: { count: vi.fn().mockResolvedValue(0) } };
 }
 
@@ -102,13 +103,13 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 		expect(transaction.conversationAsset.findFirst).not.toHaveBeenCalled();
 	});
 
-	it("does not resolve child assets after immediate-parent access ends", async function _DeniesParentRevocation()
+	it("does not resolve assets after conversation access ends", async function _DeniesConversationRevocation()
 	{
 		const findFirst = vi.fn().mockResolvedValue(null);
 		const transaction = { conversationParticipant: { findFirst }, orgMembership: { count: vi.fn().mockResolvedValue(1) }, conversationAsset: { findFirst: vi.fn() } };
 
 		await expect(new PrismaConversationAssetRepository(transaction as never).readReadyTarget(_CALLER, "child-1", "asset-1")).resolves.toBeNull();
-		expect(findFirst).toHaveBeenCalledWith({ where: { conversationId: "child-1", userId: "user-1", accessEndedPosition: null, conversation: expect.objectContaining({ OR: expect.arrayContaining([{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: "user-1", accessEndedPosition: null } } } } } }]) }) } });
+		expect(findFirst).toHaveBeenCalledWith({ where: { conversationId: "child-1", userId: "user-1", accessEndedPosition: null, conversation: { siloId: "silo-1" } } });
 		expect(transaction.conversationAsset.findFirst).not.toHaveBeenCalled();
 	});
 

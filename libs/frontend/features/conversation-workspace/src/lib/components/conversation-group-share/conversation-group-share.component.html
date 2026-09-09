@@ -1,0 +1,15 @@
+<p-dialog closeAriaLabel="Close share review" header="Share result to group" [modal]="true" [style]="{ width: 'min(var(--oc-journey-compact-width), calc(100vw - var(--oc-space-8)))' }" [visible]="visible()" [closable]="state() !== states.Submitting" [closeOnEscape]="state() !== states.Submitting" (onHide)="dismissed.emit()">
+	<div class="group-share">
+		@if (state() === states.Accepted) { <p-message severity="success" text="Shared to the group as you." /> }
+		@else { <p>Review and edit this text. It will appear in the group as a message from you.</p> }
+		<label for="group-result-text">Message to share</label>
+		<textarea id="group-result-text" pTextarea rows="8" maxlength="65536" [value]="text()" [disabled]="state() === states.Submitting || state() === states.Accepted" (input)="changeText($event)"></textarea>
+		@if (tooLong()) { <p-message severity="error" text="Shorten this message before sharing." /> }
+		@if (error(); as message) { <p-message severity="error" [text]="message" /> }
+	</div>
+	<ng-template #footer>
+		<p-button [label]="state() === states.Accepted ? 'Done' : 'Cancel'" severity="secondary" [text]="true" [disabled]="state() === states.Submitting" (onClick)="dismissed.emit()" />
+		@if (state() === states.Accepted) { <p-button label="Back to group" icon="pi pi-arrow-left" (onClick)="groupRequested.emit()" /> }
+		@else { <p-button label="Share as my message" icon="pi pi-share-alt" [loading]="state() === states.Submitting" [disabled]="!text().trim() || tooLong() || state() === states.Submitting" (onClick)="submitted.emit()" /> }
+	</ng-template>
+</p-dialog>

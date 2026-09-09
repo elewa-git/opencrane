@@ -1,14 +1,14 @@
-import type { RunInputSnapshotIdentity, RunInputSnapshotMcpTool } from "@opencrane/contracts";
-import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import type { PersonaRevisionId } from "@opencrane/models/agents";
-import type { MessageContentBlock, MessageId } from "@opencrane/models/conversations";
+import type { RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionMessageAuthor, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { ExecutionSubject, PersonaRevisionId } from "@opencrane/models/agents";
+import type { MessageId } from "@opencrane/models/conversations";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { JsonValue } from "@opencrane/util";
 
 import type { SessionAssemblyRefusalReason } from "./session-assembly-result.types";
 
 /**
- * The ids, trigger, and identity kind run admission passes in.
+ * The server-derived run coordinates that admission uses to load an execution subject.
  *
  * This is the complete list of what a caller may influence. Everything else in the snapshot is
  * read by a source from the database, which is why a browser request cannot widen its own run:
@@ -49,8 +49,24 @@ export interface ConversationContextInput
 {
 	/** Ordered message identifiers included in the runtime prompt. */
 	messageIds: readonly MessageId[];
-	/** The user's new message, waiting to be saved in the same transaction as the run. Null unless a browser conversation is being admitted. */
-	pendingUserMessage: { readonly id: MessageId; readonly blocks: readonly MessageContentBlock[] } | null;
+}
+
+/** Exact durable history facts re-read before the snapshot may freeze its message identifiers. */
+export interface ConversationHistoryAdmissionRead
+{
+	/** Kurrent stream revision that bounded this read. */
+	readonly historyRevision: string;
+	/** Canonical message identifiers in stream order. */
+	readonly orderedMessageIds: readonly MessageId[];
+	/** Immutable human author stored on the final triggering entry. */
+	readonly finalMessageAuthor: RunAdmissionMessageAuthor;
+}
+
+/** Infrastructure-neutral port for re-reading one exact durable conversation-history revision. */
+export interface ConversationHistoryAdmissionReader
+{
+	/** Read through the expected revision or return null when that exact stream boundary is unavailable. */
+	read(command: { readonly siloId: string; readonly conversationId: string; readonly expectedRevision: string }): Promise<ConversationHistoryAdmissionRead | null>;
 }
 
 /** Names one stored preference fact chosen to personalise the prompt. */
@@ -58,6 +74,15 @@ export interface PreferenceFactInput
 {
 	/** Stable fact identifier. */
 	id: string;
+}
+
+/** Identifies the memory coordinates written by the input sources into a run snapshot. */
+export enum RunInputMemoryScopes
+{
+	/** The run carries no personal dataset or preference facts. */
+	None = "none",
+	/** The run freezes a verified personal dataset; a later effect still requires current permission. */
+	Personal = "personal",
 }
 
 /** Authorised memory dataset coordinates frozen for a single run. */
@@ -88,7 +113,9 @@ export interface ToolPolicyInput
 export interface ProductResourceAuthorizationSource
 {
 	/** Batch-checks current Use grants through the transaction-bound central authority. */
-	load(command: SessionAssemblyCommand, identity: IdentityEnvelopeInput, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+	load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+	/** Rechecks only current Conversation Use before an existing immutable snapshot is returned. */
+	verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
 }
 
 /** Effective run limits resolved from service, silo, and policy. */
@@ -99,28 +126,17 @@ export interface BudgetPolicyInput
 }
 
 /**
- * The run's identity fields, plus a digest of the capabilities that identity held at admission.
+ * Loads the one already-verified execution subject that may exercise this admitted run.
  *
- * The digest is the extra field: `RunInputSnapshotIdentity` is what gets persisted, and
- * `capabilitySetDigest` is used during assembly and then dropped by `_SnapshotIdentity` in
- * session-assembly.ts. So it is a check on what was true at admission time, not something the
- * runtime can read back later.
- *
- * @see IdentityEnvelopeSource
+ * The authority is injected rather than reconstructed from request fields. It verifies the current
+ * AgentIdentity head, Principal membership, capability decision, fenced run, and active
+ * ConversationComputer lease in the admission fence. Requester provenance never becomes authority.
  */
-export type IdentityEnvelopeInput = RunInputSnapshotIdentity & {
-	/**
-	 * SHA-256 digest over every capability fact accepted while the run was being admitted.
-	 *
-	 * The grants are sorted before hashing, so two runs with the same grants in a different row order
-	 * produce the same digest.
-	 *
-	 * @see https://www.rfc-editor.org/rfc/rfc8785 - JSON Canonicalization Scheme, used by
-	 * `__DigestCanonicalJson`. It fixes object key order but not array order, which is why the sort
-	 * is done explicitly in `_CompareCanonicalGrant`.
-	 */
-	readonly capabilitySetDigest: string;
-};
+export interface ExecutionSubjectAuthority
+{
+	/** Loads one current subject that exactly matches the admitted run and computer lease. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ExecutionSubject>>;
+}
 
 /**
  * Reads the run, AgentService, and published-revision facts every later source depends on.
@@ -130,7 +146,7 @@ export type IdentityEnvelopeInput = RunInputSnapshotIdentity & {
  * service can be paused, retired, or have its active revision swapped, and admitting against the
  * old revision would run the wrong instructions.
  *
- * Implemented by: {@link PrismaRunAuthoritySource}. Wired in by
+ * Implemented by: {@link PrismaRunAuthority}. Wired in by
  * `__CreatePrismaManagedSessionAssemblyAuthorities` and
  * `__CreatePrismaPersonalSessionAssemblyAuthorities` (prisma-session-assembly-authorities.ts).
  */
@@ -139,7 +155,7 @@ export interface RunAuthoritySource
 	/**
 	 * Loads the run, service, and revision facts needed to admit this run, and nothing more.
 	 *
-	 * @param command - The admission command; only its ids and identity kind are trusted.
+ * @param command - The admission command; only its server-derived coordinates are trusted.
 	 * @param transaction - The admission transaction. Read through this, never through a root client,
 	 * or the read will not see the locks admission is holding.
 	 * @returns `loaded` with the facts every later source builds on. `denied` with
@@ -157,10 +173,10 @@ export interface RunAuthoritySource
  * so an approval bug cannot also become an admission bug.
  *
  * Managed runs get no persona at all: their published revision already holds all their
- * instructions. `__AssembleRunInputSnapshot` checks that a personal run got one and a managed run
- * did not, and refuses with `persona_unavailable` if that does not hold.
+ * instructions. `__AssembleRunInputSnapshot` checks the explicit persona policy and refuses with
+ * `persona_unavailable` when the loaded value does not match it.
  *
- * Implemented by: {@link PrismaApprovedPersonaSource}.
+ * Implemented by: {@link PrismaApprovedPersonaAuthority}.
  */
 export interface ApprovedPersonaSource
 {
@@ -168,14 +184,14 @@ export interface ApprovedPersonaSource
 	 * Loads the active approved persona revision, or null for a managed service.
 	 *
 	 * @param command - The admission command; its subject must own the persona profile.
-	 * @param run - Facts from {@link RunAuthoritySource}; `agentKind` decides whether a persona is
-	 * required at all.
+	 * @param run - Facts from {@link RunAuthoritySource}; its explicit policy decides whether a persona is required.
+	 * @param executionSubject - The verified principal whose approved persona may be selected.
 	 * @param transaction - The admission transaction.
 	 * @returns `loaded` with `personaRevisionId` set for a personal run, or null for a managed run.
 	 * `denied` with `persona_unavailable` when the caller is not the profile's owner, or the active
 	 * revision is missing or not approved — an unapproved persona must never reach a saved run.
 	 */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ApprovedPersonaInput>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ApprovedPersonaInput>>;
 }
 
 /**
@@ -204,7 +220,7 @@ export interface ConversationContextSource
 	 * their org membership is gone; or `active_run` when another unfinished run already owns this
 	 * conversation — that one is worth retrying later, the others are not.
 	 */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ConversationContextInput>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ConversationContextInput>>;
 }
 
 /**
@@ -225,7 +241,7 @@ export interface ConversationContextRepository
 	 * @param run - Facts from {@link RunAuthoritySource}.
 	 * @returns The same outcomes as {@link ConversationContextSource.load}.
 	 */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority): Promise<SessionAssemblyLoad<ConversationContextInput>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject): Promise<SessionAssemblyLoad<ConversationContextInput>>;
 }
 
 /**
@@ -262,14 +278,14 @@ export interface PreferenceFactSource
 	 *
 	 * @param command - The admission command.
 	 * @param run - Facts from {@link RunAuthoritySource}.
-	 * @param identity - Already-verified identity from {@link IdentityEnvelopeSource}. This, not the
+	 * @param executionSubject - Already-verified subject from {@link ExecutionSubjectAuthority}. This, not the
 	 * command, decides whose preferences may be read.
 	 * @param transaction - The admission transaction.
 	 * @returns `loaded` with zero or more ids. `denied` with `memory_scope_unavailable` when the run
 	 * kind or identity kind is not one this source serves — that is a composition mistake, not
 	 * something a user can fix by retrying.
 	 */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
 }
 
 /** Reads authorised memory dataset scope. */
@@ -280,7 +296,7 @@ export interface MemoryScopeSource
 	 *
 	 * @param command - The admission command.
 	 * @param run - Facts from {@link RunAuthoritySource}.
-	 * @param identity - Already-verified identity. The dataset is derived from this, never from caller
+	 * @param executionSubject - Already-verified subject. The dataset is derived from this, never from caller
 	 * input.
 	 * @param conversation - The already-frozen transcript, used to build the recall query.
 	 * @param transaction - The admission transaction.
@@ -290,7 +306,7 @@ export interface MemoryScopeSource
 	 * deliberately fails the admission rather than freezing an empty fact set that would be
 	 * indistinguishable from "this user has no memories".
 	 */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
 }
 
 /**
@@ -299,7 +315,7 @@ export interface MemoryScopeSource
  * It updates the MCP admission claim before reading inside the Serializable admission transaction.
  * A concurrent publication change then conflicts with snapshot persistence.
  *
- * Implemented by: {@link PrismaRevisionToolPolicySource}.
+ * Implemented by: {@link PrismaRevisionToolPolicyAuthority}.
  */
 export interface ToolPolicySource
 {
@@ -392,7 +408,7 @@ export interface AssignedSkillRevision
  * a caller can never extend its own run by supplying one. Missing or malformed limits are refused
  * rather than defaulted — an unbudgeted run could burn tokens without bound.
  *
- * Implemented by: {@link PrismaRevisionBudgetPolicySource}.
+ * Implemented by: {@link PrismaRevisionBudgetPolicyAuthority}.
  */
 export interface BudgetPolicySource
 {
@@ -410,52 +426,16 @@ export interface BudgetPolicySource
 }
 
 /**
- * Decides who the run executes as, and proves it inside the admission transaction.
- *
- * This runs before every identity-scoped source (preferences, memory) precisely so those sources
- * cannot select another organisation's data. It must derive the subject and organisation from
- * signed evidence in the database, never from anything the request body carried.
- *
- * For a user, that evidence is a signed fleet-membership assertion: a batch of memberships signed by
- * a trusted issuer and verified into local tables, keyed by the OIDC subject identifier Zitadel
- * issued. Admission checks a signature and a freshness window rather than calling the identity
- * provider per run.
- *
- * Two implementations: {@link PersonalExecutionIdentityEnvelopeSource} verifies a user's signed
- * fleet membership; {@link ManagedExecutionIdentityEnvelopeSource} adapts managed-service evidence.
- * Each refuses the other's run kind, and `__AssembleRunInputSnapshot` re-checks that the returned
- * identity kind matches the run kind afterwards.
- */
-export interface IdentityEnvelopeSource
-{
-	/**
-	 * Loads the capability and fleet-membership facts that decide who the runtime runs as.
-	 *
-	 * @param command - The admission command. Only the server-derived subject and silo are trusted.
-	 * @param run - Facts from {@link RunAuthoritySource}; `agentKind` must match the identity kind
-	 * this source produces.
-	 * @param transaction - The admission transaction; membership is verified through it so the check
-	 * and the snapshot see the same rows.
-	 * @returns `loaded` with the identity and its capability digest. `denied` with `membership_stale`
-	 * when signed membership is absent, does not verify, or its trust window has expired — the user
-	 * must re-authenticate; or `identity_unavailable` when the identity does not match the run or a
-	 * digest is invalid — fail the request, never fall back to a weaker identity.
-	 */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<IdentityEnvelopeInput>>;
-}
-
-/**
  * Every source {@link __AssembleRunInputSnapshot} needs, and the order it calls them in.
  *
  * The fields below are listed in call order, and that order is a safety property, not a style
  * choice: `runAuthority` first because everything else needs the run and revision;
- * `identityEnvelope` before `preferenceFacts` and `memoryScope` so no identity-scoped source can
+ * `executionSubject` before `preferenceFacts` and `memoryScope` so no identity-scoped source can
  * read another organisation's data; `skillEligibility` last so its locks are the newest ones held
  * when the snapshot commits.
  *
- * Do not assemble this by hand. Use {@link __CreatePrismaManagedSessionAssemblyAuthorities} or
- * {@link __CreatePrismaPersonalSessionAssemblyAuthorities}: mixing a personal source into a
- * managed set (or the reverse) produces a run that every source refuses.
+ * Do not assemble this by hand. Use {@link __CreatePrismaSessionAssemblyAuthorities}, which
+ * receives the authoritative subject and explicit run policy from the composition root.
  */
 export interface SessionAssemblyAuthorities
 {
@@ -479,6 +459,6 @@ export interface SessionAssemblyAuthorities
 	productAuthorization: ProductResourceAuthorizationSource;
 	/** Reads the run's token, turn, and deadline limits. */
 	budgetPolicy: BudgetPolicySource;
-	/** Decides who the run executes as. Must run before the two identity-scoped sources above. */
-	identityEnvelope: IdentityEnvelopeSource;
+	/** Loads one verified AgentIdentity-and-Principal subject before identity-scoped sources run. */
+	executionSubject: ExecutionSubjectAuthority;
 }

@@ -12,7 +12,7 @@ readiness inside ordinary-chat and agent-session message transactions.
 
 ```text
  file selection -> upload reservation -> quarantine + scan -> ready -> message attachment
- agent runtime -> output ticket -> quarantine + scan -> ready agent output
+ conversation computer -> output ticket -> quarantine + scan -> ready agent output
  active participant -> ready asset -> private byte broker -> preview or download
 ```
 
@@ -82,8 +82,7 @@ frontend and unrelated server domains do not import its persistence adapters.
 
 Owns `ConversationAsset` and `ConversationAssetOutputTicket` in
 `apps/opencrane/prisma/schema/conversation-assets.prisma`. Output tickets are structurally tied to
-their `WorkloadAssignment` and `ConversationRunEvent`; finalization stores the content and receipt
-proof exactly once. The package creates the quarantined `ArtifactRevision` and `ArtifactScanJob`
+their immutable execution subject; finalization stores the content and receipt proof exactly once. The package creates the quarantined `ArtifactRevision` and `ArtifactScanJob`
 through the artifact domain's reviewed schema and transaction contract rather than taking ownership
 of those models.
 

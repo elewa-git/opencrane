@@ -1,7 +1,9 @@
 import { ___DoWithTrace, ___MarkActiveSpanFailed, type Logger } from "@opencrane/backend/observability";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log";
 import { LiteLlmCredentialMutationOutcomes, type LiteLlmCredentialUpsert } from "./litellm-credential-registration.types";
+import { _ParseLiteLlmCredentialMutationStatus } from "./litellm-credential-registration.validator";
 
 /**
  * Per-request timeout for the LiteLLM `/credentials` calls. It bounds each provider-command
@@ -91,23 +93,24 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
       Authorization: `Bearer ${masterKey}`,
     };
 
-    // 1. PATCH replaces the encrypted value atomically. The pinned LiteLLM build updates the DB
-    //    row in one operation and returns 404 without mutation when the fixed name is absent.
+    // 1. PATCH updates the encrypted row. The pinned build returns a missing-row error inside
+    //    HTTP 200, so inspect its response before deciding whether creation is needed.
     const patched = await fetch(`${endpoint}/credentials/${encodeURIComponent(input.credentialName)}`, {
       method: "PATCH",
       headers,
       body,
       signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
     });
-    if (patched.ok)
+    const patchStatus = await _readMutationStatus(patched);
+    if (patchStatus === 200)
     {
 	  log.info({ credentialName: input.credentialName, provider: input.provider }, "litellm credential updated");
       return LiteLlmCredentialMutationOutcomes.Applied;
     }
-    if (patched.status !== 404)
+    if (patchStatus !== 404)
     {
 	  ___MarkActiveSpanFailed();
-	  log.warn({ credentialName: input.credentialName, provider: input.provider, status: patched.status }, "litellm credential update failed; key persisted to Secret only");
+	  log.warn({ credentialName: input.credentialName, provider: input.provider, status: patchStatus }, "litellm credential update failed; key persisted to Secret only");
       return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
@@ -122,10 +125,11 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
       signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
     });
 
-    if (!created.ok)
+    const createStatus = await _readMutationStatus(created);
+    if (createStatus !== 200)
     {
 	  ___MarkActiveSpanFailed();
-	  log.warn({ credentialName: input.credentialName, provider: input.provider, status: created.status }, "litellm credential create failed; key persisted to Secret only");
+	  log.warn({ credentialName: input.credentialName, provider: input.provider, status: createStatus }, "litellm credential create failed; key persisted to Secret only");
       return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
@@ -158,10 +162,11 @@ async function _deleteLive(endpoint: string, masterKey: string, credentialName: 
       signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
     });
 
-    if (!response.ok && response.status !== 404)
+    const status = await _readMutationStatus(response);
+    if (status !== 200 && status !== 404)
     {
 	  ___MarkActiveSpanFailed();
-	  log.warn({ credentialName, status: response.status }, "litellm credential delete failed");
+	  log.warn({ credentialName, status }, "litellm credential delete failed");
       return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
@@ -173,4 +178,19 @@ async function _deleteLive(endpoint: string, masterKey: string, credentialName: 
 	log.warn({ credentialName, err }, "litellm credential delete errored");
     return LiteLlmCredentialMutationOutcomes.Uncertain;
   }
+}
+
+/** Reads the pinned API's status without exposing response bodies or JSON parse errors to logs. */
+async function _readMutationStatus(response: Response): Promise<number>
+{
+	if (!response.ok)
+		return response.status;
+	try
+	{
+		return ___ParseAndValidateJson(await response.text(), "LiteLLM credential mutation response", _ParseLiteLlmCredentialMutationStatus);
+	}
+	catch
+	{
+		throw new Error("LiteLLM credential mutation response did not confirm its outcome");
+	}
 }

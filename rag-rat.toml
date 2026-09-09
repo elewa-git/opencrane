@@ -12,7 +12,7 @@ exclude = ["**/.upstream/**", "**/dist/**", "**/generated/**", "**/*.generated.t
 [[target]]
 name = "python-source"
 language = "python"
-directories = ["apps/agent-runtime", "apps/skill-authoring", "libs/backend/agents/skills/worker"]
+directories = ["apps/skill-authoring", "libs/backend/agents/skills/worker"]
 kind = "source"
 include = ["**/*.py"]
 exclude = ["**/__pycache__/**", "**/.venv/**"]

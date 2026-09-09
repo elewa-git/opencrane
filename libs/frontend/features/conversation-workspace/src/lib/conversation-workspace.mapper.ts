@@ -1,39 +1,51 @@
 import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, type ConversationMessagePresentation, type ConversationRichTextPresentation } from "@opencrane/elements/conversation";
-import { MessageContentBlockKinds } from "@opencrane/models/conversations";
+import type { ConversationEntry, MessageEntry } from "@opencrane/contracts";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
-import { AgUiMessageStatuses, type AgUiMessageView } from "@opencrane/state/conversation/ag-ui";
-import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, type ConversationCreationDirectory, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationMessageView, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationPresentationContext, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
+import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationMessageView, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 
 /**
- * Builds one shared workspace presentation from a conversation summary.
- *
- * Titles and participant labels are generated here rather than taken from the server, so neither the
- * header nor the rail can print an opaque participant reference. Only the Agent-session title uses a
- * real name, and only the personal Agent's own display name.
- *
- * The `archived` flag keeps the conversation in the rail and selects its active or archived section;
- * the mode and participant labels remain available to the selected conversation header.
- *
- * Called by: `ConversationWorkspacePresenter._Summaries`, once per conversation in the store's list.
- * @param summary - One conversation from the workspace list.
- * @param personalAgentName - The signed-in user's personal Agent display name, or `null` when the
- * directory has no personal Agent. An Agent-session row falls back to the generic "Agent session"
- * title when this is `null`, so the row still reads sensibly during incomplete Agent setup.
- * @returns A row safe to render directly.
+ * Uses the current directory to name conversations in both the rail and selected header.
+ * Missing members receive a generic label; membership references never become display text.
+ * Group titles show two names and the number of other people to keep the rail readable.
+ * @param directory The current member and personal-assistant directory, or null while unavailable.
  */
-export function _ConversationSummaryPresentation(summary: ConversationSummary, personalAgentName: string | null): ConversationSummaryPresentation
+export function _ConversationSummaryPresentation(summary: ConversationSummary, directory: ConversationCreationDirectory | null): ConversationSummaryPresentation
 {
 	const iconState = _ConversationSessionRailIconState(summary);
+	const peerLabels = _conversationPeerLabels(summary, directory);
 	switch (summary.mode)
 	{
-		case ConversationModes.AgentSession: return { id: summary.id, title: personalAgentName ?? "Agent session", modeLabel: "Agent session", participantLabel: "You and your Agent", iconState, archived: summary.archivedAt !== null };
-		case ConversationModes.Direct: return { id: summary.id, title: "Direct conversation", modeLabel: "Direct", participantLabel: "You and Participant 1", iconState, archived: summary.archivedAt !== null };
-		case ConversationModes.Group: return { id: summary.id, title: "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.AgentSession:
+		{
+			const companyAssistant = directory?.companyAssistants.find(assistant => assistant.agentServiceId === summary.agentServiceId);
+			const personalName = directory?.personalAgent?.personalAgentRef === summary.agentServiceId ? directory.personalAgent.displayName : null;
+			if (personalName !== null)
+				return { id: summary.id, title: personalName, modeLabel: "Agent session", participantLabel: "You and your Agent", iconState, archived: summary.archivedAt !== null };
+			return { id: summary.id, title: companyAssistant?.displayName ?? "Assistant conversation", modeLabel: "Company assistant", participantLabel: `Shared assistant chat · ${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
+		}
+		case ConversationModes.Direct: return { id: summary.id, title: peerLabels[0] ?? "Direct conversation", modeLabel: "Direct", participantLabel: peerLabels.length === 0 ? `${summary.participantRefs.length} participants` : `You and ${peerLabels[0]}`, iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.Group: return { id: summary.id, title: _compactParticipantNames(peerLabels) || "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
 		default: return _UnsupportedConversationMode(summary.mode);
 	}
+}
+
+/** Finds each other participant in conversation order, retaining a label for unavailable members. */
+function _conversationPeerLabels(summary: ConversationSummary, directory: ConversationCreationDirectory | null): readonly string[]
+{
+	if (directory === null)
+		return [];
+	const members = new Map(directory.participants.map(participant => [participant.participantRef, participant]));
+	return summary.participantRefs.filter(reference => !members.get(reference)?.isSelf).map(reference => members.get(reference)?.label ?? "Participant");
+}
+
+/** Limits the visible names without hiding how many other people belong to the conversation. */
+function _compactParticipantNames(labels: readonly string[]): string
+{
+	const names = labels.slice(0, 2).join(", ");
+	return labels.length > 2 ? `${names} +${labels.length - 2}` : names;
 }
 
 /**
@@ -54,7 +66,8 @@ export function _ConversationSessionRailItems(summaries: readonly ConversationSu
 /** Selects the rail prefix state while allowing a terminal lifecycle to override chat type. */
 function _ConversationSessionRailIconState(summary: ConversationSummary): ConversationSessionRailIconStates
 {
-	if (summary.lifecycle === ConversationLifecycles.Closed) return ConversationSessionRailIconStates.Closed;
+	if (summary.lifecycle === ConversationLifecycles.Closed)
+		return ConversationSessionRailIconStates.Closed;
 	switch (summary.mode)
 	{
 		case ConversationModes.AgentSession: return ConversationSessionRailIconStates.AgentSession;
@@ -78,7 +91,8 @@ function _UnsupportedConversationMode(mode: never): never
 export function _ConversationRailIdentityPresentation(directory: ConversationCreationDirectory | null): ConversationRailIdentityPresentation | null
 {
 	const self = directory?.participants.find(participant => participant.isSelf);
-	if (self === undefined) return null;
+	if (self === undefined)
+		return null;
 	return { name: self.label, detail: "Private workspace", initials: self.label === "You" ? "Y" : self.label.slice(0, 2).toUpperCase() };
 }
 
@@ -112,15 +126,22 @@ export function _ConversationOnboardingContinuationPresentation(directory: Conve
 {
 	const heading = "This conversation is complete and read-only.";
 	const detail = "Your onboarding answers stay here as a private chat.";
-	if (directory === null) return { heading, detail, capabilityNote: "New-session availability could not be confirmed.", canStartNewChat: false };
-	if (!directory.participants.some(participant => participant.isSelf)) return { heading, detail, capabilityNote: "This account needs workspace membership before a new session can be started.", canStartNewChat: false };
+	if (directory === null)
+		return { heading, detail, capabilityNote: "New-session availability could not be confirmed.", canStartNewChat: false };
+	if (!directory.participants.some(participant => participant.isSelf))
+		return { heading, detail, capabilityNote: "This account needs workspace membership before a new session can be started.", canStartNewChat: false };
 	const hasParticipant = directory.participants.some(participant => !participant.isSelf);
 	const hasReadyAgent = directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ready && directory.personalAgent !== null;
-	if (!hasParticipant && !hasReadyAgent) return { heading, detail, capabilityNote: "No participant or personal Agent is available for a new session.", canStartNewChat: false };
-	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Unavailable) return { heading, detail, capabilityNote: "Direct and group sessions are available. Agent sessions stay locked until setup is finished.", canStartNewChat: true };
-	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ambiguous) return { heading, detail, capabilityNote: "Direct and group sessions are available while an administrator repairs the personal Agent assignment.", canStartNewChat: true };
-	if (!hasParticipant) return { heading, detail, capabilityNote: "Start a new session to continue with your Agent.", canStartNewChat: true };
-	if (!hasReadyAgent) return { heading, detail, capabilityNote: "Start a direct or group session to continue with other participants.", canStartNewChat: true };
+	if (!hasParticipant && !hasReadyAgent)
+		return { heading, detail, capabilityNote: "No participant or personal Agent is available for a new session.", canStartNewChat: false };
+	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Unavailable)
+		return { heading, detail, capabilityNote: "Direct and group sessions are available. Agent sessions stay locked until setup is finished.", canStartNewChat: true };
+	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ambiguous)
+		return { heading, detail, capabilityNote: "Direct and group sessions are available while an administrator repairs the personal Agent assignment.", canStartNewChat: true };
+	if (!hasParticipant)
+		return { heading, detail, capabilityNote: "Start a new session to continue with your Agent.", canStartNewChat: true };
+	if (!hasReadyAgent)
+		return { heading, detail, capabilityNote: "Start a direct or group session to continue with other participants.", canStartNewChat: true };
 	return { heading, detail, capabilityNote: "Start a new session with your Agent or other participants.", canStartNewChat: true };
 }
 
@@ -150,63 +171,54 @@ export function _ConversationOnboardingDialogueEntries(history: ConversationOnbo
 	});
 }
 
-/** Map one canonical message to shared element models and sanitized markdown. */
-export function _ConversationMessageView(message: ConversationMessage, context: ConversationPresentationContext): ConversationMessageView
+/** Map immutable Kurrent history messages with server-resolved private payload text. */
+export function _ConversationEntryViews(entries: readonly ConversationEntry[], payloads: Readonly<Record<string, string>>): readonly ConversationMessageView[]
 {
-	const selfRef = context.directory?.participants.find(participant => participant.isSelf)?.participantRef ?? null;
-	const author = _Author(message, selfRef, context.summary.participantRefs);
-	const copy = message.blocks.map(function _Text(block) { return block.kind === MessageContentBlockKinds.Text ? block.value : `[${block.kind.replaceAll("_", " ")}]`; }).join("\n\n");
-	const html = message.state === MessageStates.Streaming ? toStreamingMarkdownHtml(copy) : toSanitizedMarkdownHtml(copy);
-	const presentation: ConversationMessagePresentation = { id: message.id, authorName: author.name, authorInitials: author.initials, avatarTone: author.avatarTone, timestampLabel: _TimeLabel(message.createdAt), body: "", tone: author.tone, accessibleStatus: message.state === MessageStates.Completed ? undefined : message.state };
-	const richText: ConversationRichTextPresentation = { messageId: message.id, html, label: `${author.name} message` };
-	return { message: presentation, richText, agentThread: message.agentThread };
-}
-
-/** Map canonical messages using stable participant numbering within the selected conversation. */
-export function _ConversationMessageViews(messages: readonly ConversationMessage[], context: ConversationPresentationContext): readonly ConversationMessageView[]
-{
-	return messages.map(function _Message(message) { return _ConversationMessageView(message, context); });
-}
-
-/** Map live AG-UI messages not yet present in the bounded canonical snapshot. */
-export function _LiveMessageViews(messages: readonly AgUiMessageView[]): readonly ConversationMessageView[]
-{
-	return messages.map(function _Message(message): ConversationMessageView
+	return entries.filter(function _Message(entry): entry is MessageEntry { return entry.kind === "message"; }).map(function _Entry(entry): ConversationMessageView
 	{
-		const agent = message.role === MessageRoles.Assistant;
-		const author = _LiveAuthor(agent);
-		const presentation: ConversationMessagePresentation = { id: message.id, authorName: author.name, authorInitials: author.initials, avatarTone: author.avatarTone, timestampLabel: "Now", body: "", tone: author.tone, accessibleStatus: message.status };
-		const html = message.status === AgUiMessageStatuses.Streaming ? toStreamingMarkdownHtml(message.text) : toSanitizedMarkdownHtml(message.text);
-		return { message: presentation, richText: { messageId: message.id, html, label: `${author.name} message` }, agentThread: null };
+		const text = entry.blocks.map(function _Block(block): string
+		{
+			if (block.kind === "text")
+				return payloads[block.payloadRef] ?? "[Message text unavailable]";
+			if (block.kind === "artifact")
+				return `[${block.name}]`;
+			return `[@${block.name}]`;
+		}).join("\n\n");
+		const authorName = entry.author.name;
+		const authorInitials = _Initials(authorName);
+		const authorPresentation = _EntryAuthorPresentation(entry.author.kind);
+		const tone = authorPresentation.tone;
+		const avatarTone = authorPresentation.avatarTone;
+		const presentation: ConversationMessagePresentation = { id: entry.id, authorName, authorInitials, avatarTone, timestampLabel: _TimeLabel(entry.occurredAt), body: "", tone, accessibleStatus: entry.state === "completed" ? undefined : entry.state };
+		const html = entry.state === "streaming" ? toStreamingMarkdownHtml(text) : toSanitizedMarkdownHtml(text);
+		return { message: presentation, richText: { messageId: entry.id, html, label: `${authorName} message` } };
 	});
 }
 
-/** Select the fixed display identity for one admitted live message role. */
-function _LiveAuthor(agent: boolean): { readonly name: string; readonly initials: string; readonly avatarTone: AvatarTones; readonly tone: ConversationMessageTones }
+/** Map a stamped author kind to presentation only; the server-stamped name remains authoritative history. */
+function _EntryAuthorPresentation(kind: ConversationEntry["author"]["kind"]): { readonly avatarTone: AvatarTones; readonly tone: ConversationMessageTones }
 {
-	if (agent) return { name: "Agent", initials: "A", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
-	return { name: "OpenCrane", initials: "OC", avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
+	switch (kind)
+	{
+		case "human": return { avatarTone: AvatarTones.Blue, tone: ConversationMessageTones.Participant };
+		case "agent": return { avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
+		case "service":
+		case "system": return { avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
+	}
 }
 
-/** Select display-only authorship without using a role as identity authority. */
-function _Author(message: ConversationMessage, selfRef: string | null, participantRefs: readonly string[]): { readonly name: string; readonly initials: string; readonly avatarTone: AvatarTones; readonly tone: ConversationMessageTones }
+/** Derive compact display initials without treating them as identity authority. */
+function _Initials(name: string): string
 {
-	if (message.participantRef !== null)
-	{
-		if (message.participantRef === selfRef) return { name: "You", initials: "Y", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Participant };
-		const others = participantRefs.filter(reference => reference !== selfRef);
-		const index = others.indexOf(message.participantRef);
-		const number = index < 0 ? 1 : index + 1;
-		return { name: `Participant ${number}`, initials: `P${number}`, avatarTone: AvatarTones.Blue, tone: ConversationMessageTones.Participant };
-	}
-	if (message.role === MessageRoles.Assistant || message.runId !== null) return { name: "Agent", initials: "A", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
-	return { name: "OpenCrane", initials: "OC", avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
+	const words = name.trim().split(/\s+/u).filter(Boolean);
+	return words.slice(0, 2).map(word => word[0]?.toUpperCase() ?? "").join("") || "?";
 }
 
 /** Format a valid server instant without exposing locale-sensitive source fields. */
 function _TimeLabel(value: string): string
 {
 	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "Time unavailable";
+	if (Number.isNaN(date.getTime()))
+		return "Time unavailable";
 	return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
 }

@@ -1,6 +1,6 @@
 # opencrane-dev GKE overlay — layer on top of gcp.yaml.
 #
-# Cluster: gke_weownai-proto_europe-west1-b_opencrane-dev  (project weownai-proto)
+# Cluster: gke_weownai-proto_europe-west1_opencrane-dev  (project weownai-proto)
 # Base domain: dev.opencrane.ai
 #
 # Usage (via the multi-tenant profile). The deploy script uses --reset-then-reuse-values:
@@ -14,7 +14,7 @@
 # deploy.sh below is a checked-out copy of it.
 #   apps/fleet-platform/deploy.sh \
 #     --base-domain dev.opencrane.ai \
-#     --ingress-ip 34.22.213.142 \
+#     --ingress-ip 35.205.225.244 \
 #     --opencrane-server-tag <new-server-image-tag> \
 #     --values apps/_infra/deploy-k8s/platform/values/opencrane-dev.yaml
 
@@ -23,3 +23,9 @@ global:
 
 ingress:
   domain: dev.opencrane.ai
+
+historyStore:
+  kurrentdb:
+    # This cluster's node-local DNS resolver is outside the kube-dns Pod selector.
+    dnsResolverCidrs:
+      - 169.254.20.10/32

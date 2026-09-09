@@ -1,42 +1,6 @@
 BEGIN;
 
-CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT)
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-DECLARE
-    actual_message TEXT;
-BEGIN
-    BEGIN
-        EXECUTE statement;
-    EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
-        IF strpos(actual_message, expected_message) > 0 THEN
-            RAISE NOTICE 'PASS: %', test_name;
-            RETURN;
-        END IF;
-        RAISE EXCEPTION 'FAIL: % returned unexpected error: %', test_name, actual_message;
-    END;
-    RAISE EXCEPTION 'FAIL: % unexpectedly succeeded', test_name;
-END;
-$$;
-
-CREATE FUNCTION pg_temp.assert_true(test_name TEXT, condition BOOLEAN)
-RETURNS VOID
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF condition IS NOT TRUE THEN
-        RAISE EXCEPTION 'FAIL: %', test_name;
-    END IF;
-    RAISE NOTICE 'PASS: %', test_name;
-END;
-$$;
-
-INSERT INTO "principals" (
-    "id", "silo_id", "issuer", "subject", "provenance", "updated_at"
-) VALUES (
-    'active-grant-test-principal', 'active-grant-test-silo',
-    'https://identity.example.test', 'active-grant-test-subject', 'external', clock_timestamp()
-);
+SELECT pg_temp.seed_external_user('active-grant-test-silo', 'active-grant-test-principal');
 
 INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",

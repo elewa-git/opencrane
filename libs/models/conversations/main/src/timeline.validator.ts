@@ -29,11 +29,8 @@ const _MembershipTimelineEntrySchema = z.object({ ..._TimelineEntryBaseShape, ki
 /** Exact system-source timeline validator. */
 const _SystemTimelineEntrySchema = z.object({ ..._TimelineEntryBaseShape, kind: z.literal(ConversationTimelineEntryKinds.System), systemEventId: _IdentifierSchema }).strict();
 
-/** Validates an agent-thread delivery reference in its immediate parent conversation. */
-const _ParentDeliveryTimelineEntrySchema = z.object({ ..._TimelineEntryBaseShape, kind: z.literal(ConversationTimelineEntryKinds.ParentDelivery), parentDeliveryAgentThreadId: _IdentifierSchema }).strict();
-
 /** Validates one timeline entry: its database-allocated position plus the reference for its source kind. */
-export const ___ConversationTimelineEntrySchema: z.ZodType<ConversationTimelineEntry> = z.discriminatedUnion("kind", [_MessageTimelineEntrySchema, _RunEventTimelineEntrySchema, _MembershipTimelineEntrySchema, _SystemTimelineEntrySchema, _ParentDeliveryTimelineEntrySchema]);
+export const ___ConversationTimelineEntrySchema: z.ZodType<ConversationTimelineEntry> = z.discriminatedUnion("kind", [_MessageTimelineEntrySchema, _RunEventTimelineEntrySchema, _MembershipTimelineEntrySchema, _SystemTimelineEntrySchema]);
 
 /** Strict validator for a resumable cursor bound to one conversation and observed position. */
-export const ___ConversationReplayCursorSchema: z.ZodType<ConversationReplayCursor> = z.object({ conversationId: _IdentifierSchema, position: _PositionSchema, subframe: z.number().int().nonnegative().max(255).optional() }).strict();
+export const ___ConversationReplayCursorSchema: z.ZodType<ConversationReplayCursor> = z.object({ conversationId: _IdentifierSchema, position: _PositionSchema }).strict();

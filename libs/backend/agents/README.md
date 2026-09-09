@@ -25,16 +25,14 @@ agent principles rather than becoming personal-only by proximity.
 | [`personal/memory`](./personal/memory/README.md) | Personal specialization: verified dataset and preference-fact selection. |
 | [`personal/personas`](./personal/personas/README.md) | Personal specialization: persona approval process. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
-| [`execution/admission`](./execution/admission/main/README.md) | Shared: trusted personal and managed entrypoints into immutable run admission. |
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
-| [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
-| [`runtime`](./runtime/README.md) | Shared: warm runtime Pod claims plus class-specific worker Job controllers. |
+| [`runtime`](./runtime/README.md) | Shared: class-specific governed worker Job controllers. |
 | [`runtime/workloads/contract`](./runtime/workloads/contract/README.md) | Shared claim lease and binding fields for class-specific workloads. |
 | [`runtime/workloads/k8s-controller`](./runtime/workloads/k8s-controller/README.md) | Exact Job adoption, release, and Pod checks shared by workload classes. |
 
 ```
  personal specialization                shared agent execution
- configuration · personal memory · personas ──► inputs ──► runs ──► protocol ──► claimed warm Pod
+ configuration · personal memory · personas ──► inputs ──► runs
                                                      ▲
                                              admission (trusted entry)
                    │                           frozen input  attempt   bounded executor boundary
@@ -59,9 +57,9 @@ sits *across* the domains, so its constraint additionally allows `scope:executio
 admission transaction it compiles into), `scope:membership` (verified identity evidence), and
 `scope:artifacts` — see the `depConstraint` in `eslint.config.mjs`.
 
-`execution/protocol` may additionally consume the shared agent model, run/conversation/authorization
-ports, and contracts required to validate an attempt. Neither it nor the runtime controller can import
-an app, transport adapter, or model driver.
+Execution packages may additionally consume the shared agent model and the run, conversation, and
+authorization ports needed to validate an attempt. Runtime workload controllers cannot import an
+app, transport adapter, or model driver.
 
 ## See also
 

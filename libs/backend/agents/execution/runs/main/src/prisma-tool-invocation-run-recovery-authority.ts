@@ -9,7 +9,7 @@ import type { ToolInvocationRunRecoveryRepository, ToolInvocationRunRecoveryUnit
  *
  * Authorization decides that a tool invocation needs recovery, but must not know how AgentRun is
  * stored; this adapter is that seam. Both transitions run on the caller's transaction and never
- * move a run out of a cancelling or finished state, so recovery can never resurrect a run that
+	 * move a run out of a finished state, so recovery can never resurrect a run that
  * has already stopped.
  *
  * Called by: the external-action, MCP-runtime, and production-runtime-dispatch composition
@@ -46,13 +46,13 @@ class PrismaToolInvocationRunRecoveryUnitOfWork implements ToolInvocationRunReco
 		this.transaction = transaction;
 	}
 
-	/** Moves the run into RecoveryRequired, never out of a cancelling or finished state. */
+	/** Moves the run into RecoveryRequired only from an active state. */
 	enterRecoveryRequired(command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>
 	{
 		return this._repository().enterRecoveryRequired(command);
 	}
 
-	/** Moves the run back to Running, never out of a cancelling or finished state. */
+	/** Moves the run back to Running only from RecoveryRequired. */
 	resumeRunning(command: ToolInvocationRunRecoveryCommand): Promise<boolean>
 	{
 		return this._repository().resumeRunning(command);
@@ -81,10 +81,15 @@ class PrismaToolInvocationRunRecoveryRepository implements ToolInvocationRunReco
 	async enterRecoveryRequired(command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>
 	{
 		const changed = await this.transaction.agentRun.updateMany({ where: { id: command.runId, attempt: command.attempt, state: AgentRunState.Running }, data: { state: AgentRunState.RecoveryRequired } });
-		if (changed.count === 1) return ToolInvocationRunRecoveryEnterResults.Entered;
+		if (changed.count === 1)
+		{
+			return ToolInvocationRunRecoveryEnterResults.Entered;
+		}
 		const state = await this._state(command);
-		if (state === AgentRunState.RecoveryRequired) return ToolInvocationRunRecoveryEnterResults.AlreadyRecoveryRequired;
-		if (state === AgentRunState.Cancelling) return ToolInvocationRunRecoveryEnterResults.Cancelling;
+		if (state === AgentRunState.RecoveryRequired)
+		{
+			return ToolInvocationRunRecoveryEnterResults.AlreadyRecoveryRequired;
+		}
 		return ToolInvocationRunRecoveryEnterResults.Conflict;
 	}
 
@@ -92,7 +97,10 @@ class PrismaToolInvocationRunRecoveryRepository implements ToolInvocationRunReco
 	async resumeRunning(command: ToolInvocationRunRecoveryCommand): Promise<boolean>
 	{
 		const changed = await this.transaction.agentRun.updateMany({ where: { id: command.runId, attempt: command.attempt, state: AgentRunState.RecoveryRequired }, data: { state: AgentRunState.Running } });
-		if (changed.count === 1) return true;
+		if (changed.count === 1)
+		{
+			return true;
+		}
 		return this._hasState(command, AgentRunState.Running);
 	}
 

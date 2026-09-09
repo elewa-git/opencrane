@@ -58,4 +58,3 @@ short-lived `opencrane-mcp-executor` token, and bounded resources.
 
 - Parent: [MCP executor runtime](../README.md)
 - Shared claim: [workloads/contract](../../workloads/contract/README.md)
-- Existing runtime launcher: [runtime/k8s-launcher](../../k8s-launcher/README.md)

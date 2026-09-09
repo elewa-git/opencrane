@@ -12,8 +12,8 @@ They solve different problems and neither should be mistaken for the other.
 ::: info What counts as one run?
 One message in an **Agent session** starts one governed run. A later message starts another run.
 Ordinary **Direct** and **Group** messages do not start an agent run, so the technical limits on an
-agent revision do not apply to those messages. Mentioning an agent from a group conversation does
-start an agent run for that request.
+agent revision do not apply to those messages. Starting assistant work from a group's `@agent`
+message is still planned; it is not an available way to start a run in 0.11.
 :::
 
 ## Default limits for a personal assistant
@@ -65,9 +65,9 @@ The model-routing service mints an attempt-scoped LiteLLM virtual key. The key c
 - an expiry aligned with the workload assignment; and
 - no upstream provider secret.
 
-After the database binds the exact claimed Pod and its one-use proof key, OpenCrane returns that
-attempt key to the runtime. The runtime keeps it only in process memory and never receives the
-LiteLLM master key.
+After OpenCrane rechecks the exact computer lease generation, AgentIdentity, membership and claimed
+Pod UID, it returns the attempt key in the frozen turn bootstrap. The computer keeps it only in
+process memory and never receives the LiteLLM master key.
 
 ## When a spending limit is reached
 

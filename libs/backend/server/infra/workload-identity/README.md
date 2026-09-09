@@ -19,14 +19,14 @@ identity for the next transport or backend authority.
  └───────────────┬────────────────┘
                  │ reviewed namespace · ServiceAccount · Pod UID
                  ▼
- runtime stream / controller / worker router
+ computer / controller / worker router
 ```
 
-**In this flow:** [agent-runtime-stream](../agent-runtime-stream/README.md) ·
+**In this flow:** [conversations](../../conversations/main/README.md) ·
 [execution runs](../../../agents/execution/runs/main/README.md)
 
-It owns the fixed agent-controller, OCI MCP executor, artifact-preprocessor, artifact-scanner,
-memory-gateway server, and channel-proxy adapters; the skill-worker adapter whose exact coordinates
+It owns the fixed agent-controller, OCI MCP executor, artifact-preprocessor, artifact-scanner, and
+memory-gateway server adapters; the skill-worker adapter whose exact coordinates
 are checked by durable bootstrap authority; and the mutually exclusive personal/managed runtime
 adapters. Invariant: an unauthenticated review, wrong
 audience, unexpected namespace or ServiceAccount, missing bound Pod UID, or ambiguous runtime
@@ -41,8 +41,6 @@ audience returns no identity. The raw token and full Kubernetes response never l
 - `_CreateSkillAuthoringValidationTokenReviewer` — binds the Python validation Job to its fixed
   audience, namespace, ServiceAccount, and saved Pod UID.
 - `_CreateArtifactPreprocessorTokenReviewer` — binds preprocessing to its isolated worker namespace.
-- `_CreateChannelProxyTokenReviewer` — binds channel resolution to one deployment-selected audience,
-  namespace, and ServiceAccount without duplicating Kubernetes TokenReview in the application root.
 - `_CreateRuntimeTokenReviewer` — separates personal and managed runtime audience, namespace, and
   ServiceAccount grammars.
 - `_ValidateRuntimeIdentityNamespaces`, `_ValidateIsolatedWorkloadNamespace` — fail startup when
@@ -70,4 +68,4 @@ reads no environment variables and opens no listener.
 ## See also
 
 - Parent index: [infra](../README.md)
-- Siblings: [agent-runtime-stream](../agent-runtime-stream/README.md) · [auth](../auth/README.md) · [api](../api/README.md)
+- Siblings: [agent-sandbox](../agent-sandbox/README.md) · [auth](../auth/README.md) · [api](../api/README.md)

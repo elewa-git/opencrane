@@ -5,7 +5,7 @@ OpenCrane separates **session history**, **run context**, **long-term semantic m
 integrator can see what a running agent may receive, what it may propose, and what remains
 server-owned.
 
-> See also: [Governed agent runtime](/integrators/agent-runtime) (runtime and action custody),
+> See also: [Conversation computers](/integrators/agent-runtime) (compute and action custody),
 > [OCI MCP runtime](/integrators/oci-mcp-runtime) (tool execution),
 > [Long-term memory, Cognee and dreaming](/integrators/long-term-memory-cognee) (datasets and
 > consolidation), and [Silo IAM](/integrators/silo-iam) (scope and grants).
@@ -77,8 +77,8 @@ unbounded transcript.
 
 ✅ Conversation writes are durable and ordered. 🔶 At admission, however, OpenCrane currently selects
 **every completed message** in the conversation, and the prompt compiler expands every selected
-message into the model input. `ConversationContextRevision` provides a schema for compacted context,
-but no production writer or reader uses it yet.
+message into the model input. No compacted-context store exists yet; the earlier placeholder table was
+removed because nothing wrote to or read from it, and compaction will bring its own schema when it lands.
 
 The target read path is therefore:
 
@@ -156,17 +156,17 @@ dataset, and a conflicting correction must fail closed.
 
 ## Outbound and return boundaries
 
-The runtime has an outbound stream to OpenCrane, not direct access to people, external integration
-providers, child agents or durable storage. The separately fenced model-provider call is shown as
-its own boundary. Each outgoing path reaches a different server authority, and only an accepted,
-saved result may return to the same active attempt.
+The conversation computer uses bounded bootstrap and output calls to OpenCrane, not direct access to
+people, external integration providers, child agents or durable storage. The separately fenced
+model-provider call is shown as its own boundary. Each outgoing path reaches a different server
+authority, and only an accepted, saved result may return to the same active attempt.
 
 ```text
                                 model provider
                                   ▲       │
         attempt-scoped LiteLLM request    │ model output
                                   │       ▼
-                              claimed runtime Pod
+                           conversation-computer Pod
                                         │
       ┌──────────────┬──────────────────┼─────────────────┬────────────────┐
       │              │                  │                 │                │
@@ -259,7 +259,7 @@ credentials, raw tool arguments and raw tool results are not projected into the 
 ## Source
 
 - [`Run input assembly`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/inputs/main/README.md)
-- [`Runtime protocol and external-action worker`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/protocol/README.md)
+- [`Conversation computer authority`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/conversations/main/README.md)
 - [`Personal memory selection`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md)
 - [`Memory gateway client`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/infra/memory-gateway-client/README.md)
 - [`Memory and run schema`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/memory.prisma)

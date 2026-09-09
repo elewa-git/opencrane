@@ -114,7 +114,7 @@ own no runtime flow, skip the diagram or use a one-line "used by" sketch.
 >  an agent wants to act  (write a file · call a tool · read memory)
 >           │
 >           ▼
->    channel-targets ......... works out WHO the agent is, issues a permission slip
+>    identity ................ works out WHO the agent is, issues a permission slip
 >           │
 >           ▼
 >  ┌────────────────────────────┐
@@ -125,9 +125,9 @@ own no runtime flow, skip the diagram or use a one-line "used by" sketch.
 >    action router ........... carries out the effect, or refuses
 > ```
 >
-> **In this flow:** `channel-targets` · the runtime action path
+> **In this flow:** `identity` · the runtime action path
 > *(in a real README each other-package name is a relative link to its own README, e.g.*
-> `[channel-targets](../../libs/backend/server/agents/channel-targets/main/README.md)`*)*
+> `[identity](../../libs/backend/server/iam/identity/main/README.md)`*)*
 >
 > To decide, it confirms three things line up: the proof the agent gives that it really is who it
 > claims, the permission slip issued earlier, and what the system can independently see about the
@@ -176,7 +176,8 @@ to; a backend authority with a diagram lands near the top of its range and that 
 | Frontend feature / element | `libs/frontend/features/*`, `libs/frontend/elements/*` | the route/UI slice it owns, its store dependencies, `scope:web` rule, consumer | 30–55 lines |
 | Frontend state (port/adapter) | `libs/frontend/state/*` | the gateway port it defines/implements, the HTTP surface it adapts, write-only invariants, consumer | 30–50 lines |
 | Frontend core / platform | `libs/frontend/{core,platform}` | the cross-cutting primitives it holds, FORK-shared status | 30–55 lines |
-| Deployable app | `apps/opencrane`, `apps/opencrane-ui`, `apps/channel-proxy`, `apps/artifact-service` | what it composes, trust/runtime posture, entrypoint, deploy unit | 45–100 lines |
+| Deployable app | `apps/opencrane`, `apps/opencrane-ui`, `apps/artifact-service` |
+ what it composes, trust/runtime posture, entrypoint, deploy unit | 45–100 lines |
 | Vendored infra app | `apps/_infra/{cognee,litellm}`, `apps/postgres` | upstream link, **why we run it**, pinned image/version, config knobs, what OpenCrane owns vs the vendor | 30–55 lines |
 | Server infra lib | `libs/backend/server/infra/*` | the runtime seam it owns, its sole consumer, what it must not import | 30–50 lines |
 | Group / area index | grouping dirs | the child map table + the tier dependency rule + a child diagram | 25–45 lines |

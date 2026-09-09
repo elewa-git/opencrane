@@ -31,7 +31,6 @@
 				"default",
 				"^production",
 				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
-				"{workspaceRoot}/libs/frontend/elements/a2ui/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
 				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*",
@@ -39,7 +38,6 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
 			],
@@ -68,7 +66,6 @@
 				"default",
 				"^production",
 				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
-				"{workspaceRoot}/libs/frontend/elements/a2ui/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
 				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*",
@@ -76,7 +73,6 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
 			],

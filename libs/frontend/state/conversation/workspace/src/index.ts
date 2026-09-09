@@ -4,21 +4,26 @@
  * Everything the workspace feature, the transport adapter and the app may use is listed here; a
  * consumer that reaches into `./lib/*` is bypassing the boundary this file draws.
  *
- * Some lines re-export from neighbouring packages — conversation models, the shared event-stream
- * contract, AG-UI state — so one import covers the whole screen and this package stays the single place
+ * Some lines re-export from neighbouring packages — conversation models and the shared history-stream
+ * contract — so one import covers the whole screen and this package stays the single place
  * a consumer looks up a workspace name. Each declaration keeps its own documentation, and hovering a
  * name here follows through to it.
  *
  * @see ../README.md for what this package owns and what it deliberately does not.
  */
-export { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./lib/conversation-workspace.gateway";
+export { CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./lib/conversation-workspace.gateway";
 export { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./lib/conversation-workspace-gateway.errors";
 export { ConversationWorkspaceStore } from "./lib/conversation-workspace.store";
+export { ConversationComputerReviewStore } from "./lib/conversation-computer-review.store";
 export { ConversationOnboardingHistoryStore } from "./lib/conversation-onboarding-history.store";
-export { ConversationRunStore } from "./lib/conversation-run.store";
-export { _ParseConversationDetail, _ParseConversationRun, _ParseConversationSummary, _ParseConversationWorkspaceDirectory } from "./lib/conversation-workspace.validator";
-export { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates } from "./lib/conversation-workspace.types";
+export { _ParseConversationDetail, _ParseConversationSummary, _ParseConversationWorkspaceDirectory } from "./lib/conversation-workspace.validator";
+export { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates } from "./lib/conversation-workspace.types";
 export { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 export { ConversationEventStreamStatuses } from "@opencrane/state/conversation/stream";
-export { AgUiToolStatuses } from "@opencrane/state/conversation/ag-ui";
-export type { ConversationCreationDirectory, ConversationDirectoryParticipant, ConversationMessage, ConversationOnboardingHistory, ConversationOnboardingHistoryEntry, ConversationOnboardingHistoryProjection, ConversationPersonalAgent, ConversationRun, ConversationSummary, ConversationWorkspaceDetail, ConversationWorkspaceGateway, ConversationWorkspaceNavigationIntent, CreateConversationCommand, RetryConversationRunCommand, SubmitConversationMessageBlock, SubmitConversationMessageCommand, SubmitConversationSteeringCommand } from "./lib/conversation-workspace.types";
+export type { ConversationComputerBrowserTarget, ConversationComputerCommandResult, ConversationComputerReviewGateway, ConversationCreationDirectory, ConversationDirectoryParticipant, ConversationOnboardingHistory, ConversationOnboardingHistoryEntry, ConversationOnboardingHistoryProjection, ConversationPersonalAgent, ConversationSummary, ConversationWorkspaceDetail, ConversationWorkspaceGateway, ConversationWorkspaceNavigationIntent, CreateConversationCommand, SubmitConversationMessageCommand } from "./lib/conversation-workspace.types";
+
+export { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_GROUP_CHILD_GATEWAY } from "./lib/conversation-workspace.gateway";
+export { ConversationGroupChildStore } from "./lib/conversation-group-child.store";
+export { ConversationGroupCommandStates } from "./lib/conversation-group-child.types";
+export type { ConversationCompanyAssistant, ConversationGroupSource, ConversationGroupChildGateway } from "./lib/conversation-group-child.types";
+export { _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare } from "./lib/conversation-group-response.validator";

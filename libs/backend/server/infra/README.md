@@ -11,16 +11,15 @@ remaining grouped with the server code that composes them.
 | Package | What it owns |
 | --- | --- |
 | [`api`](./api/README.md) | Kubernetes API constants and error normalisation. |
+| [`agent-sandbox`](./agent-sandbox/README.md) | SandboxClaim realization and exact Pod-to-lease verification. |
 | [`auth`](./auth/README.md) | OIDC login, sessions, and request-principal resolution. |
-| [`agent-runtime-stream`](./agent-runtime-stream/README.md) | Projected-token runtime HTTP/SSE framing. |
-| [`agent-runtime-continuation`](./agent-runtime-continuation/README.md) | Secret-backed encryption for durable model-loop checkpoints. |
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
+| [`history-store`](./history-store/README.md) | KurrentDB-backed append-only stream history. |
 | [`http`](./http/README.md) | Express transport plumbing. |
 | [`memory-gateway-client`](./memory-gateway-client/README.md) | Authenticated memory reads with fail-closed writes. |
 | [`mcp-era-probe`](./mcp-era-probe/README.md) | HTTPS-only, DNS-rebinding-resistant MCP 2026-07-28 discovery probe. |
 | [`oci-registry`](./oci-registry/README.md) | Imports checked OCI images into one configured registry repository by digest. |
 | [`organization-membership-gateway`](./organization-membership-gateway/README.md) | Projected-token-authenticated HTTPS transport to Fleet membership and billing. |
-| [`sandbox-execution`](./sandbox-execution/README.md) | Fail-closed sandboxed tool-execution port. |
 | [`prisma-unit-of-work`](./prisma-unit-of-work/README.md) | The shared transaction envelope: explicit isolation and bounded retry of proven rollbacks. |
 | [`workflows`](./workflows/README.md) | Engine-neutral saved workflow tasks, guardrails, scheduling helpers, adapters, and test support. |
 
@@ -28,8 +27,7 @@ remaining grouped with the server code that composes them.
  inbound request ──► http ──► auth ──► backend domain route
                                   │
                   api ───────────┤
- workload identity ─► runtime stream ◄── runtime Pod
- external-action ports ───────────┘
+ workload identity ─► workload routes
 ```
 
 ## Dependency rule for this tier

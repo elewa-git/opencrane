@@ -49,12 +49,65 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
 	{
 		const fetch = vi.fn()
 			.mockResolvedValueOnce(new Response("missing", { status: 404 }))
-			.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+			.mockResolvedValueOnce(_successResponse());
 		vi.stubGlobal("fetch", fetch);
 
 		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Applied);
 		expect(fetch.mock.calls.map(function _Method(call) { return (call[1] as RequestInit).method; })).toEqual(["PATCH", "POST"]);
 		expect(_MARK_ACTIVE_SPAN_FAILED).not.toHaveBeenCalled();
+	});
+
+	it("creates after the installed LiteLLM PATCH returns its missing-credential error inside HTTP 200", async function _ReturnedMissingCredential()
+	{
+		const fetch = vi.fn().mockResolvedValueOnce(_errorResponse("404")).mockResolvedValueOnce(_successResponse());
+		vi.stubGlobal("fetch", fetch);
+
+		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Applied);
+		expect(fetch.mock.calls.map(function _Method(call) { return (call[1] as RequestInit).method; })).toEqual(["PATCH", "POST"]);
+		expect(_MARK_ACTIVE_SPAN_FAILED).not.toHaveBeenCalled();
+	});
+
+	it.each(["401", "403", "500"])("rejects a returned PATCH error %s without creating a credential", async function _ReturnedPatchError(code)
+	{
+		const fetch = vi.fn().mockResolvedValue(_errorResponse(code));
+		vi.stubGlobal("fetch", fetch);
+
+		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Rejected);
+		expect(fetch).toHaveBeenCalledOnce();
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
+
+	it.each(["{}", "null", "[]", "invalid-json", '{"code":404}', '{"success":false}', '{"success":true,"code":"404"}', '{"code":"4040"}'])("leaves the PATCH outcome uncertain for an unconfirmed body %s", async function _UnconfirmedPatch(body)
+	{
+		const fetch = vi.fn().mockResolvedValue(new Response(body, { status: 200 }));
+		vi.stubGlobal("fetch", fetch);
+
+		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
+		expect(fetch).toHaveBeenCalledOnce();
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
+
+	it("does not accept a returned POST error as a created credential", async function _ReturnedCreateError()
+	{
+		const fetch = vi.fn().mockResolvedValueOnce(_errorResponse("404")).mockResolvedValueOnce(_errorResponse("500"));
+		vi.stubGlobal("fetch", fetch);
+
+		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Rejected);
+		expect(fetch).toHaveBeenCalledTimes(2);
+	});
+
+	it("keeps a malformed POST response and its parser error out of logs", async function _MalformedCreate()
+	{
+		const fetch = vi.fn().mockResolvedValueOnce(_errorResponse("404")).mockResolvedValueOnce(new Response('sk-private-response {', { status: 200 }));
+		const warn = vi.fn();
+		const logger = { warn } as never;
+		vi.stubGlobal("fetch", fetch);
+
+		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" }, logger)).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
+		const fields = warn.mock.calls[0]?.[0] as { err: Error };
+		expect(fields.err.message).not.toContain("sk-private-response");
+		expect(fields.err.cause).toBeUndefined();
+		expect(fetch).toHaveBeenCalledTimes(2);
 	});
 
 	it("marks an aborted POST uncertain after confirmed absence", async function _UncertainCreate()
@@ -86,7 +139,7 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
 				throw new Error("request timed out while upstream continued");
 			}
 			storedKey = body.credential_values.api_key;
-			return new Response("{}", { status: 200 });
+			return _successResponse();
 		});
 		vi.stubGlobal("fetch", fetch);
 		const desired = { credentialName: "byok-openai", provider: "openai", apiKey: "sk-desired" };
@@ -115,4 +168,42 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
 		await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Rejected);
 		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
 	});
+
+	it("confirms the explicit DELETE success response", async function _ConfirmedDelete()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_successResponse()));
+
+		await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Applied);
+		expect(_MARK_ACTIVE_SPAN_FAILED).not.toHaveBeenCalled();
+	});
+
+	it("accepts a returned DELETE absence but rejects other returned errors", async function _ReturnedDeleteError()
+	{
+		const fetch = vi.fn().mockResolvedValueOnce(_errorResponse("404")).mockResolvedValueOnce(_errorResponse("500"));
+		vi.stubGlobal("fetch", fetch);
+
+		await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Applied);
+		await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Rejected);
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
+
+	it("leaves an unconfirmed DELETE body uncertain", async function _UnconfirmedDelete()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 200 })));
+
+		await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
 });
+
+/** Uses the success fields returned by the installed credential endpoints. */
+function _successResponse(): Response
+{
+	return new Response(JSON.stringify({ success: true, message: "Credential updated successfully" }), { status: 200 });
+}
+
+/** Reproduces the installed LiteLLM 1.81.0 ProxyException encoded through FastAPI's vars path. */
+function _errorResponse(code: string): Response
+{
+	return new Response(JSON.stringify({ message: "Credential not found in DB.", type: "internal_server_error", param: "None", code, openai_code: Number(code), headers: {}, provider_specific_fields: null }), { status: 200 });
+}

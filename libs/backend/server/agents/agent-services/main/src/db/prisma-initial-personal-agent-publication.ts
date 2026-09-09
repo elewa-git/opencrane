@@ -26,13 +26,18 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 	private readonly defaultModelResolver: InitialPersonalAgentDefaultModelResolver;
 	/** Shared product-effect adapter bound to the onboarding transaction. */
 	private readonly productEffects: PersonalAgentProductEffects;
+	/** Deployment-selected profile that conversation creation and activation also require. */
+	private readonly workloadProfile: string;
 
 	/** Creates the publication strategy inside the caller's Serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver, productEffects: PersonalAgentProductEffects | null = null)
+	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver, workloadProfile: string, productEffects: PersonalAgentProductEffects | null = null)
 	{
+		if (workloadProfile.trim().length === 0 || workloadProfile.trim() !== workloadProfile)
+			throw new Error("Personal agent publication requires a configured workload profile");
 		this.transaction = transaction;
 		this.defaultModelResolver = defaultModelResolver;
 		this.productEffects = productEffects ?? new PrismaPersonalAgentProductEffectsAuthority(transaction);
+		this.workloadProfile = workloadProfile;
 	}
 
 	/**
@@ -68,7 +73,7 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			personaProfileId: persona.profileId,
 			modelDefinitionId: model.modelDefinitionId,
 			now: command.provisionedAt,
-			argumentsValue: { onboardingId: command.onboardingId, onboardingPersonaRevisionId: command.onboardingPersonaRevisionId, materializedPersonaRevisionId: persona.id, readinessKind: command.readinessKind, provisionedAt: command.provisionedAt.toISOString() },
+			argumentsValue: { onboardingId: command.onboardingId, onboardingPersonaRevisionId: command.onboardingPersonaRevisionId, materializedPersonaRevisionId: persona.id, readinessKind: command.readinessKind, provisionedAt: command.provisionedAt.toISOString(), workloadProfile: this.workloadProfile },
 		};
 		await this.productEffects.admitInitialCreation(productCommand);
 
@@ -80,7 +85,7 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 				kind: AgentServiceKind.Personal,
 				name: persona.displayName,
 				state: AgentServiceState.Draft,
-				workloadProfile: INITIAL_PERSONAL_AGENT_POLICY.workloadProfile,
+				workloadProfile: this.workloadProfile,
 				createdAt: command.provisionedAt,
 				updatedAt: command.provisionedAt,
 			},

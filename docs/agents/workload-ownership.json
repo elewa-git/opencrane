@@ -4,18 +4,19 @@
   "requiredWorkloadIds": [
     "opencrane-server",
     "opencrane-ui",
-    "channel-proxy",
     "memory-gateway",
     "artifact-service",
     "artifact-preprocessor",
     "artifact-scanner",
     "agent-controller",
-    "agent-runtime",
-    "managed-agent-runtime",
     "mcp-executor",
     "skill-authoring",
     "cognee",
     "litellm",
+    "kurrentdb",
+    "kurrentdb-bootstrap",
+    "kurrentdb-backup",
+    "agent-sandbox",
     "postgres-database",
     "postgres-pooler",
     "postgres-database-privileges"
@@ -32,7 +33,6 @@
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-opencrane-ui-spa",
-        "Deployment/opencrane-channel-proxy",
         "Deployment/opencrane-memory-gateway",
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
@@ -42,7 +42,6 @@
     {
       "id": "all-supported-pod-profiles",
       "setValues": [
-        "channelProxy.enabled=true",
         "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
         "memoryGateway.kubernetesApiServerPort=443",
         "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
@@ -62,15 +61,41 @@
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-opencrane-ui-spa",
-        "Deployment/opencrane-channel-proxy",
         "Deployment/opencrane-memory-gateway",
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-artifact-scanner",
         "Deployment/opencrane-agent-controller",
-        "Deployment/opencrane-personal-warm",
-        "Deployment/opencrane-managed-warm",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm"
+      ]
+    },
+    {
+      "id": "history-store",
+      "setValues": [
+        "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "memoryGateway.kubernetesApiServerPort=443",
+        "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
+        "memoryGateway.kubernetesApiServerEndpointPort=443",
+        "historyStore.kurrentdb.enabled=true",
+        "historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls",
+        "historyStore.kurrentdb.bootstrapAdmin.existingSecret=kurrentdb-bootstrap",
+        "historyStore.kurrentdb.bootstrapOps.existingSecret=kurrentdb-bootstrap-ops",
+        "historyStore.kurrentdb.serviceCredential.existingSecret=kurrentdb-history-service",
+        "historyStore.kurrentdb.bootstrap.image.repository=registry.invalid/opencrane-kurrentdb-bootstrap",
+        "historyStore.kurrentdb.bootstrap.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "historyStore.kurrentdb.bootstrap.image.pullPolicy=IfNotPresent"
+      ],
+      "expectedRenderedPodClasses": [
+        "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-opencrane-ui-spa",
+        "Deployment/opencrane-memory-gateway",
+        "Deployment/opencrane-artifact-service",
+        "Deployment/opencrane-cognee",
+        "Deployment/opencrane-litellm",
+        "StatefulSet/opencrane-kurrentdb",
+        "Job/opencrane-kurrentdb-bootstrap",
+        "CronJob/opencrane-kurrentdb-backup"
       ]
     }
   ],
@@ -133,15 +158,6 @@
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.ui.deployment\"" }
     },
     {
-      "id": "channel-proxy",
-      "podClass": "Deployment/channel-proxy",
-      "renderedPodClass": "Deployment/opencrane-channel-proxy",
-      "image": "ghcr.io/elewa-git/opencrane-channel-proxy:<release-tag>",
-      "owner": "apps/channel-proxy",
-      "source": { "type": "file", "path": "apps/channel-proxy/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
-      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.channelProxy.resources\"" }
-    },
-    {
       "id": "memory-gateway",
       "podClass": "Deployment/memory-gateway",
       "renderedPodClass": "Deployment/opencrane-memory-gateway",
@@ -186,24 +202,6 @@
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentController.resources\"" }
     },
     {
-      "id": "agent-runtime",
-      "podClass": "Deployment/agent-runtime-personal-warm",
-      "renderedPodClass": "Deployment/opencrane-personal-warm",
-      "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
-      "owner": "apps/agent-runtime",
-      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_warm-runtime.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
-      "composition": { "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "include \"opencrane.agentController.warmRuntimeResources\"" }
-    },
-    {
-      "id": "managed-agent-runtime",
-      "podClass": "Deployment/agent-runtime-managed-warm",
-      "renderedPodClass": "Deployment/opencrane-managed-warm",
-      "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
-      "owner": "apps/agent-runtime",
-      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_warm-runtime.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
-      "composition": { "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "include \"opencrane.agentController.warmRuntimeResources\"" }
-    },
-    {
       "id": "mcp-executor",
       "podClass": "Job/mcp-executor-invocation",
       "image": "registry-imported OCI digest plus the pinned OpenCrane MCP companion",
@@ -234,6 +232,41 @@
       "owner": "apps/_infra/litellm",
       "source": { "type": "file", "path": "apps/_infra/litellm/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.litellm.deployment\"" }
+    },
+    {
+      "id": "kurrentdb",
+      "podClass": "StatefulSet/kurrentdb",
+      "renderedPodClass": "StatefulSet/opencrane-kurrentdb",
+      "image": "docker.kurrent.io/kurrent-latest/kurrentdb@sha256:<release-digest>",
+      "owner": "apps/_infra/kurrentdb",
+      "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_resources.tpl", "anchor": "kind: StatefulSet", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
+    },
+    {
+      "id": "kurrentdb-bootstrap",
+      "podClass": "Job/kurrentdb-bootstrap",
+      "renderedPodClass": "Job/opencrane-kurrentdb-bootstrap",
+      "image": "purpose-built bootstrap image at immutable OCI digest; the deploy engine derives a bounded operator replay Job from this installed template, freezing the verified script and silo target while removing the service credential",
+      "owner": "apps/_infra/kurrentdb",
+      "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_resources.tpl", "anchor": "kind: Job", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
+    },
+    {
+      "id": "kurrentdb-backup",
+      "podClass": "CronJob/kurrentdb-backup",
+      "renderedPodClass": "CronJob/opencrane-kurrentdb-backup",
+      "image": "fileCopy mode reuses the bootstrap image at its immutable OCI digest; volumeSnapshot mode uses the operator-supplied digest-pinned kubectl image. The deploy engine derives the one-off restore Job from this CronJob's jobTemplate.",
+      "owner": "apps/_infra/kurrentdb",
+      "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_backup.tpl", "anchor": "kind: CronJob", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
+    },
+    {
+      "id": "agent-sandbox",
+      "podClass": "Pod/AgentSandbox-profile",
+      "image": "ghcr.io/elewa-git/opencrane-conversation-computer@sha256:<release-digest>",
+      "owner": "apps/conversation-computer",
+      "source": { "type": "file", "path": "apps/_infra/agent-sandbox/helm/templates/_resources.tpl", "anchor": "kind: SandboxTemplate" },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentSandbox.resources\"" }
     },
     {
       "id": "postgres-database",

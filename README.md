@@ -2,218 +2,87 @@
 
 ## The vision
 
-AI assistants become far more valuable when they understand how people work, can use company tools,
-and can carry knowledge across conversations. At organisation scale, that creates a governance
-problem: every assistant needs the right identity, context, permissions, budget, and approval
-boundaries — without exposing one person's work to another.
+OpenCrane is building a company workspace where every employee has a private AI assistant and
+teams can delegate repeatable work to shared agents. Assistants should understand how people work,
+use the right company tools and knowledge, and carry useful context between conversations.
 
-OpenCrane is a self-hosted control plane for organisational AI. It gives every employee a durable
-personal assistant, lets the organisation run shared agents for scheduled and triggered work, and
-keeps the organisation in control of its data, knowledge, skills, tools, models, and audit history.
+The organisation chooses where OpenCrane runs, which models it uses, what each assistant may
+access, and which actions need a person's approval. Conversations, files and company configuration
+stay under its control. Data sent to an external model provider or integration follows the
+organisation's chosen configuration.
 
-## Why OpenCrane
+## What it does
 
-Vendor-hosted assistants are convenient, but they place proprietary workflows, conversations, and
-company knowledge inside another company's platform, and they tie an organisation's operating model
-to one model provider.
+OpenCrane brings five things together:
 
-OpenCrane keeps the organisational layer on infrastructure you control:
+- **People and teams:** company membership and permissions determine who may use or manage each resource.
+- **Assistants:** a personal assistant works privately for one employee; a shared agent is intended
+  to carry out a defined company task with its own permissions.
+- **Conversations:** a place to ask for work, follow progress and return to its history. An assistant
+  and a conversation are different things: the assistant helps; the conversation records the work.
+- **Tools, knowledge and files:** tools act in other systems, knowledge supplies context, and files
+  hold inputs and results.
+- **Company controls:** administrators manage access, model providers, spending limits and activity.
 
-- employee conversations, files, personas, and memory stay private to their authorised user;
-- company knowledge, integrations, skills, and agent definitions stay organisation-owned;
-- model providers and credentials can change without rebuilding the assistant product;
-- budgets, approvals, access decisions, and activity are governed in one place; and
-- each organisation runs inside its own isolated boundary.
+The intended experience is straightforward: ask for help preparing a customer meeting, let the
+assistant use the company information it may access, review any proposed action, and return later
+to the same work. That complete journey is the product goal; its individual capabilities have
+different implementation states.
 
-## Two kinds of agent
+## Current development status
 
-Everything in OpenCrane is built around one distinction.
+OpenCrane is **pre-MVP**. People can complete setup, get personal-assistant answers, talk in a group,
+and ask a company assistant for help in a linked chat. They can review and edit its answer before
+returning it to the group. These text-conversation journeys have passed live testing in the 0.11
+review baseline, including saved answers after a browser reload.
 
-- **Personal assistants** work for a single employee. An assistant can see and use only that
-  person's approved context, tools, skills, files, and memory. Its work is private to them, and it
-  builds up an understanding of how that employee works over time.
-- **Managed agents** do bounded work for the organisation, a department, a team, or a project — on a
-  schedule or in response to a trigger. Each managed agent runs under its own narrowly scoped
-  identity, and can never quietly inherit the person who created it, the employee who started it, or
-  anyone's private memory or personal tools.
+The wider vision still needs work: assistants do not yet perform governed tool actions, remember
+information across conversations, run shared schedules or delegate autonomously to other assistants.
+Administration and recovery have their own remaining product and qualification work.
 
-Both kinds share the same foundation: durable conversations, governed actions, versioned skills and
-files, and permitted access to organisation knowledge.
+See [what is built and what remains](https://opencrane.ai/guide/status) for the current distinction,
+[CHANGELOG.md](CHANGELOG.md) for capability changes, and [plan.md](plan.md) for active work.
 
-## How it works
+## How the system fits together
 
-Each organisation is one isolated boundary. Inside it, a control plane holds the durable record of
-everything — who the agents are, what they may do, and everything they have done. When an agent
-needs to act, OpenCrane spins up a short-lived, isolated agent runtime for that single task, hands it
-one frozen snapshot of its input, and removes it when the task finishes. The runtime streams its
-progress back to the control plane but holds no authority of its own, so an assistant survives
-restarts, scaling, and a closed browser tab without ever becoming the source of truth.
+The web workspace talks to an OpenCrane server that checks permissions and saves the work. When an
+assistant needs to run, it uses an isolated conversation computer. The computer can stop and be
+replaced while the conversation and saved workspace remain recoverable. Models, integrations,
+memory and files have their own shared services.
 
-```text
-        Employees                                              Schedules & triggers
-            │                                                           │
-            │                                                           │
-╔═══ YOUR ORGANISATION — one isolated boundary ═════════════════════════════════════════════════════╗
-║           │                                                           │                           ║
-║           │                                                           │                           ║
-║           ▼                                                           ▼                           ║
-║   ┌─────────────────────────┐  ┌─────────────────────────┐   ┌───────────────────────────────┐    ║
-║   │ Personal assistant      │  │ identity adjusted       │   │ Managed agent                 │    ║
-║   │ private to one          │╌╌│ to the employee         │   │ bounded, scoped work          │    ║
-║   │ employee                │  │ (per-person sidecar)    │   │ own scoped identity           │    ║
-║   └─────────────────────────┘  └─────────────────────────┘   └───────────────────────────────┘    ║
-║                │                                                             │                    ║
-║                └─────────────────┬───────────────────────────────────────────┘                    ║
-║                                  ▼                                                                ║
-║           ┌─────────────────────────────────────────────┐    ┌─────────────────────────────────┐  ║
-║           │           OpenCrane control plane           │    │ Shared organisation services    │  ║
-║           │       identity · conversations · tasks      │    │ maintained centrally,           │  ║
-║           │     approvals · budgets · access · audit    │    │ outside the agents              │  ║
-║           └─────────────────────────────────────────────┘    │                                 │  ║
-║               runs a           │   ▲   progress              │  • Models                       │  ║
-║                task            │   │                         │  • Tools                        │  ║
-║                                ▼   │                         │  • Memory & knowledge           │  ║
-║           ┌─────────────────────────────────────────────┐    │  • Files & artifacts            │  ║
-║           │                Agent runtime                │uses│                                 │  ║
-║           │     isolated & short-lived · one task ·     │───▶│                                 │  ║
-║           │           keeps no standing access          │    │                                 │  ║
-║           └─────────────────────────────────────────────┘    └─────────────────────────────────┘  ║
-║                                                                                                   ║
-║  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Container substrate - pre-warmed, swappable containers. (Autoscaling in-progress)           │  ║
-║  └─────────────────────────────────────────────────────────────────────────────────────────────┘  ║
-║                                                                                                   ║
-║                                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝
-```
+The [architecture overview](https://opencrane.ai/advanced/architecture) maps these responsibilities
+to the current applications and stores.
 
-The control plane governs the parts that must be consistent across every agent:
+## Get started
 
-- **Durable conversations** keep an ordered history that replays after a reconnect, instead of
-  trusting the browser or the runtime to remember.
-- **Governed actions** pause for approval when a step needs it, and record the exact action taken and
-  its outcome.
-- **Versioned skills and files** preserve which capability or input a task actually used, even after a
-  newer version is published.
-- **Organisation memory** makes permitted company knowledge available to an agent without granting it
-  broad access to any employee's private data.
-- **Budgets and audit** track spend and activity in one place, per agent and per organisation.
+If your organisation already runs OpenCrane, sign in at its address and follow the
+[personal-assistant setup guide](https://opencrane.ai/guide/persona).
 
-See the illustrated [architecture overview](https://opencrane.ai/advanced/architecture) for the
-full reader-facing system view.
+To install a development instance, start with the
+[installation guide](https://opencrane.ai/guide/getting-started). It links the supported Kubernetes
+setup, identity configuration and required deployment inputs. The 0.11 release installation uses a
+fresh database baseline.
 
-## What an organisation admin configures
-
-An agent's reach is set once, centrally, by an organisation admin — never by the agent or the
-person using it. Each setting becomes part of the effective contract OpenCrane freezes into a task
-before its agent runtime starts, so changing a policy shapes future tasks and never rewrites one
-already running.
-
-```text
-                                       ┌───────────────────┐
-                                       │ Organisation admin│
-                                       │                   │
-                                       └───────────────────┘
-                                                 ▼
-╔═══ OpenCrane control plane — what an organisation admin configures ═════════════════════════════╗
-║                                                                                                 ║
-║  ┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐  ║
-║  │ People & access                           │   │ Agents & skills                           │  ║
-║  │ employees · departments · teams ·         │   │ managed agent definitions & revisions     │  ║
-║  │ projects · who may use what (grants)      │   │ schedules · triggers · published skills   │  ║
-║  └───────────────────────────────────────────┘   └───────────────────────────────────────────┘  ║
-║                                                                                                 ║
-║  ┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐  ║
-║  │ Tools & integrations                      │   │ Models & providers                        │  ║
-║  │ MCP tool servers · tool grants            │   │ provider keys (BYOK) · enabled models     │  ║
-║  │ external integrations & approvals         │   │ model routing defaults                    │  ║
-║  └───────────────────────────────────────────┘   └───────────────────────────────────────────┘  ║
-║                                                                                                 ║
-║  ┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐  ║
-║  │ Knowledge                                 │   │ Budgets & audit                           │  ║
-║  │ organisation retrieval sources            │   │ spend caps · usage quotas                 │  ║
-║  │ what agents may retrieve                  │   │ audit log (view decisions & activity)     │  ║
-║  └───────────────────────────────────────────┘   └───────────────────────────────────────────┘  ║
-║                                                                                                 ║
-║                                                                                                 ║
-╚═════════════════════════════════════════════════════════════════════════════════════════════════╝
-                    compiled into the frozen contract for every task
-                                                 ▼
-              ┌─────────────────────────────────────────────────────────────────────┐
-              │ Effective contract for one task                                     │
-              │ the frozen snapshot each Agent runtime receives — no setting        │
-              │ can change once the task has started                                │
-              └─────────────────────────────────────────────────────────────────────┘
-```
-
-## Documentation
-
-The complete documentation is at [opencrane.ai](https://opencrane.ai), including:
-
-- [getting started](https://opencrane.ai/guide/getting-started);
-- the [architecture overview](https://opencrane.ai/advanced/architecture);
-- the [deployment guide](https://opencrane.ai/guide/deploy-cluster);
-- the [OCI MCP runtime guide](https://opencrane.ai/integrators/oci-mcp-runtime); and
-- the [API overview](https://opencrane.ai/reference/api-overview).
-
-## Quick start
-
-### Prerequisites
-
-- Node.js 22 or newer
-- Kubernetes 1.30 or newer
-- Helm 3
-- `kubectl`
-- a CloudNativePG operator in the target cluster
-
-### Build and test
+For local development:
 
 ```bash
 npm ci
-npm run build
-npm run test
+npm exec nx show projects
 ```
 
-Developers and coding agents can add source-anchored semantic repository context to a clone with
-`npm run agent-context:setup`. The index is advisory and complements Nx; it does not replace Nx
-project boundaries, affected calculation, builds, or tests. See the
-[repository-context guide](docs/agents/repository-context.md) for the supported platforms and loop.
+Use focused Nx build and test tasks for the part you are changing. Contributor instructions start
+in [AGENTS.md](AGENTS.md); the [contributor guide](https://opencrane.ai/contributing/overview)
+explains the development workflow.
 
-### Deploy an organisation
+## Repository map
 
-The deployment entrypoint installs one isolated organisation boundary. Before running it, create the
-PostgreSQL credential Secrets named in the command and configure the organisation's OpenID Connect
-(OIDC) identity provider.
-
-```bash
-export OIDC_ISSUER_URL="https://identity.example.com"
-export OIDC_CLIENT_ID="opencrane-acme"
-export OIDC_REDIRECT_URI="https://acme.opencrane.example/api/v1/auth/callback"
-
-apps/_infra/deploy-k8s/deploy.sh \
-  --base-domain opencrane.example \
-  --cluster-tenant acme \
-  --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
-```
-
-This installs the isolated `acme` organisation boundary and serves its UI and REST API at
-`https://acme.opencrane.example`. The API is rooted at `/api/v1`; the generated OpenAPI document and
-interactive reference are linked from the [API documentation](https://opencrane.ai/reference/api).
-
-For deployment profiles, required Secrets, and local cluster setup, follow the
-[cluster deployment guide](https://opencrane.ai/guide/deploy-cluster).
-
-## Repository layout
-
-For a two-minute orientation: application deployables live under [`apps/`](apps/), reusable
-capabilities under [`libs/`](libs/), shared API contracts under [`libs/contracts/`](libs/contracts/),
-and the documentation site under [`website/`](website/).
-
-Repository contributors should start with [`AGENTS.md`](AGENTS.md). Capability history lives in
-[`CHANGELOG.md`](CHANGELOG.md), while completed implementation history and design context live in
-[`plan-done.md`](plan-done.md).
+| Path | Purpose |
+|---|---|
+| [apps/](apps/) | Deployable applications and installation tooling |
+| [libs/](libs/) | Reusable product capabilities and shared infrastructure |
+| [libs/contracts/](libs/contracts/) | Shared API and runtime contracts |
+| [website/](website/) | User, operator and integrator documentation |
+| [docs/adr/](docs/adr/) | Architecture decisions |
 
 ## Licence
 

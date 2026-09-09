@@ -22,8 +22,8 @@ Human operators authenticate through the OIDC login and callback flow. The brows
 its same-origin session cookie with public API requests.
 
 In-cluster workloads use dedicated internal routes and audience-bound projected ServiceAccount
-tokens. Runtime admission adds durable workload assignment, one-use bootstrap and per-attempt
-proof checks; network reachability or a valid Kubernetes token alone is insufficient.
+tokens. Conversation computers are fenced by their immutable execution subject and active Agent
+Sandbox lease generation; network reachability or a valid Kubernetes token alone is insufficient.
 
 ## Public resource groups
 
@@ -50,7 +50,7 @@ client.
 ## Internal trust boundaries
 
 Internal endpoints under `/api/internal` serve fixed workload classes such as the agent
-controller, agent runtime, skill workers and artifact preprocessor. They are not an
+controller, conversation computer, skill workers and artifact preprocessor. They are not an
 administrator API and should never be exposed through public Ingress.
 
 ## Base URL and health

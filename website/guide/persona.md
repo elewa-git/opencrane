@@ -1,86 +1,44 @@
 # Set up your personal assistant
 
-Your **personal assistant** is the one agent in OpenCrane that belongs to you alone — it only
-ever sees the context, tools and files you've been granted, and only ever acts as you. Before it
-can have its first conversation with you, it needs to know who it's working for. OpenCrane builds
-that through a short interview, and nothing it produces goes live until you've reviewed and
-approved it.
+Your **personal assistant** helps with your work. Onboarding records how you would like it to
+respond, then asks you to review and approve those preferences.
 
-::: tip Personal vs managed, in one line
-A **personal assistant** is your assistant — it learns your persona and only acts within your own
-access. A **managed agent** is a shared worker your organisation configures to do bounded work on
-a schedule or trigger, under its own narrow identity. Managed agents never go through this
-interview — see [Create a managed agent](/guide/first-agent).
+## Complete the setup
+
+1. **Sign in** at your organisation's OpenCrane address.
+2. **Answer the interview questions** about your role, working habits and preferred style. You can
+   return to an unfinished interview without starting over.
+3. **Review the draft persona.** A persona is the saved description of how your assistant should
+   behave. The draft includes a small set of insights linked to your answers.
+4. **Approve the draft.** Approval saves the reviewed persona and prepares your personal
+   assistant's first configuration.
+5. **Open a conversation** to begin working with the assistant.
+
+::: info Development status
+The interview, persona review, assistant-configuration handoff and forwarding of approved
+instructions to the model are implemented in the review baseline. The complete live
+onboarding-to-conversation journey still needs qualification. See [development status](/guide/status).
 :::
 
-## What onboarding gives you
+## What approval means
 
-- **A short, guided interview** instead of a blank prompt box. A reviewed set of questions asks
-  about how you work and how you'd like your assistant to behave.
-- **A draft persona you can inspect before it does anything.** OpenCrane turns your answers into
-  three to five explicit insights and picks a base personality template — never a black box.
-- **A hard approval gate.** Your assistant cannot start its first real conversation until you've
-  looked at the draft and approved it. There's no "it started acting weird, who approved that?" —
-  you did, explicitly, or it didn't happen.
-- **A record of why, not just what.** Every insight in your persona traces back to the exact
-  interview answer that produced it, so the persona is never just a guess about you.
+You approve the description shown to you. It does not grant extra access to company systems or
+change your spending permissions. Your organisation's controls continue to apply.
 
-## Walk through the interview
+The saved interview and persona let you review where the preferences came from. Technical version
+and transaction details are part of the implementation, not steps you need to manage.
 
-1. **Start the interview.** Sign in and start (or resume) your onboarding interview. If you've
-   started one already, OpenCrane resumes it — your answers are kept from your first attempt, so
-   retrying a submission never discards what you've already told it.
-2. **Answer each question once.** Every answer is tied to the exact question you answered, so
-   there's a clear trail from "you said X" to "the persona does Y."
-3. **Complete it.** OpenCrane accepts completion only once every question in the interview has an
-   answer.
-4. **Review the draft.** From your completed interview, OpenCrane derives a small set of insights
-   (three to five) and selects a base personality template — the same underlying idea as a
-   `SOUL.md` file, but reviewed and versioned rather than a file you edit by hand. Nothing here is
-   invented outside your answers.
-5. **Approve it.** Approving activates that exact draft as your one active persona. Until you do,
-   your personal assistant has no persona to run with and cannot take its first run.
-6. **Start chatting.** OpenCrane creates the personal assistant's first runnable revision from the
-   approved persona. That revision includes the default per-run limits for model turns, total tokens
-   and elapsed time. These are technical safety brakes for one agent run, not a monthly spending
-   allowance — see [Manage run limits and cost](/guide/budgets#default-limits-for-a-personal-assistant).
+## Changing preferences
 
-The final handoff uses one database transaction. If another request changes the same rows at the
-same time, OpenCrane may retry the entire handoff up to three times. It retries only conflicts where
-the database proves that the earlier attempt rolled back. You either get completed onboarding and a
-ready personal assistant together, or neither change is kept.
+The current persona workflow starts a new interview for a refresh and keeps the previous approved
+version until the replacement is accepted. A direct editable persona-file experience is not part
+of the current product.
 
-::: info What "approve" actually locks in
-Approval checks that the interview is genuinely complete, that there are between three and five
-insights, and that the selected template still matches what your answers produced. If anything
-has drifted — a stale draft, a mismatched template — OpenCrane refuses the approval rather than
-activating something that no longer matches what you reviewed.
-:::
+## Personal and shared assistants
 
-## Updating your persona later
+A personal assistant is configured around your work. A [shared agent](/guide/first-agent) is
+intended for a named company task and has its own permissions. Shared-agent execution is still
+being built.
 
-Life and working habits change, so a persona isn't locked in forever. Requesting a refresh starts
-a **new** interview rather than editing the old one in place — your previous interview stays on
-record as evidence of what you approved and when. Approving the new draft atomically swaps it in
-as your one active persona; if that swap fails partway through, your previous persona keeps
-running rather than being left half-updated.
-
-::: warning No editable persona file
-OpenCrane deliberately has no mutable "edit your SOUL file and restart" path. A persona becomes
-active only by going through interview → draft → your explicit approval. This is what keeps
-"why does my assistant think that about me" always answerable.
-:::
-
-## Why managed agents skip this
-
-A managed agent's published revision — its prompt, model, skills and integrations — is its
-complete instruction set from the moment it's published. There is no personal context to onboard,
-because a managed agent isn't supposed to have one: it does bounded, named work for a team or
-project, not a relationship with one person. See
-[Create a managed agent](/guide/first-agent) and
-[Organize your company](/guide/organize) for how that scope is decided instead.
-
-> See also: [How OpenCrane works](/guide/how-it-works) (the run lifecycle your assistant uses once
-> approved) · [Organizational knowledge](/guide/knowledge) (what your assistant can recall) ·
-> [Agent delegation (child runs)](/guide/child-runs) (when your assistant hands work to a
-> specialist or a managed agent)
+> See also: [How OpenCrane works](/guide/how-it-works) ·
+> [Knowledge and memory](/guide/knowledge) · [Access controls](/guide/permissions)

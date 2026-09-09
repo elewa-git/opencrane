@@ -1,8 +1,8 @@
 # Hosting and deployment
 
 OpenCrane installs as one **organisation silo** on a conformant Kubernetes cluster. The
-umbrella chart composes the trusted services, separate warm runtime pools and restricted worker
-namespaces.
+umbrella chart composes the trusted services, KurrentDB conversation history, an Agent Sandbox
+computer profile and restricted worker namespaces.
 
 > See also: [Deployment configuration](/operators/deployment-configuration) (public Helm inputs),
 > [Organisation boundary](/operators/organisation-boundary) (what one silo serves),
@@ -19,20 +19,20 @@ Kubernetes cluster
     │   ├── OpenCrane server and UI
     │   ├── agent controller
     │   └── supporting services
-    ├── personal runtime namespace
-    │   └── fixed warm Deployment; one claimed Pod per admitted attempt
-    ├── managed runtime namespace
-    │   └── fixed warm Deployment; one claimed Pod per managed attempt
+    ├── KurrentDB
+    │   └── ordered conversation and computer history
+    ├── Agent Sandbox profile
+    │   └── one claimed conversation-computer Pod per active lease
     └── restricted worker namespaces
         ├── skill authoring
         ├── MCP executor
         └── artifact preprocessor
 ```
 
-Each runtime namespace has one Helm-owned warm Deployment. Its generic Pods have no attempt data or
-authority. After OpenCrane durably admits a run, the controller claims one exact Pod UID, activates
-the fixed personal or managed network profile, and deletes that Pod when the attempt ends. The
-Deployment creates the replacement spare.
+An enabled computer profile renders a `SandboxTemplate` and its configured `SandboxWarmPool`. After a
+conversation entry requests activation, OpenCrane records the computer generation and lease in
+KurrentDB and creates one checked `SandboxClaim`. The external Agent Sandbox controller realises the
+Pod and Service; OpenCrane does not run a second Pod lifecycle controller.
 
 ## Prerequisites
 
@@ -41,14 +41,31 @@ Deployment creates the replacement spare.
 - A CNI that enforces `NetworkPolicy`.
 - Ingress, DNS and certificate controllers when exposing a public host.
 - PostgreSQL credentials supplied through Kubernetes Secrets.
-- Immutable image digests for the controller and runtime.
+- KurrentDB TLS and least-privilege service credentials.
+- Agent Sandbox v1beta1 CRDs and controller with extensions enabled and `opencrane.ai` allowed
+  for claim-supplied Pod labels.
+- An approved `gvisor` RuntimeClass.
+- Immutable image digests for KurrentDB, its bootstrap image and the conversation computer.
 
-## Minimal operator handoff
+Install the pinned shared Sandbox controller through the deployment entrypoint before installing a
+silo. The command verifies the current context, the upstream manifest checksum and the immutable
+controller image, and mounts the required label-domain configuration:
 
-Provide the target Kubernetes context, ClusterTenant and base domain; OIDC issuer, client ID and
-confidential-client secret; the first operator email or IdP group mapping; and three distinct
-PostgreSQL bootstrap credential Secrets. Add a namespace-local registry pull Secret only for private
-images. The script derives the namespace and default OIDC callback, and creates the OIDC Secret.
+```bash
+bash apps/_infra/deploy-k8s/platform/k8s-deploy.sh \
+  --provision-agent-sandbox-controller --context "$CONTEXT"
+```
+
+Add `--preflight` to check those inputs without changing the cluster. This action installs shared
+cluster infrastructure; it is separate from the organisation release.
+
+## Operator inputs
+
+Provide the target Kubernetes context, organisation name and domain, OIDC client configuration,
+first-owner and certificate-contact emails, three distinct PostgreSQL bootstrap Secrets, and the
+published image references. Conversation execution also needs the history and sandbox configuration
+listed in [deployment configuration](/operators/deployment-configuration). The script derives the
+namespace and default OIDC callback. Add a registry pull Secret when images are private.
 
 ::: warning
 Do not put OIDC or registry secret bytes in Helm values, committed files, or shell history.
@@ -56,35 +73,27 @@ Do not put OIDC or registry secret bytes in Helm values, committed files, or she
 
 ## Install
 
-Use the app-owned entrypoint:
-
-```bash
-export OIDC_ISSUER_URL=https://identity.example.com
-export OIDC_CLIENT_ID=<organisation-client-id>
-export OPENCRANE_OIDC_CLIENT_SECRET=<secret-manager-value>
-export OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL=operator@example.com
-
-apps/_infra/deploy-k8s/deploy.sh \
-  --base-domain opencrane.example.com \
-  --cluster-tenant acme \
-  --acme-email operator@example.com \
-  --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
-# Add --registry-pull-secret opencrane-ghcr-pull for private images.
-```
+Use the single command template in
+[deployment configuration](/operators/deployment-configuration#use-the-deploy-entrypoint).
 
 The script delegates to `apps/_infra/deploy-k8s/platform/k8s-deploy.sh` and installs the
 `opencrane-silo` umbrella chart. It does not install a second management plane. The three
 PostgreSQL bootstrap Secrets must already exist in the target namespace and use distinct
-credentials.
+credentials. The explicit [credential preparation actions](/operators/deployment-configuration#prepare-database-credentials)
+create them and the KurrentDB trust inputs for a fresh silo through the same deploy entrypoint.
+
+KurrentDB and Agent Sandbox are disabled in generic chart defaults. The current wrapper enables
+and validates them for `testv5`; other organisation names need an explicitly reviewed values profile
+and the same prerequisites. The diagram above describes the conversation-capable composition,
+not what an unconfigured base chart can do.
 
 The public host must already resolve to the ingress address. The entrypoint uses Let's Encrypt
 HTTP-01 and needs `--acme-email`; it fails before applying a self-signed certificate.
 
 ::: warning
-Do not deploy the personal and managed runtimes into the trusted server namespace. The server
-validates that all three namespaces are distinct and refuses to start on a collapsed boundary.
+Do not bypass `deploy.sh` by creating claims or Pods manually. The testv5 preflight verifies the
+Agent Sandbox APIs, controller, RuntimeClass, immutable images and KurrentDB Secrets before Helm
+changes the silo.
 :::
 
 ## What the release owns
@@ -92,10 +101,11 @@ validates that all three namespaces are distinct and refuses to start on a colla
 | Surface | Ownership |
 |---|---|
 | Trusted applications | App-owned chart templates composed by the umbrella |
-| Runtime Jobs | Created and conditionally released by `agent-controller` |
-| Runtime namespace floor | Pod Security Standards, quota, default-deny policy and admission policy |
-| Run authority | PostgreSQL-backed OpenCrane server |
+| Conversation computers | Reconciled from checked claims by the external Agent Sandbox controller |
+| Computer profile floor | gVisor, restricted security context, bounded scratch, default-deny policy and admission policy |
+| Conversation history | KurrentDB-backed OpenCrane server |
+| Product authorization | PostgreSQL-backed OpenCrane server |
 | Cluster-wide controllers | External prerequisites, not installed as silo business workloads |
 
 Source: [`apps/_infra/deploy-k8s`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/README.md)
-and [`apps/agent-controller`](https://github.com/elewa-git/opencrane/blob/main/apps/agent-controller/README.md).
+and [`apps/_infra/agent-sandbox`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/agent-sandbox/README.md).

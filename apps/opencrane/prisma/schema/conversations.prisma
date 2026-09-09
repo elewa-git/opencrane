@@ -9,74 +9,156 @@ enum ConversationLifecycle {
   Closed @map("closed")
 }
 
-enum ConversationMessageRole {
-  User      @map("user")
-  Assistant @map("assistant")
-  Tool      @map("tool")
-  System    @map("system")
-}
-
-enum ConversationMessageState {
-  Pending   @map("pending")
-  Streaming @map("streaming")
-  Completed @map("completed")
-  Failed    @map("failed")
-  Cancelled @map("cancelled")
-}
-
-enum ConversationTimelineEntryKind {
-  Message        @map("message")
-  RunEvent       @map("run_event")
-  Membership     @map("membership")
-  System         @map("system")
-  ParentDelivery @map("parent_delivery")
-}
-
-enum AgentThreadDeliveryKind {
-  Status   @map("status")
-  Question @map("question")
-  Approval @map("approval")
-  Result   @map("result")
-  Failure  @map("failure")
-  Asset    @map("asset")
-}
-
 model Conversation {
   id                            String                          @id @default(cuid())
   siloId                        String                          @map("silo_id")
   mode                          ConversationMode
   agentServiceId                String?                         @map("agent_service_id")
+  /// Rebuildable pointer to the logical computer stream for an agent session.
+  computerId                    String?                         @map("computer_id")
+  /// Rebuildable identity coordinate required to validate the computer stream.
+  computerAgentIdentityId       String?                         @map("computer_agent_identity_id")
+  /// Rebuildable profile coordinate required to validate the computer stream.
+  computerProfileRevisionId     String?                         @map("computer_profile_revision_id")
   lifecycle                     ConversationLifecycle           @default(Open)
-  contextRevisionId             String?                         @map("context_revision_id")
   closedAt                      DateTime?                       @map("closed_at")
   createdAt                     DateTime                        @default(now()) @map("created_at")
-  /// Real database append time for display. Lifecycle or context updates do not advance it.
+  /// Real database time of the latest participant-visible append; conversation lists sort by it.
+  /// The database stamps it inside the transaction that stores a new private payload, and rejects
+  /// any other move except a lifecycle change.
   updatedAt                     DateTime                        @default(now()) @map("updated_at")
-  /// Global database allocation order for list sorting. Rollbacks may leave gaps; commit order does not rewrite it.
-  activitySequence              BigInt                          @unique @default(autoincrement()) @map("activity_sequence")
   participants                  ConversationParticipant[]
-  messages                      ConversationMessage[]
-  runEvents                     ConversationRunEvent[]
-  timelineEntries               ConversationTimelineEntry[]
-  contextRevisions              ConversationContextRevision[]   @relation("ConversationContextRevisions")
+  privatePayloads               ConversationPrivatePayload[]
   runs                          AgentRun[]
   elicitationRequests           ElicitationRequest[]
-  activeContext                 ConversationContextRevision?    @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
   assets                        ConversationAsset[]
-  assetOutputTickets            ConversationAssetOutputTicket[]
-  originAgentThread             ConversationAgentThread?        @relation("AgentThreadChild")
-  childAgentThreads             ConversationAgentThread[]       @relation("AgentThreadParent")
-  rootedAgentThreads            ConversationAgentThread[]       @relation("AgentThreadRoot")
-  receivedAgentThreadDeliveries AgentThreadParentDelivery[]     @relation("AgentThreadDeliveryParent")
-  sentAgentThreadDeliveries     AgentThreadParentDelivery[]     @relation("AgentThreadDeliveryChild")
+  activeComputerLease           ConversationComputerActiveLease?
+  childRequests                 ConversationChildRequest[]
   service                       AgentService?                   @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
   @@unique([id, siloId, agentServiceId], map: "conversations_exact_service_key")
-  @@unique([id, contextRevisionId])
-  @@index([siloId, mode, lifecycle, activitySequence])
+  /// One computer stream resolves exactly one conversation inside a silo, so a duplicate projection row can never answer for another conversation.
+  @@unique([siloId, computerId])
+  @@index([siloId, mode, lifecycle, updatedAt])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
+}
+
+/// Records whether an admitted group request still needs its child conversation or has finished.
+enum ConversationChildRequestState {
+  Pending     @map("pending")
+  Ready       @map("ready")
+  Unavailable @map("unavailable")
+}
+
+/// Keeps the accepted group command while a workflow creates its KurrentDB history and computer.
+/// The request stores identity and audience coordinates; encrypted messages stay in their own store.
+model ConversationChildRequest {
+  id                       String                        @id
+  siloId                   String                        @map("silo_id")
+  idempotencyKey           String                        @map("idempotency_key")
+  parentConversationId     String                        @map("parent_conversation_id")
+  parentMessageId          String                        @map("parent_message_id")
+  parentMessagePosition    BigInt                        @map("parent_message_position")
+  childConversationId      String                        @unique @map("child_conversation_id")
+  computerId               String                        @unique @map("computer_id")
+  requestedByPrincipalId   String                        @map("requested_by_principal_id")
+  requesterSubjectId       String                        @map("requester_subject_id")
+  requesterIssuer          String                        @map("requester_issuer")
+  requesterAuthenticatedAt DateTime                      @map("requester_authenticated_at")
+  agentServiceId           String                        @map("agent_service_id")
+  agentRevisionId          String                        @map("agent_revision_id")
+  agentIdentityId          String                        @map("agent_identity_id")
+  agentPrincipalId         String                        @map("agent_principal_id")
+  agentName                String                        @map("agent_name")
+  profileRevisionId        String                        @map("profile_revision_id")
+  participantSubjectIds    Json                          @map("participant_subject_ids")
+  commandDigest            String                        @map("command_digest")
+  state                    ConversationChildRequestState @default(Pending)
+  createdAt                DateTime                      @default(now()) @map("created_at")
+  parent                   Conversation                  @relation(fields: [parentConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([siloId, requestedByPrincipalId, idempotencyKey])
+  @@index([parentConversationId, state])
+  @@map("conversation_child_requests")
+}
+
+/// Rebuildable projection of the one active Agent Sandbox lease for a conversation computer.
+///
+/// Row existence means active. Immutable computer history remains authoritative and can rebuild or
+/// delete this projection after crashes; callers must not interpret an expired row as authority.
+model ConversationComputerActiveLease {
+  computerId       String       @id @map("computer_id")
+  siloId           String       @map("silo_id")
+  conversationId   String       @unique @map("conversation_id")
+  agentIdentityId  String       @map("agent_identity_id")
+  leaseId          String       @unique @map("lease_id")
+  leaseGeneration  Int          @map("lease_generation")
+  expiresAt        DateTime     @map("expires_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  conversation     Conversation @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([conversationId, siloId])
+  @@unique([computerId, leaseGeneration])
+  @@index([siloId, agentIdentityId])
+  @@index([expiresAt])
+  @@map("conversation_computer_active_leases")
+}
+
+/// Stores encrypted participant-visible payload bytes outside immutable KurrentDB history.
+model ConversationPrivatePayload {
+  /// Opaque reference recorded in the conversation entry.
+  id             String       @id
+  /// Organisation boundary copied from the trusted conversation projection.
+  siloId         String       @map("silo_id")
+  /// Conversation whose authorised participants may decrypt this payload.
+  conversationId String       @map("conversation_id")
+  /// Participant that submitted the plaintext before server-side encryption.
+  authorSubject  String       @map("author_subject")
+  /// Browser retry key shared with the immutable KurrentDB entry.
+  idempotencyKey String       @map("idempotency_key")
+  /// Keyring identifier required to decrypt this ciphertext.
+  keyId          String       @map("key_id")
+  /// AES-GCM nonce generated independently for this payload.
+  nonce          Bytes
+  /// AES-GCM authentication tag checked before plaintext is returned.
+  authTag        Bytes        @map("auth_tag")
+  /// AES-GCM ciphertext; plaintext is never persisted.
+  ciphertext     Bytes
+  /// SHA-256 digest of the exact ciphertext recorded in KurrentDB.
+  ciphertextDigest String     @map("ciphertext_digest")
+  /// Creation timestamp retained for encrypted-payload operations.
+  createdAt      DateTime     @default(now()) @map("created_at")
+  /// Exact parent projection prevents a payload from crossing conversations.
+  conversation   Conversation @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([conversationId, authorSubject, idempotencyKey])
+  @@index([siloId, conversationId])
+  @@map("conversation_private_payloads")
+}
+
+/// Holds an encrypted, short-lived LiteLLM attempt key for bootstrap response-loss recovery.
+model ConversationComputerAttemptCredential {
+  bootstrapId      String   @id @map("bootstrap_id")
+  keyAlias         String   @map("key_alias")
+  modelAlias       String   @map("model_alias")
+  siloId           String   @map("silo_id")
+  conversationId   String   @map("conversation_id")
+  state             String   @default("pending")
+  claimFence        String   @map("claim_fence")
+  claimExpiresAt    DateTime @map("claim_expires_at")
+  keyId             String?  @map("key_id")
+  nonce             Bytes?
+  authTag            Bytes?  @map("auth_tag")
+  ciphertext         Bytes?
+  ciphertextDigest   String? @map("ciphertext_digest")
+  credentialDigest  String? @map("credential_digest")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("conversation_computer_attempt_credentials")
 }
 
 model ConversationParticipant {
@@ -88,162 +170,9 @@ model ConversationParticipant {
   archivedAt            DateTime?                   @map("archived_at")
   joinedAt              DateTime                    @default(now()) @map("joined_at")
   conversation          Conversation                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntries       ConversationTimelineEntry[]
   assignedElicitations  ElicitationRequest[]
-  initiatedAgentThreads ConversationAgentThread[]
 
   @@id([conversationId, userId])
   @@index([userId, archivedAt, conversationId])
   @@map("conversation_participants")
-}
-
-model ConversationMessage {
-  id                 String                     @id @default(cuid())
-  conversationId     String                     @map("conversation_id")
-  runId              String?                    @map("run_id")
-  userId             String?                    @map("user_id")
-  idempotencyKey     String                     @map("idempotency_key")
-  role               ConversationMessageRole
-  state              ConversationMessageState
-  source             String
-  blocks             Json
-  createdAt          DateTime                   @default(now()) @map("created_at")
-  completedAt        DateTime?                  @map("completed_at")
-  conversation       Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntry      ConversationTimelineEntry?
-  assets             ConversationAsset[]
-  invokedAgentThread ConversationAgentThread?   @relation("AgentThreadParentMessage")
-
-  @@unique([conversationId, id])
-  @@unique([conversationId, idempotencyKey])
-  @@index([runId])
-  @@map("conversation_messages")
-}
-
-model ConversationRunEvent {
-  conversationId     String                          @map("conversation_id")
-  runId              String                          @map("run_id")
-  attempt            Int
-  sequence           Int
-  type               String
-  messageId          String?                         @map("message_id")
-  payload            Json
-  occurredAt         DateTime                        @default(now()) @map("occurred_at")
-  conversation       Conversation                    @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntry      ConversationTimelineEntry?
-  assets             ConversationAsset[]
-  assetOutputTickets ConversationAssetOutputTicket[]
-
-  @@id([runId, sequence])
-  @@unique([conversationId, runId, sequence])
-  @@unique([conversationId, runId, attempt, sequence])
-  @@index([runId, attempt, messageId])
-  @@index([runId, occurredAt])
-  @@map("conversation_run_events")
-}
-
-model ConversationTimelineEntry {
-  conversationId              String                        @map("conversation_id")
-  position                    BigInt                        @default(0)
-  kind                        ConversationTimelineEntryKind
-  messageId                   String?                       @map("message_id")
-  runId                       String?                       @map("run_id")
-  runEventSequence            Int?                          @map("run_event_sequence")
-  membershipEventId           String?                       @map("membership_event_id")
-  participantUserId           String?                       @map("participant_user_id")
-  systemEventId               String?                       @map("system_event_id")
-  parentDeliveryAgentThreadId String?                       @map("parent_delivery_agent_thread_id")
-  payload                     Json?
-  occurredAt                  DateTime                      @default(now()) @map("occurred_at")
-  conversation                Conversation                  @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  message                     ConversationMessage?          @relation(fields: [conversationId, messageId], references: [conversationId, id], onDelete: Restrict)
-  runEvent                    ConversationRunEvent?         @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
-  participant                 ConversationParticipant?      @relation(fields: [conversationId, participantUserId], references: [conversationId, userId], onDelete: Restrict)
-  agentThreadDelivery         AgentThreadParentDelivery?    @relation(fields: [parentDeliveryAgentThreadId], references: [id], onDelete: Restrict)
-
-  @@id([conversationId, position])
-  @@unique([conversationId, messageId])
-  @@unique([conversationId, runId, runEventSequence])
-  @@unique([conversationId, membershipEventId])
-  @@unique([conversationId, systemEventId])
-  @@unique([parentDeliveryAgentThreadId])
-  @@index([conversationId, occurredAt])
-  @@map("conversation_timeline_entries")
-}
-
-/// Immutable link from one ordinary group message to one child agent-session conversation.
-model ConversationAgentThread {
-  childConversationId  String                      @id @map("child_conversation_id")
-  parentConversationId String                      @map("parent_conversation_id")
-  rootConversationId   String                      @map("root_conversation_id")
-  siloId               String                      @map("silo_id")
-  parentMessageId      String                      @map("parent_message_id")
-  initiatorUserId      String                      @map("initiator_user_id")
-  agentServiceId       String                      @map("agent_service_id")
-  personaProfileId     String                      @map("persona_profile_id")
-  personaRevisionId    String                      @map("persona_revision_id")
-  firstRunId           String                      @unique @map("first_run_id")
-  createdAt            DateTime                    @default(now()) @map("created_at")
-  childConversation    Conversation                @relation("AgentThreadChild", fields: [childConversationId, siloId, agentServiceId], references: [id, siloId, agentServiceId], onDelete: Restrict)
-  parentConversation   Conversation                @relation("AgentThreadParent", fields: [parentConversationId, siloId], references: [id, siloId], onDelete: Restrict)
-  rootConversation     Conversation                @relation("AgentThreadRoot", fields: [rootConversationId, siloId], references: [id, siloId], onDelete: Restrict)
-  parentMessage        ConversationMessage         @relation("AgentThreadParentMessage", fields: [parentConversationId, parentMessageId], references: [conversationId, id], onDelete: Restrict)
-  initiator            ConversationParticipant     @relation(fields: [parentConversationId, initiatorUserId], references: [conversationId, userId], onDelete: Restrict)
-  firstRun             AgentRun                    @relation(fields: [firstRunId, childConversationId, siloId, agentServiceId], references: [id, conversationId, siloId, agentServiceId], onDelete: Restrict)
-  personaProfile       PersonaProfile              @relation(fields: [personaProfileId, initiatorUserId], references: [id, userId], onDelete: Restrict)
-  personaRevision      PersonaRevision             @relation(fields: [personaProfileId, personaRevisionId], references: [personaProfileId, id], onDelete: Restrict)
-  deliveries           AgentThreadParentDelivery[]
-
-  @@unique([parentConversationId, parentMessageId])
-  @@unique([childConversationId, siloId, agentServiceId], map: "conversation_agent_threads_child_authority_key")
-  @@unique([firstRunId, childConversationId, siloId, agentServiceId], map: "conversation_agent_threads_first_run_authority_key")
-  @@unique([childConversationId, parentConversationId], map: "conversation_agent_threads_child_parent_key")
-  @@index([rootConversationId, createdAt])
-  @@index([initiatorUserId, createdAt])
-  @@map("conversation_agent_threads")
-}
-
-/// Append-only display-safe delivery from one child Agent thread to its immediate parent.
-model AgentThreadParentDelivery {
-  id                   String                     @id @default(cuid())
-  childConversationId  String                     @map("child_conversation_id")
-  parentConversationId String                     @map("parent_conversation_id")
-  siloId               String                     @map("silo_id")
-  agentServiceId       String                     @map("agent_service_id")
-  runId                String                     @map("run_id")
-  kind                 AgentThreadDeliveryKind
-  idempotencyKey       String                     @map("idempotency_key")
-  label                String
-  detail               String
-  assetId              String?                    @map("asset_id")
-  createdAt            DateTime                   @default(now()) @map("created_at")
-  thread               ConversationAgentThread    @relation(fields: [childConversationId, parentConversationId], references: [childConversationId, parentConversationId], onDelete: Restrict, map: "agent_thread_deliveries_thread_fkey")
-  childConversation    Conversation               @relation("AgentThreadDeliveryChild", fields: [childConversationId, siloId, agentServiceId], references: [id, siloId, agentServiceId], onDelete: Restrict, map: "agent_thread_deliveries_child_fkey")
-  parentConversation   Conversation               @relation("AgentThreadDeliveryParent", fields: [parentConversationId, siloId], references: [id, siloId], onDelete: Restrict)
-  run                  AgentRun                   @relation(fields: [runId, childConversationId, siloId, agentServiceId], references: [id, conversationId, siloId, agentServiceId], onDelete: Restrict)
-  asset                ConversationAsset?         @relation(fields: [parentConversationId, assetId], references: [conversationId, id], onDelete: Restrict)
-  timelineEntry        ConversationTimelineEntry?
-
-  @@unique([childConversationId, idempotencyKey])
-  @@index([parentConversationId, createdAt])
-  @@index([runId, createdAt])
-  @@map("agent_thread_parent_deliveries")
-}
-
-model ConversationContextRevision {
-  id               String         @id @default(cuid())
-  conversationId   String         @map("conversation_id")
-  revision         Int
-  throughMessageId String         @map("through_message_id")
-  summary          Json
-  digest           String
-  createdByRunId   String         @map("created_by_run_id")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  conversation     Conversation   @relation("ConversationContextRevisions", fields: [conversationId], references: [id], onDelete: Restrict)
-  activeFor        Conversation[] @relation("ActiveConversationContext")
-
-  @@unique([conversationId, revision])
-  @@unique([conversationId, id])
-  @@index([createdByRunId])
-  @@map("conversation_context_revisions")
 }

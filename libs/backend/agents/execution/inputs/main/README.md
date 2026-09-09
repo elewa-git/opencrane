@@ -5,14 +5,28 @@
 ## What it owns
 
 This package is part of the **shared execution flow** used by both personal and managed agents.
-Before an agent runtime executes a run, the platform freezes *everything* that run is allowed to see
+Before a conversation computer executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
 **`RunInputSnapshot`**: which messages, which persona, which memory query coordinates, which tools and budgets,
-and which verified identity. This package owns the **assembly** of that snapshot: it gathers each
+and which evidence-bound execution subject. This package owns the **assembly** of that snapshot: it gathers each
 input from an injected authority, validates the combination, and hands the finished snapshot to the
 run-admission transaction that persists it. After that instant nothing about the run's input can
 change — a retry, an audit, or a replay all see the exact same record, identified by its digest
 (a SHA-256 fingerprint of the canonical content).
+
+The current text-chat policy freezes a maximum of 4,096 generated tokens per response into the model
+route. This is OpenCrane's response limit; the revision's total run budget stays separate, including
+the initial personal assistant's 256,000-token ceiling. The runtime uses the smaller of those two
+limits. It consumes one admitted model turn and refuses the model request when the turn limit is
+absent or below one. Tool execution and loops with multiple model turns remain future work.
+
+The current text-chat baseline supplies conversation history and the personal assistant's approved
+persona. It resolves that persona through the verified local Principal (OpenCrane's permission
+identity) to the user's sign-in subject stored during onboarding. Company assistants run as their
+own Principal, while the triggering message remains bound to the human requester. Both kinds use
+an explicit no-personal-memory policy: preference and dataset repositories are skipped. Dataset
+provisioning and memory recall remain future work; an enabled policy with no valid dataset still
+denies admission.
 
 ```
  run request  (runId · silo · service · conversation? · subject · idempotency key)
@@ -26,12 +40,12 @@ change — a retry, an audit, or a replay all see the exact same record, identif
  └─────────────────────────────────────────┘
           │  ready (authority + snapshot) / denied (one precise reason)
           ▼
- runs · RunAdmissionRepository  ── persists run + snapshot + workflow task in one commit
+ runs · RunAdmissionRepository  ── persists run + snapshot in one commit
 ```
 
 **In this flow:** [execution/runs](../../runs/main/README.md) *(owns the admission transaction, the digest
 function, and the durable rows)* · [membership](../../../../server/iam/membership/main/README.md)
-*(supplies the signed fleet-membership evidence behind the identity envelope)*
+*(supplies deployment-selected human membership evidence consumed by the execution-subject authority)*
 
 Every input is loaded through a port (`RunAuthoritySource`, `ApprovedPersonaSource`, and the other
 named sources) inside the
@@ -41,6 +55,16 @@ millisecond before commit can never leak into the frozen record. In particular, 
 after effective-grant intersection is an assigned, same-silo, still-published, non-revoked revision. One refusal anywhere denies the
 whole assembly with a single precise reason; a duplicate request (same idempotency key) returns the
 previously admitted snapshot without recompiling anything.
+
+Conversational admission records an exact `Conversation / Use` decision for the requester inside
+that final transaction, using the same membership witness digest, run arguments, and admission
+instant. The earlier participant check remains defense-in-depth; it cannot replace this final fence
+because membership or grants may change before persistence.
+
+Resource-use decisions record the execution Principal: `user` for a personal agent acting through
+its human owner, or `agent-service` for a company agent acting through its own Principal. The
+requester's Conversation Use remains a separate human decision. These server-side admissions do
+not claim a runtime Pod identity; workload decisions still require verified Kubernetes coordinates.
 
 MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
 saved tool identifier, name, description, input schema, and schema digest. Missing, malformed, or
@@ -53,25 +77,47 @@ caller input.
 
 ## Public surface
 
+`PrismaConversationExecutionSubjectAuthority` selects personal or managed admission from the
+current active service and published revision inside the admission transaction. It invokes exactly
+one handler; a refused personal identity is never retried as managed.
+
+`ManagedConversationExecutionSubjectAuthority` binds the company's own stable Principal and checked
+identity to the active computer lease. The human requester retains separate human membership and
+current Invoke permission. The company Principal needs current Use on its model; the human needs
+current Use on the conversation. No personal persona, memory or tool assignment enters the initial
+company revision. An explicit no-personal-memory policy returns an empty preference list without
+opening the personal-memory repository.
+
+The production conversation computer repeats this authority check during bootstrap and before
+output, including retries that return an existing run snapshot. Current service state, revision,
+identity, current human membership and required grants must still admit the operation. The frozen
+snapshot supplies evidence and input limits; it cannot restore removed access.
+Retries recover the memory policy from the saved snapshot. A valid `none` scope stays disabled;
+`personal` requires both saved dataset identifiers. Unknown or inconsistent saved scopes are denied.
+
+`__RunInputAuthorityExpiresAt` bounds model credentials by the earliest original execution-evidence
+expiry, requester-evidence expiry and absolute budget deadline. It verifies run/attempt binding and
+the compiled deadline against the snapshot. Assembly returns the currently checked subject separately
+from the unchanged snapshot. A retry intersects both subjects' trust deadlines: shorter current
+evidence reduces credential validity, while refreshed evidence never extends the original ceiling.
+
 - `__AssembleRunInputSnapshot(command, authorities)` — the end-to-end assembly: validate → load all
   sources inside the admission transaction → compile, digest, and persist.
-- `ManagedExecutionIdentityEnvelopeSource` — adapts the agent-service authority's current signed
-  fleet-membership and effective non-personal boundary evidence into a tagged `service` identity. Its
-  canonical `agent-service:<id>` principal must match the admitted service; a requester never
-  becomes that service's execution identity.
-- `__CreatePrismaManagedSessionAssemblyAuthorities` — composes the package-private production
-  readers with the caller-owned identity and final skill-eligibility authorities.
-- `__CreatePrismaPersonalSessionAssemblyAuthorities` — composes the corresponding personal-run
-  readers, including one transaction-scoped personal-memory repository shared by the preference
-  and memory-scope sources. It freezes only the verified user's active Cognee dataset coordinates.
-  Admission never stores the recall query, reads fact content, or calls Cognee. The model chooses a
-  query only through the approval-required `memory_recall` tool; safe content delivery is deferred to #601.
-- `PersonalExecutionIdentityEnvelopeSource` — selects the sole current personal-scope assertion
-  from signed fleet membership, re-reads that exact verified revision after its high-watermark is
-  advanced, admits the current exact `AgentService/Invoke` grant through the central authorization
-  authority, and includes that decision evidence in the frozen capability ceiling. Browser input
-  never selects the organisation, assertion, or capabilities. The frozen digest limits the admitted
-  run; it is not a reusable grant, and later external effects recheck current authorization.
+- `ExecutionSubjectAuthority` — injects one current AgentIdentity, Principal, membership,
+  capability, run, and ConversationComputer-lease proof. A requester remains provenance, never
+  an execution identity.
+- `PersonalConversationExecutionSubjectAuthority` — joins the checked current AgentIdentity head,
+  transaction-bound personal service and authorization evidence, and the current active
+  ConversationComputer lease. It rechecks every request, service, revision, profile, computer,
+  lease, generation, and SandboxClaim coordinate before issuing an attempt-one subject. Its
+  evidence-authority factory receives the admission transaction so Prisma evidence cannot escape
+  onto a root client.
+- `__CreatePrismaSessionAssemblyAuthorities` — composes the production readers around that subject
+  authority, an exact durable-history reader, and an explicit run policy. It freezes only the verified principal's active Cognee
+  dataset coordinates when that policy allows personal memory.
+  Admission never stores a recall query, reads fact content, or calls Cognee, the knowledge store
+  behind the memory gateway. The current text-chat policy disables personal memory; a usable
+  `memory_recall` flow and content delivery remain deferred to #601.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
@@ -82,9 +128,19 @@ caller input.
   and a version stamp that makes a compiler change visible in evidence.
 - `PromptCompilerRepositories` — injected read ports used only to dereference snapshot-authorized
   content while compiling.
+- `ConversationHistoryAdmissionReader` re-reads the exact Kurrent revision, ordered identifiers,
+  final triggering message, and immutable human author before those identifiers enter a snapshot.
+- `VerifiedConversationPromptMessageRepository` accepts decrypted messages only when the
+  conversation-owned source returns the complete snapshot set exactly once and in order.
 
 All other source adapters and assembly ports are package-private implementation details. Same-package
 tests import their owning modules directly; adding a test does not widen this barrel.
+
+`PrismaPromptCompilerRepository` is the transaction-bound dereference boundary for admitted
+persona instructions, MCP tool revisions, artifact revisions, skill revisions, and model routes.
+It receives canonical conversation messages through `VerifiedConversationPromptMessageRepository`,
+so it has no relational transcript path. Missing rows, changed schemas, foreign model coordinates,
+inactive parents, and unsupported generated-output capabilities fail compilation closed.
 
 ## Boundary
 
@@ -97,23 +153,31 @@ the sealed snapshot; memory dataset coordinates never enter compiled input. It
 cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
 non-canonical digest, or any single source refusal denies the run.
 
-The OpenCrane app composes both managed and personal admission variants. The participant-owned
-conversation route derives the subject and silo from the authenticated session and host, then the
-personal assembly path re-resolves the open `agent_session`, its AgentService, and the exact signed
-membership assertion inside the admission transaction. The message body contains only bounded
-content blocks and an idempotency key. The conversation ID comes from the route; user, silo, service,
-dataset and membership coordinates never come from the browser.
+The OpenCrane app composes one admission variant. The participant-owned conversation route derives
+requester provenance from the authenticated session and host; the injected subject authority then
+resolves the exact AgentIdentity, Principal, membership, capability, run, and computer lease inside
+the admission fence. Conversation history already contains the encrypted human entry before run
+admission. The injected history adapter re-reads that exact Kurrent revision and decrypts referenced
+private payloads for prompt compilation; this package never inserts a relational copy. The
+conversation ID comes from verified computer state, and identity, principal, silo, service, dataset,
+and membership coordinates never come from the browser.
 
 There is no public run-start endpoint. Direct and group messages never enter this package; only an
 agent-session message or an internal managed trigger can request snapshot assembly.
 
 ## Dependency direction
 
-Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:agent-services`,
-`scope:artifacts`, `scope:authorization`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
-`scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. The
-agent-services dependency is one-way: this package consumes managed-service evidence but never
-decides service publication, membership, grant, or boundary attachment policy.
+Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:artifacts`,
+`scope:authorization`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
+`scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. It receives its
+execution subject through a narrow port and never decides identity, membership, grant, capability,
+or ConversationComputer-lease policy.
+
+
+Standalone run recovery requires the same membership row ID, update timestamp, external identity
+and deployment mode before accepting a saved snapshot. A refreshed observation can narrow the
+credential deadline but cannot extend the original evidence or budget. Personal memory permission
+and upgrade-session helpers remain unavailable for Standalone until their effect paths support it.
 
 ## See also
 

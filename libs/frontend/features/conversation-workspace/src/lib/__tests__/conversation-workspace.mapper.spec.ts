@@ -1,6 +1,7 @@
-import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageSources, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageView, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
+import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
 import { ConversationSessionRailIconStates } from "../conversation-workspace-feature.types";
 
 /** Builds a direct-conversation summary without introducing display names. */
@@ -9,10 +10,16 @@ function _Summary(): ConversationSummary
 	return { id: "conversation-1", mode: ConversationModes.Direct, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["subject-secret", "other-secret"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-08-12T11:08:00.000Z" };
 }
 
-/** Builds a participant message containing unsafe markup. */
-function _Message(): ConversationMessage
+/** Builds the member directory already loaded for conversation creation. */
+function _Directory(): ConversationCreationDirectory
 {
-	return { id: "message-1", position: "1", role: MessageRoles.User, state: MessageStates.Completed, source: MessageSources.UserInput, blocks: [{ id: "block-1", kind: "text", value: "Hello <script>alert('secret')</script>" }], runId: null, participantRef: "other-secret", createdAt: "2026-08-12T11:08:00.000Z", completedAt: "2026-08-12T11:08:01.000Z", agentThread: null };
+	return { companyAssistants: [], participants: [{ participantRef: "subject-secret", isSelf: true, label: "You" }, { participantRef: "other-secret", isSelf: false, label: "Amina" }, { participantRef: "member-3", isSelf: false, label: "Kamau" }, { participantRef: "member-4", isSelf: false, label: "Amina" }, { participantRef: "member-5", isSelf: false, label: "Grace" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
+}
+
+/** Builds a participant message containing unsafe markup. */
+function _Message(): MessageEntry
+{
+	return { schemaVersion: 1, id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", conversationId: "conversation-1", position: "1", author: { kind: "human", principalId: "principal-1", participantId: "participant-1", issuer: "https://issuer.example", authenticatedAt: "2026-08-12T11:08:00.000Z", name: "Jente Rosseel", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: "command-1", correlationId: "request-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", occurredAt: "2026-08-12T11:08:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:digest" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
 }
 
 describe("Conversation workspace presentation", function _ConversationWorkspacePresentation()
@@ -20,15 +27,55 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 	it("uses generic participant labels without exposing opaque references", function _GenericLabels()
 	{
 		const summary = _ConversationSummaryPresentation(_Summary(), null);
-		expect(summary).toMatchObject({ title: "Direct conversation", participantLabel: "You and Participant 1" });
+		expect(summary).toMatchObject({ title: "Direct conversation", participantLabel: "2 participants" });
 		expect(JSON.stringify(summary)).not.toContain("subject-secret");
 		expect(JSON.stringify(summary)).not.toContain("other-secret");
 	});
 
+	it("uses the selected member's name for a direct chat", function _NamedDirect()
+	{
+		const summary = _ConversationSummaryPresentation(_Summary(), _Directory());
+		expect(summary).toMatchObject({ title: "Amina", participantLabel: "You and Amina" });
+		expect(JSON.stringify(summary)).not.toContain("other-secret");
+	});
+
+	it("makes a company assistant chat's shared participant audience explicit", function _SharedAssistantAudience()
+	{
+		const directory = { ..._Directory(), companyAssistants: [{ agentServiceId: "company", displayName: "Company assistant" }] };
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.AgentSession, agentServiceId: "company", participantRefs: ["subject-secret", "other-secret", "member-3"] }, directory);
+		expect(summary).toMatchObject({ title: "Company assistant", participantLabel: "Shared assistant chat · 3 participants" });
+		expect(JSON.stringify(summary)).not.toContain("subject-secret");
+	});
+
+	it("preserves the personal assistant's private participant label", function _PersonalAssistantAudience()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.AgentSession, agentServiceId: "agent-1", participantRefs: ["subject-secret"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Nova", participantLabel: "You and your Agent" });
+	});
+
+	it("names groups from other members and counts names beyond the first two", function _NamedGroup()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.Group, participantRefs: ["other-secret", "subject-secret", "member-3", "member-4", "member-5"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Amina, Kamau +2", participantLabel: "5 participants" });
+	});
+
+	it("keeps different members with the same display name in the group title", function _DuplicateNames()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.Group, participantRefs: ["subject-secret", "other-secret", "member-4"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Amina, Amina", participantLabel: "3 participants" });
+	});
+
+	it("uses generic text when a participant is absent from the current directory", function _MissingMember()
+	{
+		const summary = _ConversationSummaryPresentation({ ..._Summary(), mode: ConversationModes.Group, participantRefs: ["subject-secret", "other-secret", "removed-secret"] }, _Directory());
+		expect(summary).toMatchObject({ title: "Amina, Participant", participantLabel: "3 participants" });
+		expect(JSON.stringify(summary)).not.toContain("removed-secret");
+	});
+
 	it("sanitizes message markup and keeps authorship generic", function _SafeMessage()
 	{
-		const view = _ConversationMessageView(_Message(), { summary: _Summary(), directory: { participants: [{ participantRef: "subject-secret", isSelf: true, label: "You" }, { participantRef: "other-secret", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null } });
-		expect(view.message.authorName).toBe("Participant 1");
+		const view = _ConversationEntryViews([_Message()], { "payload-1": "Hello <script>alert('secret')</script>" })[0]!;
+		expect(view.message.authorName).toBe("Jente Rosseel");
 		expect(view.richText.html).not.toContain("<script");
 		expect(view.richText.html).toContain("Hello");
 	});
@@ -47,7 +94,7 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 	it("maps every chat type and lets closed status override its type", function _SemanticRailStates()
 	{
 		const direct = _ConversationSummaryPresentation(_Summary(), null);
-		const agent = _ConversationSummaryPresentation({ ..._Summary(), id: "agent", mode: ConversationModes.AgentSession }, "Nova");
+		const agent = _ConversationSummaryPresentation({ ..._Summary(), id: "agent", mode: ConversationModes.AgentSession }, _Directory());
 		const group = _ConversationSummaryPresentation({ ..._Summary(), id: "group", mode: ConversationModes.Group }, null);
 		const closed = _ConversationSummaryPresentation({ ..._Summary(), id: "closed", mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Closed }, null);
 
@@ -56,7 +103,7 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 
 	it("uses only the generic directory self label in the rail footer", function _SafeRailIdentity()
 	{
-		const identity = _ConversationRailIdentityPresentation({ participants: [{ participantRef: "opaque-secret", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const identity = _ConversationRailIdentityPresentation({ companyAssistants: [], participants: [{ participantRef: "opaque-secret", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 
 		expect(identity).toEqual({ name: "You", detail: "Private workspace", initials: "Y" });
 		expect(JSON.stringify(identity)).not.toContain("opaque-secret");
@@ -66,12 +113,12 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 	{
 		const self = { participantRef: "subject-secret", isSelf: true, label: "You" } as const;
 		const participants = [self, { participantRef: "other-secret", isSelf: false, label: "Participant 1" }] as const;
-		const ready = _ConversationOnboardingContinuationPresentation({ participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-secret", displayName: "Nova" } });
+		const ready = _ConversationOnboardingContinuationPresentation({ companyAssistants: [], participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-secret", displayName: "Nova" } });
 		const unavailable = _ConversationOnboardingContinuationPresentation({ participants, personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 		const ambiguous = _ConversationOnboardingContinuationPresentation({ participants, personalAgentStatus: ConversationPersonalAgentStatuses.Ambiguous, personalAgent: null });
-		const withoutDestination = _ConversationOnboardingContinuationPresentation({ participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const withoutDestination = _ConversationOnboardingContinuationPresentation({ companyAssistants: [], participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 		const unknown = _ConversationOnboardingContinuationPresentation(null);
-		const withoutMembership = _ConversationOnboardingContinuationPresentation({ participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const withoutMembership = _ConversationOnboardingContinuationPresentation({ companyAssistants: [], participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 
 		expect(ready.capabilityNote).toContain("continue with your Agent");
 		expect(unavailable.capabilityNote).toContain("Direct and group sessions are available");

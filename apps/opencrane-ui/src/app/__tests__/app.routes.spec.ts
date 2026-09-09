@@ -4,7 +4,7 @@ import { APP_ROUTES } from "../app.routes";
 
 describe("OpenCrane app route composition", function _OpenCraneAppRouteComposition()
 {
-	it("mounts the workspace library after the first-class Agent-thread route", function _ConversationRouteOrder()
+	it("mounts the workspace library after the nested conversation route", function _ConversationRouteOrder()
 	{
 		const paths = APP_ROUTES.map(function _RoutePath(route) { return route.path; });
 		expect(paths.indexOf("chats/:parentConversationId/threads/:childConversationId")).toBeLessThan(paths.indexOf("chats"));

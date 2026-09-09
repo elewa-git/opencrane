@@ -5,7 +5,7 @@ import { __BuildSkillAuthoringValidationJob } from "../skill-authoring-validatio
 /** Builds one bounded skill-authoring profile. */
 function _Profile()
 {
-	return { image: `ghcr.io/opencrane/skill-authoring@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent" as const, serverNamespace: "opencrane", namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:8081/api/internal/agent-runtime", capabilityTokenPath: "/var/run/opencrane/tokens/capability.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "500m", memory: "3Gi" }, limits: { cpu: "2", memory: "4Gi" } } };
+	return { image: `ghcr.io/opencrane/skill-authoring@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent" as const, serverNamespace: "opencrane", namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:8081/api/internal/skill-authoring", capabilityTokenPath: "/var/run/opencrane/tokens/capability.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "500m", memory: "3Gi" }, limits: { cpu: "2", memory: "4Gi" } } };
 }
 
 /** Builds the opaque authority coordinates for one worker Job. */
@@ -33,7 +33,7 @@ describe("skill-authoring validation Job", function _DescribeJob()
 		expect(function _WrongIdentity() { __BuildSkillAuthoringValidationJob(_Assignment(), { ..._Profile(), serviceAccountName: "other-authoring" }); }).toThrow(/fixed identity/);
 		expect(function _ForeignNamespace() { __BuildSkillAuthoringValidationJob({ ..._Assignment(), namespace: "other-silo-authoring" }, _Profile()); }).toThrow(/deployment-owned namespace/);
 		expect(function _WrongAudience() { __BuildSkillAuthoringValidationJob(_Assignment(), { ..._Profile(), capabilityTokenAudience: "opencrane-server" }); }).toThrow(/fixed audience/);
-		expect(function _InvalidBootstrapPort() { __BuildSkillAuthoringValidationJob(_Assignment(), { ..._Profile(), bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:99999/api/internal/agent-runtime" }); }).toThrow(/fixed bootstrap endpoint/);
+		expect(function _InvalidBootstrapPort() { __BuildSkillAuthoringValidationJob(_Assignment(), { ..._Profile(), bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:99999/api/internal/skill-authoring" }); }).toThrow(/fixed bootstrap endpoint/);
 		expect(function _OversizedResources() { __BuildSkillAuthoringValidationJob(_Assignment(), { ..._Profile(), activeDeadlineSeconds: 901, resources: { requests: { cpu: "3", memory: "3Gi" }, limits: { cpu: "3", memory: "3Gi" } } }); }).toThrow(/bounded resources/);
 		expect(function _OversizedNamespace() { __BuildSkillAuthoringValidationJob({ ..._Assignment(), namespace: "a".repeat(64) }, { ..._Profile(), namespace: "a".repeat(64) }); }).toThrow(/bounded resources/);
 		expect(function _NonOpaqueReference() { __BuildSkillAuthoringValidationJob({ ..._Assignment(), capabilityReference: "workload-identifier" }, _Profile()); }).toThrow(/opaque bootstrap reference/);

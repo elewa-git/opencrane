@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Blocking current-silo smoke for develop. This deliberately stays smaller than the retired
 # backup/recovery qualification: it proves Nx-affected app images plus digest-validated baseline
-# images, the production deploy entrypoint, database authority, TLS, and enabled Deployments.
+# images, the production deploy entrypoint, database authority, TLS, and required service readiness.
+# The disposable runc profile does not qualify gVisor isolation or an authenticated assistant turn.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-opencrane-develop-smoke}"
@@ -24,6 +25,8 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
+SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
+SMOKE_LOCAL_REGISTRY_ADDRESS=""
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -31,7 +34,6 @@ CERT_MANAGER_INSTALL_PID=""
 SMOKE_IMAGES=(
   opencrane/opencrane-server:develop-smoke
   opencrane/opencrane-ui:develop-smoke
-  opencrane/channel-proxy:develop-smoke
   opencrane/memory-gateway:develop-smoke
   opencrane/artifact-service:develop-smoke
   opencrane/cognee:develop-smoke
@@ -69,7 +71,7 @@ _retry()
 _diagnostics()
 {
   echo "[develop-smoke] ===== failure diagnostics ====="
-  kubectl get pods,jobs,deployments -A -o wide 2>/dev/null || true
+  kubectl get pods,jobs,deployments,statefulsets -A -o wide 2>/dev/null || true
   kubectl get clusters,databases,poolers -A 2>/dev/null || true
   kubectl get certificates,issuers -A 2>/dev/null || true
   kubectl get events -A --sort-by=.lastTimestamp 2>/dev/null | tail -80 || true
@@ -103,6 +105,7 @@ _teardown_cluster_storage()
       $containers 2>/dev/null || true)"
   fi
   k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
+  k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME" >/dev/null 2>&1 || true
   if [[ -n "$containers" ]]; then
     # shellcheck disable=SC2086
     docker rm -f -v $containers >/dev/null 2>&1 || true
@@ -210,10 +213,11 @@ _prepare_image()
 SMOKE_IMAGE_SPECS=(
   "opencrane|opencrane/opencrane-server:develop-smoke|opencrane-server|apps/opencrane/deploy/Dockerfile"
   "opencrane-ui|opencrane/opencrane-ui:develop-smoke|opencrane-ui|apps/opencrane-ui/deploy/Dockerfile"
-  "channel-proxy|opencrane/channel-proxy:develop-smoke|opencrane-channel-proxy|apps/channel-proxy/deploy/Dockerfile"
   "memory-gateway|opencrane/memory-gateway:develop-smoke|opencrane-memory-gateway|apps/memory-gateway/deploy/Dockerfile"
   "artifact-service|opencrane/artifact-service:develop-smoke|opencrane-artifact-service|apps/artifact-service/deploy/Dockerfile"
   "cognee|opencrane/cognee:develop-smoke|opencrane-cognee|apps/_infra/cognee/deploy/Dockerfile"
+  "kurrentdb|opencrane/kurrentdb-bootstrap:develop-smoke|opencrane-kurrentdb-bootstrap|apps/_infra/kurrentdb/deploy/Dockerfile"
+  "conversation-computer|opencrane/conversation-computer:develop-smoke|opencrane-conversation-computer|apps/conversation-computer/deploy/Dockerfile"
 )
 
 _prepare_images()
@@ -240,6 +244,22 @@ _prepare_images()
   done
   rm -rf -- "$log_dir"
   return "$failed"
+}
+
+# Only this disposable registry receives the two images whose charts require immutable digests.
+# Hash its stored manifest bytes so the in-cluster repository names select exactly what we pushed.
+_publish_smoke_image()
+{
+  local image="$1" repository="$2" digest
+  local target="${SMOKE_LOCAL_REGISTRY_ADDRESS}/${repository}:develop-smoke"
+  docker tag "$image" "$target" || return 1
+  _retry 3 docker push "$target" >&2 || return 1
+  digest="$(curl --fail --silent --show-error \
+    --header 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+    "http://${SMOKE_LOCAL_REGISTRY_ADDRESS}/v2/${repository}/manifests/develop-smoke" \
+    | openssl dgst -sha256 -r | awk '{print $1}')" || return 1
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf 'sha256:%s\n' "$digest"
 }
 
 _create_database_credentials()
@@ -416,9 +436,9 @@ _assert_ingress_health()
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
     && jq -e '
       .ready == true
-      and (.services | keys == ["api", "channels", "database", "files", "memory", "models"])
+      and (.services | keys == ["api", "database", "files", "memory", "models"])
       and ([.services | to_entries[] | select(.key != "models") | .value]
-        | all(. == "available" or . == "disabled"))
+        | all(. == "available"))
       and (.services.models == "available" or .services.models == "unavailable")
       and (.status == "ok" or (.status == "degraded" and .services.models != "available"))
     ' >/dev/null <<<"$response"; do
@@ -430,6 +450,72 @@ _assert_ingress_health()
   done
 }
 
+# A missing optional chart is not a successful current-silo install. Check the required resources
+# explicitly, then exercise the real TLS and anonymous-read boundary from the admitted server Pod.
+_assert_current_history_and_sandbox()
+{
+  kubectl rollout status "statefulset/${RELEASE_NAME}-kurrentdb" \
+    -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  _wait_for_job "${RELEASE_NAME}-kurrentdb-bootstrap"
+  kubectl get "statefulset/${RELEASE_NAME}-kurrentdb" -n "$NAMESPACE" -o json | jq -e '
+    .spec.template.spec.containers[] | select(.name == "kurrentdb")
+    | ([.env[] | select(.name == "KURRENTDB_INSECURE"
+        or .name == "KURRENTDB_ALLOW_ANONYMOUS_ENDPOINT_ACCESS"
+        or .name == "KURRENTDB_ALLOW_ANONYMOUS_STREAM_ACCESS") | .value]
+      | length == 3 and all(. == "false"))
+      and ([.readinessProbe, .livenessProbe]
+        | all(.httpGet.path == "/health/live" and .httpGet.scheme == "HTTPS"
+          and ((.httpGet.httpHeaders // []) | length == 0)))
+  ' >/dev/null
+  kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system \
+    --timeout="${TIMEOUT_SECONDS}s"
+  kubectl get runtimeclass opencrane-smoke-runc -o json | jq -e '.handler == "runc"' >/dev/null
+  kubectl get "sandboxtemplate/${RELEASE_NAME}-developer-template" -n "$NAMESPACE" -o json \
+    | jq -e '.spec.podTemplate.spec.runtimeClassName == "opencrane-smoke-runc"' >/dev/null
+  kubectl get sandboxwarmpool/developer-pool -n "$NAMESPACE" -o json \
+    | jq -e '.spec.replicas == 0' >/dev/null
+  bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-admission-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME"
+  bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-lifecycle-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME" "$TIMEOUT_SECONDS"
+  kubectl exec -i "deployment/${RELEASE_NAME}-opencrane-server" -n "$NAMESPACE" -- node --input-type=module - "$CLUSTER_TENANT" <<'NODE'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import https from "node:https";
+
+const endpoint = `https://${process.env.OPENCRANE_HISTORY_STORE_ENDPOINT}`;
+const ca = readFileSync(process.env.OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH);
+const username = readFileSync(process.env.OPENCRANE_HISTORY_STORE_USERNAME_PATH, "utf8").trim();
+const password = readFileSync(process.env.OPENCRANE_HISTORY_STORE_PASSWORD_PATH, "utf8").trim();
+assert.equal(username, "opencrane-history");
+function status(path, authenticated = false, method = "GET") {
+  return new Promise((resolve, reject) => {
+    const request = https.request(`${endpoint}${path}`, {
+      ca,
+      method,
+      rejectUnauthorized: true,
+      ...(authenticated ? { auth: `${username}:${password}` } : {}),
+    }, (response) => {
+      response.resume();
+      response.once("end", () => resolve(response.statusCode));
+      response.once("error", reject);
+    });
+    request.setTimeout(5000, () => request.destroy(new Error("KurrentDB probe timed out")));
+    request.once("error", reject);
+    request.end();
+  });
+}
+assert.ok([200, 204].includes(await status("/health/live")), "Anonymous TLS health must succeed");
+assert.ok([401, 403].includes(await status("/users")), "Anonymous administration must be refused");
+assert.ok([401, 403].includes(await status("/streams/opencrane-silo/0")), "Anonymous ledger reads must be refused");
+assert.equal(await status("/streams/opencrane-silo/0", true), 200, "The service identity must read the server's silo sentinel");
+const activationStream = encodeURIComponent(`computer-activations-${process.argv[2]}`);
+assert.ok([401, 403].includes(await status(`/subscriptions/${activationStream}/conversation-computer-activation/replayParked`, true, "POST")), "The application service identity must not replay parked activations");
+NODE
+  OPENCRANE_CHART_DIR="$ROOT_DIR/apps/_infra/deploy-k8s" \
+    bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh" \
+    --cluster-tenant "$CLUSTER_TENANT" --namespace "$NAMESPACE" --release "$RELEASE_NAME" \
+    --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" --kurrentdb-replay-parked
+}
+
 trap _cleanup EXIT
 # Bash skips the EXIT trap on untrapped fatal signals — an interrupted run would strand the
 # k3d node containers and their multi-GB writable layers. Route the signals through exit.
@@ -437,7 +523,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for command in curl docker git helm k3d kubectl openssl; do _require_command "$command"; done
+for command in curl docker git helm jq k3d kubectl openssl; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
@@ -445,14 +531,20 @@ if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; the
 fi
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
-# external-controller readiness consume the same wall-clock time without fanning out five builds
+# external-controller readiness consume the same wall-clock time without serialising all builds
 # against the runner's small Docker daemon.
 _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
 k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
-k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" --wait
+k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME" >/dev/null 2>&1 || true
+k3d registry create "$SMOKE_LOCAL_REGISTRY_NAME" --port 127.0.0.1:0 --no-help
+registry_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5000/tcp") 0).HostPort}}' "k3d-${SMOKE_LOCAL_REGISTRY_NAME}")"
+[[ "$registry_port" =~ ^[0-9]+$ ]] || { echo "[develop-smoke] Registry has no loopback host port" >&2; exit 1; }
+SMOKE_LOCAL_REGISTRY_ADDRESS="127.0.0.1:${registry_port}"
+k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" \
+  --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" --wait
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then
@@ -479,16 +571,31 @@ if ! wait "$CERT_MANAGER_INSTALL_PID"; then
 fi
 CERT_MANAGER_INSTALL_PID=""
 
+"$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh" --provision-agent-sandbox-controller --context "k3d-${CLUSTER_NAME}"
+# This class truthfully names k3d's native runtime. Only a separate gVisor install can qualify isolation.
+cat <<'EOF' | kubectl apply -f -
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: opencrane-smoke-runc
+handler: runc
+EOF
+
 if ! wait "$IMAGE_PREPARATION_PID"; then
   IMAGE_PREPARATION_PID=""
   echo "[develop-smoke] Image preparation failed" >&2
   exit 1
 fi
 IMAGE_PREPARATION_PID=""
-echo "[develop-smoke] Importing the complete current-silo image set in one k3d transfer"
+echo "[develop-smoke] Importing the tag-based service images in one k3d transfer"
 _retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
+bootstrap_digest="$(_publish_smoke_image opencrane/kurrentdb-bootstrap:develop-smoke opencrane-kurrentdb-bootstrap)"
+computer_digest="$(_publish_smoke_image opencrane/conversation-computer:develop-smoke opencrane-conversation-computer)"
+registry_repository="k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000"
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+"$ROOT_DIR/apps/_infra/deploy-k8s/platform/provision-kurrentdb-bootstrap-secrets.sh" \
+  --namespace "$NAMESPACE" --release "$RELEASE_NAME"
 
 echo "[develop-smoke] Creating isolated database and fleet-verification inputs"
 _create_database_credentials "$POSTGRES_CREDENTIALS_SECRET" opencrane "$(_random_secret)"
@@ -530,6 +637,16 @@ export TIMEOUT_SECONDS
   --postgres-admin-credentials-secret "$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
   --postgres-values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-postgres-values.yaml" \
   --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml" \
+  --set-string "historyStore.kurrentdb.tls.existingSecret=${RELEASE_NAME}-kurrentdb-tls" \
+  --set-string "historyStore.kurrentdb.bootstrapAdmin.existingSecret=${RELEASE_NAME}-kurrentdb-bootstrap" \
+  --set-string "historyStore.kurrentdb.bootstrapOps.existingSecret=${RELEASE_NAME}-kurrentdb-bootstrap-ops" \
+  --set-string "historyStore.kurrentdb.serviceCredential.existingSecret=${RELEASE_NAME}-kurrentdb-history-service" \
+  --set-string "historyStore.kurrentdb.bootstrap.image.repository=${registry_repository}/opencrane-kurrentdb-bootstrap" \
+  --set-string "historyStore.kurrentdb.bootstrap.image.digest=${bootstrap_digest}" \
+  --set-string "agentSandbox.namespace=${NAMESPACE}" \
+  --set-string "agentSandbox.serviceAccountName=${RELEASE_NAME}-agent-sandbox" \
+  --set-string "agentSandbox.profiles[0].image.repository=${registry_repository}/opencrane-conversation-computer" \
+  --set-string "agentSandbox.profiles[0].image.digest=${computer_digest}" \
   --set "certManager.mode=selfSigned" \
   --set "certManager.issuerName=opencrane-develop-smoke-issuer"
 
@@ -540,6 +657,7 @@ kubectl wait --for=condition=Ready "certificate/${RELEASE_NAME}-clustertenant-tl
   -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 
 _assert_database_isolation
+_assert_current_history_and_sandbox
 _assert_ingress_health
 
-echo "[develop-smoke] PASS: current silo, database isolation, TLS ingress, all enabled workloads, and $SMOKE_STORAGE_MODE storage qualification are healthy"
+echo "[develop-smoke] PASS: current service readiness, database isolation, authenticated KurrentDB TLS, anonymous health/read boundaries, Agent Sandbox claim reconciliation and cleanup with its runc profile, TLS ingress, and $SMOKE_STORAGE_MODE storage qualification"

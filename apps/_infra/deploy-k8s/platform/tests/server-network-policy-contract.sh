@@ -13,20 +13,27 @@ rendered="$(helm template opencrane-silo "$CHART_DIR" --namespace pooler-ns \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler \
   --set-string networkPolicy.postgresPoolerServiceIp=10.96.42.17)"
-runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
-  "${MEMORY_GATEWAY_API_ARGS[@]}" \
-  --set agentController.enabled=true \
-  --set-string clustertenantManager.database.existingSecret=test-opencrane-db \
-  --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-  --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
-  --set-string agentController.skillAuthoringValidation.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
-  --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
-  --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
-  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')"
 lease_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set opencrane-mcp-executor.mcpExecutor.controllerClaimLeaseSeconds=47 \
   --set opencrane-mcp-executor.mcpExecutor.companionClaimLeaseSeconds=181)"
+history_rendered="$(helm template opencrane-silo "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set historyStore.kurrentdb.enabled=true \
+  --set historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls \
+  --set historyStore.kurrentdb.bootstrapAdmin.existingSecret=kurrentdb-bootstrap-admin \
+  --set historyStore.kurrentdb.bootstrapOps.existingSecret=kurrentdb-bootstrap-ops \
+  --set historyStore.kurrentdb.serviceCredential.existingSecret=kurrentdb-history-service \
+  --set historyStore.kurrentdb.bootstrap.image.repository=curlimages/curl \
+  --set historyStore.kurrentdb.bootstrap.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+  --set historyStore.kurrentdb.bootstrap.image.pullPolicy=IfNotPresent \
+  --set historyStore.kurrentdb.bootstrap.timeoutSeconds=300 \
+  --set historyStore.kurrentdb.bootstrap.activeDeadlineSeconds=330 \
+  --set historyStore.kurrentdb.bootstrap.resources.requests.cpu=50m \
+  --set historyStore.kurrentdb.bootstrap.resources.requests.memory=64Mi \
+  --set historyStore.kurrentdb.bootstrap.resources.limits.cpu=100m \
+  --set historyStore.kurrentdb.bootstrap.resources.limits.memory=128Mi)"
 otel_rendered="$(helm template acme "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" --set observability.otel.enabled=true)"
 otel_default_deny_rendered="$(helm template acme "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
@@ -34,32 +41,6 @@ otel_default_deny_rendered="$(helm template acme "$CHART_DIR" \
   --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
   --show-only templates/networkpolicy-main-default-deny.yaml)"
 server_policy="$(printf '%s\n' "$rendered" | awk '
-  function flush_document() {
-    if (is_policy && is_server_policy) {
-      printf "%s", document
-    }
-    document = ""
-    is_policy = 0
-    is_server_policy = 0
-  }
-  /^---$/ {
-    flush_document()
-    next
-  }
-  {
-    document = document $0 ORS
-  }
-  /^kind: NetworkPolicy$/ {
-    is_policy = 1
-  }
-  /^  name: opencrane-silo-opencrane-server$/ {
-    is_server_policy = 1
-  }
-  END {
-    flush_document()
-  }
-')"
-runtime_server_policy="$(printf '%s\n' "$runtime_rendered" | awk '
   function flush_document() {
     if (is_policy && is_server_policy) {
       printf "%s", document
@@ -102,14 +83,18 @@ grep -Fq '              app.kubernetes.io/component: litellm' <<<"$server_policy
 grep -Fq '          port: 4000' <<<"$server_policy"
 grep -Fq '              app.kubernetes.io/component: memory-gateway' <<<"$server_policy"
 grep -Fq '          port: 8080' <<<"$server_policy"
-grep -Fq '              opencrane.ai/runtime-release:' <<<"$runtime_server_policy"
-grep -Fq '              app.kubernetes.io/component: warm-runtime' <<<"$runtime_server_policy"
-grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-runtime"' <<<"$runtime_server_policy"
-grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
-grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-personal-warm' <<<"$runtime_server_policy"
-grep -Fq '              opencrane.ai/warm-runtime-pool: opencrane-silo-managed-warm' <<<"$runtime_server_policy"
-if grep -Fq 'app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"; then
-  echo "opencrane-server policy retained the retired per-Job runtime selector" >&2
+history_server_policy="$(printf '%s\n' "$history_rendered" | awk '
+  function flush_document() { if (is_policy && is_server_policy) printf "%s", document; document = ""; is_policy = 0; is_server_policy = 0 }
+  /^---$/ { flush_document(); next }
+  { document = document $0 ORS }
+  /^kind: NetworkPolicy$/ { is_policy = 1 }
+  /^  name: opencrane-silo-opencrane-server$/ { is_server_policy = 1 }
+  END { flush_document() }
+')"
+grep -Fq '              app.kubernetes.io/component: kurrentdb' <<<"$history_server_policy"
+grep -Fq '          port: 2113' <<<"$history_server_policy"
+if grep -Eq 'warm-runtime|agent-runtime' <<<"$server_policy"; then
+  echo "opencrane-server policy retained the retired runtime selector" >&2
   exit 1
 fi
 grep -A1 -F 'name: MCP_CONTROLLER_CLAIM_LEASE_SECONDS' <<<"$lease_rendered" | grep -F 'value: "47"' >/dev/null

@@ -64,25 +64,12 @@ if grep -Eq 'OPENCRANE_MEMBERSHIP_(ISSUER_ID|KEY_ID|PUBLIC_KEY_FILE)|membership-
   echo "standalone server renders Fleet membership trust material" >&2
   exit 1
 fi
-grep -Fq '            - name: AGENT_RUNTIME_PERSONAL_NAMESPACE' <<<"$server_manifest"
-grep -Fq '              value: "opencrane-silo-runtime"' <<<"$server_manifest"
-grep -Fq '            - name: AGENT_RUNTIME_MANAGED_NAMESPACE' <<<"$server_manifest"
-grep -Fq '              value: "opencrane-silo-managed-runtime"' <<<"$server_manifest"
-
 # The server must identify its silo and receive bounded worker and MCP-check settings before it
 # starts the Absurd worker.
 grep -Fq '            - name: OPENCRANE_SILO_ID' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS' <<<"$server_manifest"
-grep -Fq '            - name: AGENT_RUNTIME_CONTINUATION_KEYRING_PATH' <<<"$server_manifest"
-grep -Fq '              value: /var/run/opencrane/runtime-continuation/keyring.json' <<<"$server_manifest"
-grep -Fq '            - name: runtime-continuation-keyring' <<<"$server_manifest"
-grep -Fq '              mountPath: /var/run/opencrane/runtime-continuation' <<<"$server_manifest"
-continuation_keyring_volume="$(grep -A 8 '        - name: runtime-continuation-keyring' <<<"$server_manifest")"
-grep -Fq '            secretName: "opencrane-runtime-continuation"' <<<"$continuation_keyring_volume"
-grep -Fq '            defaultMode: 0440' <<<"$continuation_keyring_volume"
-grep -Fq '                path: keyring.json' <<<"$continuation_keyring_volume"
 grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_OCI_REGISTRY_BASE_URL' <<<"$server_manifest"

@@ -290,12 +290,12 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		const inventory: Array<Record<string, unknown>> = [];
 		const fetchMock = vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
 		{
-			if (url.endsWith("/model/info"))
+			if (url.endsWith("/v2/model/info"))
 				return new Response(JSON.stringify({ data: inventory }), { status: 200 });
 			if (url.includes("/credentials/"))
 				return new Response("", { status: 404 });
 			if (url.endsWith("/credentials"))
-				return new Response("{}", { status: 200 });
+				return new Response(JSON.stringify({ success: true, message: "Credential created successfully" }), { status: 200 });
 			if (url.endsWith("/model/new"))
 			{
 				const body = JSON.parse(init?.body as string) as { model_name: string; litellm_params: Record<string, unknown>; model_info?: { id?: string; mode?: string } };
@@ -360,7 +360,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		let deployment: Record<string, unknown> | null = null;
 		const fetchMock = vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
 		{
-			if (url.endsWith("/model/info"))
+			if (url.endsWith("/v2/model/info"))
 				return new Response(JSON.stringify({ data: deployment === null ? [] : [deployment] }), { status: 200 });
 			if (url.endsWith("/model/new"))
 			{

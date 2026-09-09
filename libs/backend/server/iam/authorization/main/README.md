@@ -53,6 +53,9 @@ the ordinary exact boundary-matching rules.
 ## Public surface
 
 - `AuthorizationAuthority` decides one typed action or batch-filters a lifecycle-eligible catalogue.
+- `decidePrincipal` checks current eligibility across stored personal and Group boundaries without
+  recording evidence. An allowed result cannot replace `admitPrincipal` for a concrete mutation or
+  effect. Catalogue filtering still accepts Read-class rules only, and admission rejects Read rules.
 - `PrismaAuthorizationAuthority` binds that port to the caller's existing Prisma transaction.
 - `___RunSerializableAuthorizationTransaction` gives database-only product UnitOfWorks one bounded
   P2034-only retry policy for authorization reads, protected writes, and audit evidence. Its
@@ -62,14 +65,20 @@ the ordinary exact boundary-matching rules.
   external membership, expands direct Group subjects, loads matching grants, and resolves stored
   boundary context.
 - The managed-grant repository narrowly reconciles one manager's live grants against immutable
-  catalogue references.
+  catalogue references. New grants become valid at the caller's trusted operation time, which also
+  timestamps revocations. This lets onboarding create grants and admit publication with the same
+  clock even when PostgreSQL starts the transaction later. Callers supply server-derived time,
+  never a browser timestamp. Reconciliation leaves existing activation times unchanged; current
+  membership, future validity, expiry, revocation and competing deny grants still govern decisions.
 - Exact resource retirement rechecks organisation administration and soft-revokes every active
   grant on the retiring coordinates inside the owning product transaction.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
 - `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
   `PrismaToolInvocationUnitOfWork`, and their lifecycle contracts own durable human approval and
-  provider-effect recovery for tool calls.
+  provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
+  invocation carry the same immutable execution subject, including the active conversation-computer
+  lease id and generation; released or replaced leases fail closed.
 - `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
   tool work inside the runs domain's cancellation transaction.
 

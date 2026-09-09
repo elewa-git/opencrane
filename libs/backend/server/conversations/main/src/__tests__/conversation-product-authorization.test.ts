@@ -1,3 +1,4 @@
+import { ConversationMode } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
@@ -7,6 +8,7 @@ import { PrismaConversationProductAuthorizationRepository } from "../db/conversa
 const _authorization = vi.hoisted(function _AuthorizationSpies()
 {
 	return {
+		reconcileManagedResourceGrants: vi.fn(),
 		admitPrincipal: vi.fn(),
 		listPrincipalEntitled: vi.fn(),
 	};
@@ -20,7 +22,7 @@ vi.mock("@opencrane/backend/server/iam/authorization", function _MockAuthorizati
 			async admitPrincipal(command: object) { return _authorization.admitPrincipal(command); }
 			async listPrincipalEntitled(command: object) { return _authorization.listPrincipalEntitled(command); }
 		},
-		PrismaManagedAuthorizationGrantRepository: class {},
+		PrismaManagedAuthorizationGrantRepository: class { reconcileManagedResourceGrants = _authorization.reconcileManagedResourceGrants; },
 	};
 });
 
@@ -55,4 +57,12 @@ describe("conversation product authorization", function _Suite()
 		expect(_authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", principalId: "principal-1", resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: "conversation-1" }, action: ProductAuthorizationActions.Use }));
 		expect(_authorization.admitPrincipal.mock.calls[0]?.[0]).not.toHaveProperty("boundary");
 	});
+	it.each([ConversationMode.Group, ConversationMode.Direct, ConversationMode.AgentSession])("grants Delegate only for Group participation, checking persisted %s mode", async function (mode)
+	{
+		const transaction = { principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1", subject: "user-1" }]) }, conversation: { findUnique: vi.fn().mockResolvedValue({ siloId: "silo-1", mode }) } };
+		await new PrismaConversationProductAuthorizationRepository(transaction as never).reconcileParticipants("silo-1", "conversation-1", ["user-1"], "principal-1", new Date());
+		const grants = _authorization.reconcileManagedResourceGrants.mock.calls[0]![0].grants;
+		expect(grants.some((grant: any) => grant.capability.capabilityId === `${ProductAuthorizationResourceKinds.Conversation}:${ProductAuthorizationActions.Delegate}`)).toBe(mode === ConversationMode.Group);
+	});
+
 });

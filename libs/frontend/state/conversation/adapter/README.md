@@ -1,60 +1,41 @@
-# @opencrane/state/conversation/adapter — live conversation event stream
+# @opencrane/state/conversation/adapter — conversation history and server events
 
-> [frontend](../../../README.md) › [state](../../README.md) › conversation › adapter
+> [frontend](../../../README.md) › [state](../../README.md) › [conversation](../README.md) › adapter
 
 ## What it owns
 
-Part of the OpenCrane **frontend state layer** (the code between the browser UI and the backend).
-This package streams a signed-in participant's already-authorised, display-safe conversation
-projection from the canonical socket. It does not open an agent-runtime connection, mint a pod
-credential, or expose execution authority to the browser.
+`OpenCraneConversationEventStream` reads initial participant history, then follows
+`GET /api/v1/me/conversations/{conversationId}/events` through the generated client with
+`parseAs: "stream"`. The existing session cookie and 401 sign-in handling apply to both requests.
+Accepted event IDs become the exclusive cursor in the next URL and `Last-Event-ID` header.
 
-Opening a conversation creates a same-origin WebSocket at
-`/api/v1/me/conversations/:conversationId/socket`. The browser sends its existing cookie session
-during the upgrade; the server restores that session, derives the caller and silo, and rechecks
-participant membership before accepting the connection. The socket returns structured snapshot and
-live AG-UI frames, then carries participant message commands and their idempotent acknowledgements.
-The adapter validates every complete projection frame with the shared AG-UI state package before
-publishing browser view state.
-The backend [conversation projection package](../../../../backend/conversations/projection/main/README.md)
-produces this one stream for direct, group and agent-session conversations.
-
-```
- green conversation feature
-        │ opens one authorised stream
-        ▼
- OpenCraneConversationEventStream  ◄── HERE
-        │ wss://.../me/conversations/:conversationId/socket
-        ▼
- conversation/ag-ui ......... validates + reduces safe socket frames
-```
-
-**In this flow:** [conversation/ag-ui](../ag-ui/README.md) · the green conversation feature.
-
-The browser sends its cookie session automatically for this same-origin upgrade. Bounded socket
-connections resume with the exact opaque cursor in the URL; cursorless open-interrupt overlays never
-change it. Heartbeats and reconnect phases are observable, caller abort is immediate, malformed
-frames fail closed, and access revocation purges the reduced projection.
+The server event pages contain `computer: null`; they retain the last computer read from `/history`.
+Every 30 seconds the adapter closes that event connection, refreshes `/history` after the accepted
+cursor, then opens the next event connection. There is no parallel history polling loop. **The
+initial history read and these computer refreshes still use the existing full computer-history
+replay on the server.** This change removes one-second polling; it does not eliminate that replay
+cost or provide a computer event projection.
 
 ## Public surface
 
-- `OpenCraneConversationEventStream` — cookie-session socket adapter that implements the separate
-  [`ConversationEventStream`](../stream/README.md) port and submits participant messages.
+- `OpenCraneConversationEventStream` implements the browser history port with the generated client.
 
 ## Boundary
 
-Constructed only by app composition and consumed through the separate stream port. It delegates all
-AG-UI record validation/reduction to `conversation/ag-ui`. It deliberately does not list
-conversations, persist messages itself, interpret approval authority, or expose agent commands.
+The server derives participant and silo identity from the session. The decoder holds at most one
+512 KiB encoded SSE frame and cancels a pending reader when selection changes. Model-adjacent
+validators check entries, computer coordinates, decimal progress, and the selected conversation.
+SSE cannot replace the computer projection or move the accepted cursor backwards.
 
-## Dependency direction
-
-Tagged `scope:web`, `type:state`, and `frontend-role:adapter`: it may depend on the frontend state
-contracts it adapts — here `conversation/ag-ui` and Angular — never on apps, feature packages, or
-server domains.
+Duration, idle, and response-size closes reconnect without consuming the failure allowance. A
+five-second minimum between connection starts prevents a rapid normal-close loop. Failed reads
+have exponential backoff and a limited retry count; HTTP 429 honors `Retry-After` (delays over five
+minutes require explicit recovery). A terminal `unavailable` event or malformed frame is never
+retried automatically. Current-access failures clear the private projection and tell the workspace
+to purge its selection and draft; transient failures retain accepted data. No raw server errors are
+displayed, and this adapter never submits messages or receives sandbox credentials.
 
 ## See also
 
-- Parent index: [state](../../README.md)
-- Siblings: [conversation/stream](../stream/README.md) · [conversation/ag-ui](../ag-ui/README.md) · [conversation/render](../render/README.md)
-- Server producer: [conversation projection](../../../../backend/conversations/projection/main/README.md)
+- Port and validators: [`../stream`](../stream/README.md)
+- Workspace adapter: [`../workspace/adapter`](../workspace/adapter/README.md)

@@ -1,47 +1,64 @@
 import { PersonaRevisionState } from "@prisma/client";
-import { AgentServiceKinds } from "@opencrane/models/agents";
-import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaApprovedPersonaSource } from "../prisma-approved-persona-source";
+import { RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies } from "@opencrane/backend/agents/execution/runs";
 
-/** Creates personal run authority bound to its delegated owner. */
-function _PersonalRun(overrides: Partial<InitialRunAuthority> = {}): InitialRunAuthority
+import { PrismaApprovedPersonaAuthority } from "../prisma-approved-persona-source";
+
+/** Keeps the sign-in subject, local Principal and request subject visibly distinct. */
+function _Fixture()
 {
-	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null, ...overrides };
+	const prisma = {
+		principal: { findUnique: vi.fn().mockResolvedValue({ subject: "approved-owner-oidc-subject" }) },
+		personaProfile: { findUnique: vi.fn().mockResolvedValue({ activeRevision: { id: "approved-revision", state: PersonaRevisionState.Approved, personaProfileId: "owner-profile" } }) },
+	};
+	const command = { siloId: "silo-1", requester: { subjectId: "caller-supplied-other-subject" } } as never;
+	const run = { executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.None } } as never;
+	const subject = { principalId: "local-principal", siloId: "silo-1" } as never;
+	return { prisma, source: new PrismaApprovedPersonaAuthority(prisma as never), command, run, subject };
 }
 
-/** Creates the command whose subject owns the persona profile. */
-function _Command(overrides: Record<string, unknown> = {})
+describe("PrismaApprovedPersonaAuthority", function _Suite()
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", ...overrides } as never;
-}
-
-/** Creates the admission transaction facade for persona profile lookup. */
-function _Transaction(activeRevision: unknown): RunAdmissionTransaction
-{
-	return { prisma: { personaProfile: { findUnique: vi.fn().mockResolvedValue(activeRevision === undefined ? null : { activeRevision }) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
-}
-
-describe("PrismaApprovedPersonaSource", function _DescribePrismaApprovedPersonaSource()
-{
-	it("loads only the delegated user's approved active persona in the command silo", async function _LoadsApprovedPersona()
+	it("uses the verified Principal's same-silo sign-in subject to find the approved profile", async function _ResolvesOwner()
 	{
-		const transaction = _Transaction({ id: "persona-1", state: PersonaRevisionState.Approved, personaProfileId: "profile-1" });
-		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun(), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: "persona-1", personaId: "profile-1" } });
-		expect(transaction.prisma.personaProfile.findUnique).toHaveBeenCalledWith({ where: { siloId_userId: { siloId: "silo-1", userId: "user-1" } }, select: { activeRevision: { select: { id: true, state: true, personaProfileId: true } } } });
+		const fixture = _Fixture();
+		await expect(fixture.source.load(fixture.command, fixture.run, fixture.subject, {} as never)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: "approved-revision", personaId: "owner-profile" } });
+		expect(fixture.prisma.principal.findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "local-principal", siloId: "silo-1" } }, select: { subject: true } });
+		expect(fixture.prisma.personaProfile.findUnique).toHaveBeenCalledWith({ where: { siloId_userId: { siloId: "silo-1", userId: "approved-owner-oidc-subject" } }, select: { activeRevision: { select: { id: true, state: true, personaProfileId: true } } } });
 	});
 
-	it("refuses cross-subject persona selection and keeps managed runs persona-free", async function _RejectsImpersonation()
+	it.each([null, { subject: "" }, { subject: "  " }])("denies a missing Principal or blank sign-in subject before reading profiles: %j", async function _RefusesMissingPrincipal(principal)
 	{
-		const transaction = _Transaction({ id: "persona-1", state: PersonaRevisionState.Approved, personaProfileId: "profile-1" });
-		await expect(new PrismaApprovedPersonaSource().load(_Command({ executionSubjectId: "user-2" }), _PersonalRun(), transaction)).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
-		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun({ agentKind: AgentServiceKinds.Managed, delegatedUserId: null }), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: null, personaId: null } });
+		const fixture = _Fixture();
+		fixture.prisma.principal.findUnique.mockResolvedValue(principal);
+		await expect(fixture.source.load(fixture.command, fixture.run, fixture.subject, {} as never)).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
+		expect(fixture.prisma.personaProfile.findUnique).not.toHaveBeenCalled();
 	});
 
-	it("refuses a missing or non-approved active revision", async function _RejectsDraftPersona()
+	it("cannot resolve a Principal that exists only in another silo", async function _RefusesForeignPrincipal()
 	{
-		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun(), _Transaction(null))).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
-		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun(), _Transaction({ id: "persona-1", state: PersonaRevisionState.Draft, personaProfileId: "profile-1" }))).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
+		const fixture = _Fixture();
+		fixture.prisma.principal.findUnique.mockImplementation(async function _FindPrincipal(query)
+		{
+			return query.where.id_siloId.siloId === "other-silo" ? { subject: "foreign-owner" } : null;
+		});
+		await expect(fixture.source.load(fixture.command, fixture.run, fixture.subject, {} as never)).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
+		expect(fixture.prisma.personaProfile.findUnique).not.toHaveBeenCalled();
+	});
+
+	it.each([null, { activeRevision: null }, { activeRevision: { id: "draft-revision", state: PersonaRevisionState.Draft, personaProfileId: "owner-profile" } }])("still denies a missing or unapproved active persona: %j", async function _RefusesUnapproved(profile)
+	{
+		const fixture = _Fixture();
+		fixture.prisma.personaProfile.findUnique.mockResolvedValue(profile);
+		await expect(fixture.source.load(fixture.command, fixture.run, fixture.subject, {} as never)).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
+	});
+
+	it("does not read personal identity or profiles for a policy without a persona", async function _SkipsPersona()
+	{
+		const fixture = _Fixture();
+		await expect(fixture.source.load(fixture.command, { executionPolicy: { persona: RunExecutionPersonaPolicies.None } } as never, fixture.subject, {} as never)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: null, personaId: null } });
+		expect(fixture.prisma.principal.findUnique).not.toHaveBeenCalled();
+		expect(fixture.prisma.personaProfile.findUnique).not.toHaveBeenCalled();
 	});
 });

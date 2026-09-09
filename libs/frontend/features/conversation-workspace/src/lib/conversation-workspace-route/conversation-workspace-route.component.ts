@@ -3,9 +3,8 @@ import { Router } from "@angular/router";
 
 import { PLATFORM_BRIDGE, type AuthenticationWindowObservation } from "@opencrane/platform";
 
-import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types";
 import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component";
-import { _ConversationRouteCommands, _ConversationThreadRouteNavigation } from "./conversation-workspace-route.state";
+import { _ConversationRouteCommands } from "./conversation-workspace-route.state";
 
 /** Feature-local coordinator for canonical chat URLs and breadcrumb child navigation. */
 @Component({ selector: "wo-conversation-workspace-route", standalone: true, imports: [ConversationWorkspacePageComponent], templateUrl: "./conversation-workspace-route.component.html", styleUrl: "./conversation-workspace-route.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
@@ -52,17 +51,11 @@ export class ConversationWorkspaceRouteComponent
 		await this._router.navigate(["/chats"]);
 	}
 
-	/** Open one child Agent session with exact parent breadcrumb restoration state. */
-	protected async openThread(intent: ConversationThreadNavigationIntent): Promise<void>
-	{
-		const navigation = _ConversationThreadRouteNavigation(intent);
-		await this._router.navigate(navigation.commands, navigation.extras);
-	}
-
 	/** Open the fixed server-owned sign-in path without giving the feature navigation authority. */
 	protected startStepUp(path: string): void
 	{
-		if (this._stepUpObservation !== null || path !== "/api/v1/auth/reauthenticate") return;
+		if (this._stepUpObservation !== null || path !== "/api/v1/auth/reauthenticate")
+			return;
 		this._stepUpObservation = this._platform.openAuthenticationWindow(path, this._RecoverAfterStepUp.bind(this));
 	}
 

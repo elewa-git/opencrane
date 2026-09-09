@@ -16,7 +16,7 @@ workload and namespace map is in [`cluster-architecture.md`](./cluster-architect
 - Bound Jobs with quotas, deadlines, immutable images, read-only roots, and ephemeral scratch.
 
 Runtime Pods and authoring, tool, MCP, and preprocessing Jobs must not receive general Kubernetes
-mutation rights. The agent controller is the only mutator of claimed warm runtime Pods and the
+mutation rights. The Agent Sandbox controller owns conversation computer Pods, while the agent controller
 governed worker Jobs assigned to it.
 
 ## Workload identity

@@ -1,0 +1,108 @@
+<section
+  class="computer-review"
+  aria-label="Computer review"
+  aria-live="polite"
+>
+  <header>
+    <h2>Computer review</h2>
+    <p>Inspect the active workspace, private browser, and localhost response source.</p>
+  </header>
+  @if (error()) {
+    <p class="computer-review__error" role="alert">{{ error() }}</p>
+  }
+  <section>
+    <h3>File and diff</h3>
+    <div class="computer-review__controls">
+      <input
+        #filePath
+        pInputText
+        aria-label="Workspace file path"
+        placeholder="src/main.ts"
+      /><p-button
+        label="Inspect"
+        [disabled]="busy()"
+        (onClick)="inspect(filePath.value)"
+      />
+    </div>
+    @if (file()) {
+      <h4>File</h4>
+      <pre><code>{{ file() }}</code></pre>
+    }
+    @if (diff(); as result) {
+      <h4>Diff</h4>
+      <pre><code>{{ result.output }}</code></pre>
+    }
+  </section>
+  <section>
+    <h3>Command</h3>
+    <div class="computer-review__controls">
+      <input
+        #commandLine
+        pInputText
+        aria-label="Allowlisted command"
+        placeholder="npm test"
+      /><p-button
+        label="Run"
+        [disabled]="busy()"
+        (onClick)="run(commandLine.value)"
+      />
+    </div>
+    @if (command(); as result) {
+      <p>Outcome: {{ result.outcome }} · Exit {{ result.exitCode }}</p>
+      <pre><code>{{ result.output }}</code></pre>
+    }
+  </section>
+  <section>
+    <h3>Browser and localhost response</h3>
+    <div class="computer-review__controls">
+      <input
+        #port
+        pInputText
+        aria-label="Localhost port"
+        value="5173"
+        inputmode="numeric"
+      /><input
+        #pagePath
+        pInputText
+        aria-label="Localhost path"
+        value="/"
+      /><p-button
+        label="Open page"
+        [disabled]="busy()"
+        (onClick)="localhost(port.value, pagePath.value, 'page')"
+      /><p-button
+        label="Screenshot"
+        severity="secondary"
+        [disabled]="busy()"
+        (onClick)="localhost(port.value, pagePath.value, 'screenshot')"
+      /><p-button
+        label="View response source"
+        severity="secondary"
+        [disabled]="busy()"
+        (onClick)="localhost(port.value, pagePath.value, 'preview')"
+      /><p-button
+        label="Refresh pages"
+        severity="secondary"
+        [disabled]="busy()"
+        (onClick)="browserRefreshRequested.emit()"
+      />
+    </div>
+    @if (browserTargets().length > 0) {
+      <ul>
+        @for (target of browserTargets(); track target.id) {
+          <li>
+            <strong>{{ target.title || "Untitled page" }}</strong
+            ><span>{{ target.url }}</span>
+          </li>
+        }
+      </ul>
+    }
+    @if (screenshotUrl(); as url) {
+      <img [src]="url" alt="Captured localhost preview" />
+    }
+    @if (preview()) {
+      <h4>Response source</h4>
+      <pre><code>{{ preview() }}</code></pre>
+    }
+  </section>
+</section>

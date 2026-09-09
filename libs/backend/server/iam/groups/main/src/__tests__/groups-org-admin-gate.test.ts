@@ -52,6 +52,7 @@ function _Authorization(allow: boolean): AuthorizationAuthority
 		: { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant" as const, grantIds: [], rule: null, evidence: null };
 	return {
 		decide: vi.fn().mockResolvedValue(decision),
+		decidePrincipal: vi.fn().mockResolvedValue(decision),
 		admit: vi.fn().mockResolvedValue(decision),
 		admitPrincipal: vi.fn().mockResolvedValue(decision),
 		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return decision; }); }),

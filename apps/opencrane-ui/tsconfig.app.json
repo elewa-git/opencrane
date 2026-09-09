@@ -32,12 +32,6 @@
       "path": "../../libs/frontend/state/conversation/render"
     },
     {
-      "path": "../../libs/frontend/elements/a2ui"
-    },
-    {
-      "path": "../../libs/frontend/features/agent-threads"
-    },
-    {
       "path": "../../libs/frontend/features/onboarding"
     },
     {
@@ -57,9 +51,6 @@
     },
     {
       "path": "../../libs/frontend/state/onboarding"
-    },
-    {
-      "path": "../../libs/frontend/state/conversation/agent-threads"
     },
     {
       "path": "../../libs/frontend/state/core"

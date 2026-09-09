@@ -15,8 +15,6 @@
 ---
 {{ include "opencrane.server.networkPolicy" . }}
 ---
-{{ include "opencrane.channelProxy.resources" . }}
----
 {{ include "opencrane.memoryGateway.resources" . }}
 ---
 {{ include "opencrane.artifactService.resources" . }}
@@ -36,4 +34,8 @@
 {{ include "opencrane.litellm.service" . }}
 ---
 {{ include "opencrane.litellm.networkPolicy" . }}
+---
+{{ include "opencrane.kurrentdb.resources" . }}
+---
+{{ include "opencrane.agentSandbox.resources" . }}
 ---

@@ -14,7 +14,7 @@ import type { MountedPublicKeySource } from "./mounted-public-key.types";
  * different file, and the file is read once here so that missing key material fails at
  * startup rather than on the first real request.
  *
- * Called by: libs/backend/server/iam/membership/main/src/fleet-membership-evidence.factory.ts
+ * Called by: libs/backend/server/iam/membership/main/src/human-membership-evidence.factory.ts
  *.
  *
  * @param publicKeyPath - Absolute path of the mounted public-key file.

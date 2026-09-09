@@ -1,0 +1,11 @@
+<div class="group-message-actions">
+	@if (canAsk()) { <p-button label="Ask company assistant" icon="pi pi-sparkles" severity="secondary" [text]="true" (onClick)="askRequested.emit()" /> }
+	@if (canShare()) { <p-button label="Share result to group" icon="pi pi-share-alt" severity="secondary" [text]="true" (onClick)="shareRequested.emit()" /> }
+	@for (child of children(); track child.conversationId) {
+		@switch (child.state) {
+			@case (states.Pending) { <p role="status">Preparing a conversation with {{ child.agentName }}…</p> }
+			@case (states.Ready) { <p-button [label]="'Open ' + child.agentName + ' conversation'" icon="pi pi-arrow-right" severity="secondary" [text]="true" (onClick)="childRequested.emit(child.conversationId)" /> }
+			@case (states.Unavailable) { <p role="status">The request to {{ child.agentName }} is unavailable.</p> }
+		}
+	}
+</div>

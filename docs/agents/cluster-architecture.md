@@ -15,19 +15,17 @@ and credentials are not shared across ClusterTenant boundaries.
 organisation ingress
         |
         +-> opencrane-ui
-        +-> channel-proxy
         +-> opencrane server ---- PostgreSQL
                   |
                   +---- memory-gateway ---- Cognee (sealed foundation)
                   +---- LiteLLM
                   |
-                  +---- agent-controller
-                             |
-                             +-> personal warm runtime namespace
-                             +-> managed warm runtime namespace
-                             +-> skill-authoring Job namespace
+                  +---- agent-controller ---- restricted run-worker Jobs
+                  +---- KurrentDB (conversation history + computer leases)
+                  +---- Agent Sandbox claim ---- conversation-computer Pod
+                  +---- skill-authoring Job namespace
 
-claimed runtime Pods ----> LiteLLM (attempt model key)
+conversation-computer Pods ----> LiteLLM (attempt model key)
 opencrane server ----> OCI MCP executor Jobs (durable claim + Pod-bound companion)
 
 artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
@@ -39,6 +37,13 @@ artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
 
 The `apps/_infra/deploy-k8s` umbrella chart composes the app-owned Helm units for one organisation.
 Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are external prerequisites.
+
+Browser conversation events use the existing OpenCrane public listener over same-origin SSE.
+The listener checks PostgreSQL participation and permissions, reads only the selected KurrentDB
+conversation stream, and closes upstream work when the browser disconnects. It does not expose
+KurrentDB or introduce a channel-proxy/target plane. Connection budgets are per listener process;
+adding replicas multiplies their aggregate capacity. See the
+[operator limits](../../website/operators/deployment-configuration.md#conversation-live-updates).
 
 ## Product authorization placement
 
@@ -61,7 +66,7 @@ one committed result, or one complete rollback
 ```
 
 Kubernetes ServiceAccounts, RBAC, and NetworkPolicy prove and contain workload identity; they do not
-grant access to an agent, skill, MCP tool, artifact, model, dataset, conversation, or channel target.
+grant access to an agent, skill, MCP tool, artifact, model, dataset, or conversation.
 Controllers and workers receive one database-fenced assignment after product authorization. They
 cannot list grants, select another product revision, or mint a follow-on admission.
 
@@ -71,12 +76,11 @@ cannot list grants, select another product revision, or mint a follow-on admissi
 | --- | --- | --- |
 | OpenCrane API | `apps/opencrane` | PostgreSQL product records |
 | Web client | `apps/opencrane-ui` | none; authenticated API client |
-| Channel edge | `apps/channel-proxy` | none; admitted context only |
 | Memory gateway | `apps/memory-gateway` | none; authenticated read-only Cognee boundary |
 | Runtime controller | `apps/agent-controller` | database-fenced assignment claims |
 | OCI MCP executor companion | `apps/mcp-executor` | one durable discovery or tool-call command |
-| Personal warm runtime | `apps/agent-runtime` | one-use Absurd claim for one attempt |
-| Managed warm runtime | `apps/agent-runtime` | one-use Absurd claim for one scheduled or triggered attempt |
+| Conversation computer | `apps/conversation-computer` | one generation-bound computer lease recorded in KurrentDB |
+| Agent Sandbox profile | `apps/_infra/agent-sandbox` | release-owned template, zero-replica warm pool, claim policy and claim RBAC |
 | Artifact bytes | `apps/artifact-service` | ArtifactStore behind server-issued leases |
 | Document extraction | `apps/artifact-preprocessor` | none; brokered input and output |
 | Malware scanning | `apps/artifact-scanner` | none; brokered quarantined bytes and fenced result only |
@@ -87,9 +91,10 @@ reusable behaviour and never own a deployment.
 
 ## Namespace classes
 
-- **Trusted server namespace** — API, controller, web, channel edge, and organisation service planes.
-- **Personal runtime namespace** — one fixed warm Deployment whose Pods are claimed once for personal runs.
-- **Managed runtime namespace** — one fixed warm Deployment whose Pods are claimed once for managed runs.
+- **Trusted server namespace** — API, controller, web, and organisation service planes.
+- **Conversation-computer namespace** — Agent Sandbox realises one Pod from the release-owned profile
+  after OpenCrane records a generation-bound lease. The zero-replica `SandboxWarmPool` is a profile
+  selector, not an OpenCrane-owned warm Deployment.
 - **OCI MCP executor namespace** — one restricted two-container Job per immutable MCP image
   discovery or tool call. The uploaded image receives no OpenCrane token; the fixed companion gets
   a short-lived Pod-bound token and reports one checked result.
@@ -103,9 +108,8 @@ resource quota, and a dedicated zero- or least-privilege service account.
 
 ## Network direction
 
-Inbound public traffic terminates at organisation ingress. The channel proxy authenticates channel
-traffic and forwards only admitted, bounded requests. Claimed warm runtimes open their control stream
-outward; they expose no public listener.
+Inbound public traffic terminates at organisation ingress. Conversation computers call the private server
+bootstrap and output routes with a projected token; their review Service stays private to the silo.
 
 NetworkPolicy permits only the named service path required by each workload class. Network reach is
 not authorization: every sensitive server route also verifies workload identity and current durable
@@ -135,11 +139,13 @@ fail-closed until their recoverable write authority is implemented and qualified
 
 ## Storage
 
-PostgreSQL stores durable product and audit state. ArtifactStore stores content-addressed bytes.
+PostgreSQL stores durable product, authorization and audit state. KurrentDB stores ordered
+conversation history and computer lease history. ArtifactStore stores content-addressed bytes.
 Cognee stores indexed organisation memory under OpenCrane-owned scope and provenance rules.
 
-Runtime Pods and skill-authoring and preprocessing Jobs receive only bounded scratch. Restarting or
-deleting a workload cannot delete a conversation, run, artifact, skill, or organisation-memory record.
+Conversation-computer Pods and skill-authoring and preprocessing Jobs receive only bounded scratch.
+Restarting or deleting a workload cannot delete a conversation, run, artifact, skill, or
+organisation-memory record.
 
 ## OCI registry roles
 
@@ -147,7 +153,7 @@ Operators may use the same OCI registry infrastructure for two different ownersh
 
 | Image class | Examples | Authority |
 |---|---|---|
-| OpenCrane platform image | API, runtime, controller, MCP companion, skill runner, scanner | Immutable OpenCrane release and deployment manifest |
+| OpenCrane platform image | API, conversation computer, controller, MCP companion, skill runner, scanner | Immutable OpenCrane release and deployment manifest |
 | Governed product image | Uploaded MCP server; future containerized-code skill | Product revision, central authorization decision, and one-use workload admission |
 
 An OCI digest proves which bytes a container runtime will execute. It does not prove that a

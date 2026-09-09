@@ -95,5 +95,4 @@ at the selected browser viewport height, so short routes cannot expose the body 
 ## See also
 
 - Parent index: [elements](../README.md)
-- Sibling: [a2ui](../a2ui/README.md)
 - Types source: [core](../../core/README.md)

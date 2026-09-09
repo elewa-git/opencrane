@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { JsonValue } from "@opencrane/util";
 
 /** Locked Prisma service row shape consumed by the mapper. */
 export interface AgentServiceRow
@@ -28,7 +28,7 @@ export interface AgentRevisionRow
 	readonly promptPolicyVersion: string;
 	readonly personaRevisionId: string | null;
 	readonly modelDefinitionId: string;
-	readonly budget: Prisma.JsonValue;
+	readonly budget: JsonValue;
 	readonly authoredBy: string;
 	readonly createdAt: Date;
 	readonly publishedAt: Date | null;
@@ -46,13 +46,12 @@ export interface AgentRunRow
 	readonly agentRevisionId: string;
 	readonly conversationId: string | null;
 	readonly trigger: string;
-	readonly delegatedUserId: string | null;
+	readonly agentIdentityId: string;
+	readonly principalId: string;
+	readonly executionSubject: JsonValue;
 	readonly requestIdempotencyKey: string;
-	readonly rootRunId: string;
-	readonly parentRunId: string | null;
 	readonly attempt: number;
 	readonly state: string;
-	readonly effectiveContractDigest: string;
 	readonly inputSnapshotDigest: string;
 	readonly acceptedAt: Date;
 	readonly startedAt: Date | null;

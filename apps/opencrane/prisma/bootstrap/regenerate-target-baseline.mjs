@@ -43,12 +43,6 @@ function _ReplaceExactlyOnce(source, search, replacement, label)
 
 let normalizedGenerated = _ReplaceExactlyOnce(
 	generated,
-	'    "activity_sequence" BIGSERIAL NOT NULL,',
-	'    "activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,',
-	"conversation activity sequence column",
-);
-normalizedGenerated = _ReplaceExactlyOnce(
-	normalizedGenerated,
 	'    CONSTRAINT "model_definitions_pkey" PRIMARY KEY ("id")\n);',
 	'    CONSTRAINT "model_definitions_pkey" PRIMARY KEY ("id"),\n    CONSTRAINT "model_definitions_generated_output_capabilities_check" CHECK ("generated_output_capabilities" <@ ARRAY[\'image_png\', \'code_execution_files\']::TEXT[])\n);',
 	"model definition primary key",
@@ -67,9 +61,9 @@ normalizedGenerated = _ReplaceExactlyOnce(
 );
 normalizedGenerated = _ReplaceExactlyOnce(
 	normalizedGenerated,
-	'CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx" ON "conversation_run_events"("run_id", "attempt", "message_id");',
-	'CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx" ON "conversation_run_events"("run_id", "attempt", "message_id");\n\nCREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id") WHERE "type" = \'message.started\';',
-	"conversation message event index",
+	'CREATE INDEX "conversation_computer_active_leases_expires_at_idx" ON "conversation_computer_active_leases"("expires_at");',
+	'CREATE INDEX "conversation_computer_active_leases_expires_at_idx" ON "conversation_computer_active_leases"("expires_at");\n\nALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_exact_check" CHECK (\n  btrim("computer_id") <> \'\' AND btrim("silo_id") <> \'\' AND btrim("conversation_id") <> \'\' AND\n  btrim("agent_identity_id") <> \'\' AND btrim("lease_id") <> \'\' AND "lease_generation" > 0\n);',
+	"active conversation computer lease constraint",
 );
 
 function _Between(source, start, end, label)
@@ -122,7 +116,118 @@ if (authorityIndex < 0)
 {
 	throw new Error("target baseline is missing the authority guard marker");
 }
-const authoritySql = _RemoveGeneratedObjects(current.slice(authorityIndex), normalizedGenerated);
+let authoritySql = _RemoveGeneratedObjects(current.slice(authorityIndex), normalizedGenerated);
+const approvalAuthority = `CREATE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    decision_time TIMESTAMP(3) := clock_timestamp();
+    current_run "agent_runs"%ROWTYPE;
+    current_invocation "tool_invocations"%ROWTYPE;
+    bound_request "approval_requests"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+            OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+            OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+            OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
+            OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+            OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest" OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
+            OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+            OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
+            OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+            OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+            OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+            OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+            OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+            OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest identity and action bindings are immutable';
+        END IF;
+        IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+            RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
+        END IF;
+        -- The expiry sweep runs after the computer lease may have lapsed, so pending -> expired skips the run and lease fence.
+        IF NEW."state" = 'expired' THEN
+            IF decision_time < OLD."expires_at" THEN
+                RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
+            END IF;
+            IF NEW."decided_by" IS NOT NULL OR NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+                RAISE EXCEPTION 'ApprovalRequest expiry records no decider and no final arguments';
+            END IF;
+            NEW."decided_at" := decision_time;
+            RETURN NEW;
+        END IF;
+    END IF;
+    bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
+    SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
+    IF current_run."attempt" IS DISTINCT FROM bound_request."attempt"
+        OR current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+        OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
+        OR current_invocation."run_id" IS DISTINCT FROM bound_request."run_id"
+        OR current_invocation."attempt" IS DISTINCT FROM bound_request."attempt"
+        OR current_invocation."agent_service_id" IS DISTINCT FROM bound_request."agent_service_id"
+        OR current_invocation."agent_revision_id" IS DISTINCT FROM bound_request."agent_revision_id"
+        OR current_invocation."silo_id" IS DISTINCT FROM bound_request."silo_id"
+        OR current_invocation."agent_identity_id" IS DISTINCT FROM bound_request."agent_identity_id"
+        OR current_invocation."principal_id" IS DISTINCT FROM bound_request."principal_id"
+        OR current_invocation."authorization_execution_subject" IS NULL
+        OR current_invocation."authorization_execution_subject" IS DISTINCT FROM current_run."execution_subject"
+        OR current_run."execution_subject"->'runScope'->>'runId' IS DISTINCT FROM bound_request."run_id"
+        OR current_run."execution_subject"->'runScope'->>'attempt' IS DISTINCT FROM bound_request."attempt"::TEXT
+        OR COALESCE(btrim(current_run."execution_subject"->'computerScope'->>'leaseId'), '') = ''
+        OR COALESCE(current_run."execution_subject"->'computerScope'->>'leaseGeneration', '') !~ '^[1-9][0-9]*$' THEN
+        RAISE EXCEPTION 'ApprovalRequest requires the current waiting run and its exact computer-lease invocation';
+    END IF;
+    PERFORM 1 FROM "conversation_computer_active_leases"
+    WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
+      AND "silo_id" = current_run."silo_id"
+      AND "conversation_id" = current_run."conversation_id"
+      AND "agent_identity_id" = current_run."agent_identity_id"
+      AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
+      AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
+      AND "expires_at" > decision_time
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
+        END IF;
+        IF NEW."created_at" > decision_time OR NEW."expires_at" <= decision_time THEN
+            RAISE EXCEPTION 'a new ApprovalRequest must have a current, future expiry';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."state" = 'cancelled' THEN
+        IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
+        END IF;
+        NEW."decided_by" := NULL;
+    ELSE
+        NEW."decided_at" := decision_time;
+    END IF;
+    IF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
+        RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
+    END IF;
+    RETURN NEW;
+END;
+$$;`;
+authoritySql = authoritySql.replace(/CREATE FUNCTION "enforce_approval_request_update"\(\) RETURNS trigger[\s\S]*?\n\$\$;/u, function _ApprovalAuthority() { return approvalAuthority; });
+authoritySql = authoritySql.replace(/ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK \([\s\S]*?\n    \);/u, function _ApprovalConstraint() { return `ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
+        "attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
+        btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND btrim("resource_kind") NOT IN ('', '*') AND
+        btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
+        "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        "expires_at" > "created_at" AND btrim("elicitation_request_id") <> '' AND btrim("tool_invocation_row_id") <> '' AND
+        "reviewed_tool_arguments" IS NOT NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
+        "reviewed_tool_schema" IS NOT NULL AND jsonb_typeof("reviewed_tool_schema") = 'object' AND
+        "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'
+    );`; });
 const header = "-- OpenCrane target database baseline.\n-- Applied once by CloudNativePG while creating an empty application database.";
 const nextBaseline = `${header}\n\n${normalizedGenerated}\n\n${mcpConstraints}\n\n${snapshotConstraints}\n\n${authoritySql}\n`;
 

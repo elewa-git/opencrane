@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { AgentSandboxReleaseProfileConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -15,9 +15,6 @@ const _MAXIMUM_ARTIFACT_OUTPUT_BYTES = 64 * 1_024 * 1_024;
 
 /** Default artifact-preprocessor output body limit. */
 const _DEFAULT_ARTIFACT_OUTPUT_BYTES = 16 * 1_024 * 1_024;
-
-/** Receiver-id prefix reserved for migrated route rows; a configured receiver id may never use it. */
-const _LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX = "legacy-route-v0:";
 
 /** Read one bounded whole-number setting from the startup environment. */
 function _readBoundedInteger(name: string, fallback: number, minimum: number, maximum: number): number
@@ -69,6 +66,31 @@ function _readRequiredAbsolutePath(name: string): string
 	if (!value.startsWith("/"))
 		throw new Error(`${name} must be an absolute path`);
 	return value;
+}
+
+/** Read a KurrentDB endpoint without accepting credentials, paths, or a transport override. */
+function _readHistoryStoreEndpoint(): string
+{
+	const value = _readRequired("OPENCRANE_HISTORY_STORE_ENDPOINT");
+	if (value.includes("://") || value.includes("/") || value.includes("?") || value.includes("#") || value.includes("@"))
+		throw new Error("OPENCRANE_HISTORY_STORE_ENDPOINT must be one credential-free host:port without a scheme, path, or query");
+	let endpoint: URL;
+	try { endpoint = new URL(`kurrentdb://${value}`); }
+	catch { throw new Error("OPENCRANE_HISTORY_STORE_ENDPOINT must be one credential-free host:port without a scheme, path, or query"); }
+	if (!endpoint.hostname || !endpoint.port || Number(endpoint.port) < 1)
+		throw new Error("OPENCRANE_HISTORY_STORE_ENDPOINT must be one credential-free host:port without a scheme, path, or query");
+	return endpoint.host;
+}
+
+/** Read the complete mounted KurrentDB HistoryStore connection contract. */
+function _readHistoryStoreConfig(): OpenCraneHistoryStoreConfig
+{
+	return {
+		caCertificatePath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH"),
+		endpoint: _readHistoryStoreEndpoint(),
+		passwordPath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_PASSWORD_PATH"),
+		usernamePath: _readRequiredAbsolutePath("OPENCRANE_HISTORY_STORE_USERNAME_PATH"),
+	};
 }
 
 /** Read the maximum artifact-preprocessor output size; the server-side promotion broker uses the same limit. */
@@ -139,23 +161,25 @@ export function _ReadOrganizationMembershipConfig(): OpenCraneOrganizationMember
 	throw new Error("OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet");
 }
 
-/** Read the five channel resolver and replay receiver settings; all must be set or none. */
-function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
+/** Read the sole image-bound conversation-computer profile admitted by this release. */
+export function _ReadAgentSandboxReleaseProfileConfig(): AgentSandboxReleaseProfileConfig
 {
-	const values = {
-		channelProxyServiceAccountName: process.env.CHANNEL_PROXY_SERVICE_ACCOUNT_NAME?.trim() ?? "",
-		receiverEndpoint: process.env.CHANNEL_REPLAY_ENDPOINT?.trim() ?? "",
-		receiverId: process.env.CHANNEL_REPLAY_RECEIVER_ID?.trim() ?? "",
-		siloId: process.env.CHANNEL_TARGET_SILO_ID?.trim() ?? "",
-		trustedHost: process.env.CHANNEL_TARGET_TRUSTED_HOST?.trim().toLowerCase() ?? "",
+	const profileRevisionId = _readRequired("OPENCRANE_COMPUTER_PROFILE_REVISION_ID");
+	const maximumTurnCostUsdMicros = Number(_readRequired("OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS"));
+	if (!/^sha256:[a-f0-9]{64}$/u.test(profileRevisionId))
+		throw new Error("OPENCRANE_COMPUTER_PROFILE_REVISION_ID must be an immutable sha256 image digest");
+	if (!Number.isSafeInteger(maximumTurnCostUsdMicros) || maximumTurnCostUsdMicros < 1)
+		throw new Error("OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS must be a positive integer");
+	return {
+		profileRevisionId,
+		profileName: _readRequired("OPENCRANE_COMPUTER_PROFILE_NAME"),
+		warmPoolName: _readRequired("OPENCRANE_COMPUTER_WARM_POOL_NAME"),
+		namespace: _readRequired("OPENCRANE_COMPUTER_NAMESPACE"),
+		serviceAccountName: _readRequired("OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME"),
+		// The lifecycle worker renews an in-use lease at half of this lifetime on a 30 second cadence, so the floor stays well above one pass.
+		leaseTtlMilliseconds: _readBoundedSeconds("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", 3_600, 300, 86_400),
+		maximumTurnCostUsdMicros,
 	};
-	if (Object.values(values).every(value => value.length === 0))
-		return null;
-	if (Object.values(values).some(value => value.length === 0))
-		throw new Error("channel target resolver configuration must be complete");
-	if (values.receiverId.startsWith(_LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX))
-		throw new Error("CHANNEL_REPLAY_RECEIVER_ID uses the reserved legacy route namespace");
-	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
 }
 
 /** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
@@ -189,8 +213,14 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
+		conversationPrivatePayloadKeyringPath: _readRequiredAbsolutePath("CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH"),
+		historyStore: _readHistoryStoreConfig(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		publicPort: Number(process.env.PORT ?? "8080"),
+		runAdmission: {
+			maxConcurrentAdmissions: _readBoundedInteger("AGENT_RUN_ADMISSION_MAX_CONCURRENT", 4, 1, 100),
+			maxQueuedAdmissions: _readBoundedInteger("AGENT_RUN_ADMISSION_MAX_QUEUED", 16, 0, 1_000),
+		},
 			runtime: {
 			artifactScannerEnabled: process.env.ARTIFACT_SCANNER_ENABLED === "true",
 			artifactScannerClaimLeaseMilliseconds: _readBoundedSeconds("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", 300, 60, 300),
@@ -198,25 +228,16 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorEnabled: process.env.ARTIFACT_PREPROCESSOR_ENABLED === "true",
 			artifactPreprocessorMaximumOutputBytes: _readArtifactPreprocessorBodyLimit(),
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
-			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
-			channelTargets: _readChannelTargetConfig(),
-			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
-			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
-			continuationKeyringPath: _readRequiredAbsolutePath("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH"),
-				managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
 				mcpCompanionClaimLeaseMilliseconds: _readBoundedSeconds("MCP_COMPANION_CLAIM_LEASE_SECONDS", 150, 1, 300),
 				mcpControllerClaimLeaseMilliseconds: _readBoundedSeconds("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
 				mcpExecutorNamespace: process.env.MCP_EXECUTOR_NAMESPACE?.trim(),
 			memoryGatewayTimeoutMilliseconds: _readBoundedSeconds("MEMORY_GATEWAY_TIMEOUT_SECONDS", 30, 1, 300),
 			memoryGatewayTokenPath: _readRequiredAbsolutePath("MEMORY_GATEWAY_TOKEN_PATH"),
 			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
-			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
 			skillAuthoringNamespace: _readRequired("SKILL_AUTHORING_NAMESPACE"),
 				serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
 				siloId: _readRequired("OPENCRANE_SILO_ID"),
 		},
-		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
-		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),
 		standaloneFirstUserAdmission: _readStandaloneFirstUserAdmission(),
 		workflows: _readWorkflowConfig(),
 	};

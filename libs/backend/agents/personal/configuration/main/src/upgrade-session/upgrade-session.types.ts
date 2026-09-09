@@ -42,7 +42,7 @@ export interface UpgradeSessionProposalReceipt
  * the request, and the user decides it later. Nothing about the running agent changes.
  *
  * Called by: `production-external-action-adapter.ts` in
- * libs/backend/agents/execution/protocol, as its `personalConfiguration` dependency.
+ * the personal configuration composition boundary as its `personalConfiguration` dependency.
  *
  * @see {@link PrismaUpgradeSessionProposalRepository} for the transaction-scoped implementation.
  */

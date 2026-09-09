@@ -67,8 +67,6 @@ export enum ToolInvocationRunRecoveryEnterResults
 	Entered = "entered",
 	/** The exact run attempt was already in the required manual-recovery state. */
 	AlreadyRecoveryRequired = "already_recovery_required",
-	/** The exact run attempt is cancelling and must remain under cancellation authority. */
-	Cancelling = "cancelling",
 	/** The run identity, attempt, or state does not permit this recovery transition. */
 	Conflict = "conflict",
 }

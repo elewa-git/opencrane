@@ -16,20 +16,8 @@
       "@opencrane/backend/server/agents/agent-services": [
         "./libs/backend/server/agents/agent-services/main/src/index.ts"
       ],
-      "@opencrane/backend/server/agents/scheduling": [
-        "./libs/backend/server/agents/scheduling/main/src/index.ts"
-      ],
-      "@opencrane/backend/server/agents/channel-targets": [
-        "./libs/backend/server/agents/channel-targets/main/src/index.ts"
-      ],
       "@opencrane/backend/server/conversations": [
         "./libs/backend/server/conversations/main/src/index.ts"
-      ],
-      "@opencrane/backend/conversations/projection": [
-        "./libs/backend/conversations/projection/main/src/index.ts"
-      ],
-      "@opencrane/backend/conversations/agent-threads": [
-        "./libs/backend/conversations/agent-threads/main/src/index.ts"
       ],
       "@opencrane/backend/server/agents/onboarding": [
         "./libs/backend/server/agents/onboarding/main/src/index.ts"
@@ -130,12 +118,6 @@
       "@opencrane/backend/agents/execution/elicitation": [
         "./libs/backend/agents/execution/elicitation/main/src/index.ts"
       ],
-      "@opencrane/backend/agents/execution/admission": [
-        "./libs/backend/agents/execution/admission/main/src/index.ts"
-      ],
-      "@opencrane/backend/agents/execution/protocol": [
-        "./libs/backend/agents/execution/protocol/src/index.ts"
-      ],
       "@opencrane/backend/server/agents/skills": [
         "./libs/backend/server/agents/skills/main/src/index.ts"
       ],
@@ -144,9 +126,6 @@
       ],
       "@opencrane/backend/server/reporting/spend": [
         "./libs/backend/server/reporting/spend/main/src/index.ts"
-      ],
-      "@opencrane/backend/channel-proxy": [
-        "./libs/backend/channel-proxy/main/src/index.ts"
       ],
       "@opencrane/backend/artifacts/scanner": [
         "./libs/backend/artifacts/scanner/main/src/index.ts"
@@ -184,17 +163,11 @@
       "@opencrane/backend/server/infra/auth": [
         "./libs/backend/server/infra/auth/src/index.ts"
       ],
-      "@opencrane/backend/server/infra/agent-runtime-stream": [
-        "./libs/backend/server/infra/agent-runtime-stream/src/index.ts"
-      ],
-      "@opencrane/backend/server/infra/agent-runtime-continuation": [
-        "./libs/backend/server/infra/agent-runtime-continuation/src/index.ts"
-      ],
       "@opencrane/backend/server/infra/workload-identity": [
         "./libs/backend/server/infra/workload-identity/src/index.ts"
       ],
-      "@opencrane/backend/agents/runtime/k8s-launcher": [
-        "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
+      "@opencrane/backend/server/infra/history-store": [
+        "./libs/backend/server/infra/history-store/src/index.ts"
       ],
       "@opencrane/backend/agents/runtime/workloads/contract": [
         "./libs/backend/agents/runtime/workloads/contract/src/index.ts"
@@ -234,9 +207,6 @@
       ],
       "@opencrane/backend/server/infra/http": [
         "./libs/backend/server/infra/http/src/index.ts"
-      ],
-      "@opencrane/backend/server/infra/sandbox-execution": [
-        "./libs/backend/server/infra/sandbox-execution/src/index.ts"
       ],
       "@opencrane/backend/server/infra/memory-gateway-client": [
         "./libs/backend/server/infra/memory-gateway-client/src/index.ts"
@@ -283,9 +253,6 @@
       "@opencrane/elements/ui": [
         "./libs/frontend/elements/ui/src/index.ts"
       ],
-      "@opencrane/elements/a2ui": [
-        "./libs/frontend/elements/a2ui/src/index.ts"
-      ],
       "@opencrane/elements/elicitation": [
         "./libs/frontend/elements/elicitation/src/index.ts"
       ],
@@ -300,9 +267,6 @@
       ],
       "@opencrane/features/conversation-workspace": [
         "./libs/frontend/features/conversation-workspace/src/index.ts"
-      ],
-      "@opencrane/features/agent-threads": [
-        "./libs/frontend/features/agent-threads/src/index.ts"
       ],
       "@opencrane/features/onboarding": [
         "./libs/frontend/features/onboarding/src/index.ts"
@@ -334,9 +298,6 @@
       "@opencrane/state/conversation/render": [
         "./libs/frontend/state/conversation/render/src/index.ts"
       ],
-      "@opencrane/state/conversation/ag-ui": [
-        "./libs/frontend/state/conversation/ag-ui/src/index.ts"
-      ],
       "@opencrane/state/conversation/assets": [
         "./libs/frontend/state/conversation/assets/src/index.ts"
       ],
@@ -345,9 +306,6 @@
       ],
       "@opencrane/state/conversation/elicitation": [
         "./libs/frontend/state/conversation/elicitation/src/index.ts"
-      ],
-      "@opencrane/state/conversation/agent-threads": [
-        "./libs/frontend/state/conversation/agent-threads/src/index.ts"
       ],
       "@opencrane/state/conversation/workspace": [
         "./libs/frontend/state/conversation/workspace/src/index.ts"
@@ -377,6 +335,9 @@
       ],
       "@opencrane/state/organization/members/adapter": [
         "./libs/frontend/state/organization/members/adapter/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/agent-sandbox": [
+        "./libs/backend/server/infra/agent-sandbox/src/index.ts"
       ]
     }
   },
@@ -392,9 +353,6 @@
       "path": "./libs/frontend/features/conversation-elicitation"
     },
     {
-      "path": "./libs/frontend/features/agent-threads"
-    },
-    {
       "path": "./libs/frontend/features/notifications"
     },
     {
@@ -408,9 +366,6 @@
     },
     {
       "path": "./libs/frontend/features/tools"
-    },
-    {
-      "path": "./libs/frontend/elements/a2ui"
     },
     {
       "path": "./libs/frontend/elements/elicitation"
@@ -432,9 +387,6 @@
     },
     {
       "path": "./libs/frontend/state/conversation/elicitation"
-    },
-    {
-      "path": "./libs/frontend/state/conversation/agent-threads"
     },
     {
       "path": "./libs/frontend/state/conversation/workspace"

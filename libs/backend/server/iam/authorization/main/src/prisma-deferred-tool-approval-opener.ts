@@ -3,9 +3,9 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest";
-import { __DeferToolRequest } from "./deferred-tool-approval";
+import { __DeferToolRequest, _IsApprovalRequestFenceRejection } from "./deferred-tool-approval";
 import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";
-import type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types";
+import { DeferToolRequestOutcomes, type DeferredToolApprovalOpenRepository, type DeferredToolApprovalOpenUnitOfWork, type DeferToolRequestCommand, type DeferToolRequestResult, type OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types";
 import { __MarkToolInvocationApprovalRejectedInTransaction } from "./tool-invocation-transaction";
 
 /** One transaction-scoped operation over the approval-open repository. */
@@ -29,7 +29,7 @@ class PrismaDeferredToolApprovalOpenRepository implements DeferredToolApprovalOp
 		return __DeferToolRequest(this._transaction, command);
 	}
 
-	/** Terminalise the invocation, but only while it is still in AwaitingApproval. */
+	/** Fails the invocation only while it is still in AwaitingApproval. */
 	async terminaliseAwaitingApproval(invocationId: string, failureCode: string, now: Date): Promise<boolean>
 	{
 		return __MarkToolInvocationApprovalRejectedInTransaction(this._transaction, invocationId, now, failureCode);
@@ -51,11 +51,11 @@ class PrismaDeferredToolApprovalOpenRepository implements DeferredToolApprovalOp
  * of success; only an unlinked invocation is compare-and-set to Failed. This keeps every
  * post-preparation ambiguity terminal and prevents a worker from dispatching the action.
  *
- * @param prisma - Canonical authorization persistence client.
- * @param command - Exact prepared invocation, effective policy, and server-owned time bounds.
+ * @param prisma - Authorization persistence client.
+ * @param command - Prepared invocation, effective policy, and server-owned time bounds.
  * @param logger - Structured logger used when ambiguous recovery needs operator attention.
- * @returns True when an approval exists, otherwise false after best-effort terminalisation.
- * @throws When neither approval existence nor reservation terminalisation can be proven.
+ * @returns True when an approval exists, otherwise false after best-effort invocation failure.
+ * @throws When neither approval existence nor invocation failure can be proven.
  */
 export async function __OpenDeferredToolApproval(prisma: PrismaClient, command: OpenDeferredToolApprovalCommand, logger: Logger): Promise<boolean>
 {
@@ -63,15 +63,15 @@ export async function __OpenDeferredToolApproval(prisma: PrismaClient, command: 
 	return unitOfWork.open(command);
 }
 
-/** Opens one approval, and cleans up when the open transaction throws without telling us whether it committed. */
+/** Opens one approval and cleans up when the transaction throws without revealing whether it committed. */
 class PrismaDeferredToolApprovalOpenUnitOfWork implements DeferredToolApprovalOpenUnitOfWork
 {
-	/** Process-owned Prisma root used only to begin exact transactions. */
+	/** Process-owned Prisma root used to begin transactions. */
 	private readonly _prisma: PrismaClient;
 	/** Structured evidence sink that never receives argument or proof bodies. */
 	private readonly _logger: Logger;
 
-	/** Compose the unit of work from the process-owned database and bounded logger. */
+	/** Composes the unit of work from the process-owned database and structured logger. */
 	constructor(prisma: PrismaClient, logger: Logger)
 	{
 		this._prisma = prisma;
@@ -97,6 +97,14 @@ class PrismaDeferredToolApprovalOpenUnitOfWork implements DeferredToolApprovalOp
 	}
 }
 
+/** Fail the still-awaiting invocation because nothing can own its approval; throws when another writer already moved it on. */
+async function _closeUnavailableInvocation(repository: DeferredToolApprovalOpenRepository, command: OpenDeferredToolApprovalCommand): Promise<boolean>
+{
+	if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_unavailable", command.now))
+		throw new Error("deferred approval lost its awaiting-approval invocation fence");
+	return false;
+}
+
 /** Perform the traced unit-of-work body without exposing Prisma beyond this module. */
 async function _openDeferredToolApproval(command: OpenDeferredToolApprovalCommand, logger: Logger, transaction: ApprovalOpenTransaction): Promise<boolean>
 {
@@ -115,7 +123,7 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 	{
 		return await transaction(async function _defer(repository): Promise<boolean>
 		{
-			// 1. Create the approval against the same live workload and proof-key fence as the run.
+			// 1. Create the approval against the same immutable execution subject and computer-lease fence as the run.
 			const result = await repository.defer({
 				interruptId: command.interruptId,
 				runId: command.runId,
@@ -134,40 +142,52 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 				now: command.now,
 				expiresAt: command.expiresAt,
 			});
-			if (result.outcome !== "unavailable") return true;
+			if (result.outcome !== DeferToolRequestOutcomes.Unavailable)
+				return true;
 
-			// 2. A missing live workload makes the awaiting invocation terminal in the same commit.
-			if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_unavailable", command.now)) throw new Error("deferred approval lost its awaiting-approval invocation fence");
-			return false;
+			// 2. A run, invocation, or approver that can no longer own an approval makes the awaiting invocation terminal in the same commit.
+			return _closeUnavailableInvocation(repository, command);
 		});
 	}
 	catch (transactionError)
 	{
+		// 3. The approval_requests trigger is the single computer-lease fence. When it rejects the create,
+		//    PostgreSQL rolled the attempt back, so close the invocation in a fresh transaction exactly as step 2 does.
+		if (_IsApprovalRequestFenceRejection(transactionError))
+		{
+			return transaction(async function _unavailable(repository): Promise<boolean>
+			{
+				return _closeUnavailableInvocation(repository, command);
+			});
+		}
 		const evidence = { runId: command.runId, attempt: command.attempt, invocationId: command.invocationId, toolInvocationId: command.toolInvocationId };
 		logger.warn({ err: transactionError, ...evidence }, "deferred approval transaction outcome is ambiguous");
 
-		// 3. A linked approval proves an ambiguous transaction committed before its connection failed.
+		// 4. A linked approval proves an ambiguous transaction committed before its connection failed.
 		try
 		{
 			const linked = await transaction(async function _recoverRead(repository)
 			{
 				return repository.hasLinkedApproval(command);
 			});
-			if (linked) return true;
+			if (linked)
+				return true;
 		}
 		catch (recoveryReadError)
 		{
 			logger.error({ err: recoveryReadError, ...evidence }, "deferred approval recovery read failed");
 		}
 
-		// 4. Recheck linkage and close the invocation inside one transaction. A transient failure in the
+		// 5. Recheck linkage and close the invocation inside one transaction. A transient failure in the
 		// first recovery read can never turn an already-committed approval into a failed invocation.
 		try
 		{
 			return await transaction(async function _terminalise(repository): Promise<boolean>
 			{
-				if (await repository.hasLinkedApproval(command)) return true;
-				if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_defer_failed", command.now)) throw new Error("deferred approval invocation is no longer awaiting approval");
+				if (await repository.hasLinkedApproval(command))
+					return true;
+				if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_defer_failed", command.now))
+					throw new Error("deferred approval invocation is no longer awaiting approval");
 				return false;
 			});
 		}

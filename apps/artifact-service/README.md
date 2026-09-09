@@ -94,4 +94,4 @@ library composed by the silo umbrella chart
 - Composed libraries: [store](../../libs/backend/artifacts/store/main/README.md) ·
   [authorization](../../libs/backend/artifacts/authorization/main/README.md) ·
   [filesystem](../../libs/backend/artifacts/filesystem/main/README.md)
-- Sibling apps: [channel-proxy](../channel-proxy/README.md) · [opencrane server](../opencrane/README.md)
+- Sibling apps: [opencrane-ui](../opencrane-ui/README.md) · [opencrane server](../opencrane/README.md)

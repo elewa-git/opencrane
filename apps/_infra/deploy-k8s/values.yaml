@@ -104,48 +104,141 @@ sharedPlatform:
       #    Required when mode=shared.
       secretStoreName: ""
 
-# -- Channel trust-boundary settings
-channelProxy:
-  # -- Standalone target channel trust boundary. It leaves all identity, membership,
-  #    conversation, and runtime-target decisions to OpenCrane.
-  enabled: true
-  image:
-    repository: ghcr.io/elewa-git/opencrane-channel-proxy
-    tag: latest
-    pullPolicy: IfNotPresent
-  replicas: 1
-  service:
-    port: 8080
-  # -- Empty derives the release-local OpenCrane internal Service URL.
-  openCraneInternalUrl: ""
-  # -- Stable replay receiver identity. Per-AgentService route rows bind to this receiver without
-  #    reusing it as their row id.
-  replayReceiverId: opencrane-conversation-replay-v1
-  # -- Silo id used by the exact public-host binding. Empty derives the standalone first-user
-  #    ClusterTenant when configured, otherwise the Helm release name.
-  siloId: ""
-  invocationContextTtlSeconds: 60
-  # -- Empty derives the exact HTTPS control-plane origin from ingress.controlPlaneHost/domain.
-  allowedOrigins: []
-  targetHostSuffixes:
-    - .svc.cluster.local
-  resolverTimeoutMs: 3000
-  streamConnectTimeoutMs: 5000
-  streamDurationMs: 300000
-  streamIdleTimeoutMs: 45000
-  maxEventBytes: 262144
-  rateLimit: 120
-  rateWindowMs: 60000
-  projectedTokenTtlSeconds: 600
-  # -- Namespace from which the public ingress controller may reach the proxy.
-  ingressNamespace: ingress-nginx
-  resources:
-    requests:
-      cpu: 25m
-      memory: 64Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
+# -- Private KurrentDB event ledger. The testv5 deploy path enables it after the KurrentDB and
+# bootstrap image digests, TLS material, and administrator, operations, and service Secrets pass preflight.
+historyStore:
+  kurrentdb:
+    enabled: false
+    # -- Exact DNS resolver hosts (/32 IPv4 or /128 IPv6) for bootstrap and snapshot Jobs.
+    # Add cluster or node-local resolver addresses when the CNI cannot match kube-dns Pods.
+    dnsResolverCidrs: []
+    image:
+      repository: docker.kurrent.io/kurrent-latest/kurrentdb
+      digest: ""
+      pullPolicy: IfNotPresent
+    service:
+      port: 2113
+    # -- Consumer group for conversation-computer activations. Every opencrane-server replica joins
+    # it as a competing consumer, so keep this at or above `clustertenantManager.replicas` plus the
+    # extra replica a rolling restart adds. Activations are idempotent across consumers; the group
+    # is created once by the bootstrap Job, so a change here needs a fresh silo.
+    activationSubscription:
+      maxSubscriberCount: 4
+    tls:
+      existingSecret: ""
+    bootstrapAdmin:
+      existingSecret: ""
+    # -- Existing KurrentDB operations credential Secret. KurrentDB receives this password during
+    # bootstrap; neither the application server nor the bootstrap Job mounts it.
+    bootstrapOps:
+      existingSecret: ""
+    # -- Existing least-privilege HistoryStore service credential Secret. It must contain the
+    # `username` and `password` keys that the server uses after bootstrap completes.
+    serviceCredential:
+      existingSecret: ""
+    bootstrap:
+      image:
+        # -- Purpose-built bootstrap image with `sh`, curl, jq, mktemp, tr, and grep. An
+        # operator must set both this repository and its immutable digest before KurrentDB enables.
+        repository: ""
+        digest: ""
+        pullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      activeDeadlineSeconds: 330
+      backoffLimit: 0
+      # -- Lets the bootstrap script wait for KurrentDB TLS health before it fails.
+      timeoutSeconds: 300
+    persistence:
+      storageClassName: ""
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+    # -- Kubernetes probes call the TLS HTTP health endpoint (`GET /health/live`) instead of only
+    # opening the TCP socket, so a node that listens but cannot serve is taken out of the Service.
+    probes:
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        timeoutSeconds: 5
+        failureThreshold: 3
+    # -- The ledger runs as one node. The budget refuses voluntary evictions (node drains) until an
+    # operator has a fresh backup and allows the disruption; involuntary failures are not affected.
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    # -- Scheduled backup of the KurrentDB data volume. `volumeSnapshot` takes a CSI VolumeSnapshot
+    # (the method KurrentDB documents as consistent while the node runs); `fileCopy` copies the
+    # data files in the documented order into a release-local backup PVC and needs no CSI support.
+    backup:
+      enabled: true
+      mode: fileCopy
+      schedule: "0 2 * * *"
+      startingDeadlineSeconds: 900
+      activeDeadlineSeconds: 3600
+      retention:
+        # -- Number of scheduled backups kept; older ones are pruned after each successful run.
+        keepLast: 7
+      # -- `fileCopy` target volume. Size it for `keepLast` full copies of the data volume.
+      archive:
+        persistence:
+          storageClassName: ""
+          size: 60Gi
+      volumeSnapshot:
+        # -- VolumeSnapshotClass used for scheduled and pre-restore snapshots; required in
+        # `volumeSnapshot` mode.
+        className: ""
+        readyTimeoutSeconds: 900
+        # -- Operator-supplied, digest-pinned image with `sh`, `kubectl`, `date`, `wc`, and `head`.
+        image:
+          repository: ""
+          digest: ""
+          pullPolicy: IfNotPresent
+        # -- Exact Kubernetes API Service and endpoint CIDRs the snapshot Job may reach. The deploy
+        # engine fills these in the same way as the memory gateway values.
+        kubernetesApiServerCidrs: []
+        kubernetesApiServerPort: 443
+        kubernetesApiServerEndpointCidrs: []
+        kubernetesApiServerEndpointPort: 443
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi
+
+# -- Defines release-scoped profiles for the external Kubernetes Agent Sandbox v1beta1 controller.
+# The chart creates profiles and claim admission only; it never installs the controller or CRDs.
+agentSandbox:
+  enabled: false
+  # -- Maximum lifetime of one server-issued conversation-computer lease.
+  leaseTtlSeconds: 3600
+  # -- Hard aggregate LiteLLM spend ceiling for one conversation-computer turn.
+  maximumTurnCostUsdMicros: 100000
+  # -- Target namespace where the external controller manages Sandbox Claims and their Pods.
+  namespace: ""
+  # -- Existing RuntimeClass used by every fixed profile, for example `gvisor`.
+  runtimeClassName: ""
+  # -- Zero-RBAC ServiceAccount created by this chart and referenced by every profile.
+  serviceAccountName: ""
+  # -- Each profile creates one SandboxTemplate and a zero-replica SandboxWarmPool for admitted claims.
+  profiles: []
 
 # -- The only pod permitted to reach the private release-local Cognee Service. Its search-only route
 # is prepared to TokenReview the future OpenCrane server token before forwarding the fixed allowlist.
@@ -283,10 +376,6 @@ artifactScanner:
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
 agentController:
   enabled: false
-  # -- Dedicated namespace containing only the personal warm Deployment, Pods, their zero-RBAC KSA,
-  # and Helm-owned runtime policies. Empty derives `<release-fullname>-runtime`. It must never equal
-  # the server release namespace.
-  runtimeNamespace: ""
   image:
     repository: ghcr.io/elewa-git/opencrane-agent-controller
     digest: ""
@@ -297,7 +386,6 @@ agentController:
   # -- Database/server-owned fencing windows. The controller receives their resulting expiries but
   # cannot propose or extend them in its claim/commit requests.
   claimLeaseSeconds: 30
-  assignmentTtlSeconds: 3600
   projectedTokenTtlSeconds: 600
   kubernetesTokenTtlSeconds: 600
   # -- Exact Kubernetes Service IP CIDRs admitted by the controller's app-owned NetworkPolicy.
@@ -309,48 +397,6 @@ agentController:
   # implementation-defined, so portable installs should supply both the Service and endpoint paths.
   kubernetesApiServerEndpointCidrs: []
   kubernetesApiServerEndpointPort: 443
-  # -- Aggregate ceiling for each warm runtime namespace. The Deployment keeps one fixed Pod pool.
-  runtimeQuota:
-    pods: 6
-    deployments: 1
-    requests:
-      cpu: "2"
-      memory: 4Gi
-    limits:
-      cpu: "20"
-      memory: 20Gi
-  runtimeProfile:
-    # -- Exact personal-agent profile name. `managed-default` is reserved for the managed plane.
-    name: personal-default
-    image:
-      repository: ghcr.io/elewa-git/opencrane-agent-runtime
-      digest: ""
-      pullPolicy: IfNotPresent
-    # -- Runtime-only in-cluster LiteLLM endpoint. The default is this silo's Service FQDN so the
-    #    runtime NetworkPolicy can allow precisely that workload and no arbitrary external model URL.
-    litellmBaseUrl: ""
-    scratchSize: 1Gi
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 1000m
-        memory: 1Gi
-  # -- Helm-owned generic Pods used once by an AgentRun and then deleted. Each pool keeps 2-5
-  # already-started Pods; changing these fields changes the fixed deployment profile, not a run.
-  warmRuntime:
-    # -- Empty derives `<release>-managed-runtime`; it must differ from personal and server namespaces.
-    managedNamespace: ""
-    replicas: 2
-    serviceAccountName: warm-runtime
-    tokenAudience: opencrane-warm-runtime
-    projectedTokenTtlSeconds: 600
-    bindingPort: 8090
-    genericIdleSeconds: 900
-    genericProfile: generic
-    personalProfile: personal
-    managedProfile: managed
   skillAuthoringValidation:
     image:
       repository: ghcr.io/elewa-git/opencrane-skill-authoring
@@ -424,6 +470,11 @@ clustertenantManager:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
+  # -- Purpose-specific AES-GCM keyring for participant conversation payloads. The app-owned deploy
+  # script creates this namespace-local Secret once; rotations retain old keys for reads.
+  conversationPrivatePayloadKeyring:
+    existingSecret: opencrane-conversation-private-payload
+    secretKey: keyring.json
   # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
   # These apply per silo and AgentService; keep the active limit below the server's five-connection
   # Prisma budget so a hot service cannot starve unrelated control-plane work.
@@ -436,11 +487,6 @@ clustertenantManager:
     databasePoolSize: 2
     workerConcurrency: 2
     pollIntervalMilliseconds: 100
-    # -- Continuations hold the exact paused model state. The deploy script creates this
-    # rotating encryption keyring once and retains it across upgrades.
-    continuationKeyring:
-      existingSecret: opencrane-runtime-continuation
-      secretKey: keyring.json
     mcpEraProbeTimeoutMilliseconds: 5000
     mcpEraProbeMaximumResponseBytes: 65536
     # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.
@@ -912,7 +958,7 @@ networkPolicy:
   #
   #    CONTEXT: S2 ships per-silo (per-ClusterTenant-namespace) default-deny policies
   #    emitted by the operator. The PLATFORM namespace — where opencrane-ui, LiteLLM,
-  #    channel-proxy, Cognee, and the CNPG Postgres cluster run —
+  #    Cognee, and the CNPG Postgres cluster run —
   #    has no such policy by default. This section adds one as a gated, additive block.
   #
   #    GATE: `enabled` defaults to FALSE. The whole template is a no-op until an operator

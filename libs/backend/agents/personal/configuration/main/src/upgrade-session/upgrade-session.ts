@@ -23,7 +23,7 @@ const _UPGRADE_SESSION_PARAMETERS_SCHEMA = { oneOf: [{ type: "object", propertie
  * Needs no approval because calling it applies nothing: it records a request the user reviews
  * later. `requiresApproval: false` is safe only for as long as that stays true.
  *
- * Used by: `production-runtime-dispatch.ts` in libs/backend/agents/execution/protocol, which
+ * Used by: personal configuration composition, which
  * appends it to a run's compiled tools when {@link __IsUpgradeSessionAvailable} allows.
  */
 export const UPGRADE_SESSION_TOOL: CompiledToolDefinition = {
@@ -41,7 +41,7 @@ export const UPGRADE_SESSION_TOOL: CompiledToolDefinition = {
  * Requires both a persona revision and a conversation: a proposal must name the persona whose
  * revision it freezes, and the conversation it came from, and neither can be invented later.
  *
- * Called by: `production-runtime-dispatch.ts` in libs/backend/agents/execution/protocol.
+ * Called by: the personal configuration composition boundary.
  *
  * @param snapshot - The run's immutable input snapshot.
  * @returns True when the tool may be offered; false leaves the run's tools unchanged.

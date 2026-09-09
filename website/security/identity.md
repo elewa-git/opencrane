@@ -9,21 +9,20 @@ People sign in through the configured OIDC provider. The server derives their su
 organisation context from the authenticated session; request bodies cannot override either.
 Management UI calls use the same-origin session cookie.
 
-Current organisation membership is checked before a run is admitted. Accepted membership,
-delegated subject and scope evidence are frozen into the run input snapshot.
+Current organisation membership is checked before a run is admitted. The resulting
+`ExecutionSubject` records the resolved AgentIdentity and Principal, current membership and
+capability evidence, current computer lease, and requester provenance.
 
-A **personal** run always resolves to that one authenticated person — it can never be admitted as
-someone else. It may inherit grants through Groups that current product membership places that
-Principal in, but it can never pick up another person's direct grants. A **managed** agent
-never resolves to a human at all: it runs as its own `agent-service:<id>` principal, verified
-against a separately signed fleet-membership assertion, with no path back to the administrator who
-published or triggered it. See
-[the personal/managed distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
+An agent acts through its resolved **AgentIdentity** and current Principal, never as the person
+who clicked run. A proxied identity is constrained by its current delegation ceiling; a constructed
+managed identity has its own Principal and grants. Neither may pick up a different Principal's
+direct grants or derive execution authority from the requester. See
+[the product concepts](/guide/introduction#the-five-parts-of-the-product).
 
 ## Workload identity
 
 ```text
-admitted run attempt
+active conversation-computer lease
        │
        ▼
 exact claimed Pod + ServiceAccount + namespace
@@ -32,12 +31,13 @@ exact claimed Pod + ServiceAccount + namespace
 Kubernetes TokenReview
        │  one-use bootstrap
        ▼
-proof key bound to Pod UID + run + attempt
+computer id + lease generation + Pod UID rechecked
 ```
 
-The runtime initiates the connection. OpenCrane checks the exact projected-token audience and
-Kubernetes subject, then compares the reviewed workload with the durable assignment. A valid
-token from another workload does not inherit the assignment.
+The conversation computer initiates bootstrap and output calls. OpenCrane checks the exact
+projected-token audience and Kubernetes subject, resolves the claim to the Pod, then compares the
+computer id, lease id, generation, AgentIdentity and current membership with durable authority. A
+valid token from another workload does not inherit the lease.
 
 ## Credential classes
 
@@ -45,9 +45,8 @@ token from another workload does not inherit the assignment.
 |---|---|---|
 | OIDC session cookie | Browser | Public UI and API calls |
 | Controller projected token | Agent controller | Claim and report authorised workload assignments |
-| Runtime projected token | One claimed runtime Pod | Bootstrap and open its outbound stream |
-| Runtime proof key | One run attempt | Bind candidates to the reserved Pod |
-| Attempt-scoped model key | One run attempt | Reach the allowed model alias within its budget |
+| Computer projected token | One claimed conversation-computer Pod | Bootstrap one frozen turn and submit its output |
+| Attempt-scoped model key | One computer turn | Reach the allowed model alias within its budget |
 
 Provider master keys, tool credentials and durable artifact credentials never enter the runtime.
 

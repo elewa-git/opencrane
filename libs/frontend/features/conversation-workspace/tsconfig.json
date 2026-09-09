@@ -4,7 +4,6 @@
   "include": ["src/**/*.ts"],
   "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
   "references": [
-    { "path": "../../elements/a2ui" },
     { "path": "../../elements/conversation" },
     { "path": "../../elements/ui" },
 	{ "path": "../../../models/conversations/main" },
@@ -12,7 +11,6 @@
     { "path": "../conversation-activity" },
     { "path": "../conversation-assets" },
     { "path": "../conversation-elicitation" },
-    { "path": "../../state/conversation/ag-ui" },
     { "path": "../../state/conversation/assets" },
     { "path": "../../state/conversation/elicitation" },
     { "path": "../../state/conversation/render" },

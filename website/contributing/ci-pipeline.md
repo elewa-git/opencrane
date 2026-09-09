@@ -1,15 +1,15 @@
 # The CI pipeline
 
-Every pull request and every push to `develop` or `main` runs through **three GitHub Actions
-workflows**. This page covers what each job gates and the caching that keeps the pipeline fast
-enough to stay in the loop.
+Pull requests and pushes to `develop` or `main` run the affected validation pipeline, stack
+checks and code scanning. Documentation publication, nightly work and release publication have
+their own triggers. This page explains the development checks and their measured cost.
 
 > See also: [Contributing overview](/contributing/overview) (where this fits in the PR-to-cluster
 > journey), [Deploying](/contributing/deploying) (what consumes the images this pipeline
 > publishes), and [Versions and migrations](/contributing/versions-and-migrations) (the
 > pre-1.0 release-manifest check that `check:release-versioning` runs inside the `test` job).
 
-## The three workflows
+## Development checks
 
 | Workflow | File | Purpose | Typical duration |
 | --- | --- | --- | --- |
@@ -31,6 +31,7 @@ pull request / push to develop, main
         │
         ├──→ test                 build, test, lint, every policy guard
         ├──→ database             fresh-baseline apply, SQL authority suites
+        ├──→ history_store        real KurrentDB stream and lease proofs
         ├──→ api_contract         OpenAPI + generated client (when affected)
         ├──→ storybook_visual     component contracts, cached Chromium
         ├──→ develop_smoke        k3d silo smoke — the long pole
@@ -54,6 +55,7 @@ pull request / push to develop, main
 | `prepare` | Computes the Nx affected graph, the deployable matrix, the guard comparison base, and whether the k3d smoke can be skipped. | 1–2 min |
 | `test` | Builds, tests and lints affected projects, and runs every policy guard: workload ownership, agent-domain boundary, mechanical style, module growth, release versioning, Prisma boundaries, config-docs coverage, dependency boundaries. | 3–10 min |
 | `database` | Everything PostgreSQL-bound, beside `test` instead of inside it: generates the database client, verifies the reviewed target baseline authority, applies the fresh `target-baseline.sql` to a disposable database, and runs every SQL authority suite. | 2–4 min |
+| `history_store` | Runs actual stream, concurrency, subscription cancellation and lease proofs against the pinned KurrentDB image. | about 1–2 min |
 | `api_contract` | Rebuilds the server and proves the OpenAPI reference and generated client are in sync. Runs only when the API contract changed. | skipped, or ~3–5 min |
 | `storybook_visual` | Storybook build/behaviour/visual contracts for affected frontend projects, on cached Chromium. Runs beside `test`, not after it. | seconds when nothing affected; ~5 min otherwise |
 | `develop_smoke` | Boots a disposable k3d cluster, deploys the full current silo through the real deploy scripts, and proves database isolation, TLS ingress and workload health. | 6–15 min |
@@ -73,10 +75,29 @@ Every job runs on a fresh runner, so anything not cached is paid on every run.
 | --- | --- | --- | --- |
 | npm download cache | `actions/setup-node` | lockfile hash | all jobs |
 | `node_modules` | `actions/cache` | lockfile hash | all jobs (skips `npm ci` entirely on a hit) |
-| Nx computation cache | `actions/cache` (`.nx/cache`) | lockfile hash + commit, with prefix restore | `test`, `api_contract`, `storybook_visual` |
 | Playwright Chromium | `actions/cache` (`~/.cache/ms-playwright`) | lockfile hash | `storybook_visual` |
 | Docker image layers | registry (`ghcr.io/<owner>/opencrane-buildcache:<project>`) | buildx layer graph | `develop_smoke`, `build-and-push`, `publish-develop-smoke-images` |
 | npm inside Dockerfiles | BuildKit cache mount (`/root/.npm`) | shared between build and runtime stages within one build | all Node images |
+
+Nx still caches tasks within a job. Its local `.nx/cache` is not transferred between GitHub
+runners: the machine-bound metadata was rejected on restoration, so those transfers added work
+without reusable task results. There is no configured Nx Cloud remote cache.
+
+Dependency-boundary lint runs before expensive builds and tests. Developers use focused checks
+while editing, then affected checks at integration; an unchanged passing source does not need a
+new full qualification loop. Live cluster tests belong to a selected deployment candidate.
+
+## A measured checkpoint
+
+[Run 34099276774](https://github.com/elewa-git/opencrane/actions/runs/34099276774), at
+`cbdb742d4616b45177c072f2eaadacfea737ccd1`, completed in 11 minutes 20 seconds: 29 checks passed
+and two configured checks were skipped. The affected job took 8 minutes 28 seconds, including
+6 minutes 14 seconds of Nx work; Storybook took 2 minutes 54 seconds and real KurrentDB proofs
+1 minute 12 seconds. Twelve image builds ran in parallel and took up to 1 minute 52 seconds.
+
+This is one observed checkpoint, not a measured before/after speedup. Pull-request image builds
+do not publish deployable images. The skipped develop-only publication and k3d jobs are not live
+installation evidence.
 
 ### Why image layers cache in the registry, not the Actions cache
 

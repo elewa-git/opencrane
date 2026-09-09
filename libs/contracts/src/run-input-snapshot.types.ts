@@ -1,80 +1,7 @@
-import type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaRevisionId } from "@opencrane/models/agents";
+import type { AgentRevisionId, AgentRunId, AgentServiceId, ExecutionSubject, PersonaRevisionId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { ConversationId, MessageId } from "@opencrane/models/conversations";
 import type { JsonValue } from "@opencrane/util";
-
-/**
- * Says whether a run is executed by a person or by a managed service. Stored in every run snapshot.
- *
- * The value alone grants nothing. Admission must still attach the matching signed evidence. They
- * never grant authority by themselves; admission must still bind the matching signed evidence.
- */
-export enum RunInputSnapshotIdentityKinds
-{
-	/** A person, proven by verified fleet-membership evidence. */
-	User = "user",
-	/** A managed AgentService, proven by its derived principal and its allowed scope attachments. */
-	Service = "service",
-}
-
-/** Signed membership evidence stored on both kinds of run identity. */
-export interface RunInputSnapshotFleetMembershipEvidence
-{
-	/** Highest verified fleet-membership revision accepted for this run. */
-	fleetMembershipRevision: number;
-	/** Issuer that signed the accepted fleet-membership revision. */
-	fleetMembershipIssuer: string;
-	/** Signing key that verified the exact accepted fleet-membership revision. */
-	fleetMembershipIssuerKeyId: string;
-	/** Stable signed assertion identifier bound to the execution subject. */
-	fleetMembershipAssertionId: string;
-	/** Digest of the verified signed membership payload. */
-	fleetMembershipPayloadDigest: string;
-	/** UTC time after which this membership evidence may no longer authorize work. */
-	fleetMembershipTrustedUntil: string;
-}
-
-/** Immutable identity for a run exercised by a human member. */
-export interface UserRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
-{
-	/** Tag fixed to `User`, so a service principal can never be read as a person. */
-	kind: RunInputSnapshotIdentityKinds.User;
-	/** Id of the person whose verified membership and grants authorize this run. */
-	executionSubjectId: string;
-	/** OIDC issuer that namespaces the external execution subject. */
-	executionIssuer: string;
-	/** Stable local Principal that binds personal boundaries and normalized group memberships. */
-	principalId: string;
-}
-
-/** One non-personal knowledge boundary attachment allowed for a managed service. */
-export interface ManagedRunInputBoundaryAttachment
-{
-	/** Stored kind of the attached knowledge boundary. */
-	boundaryKind: string;
-	/** Stable group identifier of the attached boundary. */
-	boundaryId: string;
-	/** Whether the attachment covers the group alone or its stored descendants. */
-	boundaryCoverage: string;
-}
-
-/** Immutable identity for a run exercised by an active managed AgentService. */
-export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
-{
-	/** Tag fixed to `Service`, so service evidence never takes a personal-user code path. */
-	kind: RunInputSnapshotIdentityKinds.Service;
-	/** Canonical derived principal in `agent-service:<AgentServiceId>` form. */
-	executionSubjectId: string;
-	/** Id of the active managed service whose revision authorizes this run. */
-	agentServiceId: AgentServiceId;
-	/** Non-personal boundary attachments allowed when the run was assembled, sorted canonically. */
-	effectiveBoundaryAttachments: readonly ManagedRunInputBoundaryAttachment[];
-	/** SHA-256 digest of the allowed boundary attachments, so the set cannot change without detection. */
-	effectiveBoundaryAttachmentDigest: string;
-}
-
-/** The run's identity — person or service — decided before the runtime receives the snapshot. */
-export type RunInputSnapshotIdentity = UserRunInputSnapshotIdentity | ServiceRunInputSnapshotIdentity;
 
 /** One exact MCP tool revision frozen when a run is admitted. */
 export interface RunInputSnapshotMcpTool
@@ -96,6 +23,8 @@ export interface RunInputSnapshot
 {
   /** Run receiving the snapshot. */
   runId: AgentRunId;
+  /** Positive attempt receiving this immutable snapshot. */
+  attempt: number;
   /** Silo in which every identity and durable input is valid. */
   siloId: string;
   /** AgentService receiving the run. */
@@ -124,13 +53,9 @@ export interface RunInputSnapshot
   modelRoute: JsonValue;
   /** Immutable token, cost, time, and tool limits. */
   budgetPolicy: JsonValue;
-	/** Tagged execution identity and verified fleet-membership evidence. */
-  identitySnapshot: RunInputSnapshotIdentity;
-  /** Digest of the capability set this run may exercise, each capability bound to a proof. */
-  capabilitySetDigest: string;
-  /** Digest of the authorization contract that was accepted when the run was admitted. */
-  effectiveContractDigest: string;
-  /** Version of the deterministic prompt compiler that will consume this input. */
+	/** Exact evidence-bound identity and principal that may exercise this run. */
+  executionSubject: ExecutionSubject;
+	/** Version of the deterministic prompt compiler that will consume this input. */
   promptCompilerVersion: string;
   /** SHA-256 digest of the complete canonical snapshot in `sha256:<hex>` form. */
   digest: string;

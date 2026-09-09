@@ -30,7 +30,7 @@ export interface ReconcileManagedAuthorizationGrantsCommand
 	readonly resource: AuthorizationResourceLocator;
 	/** Complete desired allow-grant set owned by this editor for the resource. */
 	readonly grants: readonly ManagedAuthorizationGrantSpec[];
-	/** Trusted time recorded when grants omitted from the desired set are revoked. */
+	/** Trusted server operation time used to activate new grants and revoke omitted grants. Reuse it for same-operation decisions; never take it from request data. Existing grant activation times remain unchanged. */
 	readonly now: Date;
 }
 

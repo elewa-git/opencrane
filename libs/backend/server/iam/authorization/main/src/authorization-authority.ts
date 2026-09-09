@@ -1,7 +1,7 @@
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationEvidenceKinds, ProductAuthorizationResourceKinds, __DecideAuthorization, __ProductAuthorizationCapability, __ProductAuthorizationRule, type AuthorizationBoundaryContext, type AuthorizationGrant, type AuthorizationSubject, type ProductAuthorizationCommand, type ProductAuthorizationResourceLocator, type ProductAuthorizationResult } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationDecisionRecorder, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult, RetireProductAuthorizationResourceGrantsCommand, RetireProductAuthorizationResourceGrantsResult } from "./authorization-authority.types";
+import type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AllowedPrincipalProductAuthorizationDecision, AuthorizationAuthority, DecidePrincipalProductAuthorizationCommand, ListEntitledProductResourcesCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationDecisionRecorder, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult, RetireProductAuthorizationResourceGrantsCommand, RetireProductAuthorizationResourceGrantsResult } from "./authorization-authority.types";
 import type { AuthorizationResourceGrantRetirementRepository } from "./authorization-resource-grant-retirement.types";
 import type { AuthorizationContextRepository } from "./authorization-resolution.types";
 import type { ManagedAuthorizationGrantRepository } from "./managed-authorization-grants.types";
@@ -96,13 +96,24 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 	}
 
 	/** @inheritdoc */
+	async decidePrincipal(command: DecidePrincipalProductAuthorizationCommand): Promise<ProductAuthorizationResult>
+	{
+		const allowed = await this._DecidePrincipal(command);
+		if (allowed !== null)
+			return allowed.decision;
+		const rule = __ProductAuthorizationRule(command.resource.kind, command.action);
+		return { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [], rule };
+	}
+
+	/** @inheritdoc */
 	async admitPrincipal(command: AdmitPrincipalProductAuthorizationCommand): Promise<AdmitProductAuthorizationResult>
 	{
 		const allowed = await this._DecidePrincipal(command);
 		if (allowed !== null)
 		{
-			const result = this._BuildAdmission(allowed.command, allowed.decision);
-			await this._RecordAdmission(allowed.command, result);
+			const boundedCommand = { ...command, boundary: allowed.boundary };
+			const result = this._BuildAdmission(boundedCommand, allowed.decision);
+			await this._RecordAdmission(boundedCommand, result);
 			return result;
 		}
 		const rule = __ProductAuthorizationRule(command.resource.kind, command.action);
@@ -119,7 +130,7 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 			const decision = await this._DecidePrincipal(command);
 			if (decision === null)
 				return [];
-			allowed.push(decision);
+			allowed.push({ command: { ...command, boundary: decision.boundary }, decision: decision.decision });
 		}
 
 		// 2. Build every receipt before recording any of them, so invalid evidence classes fail atomically.
@@ -257,8 +268,8 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 		return { subjects, grants, boundaryContext };
 	}
 
-	/** Finds the first stored Principal boundary that allows one admission command. */
-	private async _DecidePrincipal(command: AdmitPrincipalProductAuthorizationCommand): Promise<AllowedPrincipalAdmission | null>
+	/** Finds the first stored Principal boundary that allows a current eligibility or admission check. */
+	private async _DecidePrincipal(command: DecidePrincipalProductAuthorizationCommand): Promise<AllowedPrincipalProductAuthorizationDecision | null>
 	{
 		const subjects = await this.repository.resolvePrincipalSubjects(command.siloId, command.principalId);
 		const boundaries = [
@@ -270,7 +281,7 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 			const boundedCommand = { ...command, boundary };
 			const decision = await this.decide(boundedCommand);
 			if (decision.outcome === AuthorizationDecisionOutcomes.Allow)
-				return { command: boundedCommand, decision };
+				return { boundary, decision };
 		}
 		return null;
 	}

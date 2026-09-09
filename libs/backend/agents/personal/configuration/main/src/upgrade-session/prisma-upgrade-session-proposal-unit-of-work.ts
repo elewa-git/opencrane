@@ -45,7 +45,7 @@ export class PrismaUpgradeSessionProposalUnitOfWork implements UpgradeSessionPro
 		const unitOfWork = this;
 		try
 		{
-			return await ___DoWithTrace("personal_configuration.propose", { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId, sourceRunId: snapshot.runId }, async function _TraceProposal()
+			return await ___DoWithTrace("personal_configuration.propose", { siloId: snapshot.siloId, userId: snapshot.executionSubject.principalId, sourceRunId: snapshot.runId }, async function _TraceProposal()
 			{
 				return unitOfWork.runTransaction(candidate, snapshot, now);
 			});
@@ -93,8 +93,10 @@ function _proposalDenied(reason: PersonalConfigurationProposalCodes): Error
 /** Resolves the committed transaction outcome into the unchanged runtime-facing contract. */
 function _resolveProposal(result: ProposePersonalConfigurationChangeResult | null): UpgradeSessionProposalReceipt
 {
-	if (result === null) throw new Error("upgrade_session personal profile is unavailable");
-	if (result.outcome !== PersonalConfigurationProposalCodes.Proposed) throw _proposalDenied(result.reason);
+	if (result === null)
+		throw new Error("upgrade_session personal profile is unavailable");
+	if (result.outcome !== PersonalConfigurationProposalCodes.Proposed)
+		throw _proposalDenied(result.reason);
 	return _receipt(result.changeId);
 }
 

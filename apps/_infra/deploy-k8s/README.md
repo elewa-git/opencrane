@@ -9,7 +9,7 @@
 ## What it owns
 
 This is the **install root** for one **silo** — one customer's isolated slice of OpenCrane. The
-trusted services run in the release namespace; fixed personal and managed warm-runtime pools run in
+trusted services run in the release namespace; conversation computers run in
 two restricted sibling namespaces owned by the same release. Nothing is shared with other customers. Everything else under `apps/` ships a small
 Helm chart; this app is the **umbrella chart** (`opencrane-silo`) that pulls those deployment
 contracts together into one release, plus `deploy.sh`, the entrypoint that installs and upgrades it.
@@ -25,24 +25,24 @@ wires the pieces and the per-silo networking together.
  ┌────────────────────────────────────────────────────────────┐
  │  opencrane-silo umbrella chart  ◄── HERE                     │
  │    composes app-owned template libraries into one release:   │
- │    server · opencrane-ui · channel-proxy · artifact-service  │
+ │    server · opencrane-ui · artifact-service                  │
  │    · artifact-preprocessor · agent-controller                 │
  │    · skill-authoring                                          │
  │    · cognee · litellm                                         │
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
         ▼
- ingress controller · serving DNS · CloudNativePG · cert-manager
+ ingress controller · serving DNS · CloudNativePG · cert-manager · Agent Sandbox controller
 ```
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
-· [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
+· [artifact-service](../../artifact-service/README.md)
 · [artifact-preprocessor](../../artifact-preprocessor/README.md) · [artifact-scanner](../../artifact-scanner/README.md)
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 
 A silo installs **only** its own namespaced app releases. `--image-tag` selects one reviewed
-OpenCrane build for the server, channel proxy, memory gateway, and artifact service; the deploy
+OpenCrane build for the server, memory gateway, and artifact service; the deploy
 engine applies it after all values overrides and waits for those Deployments in both the main and
 artifact namespaces. The browser UI and Cognee keep their separate digest-pinning rules.
 Public deployments require an explicit immutable `sha-*` `--image-tag` and a registry inspector
@@ -51,8 +51,8 @@ it changes either Helm release. This is a release-set check: an advanced values 
 disables one of these services does not remove its image from qualification. The local k3d smoke
 keeps using images imported directly into its nodes and proves them through the same blocking
 Deployment rollout gates.
-Cluster-wide controllers (ingress,
-CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
+Cluster-wide controllers (ingress, CloudNativePG, cert-manager, and the Agent Sandbox controller)
+and serving DNS are external prerequisites a silo never installs.
 "External" here means outside the organisation release: a cluster operator may explicitly install
 the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`
 never invokes that helper. The app-owned chart helper runs `helm dependency update --skip-refresh`
@@ -60,7 +60,7 @@ against the checked-out in-repo `file://` sources. The commit is the version aut
 `Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
-identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image runs in
+identity, bounded scratch, and no ArtifactStore route. The `conversation-computer` image runs in
 two fixed warm Deployments rather than one Job per attempt. Each generic Pod has only DNS and
 same-silo OpenCrane reachability. An admitted run claims one Pod once; that fixed profile additionally
 admits the exact controller binding path and same-silo LiteLLM. The release owns both namespaces,
@@ -94,7 +94,7 @@ deletion surface.
 ## Boundary
 
 The umbrella renders no business logic and installs no cluster-wide controller. It composes app-owned
-templates, the server and runtime namespaces, per-silo `NetworkPolicies`, and the warm runtime Pod's
+templates, the server and sandbox namespaces, per-silo `NetworkPolicies`, and the conversation computer Pod's
 release-scoped `ValidatingAdmissionPolicy`; it does not own the workloads themselves (each app does) or
 the shared substrate helpers (the `k8s-platform` library does). During a forward upgrade, the deploy
 script adopts an unlabelled legacy artifact namespace only when its Helm deployment proves the exact
@@ -110,20 +110,11 @@ package imports it.
 
 - Umbrella chart: `Chart.yaml` (`opencrane-silo`), values in `values.yaml`, and schema in
   `values.schema.json`. Its app-owned helper packages the checked-out local chart sources.
-- `agentController.runtimeNamespace` — optional DNS-label override for the sibling runtime namespace;
-  empty derives `<release>-runtime`, and the chart rejects the trusted server namespace.
-- `agentController.warmRuntime.managedNamespace` — optional DNS-label override for the managed warm
-  pool; empty derives `<release>-managed-runtime`, distinct from the trusted and personal namespaces.
-- `agentController.warmRuntime` — fixes the generic, personal, and managed profile labels, binding
-  port, two-to-five ready Pods per pool, and one-use idle lifetime. These are deployment profiles,
-  never caller-provided run values.
 - `artifactPreprocessor` — disabled until its immutable image digest is supplied; when enabled, the
   worker runs in a dedicated restricted namespace and receives only ephemeral scratch plus
   broker/DNS/optional-telemetry egress.
 - `artifactScanner` — disabled until its immutable image digest is supplied; when enabled, the
   worker scans quarantined uploads in a separate restricted namespace through the server broker.
-- `agentController.runtimeQuota` — aggregate Deployment, Pod, CPU, and memory ceilings applied
-  independently to both untrusted runtime namespaces.
 - Deployment preflight accepts only exact known enforcing-CNI DaemonSet names. GKE Dataplane V2 is
   detected through `anetd`; similarly prefixed helper or operator DaemonSets do not satisfy the gate.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
@@ -131,6 +122,25 @@ package imports it.
   `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
+- `testv5` — the first 0.11 target silo additionally requires immutable KurrentDB and bootstrap
+  image digests; immutable TLS, administrator, operations, and `opencrane-history` service
+  Secrets; the ready Agent Sandbox controller with extensions enabled; and each Sandbox,
+  SandboxClaim, SandboxTemplate, and SandboxWarmPool CRD served and stored as `v1beta1`. The
+  deploy script rejects a missing Secret key, a different service username, or a CRD that does not
+  meet both API conditions before it changes the silo.
+- `platform/provision-kurrentdb-bootstrap-secrets.sh` — creates the namespace-local immutable TLS,
+  administrator, operations, and `opencrane-history` Secrets for one fresh testv5 silo. Reruns
+  validate the existing authorities and never rotate them.
+- `--kurrentdb-replay-parked` — replays the installed silo's parked computer activations through a
+  separate bounded Job derived from its verified KurrentDB bootstrap template. It leaves the
+  completed bootstrap Job intact and keeps administrator credentials outside the application.
+  The new Pod checks database connectivity before sending a single replay request.
+  Install the matching chart configuration first; replay refuses absent or changed scripts,
+  a different silo target, and combinations with bootstrap, restore or preflight actions.
+- `platform/k8s-deploy.sh --provision-agent-sandbox-controller --context CONTEXT` — installs the
+  pinned shared controller and its `opencrane.ai` Pod-label allowlist. Add `--preflight` to verify
+  the downloaded manifest and local configuration without changing the cluster. This separate
+  prerequisite action runs before silo installation and requires the named current context.
 - `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
   shared `ClusterTenant` CRD, while later silos consume it without competing for Helm ownership.
 - `--first-user-email` — required standalone-onboarding input. It is matched exactly against an
@@ -179,7 +189,7 @@ package imports it.
 
 - Parent index: [_infra](../README.md)
 - Composed apps: [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
-· [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
+· [artifact-service](../../artifact-service/README.md)
   · [artifact-preprocessor](../../artifact-preprocessor/README.md)
   · [artifact-scanner](../../artifact-scanner/README.md)
   · [agent-controller](../../agent-controller/README.md)

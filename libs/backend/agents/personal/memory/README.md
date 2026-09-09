@@ -28,9 +28,9 @@ before OpenCrane freezes its inputs.
 frozen run input ──► memory gateway recalls fact content later
 ```
 
-**In this flow:** [execution admission](../../execution/admission/main/README.md) derives the subject
-and silo from trusted request facts, resolves the participant-bound personal service, and enters the
-final snapshot transaction. [Execution inputs](../../execution/inputs/main/README.md) then verifies
+**This composition is not wired into production in the current checkout.** The intended
+[conversation entry](../../../server/conversations/main/README.md) derives the subject and silo,
+then [execution inputs](../../execution/inputs/main/README.md) verifies
 the signed membership and current grants before this package selects memory coordinates. The managed
 session factory still installs an explicit empty personal-memory policy, so a managed run never
 receives a person's dataset merely because it has delegated access. [Agent memory](../../memory/README.md)
@@ -38,7 +38,7 @@ owns generic catalogue metadata and outbox intent, while the
 [memory gateway](../../../../server/_infra/memory-gateway-client/README.md) remains the sole
 fact-content boundary.
 
-The production path freezes only the selected OpenCrane catalogue identifier, the gateway-native
+The input package is designed to freeze only the selected OpenCrane catalogue identifier, the gateway-native
 Cognee dataset identifier, and consented preference-fact identifiers. It does not read content or
 call Cognee. Recall happens later through the gateway using that frozen dataset coordinate. Live
 end-to-end Cognee qualification remains pending, so production admission does not by itself prove
@@ -51,6 +51,6 @@ or let an identifier supplied by a request choose a dataset.
 ## See also
 
 - Parent group: [personal-agent domains](../README.md)
-- Trusted entry: [execution admission](../../execution/admission/main/README.md)
+- Intended browser entry: [conversations](../../../server/conversations/main/README.md)
 - Generic metadata authority: [agent memory](../../memory/README.md)
 - Content boundary: [memory gateway](../../../../server/_infra/memory-gateway-client/README.md)

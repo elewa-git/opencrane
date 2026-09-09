@@ -6,7 +6,7 @@ their workloads propose.
 
 > See also: [Silo IAM](/integrators/silo-iam) (membership and grant composition),
 > [Governed packages and container images](/integrators/governed-packages) (MCP and skill content),
-> [Governed agent runtime](/integrators/agent-runtime) (run and workload boundaries), and
+> [Conversation computers](/integrators/agent-runtime) (conversation and workload boundaries), and
 > [Identity and runtime authentication](/security/identity) (proof of caller identity).
 
 ## What transaction-bound means
@@ -66,7 +66,7 @@ escape durable evidence.
 
 A managed agent never borrows the permissions of the person who created it. Likewise, permission to
 invoke an agent does not automatically grant the agent access to an MCP tool, skill, dataset, model,
-or channel target.
+or conversation.
 
 ## One authority across product domains
 
@@ -96,7 +96,7 @@ The same typed resource-action catalogue covers the major product families:
 | People and organisation | organisation membership, Groups, resource shares and grants |
 | Agents and runs | AgentService, immutable agent revision, AgentRun, schedule and budget |
 | Packages and tools | SkillRevision, MCP server/tool revision, MCP task and ToolInvocation |
-| Data and collaboration | artifact revision, dataset, memory scope, persona, conversation and channel target |
+| Data and collaboration | artifact revision, dataset, memory scope, persona and conversation |
 | Provider gateways | provider connection, model definition and token-usage reporting |
 
 Each domain still validates its own lifecycle facts, but none defines another subject model,
@@ -222,15 +222,9 @@ Durable domain relations then project the smallest exact grants that the product
 | Current resource-share recipient | Read on the share coordinate |
 | Pending tool-approval assignee | Read and Decide on that ApprovalRequest until it becomes terminal |
 
-The relation writer creates or revokes its managed grant in the same database transaction. Upgrade
-migration projects only unambiguous existing relations. Historical conversations have no reliable
-creator coordinate, so the migration grants nobody `Delete` for them rather than guessing.
-
-::: warning
-A registered channel route still needs a durable participant-to-route relation before OpenCrane can
-project a route-bound `ChannelTarget` grant. It must not grant every active organisation member
-channel access merely because they share a silo.
-:::
+The relation writer creates or revokes its managed grant in the same database transaction. The 0.11
+baseline supports fresh installation: new conversations record their creator and grants together.
+It does not infer ownership from historical messages or provide an upgrade migration.
 
 ## Source
 

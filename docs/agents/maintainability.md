@@ -95,7 +95,9 @@ authorization, audit, retention, cardinality, provenance, query, or concurrency 
 
 Run the module-growth checker against the intended base. If it reports a candidate, write the
 responsibility inventory and proposed file/folder map before adding code. Invoke the architecture
-gate when the module already crosses a threshold or the proposed change adds a new responsibility.
+specialist when that inventory demonstrates a cohesion or ownership problem, or the change adds a
+new responsibility boundary. Size alone still requires the inventory and applicable hard-limit
+check, but does not automatically add a specialist handoff.
 
 ### During implementation
 

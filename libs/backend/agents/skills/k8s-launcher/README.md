@@ -23,7 +23,7 @@ the only process allowed to submit its result to Kubernetes.
 
 **In this flow:** [skill catalog authority](../../../server/agents/skills/main/README.md) ·
 [agent controller](../../../../../apps/agent-controller/README.md) *(sole Job mutator with narrow
-RBAC)* · [agent runtime launcher](../../runtime/k8s-launcher/README.md).
+role-based access control)*.
 
 It guarantees a suspended, zero-retry, terminally cleaned, non-privileged Job with a read-only root
 filesystem, bounded temporary scratch space, no auto-mounted service-account token, and no source
@@ -58,5 +58,4 @@ It never imports an app, the skill catalog, or the control API.
 ## See also
 
 - Parent index: [skills](../README.md)
-- Similar runtime builder: [agent runtime launcher](../../runtime/k8s-launcher/README.md)
 - Catalog authority: [server skills](../../../server/agents/skills/main/README.md)

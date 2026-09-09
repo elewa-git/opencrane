@@ -1,24 +1,45 @@
-import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
-import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
+import { __DigestHumanMembershipEvidence, __HumanMembershipRevision } from "@opencrane/backend/server/iam/membership";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
+import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, ProductResourceAuthorizationSource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput } from "./session-assembly.types";
+import type { ApprovedPersonaInput, MemoryScopeInput, ProductResourceAuthorizationSource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput } from "./session-assembly.types";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
 /** Rechecks current Use grants for the complete exact resource set selected during admission. */
 export class TransactionBoundProductResourceAuthorizationSource implements ProductResourceAuthorizationSource
 {
 	/** @inheritdoc */
-	async load(command: SessionAssemblyCommand, identity: IdentityEnvelopeInput, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
+	async load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
 	{
 		if (transaction.authorization === undefined)
+		{
 			return { outcome: "denied", reason: "product_authorization_unavailable" };
-		const principalId = identity.kind === RunInputSnapshotIdentityKinds.User ? identity.principalId : identity.executionSubjectId;
+		}
+		const principalId = executionSubject.principalId;
 		const resources = _Resources(persona, memory, tools);
-		const actorKind = identity.kind === RunInputSnapshotIdentityKinds.User ? "user" : "agent-service";
-		const argumentsDigest = ___DigestCanonicalJson({ runId: command.runId, agentServiceId: command.agentServiceId, conversationId: command.conversationId } as JsonValue);
-		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind, actorId: principalId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision: identity.fleetMembershipRevision, nowEpochMs: transaction.admittedAtEpochMs })));
+		const argumentsDigest = ___DigestCanonicalJson({ runId: command.runId, attempt: 1, siloId: command.siloId, agentServiceId: command.agentServiceId, agentRevisionId: executionSubject.runScope.agentRevisionId, conversationId: command.conversationId, requestIdempotencyKey: command.requestIdempotencyKey, membershipDigest: ___DigestCanonicalJson(executionSubject.membership as unknown as JsonValue), requesterMembershipDigest: __DigestHumanMembershipEvidence(executionSubject.requester.membership) } as JsonValue);
+		const conversation = await this.verifyExisting(command, executionSubject, transaction);
+		if (conversation.outcome === "denied")
+			return conversation;
+		const membershipRevision = executionSubject.membership.kind === ExecutionSubjectMembershipKinds.Fleet ? executionSubject.membership.revision : undefined;
+		// Admission records the execution Principal; a runtime Pod has not requested these resources.
+		const actorKind = executionSubject.membership.kind === ExecutionSubjectMembershipKinds.Managed ? "agent-service" : "user";
+		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind, actorId: principalId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision, nowEpochMs: transaction.admittedAtEpochMs })));
 		return admissions.length === resources.length ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
+	}
+
+	/** Re-admits current requester access without replaying snapshot resource admissions. */
+	async verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
+	{
+		if (command.conversationId === null)
+			return { outcome: "loaded", value: null };
+		if (transaction.authorization === undefined)
+			return { outcome: "denied", reason: "product_authorization_unavailable" };
+		const argumentsDigest = ___DigestCanonicalJson({ runId: command.runId, attempt: 1, siloId: command.siloId, agentServiceId: command.agentServiceId, agentRevisionId: executionSubject.runScope.agentRevisionId, conversationId: command.conversationId, requestIdempotencyKey: command.requestIdempotencyKey, membershipDigest: ___DigestCanonicalJson(executionSubject.membership as unknown as JsonValue), requesterMembershipDigest: __DigestHumanMembershipEvidence(executionSubject.requester.membership) } as JsonValue);
+		const requester = executionSubject.requester;
+		const conversation = await transaction.authorization.admitPrincipal({ siloId: command.siloId, principalId: requester.requesterPrincipalId, actorKind: "user", actorId: requester.requesterPrincipalId, action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: command.conversationId }, argumentsDigest, membershipRevision: __HumanMembershipRevision(requester.membership), nowEpochMs: transaction.admittedAtEpochMs });
+		return conversation.outcome === AuthorizationDecisionOutcomes.Allow && conversation.evidence !== null ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
 	}
 }
 

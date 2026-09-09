@@ -1,3 +1,4 @@
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AgentRunState, ExternalActionClaimKind, ExternalActionRecoveryMode, ToolInvocationState, type Prisma, type PrismaClient } from "@prisma/client";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
@@ -9,12 +10,27 @@ import { PrismaToolInvocationUnitOfWork } from "../prisma-tool-invocation-unit-o
 import { __AdmitPreparingToolInvocationInTransaction } from "../tool-invocation-transaction";
 import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "../tool-invocation.types";
 
+/** Valid execution authority that every run-owned test invocation must carry. */
+const EXECUTION_SUBJECT = {
+	schemaVersion: 1,
+	siloId: "silo-1",
+	agentIdentityId: "identity-1",
+	principalId: "principal-1",
+	identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-evidence", verifiedAt: "2026-08-11T10:00:00.000Z" },
+	membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-08-11T11:00:00.000Z" },
+	capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-evidence", decidedAt: "2026-08-11T10:00:00.000Z" },
+	runScope: { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1" },
+	computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 },
+	requester: { membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 3, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: "2026-08-11T11:00:00.000Z" }, siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-08-11T10:00:00.000Z" },
+	admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-evidence", admittedAt: "2026-08-11T10:00:00.000Z" },
+} as const;
+
 /** Build one complete persistence row around a focused state override. */
 function _row(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown>
 {
 	return {
-		id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1",
-		authorizationPrincipalId: null, authorizationActorKind: null, authorizationCoordinates: null, authorizationDecisionDigests: [], authorizationMembershipRevision: null, authorizationAssignmentDigest: null, authorizationEvidenceDigest: null,
+		id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1",
+		authorizationActorKind: null, authorizationExecutionSubject: null, authorizationCoordinates: null, authorizationDecisionDigests: [], authorizationAssignmentDigest: null, authorizationEvidenceDigest: null,
 		runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1",
 		arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: false,
 		recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.Preparing, preparationAttempt: 1,
@@ -29,11 +45,10 @@ function _authorizationEvidence()
 {
 	const assignmentDigest = `sha256:${"a".repeat(64)}` as const;
 	const evidence = {
-		principalId: "principal-1",
-		actorKind: "user" as const,
+		actorKind: "workload" as const,
+		executionSubject: EXECUTION_SUBJECT,
 		coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "integration:calendar:create" }, action: ProductAuthorizationActions.Invoke }],
 		decisionDigests: [`sha256:${"b".repeat(64)}`] as const,
-		membershipRevision: 3,
 		agentRevisionId: "revision-1",
 		runId: "run-1",
 		attempt: 2,
@@ -56,7 +71,7 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const created = _row({ preparationAttempt: 0 });
 		const create = vi.fn().mockResolvedValue(created);
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(null), create } } as unknown as Prisma.TransactionClient;
-		const intent = { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1", authorizationEvidence: _authorizationEvidence(), requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1", arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null } as const;
+		const intent = { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", authorizationEvidence: _authorizationEvidence(), requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1", arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null } as const;
 		const result = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date("2026-08-11T10:00:00.000Z"), _policy());
 		expect(result.outcome).toBe("admitted");
 		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z") }) });
@@ -69,10 +84,7 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const findMany = vi.fn().mockResolvedValue([stale, current]);
 		const repository = new PrismaToolInvocationRepository({ toolInvocation: { findMany } } as unknown as Prisma.TransactionClient);
 		await expect(repository.findNextRunnable(new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ id: "current" }));
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { mcpRuntimeExecution: { is: null }, authorizationEvidenceDigest: { not: null }, OR: expect.arrayContaining([
-			expect.objectContaining({ run: { is: { state: AgentRunState.Running } }, OR: expect.arrayContaining([expect.objectContaining({ state: ToolInvocationState.AwaitingApproval, claimKind: null }), expect.objectContaining({ state: ToolInvocationState.Ready, claimKind: null })]) }),
-			expect.objectContaining({ run: { is: { state: AgentRunState.Cancelling } }, state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, claimExpiresAt: { lte: expect.any(Date) } }),
-		]) } }));
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ mcpRuntimeExecution: { is: null }, authorizationEvidenceDigest: { not: null }, OR: [expect.objectContaining({ run: { is: { state: AgentRunState.Running } } })] }) }));
 	});
 
 	it("allows successful first preparation after the retry deadline because only retries expire", async function _latePreparationSuccess()
@@ -125,7 +137,7 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(before).mockResolvedValueOnce(winner).mockResolvedValueOnce(winner), updateMany }, toolResultDelivery: { create: vi.fn() } } as unknown as Prisma.TransactionClient;
 		const claim = { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Reconcile, fence: 4, revision: 6 };
 		await new PrismaToolInvocationRepository(transaction).complete(claim, { toolInvocationId: "tool-1", outcome: "succeeded", result: { ok: true } }, new Date("2026-08-11T10:00:01.000Z"));
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: ToolInvocationState.Reconciling, claimKind: ExternalActionClaimKind.Reconcile, claimFence: 4, revision: 6, run: { is: { attempt: 2, state: { in: [AgentRunState.Running, AgentRunState.Cancelling] } } } }) }));
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: ToolInvocationState.Reconciling, claimKind: ExternalActionClaimKind.Reconcile, claimFence: 4, revision: 6, run: { is: { attempt: 2, state: AgentRunState.Running } } }) }));
 	});
 
 	it("does not create a duplicate delivery when a stale claim and revision lose the completion CAS", async function _completionCasLoser()
@@ -158,7 +170,7 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(recovered), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } } as unknown as Prisma.TransactionClient;
 		const result = await new PrismaToolInvocationRepository(transaction).completeAmbiguous({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"));
 		expect(result).toEqual({ changed: true, invocation: expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired }) });
-		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: { in: [AgentRunState.Running, AgentRunState.Cancelling] } } } }) }));
+		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: AgentRunState.Running } } }) }));
 	});
 
 	it("releases a proven pre-dispatch failure under the exact claim fence", async function _releaseBeforeDispatch()
@@ -197,21 +209,6 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		expect(appendLifecycle).toHaveBeenCalledWith(transaction, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "tool-1", toolRevisionId: "integration:calendar:create", reason: "preparation_failed", retryCount: 1, retryLimit: 3, retrying: true } });
 	});
 
-	it("keeps a cancelling run cancelling while committing exact recovery evidence", async function _cancellingRecovery()
-	{
-		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
-		const recovery = _row({ state: ToolInvocationState.RecoveryRequired, claimKind: null, claimFence: 3, revision: 6, recoveryRequiredAt: new Date("2026-08-11T10:00:01.000Z") });
-		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(recovery), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
-		const prisma = { $transaction: vi.fn(async function _transaction(operation) { return operation(transaction); }) } as unknown as PrismaClient;
-		const appendRecovery = vi.fn().mockResolvedValue(true);
-		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Cancelling), resumeRunningInTransaction: vi.fn().mockResolvedValue(true) };
-		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, runRecovery);
-		await expect(unit.completeAmbiguous({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired }));
-		expect(runRecovery.enterRecoveryRequiredInTransaction).toHaveBeenCalledWith(transaction, { runId: "run-1", attempt: 2 });
-		expect(runRecovery.resumeRunningInTransaction).not.toHaveBeenCalled();
-		expect(appendRecovery).not.toHaveBeenCalled();
-	});
-
 	it("fails closed when invocation recovery conflicts with the owning run attempt", async function _recoveryConflict()
 	{
 		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
@@ -226,7 +223,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		expect(appendRecovery).not.toHaveBeenCalled();
 	});
 
-	it("commits definite success and clears its dispatch claim while the run is cancelling", async function _successUnderCancellation()
+	it("commits definite success and clears its dispatch claim", async function _success()
 	{
 		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
 		const succeeded = _row({ state: ToolInvocationState.Succeeded, claimKind: null, claimFence: 3, claimExpiresAt: null, revision: 6, result: { ok: true }, completedAt: new Date("2026-08-11T10:00:01.000Z") });
@@ -238,7 +235,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn() }, runRecovery);
 
 		await expect(unit.completeSucceeded({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, { ok: true }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ outcome: "completed", invocation: expect.objectContaining({ state: ToolInvocationStates.Succeeded, claimKind: null }) }));
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: { in: [AgentRunState.Running, AgentRunState.Cancelling] } } } }), data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: AgentRunState.Running } } }), data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
 		expect(appendLifecycle).toHaveBeenCalledWith(transaction, expect.objectContaining({ eventType: ToolInvocationEventTypes.Completed }));
 	});
 
@@ -259,7 +256,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		expect(appendLifecycle).not.toHaveBeenCalled();
 	});
 
-	it("commits definite failure and clears its dispatch claim while the run is cancelling", async function _failureUnderCancellation()
+	it("commits definite failure and clears its dispatch claim", async function _failure()
 	{
 		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
 		const failed = _row({ state: ToolInvocationState.Failed, claimKind: null, claimFence: 3, claimExpiresAt: null, revision: 6, failureCode: "provider_rejected", completedAt: new Date("2026-08-11T10:00:01.000Z") });
@@ -275,7 +272,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		expect(appendLifecycle).toHaveBeenCalledWith(transaction, expect.objectContaining({ eventType: ToolInvocationEventTypes.Failed }));
 	});
 
-	it("commits proven pre-dispatch release and clears its claim while the run is cancelling", async function _releaseUnderCancellation()
+	it("commits proven pre-dispatch release and clears its claim", async function _release()
 	{
 		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
 		const ready = _row({ state: ToolInvocationState.Ready, claimKind: null, claimFence: 3, claimExpiresAt: null, revision: 6, preparationAttempt: 2 });
@@ -285,38 +282,6 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: vi.fn() }, { enterRecoveryRequiredInTransaction: vi.fn(), resumeRunningInTransaction: vi.fn() });
 
 		await expect(unit.releaseClaimBeforeDispatch({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.Ready, claimKind: null }));
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: { in: [AgentRunState.Running, AgentRunState.Cancelling] } } } }), data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
-	});
-
-	it("commits ambiguity claim release without a recovery event while the run is cancelling", async function _ambiguityUnderCancellation()
-	{
-		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
-		const recovery = _row({ state: ToolInvocationState.RecoveryRequired, claimKind: null, claimFence: 3, claimExpiresAt: null, revision: 6, recoveryRequiredAt: new Date("2026-08-11T10:00:01.000Z") });
-		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(recovery), updateMany } };
-		const prisma = { $transaction: vi.fn(async function _transaction(operation) { return operation(transaction); }) } as unknown as PrismaClient;
-		const appendRecovery = vi.fn().mockResolvedValue(true);
-		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Cancelling), resumeRunningInTransaction: vi.fn() };
-		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, runRecovery);
-
-		await expect(unit.completeAmbiguous({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired, claimKind: null }));
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
-		expect(appendRecovery).not.toHaveBeenCalled();
-	});
-
-	it("commits expired-claim recovery without a recovery event while the run is cancelling", async function _expiredClaimUnderCancellation()
-	{
-		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, claimExpiresAt: new Date("2026-08-11T10:00:00.000Z"), revision: 5 });
-		const recovery = _row({ state: ToolInvocationState.RecoveryRequired, claimKind: null, claimFence: 3, claimExpiresAt: null, revision: 6, recoveryRequiredAt: new Date("2026-08-11T10:00:01.000Z") });
-		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(recovery), updateMany } };
-		const prisma = { $transaction: vi.fn(async function _transaction(operation) { return operation(transaction); }) } as unknown as PrismaClient;
-		const appendRecovery = vi.fn().mockResolvedValue(true);
-		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Cancelling), resumeRunningInTransaction: vi.fn() };
-		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, runRecovery);
-
-		await expect(unit.recoverExpiredClaim("invocation-row-1", new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired, claimKind: null }));
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: { in: [AgentRunState.Running, AgentRunState.Cancelling] } } } }), data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
-		expect(appendRecovery).not.toHaveBeenCalled();
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: AgentRunState.Running } } }), data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
 	});
 });

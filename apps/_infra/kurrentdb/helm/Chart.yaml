@@ -1,0 +1,6 @@
+apiVersion: v2
+name: opencrane-kurrentdb
+description: App-owned named-template library for the private KurrentDB HistoryStore plane.
+type: library
+version: 0.11.0
+appVersion: "26.1.1"

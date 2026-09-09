@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ReadOrganizationMembershipConfig, _ReadProcessConfig } from "../config";
+import { _ReadAgentSandboxReleaseProfileConfig, _ReadOrganizationMembershipConfig, _ReadProcessConfig } from "../config";
 
 const _temporaryDirectories: string[] = [];
 
@@ -23,9 +23,13 @@ describe("opencrane process config", function _ProcessConfigSuite()
 	beforeEach(function _stubRequiredMemoryGatewayEnvironment()
 	{
 		vi.stubEnv("DATABASE_URL", "postgresql://opencrane:test@localhost:5432/opencrane");
+		vi.stubEnv("CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH", "/var/run/opencrane/conversation-payload/keyring.json");
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
-		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "opencrane-kurrentdb.default.svc:2113");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH", "/var/run/opencrane/history-store/ca.crt");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_USERNAME_PATH", "/var/run/opencrane/history-store/username");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_PASSWORD_PATH", "/var/run/opencrane/history-store/password");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
@@ -44,38 +48,36 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("PORT", "9080");
 		vi.stubEnv("INTERNAL_PORT", "9081");
 		vi.stubEnv("WATCH_NAMESPACE", "workspace-seeds");
-		vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "personal-runs");
-		vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "managed-runs");
 		vi.stubEnv("ARTIFACT_SCANNER_ENABLED", "true");
 		vi.stubEnv("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", "240");
 		vi.stubEnv("ARTIFACT_SCANNER_NAMESPACE", "artifact-scanner");
 		vi.stubEnv("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", "20");
 		vi.stubEnv("MCP_COMPANION_CLAIM_LEASE_SECONDS", "25");
-		vi.stubEnv("OPENCRANE_SCHEDULER_ENABLED", "true");
-		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "2500");
 
-		expect(_ReadProcessConfig()).toMatchObject({
-			authWatchNamespace: "workspace-seeds",
+			expect(_ReadProcessConfig()).toMatchObject({
+				authWatchNamespace: "workspace-seeds",
+				conversationPrivatePayloadKeyringPath: "/var/run/opencrane/conversation-payload/keyring.json",
+			historyStore: {
+				caCertificatePath: "/var/run/opencrane/history-store/ca.crt",
+				endpoint: "opencrane-kurrentdb.default.svc:2113",
+				passwordPath: "/var/run/opencrane/history-store/password",
+				usernamePath: "/var/run/opencrane/history-store/username",
+			},
 			internalPort: 9081,
 			publicPort: 9080,
 			runtime: {
 				artifactScannerEnabled: true,
 				artifactScannerClaimLeaseMilliseconds: 240_000,
 				artifactScannerNamespace: "artifact-scanner",
-				managedRuntimeNamespace: "managed-runs",
-				continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
 				mcpCompanionClaimLeaseMilliseconds: 25_000,
 				mcpControllerClaimLeaseMilliseconds: 20_000,
 				mcpExecutorNamespace: "mcp-executors",
 				memoryGatewayTimeoutMilliseconds: 30_000,
 				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 				memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
-				personalRuntimeNamespace: "personal-runs",
 				skillAuthoringNamespace: "skill-authoring",
 				siloId: "silo-test",
 			},
-			schedulerEnabled: true,
-			schedulerIntervalMilliseconds: 2500,
 			workflows: {
 				databasePoolSize: 2,
 				databaseUrl: "postgresql://opencrane:test@localhost:5432/opencrane",
@@ -89,6 +91,29 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				workerConcurrency: 2,
 			},
 		});
+	});
+
+	it("reads the release-owned conversation-computer profile", function _ReadComputerProfile()
+	{
+		vi.stubEnv("OPENCRANE_COMPUTER_PROFILE_REVISION_ID", `sha256:${"a".repeat(64)}`);
+		vi.stubEnv("OPENCRANE_COMPUTER_PROFILE_NAME", "developer");
+		vi.stubEnv("OPENCRANE_COMPUTER_WARM_POOL_NAME", "developer-pool");
+		vi.stubEnv("OPENCRANE_COMPUTER_NAMESPACE", "opencrane-testv5");
+		vi.stubEnv("OPENCRANE_COMPUTER_SERVICE_ACCOUNT_NAME", "opencrane-conversation-computer");
+		vi.stubEnv("OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS", "100000");
+		vi.stubEnv("OPENCRANE_COMPUTER_LEASE_TTL_SECONDS", "1800");
+		expect(_ReadAgentSandboxReleaseProfileConfig()).toEqual({ profileRevisionId: `sha256:${"a".repeat(64)}`, profileName: "developer", warmPoolName: "developer-pool", namespace: "opencrane-testv5", serviceAccountName: "opencrane-conversation-computer", leaseTtlMilliseconds: 1_800_000, maximumTurnCostUsdMicros: 100_000 });
+	});
+
+	it("reads bounded run-admission capacity from the existing chart settings", function _ReadRunAdmissionCapacity()
+	{
+		vi.stubEnv("AGENT_RUN_ADMISSION_MAX_CONCURRENT", "7");
+		vi.stubEnv("AGENT_RUN_ADMISSION_MAX_QUEUED", "23");
+
+		expect(_ReadProcessConfig().runAdmission).toEqual({ maxConcurrentAdmissions: 7, maxQueuedAdmissions: 23 });
+
+		vi.stubEnv("AGENT_RUN_ADMISSION_MAX_QUEUED", "1001");
+		expect(function _ReadExcessiveRunAdmissionQueue() { _ReadProcessConfig(); }).toThrow(/integer from 0 through 1000/);
 	});
 
 	it("rejects missing or excessive durable workflow settings", function _RejectInvalidWorkflowConfig()
@@ -107,6 +132,22 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", "5000");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE", "relative/authorization");
 		expect(function _readRelativeRegistryCredential() { _ReadProcessConfig(); }).toThrow(/absolute mounted file path/);
+	});
+
+	it("requires a credential-free KurrentDB host, port, and mounted file paths", function _RejectsInvalidHistoryStoreConfig()
+	{
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "kurrentdb://operator:secret@history.example:2113");
+		expect(function _CredentialedHistoryEndpoint() { _ReadProcessConfig(); }).toThrow(/credential-free host:port/);
+
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "history.example");
+		expect(function _PortlessHistoryEndpoint() { _ReadProcessConfig(); }).toThrow(/credential-free host:port/);
+
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "history.example:0");
+		expect(function _ZeroHistoryEndpointPort() { _ReadProcessConfig(); }).toThrow(/credential-free host:port/);
+
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_ENDPOINT", "history.example:2113");
+		vi.stubEnv("OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH", "var/run/history/ca.crt");
+		expect(function _RelativeHistoryCertificate() { _ReadProcessConfig(); }).toThrow(/OPENCRANE_HISTORY_STORE_CA_CERTIFICATE_PATH must be an absolute path/);
 	});
 
 	it("reads the all-or-nothing standalone first-owner admission contract", function _ReadStandaloneFirstUserAdmission()
@@ -170,17 +211,6 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readInvalidConfig() { _ReadProcessConfig(); }).toThrow(/integer from 1024 through 67108864/);
 	});
 
-	it("rejects the receiver namespace reserved for migrated route evidence", function _RejectLegacyRouteReceiver()
-	{
-		vi.stubEnv("CHANNEL_PROXY_SERVICE_ACCOUNT_NAME", "channel-proxy");
-		vi.stubEnv("CHANNEL_REPLAY_ENDPOINT", "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/conversation-replay");
-		vi.stubEnv("CHANNEL_REPLAY_RECEIVER_ID", "legacy-route-v0:forged");
-		vi.stubEnv("CHANNEL_TARGET_SILO_ID", "silo");
-		vi.stubEnv("CHANNEL_TARGET_TRUSTED_HOST", "silo.example.com");
-
-		expect(function _ReadReservedReceiver() { _ReadProcessConfig(); }).toThrow(/reserved legacy route namespace/);
-	});
-
 	it("fails boot when the memory-gateway origin or token path is missing", function _RejectMissingMemoryGateway()
 	{
 		vi.stubEnv("MEMORY_GATEWAY_URL", "");
@@ -201,12 +231,4 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readExcessiveTimeout() { _ReadProcessConfig(); }).toThrow(/integer from 1 through 300/);
 	});
 
-	it("rejects malformed or excessive scheduler intervals before a tight loop can start", function _RejectInvalidSchedulerInterval()
-	{
-		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "bad");
-		expect(function _readMalformedInterval() { _ReadProcessConfig(); }).toThrow(/integer from 1000 through 3600000/);
-
-		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "3600001");
-		expect(function _readExcessiveInterval() { _ReadProcessConfig(); }).toThrow(/integer from 1000 through 3600000/);
-	});
 });

@@ -12,6 +12,7 @@ source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 prepare_current_chart_sources
 trap 'cleanup_current_chart_sources' EXIT
 CHART_FIXTURE="$(current_chart_sources_dir)"
+echo "[health] render ingress"
 rendered_ingress="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -26,6 +27,7 @@ grep -Fq '            pathType: Exact' <<<"$health_route"
 grep -Fq '                name: opencrane-silo-opencrane-server' <<<"$health_route"
 grep -Fq '                  number: 8080' <<<"$health_route"
 
+echo "[health] render server deployment"
 server_deployment="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -39,21 +41,8 @@ if awk '/livenessProbe:/,/readinessProbe:/' <<<"$server_deployment" | grep -Fq '
 fi
 grep -Fq 'readinessProbe:' <<<"$server_deployment"
 grep -Fq 'path: /healthz' <<<"$server_deployment"
-grep -Fq 'name: CHANNEL_PROXY_URL' <<<"$server_deployment"
-grep -Fq 'value: "http://opencrane-silo-channel-proxy.default.svc.cluster.local:8080"' <<<"$server_deployment"
 
-server_network_policy="$(helm template opencrane-silo "$CHART_FIXTURE" \
-  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
-  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
-  --show-only templates/app-rollups.yaml | awk 'BEGIN { RS="---" } /kind: NetworkPolicy/ && /name: opencrane-silo-opencrane-server/ { print }')"
-channel_health_egress="$(awk '
-  /# Release-local live conversation-event delivery/ { capture = 1 }
-  capture { print }
-  capture && /port: 8080/ { exit }
-' <<<"$server_network_policy")"
-grep -Fq 'app.kubernetes.io/component: channel-proxy' <<<"$channel_health_egress"
-grep -Fq 'port: 8080' <<<"$channel_health_egress"
-
+echo "[health] render spa deployment"
 spa_deployment="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -64,12 +53,21 @@ grep -Fq 'image: "ghcr.io/elewa-git/opencrane-ui@sha256:aaaaaaaaaaaaaaaaaaaaaaaa
 grep -Fq 'livenessProbe:' <<<"$spa_deployment"
 grep -Fq 'readinessProbe:' <<<"$spa_deployment"
 
+echo "[health] render pull secret"
 rendered_pull_secret="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
   --set-string 'global.imagePullSecret=opencrane-ghcr-pull' \
   --show-only templates/app-rollups.yaml)"
-[[ "$(grep -Fc 'name: "opencrane-ghcr-pull"' <<<"$rendered_pull_secret")" == "3" ]]
+# Every image-pulling deployable the umbrella renders must carry the shared pull secret: the server
+# and the memory gateway. Name them instead of counting, so a removed or added deployable is a
+# deliberate edit here rather than a silent count drift.
+for pulling_deployment in opencrane-silo-opencrane-server opencrane-silo-memory-gateway; do
+  pulling_document="$(awk -v name="$pulling_deployment" 'BEGIN { RS="---" } /kind: Deployment/ && index($0, "name: " name) { print }' <<<"$rendered_pull_secret")"
+  [[ -n "$pulling_document" ]]
+  grep -Fq 'name: "opencrane-ghcr-pull"' <<<"$pulling_document"
+done
+[[ "$(grep -Fc 'name: "opencrane-ghcr-pull"' <<<"$rendered_pull_secret")" == "2" ]]
 
 _run_verify() {
   local curl_outcome="$1"
@@ -105,6 +103,7 @@ _run_verify() {
   rm -f "$curl_args_file"
 }
 
+echo "[health] verify healthy"
 healthy_output="$(_run_verify healthy 0)"
 grep -Fq 'https://acme.opencrane.local/healthz is healthy' <<<"$healthy_output"
 grep -Fq -- '--connect-timeout' <<<"$healthy_output"
@@ -114,12 +113,15 @@ if grep -Fq -- '--insecure' <<<"$healthy_output"; then
   exit 1
 fi
 
+echo "[health] verify insecure"
 insecure_output="$(_run_verify healthy 1)"
 grep -Fq -- '--insecure' <<<"$insecure_output"
 
+echo "[health] verify unhealthy"
 unhealthy_output="$(_run_verify unhealthy 0)"
 grep -Fq 'https://acme.opencrane.local/healthz is unavailable or unhealthy' <<<"$unhealthy_output"
 
+echo "[health] verify missing curl"
 missing_curl_output="$(_run_verify healthy 0 1)"
 grep -Fq 'curl is unavailable — skipping the HTTP health check.' <<<"$missing_curl_output"
 
@@ -151,6 +153,7 @@ JSON
   grep -Fq 'observed image IDs: ghcr.io/elewa-git/opencrane-ui@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' <<<"$result"
 }
 
+echo "[health] verify spa rollout"
 _verify_spa_rollout
 
 if (
@@ -227,4 +230,5 @@ if (
   exit 1
 fi
 
+echo "post-deploy health contract: PASS"
 echo "post-deploy health contract: PASS"

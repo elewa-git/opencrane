@@ -7,7 +7,7 @@ retaining the packaging and execution rules their domains need.
 > See also: [Central authorization authority](/integrators/authorization-authority) (who may use a
 > revision), [OCI MCP runtime](/integrators/oci-mcp-runtime) (MCP execution),
 > [Agent skills](/guide/skills) (skill lifecycle), and
-> [Governed agent runtime](/integrators/agent-runtime) (agent execution).
+> [Conversation computers](/integrators/agent-runtime) (agent execution).
 
 ## Artifact, OCI image, and container
 

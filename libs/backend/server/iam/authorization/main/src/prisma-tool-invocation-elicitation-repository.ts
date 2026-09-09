@@ -41,7 +41,12 @@ export class PrismaToolInvocationElicitationRepository implements ToolInvocation
 		if (invocation.runId === null || invocation.attempt === null)
 			return false;
 		const current = await this.findById(claim.invocationId);
-		if (current === null) return false;
+		if (current === null)
+			return false;
+		const currentEvidence = current.authorizationEvidence;
+		const invocationEvidence = invocation.authorizationEvidence;
+		if (currentEvidence === null || invocationEvidence === null || !("executionSubject" in currentEvidence) || !("executionSubject" in invocationEvidence))
+			return false;
 		const run = await this._transaction.agentRun.findUnique({ where: { id: invocation.runId }, select: { attempt: true, state: true } });
 		return run !== null
 			&& run.attempt === invocation.attempt
@@ -54,7 +59,8 @@ export class PrismaToolInvocationElicitationRepository implements ToolInvocation
 			&& current.id === invocation.id
 			&& current.runId === invocation.runId
 			&& current.attempt === invocation.attempt
-			&& current.subjectId === invocation.subjectId
+			&& currentEvidence.executionSubject.agentIdentityId === invocationEvidence.executionSubject.agentIdentityId
+			&& currentEvidence.executionSubject.principalId === invocationEvidence.executionSubject.principalId
 			&& current.toolInvocationId === invocation.toolInvocationId
 			&& current.toolRevisionId === invocation.toolRevisionId
 			&& current.requestFingerprint === invocation.requestFingerprint

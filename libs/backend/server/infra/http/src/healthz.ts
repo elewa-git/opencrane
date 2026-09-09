@@ -48,7 +48,6 @@ function _UnavailableReport(): PublicHealthReport
 			[PublicHealthServiceNames.Models]: PublicHealthServiceStatuses.Unavailable,
 			[PublicHealthServiceNames.Memory]: PublicHealthServiceStatuses.Unavailable,
 			[PublicHealthServiceNames.Files]: PublicHealthServiceStatuses.Unavailable,
-			[PublicHealthServiceNames.Channels]: PublicHealthServiceStatuses.Unavailable,
 		},
 	};
 }

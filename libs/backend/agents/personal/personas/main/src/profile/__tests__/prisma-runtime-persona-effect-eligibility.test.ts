@@ -8,10 +8,12 @@ describe("PrismaRuntimePersonaEffectEligibilityAuthority", function _Suite()
 	it("rejects a revision outside the exact silo, owner, Approved lifecycle, or active profile pointer", async function _RejectsMismatch()
 	{
 		const findFirst = vi.fn().mockResolvedValue(null);
-		const transaction = { personaRevision: { findFirst } } as unknown as Prisma.TransactionClient;
+		const findUnique = vi.fn().mockResolvedValue({ subject: "user-1" });
+		const transaction = { principal: { findUnique }, personaRevision: { findFirst } } as unknown as Prisma.TransactionClient;
 		const authority = new PrismaRuntimePersonaEffectEligibilityAuthority(transaction);
 
-		await expect(authority.findEligibleProfileId({ siloId: "silo-1", userId: "user-1", personaRevisionId: "revision-1" })).resolves.toBeNull();
+		await expect(authority.findEligibleProfileId({ siloId: "silo-1", principalId: "principal-1", personaRevisionId: "revision-1" })).resolves.toBeNull();
+		expect(findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "principal-1", siloId: "silo-1" } }, select: { subject: true } });
 		expect(findFirst).toHaveBeenCalledWith({
 			where: {
 				id: "revision-1",

@@ -14,9 +14,6 @@ CREATE TYPE "AgentServiceState" AS ENUM ('draft', 'active', 'paused', 'retired')
 CREATE TYPE "AgentRevisionState" AS ENUM ('draft', 'published', 'rejected', 'retired');
 
 -- CreateEnum
-CREATE TYPE "AgentScheduleOverlapPolicy" AS ENUM ('skip', 'allow');
-
--- CreateEnum
 CREATE TYPE "ArtifactKind" AS ENUM ('document', 'generated', 'skill', 'upload');
 
 -- CreateEnum
@@ -74,13 +71,10 @@ CREATE TYPE "ExternalActionClaimKind" AS ENUM ('dispatch', 'reconcile');
 CREATE TYPE "ToolResultDeliveryState" AS ENUM ('pending', 'consumed');
 
 -- CreateEnum
-CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('user', 'agent-service');
+CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('workload');
 
 -- CreateEnum
-CREATE TYPE "ChannelInvocationAction" AS ENUM ('events.read');
-
--- CreateEnum
-CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
+CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload');
 
 -- CreateEnum
 CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'removed');
@@ -92,16 +86,7 @@ CREATE TYPE "ConversationMode" AS ENUM ('agent_session', 'direct', 'group');
 CREATE TYPE "ConversationLifecycle" AS ENUM ('open', 'closed');
 
 -- CreateEnum
-CREATE TYPE "ConversationMessageRole" AS ENUM ('user', 'assistant', 'tool', 'system');
-
--- CreateEnum
-CREATE TYPE "ConversationMessageState" AS ENUM ('pending', 'streaming', 'completed', 'failed', 'cancelled');
-
--- CreateEnum
-CREATE TYPE "ConversationTimelineEntryKind" AS ENUM ('message', 'run_event', 'membership', 'system', 'parent_delivery');
-
--- CreateEnum
-CREATE TYPE "AgentThreadDeliveryKind" AS ENUM ('status', 'question', 'approval', 'result', 'failure', 'asset');
+CREATE TYPE "ConversationChildRequestState" AS ENUM ('pending', 'ready', 'unavailable');
 
 -- CreateEnum
 CREATE TYPE "ElicitationRequestState" AS ENUM ('requested', 'answered', 'declined', 'expired', 'cancelled');
@@ -224,34 +209,16 @@ CREATE TYPE "ThirdPartySourceStatus" AS ENUM ('healthy', 'syncing', 'error', 'pe
 CREATE TYPE "ThirdPartySourceItemKind" AS ENUM ('mcp-server');
 
 -- CreateEnum
-CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive', 'schedule', 'managed_invocation');
+CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive');
 
 -- CreateEnum
-CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_input', 'recovery_required', 'cancelling', 'completed', 'failed', 'cancelled');
+CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_input', 'recovery_required', 'completed', 'failed');
 
 -- CreateEnum
-CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'user_cancelled', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
-
--- CreateEnum
-CREATE TYPE "WorkloadAssignmentState" AS ENUM ('pending_pod', 'registered', 'revoked');
+CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
 
 -- CreateEnum
 CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
-
--- CreateEnum
-CREATE TYPE "WarmRuntimeReservationState" AS ENUM ('reserved', 'profile_activating', 'ready', 'claimed', 'delete_requested', 'deleted');
-
--- CreateEnum
-CREATE TYPE "ChildRunCompletionDeliveryOutcome" AS ENUM ('delivered', 'no_parent_stream', 'parent_stream_terminal');
-
--- CreateEnum
-CREATE TYPE "RuntimeCommandKind" AS ENUM ('start_attempt', 'resume_attempt', 'cancel_attempt');
-
--- CreateEnum
-CREATE TYPE "RuntimeSteeringDisposition" AS ENUM ('absorbed', 'deferred');
-
--- CreateEnum
-CREATE TYPE "RuntimeSteeringRequestState" AS ENUM ('pending', 'consumed');
 
 -- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
@@ -348,23 +315,6 @@ CREATE TABLE "agent_revision_mcp_tool_assignments" (
     "silo_id" TEXT NOT NULL,
 
     CONSTRAINT "agent_revision_mcp_tool_assignments_pkey" PRIMARY KEY ("agent_revision_id","tool_revision_id")
-);
-
--- CreateTable
-CREATE TABLE "agent_service_schedules" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "cron" TEXT NOT NULL,
-    "timezone" TEXT NOT NULL,
-    "overlap_policy" "AgentScheduleOverlapPolicy" NOT NULL DEFAULT 'skip',
-    "enabled" BOOLEAN NOT NULL DEFAULT true,
-    "catchup_window_seconds" INTEGER NOT NULL DEFAULT 3600,
-    "last_scheduled_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "agent_service_schedules_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -531,8 +481,6 @@ CREATE TABLE "audit_decisions" (
     "attempt" INTEGER,
     "agent_service_id" TEXT,
     "agent_revision_id" TEXT,
-    "proof_key_id" TEXT,
-    "proof_key_thumbprint" TEXT,
     "resource_kind" TEXT NOT NULL,
     "resource_id" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -600,15 +548,8 @@ CREATE TABLE "approval_requests" (
     "agent_revision_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "proof_key_id" TEXT NOT NULL,
-    "proof_key_thumbprint" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "workload_audience" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "pod_uid" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
     "resource_kind" TEXT NOT NULL,
     "resource_id" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -643,12 +584,12 @@ CREATE TABLE "tool_invocations" (
     "agent_service_id" TEXT,
     "agent_revision_id" TEXT,
     "mcp_task_id" TEXT,
-    "subject_id" TEXT NOT NULL,
-    "authorization_principal_id" TEXT,
+    "agent_identity_id" TEXT,
+    "principal_id" TEXT NOT NULL,
     "authorization_actor_kind" "ToolInvocationAuthorizationActorKind",
+    "authorization_execution_subject" JSONB,
     "authorization_coordinates" JSONB,
     "authorization_decision_digests" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "authorization_membership_revision" INTEGER,
     "authorization_assignment_digest" TEXT,
     "authorization_evidence_digest" TEXT,
     "runtime_instance_id" TEXT NOT NULL,
@@ -698,56 +639,14 @@ CREATE TABLE "tool_result_deliveries" (
 );
 
 -- CreateTable
-CREATE TABLE "channel_runtime_routes" (
-    "id" TEXT NOT NULL,
-    "receiver_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "action" "ChannelInvocationAction" NOT NULL,
-    "endpoint" TEXT NOT NULL,
-    "is_current" BOOLEAN NOT NULL DEFAULT true,
-    "registered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "legacy_expires_at" TIMESTAMP(3),
-    "revoked_at" TIMESTAMP(3),
-
-    CONSTRAINT "channel_runtime_routes_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "channel_invocation_contexts" (
-    "id" TEXT NOT NULL,
-    "digest" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "action" "ChannelInvocationAction" NOT NULL,
-    "route_id" TEXT NOT NULL,
-    "receiver_id" TEXT NOT NULL,
-    "membership_revision" INTEGER NOT NULL,
-    "authorization_digest" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "consumed_at" TIMESTAMP(3),
-    "revoked_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "channel_invocation_contexts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "conversation_assets" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "conversation_id" TEXT NOT NULL,
     "message_id" TEXT,
-    "run_id" TEXT,
-    "run_attempt" INTEGER,
-    "run_event_sequence" INTEGER,
-    "run_message_id" TEXT,
     "artifact_id" TEXT,
     "revision_id" TEXT,
     "upload_lease_id" TEXT,
-    "output_ticket_id" TEXT,
     "idempotency_key" TEXT NOT NULL,
     "provenance" "ConversationAssetProvenance" NOT NULL,
     "state" "ConversationAssetState" NOT NULL,
@@ -764,38 +663,101 @@ CREATE TABLE "conversation_assets" (
 );
 
 -- CreateTable
-CREATE TABLE "conversation_asset_output_tickets" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "run_attempt" INTEGER NOT NULL,
-    "run_event_sequence" INTEGER NOT NULL,
-    "output_message_id" TEXT NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "finalized_content_address" TEXT,
-    "finalized_receipt_digest" TEXT,
-    "finalized_at" TIMESTAMP(3),
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_asset_output_tickets_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "conversations" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "mode" "ConversationMode" NOT NULL,
     "agent_service_id" TEXT,
+    "computer_id" TEXT,
+    "computer_agent_identity_id" TEXT,
+    "computer_profile_revision_id" TEXT,
     "lifecycle" "ConversationLifecycle" NOT NULL DEFAULT 'open',
-    "context_revision_id" TEXT,
     "closed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
 
     CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_child_requests" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "parent_conversation_id" TEXT NOT NULL,
+    "parent_message_id" TEXT NOT NULL,
+    "parent_message_position" BIGINT NOT NULL,
+    "child_conversation_id" TEXT NOT NULL,
+    "computer_id" TEXT NOT NULL,
+    "requested_by_principal_id" TEXT NOT NULL,
+    "requester_subject_id" TEXT NOT NULL,
+    "requester_issuer" TEXT NOT NULL,
+    "requester_authenticated_at" TIMESTAMP(3) NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "agent_revision_id" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "agent_principal_id" TEXT NOT NULL,
+    "agent_name" TEXT NOT NULL,
+    "profile_revision_id" TEXT NOT NULL,
+    "participant_subject_ids" JSONB NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "state" "ConversationChildRequestState" NOT NULL DEFAULT 'pending',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_child_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_computer_active_leases" (
+    "computer_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "lease_id" TEXT NOT NULL,
+    "lease_generation" INTEGER NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "conversation_computer_active_leases_pkey" PRIMARY KEY ("computer_id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_private_payloads" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "author_subject" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "key_id" TEXT NOT NULL,
+    "nonce" BYTEA NOT NULL,
+    "auth_tag" BYTEA NOT NULL,
+    "ciphertext" BYTEA NOT NULL,
+    "ciphertext_digest" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_private_payloads_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_computer_attempt_credentials" (
+    "bootstrap_id" TEXT NOT NULL,
+    "key_alias" TEXT NOT NULL,
+    "model_alias" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "state" TEXT NOT NULL DEFAULT 'pending',
+    "claim_fence" TEXT NOT NULL,
+    "claim_expires_at" TIMESTAMP(3) NOT NULL,
+    "key_id" TEXT,
+    "nonce" BYTEA,
+    "auth_tag" BYTEA,
+    "ciphertext" BYTEA,
+    "ciphertext_digest" TEXT,
+    "credential_digest" TEXT,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_computer_attempt_credentials_pkey" PRIMARY KEY ("bootstrap_id")
 );
 
 -- CreateTable
@@ -809,104 +771,6 @@ CREATE TABLE "conversation_participants" (
     "joined_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "conversation_participants_pkey" PRIMARY KEY ("conversation_id","user_id")
-);
-
--- CreateTable
-CREATE TABLE "conversation_messages" (
-    "id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "run_id" TEXT,
-    "user_id" TEXT,
-    "idempotency_key" TEXT NOT NULL,
-    "role" "ConversationMessageRole" NOT NULL,
-    "state" "ConversationMessageState" NOT NULL,
-    "source" TEXT NOT NULL,
-    "blocks" JSONB NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "completed_at" TIMESTAMP(3),
-
-    CONSTRAINT "conversation_messages_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "conversation_run_events" (
-    "conversation_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "sequence" INTEGER NOT NULL,
-    "type" TEXT NOT NULL,
-    "message_id" TEXT,
-    "payload" JSONB NOT NULL,
-    "occurred_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_run_events_pkey" PRIMARY KEY ("run_id","sequence")
-);
-
--- CreateTable
-CREATE TABLE "conversation_timeline_entries" (
-    "conversation_id" TEXT NOT NULL,
-    "position" BIGINT NOT NULL DEFAULT 0,
-    "kind" "ConversationTimelineEntryKind" NOT NULL,
-    "message_id" TEXT,
-    "run_id" TEXT,
-    "run_event_sequence" INTEGER,
-    "membership_event_id" TEXT,
-    "participant_user_id" TEXT,
-    "system_event_id" TEXT,
-    "parent_delivery_agent_thread_id" TEXT,
-    "payload" JSONB,
-    "occurred_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_timeline_entries_pkey" PRIMARY KEY ("conversation_id","position")
-);
-
--- CreateTable
-CREATE TABLE "conversation_agent_threads" (
-    "child_conversation_id" TEXT NOT NULL,
-    "parent_conversation_id" TEXT NOT NULL,
-    "root_conversation_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "parent_message_id" TEXT NOT NULL,
-    "initiator_user_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "persona_profile_id" TEXT NOT NULL,
-    "persona_revision_id" TEXT NOT NULL,
-    "first_run_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_agent_threads_pkey" PRIMARY KEY ("child_conversation_id")
-);
-
--- CreateTable
-CREATE TABLE "agent_thread_parent_deliveries" (
-    "id" TEXT NOT NULL,
-    "child_conversation_id" TEXT NOT NULL,
-    "parent_conversation_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "kind" "AgentThreadDeliveryKind" NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "label" TEXT NOT NULL,
-    "detail" TEXT NOT NULL,
-    "asset_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "agent_thread_parent_deliveries_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "conversation_context_revisions" (
-    "id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "revision" INTEGER NOT NULL,
-    "through_message_id" TEXT NOT NULL,
-    "summary" JSONB NOT NULL,
-    "digest" TEXT NOT NULL,
-    "created_by_run_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_context_revisions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1752,13 +1616,12 @@ CREATE TABLE "agent_runs" (
     "agent_revision_id" TEXT NOT NULL,
     "conversation_id" TEXT,
     "trigger" "AgentRunTrigger" NOT NULL,
-    "delegated_user_id" TEXT,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "execution_subject" JSONB NOT NULL,
     "request_idempotency_key" TEXT NOT NULL,
-    "root_run_id" TEXT NOT NULL,
-    "parent_run_id" TEXT,
     "attempt" INTEGER NOT NULL DEFAULT 1,
     "state" "AgentRunState" NOT NULL DEFAULT 'accepted',
-    "effective_contract_digest" TEXT NOT NULL,
     "input_snapshot_digest" TEXT NOT NULL,
     "accepted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "started_at" TIMESTAMP(3),
@@ -1771,175 +1634,33 @@ CREATE TABLE "agent_runs" (
 );
 
 -- CreateTable
-CREATE TABLE "warm_runtime_reservations" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL DEFAULT 1,
-    "silo_id" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "deployment_name" TEXT NOT NULL,
-    "deployment_uid" TEXT NOT NULL,
-    "pod_name" TEXT NOT NULL,
-    "pod_uid" TEXT NOT NULL,
-    "pod_resource_version" TEXT NOT NULL,
-    "generic_profile" TEXT NOT NULL,
-    "claimed_profile" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "state" "WarmRuntimeReservationState" NOT NULL DEFAULT 'reserved',
-    "proof_key_thumbprint" TEXT,
-    "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "profile_activated_at" TIMESTAMP(3),
-    "readiness_observed_at" TIMESTAMP(3),
-    "bound_at" TIMESTAMP(3),
-    "idle_deadline" TIMESTAMP(3) NOT NULL,
-    "delete_requested_at" TIMESTAMP(3),
-    "deleted_at" TIMESTAMP(3),
-
-    CONSTRAINT "warm_runtime_reservations_pkey" PRIMARY KEY ("run_id","attempt","generation")
-);
-
--- CreateTable
-CREATE TABLE "agent_run_workflow_tasks" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "task_key" TEXT NOT NULL,
-    "task_name" TEXT NOT NULL,
-    "task_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "receipt_bound_at" TIMESTAMP(3),
-    "assignment_expires_at" TIMESTAMP(3),
-    "release_claimed_at" TIMESTAMP(3),
-    "release_expires_at" TIMESTAMP(3),
-    "release_delivery_count" INTEGER NOT NULL DEFAULT 0,
-    "attempt_key_digest" TEXT,
-
-    CONSTRAINT "agent_run_workflow_tasks_pkey" PRIMARY KEY ("run_id","attempt")
-);
-
--- CreateTable
-CREATE TABLE "child_run_completion_deliveries" (
-    "child_run_id" TEXT NOT NULL,
-    "child_attempt" INTEGER NOT NULL,
-    "parent_run_id" TEXT NOT NULL,
-    "parent_attempt" INTEGER NOT NULL,
-    "parent_event_sequence" INTEGER,
-    "outcome" "ChildRunCompletionDeliveryOutcome" NOT NULL,
-    "delivered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id","child_attempt","parent_attempt")
-);
-
--- CreateTable
-CREATE TABLE "child_run_reservations" (
-    "child_run_id" TEXT NOT NULL,
-    "parent_run_id" TEXT NOT NULL,
-    "root_run_id" TEXT NOT NULL,
-    "depth" INTEGER NOT NULL,
-    "max_tokens" INTEGER NOT NULL,
-    "max_cost_usd_micros" BIGINT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "child_run_reservations_pkey" PRIMARY KEY ("child_run_id")
-);
-
--- CreateTable
 CREATE TABLE "run_input_snapshots" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
     "snapshot_version" INTEGER NOT NULL,
     "silo_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
-    "effective_contract_digest" TEXT NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "execution_subject" JSONB NOT NULL,
     "persona_revision_id" TEXT,
     "conversation_id" TEXT,
     "message_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "preference_fact_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "artifact_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_facts" JSONB NOT NULL DEFAULT '[]',
-    "identity_snapshot" JSONB NOT NULL,
     "model_route" JSONB NOT NULL,
     "mcp_tools" JSONB NOT NULL,
     "skill_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_query_policy" JSONB NOT NULL,
     "budget_policy" JSONB NOT NULL,
-    "capability_set_digest" TEXT NOT NULL,
     "prompt_compiler_version" TEXT NOT NULL,
     "input_digest" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "run_input_snapshots_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "workload_assignments" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "agent_revision_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "audience" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "workload_profile" TEXT NOT NULL,
-    "pod_uid" TEXT,
-    "binding_generation" INTEGER NOT NULL DEFAULT 1,
-    "state" "WorkloadAssignmentState" NOT NULL DEFAULT 'pending_pod',
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "registered_at" TIMESTAMP(3),
-    "revoked_at" TIMESTAMP(3),
-
-    CONSTRAINT "workload_assignments_pkey" PRIMARY KEY ("run_id","attempt")
-);
-
--- CreateTable
-CREATE TABLE "workload_bootstraps" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL DEFAULT 1,
-    "agent_service_id" TEXT NOT NULL,
-    "agent_revision_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "audience" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
-    "namespace" TEXT NOT NULL,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "claim_digest" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "consumed_at" TIMESTAMP(3),
-    "consumed_by_pod_uid" TEXT,
-    "revoked_at" TIMESTAMP(3),
-    "receipt_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "workload_bootstraps_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "run_proof_keys" (
-    "id" TEXT NOT NULL,
-    "bootstrap_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL DEFAULT 1,
-    "workload_kind" "WorkloadKind" NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "pod_uid" TEXT NOT NULL,
-    "public_key_jwk" JSONB NOT NULL,
-    "key_thumbprint" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "revoked_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "run_proof_keys_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1958,94 +1679,6 @@ CREATE TABLE "run_model_credential_mint_authorizations" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "run_model_credential_mint_authorizations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "runtime_command_streams" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "fence" INTEGER NOT NULL DEFAULT 1,
-    "input_generation" INTEGER NOT NULL DEFAULT 0,
-    "runtime_instance_id" TEXT,
-    "next_command_sequence" INTEGER NOT NULL DEFAULT 1,
-    "accepted_candidate_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "dispatch_blocked_reason" TEXT,
-    "dispatch_blocked_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id","attempt")
-);
-
--- CreateTable
-CREATE TABLE "runtime_continuation_checkpoints" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "input_generation" INTEGER NOT NULL,
-    "format_version" TEXT NOT NULL,
-    "revision" INTEGER NOT NULL,
-    "digest" TEXT NOT NULL,
-    "applied_command_sequence" INTEGER NOT NULL,
-    "source_runtime_instance_id" TEXT NOT NULL,
-    "source_command_id" TEXT NOT NULL,
-    "source_fence" INTEGER NOT NULL,
-    "key_id" TEXT NOT NULL,
-    "ciphertext" BYTEA NOT NULL,
-    "nonce" BYTEA NOT NULL,
-    "authentication_tag" BYTEA NOT NULL,
-    "plaintext_bytes" INTEGER NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "runtime_continuation_checkpoints_pkey" PRIMARY KEY ("run_id","attempt","input_generation")
-);
-
--- CreateTable
-CREATE TABLE "runtime_steering_boundaries" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "boundary_id" TEXT NOT NULL,
-    "from_input_generation" INTEGER NOT NULL,
-    "to_input_generation" INTEGER NOT NULL,
-    "disposition" "RuntimeSteeringDisposition" NOT NULL,
-    "steering_digest" TEXT,
-    "claimed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "acked_at" TIMESTAMP(3),
-
-    CONSTRAINT "runtime_steering_boundaries_pkey" PRIMARY KEY ("run_id","attempt","boundary_id")
-);
-
--- CreateTable
-CREATE TABLE "runtime_steering_requests" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "content" JSONB NOT NULL,
-    "digest" TEXT NOT NULL,
-    "state" "RuntimeSteeringRequestState" NOT NULL DEFAULT 'pending',
-    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "consumed_at" TIMESTAMP(3),
-
-    CONSTRAINT "runtime_steering_requests_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "runtime_dispatched_commands" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "sequence" INTEGER NOT NULL,
-    "command_id" TEXT NOT NULL,
-    "kind" "RuntimeCommandKind" NOT NULL,
-    "fence" INTEGER NOT NULL,
-    "payload" JSONB,
-    "issued_at" TIMESTAMP(3) NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "runtime_dispatched_commands_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2319,12 +1952,6 @@ CREATE INDEX "agent_revision_mcp_tool_assignments_agent_service_id_silo_i_idx" O
 CREATE INDEX "agent_revision_mcp_tool_assignments_tool_revision_id_silo_i_idx" ON "agent_revision_mcp_tool_assignments"("tool_revision_id", "silo_id");
 
 -- CreateIndex
-CREATE INDEX "agent_service_schedules_silo_id_agent_service_id_idx" ON "agent_service_schedules"("silo_id", "agent_service_id");
-
--- CreateIndex
-CREATE INDEX "agent_service_schedules_enabled_idx" ON "agent_service_schedules"("enabled");
-
--- CreateIndex
 CREATE INDEX "artifacts_silo_id_owner_principal_id_state_idx" ON "artifacts"("silo_id", "owner_principal_id", "state");
 
 -- CreateIndex
@@ -2472,7 +2099,7 @@ CREATE UNIQUE INDEX "approval_requests_elicitation_request_id_key" ON "approval_
 CREATE INDEX "approval_requests_state_expires_at_idx" ON "approval_requests"("state", "expires_at");
 
 -- CreateIndex
-CREATE INDEX "approval_requests_subject_id_idx" ON "approval_requests"("subject_id");
+CREATE INDEX "approval_requests_agent_identity_id_principal_id_idx" ON "approval_requests"("agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "approval_requests_run_id_attempt_action_digest_key" ON "approval_requests"("run_id", "attempt", "action_digest");
@@ -2482,6 +2109,9 @@ CREATE UNIQUE INDEX "tool_invocations_mcp_task_id_key" ON "tool_invocations"("mc
 
 -- CreateIndex
 CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
+
+-- CreateIndex
+CREATE INDEX "tool_invocations_silo_id_agent_identity_id_principal_id_idx" ON "tool_invocations"("silo_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "tool_invocations_run_id_attempt_state_idx" ON "tool_invocations"("run_id", "attempt", "state");
@@ -2505,31 +2135,7 @@ CREATE UNIQUE INDEX "tool_result_deliveries_tool_invocation_id_key" ON "tool_res
 CREATE INDEX "tool_result_deliveries_state_created_at_idx" ON "tool_result_deliveries"("state", "created_at");
 
 -- CreateIndex
-CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_routes"("silo_id", "agent_service_id", "action", "is_current");
-
--- CreateIndex
-CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action");
-
--- CreateIndex
-CREATE UNIQUE INDEX "channel_runtime_routes_receiver_service_key" ON "channel_runtime_routes"("receiver_id", "silo_id", "agent_service_id", "action");
-
--- CreateIndex
-CREATE UNIQUE INDEX "channel_invocation_contexts_digest_key" ON "channel_invocation_contexts"("digest");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_digest_expiry_idx" ON "channel_invocation_contexts"("digest", "expires_at");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_route_expiry_idx" ON "channel_invocation_contexts"("route_id", "expires_at");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_subject_conversation_idx" ON "channel_invocation_contexts"("subject_id", "silo_id", "conversation_id", "created_at");
-
--- CreateIndex
 CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
 
 -- CreateIndex
 CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
@@ -2538,37 +2144,16 @@ CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conv
 CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
 
 -- CreateIndex
-CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
-
--- CreateIndex
 CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_assets"("artifact_id", "revision_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "conversation_assets_exact_output_ticket_key" ON "conversation_assets"("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id");
-
--- CreateIndex
 CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_finalized_receipt_digest_key" ON "conversation_asset_output_tickets"("finalized_receipt_digest");
-
--- CreateIndex
-CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" ON "conversation_asset_output_tickets"("conversation_id", "created_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_run_id_run_attempt_idempo_key" ON "conversation_asset_output_tickets"("run_id", "run_attempt", "idempotency_key");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_exact_asset_key" ON "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversations_activity_sequence_key" ON "conversations"("activity_sequence");
-
--- CreateIndex
-CREATE INDEX "conversations_silo_id_mode_lifecycle_activity_sequence_idx" ON "conversations"("silo_id", "mode", "lifecycle", "activity_sequence");
+CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at");
 
 -- CreateIndex
 CREATE INDEX "conversations_silo_id_agent_service_id_lifecycle_idx" ON "conversations"("silo_id", "agent_service_id", "lifecycle");
@@ -2580,90 +2165,54 @@ CREATE UNIQUE INDEX "conversations_id_silo_id_key" ON "conversations"("id", "sil
 CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "silo_id", "agent_service_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
+CREATE UNIQUE INDEX "conversations_silo_id_computer_id_key" ON "conversations"("silo_id", "computer_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_child_requests_child_conversation_id_key" ON "conversation_child_requests"("child_conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_child_requests_computer_id_key" ON "conversation_child_requests"("computer_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_child_requests_parent_conversation_id_state_idx" ON "conversation_child_requests"("parent_conversation_id", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_child_requests_silo_id_requested_by_principal__key" ON "conversation_child_requests"("silo_id", "requested_by_principal_id", "idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_conversation_id_key" ON "conversation_computer_active_leases"("conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_lease_id_key" ON "conversation_computer_active_leases"("lease_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_computer_active_leases_silo_id_agent_identity__idx" ON "conversation_computer_active_leases"("silo_id", "agent_identity_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_computer_active_leases_expires_at_idx" ON "conversation_computer_active_leases"("expires_at");
+
+ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_exact_check" CHECK (
+  btrim("computer_id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> '' AND
+  btrim("agent_identity_id") <> '' AND btrim("lease_id") <> '' AND "lease_generation" > 0
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_conversation_id_silo_id_key" ON "conversation_computer_active_leases"("conversation_id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_computer_active_leases_computer_id_lease_gener_key" ON "conversation_computer_active_leases"("computer_id", "lease_generation");
+
+-- CreateIndex
+CREATE INDEX "conversation_private_payloads_silo_id_conversation_id_idx" ON "conversation_private_payloads"("silo_id", "conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_private_payloads_conversation_id_author_subjec_key" ON "conversation_private_payloads"("conversation_id", "author_subject", "idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "conversation_computer_attempt_credentials_expires_at_idx" ON "conversation_computer_attempt_credentials"("expires_at");
 
 -- CreateIndex
 CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
-
--- CreateIndex
-CREATE INDEX "conversation_messages_run_id_idx" ON "conversation_messages"("run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_messages_conversation_id_id_key" ON "conversation_messages"("conversation_id", "id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_messages_conversation_id_idempotency_key_key" ON "conversation_messages"("conversation_id", "idempotency_key");
-
--- CreateIndex
-CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx" ON "conversation_run_events"("run_id", "attempt", "message_id");
-
-CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id") WHERE "type" = 'message.started';
-
--- CreateIndex
-CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_sequence_key" ON "conversation_run_events"("conversation_id", "run_id", "sequence");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_attempt_sequ_key" ON "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence");
-
--- CreateIndex
-CREATE INDEX "conversation_timeline_entries_conversation_id_occurred_at_idx" ON "conversation_timeline_entries"("conversation_id", "occurred_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_message_id_key" ON "conversation_timeline_entries"("conversation_id", "message_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_run_id_run_ev_key" ON "conversation_timeline_entries"("conversation_id", "run_id", "run_event_sequence");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_membership_ev_key" ON "conversation_timeline_entries"("conversation_id", "membership_event_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_system_event__key" ON "conversation_timeline_entries"("conversation_id", "system_event_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_agent_thread__key" ON "conversation_timeline_entries"("parent_delivery_agent_thread_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_agent_threads_first_run_id_key" ON "conversation_agent_threads"("first_run_id");
-
--- CreateIndex
-CREATE INDEX "conversation_agent_threads_root_conversation_id_created_at_idx" ON "conversation_agent_threads"("root_conversation_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "conversation_agent_threads_initiator_user_id_created_at_idx" ON "conversation_agent_threads"("initiator_user_id", "created_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_agent_threads_parent_conversation_id_parent_me_key" ON "conversation_agent_threads"("parent_conversation_id", "parent_message_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_agent_threads_child_authority_key" ON "conversation_agent_threads"("child_conversation_id", "silo_id", "agent_service_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_agent_threads_first_run_authority_key" ON "conversation_agent_threads"("first_run_id", "child_conversation_id", "silo_id", "agent_service_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_agent_threads_child_parent_key" ON "conversation_agent_threads"("child_conversation_id", "parent_conversation_id");
-
--- CreateIndex
-CREATE INDEX "agent_thread_parent_deliveries_parent_conversation_id_creat_idx" ON "agent_thread_parent_deliveries"("parent_conversation_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "agent_thread_parent_deliveries_run_id_created_at_idx" ON "agent_thread_parent_deliveries"("run_id", "created_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_thread_parent_deliveries_child_conversation_id_idempo_key" ON "agent_thread_parent_deliveries"("child_conversation_id", "idempotency_key");
-
--- CreateIndex
-CREATE INDEX "conversation_context_revisions_created_by_run_id_idx" ON "conversation_context_revisions"("created_by_run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_revision_key" ON "conversation_context_revisions"("conversation_id", "revision");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_id_key" ON "conversation_context_revisions"("conversation_id", "id");
 
 -- CreateIndex
 CREATE INDEX "elicitation_requests_conversation_id_state_created_at_idx" ON "elicitation_requests"("conversation_id", "state", "created_at");
@@ -3058,9 +2607,6 @@ CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_serv
 CREATE INDEX "agent_runs_conversation_id_accepted_at_idx" ON "agent_runs"("conversation_id", "accepted_at");
 
 -- CreateIndex
-CREATE INDEX "agent_runs_root_run_id_idx" ON "agent_runs"("root_run_id");
-
--- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_silo_id_request_idempotency_key_key" ON "agent_runs"("silo_id", "request_idempotency_key");
 
 -- CreateIndex
@@ -3068,6 +2614,9 @@ CREATE UNIQUE INDEX "agent_runs_id_agent_service_id_agent_revision_id_key" ON "a
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_id_attempt_key" ON "agent_runs"("id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_run_attempt_snapshot_key" ON "agent_runs"("id", "attempt", "input_snapshot_digest");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_id_silo_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id");
@@ -3085,109 +2634,22 @@ CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("convers
 CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
-
--- CreateIndex
-CREATE INDEX "warm_runtime_reservations_state_idle_deadline_idx" ON "warm_runtime_reservations"("state", "idle_deadline");
-
--- CreateIndex
-CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_pod_uid_key" ON "warm_runtime_reservations"("namespace", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_deployment_uid_pod_name_key" ON "warm_runtime_reservations"("namespace", "deployment_uid", "pod_name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_run_workflow_tasks_task_id_key" ON "agent_run_workflow_tasks"("task_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_run_workflow_tasks_silo_id_task_key_key" ON "agent_run_workflow_tasks"("silo_id", "task_key");
-
--- CreateIndex
-CREATE INDEX "child_run_completion_deliveries_parent_run_id_parent_attemp_idx" ON "child_run_completion_deliveries"("parent_run_id", "parent_attempt");
-
--- CreateIndex
-CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
-
--- CreateIndex
-CREATE INDEX "child_run_reservations_root_run_id_idx" ON "child_run_reservations"("root_run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_key" ON "run_input_snapshots"("run_id");
+CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_input_snapshots_input_digest_key" ON "run_input_snapshots"("input_digest");
 
 -- CreateIndex
+CREATE INDEX "run_input_snapshots_run_id_attempt_idx" ON "run_input_snapshots"("run_id", "attempt");
+
+-- CreateIndex
 CREATE INDEX "run_input_snapshots_agent_service_id_agent_revision_id_idx" ON "run_input_snapshots"("agent_service_id", "agent_revision_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_snapshots"("run_id", "input_digest");
+CREATE UNIQUE INDEX "run_input_snapshots_run_id_attempt_input_digest_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
-
--- CreateIndex
-CREATE INDEX "workload_assignments_silo_id_subject_id_idx" ON "workload_assignments"("silo_id", "subject_id");
-
--- CreateIndex
-CREATE INDEX "workload_assignments_state_expires_at_idx" ON "workload_assignments"("state", "expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignment_bootstrap_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignment_action_identity_key" ON "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_run_attempt_workload_key" ON "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_run_attempt_workload_pod_key" ON "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_namespace_workload_kind_workload_uid_key" ON "workload_assignments"("namespace", "workload_kind", "workload_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_assignments_namespace_pod_uid_key" ON "workload_assignments"("namespace", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_claim_digest_key" ON "workload_bootstraps"("claim_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_receipt_id_key" ON "workload_bootstraps"("receipt_id");
-
--- CreateIndex
-CREATE INDEX "workload_bootstraps_expires_at_idx" ON "workload_bootstraps"("expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_run_id_attempt_generation_key" ON "workload_bootstraps"("run_id", "attempt", "generation");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_bootstrap_id_key" ON "run_proof_keys"("bootstrap_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_key_thumbprint_key" ON "run_proof_keys"("key_thumbprint");
-
--- CreateIndex
-CREATE INDEX "run_proof_keys_pod_uid_idx" ON "run_proof_keys"("pod_uid");
-
--- CreateIndex
-CREATE INDEX "run_proof_keys_expires_at_idx" ON "run_proof_keys"("expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_generation_key" ON "run_proof_keys"("run_id", "attempt", "generation");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_workload_kind_workload_uid_po_key" ON "run_proof_keys"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_id_run_id_attempt_key" ON "run_proof_keys"("id", "run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_key_bound_thumbprint_key" ON "run_proof_keys"("id", "run_id", "attempt", "key_thumbprint");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_key_bound_pod_key" ON "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid");
+CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_key_alias_key" ON "run_model_credential_mint_authorizations"("key_alias");
@@ -3197,30 +2659,6 @@ CREATE INDEX "run_model_credential_mint_authorizations_expires_at_idx" ON "run_m
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_run_id_attempt_gen_key" ON "run_model_credential_mint_authorizations"("run_id", "attempt", "generation");
-
--- CreateIndex
-CREATE INDEX "runtime_continuation_checkpoints_run_id_attempt_revision_idx" ON "runtime_continuation_checkpoints"("run_id", "attempt", "revision");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat_key" ON "runtime_steering_boundaries"("run_id", "attempt", "to_input_generation");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
-
--- CreateIndex
-CREATE INDEX "runtime_dispatched_commands_run_id_attempt_idx" ON "runtime_dispatched_commands"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_run_id_attempt_sequence_key" ON "runtime_dispatched_commands"("run_id", "attempt", "sequence");
 
 -- CreateIndex
 CREATE INDEX "skills_silo_id_state_idx" ON "skills"("silo_id", "state");
@@ -3373,9 +2811,6 @@ ALTER TABLE "agent_revision_mcp_tool_assignments" ADD CONSTRAINT "agent_revision
 ALTER TABLE "agent_revision_mcp_tool_assignments" ADD CONSTRAINT "agent_revision_mcp_tool_assignments_tool_revision_id_silo__fkey" FOREIGN KEY ("tool_revision_id", "silo_id") REFERENCES "mcp_tool_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_service_schedules" ADD CONSTRAINT "agent_service_schedules_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3433,12 +2868,6 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocatio
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_proof_key_id_run_id_attempt_workload_kin_fkey" FOREIGN KEY ("proof_key_id", "run_id", "attempt", "workload_kind", "workload_uid", "proof_key_thumbprint", "pod_uid") REFERENCES "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_attempt_agent_service_id_agent_re_fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "workload_audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3448,19 +2877,7 @@ ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_mcp_task_id_fkey
 ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_receiver_id_silo_id_a_fkey" FOREIGN KEY ("route_id", "receiver_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_attempt_run_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_silo_id_fkey" FOREIGN KEY ("artifact_id", "silo_id") REFERENCES "artifacts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3472,91 +2889,19 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_i
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey" FOREIGN KEY ("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id") REFERENCES "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "conversation_child_requests" ADD CONSTRAINT "conversation_child_requests_parent_conversation_id_silo_id_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_conversation_id_silo_i_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_run_id_run_e_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_participant__fkey" FOREIGN KEY ("conversation_id", "participant_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_agent_thread_fkey" FOREIGN KEY ("parent_delivery_agent_thread_id") REFERENCES "agent_thread_parent_deliveries"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_child_conversation_id_silo_id_a_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_silo_id_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_root_conversation_id_silo_id_fkey" FOREIGN KEY ("root_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_parent_m_fkey" FOREIGN KEY ("parent_conversation_id", "parent_message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_initiato_fkey" FOREIGN KEY ("parent_conversation_id", "initiator_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_first_run_id_child_conversation_fkey" FOREIGN KEY ("first_run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_initiator_us_fkey" FOREIGN KEY ("persona_profile_id", "initiator_user_id") REFERENCES "persona_profiles"("id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_persona_revi_fkey" FOREIGN KEY ("persona_profile_id", "persona_revision_id") REFERENCES "persona_revisions"("persona_profile_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_thread_fkey" FOREIGN KEY ("child_conversation_id", "parent_conversation_id") REFERENCES "conversation_agent_threads"("child_conversation_id", "parent_conversation_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_child_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_silo_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_run_id_child_conversation_i_fkey" FOREIGN KEY ("run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_asse_fkey" FOREIGN KEY ("parent_conversation_id", "asset_id") REFERENCES "conversation_assets"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3739,58 +3084,10 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fke
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_run_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_assignment_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_run_workflow_tasks" ADD CONSTRAINT "agent_run_workflow_tasks_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_conversation_id_si_fkey" FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_silo_id_agent_service_id_agent_fkey" FOREIGN KEY ("run_id", "silo_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_generation_fkey" FOREIGN KEY ("run_id", "attempt", "generation") REFERENCES "warm_runtime_reservations"("run_id", "attempt", "generation") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_run_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_assignment_fkey" FOREIGN KEY ("run_id", "attempt", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" FOREIGN KEY ("bootstrap_id") REFERENCES "workload_bootstraps"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_continuation_checkpoints" ADD CONSTRAINT "runtime_continuation_checkpoints_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3862,87 +3159,19 @@ ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result
 );
 
 -- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when conversation_id is NULL.
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_digest_fkey"
-    FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
-    FOREIGN KEY ("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
+    FOREIGN KEY ("id", "attempt", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id")
+    REFERENCES "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id")
     ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_check" CHECK (
     ("conversation_id" IS NULL OR btrim("conversation_id") <> '')
-    AND btrim("capability_set_digest") <> ''
-    AND "capability_set_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND jsonb_typeof("memory_facts") = 'array'
 	AND jsonb_typeof("mcp_tools") = 'array'
 );
 
--- Channel-target constraints cannot be represented by Prisma relations/indexes alone.
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_endpoint_nonempty" CHECK (length(btrim("endpoint")) > 0);
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_receiver_nonempty" CHECK (length(btrim("receiver_id")) > 0);
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_state_check" CHECK (
-    ("is_current" = TRUE AND "revoked_at" IS NULL AND "legacy_expires_at" IS NULL)
-    OR ("is_current" = FALSE AND "revoked_at" IS NOT NULL)
-);
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_legacy_evidence_check" CHECK (
-    ("legacy_expires_at" IS NULL AND "receiver_id" NOT LIKE 'legacy-route-v0:%')
-    OR (
-        "legacy_expires_at" IS NOT NULL
-        AND "legacy_expires_at" > "registered_at"
-        AND "receiver_id" = 'legacy-route-v0:' || "id"
-        AND "is_current" = FALSE
-        AND "revoked_at" IS NOT NULL
-    )
-);
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_service_fkey"
-    FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-CREATE UNIQUE INDEX "channel_runtime_routes_one_current_target"
-    ON "channel_runtime_routes"("silo_id", "agent_service_id", "action") WHERE "is_current" = TRUE AND "revoked_at" IS NULL;
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_digest_format" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_membership_revision_positive" CHECK ("membership_revision" > 0);
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_expiry_after_creation" CHECK ("expires_at" > "created_at");
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_conversation_fkey"
-    FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_participant_fkey"
-    FOREIGN KEY ("conversation_id", "subject_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
-CREATE FUNCTION "enforce_channel_runtime_route_evidence"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'ChannelRuntimeRoute evidence cannot be deleted';
-    END IF;
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
-            RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence can only be created by a reviewed migration';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF OLD."legacy_expires_at" IS NOT NULL OR OLD."receiver_id" LIKE 'legacy-route-v0:%' THEN
-        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence is immutable';
-    END IF;
-    IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
-        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence cannot be added at runtime';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER "channel_runtime_routes_evidence_guard"
-    BEFORE INSERT OR UPDATE OR DELETE ON "channel_runtime_routes"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_channel_runtime_route_evidence"();
-
 -- Cross-domain transcript and persona provenance constraints are deliberately database-enforced.
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_fkey"
     FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_run_id_fkey"
-    FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_run_id_fkey"
-    FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_through_message_id_fkey"
-    FOREIGN KEY ("conversation_id", "through_message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_created_by_run_id_fkey"
-    FOREIGN KEY ("conversation_id", "created_by_run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_question_fkey"
     FOREIGN KEY ("question_set_id", "question_set_version", "question_id") REFERENCES "persona_questions"("question_set_id", "question_set_version", "question_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_answer_provenance_fkey"
@@ -4550,67 +3779,9 @@ BEGIN
     RAISE EXCEPTION 'AgentRevision assignments are immutable';
 END;
 $$;
-CREATE FUNCTION "enforce_current_workload_assignment_attempt"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_state "AgentRunState";
-BEGIN
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'queued'::"AgentRunState" THEN
-        RAISE EXCEPTION 'workload assignment must target the current Queued attempt';
-    END IF;
-    RETURN NEW;
-END;
-$$;
 CREATE FUNCTION "reject_run_input_snapshot_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'RunInputSnapshot rows are immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_child_run_reservation"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    child "agent_runs"%ROWTYPE;
-    parent "agent_runs"%ROWTYPE;
-    root "agent_runs"%ROWTYPE;
-    parent_depth INTEGER;
-BEGIN
-    SELECT * INTO child FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR KEY SHARE;
-    SELECT * INTO parent FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
-    SELECT * INTO root FROM "agent_runs" WHERE "id" = NEW."root_run_id" FOR KEY SHARE;
-
-    IF child."id" IS NULL OR parent."id" IS NULL OR root."id" IS NULL
-        OR child."state" IS DISTINCT FROM 'accepted'::"AgentRunState"
-        OR child."attempt" <> 1
-        OR child."trigger" IS DISTINCT FROM 'managed_invocation'::"AgentRunTrigger"
-        OR child."parent_run_id" IS DISTINCT FROM NEW."parent_run_id"
-        OR child."root_run_id" IS DISTINCT FROM NEW."root_run_id"
-        OR parent."root_run_id" IS DISTINCT FROM NEW."root_run_id"
-        OR root."id" IS DISTINCT FROM root."root_run_id"
-        OR root."parent_run_id" IS NOT NULL
-        OR child."silo_id" IS DISTINCT FROM parent."silo_id"
-        OR parent."silo_id" IS DISTINCT FROM root."silo_id"
-        OR NEW."child_run_id" = NEW."parent_run_id" THEN
-        RAISE EXCEPTION 'ChildRunReservation must bind one same-silo child to its exact parent and root';
-    END IF;
-
-    IF parent."parent_run_id" IS NULL THEN
-        IF parent."id" IS DISTINCT FROM NEW."root_run_id" OR NEW."depth" <> 1 THEN
-            RAISE EXCEPTION 'a direct child reservation must have the canonical root parent and depth 1';
-        END IF;
-    ELSE
-        SELECT "depth" INTO parent_depth FROM "child_run_reservations" WHERE "child_run_id" = parent."id" FOR KEY SHARE;
-        IF parent_depth IS NULL OR NEW."depth" <> parent_depth + 1 THEN
-            RAISE EXCEPTION 'a nested child reservation must continue its parent reservation depth';
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_child_run_reservation_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'ChildRunReservation rows are immutable';
 END;
 $$;
 CREATE FUNCTION "enforce_initial_agent_run_state"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -4663,271 +3834,40 @@ BEGIN
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
         OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
         OR NEW."trigger" IS DISTINCT FROM OLD."trigger"
-        OR NEW."delegated_user_id" IS DISTINCT FROM OLD."delegated_user_id"
-        OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key"
-        OR NEW."root_run_id" IS DISTINCT FROM OLD."root_run_id"
-        OR NEW."parent_run_id" IS DISTINCT FROM OLD."parent_run_id"
-        OR NEW."effective_contract_digest" IS DISTINCT FROM OLD."effective_contract_digest"
-        OR NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest" THEN
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+        OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key" THEN
         RAISE EXCEPTION 'AgentRun identity and accepted inputs are immutable';
     END IF;
     IF NEW."attempt" <> OLD."attempt" THEN
-        IF NEW."attempt" <> OLD."attempt" + 1 OR OLD."state" NOT IN ('failed', 'cancelled')
-            OR NEW."state" <> 'accepted' OR NEW."accepted_at" <= OLD."accepted_at"
-            OR NEW."started_at" IS NOT NULL OR NEW."finished_at" IS NOT NULL
-            OR NEW."terminal_reason" IS NOT NULL OR NEW."cost_amount" IS NOT NULL
-            OR NEW."cost_currency" IS NOT NULL THEN
-            RAISE EXCEPTION 'invalid AgentRun attempt transition';
-        END IF;
-    ELSE
-        IF NEW."accepted_at" IS DISTINCT FROM OLD."accepted_at" THEN
-            RAISE EXCEPTION 'accepted_at changes only with a new accepted attempt';
-        END IF;
-        IF OLD."state" IN ('completed', 'failed', 'cancelled') THEN
-            RAISE EXCEPTION 'terminal AgentRun attempt coordinates are immutable';
-        END IF;
-        IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
-            (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'failed', 'cancelling')) OR
-            (OLD."state" = 'queued' AND NEW."state" IN ('assigned', 'failed', 'cancelling')) OR
-            (OLD."state" = 'assigned' AND NEW."state" IN ('running', 'failed', 'cancelling')) OR
-            (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_input', 'completed', 'failed', 'cancelling')) OR
-            (OLD."state" = 'waiting_for_input' AND NEW."state" IN ('running', 'completed', 'failed', 'cancelling')) OR
-            (OLD."state" = 'cancelling' AND NEW."state" = 'cancelled')
-        ) THEN
-            RAISE EXCEPTION 'invalid AgentRun state transition';
-        END IF;
-        IF OLD."state" = 'cancelling' AND NEW."state" = 'cancelled' THEN
-            PERFORM 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "agent_run_workflow_tasks" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "warm_runtime_reservations" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            IF EXISTS (
-                SELECT 1 FROM "workload_assignments"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
-                  AND "state" IN ('pending_pod'::"WorkloadAssignmentState", 'registered'::"WorkloadAssignmentState")
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires no current PendingPod or Registered WorkloadAssignment';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "revoked_at" IS NULL
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires every RunProofKey revoked';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "warm_runtime_reservations"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
-                  AND ("state" <> 'deleted'::"WarmRuntimeReservationState" OR "deleted_at" IS NULL)
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires every warm runtime reservation deleted';
-            END IF;
-        END IF;
-        IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
-            RAISE EXCEPTION 'AgentRun started_at is immutable once recorded';
-        END IF;
-        IF OLD."started_at" IS NULL AND NEW."started_at" IS NOT NULL AND NEW."state" <> 'running' THEN
-            RAISE EXCEPTION 'AgentRun started_at may be recorded only when entering running';
-        END IF;
-        IF NEW."state" = 'running' AND NEW."started_at" IS NULL THEN
-            RAISE EXCEPTION 'a running AgentRun requires started_at';
-        END IF;
+        RAISE EXCEPTION 'AgentRun attempt is immutable';
     END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_workload_bootstrap_consumption"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    assignment_pod_uid TEXT;
-    assignment_state "WorkloadAssignmentState";
-    run_state "AgentRunState";
-    transition_time TIMESTAMP(3) := clock_timestamp();
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL
-            OR NEW."receipt_id" IS NOT NULL OR NEW."revoked_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap must begin unconsumed and unrevoked';
-        END IF;
-        SELECT "state" INTO run_state
-        FROM "agent_runs"
-        WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-        FOR UPDATE;
-        IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap requires the current Assigned attempt';
-        END IF;
-        SELECT "state" INTO assignment_state
-        FROM "workload_assignments"
-        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "agent_service_id" = NEW."agent_service_id"
-          AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
-          AND "audience" = NEW."audience"
-          AND "service_account_name" = NEW."service_account_name"
-          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
-          AND "workload_uid" = NEW."workload_uid"
-        FOR UPDATE;
-        IF assignment_state IS DISTINCT FROM 'pending_pod'::"WorkloadAssignmentState" THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap requires its PendingPod assignment';
-        END IF;
-        RETURN NEW;
+    IF NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest"
+        OR NEW."execution_subject" IS DISTINCT FROM OLD."execution_subject"
+        OR NEW."accepted_at" IS DISTINCT FROM OLD."accepted_at" THEN
+        RAISE EXCEPTION 'AgentRun accepted inputs are immutable';
     END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadBootstrap rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."generation" IS DISTINCT FROM OLD."generation"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."audience" IS DISTINCT FROM OLD."audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
-        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."claim_digest" IS DISTINCT FROM OLD."claim_digest"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap identity is immutable';
+    IF OLD."state" IN ('completed', 'failed') THEN
+        RAISE EXCEPTION 'terminal AgentRun attempt coordinates are immutable';
     END IF;
-    IF OLD."revoked_at" IS NOT NULL THEN
-        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
-            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
-            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
-            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
-        END IF;
-        IF NEW."revoked_at" IS DISTINCT FROM OLD."revoked_at" THEN
-            RAISE EXCEPTION 'WorkloadBootstrap revocation is irreversible';
-        END IF;
-        RAISE EXCEPTION 'WorkloadBootstrap is already revoked';
-    END IF;
-    IF NEW."revoked_at" IS NOT NULL THEN
-        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
-            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
-            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
-            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
-        END IF;
-        IF NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
-            OR (OLD."consumed_at" IS NOT NULL AND NEW."revoked_at" < OLD."consumed_at") THEN
-            RAISE EXCEPTION 'WorkloadBootstrap revocation time must be current';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL
-        OR NEW."consumed_by_pod_uid" IS NULL OR NEW."receipt_id" IS NULL THEN
-        RAISE EXCEPTION 'WorkloadBootstrap may be consumed exactly once';
-    END IF;
-    IF NEW."consumed_at" < OLD."created_at" OR NEW."consumed_at" > transition_time
-        OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap must be consumed at a current time before expiry';
-    END IF;
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap consumption requires the current Assigned attempt';
-    END IF;
-    SELECT "state", "pod_uid" INTO assignment_state, assignment_pod_uid
-    FROM "workload_assignments"
-    WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-        OR assignment_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN
-        RAISE EXCEPTION 'bootstrap consumer Pod is not the registered assignment Pod';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_proof_key_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_state "AgentRunState";
-BEGIN
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-        RAISE EXCEPTION 'RunProofKey requires the current Assigned attempt';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM "workload_bootstraps" WHERE "id" = NEW."bootstrap_id"
-        AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-        AND "consumed_at" IS NOT NULL AND "consumed_by_pod_uid" = NEW."pod_uid"
+    IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
+        (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'running', 'failed')) OR
+        (OLD."state" = 'queued' AND NEW."state" IN ('assigned', 'failed')) OR
+        (OLD."state" = 'assigned' AND NEW."state" IN ('running', 'failed')) OR
+        (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_input', 'recovery_required', 'completed', 'failed')) OR
+        (OLD."state" = 'waiting_for_input' AND NEW."state" IN ('running', 'completed', 'failed')) OR
+        (OLD."state" = 'recovery_required' AND NEW."state" IN ('running', 'failed'))
     ) THEN
-        RAISE EXCEPTION 'RunProofKey requires the consumed bootstrap for the exact run, attempt, and Pod';
+        RAISE EXCEPTION 'invalid AgentRun state transition';
     END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_workload_assignment_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    transition_time TIMESTAMP(3) := clock_timestamp();
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending_pod'
-            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL
-            OR NOT ((NEW."workload_kind" = 'job' AND NEW."pod_uid" IS NULL)
-                OR (NEW."workload_kind" = 'deployment' AND NEW."pod_uid" IS NOT NULL
-                    AND btrim(NEW."pod_uid") <> '' AND NEW."pod_uid" = NEW."workload_uid")) THEN
-            RAISE EXCEPTION 'a new WorkloadAssignment must begin pending_pod';
-        END IF;
-        RETURN NEW;
+    IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
+        RAISE EXCEPTION 'AgentRun started_at is immutable once recorded';
     END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadAssignment rows cannot be deleted'; END IF;
-    IF NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."audience" IS DISTINCT FROM OLD."audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
-        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."workload_profile" IS DISTINCT FROM OLD."workload_profile"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'WorkloadAssignment identity is immutable';
+    IF OLD."started_at" IS NULL AND NEW."started_at" IS NOT NULL AND NEW."state" <> 'running' THEN
+        RAISE EXCEPTION 'AgentRun started_at may be recorded only when entering running';
     END IF;
-    IF OLD."state" = 'revoked' OR NEW."state" = OLD."state"
-        OR (OLD."state" = 'registered' AND NEW."state" <> 'revoked')
-        OR (OLD."state" = 'pending_pod' AND NEW."state" NOT IN ('registered', 'revoked')) THEN
-        RAISE EXCEPTION 'invalid WorkloadAssignment state transition';
-    END IF;
-    IF OLD."state" = 'pending_pod' AND NEW."state" = 'registered' AND (
-        NEW."pod_uid" IS NULL OR NEW."registered_at" IS NULL OR NEW."revoked_at" IS NOT NULL
-        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
-        OR NEW."registered_at" < OLD."created_at" OR NEW."registered_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'registration must bind the current Pod and registration time';
-    END IF;
-    IF OLD."state" = 'pending_pod' AND NEW."state" = 'revoked' AND (
-        NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
-        OR (OLD."workload_kind" = 'job' AND NEW."pod_uid" IS NOT NULL)
-        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
-        OR NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'an unregistered WorkloadAssignment must revoke without Pod registration';
-    END IF;
-    IF OLD."state" = 'registered' AND (
-        NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
-        OR NEW."registered_at" IS DISTINCT FROM OLD."registered_at"
-        OR NEW."revoked_at" IS NULL OR NEW."revoked_at" < OLD."registered_at"
-        OR NEW."revoked_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'registered WorkloadAssignment Pod UID is immutable';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_proof_key_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'RunProofKey rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."bootstrap_id" IS DISTINCT FROM OLD."bootstrap_id"
-        OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
-        OR NEW."public_key_jwk" IS DISTINCT FROM OLD."public_key_jwk"
-        OR NEW."key_thumbprint" IS DISTINCT FROM OLD."key_thumbprint"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'RunProofKey binding is immutable';
-    END IF;
-    IF OLD."revoked_at" IS NOT NULL OR NEW."revoked_at" IS NULL THEN
-        RAISE EXCEPTION 'RunProofKey may be revoked exactly once';
+    IF NEW."state" = 'running' AND NEW."started_at" IS NULL THEN
+        RAISE EXCEPTION 'a running AgentRun requires started_at';
     END IF;
     RETURN NEW;
 END;
@@ -4966,109 +3906,96 @@ $$;
 CREATE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     decision_time TIMESTAMP(3) := clock_timestamp();
-    current_attempt INTEGER;
-    current_run_state "AgentRunState";
-    assignment_state "WorkloadAssignmentState";
-    assignment_expires_at TIMESTAMP(3);
-    proof_expires_at TIMESTAMP(3);
-    proof_revoked_at TIMESTAMP(3);
+    current_run "agent_runs"%ROWTYPE;
+    current_invocation "tool_invocations"%ROWTYPE;
+    bound_request "approval_requests"%ROWTYPE;
 BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+            OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+            OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+            OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
+            OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+            OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest" OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
+            OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+            OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
+            OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+            OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+            OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+            OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+            OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+            OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest identity and action bindings are immutable';
+        END IF;
+        IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+            RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
+        END IF;
+        -- The expiry sweep runs after the computer lease may have lapsed, so pending -> expired skips the run and lease fence.
+        IF NEW."state" = 'expired' THEN
+            IF decision_time < OLD."expires_at" THEN
+                RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
+            END IF;
+            IF NEW."decided_by" IS NOT NULL OR NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+                RAISE EXCEPTION 'ApprovalRequest expiry records no decider and no final arguments';
+            END IF;
+            NEW."decided_at" := decision_time;
+            RETURN NEW;
+        END IF;
+    END IF;
+    bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
+    SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
+    IF current_run."attempt" IS DISTINCT FROM bound_request."attempt"
+        OR current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+        OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
+        OR current_invocation."run_id" IS DISTINCT FROM bound_request."run_id"
+        OR current_invocation."attempt" IS DISTINCT FROM bound_request."attempt"
+        OR current_invocation."agent_service_id" IS DISTINCT FROM bound_request."agent_service_id"
+        OR current_invocation."agent_revision_id" IS DISTINCT FROM bound_request."agent_revision_id"
+        OR current_invocation."silo_id" IS DISTINCT FROM bound_request."silo_id"
+        OR current_invocation."agent_identity_id" IS DISTINCT FROM bound_request."agent_identity_id"
+        OR current_invocation."principal_id" IS DISTINCT FROM bound_request."principal_id"
+        OR current_invocation."authorization_execution_subject" IS NULL
+        OR current_invocation."authorization_execution_subject" IS DISTINCT FROM current_run."execution_subject"
+        OR current_run."execution_subject"->'runScope'->>'runId' IS DISTINCT FROM bound_request."run_id"
+        OR current_run."execution_subject"->'runScope'->>'attempt' IS DISTINCT FROM bound_request."attempt"::TEXT
+        OR COALESCE(btrim(current_run."execution_subject"->'computerScope'->>'leaseId'), '') = ''
+        OR COALESCE(current_run."execution_subject"->'computerScope'->>'leaseGeneration', '') !~ '^[1-9][0-9]*$' THEN
+        RAISE EXCEPTION 'ApprovalRequest requires the current waiting run and its exact computer-lease invocation';
+    END IF;
+    PERFORM 1 FROM "conversation_computer_active_leases"
+    WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
+      AND "silo_id" = current_run."silo_id"
+      AND "conversation_id" = current_run."conversation_id"
+      AND "agent_identity_id" = current_run."agent_identity_id"
+      AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
+      AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
+      AND "expires_at" > decision_time
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+    END IF;
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL
-            OR NEW."decided_by" IS NOT NULL THEN
+        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
             RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
         END IF;
         IF NEW."created_at" > decision_time OR NEW."expires_at" <= decision_time THEN
             RAISE EXCEPTION 'a new ApprovalRequest must have a current, future expiry';
         END IF;
-        SELECT "attempt", "state" INTO current_attempt, current_run_state
-        FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
-        FROM "workload_assignments"
-        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "agent_service_id" = NEW."agent_service_id" AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
-          AND "audience" = NEW."workload_audience" AND "service_account_name" = NEW."service_account_name"
-          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
-          AND "workload_uid" = NEW."workload_uid" AND "pod_uid" = NEW."pod_uid"
-        FOR UPDATE;
-        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
-        FROM "run_proof_keys"
-        WHERE "id" = NEW."proof_key_id" AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "workload_kind" = NEW."workload_kind" AND "workload_uid" = NEW."workload_uid"
-          AND "key_thumbprint" = NEW."proof_key_thumbprint" AND "pod_uid" = NEW."pod_uid"
-        FOR UPDATE;
-        IF current_attempt IS DISTINCT FROM NEW."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
-            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
-            OR proof_expires_at <= decision_time THEN
-            RAISE EXCEPTION 'ApprovalRequest requires current WaitingForInput run, assignment, and proof authority';
-        END IF;
         RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."proof_key_id" IS DISTINCT FROM OLD."proof_key_id" OR NEW."proof_key_thumbprint" IS DISTINCT FROM OLD."proof_key_thumbprint"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."workload_audience" IS DISTINCT FROM OLD."workload_audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
-        OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id" OR NEW."action" IS DISTINCT FROM OLD."action"
-        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest"
-        OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
-        OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
-		OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
-		OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
-		OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
-		OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
-		OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
-		OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
-		OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
-    END IF;
-    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
-        RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
     END IF;
     IF NEW."state" = 'cancelled' THEN
         IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
             RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
         END IF;
+        NEW."decided_by" := NULL;
     ELSE
         NEW."decided_at" := decision_time;
     END IF;
-    IF NEW."state" IN ('approved', 'denied') THEN
-        SELECT "attempt", "state" INTO current_attempt, current_run_state
-        FROM "agent_runs" WHERE "id" = OLD."run_id" FOR UPDATE;
-        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
-        FROM "workload_assignments"
-        WHERE "run_id" = OLD."run_id" AND "attempt" = OLD."attempt"
-          AND "agent_service_id" = OLD."agent_service_id" AND "agent_revision_id" = OLD."agent_revision_id"
-          AND "silo_id" = OLD."silo_id" AND "subject_id" = OLD."subject_id"
-          AND "audience" = OLD."workload_audience" AND "service_account_name" = OLD."service_account_name"
-          AND "namespace" = OLD."namespace" AND "workload_kind" = OLD."workload_kind"
-          AND "workload_uid" = OLD."workload_uid" AND "pod_uid" = OLD."pod_uid"
-        FOR UPDATE;
-        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
-        FROM "run_proof_keys" WHERE "id" = OLD."proof_key_id" FOR UPDATE;
-        IF current_attempt IS DISTINCT FROM OLD."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
-            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
-            OR proof_expires_at <= decision_time THEN
-            RAISE EXCEPTION 'ApprovalRequest decision authority is no longer current';
-        END IF;
-    END IF;
-    IF NEW."state" = 'cancelled' THEN
-        NEW."decided_by" := NULL;
-    ELSIF NEW."state" = 'expired' THEN
-        IF decision_time < OLD."expires_at" THEN
-            RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
-        END IF;
-    ELSIF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
+    IF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
         RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
     END IF;
     RETURN NEW;
@@ -5150,6 +4077,94 @@ BEGIN
     RAISE EXCEPTION 'AuditDecision rows are append-only';
 END;
 $$;
+-- An accepted group command cannot change its assistant, source message, or audience during recovery.
+CREATE FUNCTION "enforce_conversation_child_request"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    subject_count INTEGER;
+    unique_subject_count INTEGER;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ConversationChildRequest commands cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF (to_jsonb(NEW) - 'state') IS DISTINCT FROM (to_jsonb(OLD) - 'state') THEN
+            RAISE EXCEPTION 'ConversationChildRequest command and audience are immutable';
+        END IF;
+        IF NEW."state" = OLD."state" THEN RETURN NEW; END IF;
+        IF OLD."state" <> 'pending' OR NEW."state" NOT IN ('ready', 'unavailable') THEN
+            RAISE EXCEPTION 'ConversationChildRequest may finish creation only once';
+        END IF;
+        IF NEW."state" = 'unavailable' THEN RETURN NEW; END IF;
+    ELSE
+        IF NEW."state" <> 'pending' OR NEW."parent_conversation_id" = NEW."child_conversation_id"
+            OR NEW."parent_message_position" < 1
+            OR NEW."command_digest" !~ '^sha256:[0-9a-f]{64}$'
+            OR jsonb_typeof(NEW."participant_subject_ids") IS DISTINCT FROM 'array' THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires a pending command and a distinct child';
+        END IF;
+        SELECT count(*), count(DISTINCT value) INTO subject_count, unique_subject_count
+        FROM jsonb_array_elements(NEW."participant_subject_ids");
+        IF subject_count < 1 OR subject_count > 100 OR subject_count <> unique_subject_count
+            OR EXISTS (SELECT 1 FROM jsonb_array_elements(NEW."participant_subject_ids")
+                WHERE jsonb_typeof(value) <> 'string' OR btrim(value #>> '{}') = '')
+            OR NOT (NEW."participant_subject_ids" ? NEW."requester_subject_id") THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires unique participant subjects including its requester';
+        END IF;
+        PERFORM 1 FROM "principals"
+        WHERE "id" = NEW."requested_by_principal_id" AND "silo_id" = NEW."silo_id"
+            AND "provenance" = 'external' AND "issuer" = NEW."requester_issuer"
+            AND "subject" = NEW."requester_subject_id"
+        FOR UPDATE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires its authenticated external Principal';
+        END IF;
+        PERFORM 1 FROM "agent_services" AS service
+        JOIN "principals" AS principal ON principal."id" = service."principal_id" AND principal."silo_id" = service."silo_id"
+        JOIN "agent_revisions" AS revision ON revision."id" = service."active_revision_id" AND revision."agent_service_id" = service."id" AND revision."silo_id" = service."silo_id"
+        WHERE service."id" = NEW."agent_service_id" AND service."silo_id" = NEW."silo_id"
+            AND service."kind" = 'managed' AND service."state" = 'active'
+            AND principal."id" = NEW."agent_principal_id" AND principal."provenance" = 'internal'
+            AND revision."id" = NEW."agent_revision_id" AND revision."state" = 'published'
+        FOR UPDATE OF service, principal, revision;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ConversationChildRequest requires the active managed service and its published revision';
+        END IF;
+    END IF;
+    PERFORM 1 FROM "conversations"
+    WHERE "id" = NEW."parent_conversation_id" AND "silo_id" = NEW."silo_id" AND "mode" = 'group' AND "lifecycle" = 'open'
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'ConversationChildRequest requires its current open parent group';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(NEW."participant_subject_ids") AS audience(subject)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM "conversation_participants" AS participant
+            JOIN "org_memberships" AS membership ON membership."subject" = participant."user_id" AND membership."cluster_tenant" = NEW."silo_id"
+            WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."user_id" = audience.subject
+                AND participant."access_ended_position" IS NULL AND participant."visible_from_position" <= NEW."parent_message_position"
+                AND membership."status" = 'active'
+        )
+    ) THEN
+        RAISE EXCEPTION 'ConversationChildRequest audience requires current parent membership and source visibility';
+    END IF;
+    IF NEW."state" = 'ready' THEN
+        PERFORM 1 FROM "conversations"
+        WHERE "id" = NEW."child_conversation_id" AND "silo_id" = NEW."silo_id"
+            AND "mode" = 'agent_session' AND "agent_service_id" = NEW."agent_service_id"
+            AND "computer_id" = NEW."computer_id" AND "computer_agent_identity_id" = NEW."agent_identity_id"
+            AND "computer_profile_revision_id" = NEW."profile_revision_id";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ConversationChildRequest becomes ready only with its matching child projection';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "conversation_child_requests_immutable_command"
+    BEFORE INSERT OR UPDATE OR DELETE ON "conversation_child_requests"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_child_request"();
+
 CREATE FUNCTION "enforce_conversation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
@@ -5169,13 +4184,21 @@ BEGIN
         OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'Conversation identity, mode, and agent binding are immutable';
     END IF;
-    IF (NEW."updated_at" IS DISTINCT FROM OLD."updated_at"
-        OR NEW."activity_sequence" IS DISTINCT FROM OLD."activity_sequence")
-        AND pg_trigger_depth() < 2 THEN
-        RAISE EXCEPTION 'Conversation activity time and sequence are database-owned by canonical timeline appends';
-    END IF;
     IF OLD."lifecycle" = 'closed' THEN
         RAISE EXCEPTION 'closed Conversation is read-only';
+    END IF;
+    -- updated_at orders conversation lists, so it moves only when this transaction stored a new
+    -- participant-visible payload for the conversation or when the lifecycle changes. The database
+    -- stamps the real time itself; a caller-supplied value is only the request to move it.
+    IF NEW."updated_at" IS DISTINCT FROM OLD."updated_at" THEN
+        IF NEW."lifecycle" IS NOT DISTINCT FROM OLD."lifecycle" AND NOT EXISTS (
+            SELECT 1 FROM "conversation_private_payloads"
+            WHERE "conversation_id" = OLD."id" AND "silo_id" = OLD."silo_id"
+              AND xmin = pg_current_xact_id()::xid
+        ) THEN
+            RAISE EXCEPTION 'Conversation updated_at moves only with a participant-visible append or a lifecycle change';
+        END IF;
+        NEW."updated_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
     END IF;
     IF NEW."lifecycle" = 'open' THEN
         IF NEW."closed_at" IS NOT NULL THEN
@@ -5189,7 +4212,7 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM "agent_runs"
         WHERE "conversation_id" = OLD."id"
-          AND "state" NOT IN ('completed', 'failed', 'cancelled')
+          AND "state" NOT IN ('completed', 'failed')
     ) THEN
         RAISE EXCEPTION 'Conversation cannot close while a foreground run is active';
     END IF;
@@ -5199,31 +4222,22 @@ $$;
 CREATE FUNCTION "enforce_conversation_participant_coordinates"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     conversation_lifecycle "ConversationLifecycle";
-    next_position BIGINT;
-    last_position BIGINT;
 BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'ConversationParticipant rows cannot be deleted';
     END IF;
-    SELECT "lifecycle", COALESCE((
-        SELECT max(entry."position") + 1
-        FROM "conversation_timeline_entries" entry
-        WHERE entry."conversation_id" = conversation."id"
-    ), 1)
-    INTO conversation_lifecycle, next_position
-    FROM "conversations" conversation
-    WHERE conversation."id" = NEW."conversation_id"
+    SELECT "lifecycle" INTO conversation_lifecycle
+    FROM "conversations"
+    WHERE "id" = NEW."conversation_id"
     FOR UPDATE;
     IF conversation_lifecycle IS NULL THEN
         RAISE EXCEPTION 'ConversationParticipant requires its exact Conversation';
     END IF;
-    last_position := next_position - 1;
+    -- Positions are KurrentDB conversation stream positions supplied by the server; the database only keeps them consistent.
     IF TG_OP = 'INSERT' THEN
         IF conversation_lifecycle <> 'open' THEN
             RAISE EXCEPTION 'participants cannot join a closed Conversation';
         END IF;
-        NEW."visible_from_position" := next_position;
-        NEW."read_through_position" := last_position;
         IF NEW."access_ended_position" IS NOT NULL OR NEW."archived_at" IS NOT NULL THEN
             RAISE EXCEPTION 'new ConversationParticipant must begin with current, unarchived access';
         END IF;
@@ -5235,394 +4249,10 @@ BEGIN
         OR NEW."joined_at" IS DISTINCT FROM OLD."joined_at" THEN
         RAISE EXCEPTION 'ConversationParticipant join authority is immutable';
     END IF;
-    IF NEW."read_through_position" < NEW."visible_from_position" - 1
-        OR NEW."read_through_position" > last_position THEN
-        RAISE EXCEPTION 'ConversationParticipant read position is outside its visible timeline';
-    END IF;
     IF OLD."access_ended_position" IS NOT NULL
         AND NEW."access_ended_position" IS DISTINCT FROM OLD."access_ended_position" THEN
         RAISE EXCEPTION 'ConversationParticipant access end is immutable';
     END IF;
-    IF OLD."access_ended_position" IS NULL AND NEW."access_ended_position" IS NOT NULL THEN
-        IF NEW."access_ended_position" <> 0 THEN
-            RAISE EXCEPTION 'ConversationParticipant access end position is database allocated';
-        END IF;
-        INSERT INTO "conversation_timeline_entries" (
-            "conversation_id", "kind", "membership_event_id", "participant_user_id", "payload"
-        ) VALUES (
-            NEW."conversation_id", 'membership', 'access-ended:' || NEW."user_id", NEW."user_id",
-            jsonb_build_object('action', 'access_ended', 'userId', NEW."user_id")
-        ) RETURNING "position" INTO NEW."access_ended_position";
-    END IF;
-    IF NEW."access_ended_position" IS NOT NULL
-        AND NEW."read_through_position" >= NEW."access_ended_position" THEN
-        RAISE EXCEPTION 'ConversationParticipant cannot read at or beyond its access end';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "append_conversation_participant_join"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    allocated_position BIGINT;
-BEGIN
-    INSERT INTO "conversation_timeline_entries" (
-        "conversation_id", "kind", "membership_event_id", "participant_user_id", "payload"
-    ) VALUES (
-        NEW."conversation_id", 'membership', 'joined:' || NEW."user_id", NEW."user_id",
-        jsonb_build_object('action', 'joined', 'userId', NEW."user_id")
-    ) RETURNING "position" INTO allocated_position;
-    IF allocated_position IS DISTINCT FROM NEW."visible_from_position" THEN
-        RAISE EXCEPTION 'ConversationParticipant join visibility must equal its membership position';
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "revoke_channel_target_grant_after_participant_access_end"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    participant_principal_id TEXT;
-    principal_count INTEGER;
-BEGIN
-    IF OLD."access_ended_position" IS NULL AND NEW."access_ended_position" IS NOT NULL THEN
-        SELECT min(principal."id"), count(principal."id")
-          INTO participant_principal_id, principal_count
-          FROM "principals" principal
-          JOIN "conversations" conversation ON conversation."id" = NEW."conversation_id"
-         WHERE principal."silo_id" = conversation."silo_id"
-           AND principal."subject" = NEW."user_id";
-        IF principal_count <> 1 THEN
-            RAISE EXCEPTION 'ChannelTarget participant Principal projection is unavailable or ambiguous';
-        END IF;
-        UPDATE "authorization_grants" grant_row
-           SET "revoked_at" = clock_timestamp()
-          FROM "conversations" conversation, "channel_runtime_routes" route
-         WHERE conversation."id" = NEW."conversation_id"
-           AND route."silo_id" = conversation."silo_id"
-           AND route."agent_service_id" = conversation."agent_service_id"
-           AND grant_row."silo_id" = conversation."silo_id"
-           AND grant_row."manager_id" = 'channel-target-participant-access'
-           AND grant_row."subject_kind" = 'principal'
-           AND grant_row."subject_principal_id" = participant_principal_id
-           AND grant_row."resource_kind" = 'channel-target'
-           AND grant_row."resource_id" = route."id"
-           AND grant_row."revoked_at" IS NULL
-           AND NOT EXISTS (
-               SELECT 1
-                 FROM "conversations" continuing_conversation
-                 JOIN "conversation_participants" continuing_participant
-                   ON continuing_participant."conversation_id" = continuing_conversation."id"
-                WHERE continuing_conversation."silo_id" = conversation."silo_id"
-                  AND continuing_conversation."agent_service_id" = conversation."agent_service_id"
-                  AND continuing_conversation."mode" = 'agent_session'::"ConversationMode"
-                  AND continuing_conversation."lifecycle" = 'open'::"ConversationLifecycle"
-                  AND continuing_participant."user_id" = NEW."user_id"
-                  AND continuing_participant."access_ended_position" IS NULL
-           );
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_message_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    conversation_silo_id TEXT;
-    conversation_agent_service_id TEXT;
-    conversation_mode "ConversationMode";
-    conversation_lifecycle "ConversationLifecycle";
-    run_silo_id TEXT;
-    run_agent_service_id TEXT;
-    run_conversation_id TEXT;
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'ConversationMessage rows cannot be deleted';
-    END IF;
-    IF TG_OP = 'UPDATE' THEN
-        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
-            OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
-            OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-            OR NEW."role" IS DISTINCT FROM OLD."role" OR NEW."source" IS DISTINCT FROM OLD."source"
-            OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-            RAISE EXCEPTION 'ConversationMessage identity and provenance are immutable';
-        END IF;
-        IF OLD."state" IN ('completed', 'failed', 'cancelled') OR NOT (
-            (OLD."state" = 'pending' AND NEW."state" IN ('pending', 'streaming', 'completed', 'failed', 'cancelled')) OR
-            (OLD."state" = 'streaming' AND NEW."state" IN ('streaming', 'completed', 'failed', 'cancelled'))
-        ) THEN
-            RAISE EXCEPTION 'invalid ConversationMessage lifecycle transition';
-        END IF;
-    END IF;
-    SELECT "silo_id", "agent_service_id", "mode", "lifecycle"
-      INTO conversation_silo_id, conversation_agent_service_id, conversation_mode, conversation_lifecycle
-      FROM "conversations" WHERE "id" = NEW."conversation_id" FOR UPDATE;
-    IF conversation_lifecycle IS NULL OR conversation_lifecycle <> 'open' THEN
-        RAISE EXCEPTION 'ConversationMessage requires an open Conversation';
-    END IF;
-    IF NEW."source" = 'user_input' THEN
-        IF NEW."role" <> 'user' OR NEW."user_id" IS NULL THEN
-            RAISE EXCEPTION 'user input requires User role and exact user provenance';
-        END IF;
-        IF NOT EXISTS (
-            SELECT 1 FROM "conversation_participants"
-            WHERE "conversation_id" = NEW."conversation_id"
-              AND "user_id" = NEW."user_id"
-              AND "access_ended_position" IS NULL
-        ) THEN
-            RAISE EXCEPTION 'user input requires a participant with current Conversation access';
-        END IF;
-        IF (conversation_mode = 'agent_session' AND NEW."run_id" IS NULL)
-            OR (conversation_mode IN ('direct', 'group') AND NEW."run_id" IS NOT NULL) THEN
-            RAISE EXCEPTION 'user input run provenance must match persisted Conversation mode';
-        END IF;
-    ELSIF NEW."source" = 'model_output' THEN
-        IF NEW."role" <> 'assistant' OR NEW."run_id" IS NULL OR NEW."user_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'model output requires Assistant role and exact run provenance';
-        END IF;
-    ELSIF NEW."source" = 'tool_result' THEN
-        IF NEW."role" <> 'tool' OR NEW."run_id" IS NULL OR NEW."user_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'tool result requires Tool role and exact run provenance';
-        END IF;
-    ELSIF NEW."role" <> 'system' OR NEW."user_id" IS NOT NULL THEN
-        RAISE EXCEPTION 'platform message requires System role';
-    END IF;
-    IF NEW."run_id" IS NOT NULL THEN
-        SELECT "silo_id", "agent_service_id", "conversation_id" INTO run_silo_id, run_agent_service_id, run_conversation_id
-          FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        IF run_silo_id IS DISTINCT FROM conversation_silo_id OR run_agent_service_id IS DISTINCT FROM conversation_agent_service_id
-            OR run_conversation_id IS DISTINCT FROM NEW."conversation_id" THEN
-            RAISE EXCEPTION 'ConversationMessage run must belong to the exact conversation and silo';
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "append_conversation_message_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    INSERT INTO "conversation_timeline_entries" ("conversation_id", "kind", "message_id")
-    VALUES (NEW."conversation_id", 'message', NEW."id");
-    RETURN NULL;
-END;
-$$;
--- Protect owner-authored steering from direct-SQL identity changes, late injection after a resume,
--- and consumption that is not backed by the exact persisted resume payload.
-CREATE FUNCTION "enforce_runtime_steering_request_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_attempt INTEGER;
-    run_silo_id TEXT;
-    run_subject_id TEXT;
-    run_state "AgentRunState";
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'RuntimeSteeringRequest rows cannot be deleted';
-    END IF;
-
-    -- 1. Admit only a pending request for the locked current attempt, silo, and delegated owner.
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."consumed_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new RuntimeSteeringRequest must begin pending without consumption evidence';
-        END IF;
-
-        SELECT "attempt", "silo_id", "delegated_user_id", "state"
-        INTO run_attempt, run_silo_id, run_subject_id, run_state
-        FROM "agent_runs"
-        WHERE "id" = NEW."run_id"
-        FOR UPDATE;
-
-        IF run_attempt IS DISTINCT FROM NEW."attempt"
-            OR run_silo_id IS DISTINCT FROM NEW."silo_id"
-            OR run_subject_id IS DISTINCT FROM NEW."subject_id"
-            OR run_state NOT IN ('assigned', 'running', 'waiting_for_input') THEN
-            RAISE EXCEPTION 'RuntimeSteeringRequest requires the current owner-bound steerable AgentRun attempt';
-        END IF;
-
-        IF EXISTS (
-            SELECT 1
-            FROM "runtime_dispatched_commands"
-            WHERE "run_id" = NEW."run_id"
-              AND "attempt" = NEW."attempt"
-              AND "kind" = 'resume_attempt'::"RuntimeCommandKind"
-        ) THEN
-            RAISE EXCEPTION 'RuntimeSteeringRequest must be submitted before its sole resume command';
-        END IF;
-        RETURN NEW;
-    END IF;
-
-    -- 2. Preserve the evidence that was accepted by the public steering boundary.
-    IF NEW."id" IS DISTINCT FROM OLD."id"
-        OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."content" IS DISTINCT FROM OLD."content"
-        OR NEW."digest" IS DISTINCT FROM OLD."digest"
-        OR NEW."submitted_at" IS DISTINCT FROM OLD."submitted_at" THEN
-        RAISE EXCEPTION 'RuntimeSteeringRequest identity and content are immutable';
-    END IF;
-
-    IF OLD."state" <> 'pending' THEN
-        RAISE EXCEPTION 'consumed RuntimeSteeringRequest is terminal';
-    END IF;
-
-    IF NEW."state" = 'pending' AND NEW."consumed_at" IS NULL THEN
-        RETURN NEW;
-    END IF;
-
-    IF NEW."state" <> 'consumed' OR NEW."consumed_at" IS NULL OR NEW."consumed_at" < OLD."submitted_at" THEN
-        RAISE EXCEPTION 'RuntimeSteeringRequest may only transition once from Pending to Consumed';
-    END IF;
-
-    -- 3. Close the lifecycle only after the server has durably embedded this content in a resume.
-    IF NOT EXISTS (
-        SELECT 1
-        FROM "runtime_dispatched_commands" command
-        WHERE command."run_id" = OLD."run_id"
-          AND command."attempt" = OLD."attempt"
-          AND command."kind" = 'resume_attempt'::"RuntimeCommandKind"
-          AND command."payload"->'steeringRequests' @> jsonb_build_array(OLD."content")
-    ) THEN
-        RAISE EXCEPTION 'consumed RuntimeSteeringRequest requires its persisted resume command payload';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_run_event_append"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    previous_sequence INTEGER;
-    terminal_exists BOOLEAN;
-    current_attempt INTEGER;
-    run_state "AgentRunState";
-    run_conversation_id TEXT;
-BEGIN
-    PERFORM pg_advisory_xact_lock(hashtextextended(NEW."run_id", 0));
-    SELECT "attempt", "state", "conversation_id" INTO current_attempt, run_state, run_conversation_id
-    FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-    IF run_state IS NULL THEN RAISE EXCEPTION 'RunEvent run does not exist'; END IF;
-    IF run_conversation_id IS NULL THEN RAISE EXCEPTION 'RunEvent requires a conversation-bound AgentRun'; END IF;
-    IF NEW."conversation_id" IS DISTINCT FROM run_conversation_id THEN
-        RAISE EXCEPTION 'RunEvent must bind the exact AgentRun Conversation';
-    END IF;
-    IF NEW."attempt" IS DISTINCT FROM current_attempt THEN
-        RAISE EXCEPTION 'RunEvent must bind the current AgentRun attempt';
-    END IF;
-    SELECT COALESCE(MAX("sequence"), 0),
-           COALESCE(bool_or("type" IN ('run.completed', 'run.failed', 'run.cancelled')) FILTER (WHERE "attempt" = NEW."attempt"), false)
-      INTO previous_sequence, terminal_exists
-      FROM "conversation_run_events" WHERE "run_id" = NEW."run_id";
-    IF terminal_exists THEN
-        RAISE EXCEPTION 'RunEvent attempt stream is terminal';
-    END IF;
-    IF NEW."sequence" <> previous_sequence + 1 THEN
-        RAISE EXCEPTION 'RunEvent sequence must be contiguous';
-    END IF;
-    IF NEW."type" = 'run.completed' AND run_state <> 'completed' THEN
-        RAISE EXCEPTION 'run.completed event requires Completed AgentRun authority';
-    ELSIF NEW."type" = 'run.failed' AND run_state <> 'failed' THEN
-        RAISE EXCEPTION 'run.failed event requires Failed AgentRun authority';
-    ELSIF NEW."type" = 'run.cancelled' AND run_state <> 'cancelled' THEN
-        RAISE EXCEPTION 'run.cancelled event requires Cancelled AgentRun authority';
-    ELSIF NEW."type" NOT IN ('run.completed', 'run.failed', 'run.cancelled') AND run_state IN ('completed', 'failed', 'cancelled') THEN
-        RAISE EXCEPTION 'terminal AgentRun accepts only its matching terminal event';
-    END IF;
-    IF NEW."type" IN ('child.run.completed', 'child.run.failed', 'child.run.cancelled') AND NOT EXISTS (
-        SELECT 1
-        FROM "child_run_completion_deliveries" delivery
-        JOIN "agent_runs" child ON child."id" = delivery."child_run_id"
-        WHERE delivery."child_run_id" = NEW."payload"->>'childRunId'
-          AND delivery."child_attempt"::TEXT = NEW."payload"->>'childAttempt'
-          AND delivery."parent_run_id" = NEW."run_id"
-          AND delivery."parent_attempt" = NEW."attempt"
-          AND delivery."parent_event_sequence" = NEW."sequence"
-          AND delivery."outcome" = 'delivered'
-          AND child."attempt" = delivery."child_attempt"
-          AND ((NEW."type" = 'child.run.completed' AND child."state" = 'completed') OR (NEW."type" = 'child.run.failed' AND child."state" = 'failed') OR (NEW."type" = 'child.run.cancelled' AND child."state" = 'cancelled'))
-    ) THEN
-        RAISE EXCEPTION 'child RunEvent requires child completion delivery authority';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "append_conversation_run_event_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    INSERT INTO "conversation_timeline_entries" (
-        "conversation_id", "kind", "run_id", "run_event_sequence"
-    ) VALUES (
-        NEW."conversation_id", 'run_event', NEW."run_id", NEW."sequence"
-    );
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_timeline_entry"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    conversation_lifecycle "ConversationLifecycle";
-BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'ConversationTimelineEntry rows are append-only';
-    END IF;
-    IF NEW."position" <> 0 THEN
-        RAISE EXCEPTION 'ConversationTimelineEntry position is database allocated';
-    END IF;
-    IF NEW."kind" = 'message' THEN
-        IF NEW."message_id" IS NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
-            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
-            OR NEW."payload" IS NOT NULL THEN
-            RAISE EXCEPTION 'message timeline entry requires only exact Message provenance';
-        END IF;
-    ELSIF NEW."kind" = 'run_event' THEN
-        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NULL OR NEW."run_event_sequence" IS NULL
-            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
-            OR NEW."payload" IS NOT NULL THEN
-            RAISE EXCEPTION 'run-event timeline entry requires only exact RunEvent provenance';
-        END IF;
-    ELSIF NEW."kind" = 'membership' THEN
-        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
-            OR NEW."membership_event_id" IS NULL OR NEW."participant_user_id" IS NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
-            OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
-            RAISE EXCEPTION 'membership timeline entry requires only exact participant event provenance';
-        END IF;
-        IF NEW."payload"->>'action' NOT IN ('joined', 'access_ended')
-            OR NEW."payload"->>'userId' IS DISTINCT FROM NEW."participant_user_id" THEN
-            RAISE EXCEPTION 'membership timeline payload must bind its exact participant action';
-        END IF;
-    ELSIF NEW."kind" = 'system' THEN
-        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
-            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
-            OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
-            RAISE EXCEPTION 'system timeline entry requires only exact system event provenance';
-        END IF;
-    ELSIF NEW."kind" = 'parent_delivery' THEN
-        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
-            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NULL
-            OR NEW."payload" IS NOT NULL THEN
-            RAISE EXCEPTION 'parent-delivery timeline entry requires only exact delivery provenance';
-        END IF;
-        IF NOT EXISTS (
-            SELECT 1
-            FROM "agent_thread_parent_deliveries" delivery
-            WHERE delivery."id" = NEW."parent_delivery_agent_thread_id"
-              AND delivery."parent_conversation_id" = NEW."conversation_id"
-        ) THEN
-            RAISE EXCEPTION 'Agent-thread delivery timeline entry requires exact immediate-parent authority';
-        END IF;
-    ELSE
-        RAISE EXCEPTION 'unsupported ConversationTimelineEntry kind';
-    END IF;
-    SELECT "lifecycle" INTO conversation_lifecycle
-    FROM "conversations"
-    WHERE "id" = NEW."conversation_id"
-    FOR UPDATE;
-    IF conversation_lifecycle IS NULL OR conversation_lifecycle <> 'open' THEN
-        RAISE EXCEPTION 'ConversationTimelineEntry requires an open Conversation';
-    END IF;
-    SELECT COALESCE(max("position"), 0) + 1 INTO NEW."position"
-    FROM "conversation_timeline_entries"
-    WHERE "conversation_id" = NEW."conversation_id";
-    NEW."occurred_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
-    UPDATE "conversations"
-    SET "updated_at" = NEW."occurred_at",
-        "activity_sequence" = DEFAULT
-    WHERE "id" = NEW."conversation_id";
     RETURN NEW;
 END;
 $$;
@@ -5646,99 +4276,10 @@ BEGIN
         OR conversation_agent_service_id IS DISTINCT FROM NEW."agent_service_id" THEN
         RAISE EXCEPTION 'AgentRun requires the exact agent-session Conversation authority';
     END IF;
-    IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN
+    IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'failed') THEN
         RAISE EXCEPTION 'non-terminal AgentRun requires an open Conversation';
     END IF;
     RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_child_run_completion_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    child_attempt INTEGER;
-    child_parent_run_id TEXT;
-    child_root_run_id TEXT;
-    child_silo_id TEXT;
-    child_state "AgentRunState";
-    reservation_parent_run_id TEXT;
-    reservation_root_run_id TEXT;
-    parent_attempt INTEGER;
-    parent_silo_id TEXT;
-    parent_root_run_id TEXT;
-    parent_conversation_id TEXT;
-BEGIN
-    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'child completion deliveries are append-only'; END IF;
-    SELECT "attempt", "parent_run_id", "root_run_id", "silo_id", "state"
-    INTO child_attempt, child_parent_run_id, child_root_run_id, child_silo_id, child_state
-    FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR UPDATE;
-    IF child_parent_run_id IS NULL OR child_state NOT IN ('completed', 'failed', 'cancelled') THEN RAISE EXCEPTION 'child completion delivery requires terminal child authority'; END IF;
-    SELECT "parent_run_id", "root_run_id" INTO reservation_parent_run_id, reservation_root_run_id FROM "child_run_reservations" WHERE "child_run_id" = NEW."child_run_id" FOR UPDATE;
-    SELECT "attempt", "silo_id", "root_run_id", "conversation_id"
-    INTO parent_attempt, parent_silo_id, parent_root_run_id, parent_conversation_id
-    FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
-    IF NEW."child_attempt" IS DISTINCT FROM child_attempt OR NEW."parent_attempt" IS DISTINCT FROM parent_attempt THEN
-        RAISE EXCEPTION 'child completion delivery must bind the current child and parent attempts';
-    END IF;
-    IF reservation_parent_run_id IS NULL OR parent_silo_id IS NULL OR NEW."parent_run_id" <> child_parent_run_id OR reservation_parent_run_id <> child_parent_run_id OR reservation_root_run_id <> child_root_run_id OR parent_silo_id <> child_silo_id OR parent_root_run_id <> child_root_run_id THEN RAISE EXCEPTION 'child completion delivery lineage mismatch'; END IF;
-    IF NEW."outcome" = 'delivered' THEN
-        IF parent_conversation_id IS NULL OR NEW."parent_event_sequence" IS NULL THEN RAISE EXCEPTION 'delivered child completion requires a parent conversation stream and event sequence'; END IF;
-    ELSIF NEW."outcome" = 'no_parent_stream' THEN
-        IF parent_conversation_id IS NOT NULL OR NEW."parent_event_sequence" IS NOT NULL THEN RAISE EXCEPTION 'no_parent_stream outcome requires no parent conversation stream'; END IF;
-    ELSE
-        IF NEW."parent_event_sequence" IS NOT NULL OR NOT EXISTS (
-            SELECT 1 FROM "conversation_run_events"
-            WHERE "run_id" = NEW."parent_run_id" AND "attempt" = NEW."parent_attempt"
-              AND "type" IN ('run.completed', 'run.failed', 'run.cancelled')
-        ) THEN RAISE EXCEPTION 'parent_stream_terminal outcome requires terminal parent attempt stream'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_child_run_completion_delivery_event"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    child_state "AgentRunState";
-    expected_event_type TEXT;
-BEGIN
-    IF NEW."outcome" <> 'delivered' THEN RETURN NULL; END IF;
-    SELECT "state" INTO child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id" AND "attempt" = NEW."child_attempt";
-    expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
-    IF NOT EXISTS (
-        SELECT 1 FROM "conversation_run_events"
-        WHERE "run_id" = NEW."parent_run_id" AND "attempt" = NEW."parent_attempt"
-          AND "sequence" = NEW."parent_event_sequence" AND "type" = expected_event_type
-          AND "payload"->>'childRunId' = NEW."child_run_id"
-          AND "payload"->>'childAttempt' = NEW."child_attempt"::TEXT
-    ) THEN RAISE EXCEPTION 'delivered child completion requires exact parent attempt event'; END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "reject_conversation_immutable_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'canonical conversation history is immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_context_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    message_conversation_id TEXT;
-    run_conversation_id TEXT;
-BEGIN
-    SELECT "conversation_id" INTO message_conversation_id FROM "conversation_messages" WHERE "id" = NEW."through_message_id" FOR UPDATE;
-    SELECT "conversation_id" INTO run_conversation_id FROM "agent_runs" WHERE "id" = NEW."created_by_run_id" FOR UPDATE;
-    IF message_conversation_id IS DISTINCT FROM NEW."conversation_id" OR run_conversation_id IS DISTINCT FROM NEW."conversation_id" THEN
-        RAISE EXCEPTION 'ConversationContextRevision provenance must belong to the exact conversation';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_terminal_agent_run_event"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    expected_type TEXT;
-BEGIN
-    IF NEW."conversation_id" IS NULL OR NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN RETURN NULL; END IF;
-    expected_type := CASE NEW."state" WHEN 'completed' THEN 'run.completed' WHEN 'failed' THEN 'run.failed' ELSE 'run.cancelled' END;
-    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "type" = expected_type) THEN
-        RAISE EXCEPTION 'terminal conversation AgentRun requires its matching terminal RunEvent';
-    END IF;
-    RETURN NULL;
 END;
 $$;
 CREATE FUNCTION "enforce_persona_question_set_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -6348,7 +4889,7 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "conversation_id" = NEW."source_conversation_id" AND "user_id" = NEW."user_id" AND "access_ended_position" IS NULL) THEN
             RAISE EXCEPTION 'PersonalConfigurationChange source conversation requires the initiating participant with current access';
         END IF;
-        SELECT "silo_id", "conversation_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_conversation, run_service, run_user
+        SELECT "silo_id", "conversation_id", "agent_service_id", "principal_id" INTO run_silo, run_conversation, run_service, run_user
           FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
         SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
           FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
@@ -6359,9 +4900,6 @@ BEGIN
            OR service_silo IS DISTINCT FROM NEW."silo_id" OR service_kind IS DISTINCT FROM 'personal'
            OR active_persona IS DISTINCT FROM NEW."expected_persona_revision_id" OR active_agent IS DISTINCT FROM NEW."expected_agent_revision_id" THEN
             RAISE EXCEPTION 'PersonalConfigurationChange provenance or active-revision fence conflict';
-        END IF;
-        IF NEW."source_message_id" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "conversation_messages" WHERE "id" = NEW."source_message_id" AND "conversation_id" = NEW."source_conversation_id") THEN
-            RAISE EXCEPTION 'PersonalConfigurationChange source message must belong to its source conversation';
         END IF;
         RETURN NEW;
     END IF;
@@ -6453,19 +4991,6 @@ BEGIN
     IF NEW."source_run_id" IS NOT NULL THEN
         SELECT "silo_id" INTO source_silo_id FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
         IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision run provenance must stay inside its silo'; END IF;
-    END IF;
-    IF NEW."source_message_id" IS NOT NULL THEN
-        IF NEW."source_run_id" IS NOT NULL THEN
-            SELECT run."silo_id" INTO source_silo_id FROM "conversation_run_events" event
-              JOIN "agent_runs" run ON run."id" = event."run_id" AND run."conversation_id" = event."conversation_id"
-              WHERE event."run_id" = NEW."source_run_id" AND event."type" = 'message.started'
-                AND event."payload"->>'messageId' = NEW."source_message_id" FOR UPDATE OF event, run;
-        ELSE
-            SELECT conversation."silo_id" INTO source_silo_id FROM "conversation_messages" message
-              JOIN "conversations" conversation ON conversation."id" = message."conversation_id"
-              WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, conversation;
-        END IF;
-        IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision message provenance must stay inside its silo'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -6964,7 +5489,7 @@ BEGIN
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
         OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."runtime_instance_id" IS DISTINCT FROM OLD."runtime_instance_id"
+        OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id" OR NEW."runtime_instance_id" IS DISTINCT FROM OLD."runtime_instance_id"
         OR NEW."command_id" IS DISTINCT FROM OLD."command_id" OR NEW."candidate_id" IS DISTINCT FROM OLD."candidate_id"
         OR NEW."tool_revision_id" IS DISTINCT FROM OLD."tool_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
         OR NEW."arguments" IS DISTINCT FROM OLD."arguments" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
@@ -7003,36 +5528,33 @@ DECLARE
     has_evidence BOOLEAN;
 BEGIN
     IF TG_OP = 'UPDATE' AND (
-        NEW."authorization_principal_id" IS DISTINCT FROM OLD."authorization_principal_id"
-        OR NEW."authorization_actor_kind" IS DISTINCT FROM OLD."authorization_actor_kind"
+        NEW."authorization_actor_kind" IS DISTINCT FROM OLD."authorization_actor_kind"
+        OR NEW."authorization_execution_subject" IS DISTINCT FROM OLD."authorization_execution_subject"
         OR NEW."authorization_coordinates" IS DISTINCT FROM OLD."authorization_coordinates"
         OR NEW."authorization_decision_digests" IS DISTINCT FROM OLD."authorization_decision_digests"
-        OR NEW."authorization_membership_revision" IS DISTINCT FROM OLD."authorization_membership_revision"
         OR NEW."authorization_assignment_digest" IS DISTINCT FROM OLD."authorization_assignment_digest"
         OR NEW."authorization_evidence_digest" IS DISTINCT FROM OLD."authorization_evidence_digest"
     ) THEN
         RAISE EXCEPTION 'ToolInvocation authorization evidence is immutable';
     END IF;
 
-    has_evidence := NEW."authorization_principal_id" IS NOT NULL
-        OR NEW."authorization_actor_kind" IS NOT NULL
+    has_evidence := NEW."authorization_actor_kind" IS NOT NULL
+        OR NEW."authorization_execution_subject" IS NOT NULL
         OR NEW."authorization_coordinates" IS NOT NULL
         OR cardinality(NEW."authorization_decision_digests") > 0
-        OR NEW."authorization_membership_revision" IS NOT NULL
         OR NEW."authorization_assignment_digest" IS NOT NULL
         OR NEW."authorization_evidence_digest" IS NOT NULL;
 
     IF NEW."run_id" IS NULL THEN
         IF TG_OP = 'INSERT' OR has_evidence THEN
-            IF NEW."authorization_principal_id" IS NULL
-                OR btrim(NEW."authorization_principal_id") = ''
-                OR NEW."authorization_actor_kind" IS DISTINCT FROM 'user'::"ToolInvocationAuthorizationActorKind"
+            IF NEW."agent_identity_id" IS NOT NULL
+                OR NEW."authorization_actor_kind" IS NOT NULL
+                OR NEW."authorization_execution_subject" IS NOT NULL
                 OR NEW."authorization_coordinates" IS NULL
                 OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
                 OR jsonb_array_length(NEW."authorization_coordinates") = 0
                 OR NEW."authorization_decision_digests" IS NULL
                 OR cardinality(NEW."authorization_decision_digests") = 0
-                OR NEW."authorization_membership_revision" IS NOT NULL
                 OR NEW."authorization_assignment_digest" IS NOT NULL
                 OR NEW."authorization_evidence_digest" IS NULL
                 OR NEW."authorization_evidence_digest" !~ '^sha256:[0-9a-f]{64}$'
@@ -7055,16 +5577,28 @@ BEGIN
     END IF;
 
     IF TG_OP = 'INSERT' OR has_evidence THEN
-        IF NEW."authorization_principal_id" IS NULL
-            OR btrim(NEW."authorization_principal_id") = ''
-            OR NEW."authorization_actor_kind" IS NULL
+        IF NEW."agent_identity_id" IS NULL
+            OR btrim(NEW."agent_identity_id") = ''
+            OR NEW."authorization_actor_kind" IS DISTINCT FROM 'workload'::"ToolInvocationAuthorizationActorKind"
+            OR NEW."authorization_execution_subject" IS NULL
+            OR jsonb_typeof(NEW."authorization_execution_subject") <> 'object'
+            OR NEW."authorization_execution_subject"->>'siloId' IS DISTINCT FROM NEW."silo_id"
+            OR NEW."authorization_execution_subject"->>'agentIdentityId' IS DISTINCT FROM NEW."agent_identity_id"
+            OR NEW."authorization_execution_subject"->>'principalId' IS DISTINCT FROM NEW."principal_id"
+            OR NEW."authorization_execution_subject"->'identity'->>'agentIdentityId' IS DISTINCT FROM NEW."agent_identity_id"
+            OR NEW."authorization_execution_subject"->'identity'->>'principalId' IS DISTINCT FROM NEW."principal_id"
+            OR NEW."authorization_execution_subject"->'membership'->>'principalId' IS DISTINCT FROM NEW."principal_id"
+            OR NEW."authorization_execution_subject"->'capability'->>'agentIdentityId' IS DISTINCT FROM NEW."agent_identity_id"
+            OR NEW."authorization_execution_subject"->'capability'->>'capabilitySetDigest' !~ '^sha256:[0-9a-f]{64}$'
+            OR NEW."authorization_execution_subject"->'runScope'->>'runId' IS DISTINCT FROM NEW."run_id"
+            OR NEW."authorization_execution_subject"->'runScope'->>'attempt' IS DISTINCT FROM NEW."attempt"::TEXT
+            OR NEW."authorization_execution_subject"->'runScope'->>'agentServiceId' IS DISTINCT FROM NEW."agent_service_id"
+            OR NEW."authorization_execution_subject"->'runScope'->>'agentRevisionId' IS DISTINCT FROM NEW."agent_revision_id"
             OR NEW."authorization_coordinates" IS NULL
             OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
             OR jsonb_array_length(NEW."authorization_coordinates") = 0
             OR NEW."authorization_decision_digests" IS NULL
             OR cardinality(NEW."authorization_decision_digests") = 0
-            OR NEW."authorization_membership_revision" IS NULL
-            OR NEW."authorization_membership_revision" < 1
             OR NEW."authorization_assignment_digest" IS NULL
             OR NEW."authorization_assignment_digest" !~ '^sha256:[0-9a-f]{64}$'
             OR NEW."authorization_evidence_digest" IS NULL
@@ -7165,10 +5699,6 @@ BEGIN
             SELECT artifact."silo_id" INTO source_silo_id FROM "artifact_revisions" revision
               JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
               WHERE revision."id" = NEW."source_artifact_revision_id" FOR UPDATE OF revision, artifact;
-        ELSIF NEW."source_message_id" IS NOT NULL THEN
-            SELECT conversation."silo_id" INTO source_silo_id FROM "conversation_messages" message
-              JOIN "conversations" conversation ON conversation."id" = message."conversation_id"
-              WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, conversation;
         ELSE
             source_silo_id := dataset_silo_id;
         END IF;
@@ -7275,20 +5805,17 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_attempt_check" CHECK ("attem
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND
         btrim("agent_revision_id") <> '' AND btrim("request_idempotency_key") <> '' AND
-        btrim("root_run_id") <> '' AND btrim("effective_contract_digest") <> '' AND
         btrim("input_snapshot_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_check" CHECK (
-        ("state" IN ('completed', 'failed', 'cancelled') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR
-        ("state" NOT IN ('completed', 'failed', 'cancelled') AND "finished_at" IS NULL AND "terminal_reason" IS NULL)
+        ("state" IN ('completed', 'failed') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR
+        ("state" NOT IN ('completed', 'failed') AND "finished_at" IS NULL AND "terminal_reason" IS NULL)
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_reason_check" CHECK (
         ("state" = 'completed' AND "terminal_reason" = 'success') OR
-        ("state" = 'cancelled' AND "terminal_reason" = 'user_cancelled') OR
-        ("state" = 'failed' AND "terminal_reason" NOT IN ('success', 'user_cancelled')) OR
-        "state" NOT IN ('completed', 'failed', 'cancelled')
+        ("state" = 'failed' AND "terminal_reason" <> 'success') OR
+        "state" NOT IN ('completed', 'failed')
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
         ("cost_amount" IS NULL AND "cost_currency" IS NULL) OR
@@ -7297,37 +5824,9 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" > 0);
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND
-        btrim("effective_contract_digest") <> '' AND btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_digest" ~ '^sha256:[0-9a-f]{64}$'
+        btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
+        "input_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_positive_limits" CHECK (
-    "depth" > 0
-    AND "max_tokens" > 0
-    AND "max_cost_usd_micros" > 0
-);
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
-        btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
-        btrim("subject_id") <> '' AND "audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime') AND btrim("service_account_name") <> '' AND
-        btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND btrim("workload_profile") <> ''
-    );
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_state_check" CHECK (
-        ("state" = 'pending_pod' AND "registered_at" IS NULL AND "revoked_at" IS NULL AND
-            (("workload_kind" = 'job' AND "pod_uid" IS NULL) OR
-             ("workload_kind" = 'deployment' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "pod_uid" = "workload_uid"))) OR
-        ("state" = 'registered' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "registered_at" IS NOT NULL AND "revoked_at" IS NULL) OR
-        ("state" = 'revoked' AND "revoked_at" IS NOT NULL)
-    );
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_claim_digest_check" CHECK ("claim_digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_audience_check" CHECK ("audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime'));
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_consumption_check" CHECK (
-        ("consumed_at" IS NULL AND "consumed_by_pod_uid" IS NULL AND "receipt_id" IS NULL) OR
-        ("consumed_at" IS NOT NULL AND "consumed_by_pod_uid" IS NOT NULL AND btrim("consumed_by_pod_uid") <> '' AND "receipt_id" IS NOT NULL AND btrim("receipt_id") <> '')
-    );
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_nonempty_check" CHECK (btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND "key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$');
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_expiry_check" CHECK ("expires_at" > "created_at");
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK (
 		btrim("silo_id") <> '' AND
 		(("subject_kind" = 'group' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR
@@ -7345,26 +5844,15 @@ ALTER TABLE "capability_catalog_revisions" ADD CONSTRAINT "capability_catalog_re
     );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
         "attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
-        "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND btrim("subject_id") <> '' AND
-		btrim("workload_audience") <> '' AND btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND
-		btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND
-		btrim("resource_kind") NOT IN ('', '*') AND
+        btrim("agent_identity_id") <> '' AND btrim("principal_id") <> '' AND btrim("resource_kind") NOT IN ('', '*') AND
         btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
         "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-		"expires_at" > "created_at" AND
-		btrim("elicitation_request_id") <> '' AND btrim("tool_invocation_row_id") <> '' AND
-		"reviewed_tool_arguments" IS NOT NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
-		"reviewed_tool_schema" IS NOT NULL AND jsonb_typeof("reviewed_tool_schema") = 'object' AND
-		"reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-		"safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'
-    );
-ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_exact_check" CHECK (
-        btrim("id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
-        btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
-        jsonb_typeof("content") = 'object' AND "digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        (("state" = 'pending' AND "consumed_at" IS NULL) OR
-         ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
+        "expires_at" > "created_at" AND btrim("elicitation_request_id") <> '' AND btrim("tool_invocation_row_id") <> '' AND
+        "reviewed_tool_arguments" IS NOT NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
+        "reviewed_tool_schema" IS NOT NULL AND jsonb_typeof("reviewed_tool_schema") = 'object' AND
+        "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'
     );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
 		("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
@@ -7376,11 +5864,11 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check
 		("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
 	);
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" CHECK (
-        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
+        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("principal_id") <> '' AND
         (("mcp_task_id" IS NULL AND btrim("run_id") <> '' AND "attempt" > 0 AND
-          btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '') OR
+          btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("agent_identity_id") <> '') OR
          (btrim("mcp_task_id") <> '' AND "run_id" IS NULL AND "attempt" IS NULL AND
-          "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND NOT "approval_required")) AND
+          "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND "agent_identity_id" IS NULL AND NOT "approval_required")) AND
         btrim("runtime_instance_id") <> '' AND btrim("command_id") <> '' AND btrim("candidate_id") <> '' AND
         btrim("tool_revision_id") <> '' AND btrim("tool_invocation_id") <> '' AND
         jsonb_typeof("arguments") = 'object' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
@@ -7437,17 +5925,34 @@ ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_
          "namespace" IS NOT NULL AND btrim("namespace") <> '' AND
          "service_account_name" IS NOT NULL AND btrim("service_account_name") <> '' AND
          "workload_kind" IS NOT NULL AND "workload_uid" IS NOT NULL AND btrim("workload_uid") <> '' AND
-         "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND
-         "proof_key_thumbprint" IS NOT NULL AND "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$')
+         "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '')
     );
 ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_membership_revision_check" CHECK ("membership_revision" IS NULL OR "membership_revision" > 0);
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check" CHECK (
-        btrim("silo_id") <> '' AND "activity_sequence" > 0 AND
-        (("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> '') OR
-         ("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL)) AND
+        btrim("silo_id") <> '' AND
+        (("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> ''
+          AND "computer_id" IS NOT NULL AND btrim("computer_id") <> ''
+          AND "computer_agent_identity_id" IS NOT NULL AND btrim("computer_agent_identity_id") <> ''
+          AND "computer_profile_revision_id" IS NOT NULL AND btrim("computer_profile_revision_id") <> '') OR
+         ("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL AND "computer_id" IS NULL
+          AND "computer_agent_identity_id" IS NULL AND "computer_profile_revision_id" IS NULL)) AND
         (("lifecycle" = 'open' AND "closed_at" IS NULL) OR
          ("lifecycle" = 'closed' AND "closed_at" IS NOT NULL AND "closed_at" >= "created_at"))
     );
+ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_encryption_check" CHECK (
+        btrim("silo_id") <> '' AND btrim("author_subject") <> '' AND btrim("idempotency_key") <> ''
+        AND btrim("key_id") <> '' AND octet_length("nonce") = 12 AND octet_length("auth_tag") = 16
+        AND octet_length("ciphertext") BETWEEN 1 AND 65536
+        AND "ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$'
+    );
+CREATE FUNCTION "reject_conversation_private_payload_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ConversationPrivatePayload rows are immutable';
+END;
+$$;
+CREATE TRIGGER "conversation_private_payloads_immutable"
+    BEFORE UPDATE OR DELETE ON "conversation_private_payloads"
+    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_private_payload_mutation"();
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_coordinates_check" CHECK (
         btrim("user_id") <> '' AND "visible_from_position" > 0 AND
         "read_through_position" >= "visible_from_position" - 1 AND
@@ -7455,62 +5960,9 @@ ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participant
          ("access_ended_position" >= "visible_from_position" AND "read_through_position" < "access_ended_position")) AND
         ("archived_at" IS NULL OR "archived_at" >= "joined_at")
     );
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_source_check" CHECK ("source" IN ('user_input', 'model_output', 'tool_result', 'platform'));
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_blocks_check" CHECK (jsonb_typeof("blocks") = 'array');
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_idempotency_key_check" CHECK (length(btrim("idempotency_key")) BETWEEN 1 AND 128);
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_provenance_check" CHECK (
-        ("source" = 'user_input' AND "role" = 'user' AND "user_id" IS NOT NULL) OR
-        ("source" = 'model_output' AND "role" = 'assistant' AND "user_id" IS NULL AND "run_id" IS NOT NULL) OR
-        ("source" = 'tool_result' AND "role" = 'tool' AND "user_id" IS NULL AND "run_id" IS NOT NULL) OR
-        ("source" = 'platform' AND "role" = 'system' AND "user_id" IS NULL)
-    );
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_completion_check" CHECK (
-        ("state" IN ('pending', 'streaming') AND "completed_at" IS NULL) OR
-        ("state" IN ('completed', 'failed', 'cancelled') AND "completed_at" IS NOT NULL)
-    );
-CREATE UNIQUE INDEX "conversation_messages_one_user_input_per_run"
-    ON "conversation_messages"("run_id") WHERE "source" = 'user_input';
 CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
     ON "agent_runs"("conversation_id")
-    WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed', 'cancelled');
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_attempt_sequence_check" CHECK ("attempt" > 0 AND "sequence" > 0);
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
-        'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
-        'tool.requested', 'elicitation.requested', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
-        'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated',
-        'context.compaction_started', 'context.compaction_completed', 'run.usage',
-        'run.completed', 'run.failed', 'run.cancelled', 'run.error',
-        'child.run.completed', 'child.run.failed', 'child.run.cancelled'
-    ));
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_message_id_check" CHECK (
-        ("type" LIKE 'message.%' AND length(btrim("message_id")) BETWEEN 1 AND 256 AND "payload"->>'messageId' = "message_id")
-        OR ("type" NOT LIKE 'message.%' AND "message_id" IS NULL)
-    );
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check" CHECK (
-        ("kind" = 'message' AND "message_id" IS NOT NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
-            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
-        ("kind" = 'run_event' AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_event_sequence" IS NOT NULL
-            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
-        ("kind" = 'membership' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
-            AND "membership_event_id" IS NOT NULL AND btrim("membership_event_id") <> '' AND "participant_user_id" IS NOT NULL
-            AND btrim("participant_user_id") <> '' AND "system_event_id" IS NULL AND "parent_delivery_agent_thread_id" IS NULL
-            AND jsonb_typeof("payload") = 'object') OR
-        ("kind" = 'system' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
-            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NOT NULL
-            AND btrim("system_event_id") <> '' AND "parent_delivery_agent_thread_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
-        ("kind" = 'parent_delivery' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
-            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_agent_thread_id" IS NOT NULL AND btrim("parent_delivery_agent_thread_id") <> '' AND "payload" IS NULL)
-    );
-ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_attempt_check" CHECK ("child_attempt" > 0 AND "parent_attempt" > 0);
-CREATE UNIQUE INDEX "child_run_completion_deliveries_one_delivery_per_attempt"
-    ON "child_run_completion_deliveries"("child_run_id", "child_attempt") WHERE "outcome" = 'delivered';
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_revision_check" CHECK ("revision" > 0);
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_digest_check" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_summary_check" CHECK (jsonb_typeof("summary") = 'object');
+    WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed');
 ALTER TABLE "persona_question_sets" ADD CONSTRAINT "persona_question_sets_valid_check" CHECK (
         btrim("question_set_id") <> '' AND "version" > 0 AND
         (("state" = 'draft' AND "reviewed_by" IS NULL AND "reviewed_at" IS NULL) OR
@@ -7719,7 +6171,6 @@ ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_prom
     );
 -- Partial indexes
 CREATE UNIQUE INDEX "memory_fact_catalog_single_successor_key" ON "memory_fact_catalog"("supersedes_fact_id") WHERE "supersedes_fact_id" IS NOT NULL;
-
 -- Triggers
 CREATE TRIGGER "agent_revisions_immutable"
     BEFORE UPDATE ON "agent_revisions"
@@ -7753,12 +6204,7 @@ CREATE TRIGGER "agent_revision_mcp_tool_assignments_immutable"
 CREATE TRIGGER "agent_revision_boundary_attachments_immutable"
 	BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_boundary_attachments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
-CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
 CREATE TRIGGER "run_input_snapshots_immutable" BEFORE UPDATE OR DELETE ON "run_input_snapshots" FOR EACH ROW EXECUTE FUNCTION "reject_run_input_snapshot_mutation"();
-CREATE TRIGGER "child_run_reservations_authority" BEFORE INSERT ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_reservation"();
-CREATE TRIGGER "child_run_reservations_immutable" BEFORE UPDATE OR DELETE ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "reject_child_run_reservation_mutation"();
-CREATE TRIGGER "child_run_completion_deliveries_authority" BEFORE INSERT OR UPDATE OR DELETE ON "child_run_completion_deliveries" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_completion_delivery"();
-CREATE CONSTRAINT TRIGGER "child_run_completion_deliveries_exact_parent_event" AFTER INSERT ON "child_run_completion_deliveries" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_completion_delivery_event"();
 CREATE TRIGGER "agent_runs_initial_state"
     BEFORE INSERT ON "agent_runs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_initial_agent_run_state"();
@@ -7766,13 +6212,6 @@ CREATE TRIGGER "agent_runs_current_authority"
     BEFORE INSERT OR UPDATE OF "attempt" ON "agent_runs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_current_agent_run_authority"();
 CREATE TRIGGER "agent_runs_authority_update" BEFORE UPDATE ON "agent_runs" FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_authority_update"();
-CREATE TRIGGER "workload_bootstraps_single_use" BEFORE INSERT OR UPDATE OR DELETE ON "workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_bootstrap_consumption"();
-CREATE TRIGGER "run_proof_keys_consumed_bootstrap" BEFORE INSERT ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_bootstrap"();
-CREATE TRIGGER "workload_assignments_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_assignment_update"();
-CREATE TRIGGER "run_proof_keys_immutable" BEFORE UPDATE OR DELETE ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_update"();
-CREATE TRIGGER "runtime_steering_requests_closed_lifecycle"
-    BEFORE INSERT OR UPDATE OR DELETE ON "runtime_steering_requests"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_runtime_steering_request_lifecycle"();
 CREATE TRIGGER "capability_catalog_revisions_immutable" BEFORE UPDATE OR DELETE ON "capability_catalog_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_capability_catalog_revision_mutation"();
 CREATE TRIGGER "authorization_grants_immutable" BEFORE UPDATE OR DELETE ON "authorization_grants" FOR EACH ROW EXECUTE FUNCTION "enforce_authorization_grant_update"();
 CREATE FUNCTION "enforce_elicitation_request_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -7866,7 +6305,11 @@ BEGIN
     END IF;
     SELECT * INTO request_row FROM "elicitation_requests" WHERE "id" = NEW."request_id" FOR UPDATE;
     SELECT * INTO invocation_row FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id" FOR UPDATE;
-    SELECT * INTO snapshot_row FROM "run_input_snapshots" WHERE "run_id" = NEW."run_id";
+    SELECT * INTO snapshot_row
+    FROM "run_input_snapshots"
+    WHERE "run_id" = NEW."run_id"
+      AND "attempt" = NEW."attempt"
+      AND "input_digest" = NEW."input_snapshot_digest";
     SELECT EXISTS (
         SELECT 1 FROM "elicitation_response_attempts"
         WHERE "request_id" = NEW."request_id"
@@ -7917,29 +6360,6 @@ CREATE TRIGGER "conversations_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELET
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_lifecycle"();
 CREATE TRIGGER "conversation_participants_coordinates" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_participants"
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_participant_coordinates"();
-CREATE TRIGGER "conversation_participants_join_timeline" AFTER INSERT ON "conversation_participants"
-    FOR EACH ROW EXECUTE FUNCTION "append_conversation_participant_join"();
-CREATE TRIGGER "conversation_participants_channel_target_grant_revoke"
-    AFTER UPDATE OF "access_ended_position" ON "conversation_participants"
-    FOR EACH ROW EXECUTE FUNCTION "revoke_channel_target_grant_after_participant_access_end"();
-CREATE TRIGGER "conversation_timeline_entries_allocate" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_timeline_entries"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_timeline_entry"();
-CREATE TRIGGER "conversation_messages_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_messages"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_message_lifecycle"();
-CREATE TRIGGER "conversation_messages_timeline" AFTER INSERT ON "conversation_messages"
-    FOR EACH ROW EXECUTE FUNCTION "append_conversation_message_timeline"();
-CREATE TRIGGER "conversation_run_events_contiguous" BEFORE INSERT ON "conversation_run_events"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_run_event_append"();
-CREATE TRIGGER "conversation_run_events_timeline" AFTER INSERT ON "conversation_run_events"
-    FOR EACH ROW EXECUTE FUNCTION "append_conversation_run_event_timeline"();
-CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE ON "conversation_run_events"
-    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_immutable_mutation"();
-CREATE TRIGGER "conversation_context_revisions_append_only" BEFORE UPDATE OR DELETE ON "conversation_context_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_immutable_mutation"();
-CREATE TRIGGER "conversation_context_revisions_exact_provenance" BEFORE INSERT ON "conversation_context_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_context_provenance"();
-CREATE CONSTRAINT TRIGGER "terminal_agent_runs_require_event" AFTER INSERT OR UPDATE OF "state" ON "agent_runs"
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_terminal_agent_run_event"();
 CREATE TRIGGER "agent_runs_conversation_authority" BEFORE INSERT OR UPDATE OF "conversation_id", "silo_id", "agent_service_id", "state" ON "agent_runs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_conversation_authority"();
 CREATE TRIGGER "persona_question_sets_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_question_sets"
@@ -8015,12 +6435,15 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "run_input_snapshots" snapshot
         WHERE snapshot."run_id" = NEW."id"
+          AND snapshot."attempt" = NEW."attempt"
           AND snapshot."input_digest" = NEW."input_snapshot_digest"
           AND snapshot."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND snapshot."silo_id" = NEW."silo_id"
           AND snapshot."agent_service_id" = NEW."agent_service_id"
           AND snapshot."agent_revision_id" = NEW."agent_revision_id"
-          AND snapshot."effective_contract_digest" = NEW."effective_contract_digest"
+          AND snapshot."agent_identity_id" = NEW."agent_identity_id"
+          AND snapshot."principal_id" = NEW."principal_id"
+          AND snapshot."execution_subject" IS NOT DISTINCT FROM NEW."execution_subject"
     ) THEN
         RAISE EXCEPTION 'AgentRun requires its exact immutable RunInputSnapshot' USING ERRCODE = '23503';
     END IF;
@@ -8029,7 +6452,7 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete
-AFTER INSERT OR UPDATE OF "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "attempt", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id"
 ON "agent_runs" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_agent_run_input_snapshot_completeness();
 
@@ -8040,12 +6463,15 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "agent_runs" run
         WHERE run."id" = NEW."run_id"
+          AND run."attempt" = NEW."attempt"
           AND run."input_snapshot_digest" = NEW."input_digest"
           AND run."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND run."silo_id" = NEW."silo_id"
           AND run."agent_service_id" = NEW."agent_service_id"
           AND run."agent_revision_id" = NEW."agent_revision_id"
-          AND run."effective_contract_digest" = NEW."effective_contract_digest"
+          AND run."agent_identity_id" = NEW."agent_identity_id"
+          AND run."principal_id" = NEW."principal_id"
+          AND run."execution_subject" IS NOT DISTINCT FROM NEW."execution_subject"
     ) THEN
         RAISE EXCEPTION 'RunInputSnapshot must bind the exact AgentRun conversation and authority' USING ERRCODE = '23503';
     END IF;
@@ -8054,7 +6480,7 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
-AFTER INSERT OR UPDATE OF "run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id"
 ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
 
@@ -8066,8 +6492,8 @@ INSERT INTO "capability_catalog_revisions" (
     'capability-catalog-resource-sharing-v1',
     'opencrane-resource-sharing',
     1,
-    'sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775',
-    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:schedule","resourceKind":"agent-service","actions":["schedule"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"agent-run:cancel","resourceKind":"agent-run","actions":["cancel"],"evidence":"decision"},{"id":"agent-run:retry","resourceKind":"agent-run","actions":["retry"],"evidence":"decision"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"channel-target:discover","resourceKind":"channel-target","actions":["discover"],"evidence":"read"},{"id":"channel-target:read","resourceKind":"channel-target","actions":["read"],"evidence":"read"},{"id":"channel-target:manage","resourceKind":"channel-target","actions":["manage"],"evidence":"decision"},{"id":"channel-target:administer","resourceKind":"channel-target","actions":["administer"],"evidence":"decision"},{"id":"channel-target:send","resourceKind":"channel-target","actions":["send"],"evidence":"effect"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"schedule:discover","resourceKind":"schedule","actions":["discover"],"evidence":"read"},{"id":"schedule:read","resourceKind":"schedule","actions":["read"],"evidence":"read"},{"id":"schedule:create","resourceKind":"schedule","actions":["create"],"evidence":"decision"},{"id":"schedule:edit","resourceKind":"schedule","actions":["edit"],"evidence":"decision"},{"id":"schedule:schedule","resourceKind":"schedule","actions":["schedule"],"evidence":"decision"},{"id":"schedule:delete","resourceKind":"schedule","actions":["delete"],"evidence":"decision"},{"id":"schedule:administer","resourceKind":"schedule","actions":["administer"],"evidence":"decision"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"}]'::jsonb,
+    'sha256:8f77a4cad03cb7b536f6954df320d5ad3dfa726822ea32a0cf2848af4f45ca95',
+    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"}]'::jsonb,
     'system:target-baseline'
 );
 
@@ -8078,8 +6504,8 @@ INSERT INTO "capability_catalog_revisions" (
     'capability-catalog-opencrane-product-authorization-v1',
     'opencrane-product-authorization',
     1,
-    'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:schedule","resourceKind":"agent-service","actions":["schedule"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"agent-run:cancel","resourceKind":"agent-run","actions":["cancel"],"evidence":"decision"},{"id":"agent-run:retry","resourceKind":"agent-run","actions":["retry"],"evidence":"decision"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"channel-target:discover","resourceKind":"channel-target","actions":["discover"],"evidence":"read"},{"id":"channel-target:read","resourceKind":"channel-target","actions":["read"],"evidence":"read"},{"id":"channel-target:manage","resourceKind":"channel-target","actions":["manage"],"evidence":"decision"},{"id":"channel-target:administer","resourceKind":"channel-target","actions":["administer"],"evidence":"decision"},{"id":"channel-target:send","resourceKind":"channel-target","actions":["send"],"evidence":"effect"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"schedule:discover","resourceKind":"schedule","actions":["discover"],"evidence":"read"},{"id":"schedule:read","resourceKind":"schedule","actions":["read"],"evidence":"read"},{"id":"schedule:create","resourceKind":"schedule","actions":["create"],"evidence":"decision"},{"id":"schedule:edit","resourceKind":"schedule","actions":["edit"],"evidence":"decision"},{"id":"schedule:schedule","resourceKind":"schedule","actions":["schedule"],"evidence":"decision"},{"id":"schedule:delete","resourceKind":"schedule","actions":["delete"],"evidence":"decision"},{"id":"schedule:administer","resourceKind":"schedule","actions":["administer"],"evidence":"decision"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"},{"id":"mcp-task:read","resourceKind":"mcp-task","actions":["read"],"evidence":"read"},{"id":"mcp-task:edit","resourceKind":"mcp-task","actions":["edit"],"evidence":"decision"},{"id":"mcp-task:cancel","resourceKind":"mcp-task","actions":["cancel"],"evidence":"decision"},{"id":"persona-collection:create","resourceKind":"persona-collection","actions":["create"],"evidence":"decision"},{"id":"agent-service-collection:create","resourceKind":"agent-service-collection","actions":["create"],"evidence":"decision"}]'::jsonb,
+    'sha256:7ef1b1ed025cb52c5ef5c0c918220ad4f1355f0f171a2208d02197af2c32bb53',
+    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"},{"id":"mcp-task:read","resourceKind":"mcp-task","actions":["read"],"evidence":"read"},{"id":"mcp-task:edit","resourceKind":"mcp-task","actions":["edit"],"evidence":"decision"},{"id":"mcp-task:cancel","resourceKind":"mcp-task","actions":["cancel"],"evidence":"decision"},{"id":"persona-collection:create","resourceKind":"persona-collection","actions":["create"],"evidence":"decision"},{"id":"agent-service-collection:create","resourceKind":"agent-service-collection","actions":["create"],"evidence":"decision"}]'::jsonb,
     'system:target-baseline'
 );
 
@@ -8479,26 +6905,14 @@ ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check"
     OR ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND "claim_expires_at" IS NOT NULL AND "completed_at" IS NULL)
     OR ("state" IN ('clean', 'rejected', 'terminal_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NOT NULL)
 );
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_identity_check" CHECK (
-    "run_attempt" > 0
-    AND "run_event_sequence" > 0
-    AND length(btrim("output_message_id")) BETWEEN 1 AND 256
-    AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
-    AND "expires_at" > "created_at"
-    AND (("finalized_content_address" IS NULL AND "finalized_receipt_digest" IS NULL AND "finalized_at" IS NULL)
-      OR ("finalized_content_address" ~ '^sha256:[0-9a-f]{64}$' AND "finalized_receipt_digest" ~ '^sha256:[0-9a-f]{64}$' AND "finalized_at" IS NOT NULL))
-);
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_check" CHECK (
     length(btrim("display_name")) BETWEEN 1 AND 255
     AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
     AND length(btrim("media_type")) BETWEEN 1 AND 255
     AND ("byte_length" IS NULL OR "byte_length" > 0)
-    AND (("run_id" IS NULL AND "run_attempt" IS NULL AND "run_event_sequence" IS NULL AND "run_message_id" IS NULL)
-      OR ("run_id" IS NOT NULL AND "run_attempt" > 0 AND "run_event_sequence" > 0 AND length(btrim("run_message_id")) BETWEEN 1 AND 256))
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_provenance_check" CHECK (
-    ("provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL AND "output_ticket_id" IS NULL AND "run_id" IS NULL AND "run_attempt" IS NULL AND "run_event_sequence" IS NULL AND "run_message_id" IS NULL)
-    OR ("provenance" = 'agent_output' AND "created_by_user_id" IS NULL AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_attempt" > 0 AND "run_event_sequence" > 0 AND "run_message_id" IS NOT NULL AND "output_ticket_id" IS NOT NULL)
+    "provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_check" CHECK (
     ("state" = 'uploading' AND "upload_lease_id" IS NOT NULL AND "revision_id" IS NULL AND "failure_code" IS NULL)
@@ -8611,156 +7025,6 @@ $$;
 CREATE CONSTRAINT TRIGGER "groups_hierarchy_guard" AFTER INSERT OR UPDATE OF "parent_id" ON "groups"
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION "enforce_group_hierarchy"();
-
-CREATE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    verified BOOLEAN;
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'ConversationAssetOutputTicket cannot be deleted';
-    END IF;
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."finalized_content_address" IS NOT NULL OR NEW."finalized_receipt_digest" IS NOT NULL OR NEW."finalized_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'ConversationAssetOutputTicket must begin unfinalized';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."run_attempt" IS DISTINCT FROM OLD."run_attempt" OR NEW."run_event_sequence" IS DISTINCT FROM OLD."run_event_sequence"
-        OR NEW."output_message_id" IS DISTINCT FROM OLD."output_message_id" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ConversationAssetOutputTicket identity is immutable';
-    END IF;
-    IF OLD."finalized_at" IS NOT NULL THEN
-        IF NEW."finalized_content_address" IS DISTINCT FROM OLD."finalized_content_address"
-            OR NEW."finalized_receipt_digest" IS DISTINCT FROM OLD."finalized_receipt_digest"
-            OR NEW."finalized_at" IS DISTINCT FROM OLD."finalized_at" THEN
-            RAISE EXCEPTION 'ConversationAssetOutputTicket receipt is immutable';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF NEW."finalized_at" IS NULL THEN RETURN NEW; END IF;
-    SELECT EXISTS (
-        SELECT 1 FROM "conversation_assets" asset
-        JOIN "artifact_upload_leases" lease ON lease."id" = asset."upload_lease_id"
-        WHERE asset."output_ticket_id" = OLD."id" AND asset."silo_id" = OLD."silo_id"
-          AND asset."conversation_id" = OLD."conversation_id" AND asset."run_id" = OLD."run_id"
-          AND asset."run_attempt" = OLD."run_attempt" AND asset."run_event_sequence" = OLD."run_event_sequence"
-          AND asset."run_message_id" = OLD."output_message_id" AND lease."state" = 'finalized'
-          AND lease."promoted_content_address" = NEW."finalized_content_address"
-          AND lease."promotion_receipt_digest" = NEW."finalized_receipt_digest"
-    ) INTO verified;
-    IF NOT verified THEN RAISE EXCEPTION 'ConversationAssetOutputTicket finalization lacks exact receipt evidence'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE TRIGGER "conversation_asset_output_tickets_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_asset_output_tickets"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"();
-
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_identity_check" CHECK (
-    "child_conversation_id" <> "parent_conversation_id"
-    AND "child_conversation_id" <> "root_conversation_id"
-    AND "parent_conversation_id" = "root_conversation_id"
-    AND length(btrim("parent_message_id")) BETWEEN 1 AND 256
-    AND length(btrim("initiator_user_id")) BETWEEN 1 AND 256
-    AND length(btrim("agent_service_id")) BETWEEN 1 AND 256
-    AND length(btrim("persona_profile_id")) BETWEEN 1 AND 256
-    AND length(btrim("persona_revision_id")) BETWEEN 1 AND 256
-    AND length(btrim("first_run_id")) BETWEEN 1 AND 256
-);
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_display_check" CHECK (
-    length(btrim("idempotency_key")) BETWEEN 1 AND 128
-    AND length(btrim("label")) BETWEEN 1 AND 160
-    AND length(btrim("detail")) BETWEEN 1 AND 4000
-    AND (("kind" = 'asset' AND "asset_id" IS NOT NULL) OR ("kind" <> 'asset' AND "asset_id" IS NULL))
-);
-
-CREATE FUNCTION "enforce_conversation_agent_thread_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    child_mode "ConversationMode";
-    parent_mode "ConversationMode";
-    root_mode "ConversationMode";
-BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'ConversationAgentThread rows are immutable';
-    END IF;
-    SELECT "mode" INTO child_mode FROM "conversations"
-    WHERE "id" = NEW."child_conversation_id" AND "silo_id" = NEW."silo_id"
-      AND "agent_service_id" = NEW."agent_service_id" AND "lifecycle" = 'open';
-    SELECT "mode" INTO parent_mode FROM "conversations"
-    WHERE "id" = NEW."parent_conversation_id" AND "silo_id" = NEW."silo_id" AND "lifecycle" = 'open';
-    SELECT "mode" INTO root_mode FROM "conversations"
-    WHERE "id" = NEW."root_conversation_id" AND "silo_id" = NEW."silo_id" AND "lifecycle" = 'open';
-    IF child_mode IS DISTINCT FROM 'agent_session' OR parent_mode IS DISTINCT FROM 'group'
-        OR root_mode IS DISTINCT FROM 'group' THEN
-        RAISE EXCEPTION 'Agent thread requires an open Agent-session child and open group parent/root';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM "conversation_messages" message
-        WHERE message."conversation_id" = NEW."parent_conversation_id" AND message."id" = NEW."parent_message_id"
-          AND message."run_id" IS NULL AND message."user_id" = NEW."initiator_user_id"
-          AND message."role" = 'user' AND message."state" = 'completed' AND message."source" = 'user_input'
-    ) THEN
-        RAISE EXCEPTION 'Agent thread requires its exact ordinary parent group message';
-    END IF;
-    IF EXISTS (
-        (SELECT participant."user_id" FROM "conversation_participants" participant
-         WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."access_ended_position" IS NULL)
-        EXCEPT
-        (SELECT participant."user_id" FROM "conversation_participants" participant
-         WHERE participant."conversation_id" = NEW."child_conversation_id" AND participant."access_ended_position" IS NULL)
-    ) OR EXISTS (
-        (SELECT participant."user_id" FROM "conversation_participants" participant
-         WHERE participant."conversation_id" = NEW."child_conversation_id" AND participant."access_ended_position" IS NULL)
-        EXCEPT
-        (SELECT participant."user_id" FROM "conversation_participants" participant
-         WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."access_ended_position" IS NULL)
-    ) THEN
-        RAISE EXCEPTION 'Agent thread child participants must mirror active parent participants';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM "agent_runs" run
-        JOIN "run_input_snapshots" snapshot ON snapshot."run_id" = run."id"
-        JOIN "persona_revisions" revision ON revision."id" = snapshot."persona_revision_id"
-        WHERE run."id" = NEW."first_run_id" AND run."conversation_id" = NEW."child_conversation_id"
-          AND run."silo_id" = NEW."silo_id" AND run."agent_service_id" = NEW."agent_service_id"
-          AND run."delegated_user_id" = NEW."initiator_user_id" AND run."state" = 'accepted'
-          AND snapshot."persona_revision_id" = NEW."persona_revision_id"
-          AND revision."persona_profile_id" = NEW."persona_profile_id" AND revision."state" = 'approved'
-    ) THEN
-        RAISE EXCEPTION 'Agent thread requires the initiating user persona frozen in its exact first run';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE FUNCTION "enforce_agent_thread_parent_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'AgentThreadParentDelivery rows are append-only';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE FUNCTION "append_agent_thread_parent_delivery_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    INSERT INTO "conversation_timeline_entries" (
-        "conversation_id", "kind", "parent_delivery_agent_thread_id"
-    ) VALUES (
-        NEW."parent_conversation_id", 'parent_delivery', NEW."id"
-    );
-    RETURN NULL;
-END;
-$$;
-
-CREATE TRIGGER "conversation_agent_threads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_agent_threads"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_agent_thread_authority"();
-CREATE TRIGGER "agent_thread_parent_deliveries_append_only" BEFORE INSERT OR UPDATE OR DELETE ON "agent_thread_parent_deliveries"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_thread_parent_delivery"();
-CREATE TRIGGER "agent_thread_parent_deliveries_timeline" AFTER INSERT ON "agent_thread_parent_deliveries"
-    FOR EACH ROW EXECUTE FUNCTION "append_agent_thread_parent_delivery_timeline"();
 
 -- Absurd installs a Postgres-native durable workflow system that can be dropped
 -- into an existing database.

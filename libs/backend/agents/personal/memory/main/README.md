@@ -46,8 +46,8 @@ and never calls Cognee.
 
 ## Boundary
 
-Consumed by the production personal-run path through
-[execution admission](../../../execution/admission/main/README.md). `POST /api/v1/me/conversations/:conversationId/messages` accepts
+The current production conversation path does not consume this package. The intended entry is
+[conversations](../../../../server/conversations/main/README.md): `POST /api/v1/me/conversations/:conversationId/messages` accepts
 only a `conversationId` and `requestIdempotencyKey`; the authenticated session supplies the subject, the
 trusted host supplies the silo, and the server re-resolves the participant-bound conversation and personal
 agent service. Inside the final admission transaction, execution inputs verify the exact signed fleet
@@ -78,5 +78,5 @@ memory-authority path; durable fact content remains behind the memory gateway.
 ## See also
 
 - Parent group: [personal-agent domains](../../README.md)
-- Admission path: [execution admission](../../../execution/admission/main/README.md)
+- Intended admission entry: [conversations](../../../../server/conversations/main/README.md)
 - Snapshot assembly: [execution inputs](../../../execution/inputs/main/README.md)

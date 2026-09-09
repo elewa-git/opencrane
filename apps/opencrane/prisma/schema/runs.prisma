@@ -1,7 +1,5 @@
 enum AgentRunTrigger {
-  Interactive       @map("interactive")
-  Schedule          @map("schedule")
-  ManagedInvocation @map("managed_invocation")
+  Interactive @map("interactive")
 }
 
 enum AgentRunState {
@@ -11,25 +9,16 @@ enum AgentRunState {
   Running          @map("running")
   WaitingForInput  @map("waiting_for_input")
   RecoveryRequired @map("recovery_required")
-  Cancelling       @map("cancelling")
   Completed        @map("completed")
   Failed           @map("failed")
-  Cancelled        @map("cancelled")
 }
 
 enum AgentRunTerminalReason {
   Success         @map("success")
-  UserCancelled   @map("user_cancelled")
   PolicyDenied    @map("policy_denied")
   BudgetExhausted @map("budget_exhausted")
   RuntimeFailure  @map("runtime_failure")
   InvalidInput    @map("invalid_input")
-}
-
-enum WorkloadAssignmentState {
-  PendingPod @map("pending_pod")
-  Registered @map("registered")
-  Revoked    @map("revoked")
 }
 
 enum WorkloadKind {
@@ -37,23 +26,7 @@ enum WorkloadKind {
   Deployment @map("deployment")
 }
 
-enum WarmRuntimeReservationState {
-  Reserved          @map("reserved")
-  ProfileActivating @map("profile_activating")
-  Ready             @map("ready")
-  Claimed           @map("claimed")
-  DeleteRequested   @map("delete_requested")
-  Deleted           @map("deleted")
-}
-
-/// Immutable outcome of attempting to append one terminal child's result to its parent stream.
-enum ChildRunCompletionDeliveryOutcome {
-  Delivered            @map("delivered")
-  NoParentStream       @map("no_parent_stream")
-  ParentStreamTerminal @map("parent_stream_terminal")
-}
-
-/// One logical run authority. Retries atomically increment `attempt`; there is no AgentRunAttempt.
+/// One immutable interactive run authority; there is no separate AgentRunAttempt.
 model AgentRun {
   id                                String                                @id @default(cuid())
   siloId                            String                                @map("silo_id")
@@ -61,13 +34,12 @@ model AgentRun {
   agentRevisionId                   String                                @map("agent_revision_id")
   conversationId                    String?                               @map("conversation_id")
   trigger                           AgentRunTrigger
-  delegatedUserId                   String?                               @map("delegated_user_id")
+  agentIdentityId                   String                                @map("agent_identity_id")
+  principalId                       String                                @map("principal_id")
+  executionSubject                  Json                                  @map("execution_subject")
   requestIdempotencyKey             String                                @map("request_idempotency_key")
-  rootRunId                         String                                @map("root_run_id")
-  parentRunId                       String?                               @map("parent_run_id")
   attempt                           Int                                   @default(1)
   state                             AgentRunState                         @default(Accepted)
-  effectiveContractDigest           String                                @map("effective_contract_digest")
   inputSnapshotDigest               String                                @map("input_snapshot_digest")
   acceptedAt                        DateTime                              @default(now()) @map("accepted_at")
   startedAt                         DateTime?                             @map("started_at")
@@ -78,269 +50,59 @@ model AgentRun {
   revision                          AgentRevision                         @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  inputSnapshot                     RunInputSnapshot?
-  workloadAssignments               WorkloadAssignment[]
-  proofKeys                         RunProofKey[]
+  inputSnapshots                    RunInputSnapshot[]
   modelCredentialMintAuthorizations RunModelCredentialMintAuthorization[]
   approvalRequests                  ApprovalRequest[]
   elicitationRequests               ElicitationRequest[]
   toolInvocations                   ToolInvocation[]
-  workflowTasks                     AgentRunWorkflowTask[]
-  steeringRequests                  RuntimeSteeringRequest[]
-  spawnedChildReservations          ChildRunReservation[]                 @relation("ChildRunReservationParent")
-  childReservation                  ChildRunReservation?                  @relation("ChildRunReservationChild")
-  childCompletionDeliveries         ChildRunCompletionDelivery[]          @relation("ChildRunCompletionDeliveryChild")
-  receivedChildCompletions          ChildRunCompletionDelivery[]          @relation("ChildRunCompletionDeliveryParent")
-  agentThreadOrigin                 ConversationAgentThread?
-  agentThreadDeliveries             AgentThreadParentDelivery[]
-  conversationAssets                ConversationAsset[]
-  conversationAssetTickets          ConversationAssetOutputTicket[]
-  warmRuntimeReservations           WarmRuntimeReservation[]
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
   @@unique([id, attempt])
+  @@unique([id, attempt, inputSnapshotDigest], map: "agent_run_attempt_snapshot_key")
   @@unique([id, siloId, agentServiceId, agentRevisionId])
   @@unique([id, agentRevisionId])
   @@unique([id, inputSnapshotDigest])
   @@unique([conversationId, id])
   @@unique([id, conversationId, siloId, agentServiceId], map: "agent_runs_thread_authority_key")
-  @@unique([id, inputSnapshotDigest, conversationId, siloId, agentServiceId, agentRevisionId, effectiveContractDigest], map: "agent_run_snapshot_identity_key")
+  @@unique([id, inputSnapshotDigest, conversationId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId], map: "agent_run_snapshot_identity_key")
   @@index([agentServiceId, state])
   @@index([conversationId, acceptedAt])
-  @@index([rootRunId])
   @@map("agent_runs")
-}
-
-/// One-use reservation of a Helm-owned generic warm Pod for one admitted AgentRun attempt.
-///
-/// The row is the database authority for the Pod binding. Kubernetes labels project the selected
-/// profile but never grant run authority. A used Pod reaches `Deleted`; it never becomes generic.
-model WarmRuntimeReservation {
-  runId               String                      @map("run_id")
-  attempt             Int
-  generation          Int                         @default(1)
-  siloId              String                      @map("silo_id")
-  namespace           String
-  deploymentName      String                      @map("deployment_name")
-  deploymentUid       String                      @map("deployment_uid")
-  podName             String                      @map("pod_name")
-  podUid              String                      @map("pod_uid")
-  podResourceVersion  String                      @map("pod_resource_version")
-  genericProfile      String                      @map("generic_profile")
-  claimedProfile      String                      @map("claimed_profile")
-  serviceAccountName  String                      @map("service_account_name")
-  state               WarmRuntimeReservationState @default(Reserved)
-  proofKeyThumbprint  String?                     @map("proof_key_thumbprint")
-  reservedAt          DateTime                    @default(now()) @map("reserved_at")
-  profileActivatedAt  DateTime?                   @map("profile_activated_at")
-  readinessObservedAt DateTime?                   @map("readiness_observed_at")
-  boundAt             DateTime?                   @map("bound_at")
-  idleDeadline        DateTime                    @map("idle_deadline")
-  deleteRequestedAt   DateTime?                   @map("delete_requested_at")
-  deletedAt           DateTime?                   @map("deleted_at")
-  run                 AgentRun                    @relation(fields: [runId, attempt], references: [id, attempt], onDelete: Restrict, map: "warm_runtime_reservations_run_fkey")
-  assignment          WorkloadAssignment          @relation(fields: [runId, attempt], references: [runId, attempt], onDelete: Restrict, map: "warm_runtime_reservations_assignment_fkey")
-  bootstrap           WorkloadBootstrap?
-
-  @@id([runId, attempt, generation])
-  @@unique([namespace, podUid])
-  @@unique([namespace, deploymentUid, podName])
-  @@index([state, idleDeadline])
-  @@map("warm_runtime_reservations")
-}
-
-/// One controller workflow task for one AgentRun attempt.
-///
-/// The relation uses only `runId`: AgentRun advances its current attempt after a retry, while this
-/// row keeps the earlier attempt and its task receipt available for replay and cleanup.
-model AgentRunWorkflowTask {
-  runId                String    @map("run_id")
-  attempt              Int
-  siloId               String    @map("silo_id")
-  taskKey              String    @map("task_key")
-  taskName             String    @map("task_name")
-  taskId               String?   @unique @map("task_id")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  receiptBoundAt       DateTime? @map("receipt_bound_at")
-  assignmentExpiresAt  DateTime? @map("assignment_expires_at")
-  releaseClaimedAt     DateTime? @map("release_claimed_at")
-  releaseExpiresAt     DateTime? @map("release_expires_at")
-  releaseDeliveryCount Int       @default(0) @map("release_delivery_count")
-  attemptKeyDigest     String?   @map("attempt_key_digest")
-  run                  AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
-
-  @@id([runId, attempt])
-  @@unique([siloId, taskKey])
-  @@map("agent_run_workflow_tasks")
-}
-
-/// Append-only proof that a terminal child was delivered to its direct parent's stream or deliberately suppressed.
-model ChildRunCompletionDelivery {
-  childRunId          String                            @map("child_run_id")
-  childAttempt        Int                               @map("child_attempt")
-  parentRunId         String                            @map("parent_run_id")
-  parentAttempt       Int                               @map("parent_attempt")
-  parentEventSequence Int?                              @map("parent_event_sequence")
-  outcome             ChildRunCompletionDeliveryOutcome
-  deliveredAt         DateTime                          @default(now()) @map("delivered_at")
-  childRun            AgentRun                          @relation("ChildRunCompletionDeliveryChild", fields: [childRunId], references: [id], onDelete: Restrict)
-  parentRun           AgentRun                          @relation("ChildRunCompletionDeliveryParent", fields: [parentRunId], references: [id], onDelete: Restrict)
-
-  @@id([childRunId, childAttempt, parentAttempt])
-  @@index([parentRunId, parentAttempt])
-  @@map("child_run_completion_deliveries")
-}
-
-/// Immutable token and cost allocation made by a parent for one governed child run.
-///
-/// This row is committed with its accepted child run. It makes the parent/root lineage and the
-/// budget carved from the parent auditable, while allowing a parent-locked transaction to count
-/// durable allocations rather than trust a caller-provided remaining budget.
-model ChildRunReservation {
-  childRunId       String   @id @map("child_run_id")
-  parentRunId      String   @map("parent_run_id")
-  rootRunId        String   @map("root_run_id")
-  depth            Int
-  maxTokens        Int      @map("max_tokens")
-  maxCostUsdMicros BigInt   @map("max_cost_usd_micros")
-  createdAt        DateTime @default(now()) @map("created_at")
-  parentRun        AgentRun @relation("ChildRunReservationParent", fields: [parentRunId], references: [id], onDelete: Restrict)
-  childRun         AgentRun @relation("ChildRunReservationChild", fields: [childRunId], references: [id], onDelete: Restrict)
-
-  @@index([parentRunId])
-  @@index([rootRunId])
-  @@map("child_run_reservations")
 }
 
 model RunInputSnapshot {
   id                      String    @id @default(cuid())
-  runId                   String    @unique @map("run_id")
+  runId                   String    @map("run_id")
+  attempt                 Int       @map("attempt")
   snapshotVersion         Int       @map("snapshot_version")
   siloId                  String    @map("silo_id")
   agentServiceId          String    @map("agent_service_id")
   agentRevisionId         String    @map("agent_revision_id")
-  effectiveContractDigest String    @map("effective_contract_digest")
+  agentIdentityId          String    @map("agent_identity_id")
+  principalId              String    @map("principal_id")
+  executionSubject         Json      @map("execution_subject")
   personaRevisionId       String?   @map("persona_revision_id")
   conversationId          String?   @map("conversation_id")
   messageIds              String[]  @default([]) @map("message_ids")
   preferenceFactIds       String[]  @default([]) @map("preference_fact_ids")
   artifactRevisionIds     String[]  @default([]) @map("artifact_revision_ids")
   retiredMemoryFacts      Json      @default("[]") @map("memory_facts")
-  identitySnapshot        Json      @map("identity_snapshot")
   modelRoute              Json      @map("model_route")
   mcpTools                Json      @map("mcp_tools")
   skillRevisionIds        String[]  @default([]) @map("skill_revision_ids")
   memoryQueryPolicy       Json      @map("memory_query_policy")
   budgetPolicy            Json      @map("budget_policy")
-  capabilitySetDigest     String    @map("capability_set_digest")
   promptCompilerVersion   String    @map("prompt_compiler_version")
   digest                  String    @unique @map("input_digest")
   compiledAt              DateTime  @default(now()) @map("created_at")
-  run                     AgentRun? @relation(fields: [runId, digest, conversationId, siloId, agentServiceId, agentRevisionId, effectiveContractDigest], references: [id, inputSnapshotDigest, conversationId, siloId, agentServiceId, agentRevisionId, effectiveContractDigest], onDelete: Restrict)
+  run                     AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
 
-  @@unique([runId, digest])
-  @@unique([runId, digest, conversationId, siloId, agentServiceId, agentRevisionId, effectiveContractDigest], map: "run_input_snapshot_run_identity_key")
+  @@unique([runId, attempt, digest])
+  @@unique([runId, attempt, digest, conversationId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId], map: "run_input_snapshot_run_identity_key")
+  @@index([runId, attempt])
   @@index([agentServiceId, agentRevisionId])
   @@map("run_input_snapshots")
-}
-
-model WorkloadAssignment {
-  runId                    String                          @map("run_id")
-  attempt                  Int
-  agentServiceId           String                          @map("agent_service_id")
-  agentRevisionId          String                          @map("agent_revision_id")
-  siloId                   String                          @map("silo_id")
-  subjectId                String                          @map("subject_id")
-  audience                 String
-  serviceAccountName       String                          @map("service_account_name")
-  namespace                String
-  workloadKind             WorkloadKind                    @map("workload_kind")
-  workloadUid              String                          @map("workload_uid")
-  workloadProfile          String                          @map("workload_profile")
-  podUid                   String?                         @map("pod_uid")
-  bindingGeneration        Int                             @default(1) @map("binding_generation")
-  state                    WorkloadAssignmentState         @default(PendingPod)
-  expiresAt                DateTime                        @map("expires_at")
-  createdAt                DateTime                        @default(now()) @map("created_at")
-  registeredAt             DateTime?                       @map("registered_at")
-  revokedAt                DateTime?                       @map("revoked_at")
-  run                      AgentRun                        @relation(fields: [runId, siloId, agentServiceId, agentRevisionId], references: [id, siloId, agentServiceId, agentRevisionId], onDelete: Restrict)
-  bootstraps               WorkloadBootstrap[]
-  proofKeys                RunProofKey[]
-  warmRuntimeReservations  WarmRuntimeReservation[]
-  approvalRequests         ApprovalRequest[]
-  conversationAssetTickets ConversationAssetOutputTicket[]
-
-  @@id([runId, attempt])
-  @@unique([runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], map: "workload_assignment_bootstrap_identity_key")
-  @@unique([runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, serviceAccountName, namespace, workloadKind, workloadUid], map: "workload_assignment_action_identity_key")
-  @@unique([runId, attempt, workloadKind, workloadUid], map: "workload_assignments_run_attempt_workload_key")
-  @@unique([runId, attempt, workloadKind, workloadUid, podUid], map: "workload_assignments_run_attempt_workload_pod_key")
-  @@unique([namespace, workloadKind, workloadUid])
-  @@unique([namespace, podUid])
-  @@index([siloId, subjectId])
-  @@index([state, expiresAt])
-  @@map("workload_assignments")
-}
-
-model WorkloadBootstrap {
-  id                 String                 @id @default(cuid())
-  runId              String                 @map("run_id")
-  attempt            Int
-  generation         Int                    @default(1)
-  agentServiceId     String                 @map("agent_service_id")
-  agentRevisionId    String                 @map("agent_revision_id")
-  siloId             String                 @map("silo_id")
-  subjectId          String                 @map("subject_id")
-  audience           String
-  serviceAccountName String                 @map("service_account_name")
-  namespace          String
-  workloadKind       WorkloadKind           @map("workload_kind")
-  workloadUid        String                 @map("workload_uid")
-  claimDigest        String                 @unique @map("claim_digest")
-  expiresAt          DateTime               @map("expires_at")
-  consumedAt         DateTime?              @map("consumed_at")
-  consumedByPodUid   String?                @map("consumed_by_pod_uid")
-  revokedAt          DateTime?              @map("revoked_at")
-  receiptId          String?                @unique @map("receipt_id")
-  createdAt          DateTime               @default(now()) @map("created_at")
-  assignment         WorkloadAssignment     @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
-  reservation        WarmRuntimeReservation @relation(fields: [runId, attempt, generation], references: [runId, attempt, generation], onDelete: Restrict)
-  proofKey           RunProofKey?
-
-  @@unique([runId, attempt, generation])
-  @@index([expiresAt])
-  @@map("workload_bootstraps")
-}
-
-model RunProofKey {
-  id               String             @id @default(cuid())
-  bootstrapId      String             @unique @map("bootstrap_id")
-  runId            String             @map("run_id")
-  attempt          Int
-  generation       Int                @default(1)
-  workloadKind     WorkloadKind       @map("workload_kind")
-  workloadUid      String             @map("workload_uid")
-  podUid           String             @map("pod_uid")
-  publicKeyJwk     Json               @map("public_key_jwk")
-  keyThumbprint    String             @unique @map("key_thumbprint")
-  expiresAt        DateTime           @map("expires_at")
-  revokedAt        DateTime?          @map("revoked_at")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  run              AgentRun           @relation(fields: [runId], references: [id], onDelete: Restrict, map: "run_proof_keys_run_fkey")
-  assignment       WorkloadAssignment @relation(fields: [runId, attempt, workloadKind, workloadUid], references: [runId, attempt, workloadKind, workloadUid], onDelete: Restrict, map: "run_proof_keys_assignment_fkey")
-  bootstrap        WorkloadBootstrap  @relation(fields: [bootstrapId], references: [id], onDelete: Restrict)
-  approvalRequests ApprovalRequest[]
-
-  @@unique([runId, attempt, generation])
-  @@unique([runId, attempt, workloadKind, workloadUid, podUid])
-  @@unique([id, runId, attempt])
-  @@unique([id, runId, attempt, keyThumbprint], map: "run_proof_key_bound_thumbprint_key")
-  @@unique([id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], map: "run_proof_key_bound_pod_key")
-  @@index([podUid])
-  @@index([expiresAt])
-  @@map("run_proof_keys")
 }
 
 /// One durable, single-consumption authorization for the post-commit LiteLLM key mint.

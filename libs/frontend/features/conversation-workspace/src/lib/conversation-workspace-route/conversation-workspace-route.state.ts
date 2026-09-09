@@ -1,5 +1,3 @@
-import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types";
-import type { ConversationThreadRouteNavigation } from "./conversation-workspace-route.state.types";
 
 /**
  * Build the canonical URL segments for one selected normal conversation.
@@ -21,36 +19,4 @@ import type { ConversationThreadRouteNavigation } from "./conversation-workspace
 export function _ConversationRouteCommands(conversationId: string | null): readonly string[]
 {
 	return conversationId === null ? ["/chats"] : ["/chats", conversationId];
-}
-
-/**
- * Turn the feature's "open this thread" request into a child URL plus the state that returns from it.
- *
- * The workspace page emits an intent and its feature-local route coordinator decides both the URL
- * and what the child will be able to use to come back. The return coordinates travel as
- * browser-history state, which is what makes the back journey exact: `AgentThreadRouteComponent`
- * reads `parentRestore` off the history entry and accepts it only when its parent conversation
- * matches the route it is on, and `AgentThreadPageComponent.returnToParent` additionally checks
- * `parentMessageId` against the conversation it actually loaded before honouring it. State that
- * belongs to a different parent is therefore ignored rather than followed.
- *
- * `parentScrollAnchor` repeats `parentMessageId` because the workspace has no separate scroll
- * coordinate to give: {@link ConversationThreadNavigationIntent} carries only the parent message,
- * while `AgentThreadParentRestoreIntent` requires an anchor, so the originating message doubles as
- * the place to return to.
- *
- * Called by: `ConversationWorkspaceRouteComponent.openThread` in
- * `conversation-workspace-route.component.ts`.
- *
- * @param intent - Parent conversation, child conversation, and the parent message the thread grew from.
- * @returns Segments and history state to pass to `Router.navigate` together. Nothing is validated
- * here; the child route re-checks the parent before trusting it.
- * @see conversation-workspace-route.state.spec.ts — `_ChildThreadRoute` pins this exact shape.
- */
-export function _ConversationThreadRouteNavigation(intent: ConversationThreadNavigationIntent): ConversationThreadRouteNavigation
-{
-	return {
-		commands: ["/chats", intent.parentConversationId, "threads", intent.childConversationId],
-		extras: { state: { parentRestore: { parentConversationId: intent.parentConversationId, parentMessageId: intent.parentMessageId, parentScrollAnchor: intent.parentMessageId } } }
-	};
 }

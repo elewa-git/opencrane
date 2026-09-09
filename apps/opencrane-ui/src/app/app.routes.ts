@@ -6,8 +6,7 @@ import { ___OperatorAccessGuard } from "./operator-access.guard";
  * Top-level route table; feature pages are lazy-loaded route containers.
  *
  * Every entry loads its component or child routes on demand, so no feature is in the initial bundle.
- * Order matters here: Angular tries these in declaration order and takes the first that matches, so
- * the first-class Agent-thread route stays above the conversation workspace mount.
+ * Order matters here: Angular tries these in declaration order and takes the first that matches.
  *
  * Every signed-in route carries `___OperatorAccessGuard`; only `login` and the redirects do not,
  * because `login` is where the guard sends anonymous visitors.
@@ -78,19 +77,6 @@ export const APP_ROUTES: Routes =
 			return import("@opencrane/features/settings").then(function pickInvitationAcceptance(m)
 			{
 				return m.OrganizationInviteAcceptanceComponent;
-			});
-		}
-	},
-	{
-		// Canonical first-class Agent-session child conversation route. The parent
-		// workspace from #351 will write exact focus and scroll restoration state.
-		path: "chats/:parentConversationId/threads/:childConversationId",
-		canActivate: [___OperatorAccessGuard],
-		loadComponent: function loadAgentThreadRoute()
-		{
-			return import("@opencrane/features/agent-threads").then(function pickAgentThreadRoute(m)
-			{
-				return m.AgentThreadRouteComponent;
 			});
 		}
 	},

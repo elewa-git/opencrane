@@ -1,2 +1,2 @@
-export { ConversationEventStreamMessageError } from "./lib/conversation-event-stream.errors";
-export { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand, type SubmitConversationEventStreamMessageCommand } from "./lib/conversation-event-stream.types";
+export { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type ConversationHistoryProjection, type StreamConversationEventsCommand } from "./lib/conversation-event-stream.types";
+export { __ParseConversationHistoryProjection } from "./lib/conversation-event-stream.validator";

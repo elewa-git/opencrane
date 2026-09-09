@@ -16,6 +16,7 @@ function _Authorization()
 	const admission = { outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow" as const, grantIds: ["grant-1"], rule: null, evidence: null };
 	return {
 		decide: vi.fn().mockResolvedValue(admission),
+		decidePrincipal: vi.fn().mockResolvedValue(admission),
 		admit: vi.fn().mockResolvedValue(admission),
 		admitPrincipal: vi.fn().mockResolvedValue(admission),
 		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return admission; }); }),

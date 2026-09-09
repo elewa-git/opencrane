@@ -1,12 +1,13 @@
 {{/*
-This template renders LiteLLM's base boundary for its release-local callers and outbound paths.
-The agent-controller adds claimed warm runtimes separately because it owns their pool selectors.
+This template renders LiteLLM's boundary for release-local callers and outbound paths.
 The chart rejects Redis while no app-owned policy can select its workload.
 Called by apps/_infra/deploy-k8s/templates/app-rollups.yaml.
 */}}
 {{- define "opencrane.litellm.networkPolicy" -}}
 {{- $localLiteLlm := and .Values.litellm.enabled (ne (include "opencrane.litellmShared" .) "true") -}}
-{{- $policyRequired := or .Values.networkPolicy.enabled .Values.agentController.enabled -}}
+{{- $policyRequired := or .Values.networkPolicy.enabled .Values.agentController.enabled .Values.agentSandbox.enabled -}}
+{{- $computerProfiles := list -}}
+{{- range .Values.agentSandbox.profiles -}}{{- $computerProfiles = append $computerProfiles .name -}}{{- end -}}
 {{- if and $localLiteLlm $policyRequired .Values.litellm.redis.enabled -}}
 {{- fail "litellm.redis.enabled=true is unsupported while the app-owned LiteLLM NetworkPolicy is active because no exact Redis workload boundary is configured" -}}
 {{- end -}}
@@ -26,8 +27,7 @@ spec:
       app.kubernetes.io/component: litellm
   policyTypes: ["Ingress", "Egress"]
   ingress:
-    # The release-local server and Cognee are the two long-lived model-routing callers.
-    # The agent-controller's additive policy admits claimed warm runtimes without widening this rule.
+    # The server and Cognee route models; admitted computers use their attempt-scoped model key.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -43,6 +43,18 @@ spec:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: cognee
+        {{- if .Values.agentSandbox.enabled }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.agentSandbox.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agent-sandbox
+            matchExpressions:
+              - key: opencrane.ai/agent-sandbox-profile
+                operator: In
+                values: {{ $computerProfiles | toJson }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}

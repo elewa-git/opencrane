@@ -13,7 +13,6 @@ vi.mock("../../infra/artifacts/artifact-upload.factory", function _MockArtifactU
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
-		_CreateConversationAssetOutputAuthority: function _CreateConversationAssetOutputAuthority() { return { reserve: vi.fn(), publish: vi.fn() }; },
 		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
 	};
 });
@@ -42,19 +41,12 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorEnabled: false,
 		artifactPreprocessorMaximumOutputBytes: 1_024,
 		artifactPreprocessorNamespace: undefined,
-		assignmentTtlMilliseconds: 60_000,
-		channelTargets: null,
-		commandRecoveryMilliseconds: 15_000,
-		commandTtlMilliseconds: 60_000,
-		continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
-		managedRuntimeNamespace: "managed-runtime",
 		mcpCompanionClaimLeaseMilliseconds: 30_000,
 		mcpControllerClaimLeaseMilliseconds: 30_000,
 		mcpExecutorNamespace: "mcp-executors",
 		memoryGatewayTimeoutMilliseconds: 30_000,
 		memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
-		personalRuntimeNamespace: "personal-runtime",
 		serverNamespace: "opencrane-server",
 		skillAuthoringNamespace: "skill-authoring",
 		siloId: "silo-1",
@@ -72,19 +64,15 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
 
-		expect(composition.agentRunWorkflowController).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationWorker).toEqual(expect.any(Function));
 		expect(composition).not.toHaveProperty("skillAuthoringInput");
 		expect(composition).not.toHaveProperty("skillAuthoringCompletion");
 		expect(composition.artifactPreprocessController).toBeNull();
 		expect(composition).not.toHaveProperty("runtimeStream");
-		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));
-		expect(composition.agentThreadParentDeliveries).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();
 		expect(composition.artifactScanner).toBeNull();
-		expect(composition.channelTargetResolver).toBeNull();
-		expect(composition.conversationReplay).toBeNull();
+		expect(composition).not.toHaveProperty("conversationReplay");
 	});
 
 	it("refuses an enabled worker plane that crosses into the trusted server namespace", function _rejectsCrossedWorkerPlane()
@@ -111,7 +99,6 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 			artifactPreprocessorNamespace: "artifact-preprocessor",
 			artifactScannerEnabled: true,
 			artifactScannerNamespace: "artifact-scanner",
-			channelTargets: { channelProxyServiceAccountName: "channel-proxy", invocationContextTtlMilliseconds: 60_000, receiverEndpoint: "http://opencrane-server.opencrane-server.svc.cluster.local:8081/api/internal/conversation-replay", receiverId: "internal-channel-replay", siloId: "silo-1", trustedHost: "acme.example.com" },
 		};
 
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config);
@@ -119,8 +106,6 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessController).toEqual(expect.any(Function));
 		expect(composition.artifactScanner).toEqual(expect.any(Function));
-		expect(composition.channelTargetResolver).toEqual(expect.any(Function));
-		expect(composition.conversationReplay).toEqual(expect.any(Function));
 	});
 
 	it("refuses an enabled scanner plane without a separate namespace", function _rejectsScannerWithoutNamespace()
@@ -137,10 +122,4 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
-	it("refuses runtime planes that collapse into one identity namespace", function _rejectsCollapsedRuntimePlanes()
-	{
-		const config = { ..._RuntimeConfig(), managedRuntimeNamespace: "personal-runtime" };
-
-		expect(function _composeCollapsedRuntimePlanes() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from/);
-	});
 });

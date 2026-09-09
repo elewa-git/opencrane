@@ -1,92 +1,42 @@
 # How OpenCrane works
 
-Every time an agent does something in OpenCrane — answers you, drafts a document, calls a tool —
-that work happens as a **run**: a tracked, disposable unit of execution that OpenCrane admits,
-watches and records from start to finish. This page is a short tour of what that means in
-practice, for both kinds of agent.
+An OpenCrane **conversation** is the place to start work and return to it later. Your assistant's
+saved configuration and the company's permissions determine how it may help.
 
-## Personal and managed runs, side by side
+## The experience we are building
 
-| | Your personal assistant | A managed agent |
-|---|---|---|
-| Who it acts as | You | Its own service identity |
-| What it can see | Only what's been granted to *you* | Only what its published revision was configured with |
-| How it starts | You talking to it | A schedule, a trigger, or another authorised caller |
-| Persona | Built through your [interview](/guide/persona) | None — its published configuration *is* its complete instruction set |
-| Typical use | Drafting, research, day-to-day work for one person | Triaging tickets, nightly reports, org-wide or team-wide jobs |
+1. **Ask for help.** Open a conversation with your assistant and describe the outcome you want.
+2. **Work with permitted context.** The assistant uses the model, knowledge, files and tools
+   available for that task.
+3. **Review consequential actions.** When an action needs your approval, the request explains what
+   would happen before you decide.
+4. **Keep the outcome.** Answers and completed outputs belong with the conversation so you can
+   inspect them and continue the work later.
 
-Both kinds go through the same admission and execution machinery below — that's what makes every
-run auditable the same way, no matter who or what started it.
-
-## What happens when work starts
-
-```text
-you, or a schedule/trigger
-       │
-       ▼
-OpenCrane checks who's asking and what they're allowed to do
-       │
-       ▼
-OpenCrane freezes exactly what this run may use — before anything executes
-       │
-       ▼
-a pre-started Kubernetes Pod is claimed for this run only
-       │
-       ▼
-you see the ordered events, any actions taken, and the final outcome
-```
-
-1. OpenCrane authenticates the caller and resolves the organisation.
-2. It checks membership, grants, model access and budget.
-3. It **freezes** the accepted inputs — which tools, skills, knowledge and model this exact run may
-   use — before the claimed Pod receives any work. Nothing can widen its own access mid-run.
-4. OpenCrane claims one bounded Pod from the warm pool. It streams results back and is deleted after
-   this attempt, so it can never carry data into another run.
-5. Every tool call OpenCrane executes on the agent's behalf is recorded, and any that needs a human
-   decision pauses for [approval](/guide/audit).
-6. The run reaches a final outcome. The Pod that executed it can disappear — the durable record of
-   what ran, what it used and what happened does not.
-
-::: tip Why "disposable execution, durable record" matters
-The container is a detail; it can crash, get rescheduled, or simply finish and vanish. What you
-audit, retry or investigate later is the run record — never a Pod name.
+::: info Current scope
+Durable conversation history, bounded personal model turns and computer inspection are implemented
+in the 0.11 review baseline. Agent-driven tool use, the complete approval journey and durable
+created-output journeys remain unfinished. See [development status](/guide/status) before treating
+the sequence above as an available end-to-end workflow.
 :::
 
-## The words you'll see
+## Returning to work
 
-### Agent (personal or managed)
+The browser displays a saved conversation. Closing a tab does not make the browser responsible for
+remembering it. An assistant's computer can also stop when idle; checkpoint and restore code keeps
+its workspace recoverable. Live recovery testing remains part of qualification.
 
-The thing that does the work. A personal assistant is yours alone; a managed agent is a shared,
-narrowly scoped worker your organisation configures. See
-[the distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
+## Working with other people
 
-### Run
+The conversation model also supports direct and group messages. Ordinary messages between people
+do not ask an assistant to run. You can explicitly [ask the company assistant](/guide/child-runs)
+from one of your group messages, continue in a linked chat, and review a result before sharing it back.
+Delegation between assistants remains planned.
 
-One tracked execution of an agent — a single conversation turn, a scheduled job, a triggered task.
-A run keeps its state, how many attempts it's had, exactly what it was allowed to use, and how it
-ended. Retrying creates another attempt on the same run rather than a disconnected new one.
+A shared agent is intended for a repeatable company task with its own access. Its scheduled and
+triggered execution is not yet part of the current working product. Read
+[shared agents](/guide/first-agent) for that distinction.
 
-### Skill
-
-A reusable ability you give an agent — drafting a follow-up, reviewing a document, summarising a
-ticket — published as a versioned, reviewed artifact rather than a loose snippet.
-→ [Manage skills](/guide/skills)
-
-### Tool
-
-An action an agent can ask OpenCrane to take in another system. The agent proposes it; OpenCrane
-authorises, executes and records it. → [Manage tools](/guide/tools)
-
-### Organisational knowledge
-
-Facts and documents an agent can recall — personal notes for your assistant, shared knowledge for
-a managed agent — always filtered through who's allowed to see what.
-→ [Connect knowledge](/guide/knowledge)
-
-### Organisation (silo)
-
-Your company's isolated slice of OpenCrane. Every agent, run, grant and piece of knowledge lives
-inside your organisation's boundary and never crosses into another customer's.
-→ [Organisation boundary](/operators/organisation-boundary)
-
-Ready? → [Install OpenCrane](/guide/getting-started)
+> See also: [Set up your personal assistant](/guide/persona) ·
+> [Tools](/guide/tools) · [Knowledge and memory](/guide/knowledge) ·
+> [Architecture](/advanced/architecture)

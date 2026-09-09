@@ -25,7 +25,7 @@ describe("agent model state transitions", function _stateTransitionSuite()
 		expect(__IsAgentRevisionTransitionAllowed("retired", "published")).toBe(false);
 	});
 
-	it("requires active runs to pass through cancelling before cancellation becomes terminal", function _agentRunTransitions()
+	it("permits only the current personal-run lifecycle", function _agentRunTransitions()
 	{
 		expect(__IsAgentRunTransitionAllowed("accepted", "queued")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("queued", "assigned")).toBe(true);
@@ -33,26 +33,12 @@ describe("agent model state transitions", function _stateTransitionSuite()
 		expect(__IsAgentRunTransitionAllowed("running", "waiting_for_input")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("waiting_for_input", "running")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("running", "recovery_required")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("recovery_required", "cancelling")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("recovery_required", "running")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("running", "completed")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("accepted", "cancelling")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("queued", "cancelling")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("assigned", "cancelling")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("running", "cancelling")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("waiting_for_input", "cancelling")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("cancelling", "cancelled")).toBe(true);
-		expect(__IsAgentRunTransitionAllowed("accepted", "cancelled")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("queued", "cancelled")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("assigned", "cancelled")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("running", "cancelled")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("waiting_for_input", "cancelled")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("cancelling", "failed")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("cancelling", "running")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("accepted", "running")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("waiting_for_input", "completed")).toBe(false);
+		expect(__IsAgentRunTransitionAllowed("accepted", "running")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("waiting_for_input", "completed")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("completed", "running")).toBe(false);
 		expect(__IsAgentRunTransitionAllowed("failed", "queued")).toBe(false);
-		expect(__IsAgentRunTransitionAllowed("cancelled", "running")).toBe(false);
 	});
 
 });

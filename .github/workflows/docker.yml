@@ -30,6 +30,7 @@ on:
         default: none
         options:
           - none
+          - affected
           - bootstrap
           - artifact
           - all
@@ -105,9 +106,23 @@ jobs:
         run: npm ci
 
       - name: Select the last successful base
+        id: nx-shas
         uses: nrwl/nx-set-shas@v5
         with:
           main-branch-name: ${{ github.base_ref || github.ref_name }}
+          # Manual validation or partial publication must not advance the automatic base.
+          last-successful-event: push
+          set-environment-variables-for-job: false
+          # The next step replaces this empty-tree sentinel with an integration ancestor or fails.
+          # Without an explicit fallback, the action silently selects HEAD~1.
+          fallback-sha: 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+
+      - name: Verify the cumulative comparison base
+        env:
+          NX_CANDIDATE_BASE: ${{ steps.nx-shas.outputs.base }}
+          NX_CANDIDATE_HEAD: ${{ steps.nx-shas.outputs.head }}
+          NO_PREVIOUS_BUILD: ${{ steps.nx-shas.outputs.noPreviousBuild }}
+        run: node scripts/affected-deployables-base.mjs
 
       # The full main...develop range still drives builds, smoke selection, and publication. Diff-
       # scoped policy guards may trust the source only after this exact develop SHA passed its push
@@ -188,6 +203,9 @@ jobs:
       - name: Install dependencies
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci
+
+      - name: Enforce monorepo dependency boundaries
+        run: npm run lint:boundaries
 
       - name: Install Helm for topology render validation
         uses: azure/setup-helm@v5
@@ -289,19 +307,8 @@ jobs:
       - name: Prove the workflow boundary classifier
         run: npm run test:workflow-boundary
 
-      - name: Restore the Nx computation cache
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
-
       - name: Build, test, and lint affected projects
         run: npx nx affected -t build test lint
-
-      - name: Enforce monorepo dependency boundaries
-        run: npm run lint:boundaries
 
   # The PostgreSQL-bound proofs run beside the main test job instead of serially inside it:
   # database generation, the target baseline, the SQL authority suites, and the migration
@@ -369,6 +376,71 @@ jobs:
       - name: Run every PostgreSQL authority suite
         run: npx nx run-many -t test:sql --parallel=1
 
+  # The KurrentDB proofs run beside the database job for the same reason: they need a live server
+  # that nothing else in this workflow starts, and they must not lengthen the test job's critical
+  # path. ADR 0016 requires the admission test to prove the real client and topology support every
+  # HistoryStore operation; the unit tests mock the client, so this job is that proof.
+  history_store:
+    name: KurrentDB history-store proofs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: prepare
+    services:
+      kurrentdb:
+        # The chart pins appVersion 26.1.1 (apps/_infra/kurrentdb/helm/Chart.yaml). The digest is the
+        # amd64 OCI image manifest behind that tag (the registry's default tag response is a legacy
+        # schema-1 manifest whose digest Docker cannot pull), so a moved tag cannot change this proof.
+        image: docker.kurrent.io/kurrent-latest/kurrentdb:26.1.1@sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8
+        env:
+          # Insecure mode is acceptable ONLY for this throwaway CI container. It exists to prove the
+          # client and the stream and consumer-group operations. TLS, credentials, and the stream ACL
+          # are covered by the Helm contract test and the bootstrap Job under apps/_infra/kurrentdb,
+          # and the chart itself hard-codes KURRENTDB_INSECURE=false.
+          KURRENTDB_CLUSTER_SIZE: "1"
+          KURRENTDB_INSECURE: "true"
+          KURRENTDB_MEM_DB: "true"
+          KURRENTDB_RUN_PROJECTIONS: None
+          KURRENTDB_NODE_PORT: "2113"
+        ports:
+          - 2113:2113
+    env:
+      KURRENTDB_INTEGRATION_URL: kurrentdb://localhost:2113?tls=false
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      # The wait runs on the runner rather than as a container health command so the job does not
+      # depend on which HTTP client the KurrentDB image ships.
+      - name: Wait for KurrentDB to report live
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null http://localhost:2113/health/live; then
+              echo "KurrentDB is live after $attempt attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "KurrentDB did not become live within 120 seconds" >&2
+          exit 1
+
+      - name: Prove the KurrentDB client against the live server
+        run: npx nx run backend-server-infra-history-store:test:integration
+
   # The API contract check builds the full server, so when the contract changed it added
   # minutes to the test job. It only needs the prepare outputs and runs beside it instead.
   api_contract:
@@ -395,14 +467,6 @@ jobs:
       - name: Install dependencies
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci
-
-      - name: Restore the Nx computation cache
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Verify API reference and generated client
         run: |
@@ -454,15 +518,6 @@ jobs:
           else
             echo "required=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Restore the Nx computation cache
-        if: steps.storybook-regression.outputs.required == 'true'
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       # The browser binaries change only with the lockfile, so they restore from cache instead
       # of downloading each run. On a cache hit the apt-driven install-deps is skipped entirely:
@@ -618,7 +673,7 @@ jobs:
     name: Build and publish affected images
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke]
+    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke]
     # Manual publication bypasses failed validation only when the operator repeats this workflow's SHA.
     # The exact match prevents approval for one commit from publishing a different commit.
     if: >-
@@ -631,6 +686,7 @@ jobs:
           inputs.validation_override_sha == github.sha) ||
          (needs.test.result == 'success' &&
           needs.database.result == 'success' &&
+          needs.history_store.result == 'success' &&
           (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
           needs.storybook_visual.result == 'success' &&
           (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
@@ -706,7 +762,7 @@ jobs:
     name: Publish develop smoke image (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke, build-and-push]
+    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke, build-and-push]
     if: >-
       ${{
         always() &&
@@ -714,6 +770,7 @@ jobs:
         github.ref == 'refs/heads/develop' &&
         needs.test.result == 'success' &&
         needs.database.result == 'success' &&
+        needs.history_store.result == 'success' &&
         (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
         needs.storybook_visual.result == 'success' &&
         needs.develop_smoke.result == 'success' &&

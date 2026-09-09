@@ -24,12 +24,3 @@ origin, refuses redirects, and re-reads the projected token for every exchange. 
 TokenReview that audience and bind the reviewed server ServiceAccount to the configured silo before
 trusting forwarded OIDC caller fields. No static Fleet billing credential Secret is mounted.
 
-## Channel target and replay wiring
-
-When `channelProxy.enabled=true`, the Deployment renders the complete resolver contract: the exact
-channel-proxy ServiceAccount, the public control-plane host, the silo id, a stable replay receiver,
-and the release-local internal replay endpoint. OpenCrane mounts the same signed-session middleware
-on both listeners, TokenReviews the proxy's projected `opencrane` token, and accepts browser identity
-only from that verified session. At startup it reconciles one `events.read` route row per existing
-AgentService. Those rows share `channelProxy.replayReceiverId` but retain distinct route ids, so
-revocation and consumption remain bound to exact per-service evidence.

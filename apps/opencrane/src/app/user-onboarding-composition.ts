@@ -11,23 +11,29 @@ import type { UserOnboardingRouteComposition } from "./routes.types";
 /** The Prisma client type `_CreateUserOnboardingRepository` expects, derived so this file need not import Prisma. */
 type UserOnboardingPrismaClient = Parameters<typeof _CreateUserOnboardingRepository>[0];
 
-/** Compose the complete owner-only onboarding router and its persona notifications. */
-export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaClient, logger: Logger, resolveOwner: UserOnboardingOwnerResolver): UserOnboardingRouteComposition
+/**
+ * Compose the owner-only onboarding router with the deployment's conversation-computer profile.
+ * @param workloadProfile Profile name from the same release configuration used for conversations.
+ * @throws When the configured profile is empty or contains surrounding whitespace.
+ */
+export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaClient, logger: Logger, resolveOwner: UserOnboardingOwnerResolver, workloadProfile: string): UserOnboardingRouteComposition
 {
+	if (workloadProfile.trim().length === 0 || workloadProfile.trim() !== workloadProfile)
+		throw new Error("Onboarding requires the configured conversation-computer profile");
 	const repository = _CreateUserOnboardingRepository(prisma);
 	const personaEvidence = _CreateUserOnboardingPersonaEvidence(_CreatePersonaWorkflowEvidenceRepository(prisma));
-	const completion = new PrismaUserOnboardingCompletionUnitOfWork(prisma, function _PersonalAgent(transaction) { return _CreatePersonalAgentBootstrap(transaction, logger); });
+	const completion = new PrismaUserOnboardingCompletionUnitOfWork(prisma, function _PersonalAgent(transaction) { return _CreatePersonalAgentBootstrap(transaction, logger, workloadProfile); });
 	const authority = new __UserOnboardingAuthority(repository, personaEvidence, 1, completion);
 	const chatAuthority = new __UserOnboardingChatAuthority(authority, repository, personaEvidence, completion);
 	return { router: __CreateUserOnboardingRouter({ authority, chatAuthority, resolveOwner, logger }), personaWorkflow: _CreatePersonaOnboardingWorkflow(authority) };
 }
 
 /** Adapt agent-services' richer result to onboarding's narrow cross-domain readiness port. */
-function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, logger: Logger): UserOnboardingPersonalAgentBootstrapPort
+function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, logger: Logger, workloadProfile: string): UserOnboardingPersonalAgentBootstrapPort
 {
 	const defaultModelResolver = _CreateInitialPersonalAgentDefaultModelResolver(transaction);
 	const productEffects = new PrismaPersonalAgentProductEffectsAuthority(transaction);
-	const repository = new PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver, productEffects);
+	const repository = new PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver, workloadProfile, productEffects);
 	return {
 		async ensureReady(command)
 		{

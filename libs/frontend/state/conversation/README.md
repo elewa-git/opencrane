@@ -8,10 +8,8 @@ participants, assets, elicitation, or access decisions.
 
 | Package | Responsibility |
 |---------|----------------|
-| [`stream`](./stream/README.md) | Transport-neutral live conversation stream port and connection states. |
-| [`adapter`](./adapter/README.md) | Signed-in HTTP implementation of the conversation stream port. |
-| [`ag-ui`](./ag-ui/README.md) | Safe projected-event state for A2UI surfaces. |
-| [`agent-threads`](./agent-threads/README.md) | Child Agent-session route state, follow-up commands, and access purge. |
+| [`stream`](./stream/README.md) | Transport-neutral history port, response validation, and connection states. |
+| [`adapter`](./adapter/README.md) | Signed-in initial history, server event delivery, and periodic computer refresh. |
 | [`assets`](./assets/README.md) | Upload, retry, and safe attachment lifecycle state. |
 | [`elicitation`](./elicitation/README.md) | Recoverable question and approval state plus Activity mapping. |
 | [`render`](./render/README.md) | Vendored conversation render view-models. |

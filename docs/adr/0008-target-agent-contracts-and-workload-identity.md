@@ -55,7 +55,6 @@ exchange returns scoped execution material.
 | Workload | Identity and authority |
 |----------|------------------------|
 | [`apps/opencrane`](../../apps/opencrane) | Control-plane API; owns product composition and database access |
-| [`apps/channel-proxy`](../../apps/channel-proxy) | Channel ingress boundary; no product database authority |
 | [`apps/agent-controller`](../../apps/agent-controller) | Runtime-namespace Job mutation only |
 | [`apps/agent-runtime`](../../apps/agent-runtime) | Projected personal or managed runtime identity, selected by the fixed warm-pool profile; no RBAC or database access |
 | [`apps/artifact-service`](../../apps/artifact-service) | Private immutable-byte service behind signed leases |

@@ -15,7 +15,6 @@ describe("public health production composition", function _Suite()
 		};
 		const config = {
 			runtime: {
-				channelTargets: {},
 				memoryGatewayUrl: "http://memory-gateway.svc:8080",
 			},
 		} as unknown as OpenCraneProcessConfig;
@@ -25,15 +24,13 @@ describe("public health production composition", function _Suite()
 			LITELLM_ENDPOINT: "http://litellm.svc:4000",
 			LITELLM_MASTER_KEY: "master-key",
 			ARTIFACT_SERVICE_URL: "http://artifact-service.svc:8080",
-			CHANNEL_PROXY_URL: "http://channel-proxy.svc:8080",
 		});
 
 		const report = await reader.read();
-		expect(report.services[PublicHealthServiceNames.Channels]).toBe(PublicHealthServiceStatuses.Available);
+		expect(report.services[PublicHealthServiceNames.Files]).toBe(PublicHealthServiceStatuses.Available);
 		expect(findFirst).toHaveBeenCalledOnce();
 		expect(fetch.mock.calls.map(function _Url(call) { return String(call[0]); }).sort()).toEqual([
 			"http://artifact-service.svc:8080/readyz",
-			"http://channel-proxy.svc:8080/readyz",
 			"http://litellm.svc:4000/v1/models",
 			"http://memory-gateway.svc:8080/readyz",
 		]);

@@ -42,6 +42,9 @@ cd "$REPO_ROOT"
 #    scopes to what the current change actually touched.
 FILES=()
 IF_DIFF_BASE=""
+if [[ "${AGENT_STYLE_CHUNK:-}" == "1" ]]; then
+	IF_DIFF_BASE="${AGENT_STYLE_IF_DIFF_BASE:-}"
+fi
 if [[ $# -eq 0 ]]; then
 	IF_DIFF_BASE="HEAD"
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z HEAD -- '*.ts' 2>/dev/null || true)
@@ -55,11 +58,12 @@ else
 fi
 
 # Large file lists fan out across CPU cores: each rule is a handful of grep/awk
-# processes per file, so a big diff serially cost minutes in CI. Chunks re-invoke
-# this script with explicit file arguments; AGENT_STYLE_CHUNK stops recursion.
+# processes per file, so a big diff serially cost minutes in CI. Chunks retain the
+# parent's comparison base for added-line rules; explicit file arguments otherwise
+# turn those checks into whole-file checks. AGENT_STYLE_CHUNK stops recursion.
 if [[ -z "${AGENT_STYLE_CHUNK:-}" && ${#FILES[@]} -gt 40 ]]; then
 	if printf '%s\0' "${FILES[@]}" \
-		| AGENT_STYLE_CHUNK=1 xargs -0 -n 40 -P "$(getconf _NPROCESSORS_ONLN)" "$0"; then
+		| AGENT_STYLE_CHUNK=1 AGENT_STYLE_IF_DIFF_BASE="$IF_DIFF_BASE" xargs -0 -n 40 -P "$(getconf _NPROCESSORS_ONLN)" "$0"; then
 		exit 0
 	fi
 	exit 1

@@ -1,41 +1,14 @@
 import * as k8s from "@kubernetes/client-node";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity } from "./workload-identity.types";
+import type { FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "./workload-identity.types";
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
 function _IsNamespace(value: string): boolean
 {
 	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
-}
-
-/**
- * Check the three namespaces the server needs to keep identities apart, at startup.
- *
- * All three must be valid DNS labels, both runtime namespaces must be present, and all
- * three must differ from each other. Sharing a namespace would put the server and a
- * runtime — or a personal and a managed runtime — in the same identity space, where one
- * could present a token accepted for the other, so a missing or duplicated value stops the
- * process instead of defaulting to something.
- *
- * Called by: apps/opencrane/src/app/runtime-composition.ts, before any reviewer
- * is built.
- *
- * @param config - Namespaces as read from deployment configuration.
- * @returns The same three names, now all present, for use where they are required.
- * @throws When any name is missing, is not a valid DNS label, or repeats another — startup
- *         must fail rather than run with runtime identities that overlap.
- */
-export function _ValidateRuntimeIdentityNamespaces(config: RuntimeIdentityNamespaceInput): RuntimeIdentityNamespaces
-{
-	const { serverNamespace, personalRuntimeNamespace, managedRuntimeNamespace } = config;
-	if (!_IsNamespace(serverNamespace) || !personalRuntimeNamespace || !_IsNamespace(personalRuntimeNamespace) || !managedRuntimeNamespace || !_IsNamespace(managedRuntimeNamespace) || personalRuntimeNamespace === serverNamespace || managedRuntimeNamespace === serverNamespace || personalRuntimeNamespace === managedRuntimeNamespace)
-	{
-		throw new Error("personal and managed runtime namespaces must be valid, distinct, and different from POD_NAMESPACE");
-	}
-	return { serverNamespace, personalRuntimeNamespace, managedRuntimeNamespace };
 }
 
 /**
@@ -53,7 +26,8 @@ export function _ValidateRuntimeIdentityNamespaces(config: RuntimeIdentityNamesp
  */
 export function _ValidateIsolatedWorkloadNamespace(namespace: string | undefined, serverNamespace: string): string
 {
-	if (!namespace || !_IsNamespace(namespace) || namespace === serverNamespace) throw new Error("restricted workload namespace must be valid and different from POD_NAMESPACE");
+	if (!namespace || !_IsNamespace(namespace) || namespace === serverNamespace)
+		throw new Error("restricted workload namespace must be valid and different from POD_NAMESPACE");
 	return namespace;
 }
 
@@ -101,7 +75,8 @@ function _CreateFixedServiceAccountTokenReviewer(authApi: ProjectedTokenReviewAp
 		{
 			const status = await _ReviewProjectedToken(authApi, token, [audience]);
 			const username = status?.user?.username ?? "";
-			if (status === null || username !== `system:serviceaccount:${namespace}:${serviceAccountName}`) return null;
+			if (status === null || username !== `system:serviceaccount:${namespace}:${serviceAccountName}`)
+				return null;
 			return { username, namespace, serviceAccountName, audiences: status.audiences ?? [] };
 		},
 	};
@@ -137,6 +112,21 @@ export function _CreateMcpExecutorTokenReviewer(authApi: ProjectedTokenReviewApi
 	};
 }
 
+/** Build the Pod-bound reviewer for one release-fixed conversation-computer ServiceAccount. */
+export function _CreateConversationComputerTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string, serviceAccountName: string): RuntimeTokenReviewer
+{
+	if (!_IsNamespace(namespace) || !_IsNamespace(serviceAccountName))
+		throw new Error("conversation-computer workload identity must use valid Kubernetes names");
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE]);
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _IsConversationComputerServiceAccount(value): boolean { return value === serviceAccountName; });
+		},
+	};
+}
+
 /** Build the fixed TokenReview adapter for the dedicated artifact-preprocessor identity. */
 export function _CreateArtifactPreprocessorTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): FixedServiceAccountTokenReviewer
 {
@@ -162,13 +152,6 @@ export function _CreateSkillAuthoringValidationTokenReviewer(authApi: ProjectedT
 	};
 }
 
-/** Build the fixed TokenReview adapter for one deployment-owned channel-proxy identity. */
-export function _CreateChannelProxyTokenReviewer(authApi: ProjectedTokenReviewApi, config: ChannelProxyTokenReviewerConfig): FixedServiceAccountTokenReviewer
-{
-	if (!config.audience.trim() || !config.namespace.trim() || !config.serviceAccountName.trim()) throw new Error("channel-proxy workload identity must be configured");
-	return _CreateFixedServiceAccountTokenReviewer(authApi, config.audience, config.namespace, config.serviceAccountName);
-}
-
 /** Build the fixed TokenReview adapter for the sole OpenCrane server admitted by memory-gateway. */
 export function _CreateMemoryGatewayServerTokenReviewer(authApi: ProjectedTokenReviewApi, config: MemoryGatewayServerIdentityConfig): FixedServiceAccountTokenReviewer
 {
@@ -179,22 +162,7 @@ export function _CreateMemoryGatewayServerTokenReviewer(authApi: ProjectedTokenR
 function _ParseRuntimeSubject(subject: string, expectedNamespace: string, podUid: string | null, isServiceAccountName: (value: string) => boolean): RuntimeWorkloadIdentity | null
 {
 	const parsed = _ParseServiceAccountSubject(subject);
-	if (!parsed || parsed.namespace !== expectedNamespace || !isServiceAccountName(parsed.serviceAccountName) || !podUid) return null;
+	if (!parsed || parsed.namespace !== expectedNamespace || !isServiceAccountName(parsed.serviceAccountName) || !podUid)
+		return null;
 	return { subject, ...parsed, podUid };
-}
-
-/** Build the Pod-bound reviewer used only by warm binding and warm command-stream routes. */
-export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, config: RuntimeTokenReviewerConfig): RuntimeTokenReviewer
-{
-	return {
-		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
-		{
-			const status = await _ReviewProjectedToken(authApi, token, [WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
-			const subject = _ParseServiceAccountSubject(status?.user?.username ?? "");
-			const podUid = _ReadReviewedPodUid(status?.user?.extra);
-			if (!subject || !podUid || subject.serviceAccountName !== WARM_RUNTIME_SERVICE_ACCOUNT_NAME || (subject.namespace !== config.personalRuntimeNamespace && subject.namespace !== config.managedRuntimeNamespace))
-				return null;
-			return { subject: status?.user?.username ?? "", ...subject, podUid };
-		},
-	};
 }

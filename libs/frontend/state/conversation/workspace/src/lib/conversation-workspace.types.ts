@@ -1,4 +1,6 @@
-import { MessageContentBlockKinds, type ConversationLifecycles, type ConversationModes, type MessageRoles, type MessageSources, type MessageStates } from "@opencrane/models/conversations";
+import type { ConversationLifecycles, ConversationModes, GroupChildOrigin, MessageRoles } from "@opencrane/models/conversations";
+
+import type { ConversationCompanyAssistant } from "./conversation-group-child.types";
 
 /** Route-level states rendered by the conversation workspace. */
 export enum ConversationWorkspaceRouteStates
@@ -106,31 +108,6 @@ export interface ConversationOnboardingHistoryProjection
 	readonly history: ConversationOnboardingHistory | null;
 }
 
-/** Run lifecycle values returned by the signed-in user's run-status API. */
-export enum ConversationRunStates
-{
-	/** The run was accepted but has not been queued yet. */
-	Accepted = "accepted",
-	/** The run is waiting for a worker. */
-	Queued = "queued",
-	/** A worker claim exists but execution has not started. */
-	Assigned = "assigned",
-	/** The run is executing. */
-	Running = "running",
-	/** The run is paused for participant input. */
-	WaitingForInput = "waiting_for_input",
-	/** An external action has an unknown outcome and the run must not be retried. */
-	RecoveryRequired = "recovery_required",
-	/** Cancellation is accepted while cleanup is still active. */
-	Cancelling = "cancelling",
-	/** The run completed successfully. */
-	Completed = "completed",
-	/** The run ended unsuccessfully and may be eligible for an explicit retry. */
-	Failed = "failed",
-	/** The run is cancelled and no more work is accepted. */
-	Cancelled = "cancelled"
-}
-
 /** One privacy-safe creation choice for a human participant. */
 export interface ConversationDirectoryParticipant
 {
@@ -138,7 +115,7 @@ export interface ConversationDirectoryParticipant
 	readonly participantRef: string;
 	/** Whether this coordinate represents the signed-in participant. */
 	readonly isSelf: boolean;
-	/** Generic label that never infers a name from the opaque coordinate. */
+	/** Uses the server-selected member display name, or You for the signed-in participant. */
 	readonly label: string;
 }
 
@@ -154,6 +131,8 @@ export interface ConversationPersonalAgent
 /** Privacy-safe choices accepted by the new-conversation form. */
 export interface ConversationCreationDirectory
 {
+	/** Lists company assistants the caller may invoke from a group message. */
+	readonly companyAssistants: readonly ConversationCompanyAssistant[];
 	/** Human creation choices in stable server order. */
 	readonly participants: readonly ConversationDirectoryParticipant[];
 	/** Whether an Agent session can be created. */
@@ -183,83 +162,39 @@ export interface ConversationSummary
 	readonly updatedAt: string;
 }
 
-/** One canonical conversation message from the bounded snapshot. */
-export interface ConversationMessage
-{
-	/** Stable message coordinate. */
-	readonly id: string;
-	/** Decimal timeline position; sorting does not use timestamps. */
-	readonly position: string;
-	/** Canonical author role. */
-	readonly role: MessageRoles;
-	/** Canonical message lifecycle. */
-	readonly state: MessageStates;
-	/** Canonical message source. */
-	readonly source: MessageSources;
-	/** Plain display blocks in server order. */
-	readonly blocks: readonly { readonly id: string; readonly kind: string; readonly value: string }[];
-	/** Run coordinate when an Agent produced or answered the message. */
-	readonly runId: string | null;
-	/** Opaque participant coordinate for human-authored messages. */
-	readonly participantRef: string | null;
-	/** Server timestamp used only for a display label. */
-	readonly createdAt: string;
-	/** Server completion time for `Completed`, `Failed`, or `Cancelled`; null for `Pending` or `Streaming`. */
-	readonly completedAt: string | null;
-	/** Child Agent-session origin created by an @agent message. */
-	readonly agentThread: { readonly childConversationId: string; readonly parentMessageId: string } | null;
-}
-
 /** Authorized bounded snapshot for one selected conversation. */
 export interface ConversationWorkspaceDetail extends ConversationSummary
 {
+	/** Preserves the origin of a company-assistant child, or null for an ordinary conversation. */
+	readonly parent: GroupChildOrigin | null;
 	/** First timeline position this participant may see. */
 	readonly visibleFromPosition: string;
 	/** Final visible position after removal, or null while access remains active. */
 	readonly accessEndedPosition: string | null;
-	/** Most recent canonical messages in timeline order. */
-	readonly messages: readonly ConversationMessage[];
 }
 
-/** Signed-in user's status for one run attached to the selected conversation. */
-export interface ConversationRun
-{
-	/** Opaque run coordinate. */
-	readonly runId: string;
-	/** Current fenced attempt. */
-	readonly attempt: number;
-	/** Canonical lifecycle. */
-	readonly state: ConversationRunStates;
-	/** Owning conversation coordinate, when attached to a conversation. */
-	readonly conversationId: string | null;
-}
-
-/** Immutable command for a new conversation. */
+/**
+ * Describes the selected participants or personal assistant for a new conversation.
+ * All creation retries retain their UUID until the server returns the conversation. A new UUID
+ * starts a separate conversation with the selected assistant or members.
+ * Called by: ConversationWorkspaceStore and OpenCraneConversationWorkspaceGateway.
+ */
 export type CreateConversationCommand =
-	| { readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string }
-	| { readonly mode: ConversationModes.Direct; readonly participantRefs: readonly string[] }
-	| { readonly mode: ConversationModes.Group; readonly participantRefs: readonly string[] };
-
-/** One participant-admitted block frozen inside a retry-stable message command. */
-export interface SubmitConversationMessageBlock
-{
-	/** Stable block coordinate reused during an exact retry. */
-	readonly id: string;
-	/** Participant input supports only plain text and durable asset references. */
-	readonly kind: MessageContentBlockKinds.Text | MessageContentBlockKinds.Artifact;
-	/** Plain text or an authorized ready asset coordinate. */
-	readonly value: string;
-}
+	| { readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string; readonly idempotencyKey: string }
+	| { readonly mode: ConversationModes.Direct; readonly participantRefs: readonly string[]; readonly idempotencyKey: string }
+	| { readonly mode: ConversationModes.Group; readonly participantRefs: readonly string[]; readonly idempotencyKey: string };
 
 /** Retry-stable participant message command retained until canonical reconciliation succeeds. */
 export interface SubmitConversationMessageCommand
 {
-	/** Selected conversation that owns every referenced asset. */
+	/** Selected conversation that owns the new immutable history entry. */
 	readonly conversationId: string;
 	/** Client command coordinate reused only for an exact retry. */
 	readonly idempotencyKey: string;
-	/** Stable text and asset blocks reused byte-for-byte for an exact retry. */
-	readonly blocks: readonly SubmitConversationMessageBlock[];
+	/** Plain participant text stored through the server's private payload boundary. */
+	readonly text: string;
+	/** Whether this message starts, interrupts, or does not activate computer work. */
+	readonly activation: "none" | "start" | "interrupt";
 }
 
 /** App-owned route change requested after an authoritative workspace mutation. */
@@ -269,26 +204,28 @@ export interface ConversationWorkspaceNavigationIntent
 	readonly conversationId: string | null;
 }
 
-/** Exact participant-visible attempt selected for retry. */
-export interface RetryConversationRunCommand
+/** Bounded command result returned by the active conversation computer. */
+export interface ConversationComputerCommandResult
 {
-	/** Conversation that owns the run. */
-	readonly conversationId: string;
-	/** Run selected from the current projection. */
-	readonly runId: string;
-	/** Attempt last observed by the participant. */
-	readonly expectedAttempt: number;
+	/** Process exit code, or null when a review limit stopped the process. */
+	readonly exitCode: number | null;
+	/** Stable sandbox process outcome. */
+	readonly outcome: "completed" | "timed_out" | "output_limited";
+	/** Combined bounded stdout and stderr. */
+	readonly output: string;
+	/** Whether the review surface clipped output at its release ceiling. */
+	readonly truncated: boolean;
 }
 
-/** Retry-stable steering command for one participant-visible run. */
-export interface SubmitConversationSteeringCommand
+/** Current private Chromium target shown without exposing its debugger endpoint. */
+export interface ConversationComputerBrowserTarget
 {
-	/** Run selected from the current projection. */
-	readonly runId: string;
-	/** Exact bounded instruction retained after an ambiguous response. */
-	readonly text: string;
-	/** Client command coordinate reused only for this exact instruction. */
-	readonly idempotencyKey: string;
+	/** Chromium target identifier used only for display selection. */
+	readonly id: string;
+	/** Browser-supplied page title. */
+	readonly title: string;
+	/** Localhost URL opened inside the computer. */
+	readonly url: string;
 }
 
 /** Participant-scoped conversation reads and commands. */
@@ -304,18 +241,39 @@ export interface ConversationWorkspaceGateway
 	open(conversationId: string): Promise<ConversationWorkspaceDetail>;
 	/** Create one conversation whose mode can never change. */
 	create(command: CreateConversationCommand): Promise<ConversationWorkspaceDetail>;
-	/** Submit one exact text-and-asset message through the selected conversation's mode strategy. */
+	/** Submit one exact message through the Kurrent-backed history authority. */
 	send(command: SubmitConversationMessageCommand): Promise<void>;
 	/** Change only this participant's archive visibility. */
 	archive(conversationId: string, archived: boolean): Promise<ConversationWorkspaceDetail>;
 	/** Permanently close a conversation after server authority checks. */
 	close(conversationId: string): Promise<ConversationWorkspaceDetail>;
-	/** Read one signed-in user's run projection. */
-	run(runId: string): Promise<ConversationRun>;
-	/** Queue one retry-stable instruction at the current run's safe boundary. */
-	steer(command: SubmitConversationSteeringCommand): Promise<void>;
-	/** Request cancellation of the exact observed attempt. */
-	cancel(runId: string, expectedAttempt: number): Promise<ConversationRun>;
-	/** Start a new attempt for one failed participant-visible conversation run. */
-	retry(command: RetryConversationRunCommand): Promise<ConversationRun>;
+}
+
+/**
+ * Defines the browser's authenticated API boundary for reviewing an active conversation computer.
+ *
+ * Callers identify a conversation and public operation inputs; they never receive or submit sandbox
+ * ids, Service addresses, or lease credentials. Implementations must use the generated API client so
+ * the server can apply `Read` to file, diff, and target discovery and `Use` to commands, browser
+ * changes, screenshots, and localhost responses. Preview responses remain text for inert rendering.
+ *
+ * Called by: `ConversationComputerReviewStore`. Implemented by
+ * `OpenCraneConversationWorkspaceGateway`.
+ */
+export interface ConversationComputerReviewGateway
+{
+	/** Read one workspace file from the active computer. */
+	readComputerFile(conversationId: string, path: string): Promise<string>;
+	/** Read a git diff for one workspace path. */
+	readComputerDiff(conversationId: string, path: string): Promise<ConversationComputerCommandResult>;
+	/** Run one release-allowlisted argv command. */
+	runComputerCommand(conversationId: string, argv: readonly string[], cwd: string): Promise<ConversationComputerCommandResult>;
+	/** List private Chromium targets without releasing debugger coordinates. */
+	listComputerBrowserTargets(conversationId: string): Promise<readonly ConversationComputerBrowserTarget[]>;
+	/** Open one allowlisted localhost page in the private browser. */
+	openComputerBrowserPage(conversationId: string, port: number, path: string): Promise<void>;
+	/** Capture one PNG from an allowlisted localhost page. */
+	captureComputerScreenshot(conversationId: string, port: number, path: string, width: number, height: number): Promise<Blob>;
+	/** Read one allowlisted localhost preview response. */
+	readComputerPreview(conversationId: string, port: number, path: string): Promise<string>;
 }

@@ -19,8 +19,7 @@ import { ConversationComposerStates } from "../conversation.types";
  * the page footer instead, which is exactly why the composer cannot see the attachments and needs
  * {@link allowEmptySubmission} to be told they exist.
  *
- * Called by: {@link ConversationWorkspacePageComponent} template (workspace message box) and
- * {@link AgentThreadPageComponent} template (Agent-thread follow-up box).
+ * Called by: {@link ConversationWorkspacePageComponent} template.
  * @see ConversationComposerStates for the three states a parent may put it in.
  */
 @Component({ selector: "wo-conversation-composer", standalone: true, imports: [ButtonModule, TextareaModule], templateUrl: "./conversation-composer.component.html", styleUrl: "./conversation-composer.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
@@ -84,7 +83,8 @@ export class ConversationComposerComponent
 	protected changeDraft(event: Event): void
 	{
 		const target = event.target;
-		if (target instanceof HTMLTextAreaElement) this.draftChange.emit(target.value);
+		if (target instanceof HTMLTextAreaElement)
+			this.draftChange.emit(target.value);
 	}
 
 	/**
@@ -96,7 +96,8 @@ export class ConversationComposerComponent
 	 */
 	protected handleKeydown(event: KeyboardEvent): void
 	{
-		if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+		if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey))
+			return;
 		event.preventDefault();
 		this.submit();
 	}
@@ -111,10 +112,12 @@ export class ConversationComposerComponent
 	{
 		// 1. Refuse in any state but Available: Submitting means the parent's send is still out, and
 		// re-emitting there would send the same message twice.
-		if (this.state() !== ConversationComposerStates.Available) return;
+		if (this.state() !== ConversationComposerStates.Available)
+			return;
 
 		// 2. Require something to send — text, or content the parent holds and we cannot see, such as
 		// selected attachments. Emit the draft as displayed, empty string included.
-		if (this.draft().trim().length > 0 || this.allowEmptySubmission()) this.submitted.emit(this.draft());
+		if (this.draft().trim().length > 0 || this.allowEmptySubmission())
+			this.submitted.emit(this.draft());
 	}
 }

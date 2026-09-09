@@ -4,7 +4,7 @@
 		@if (actionError(); as error) {
 			<p-message journey-status severity="error" [closable]="false">{{ error }}</p-message>
 		} @else {
-			<p-message journey-status severity="success" [closable]="false">This exact persona revision is active for future admitted runs. Existing run snapshots are unchanged.</p-message>
+			<p-message journey-status severity="success" [closable]="false">Your assistant will use these settings for future replies. Work already started keeps its current settings.</p-message>
 		}
 		<wo-persona-result-evidence [result]="result" [questions]="state.questions" />
 		@if (actionError()) {
@@ -12,8 +12,8 @@
 		}
 	</wo-journey-shell>
 } @else {
-	<wo-journey-shell title="Your active persona is unavailable" description="OpenCrane did not return the evidence required to display the approved persona." [layout]="layouts.Compact">
-		<p-message journey-status severity="error" [closable]="false">Reload the exact active revision before continuing.</p-message>
+	<wo-journey-shell title="Your active persona is unavailable" description="We could not load your approved assistant settings." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">Reload your saved settings to continue.</p-message>
 		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retryRequested.emit()" />
 	</wo-journey-shell>
 }

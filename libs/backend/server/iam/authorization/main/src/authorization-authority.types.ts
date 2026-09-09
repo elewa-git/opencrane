@@ -20,6 +20,22 @@ export interface AdmitProductAuthorizationCommand extends ProductAuthorizationCo
 /** One product action admitted across a Principal's stored personal and direct Group boundaries. */
 export type AdmitPrincipalProductAuthorizationCommand = Omit<AdmitProductAuthorizationCommand, "boundary">;
 
+/**
+ * Checks current eligibility across a Principal's stored personal and Group boundaries.
+ * An allowed result records no evidence and cannot authorise a protected write or external effect;
+ * its owning transaction must separately admit the concrete operation before committing it.
+ */
+export type DecidePrincipalProductAuthorizationCommand = Omit<ProductAuthorizationCommand, "boundary">;
+
+/** Stored Principal boundary and allowed decision found by the authority's shared decision loop. */
+export interface AllowedPrincipalProductAuthorizationDecision
+{
+	/** Current personal or Group boundary whose grants allow the action. */
+	readonly boundary: AuthorizationBoundary;
+	/** Pure decision that has not been recorded as permission to perform an operation. */
+	readonly decision: ProductAuthorizationResult;
+}
+
 /** Durable evidence derived by the authority rather than supplied as an allow assertion. */
 export interface ProductAuthorizationAdmissionEvidence
 {
@@ -138,6 +154,8 @@ export interface AuthorizationAuthority
 {
 	/** Decides one typed action using current product-authority state. */
 	decide(command: ProductAuthorizationCommand): Promise<ProductAuthorizationResult>;
+	/** Checks current Principal eligibility without recording or replacing mutation/effect admission. */
+	decidePrincipal(command: DecidePrincipalProductAuthorizationCommand): Promise<ProductAuthorizationResult>;
 	/** Decides and records one protected mutation or external-effect admission atomically. */
 	admit(command: AdmitProductAuthorizationCommand): Promise<AdmitProductAuthorizationResult>;
 	/** Decides and records across the actor's stored personal and Group boundaries. */

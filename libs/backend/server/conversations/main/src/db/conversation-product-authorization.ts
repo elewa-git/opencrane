@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { ConversationMode, type Prisma } from "@prisma/client";
 
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
@@ -21,11 +21,18 @@ export class PrismaConversationProductAuthorizationRepository implements Convers
 
 	constructor(transaction: Prisma.TransactionClient) { this.transaction = transaction; this.authority = new PrismaAuthorizationAuthority(transaction); this.managedGrants = new PrismaManagedAuthorizationGrantRepository(transaction); }
 
-	/** Decides an exact conversation action inside the owning domain transaction. */
+	/** Filters an exact conversation through the Read-class catalogue guard. */
 	async canAccess(caller: ConversationCaller, conversationId: string, action: ProductAuthorizationActions): Promise<boolean>
 	{
 		const entitled = await this.authority.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, resources: [{ kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }], action, nowEpochMs: Date.now() });
 		return entitled.length === 1;
+	}
+
+	/** Checks current eligibility without admitting a write or effect; callers must record concrete operations separately. */
+	async isCurrentlyEligible(caller: ConversationCaller, conversationId: string, action: ProductAuthorizationActions): Promise<boolean>
+	{
+		const decision = await this.authority.decidePrincipal({ siloId: caller.siloId, principalId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, action, nowEpochMs: Date.now() });
+		return decision.outcome === AuthorizationDecisionOutcomes.Allow;
 	}
 
 	/** Records an exact conversation or collection mutation/effect before its protected write. */
@@ -60,7 +67,10 @@ export class PrismaConversationProductAuthorizationRepository implements Convers
 				throw new Error("conversation participant Principal projection is unavailable or ambiguous");
 		}
 		const resource = { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId } as const;
-		const actions = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Use] as const;
+		const conversation = await this.transaction.conversation.findUnique({ where: { id: conversationId }, select: { siloId: true, mode: true } });
+		if (conversation === null || conversation.siloId !== siloId)
+			throw new Error("Conversation participant grants require a same-silo projection");
+		const actions = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Use, ...(conversation.mode === ConversationMode.Group ? [ProductAuthorizationActions.Delegate] : [])];
 		const grants = principals.flatMap(principal => actions.map(action => _Grant(principal.id, createdByPrincipalId, resource, action)));
 		await this.managedGrants.reconcileManagedResourceGrants({ siloId, managerId: CONVERSATION_PARTICIPANT_GRANT_MANAGER_ID, resource, grants, now });
 	}

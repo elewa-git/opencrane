@@ -1,49 +1,35 @@
-# @opencrane/state/conversation/stream — browser conversation transport contract
+# @opencrane/state/conversation/stream — browser history connection contract
 
 > [frontend](../../../README.md) › [state](../../README.md) › [conversation](../README.md) › stream
 
 ## What it owns
 
-This package defines what browser state needs from the shared conversation transport without
-choosing how it reaches the browser. The workspace asks this port for live projections and participant
-message submission; the session-authenticated WebSocket adapter implements both operations.
+This package defines the transport-neutral browser port for participant-authorized conversation
+history. It carries immutable entries, resolved private text, the exclusive next position, and the
+current logical conversation computer. Its validator composes the shared entry and computer
+schemas, then checks ordered entries and the selected conversation's coordinates.
 
-```text
- workspace state ── projection + submission ──► conversation/stream  ◄── HERE
-                                             ▲
-                                             │ implements
-                         WebSocket conversation adapter ──► server
-```
-
-**In this flow:** [workspace state](../workspace/README.md) · [WebSocket adapter](../adapter/README.md).
-
-The contract keeps reconnecting distinct from failure, carries the last validated Agent User
-Interface (AG-UI) state, and requires an abort signal so a screen can stop its own stream. It
-contains no HTTP client and grants no conversation or run authority.
+`ConversationEventStreamStatuses` distinguishes initial connection, live history, retry, abort,
+current-access loss, and terminal failure. An `AbortSignal` stops the connection when selection
+changes. Access loss requires the workspace to discard the selected private history and draft;
+transient failures retain the last accepted projection for recovery.
 
 ## Public surface
 
-- `ConversationEventStream` — the transport-neutral port implemented by a live or test adapter.
-- `StreamConversationEventsCommand` — the conversation, abort, resume, retry, and update inputs.
-- `ConversationEventStreamUpdate` — one connection phase with the last accepted projection state.
-- `ConversationEventStreamStatuses` — connecting, live, reconnecting, aborted, and failed states.
-- `SubmitConversationEventStreamMessageCommand` — one retry-stable participant submission.
-- `ConversationEventStreamMessageError` — a display-safe refusal or unsettled submission result.
+- `ConversationEventStream` is the transport-neutral history port.
+- `ConversationEventStreamStatuses` names connection outcomes and the required state handling.
+- `ConversationHistoryProjection` holds the validated browser history and computer state.
+- `__ParseConversationHistoryProjection` validates a response against its requested conversation
+  and previous decimal cursor.
+- `__CreateConversationHistoryProjection` creates the initial empty browser projection.
 
 ## Boundary
 
-Conversation state and workspace adapters consume this port. The app binds it to a concrete adapter.
-This package never opens a transport, decodes concrete wire frames, stores data, or starts an Agent
-run.
-
-## Dependency direction
-
-Tagged `scope:web`, `layer:frontend`, and `frontend-role:state`: it may depend on the foundational
-AG-UI browser state, shared contracts, models, and pure utilities. It never imports an adapter,
-feature, app, or backend package.
+The port grants no conversation, run, or sandbox authority. A concrete adapter authenticates as the
+signed-in participant and interprets its protocol before adopting validated data. SSE's absent
+computer update does not erase the computer supplied by a separate history read.
 
 ## See also
 
-- Parent index: [conversation](../README.md)
-- Adapter: [conversation adapter](../adapter/README.md)
-- Projection state: [conversation AG-UI](../ag-ui/README.md)
+- HTTP and SSE adapter: [`../adapter`](../adapter/README.md)
+- Workspace state: [`../workspace`](../workspace/README.md)

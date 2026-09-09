@@ -1,8 +1,0 @@
-{
-  "extends": "../../../../../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "../../../../../../dist/out-tsc/libs/backend/agents/execution/runs/controller",
-    "types": ["node", "vitest/globals"]
-  },
-  "include": ["src/**/*.ts"]
-}

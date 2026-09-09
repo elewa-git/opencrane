@@ -1,113 +1,99 @@
-import type { AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import type { ConversationComputer, ConversationEntry } from "@opencrane/contracts";
 
 /**
- * Reports where a conversation stream is in its lifecycle so browser state can distinguish a
- * temporary interruption from a terminal outcome.
+ * Reports how the browser's conversation-history connection should preserve or stop its state.
  *
- * Implementations send these values through `StreamConversationEventsCommand.onUpdate`; they are
- * not stored or sent to the server. `Reconnecting` keeps the last accepted state usable, while
- * `Failed` and `Aborted` end the stream. Implementations must not emit values outside this closed
- * set because workspace presenters branch on each lifecycle state.
+ * Workspace state branches on these in-memory values. `Reconnecting` retains the last accepted
+ * projection; `AccessChanged` requires its removal. `Aborted` and `Failed` stop the connection for
+ * different reasons. Unknown values must not be treated as a live connection.
  */
 export enum ConversationEventStreamStatuses
 {
-	/** The implementation is opening its first update channel; no live update has arrived yet. */
+	/** The first authorized history read has not completed. */
 	Connecting = "connecting",
-	/** The implementation is accepting validated updates and may continue changing the projection. */
+	/** The authenticated event connection is open. */
 	Live = "live",
-	/** The update channel ended or failed temporarily; the caller keeps the last accepted state while the implementation resumes. */
+	/** A temporary read failure is being retried without discarding accepted history. */
 	Reconnecting = "reconnecting",
-	/** The caller aborted the stream; this is a successful terminal outcome and no more updates follow. */
+	/** The caller stopped the selected conversation connection. */
 	Aborted = "aborted",
-	/** The implementation cannot continue; this is a terminal failure and `error` may hold display-safe detail. */
+	/** Current access ended; the workspace must discard its selected history and draft. */
+	AccessChanged = "access_changed",
+	/** Transport retries ended or history could not be validated; participant action is required. */
 	Failed = "failed",
 }
 
-/**
- * Carries one lifecycle report with the last state the implementation accepted.
- *
- * Workspace state adopts these reports while `stream()` is pending, so an implementation must
- * keep the last valid projection when it reports reconnecting or failed rather than replacing it
- * with partially decoded data.
- */
+/** Holds the exact participant-visible history accepted from the server. */
+export interface ConversationHistoryProjection
+{
+	/** Immutable entries in canonical stream-position order. */
+	readonly entries: readonly ConversationEntry[];
+	/** Resolved private text indexed by the payload reference carried in message entries. */
+	readonly payloads: Readonly<Record<string, string>>;
+	/** Last accepted decimal stream position, used as the exclusive next-read cursor. */
+	readonly nextPosition: string;
+	/** Current logical computer projection, or null for conversations without a computer. */
+	readonly computer: ConversationComputer | null;
+}
+
+/** Carries one connection lifecycle update with the last fully accepted projection. */
 export interface ConversationEventStreamUpdate
 {
 	/** Current connection phase. */
 	readonly status: ConversationEventStreamStatuses;
-	/** The last stream state that passed validation. */
-	readonly state: AgUiStreamState;
-	/** Consecutive reconnect attempt, starting at zero. */
+	/** Last fully validated history projection. */
+	readonly state: ConversationHistoryProjection;
+	/** Consecutive transport failures since accepted progress or a healthy server close. */
 	readonly reconnectAttempt: number;
-	/** Browser time of the latest server heartbeat. */
+	/** Browser time of the latest authenticated connection, history event, or heartbeat. */
 	readonly lastHeartbeatAt: number | null;
-	/** Display-safe failure message set only for the failed phase. */
+	/** Fixed display-safe failure message set only for a terminal failure. */
 	readonly error?: string;
 }
 
-/**
- * Supplies the conversation, cancellation, resume, retry, and observation inputs for one stream.
- *
- * The caller owns the abort signal and must abort it when the selected conversation or screen
- * lifetime changes. Passing `initialState` lets an implementation resume from the cursor that state
- * contains instead of replaying updates the browser already accepted.
- */
+/** Supplies one selected conversation and its bounded connection lifecycle. */
 export interface StreamConversationEventsCommand
 {
-	/** Opaque conversation identifier. */
+	/** Opaque conversation identifier authorized by the server session. */
 	readonly conversationId: string;
-	/** Stops the stream when aborted. */
+	/** Stops the connection when selection or page lifetime changes. */
 	readonly signal: AbortSignal;
-	/** State from an earlier connection, including its resume cursor. */
-	readonly initialState?: AgUiStreamState;
-	/** Receives every phase change, heartbeat, and accepted event. */
+	/** Previously accepted state whose next position resumes history and event reads. */
+	readonly initialState?: ConversationHistoryProjection;
+	/** Receives every successful read and lifecycle change. */
 	readonly onUpdate?: (update: ConversationEventStreamUpdate) => void;
-	/** Consecutive failures allowed before the stream gives up; defaults to three. */
+	/** Consecutive failures allowed before reconnecting stops. */
 	readonly maximumReconnectAttempts?: number;
-	/** Delay before reconnecting in milliseconds; defaults to 250. */
+	/** Initial retry delay; the adapter may apply backoff and a server-requested minimum. */
 	readonly reconnectDelayMilliseconds?: number;
 }
 
-/** Carries one participant message through the transport already selected for its conversation. */
-export interface SubmitConversationEventStreamMessageCommand
-{
-	/** Conversation selected by the active event stream. */
-	readonly conversationId: string;
-	/** Retry key the server uses to deduplicate uncertain submissions. */
-	readonly idempotencyKey: string;
-	/** Display-safe participant blocks retained unchanged for an exact retry. */
-	readonly blocks: readonly { readonly id: string; readonly kind: string; readonly value: string }[];
-}
-
 /**
- * Reads one signed-in participant's conversation updates without prescribing a transport.
+ * Follows authorized history without prescribing the browser transport.
  *
- * Workspace state depends on this port so production and test adapters share the same lifecycle,
- * resume, and cancellation contract. The port grants no conversation access; a production adapter
- * must use the signed-in context supplied by its own boundary.
+ * The implementation preserves the last fully validated projection across transient failures and
+ * stops when the caller aborts, access ends, or recovery requires participant action. This port grants no conversation access;
+ * the production adapter uses the signed-in HTTP context supplied by its own boundary.
  *
- * Called by: `ConversationWorkspaceStore` through `CONVERSATION_WORKSPACE_EVENT_STREAM`. Implemented
- * by `OpenCraneConversationEventStream` in the browser app and by focused workspace test doubles.
+ * Called by: `ConversationWorkspaceStore` through `CONVERSATION_WORKSPACE_EVENT_STREAM`.
  */
 export interface ConversationEventStream
 {
 	/**
-	 * Streams until the caller aborts or the implementation fails closed.
-	 *
-	 * Progress arrives through `command.onUpdate` while this promise is pending. A caller abort
-	 * returns the last accepted state; an implementation failure first reports `Failed` and then
-	 * rejects, leaving the last accepted state in that update.
-	 *
-	 * @param command - Conversation, cancellation, resume, retry, and observation inputs.
-	 * @returns The last accepted state after the caller stops the stream.
-	 * @throws Error when the implementation cannot continue without the caller changing something.
+	 * Follows history until aborted or failed and reports each accepted projection through `onUpdate`.
+	 * @param command - Selects the conversation, prior cursor, abort signal, and retry policy.
+	 * @returns The last accepted projection on abort, or an empty projection after access ends.
+	 * @throws {Error} When transport retries end or an invalid response requires explicit recovery.
 	 */
-	stream(command: StreamConversationEventsCommand): Promise<AgUiStreamState>;
-	/**
-	 * Submits a participant message through the selected conversation's live transport.
-	 *
-	 * @param command - The selected conversation and retry-stable participant blocks.
-	 * @returns A promise fulfilled only after the server acknowledges admission or replay.
-	 * @throws ConversationEventStreamMessageError when the stream cannot safely submit the command.
-	 */
-	submit(command: SubmitConversationEventStreamMessageCommand): Promise<void>;
+	stream(command: StreamConversationEventsCommand): Promise<ConversationHistoryProjection>;
+}
+
+/**
+ * Builds the empty projection used before the first authorized history read.
+ * Called by: `ConversationWorkspaceStore`, `OpenCraneConversationEventStream`, and their focused tests.
+ * @returns A fresh projection at cursor zero with no entries, payloads, or computer.
+ */
+export function __CreateConversationHistoryProjection(): ConversationHistoryProjection
+{
+	return { entries: [], payloads: {}, nextPosition: "0", computer: null };
 }

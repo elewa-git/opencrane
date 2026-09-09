@@ -1,0 +1,6 @@
+apiVersion: v2
+name: opencrane-agent-sandbox
+description: App-owned Agent Sandbox v1beta1 profile resources for conversation computers.
+type: library
+version: 0.11.0
+appVersion: "v1beta1"

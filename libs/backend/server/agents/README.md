@@ -7,7 +7,6 @@ These capabilities govern the managed-agent product plane.
 - `scheduling` evaluates a managed-agent schedule into due runs and admits them idempotently.
 - `skills` exposes a browser-safe, silo-scoped catalogue of governed skill metadata.
 - `artifacts` is the finalisation authority for artifact metadata.
-- `channel-targets` authorizes a channel target for a specific operation.
 - `onboarding` owns the durable first-route workflow and pins exact persona and bootstrap references
   to the session-derived silo and OIDC subject.
 

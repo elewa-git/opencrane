@@ -1,0 +1,13 @@
+<p-dialog closeAriaLabel="Close assistant request" header="Ask company assistant" [modal]="true" [style]="{ width: 'min(var(--oc-journey-compact-width), calc(100vw - var(--oc-space-8)))' }" [visible]="source() !== null" [closable]="state() !== states.Submitting" [closeOnEscape]="state() !== states.Submitting" (onHide)="dismissed.emit()">
+	<div class="group-request">
+		<p>Everyone currently in this group can read the assistant chat and your follow-ups. Sharing a result posts selected text back to the group.</p>
+		<blockquote aria-label="Your group message">{{ source()?.text }}</blockquote>
+		@if (assistants().length === 0) { <p-message severity="info" text="No company assistant is available to you. Ask an administrator to set one up and give you access." /> }
+		@else { <wo-choice-card-group controlId="group-company-assistant" legend="Choose a company assistant" [options]="choices()" [selectedId]="selectedId()" [disabled]="state() === states.Submitting" (selectedIdChange)="assistantSelected.emit($event)" /> }
+		@if (error(); as message) { <p-message severity="error" [text]="message" /> }
+	</div>
+	<ng-template #footer>
+		<p-button label="Cancel" severity="secondary" [text]="true" [disabled]="state() === states.Submitting" (onClick)="dismissed.emit()" />
+		<p-button label="Ask assistant" [loading]="state() === states.Submitting" [disabled]="selectedId() === null || assistants().length === 0 || state() === states.Submitting" (onClick)="submitted.emit()" />
+	</ng-template>
+</p-dialog>

@@ -35,7 +35,7 @@ function _Source(): PrismaSkillRevisionEligibilitySource
 {
 	return new PrismaSkillRevisionEligibilitySource(function _Create(transaction)
 	{
-		return new PrismaSkillRevisionEligibilityRepository(transaction.prisma);
+		return new PrismaSkillRevisionEligibilityRepository(transaction.prisma as never);
 	});
 }
 

@@ -136,7 +136,7 @@ export class PrismaPersonalAgentProductEffectsAuthority implements PersonalAgent
 }
 
 /** Complete exact-owner actions for one stable personal AgentService. */
-const _SERVICE_ACTIONS = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Create, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Publish, ProductAuthorizationActions.Invoke, ProductAuthorizationActions.Schedule, ProductAuthorizationActions.Retire, ProductAuthorizationActions.Administer] as const;
+const _SERVICE_ACTIONS = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Create, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Publish, ProductAuthorizationActions.Invoke, ProductAuthorizationActions.Retire, ProductAuthorizationActions.Administer] as const;
 
 /** Complete exact-owner actions for one immutable personal AgentRevision. */
 const _REVISION_ACTIONS = [ProductAuthorizationActions.Read, ProductAuthorizationActions.Create, ProductAuthorizationActions.Edit, ProductAuthorizationActions.Publish, ProductAuthorizationActions.Assign, ProductAuthorizationActions.Revoke] as const;

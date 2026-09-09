@@ -57,8 +57,7 @@ describe("PrismaConversationAssetRepository removal", function _Suite()
 
 	it.each([
 		["message-linked", { messageId: "message-1" }],
-		["already uploaded", { revisionId: "revision-1", state: ConversationAssetState.Processing }],
-		["assistant-created", { provenance: ConversationAssetProvenance.AgentOutput, createdByUserId: null }]
+		["already uploaded", { revisionId: "revision-1", state: ConversationAssetState.Processing }]
 	])("denies removal for %s files without mutating persistence", async function _DeniesRemoval(_label, overrides)
 	{
 		const transaction = _Transaction(_Asset(overrides));
@@ -75,6 +74,6 @@ describe("PrismaConversationAssetRepository removal", function _Suite()
 		const participant = await new PrismaConversationAssetRepository(transaction as never).list({ ..._CALLER, subjectId: "user-2" }, "conversation-1");
 		expect(owner[0]).toMatchObject({ canRemove: true });
 		expect(participant[0]).toMatchObject({ canRemove: false });
-		expect(transaction.conversationAsset.findMany).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", siloId: "silo-1", state: { not: ConversationAssetState.Removed }, OR: [{ provenance: ConversationAssetProvenance.ParticipantUpload }, { provenance: ConversationAssetProvenance.AgentOutput, state: { in: [ConversationAssetState.Processing, ConversationAssetState.Ready, ConversationAssetState.Failed] } }] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+		expect(transaction.conversationAsset.findMany).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", siloId: "silo-1", state: { not: ConversationAssetState.Removed }, provenance: ConversationAssetProvenance.ParticipantUpload }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
 	});
 });

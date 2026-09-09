@@ -12,7 +12,7 @@ import type { SelfRunStatusCaller } from "./self-run-status.router.types";
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfRunStatusCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { principalId: principal.principalId, subjectId: principal.externalSubject, siloId: principal.siloId } : null;
+	return principal ? { principalId: principal.principalId, siloId: principal.siloId } : null;
 }
 
 /**

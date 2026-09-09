@@ -8,8 +8,6 @@ export interface SelfRunStatusCaller
 	readonly siloId: string;
 	/** Durable local Principal used by central product authorization. */
 	readonly principalId: string;
-	/** Stable authenticated subject who owns the personal run. */
-	readonly subjectId: string;
 }
 
 /** Persisted run fields safe to show to its owner. */
@@ -36,7 +34,7 @@ export interface SelfRunStatusRepository
 {
 	/** Lists the caller's most recent personal runs in one exact selected silo. */
 	listOwned(caller: SelfRunStatusCaller): Promise<readonly SelfRunStatus[]>;
-	/** Returns the run only when it belongs to the exact authenticated subject in the silo. */
+	/** Returns the run only when it belongs to the exact authenticated principal in the silo. */
 	readOwned(caller: SelfRunStatusCaller, runId: string): Promise<SelfRunStatus | null>;
 }
 

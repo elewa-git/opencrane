@@ -346,3 +346,890 @@ Full run reports belong in the corresponding pull request or issue.
   made every schema change a multi-file ceremony while no external user depends on an upgrade path.
 - lesson: do not attempt an in-place schema upgrade on any dev silo while the pre-1.0 policy stands;
   rebuild instead. Upgrade contracts return at MVP, most likely as a Prisma-ledger migrator Job.
+
+## 2026-09-06 · render-only · testv5 KurrentDB backup and restore qualification · PR #826 · PARTIAL
+
+- findings: chart: the KurrentDB plane now renders TLS `GET /health/live` readiness and liveness
+  probes, a `minAvailable: 1` PodDisruptionBudget, and the `<release>-kurrentdb-backup` CronJob in
+  `fileCopy` (default) or `volumeSnapshot` mode with `values.schema.json` coverage; the Helm
+  contract, workload-ownership, module-growth, and release-versioning gates pass on the default,
+  history-store, and develop-smoke value sets. script: `k8s-deploy.sh --kurrentdb-restore` builds its
+  restore Job from the CronJob's own jobTemplate, refuses a serving ledger without
+  `--kurrentdb-restore-confirm-serving`, keeps a pre-restore safety copy, and re-runs the bootstrap
+  Job; proven only against mocked kubectl/helm in `kurrentdb-restore-contract.sh`. docs: the
+  KurrentDB 26.0 guide marks online file copies as possibly inconsistent for secondary-index files
+  (secondary indexing is on by default) and recommends volume snapshots; the dev GKE cluster had no
+  `VolumeSnapshotClass` on 2026-08-31, so `fileCopy` is the shipped default. Recovery objectives with
+  the default schedule: RPO 24 h plus run time, RTO unmeasured (expected minutes for 20Gi).
+- friction: no offline evidence exists that `/health/live` answers anonymously under
+  `AllowAnonymousEndpointAccess=false`; the official secure-cluster compose examples probe it without
+  credentials, which is the basis for the HTTPS probes. A 3-node topology stays unrendered because
+  per-node advertised hostnames, gossip seeds, and a wildcard node certificate are not produced yet.
+- lesson: the live testv5 drill must (1) confirm the probes report Ready on 26.1.1 with anonymous
+  endpoint access disabled, (2) run one scheduled `fileCopy` backup and one `--kurrentdb-restore
+  latest` end to end and record the measured RTO, (3) create a `VolumeSnapshotClass` on the dev
+  cluster and repeat the drill in `volumeSnapshot` mode, and (4) verify that the restored node
+  accepts the copied secondary-index files or document disabling secondary indexing.
+
+## 2026-09-07 · live preflight · testv5 recovery drill · f1a01fbf5 · PARTIAL
+
+- findings: infra: the active context is `gke_weownai-proto_europe-west1_opencrane-dev`.
+  A live namespace inventory contains testv3, testv4, testlynn, and testjos, but no testv5.
+  `kubectl get volumesnapshotclasses.snapshot.storage.k8s.io` returns no classes. No backup or
+  restore has run, so RTO remains unmeasured and anonymous KurrentDB health remains unproven.
+- findings: infra: the Agent Sandbox controller has one available replica, uses the immutable
+  `sha256:ba381b4e0c86cca597d5c5a31860e38d30ec1c45e0a7a8328bb2799c87d059c0` image, and enables
+  the extensions reconciler. This confirms only that prerequisite, not a working conversation.
+- friction: the handoff describes a testv5 drill but the target silo has not been installed on
+  this context. The install requires its own identity configuration and namespace-local bootstrap
+  credentials before a scheduled backup can exist.
+- lesson: establish the fresh-install inputs and supported script path first, then record a real
+  scheduled backup, restore, health probe, and measured RTO. Keep snapshot qualification pending
+  until a suitable VolumeSnapshotClass is available through the authorized infrastructure path.
+
+## 2026-09-07 · CI fresh install · conversation workspace · 0a4a7c98d83d8e1a59e4e6307924ae4a35be00bd · FAILED
+
+- findings: codebase: [qualification run 34112859323](https://github.com/elewa-git/opencrane/actions/runs/34112859323)
+  passed the source, SQL, KurrentDB and image-build checks, then failed its k3d fresh install.
+  The server crashed because its production workspace install omitted `@kurrent/kurrentdb-client`.
+  Cognee recovered from the unavailable HuggingFace tokenizer and reached Ready; it was not a
+  second deployment blocker. Publication was skipped, so this run produced no candidate images.
+- friction: the client was declared at the repository root, which made builds and source tests pass
+  while leaving it out of the server's production dependency manifest.
+- lesson: declare the KurrentDB client in the server workspace and extend the existing Docker import
+  check so image construction catches this failure before a cluster rollout. Qualify the repaired
+  SHA before publication. This throwaway CI run supplies no testv5 recovery or authenticated-journey proof.
+
+## 2026-09-07 · CI fresh install · current-silo qualification · 54970839a6e6dda3e29aa546c0796691465ab45d · FAILED
+
+- findings: config: [qualification run 34115181543](https://github.com/elewa-git/opencrane/actions/runs/34115181543)
+  reached server configuration after the client packaging repair, then failed because the old smoke
+  profile enabled neither required KurrentDB configuration nor an Agent Sandbox profile. script:
+  the parallel source job also exposed an agent-controller Helm contract that depended on another
+  test populating the checkout's generated chart directory. Publication remained blocked.
+- friction: the fresh-install step spent 16m41s before reporting the missing history configuration;
+  the full run took 19m35s. PR source checks on this SHA passed independently, illustrating why their
+  success does not establish installation readiness.
+- lesson: isolate chart fixtures (`874181a01`) and render the exact smoke profile in local contracts.
+  The repaired smoke installs TLS KurrentDB and the pinned Sandbox controller, builds the bootstrap
+  image from its app-owned Dockerfile, and uses immutable images in a disposable registry. It must
+  prove anonymous health, denied anonymous data reads and authenticated service reads in CI before
+  publication. Its explicit runc profile supplies no gVisor, backup/restore, or user-journey proof.
+
+## 2026-09-07 · CI fresh install · TLS ledger startup · 12de455f86a72f4e24d8f3c3909a3b5753d01d14 · FAILED
+
+- findings: chart: [qualification run 34118015985](https://github.com/elewa-git/opencrane/actions/runs/34118015985)
+  passed the other selected qualification jobs, then failed its fresh install. KurrentDB loaded the
+  server certificate from its trusted-root directory and rejected it because it was not self-signed.
+  The server could not connect to the crashing ledger. Publication remained blocked.
+- friction: the fresh-install step spent 17m51s before returning the certificate error. Render checks
+  had verified that TLS inputs existed without checking what the trusted-root directory contained.
+- lesson: project only `ca.crt` into the trusted-root mount and keep the node certificate and key
+  in their own mount. Parse the rendered StatefulSet in the Helm contract to guard this boundary,
+  then qualify the repaired SHA before publication. Preflight against KurrentDB 26.1.1 also showed
+  that bootstrap's HTTP stream routes require `KURRENTDB_ENABLE_ATOM_PUB_OVER_HTTP=true`, which
+  defaults to false; enable it while retaining TLS, authentication, and the existing private network
+  boundary. Bootstrap now reads the latest settings event as JSON instead of searching an HTTP feed
+  whose embedded data is a string, and its contract rejects changed permissions even when an older
+  matching ACL is nested in the response. The final service probe requests JSON explicitly, and
+  subscription retries inspect `/info` instead of consuming activation messages. No testv5 drill
+  or user journey has run.
+
+## 2026-09-07 · dev prerequisite · GKE PD snapshot class · 74599200d6d46bbab5ca982d5e42cb375fe317d3 · LIVE
+
+- findings: infra: the deploy entrypoint created `opencrane-pd-snapshots` at 12:19:36 UTC on
+  `gke_weownai-proto_europe-west1_opencrane-dev`. The class uses `pd.csi.storage.gke.io` with
+  `Delete` policy and no default-class annotation. Its ownership labels are
+  `app.kubernetes.io/managed-by=opencrane-prerequisite-bootstrap` and
+  `opencrane.ai/prerequisite=gke-pd-snapshot-class`.
+- command: `apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-gke-snapshot-class opencrane-pd-snapshots --context gke_weownai-proto_europe-west1_opencrane-dev --storage-class standard-rwo`.
+  The identical action then reported an existing valid class. Readback at 12:20:36 UTC retained
+  UID `06a3c519-d969-4755-9980-50c3722898c4`, resource version `1788783576490431004`, and generation 1.
+  Both actions exited successfully; the retry changed no resource.
+- lesson: the missing snapshot class was a provisioning gap that the authorized script could
+  resolve, not a missing operator decision. Only that class was created. Testv5 still needs its
+  identity configuration and fresh installation; no scheduled backup, restore, measured RTO,
+  cloud snapshot readiness, or authenticated user journey is established by this prerequisite.
+
+## 2026-09-07 · CI fresh install · native history authentication · 08e3d27450c777e5b6dbee0308a29139087e5b83 · FAILED
+
+- findings: codebase: [qualification run 34121485088](https://github.com/elewa-git/opencrane/actions/runs/34121485088)
+  brought KurrentDB to readiness and completed bootstrap in 44 seconds, including current ACL
+  verification and the authenticated service probe. Server startup then received `AccessDeniedError`
+  on the silo sentinel read. The pinned native client retains percent encoding in URL credentials,
+  so generated password characters such as `+` and `/` reached authentication as `%2B` and `%2F`.
+- friction: the fresh-install step spent 19m08s before returning the failure. A local TLS probe
+  using the actual installed client reproduced the incorrect password bytes without Docker.
+- lesson: supply raw credentials through the SDK provider and keep them out of the URL. The
+  regression observes the real native request over verified TLS. The subsequent first-read path
+  also needs the history port's empty result for never-written streams: normalize that SDK error
+  while preserving authentication, transport, deletion, malformed-event and cancellation failures.
+  PR CI on this SHA passed all 24 jobs plus two configured skips; full qualification still blocked
+  publication. No testv5 recovery or authenticated user journey has run.
+
+## 2026-09-07 · CI fresh install · conversation workspace · 574673d5f52f2d92dfb823c90259283c17470a2c · LIVE
+
+- findings: [full qualification and publication run 34125652718](https://github.com/elewa-git/opencrane/actions/runs/34125652718)
+  passed all 25 selected jobs, including all 13 image publications; one configured job was skipped.
+  Source checks, fresh PostgreSQL authority proofs, real KurrentDB proofs, five image smokes, API
+  synchronization and the k3d installation passed without validation overrides. Storybook affected
+  detection ran but selected no component execution in this manual run. The separate
+  [PR run 34125286532](https://github.com/elewa-git/opencrane/actions/runs/34125286532) passed 24 jobs,
+  including its browser checks, with two configured skips; its complete rollup had 31 successful
+  checks and two skips.
+- images: registry inspection verified all 13 `sha-574673d5f52f2d92dfb823c90259283c17470a2c`
+  tags, immutable Linux/amd64 manifests and matching OCI revision labels. The smoke built separate
+  images from that same source before publication; deployment of the published digests remains
+  testv5 work. The full qualification/publication run took 13m26s.
+- timing: the k3d smoke step ran from 13:09:24 to 13:18:41 UTC (9m17s). Installation began at
+  13:15:44.873; KurrentDB rollout completed at 13:17:40.475, bootstrap completion was observed at
+  13:17:44.936 and server availability at 13:18:05.482. The application became available about
+  2m21s after installation began. These are disposable CI measurements, not testv5 recovery timing
+  or a controlled before/after benchmark.
+- proof: with TLS verification and anonymous endpoint/stream access disabled, the smoke asserted
+  anonymous `/health/live` returned 200/204, anonymous administration and sentinel reads returned
+  401/403, and the history service identity read the sentinel with 200. Individual status codes
+  were not printed; the final successful assertion sequence establishes those allowed results.
+  Storage qualification expanded a CSI-backed PVC from 64Mi to 128Mi. Agent Sandbox used the
+  explicit runc profile. This run did not qualify gVisor, an authenticated assistant turn, scheduled
+  KurrentDB backups, snapshot creation/restoration, or either recovery mode on testv5.
+- follow-up: preparation of the cloud drill caught invalid uppercase timestamps in both scheduled
+  and safety VolumeSnapshot names. `1867e416f` corrects those two naming paths; the rendered backup
+  script and actual restore safety manifest pass name-validation regressions. The deploy entrypoint
+  also exposes the existing namespace credential helpers as explicit actions, preserving ordinary
+  install validation and credential reuse. These later script/chart changes have separate focused
+  contract and independent-review evidence; they are not part of this CI installation's source SHA.
+
+## 2026-09-07 · live setup · testv5 identity, DNS and provider · a74c3caf2 · PARTIAL
+
+- findings: config: the user supplied the ignored repository credentials for Zitadel and OpenAI.
+  Their validity was checked without printing or committing values. Zitadel has a dedicated
+  `OpenCrane testv5` confidential web client, authorization-code flow with `client_secret_post`,
+  exact callback `https://testv5.dev.opencrane.ai/api/v1/auth/callback` and logout origin.
+  App-local hosted Login V2 was enabled at 18:58:30 UTC; its other OIDC fields and both sibling
+  applications were unchanged. Three reserved-address test identities have private generated
+  passwords and administrator-verified fixture email claims. No notification email was sent,
+  existing human credentials changed, or instance-wide login policy modified.
+- findings: infra: Cloud DNS change 38 completed at 18:47:09.896 UTC in `opencrane-ai-zone`,
+  project `weownai-proto`. It added only `testv5.dev.opencrane.ai A 35.205.225.244`, TTL 300.
+  All four authoritative nameservers and public/local recursive resolvers returned that address.
+  The wildcard and sibling records were unchanged.
+- findings: provider: a direct OpenAI request to `gpt-4.1-nano-2025-04-14` returned HTTP 200 and
+  the expected marker in 2.806s, using 25 input and 5 output tokens. This establishes the key and
+  upstream model only; no provider registration or assistant turn through OpenCrane is proven.
+- findings: infra: the 18:42–18:46 UTC preflight reverified shared controllers, Sandbox v1beta1
+  CRDs, gVisor, published images and the snapshot class. No testv5 namespace existed. Regional
+  SSD usage was 1190/1200Gi, while standard-disk usage was 0/4096Gi. The existing `standard`
+  class uses the legacy in-tree provisioner; it cannot supply the required CSI snapshot proof.
+- lesson: identity inputs were already available in ignored `keys/` dotfiles. Inspect authorized
+  local secret sources before reporting missing operator input. Use a non-default CSI standard-disk
+  class through the owning deploy action to fit available quota, and record that disk type with
+  recovery timing. Installation, product authentication, provider registration and both drills remain
+  pending; this setup entry establishes none of them.
+
+## 2026-09-07 · dev prerequisite and preflight · testv5 standard disks · bd85bdde36c33ee048cb912483851d96a986262c · PARTIAL
+
+- findings: infra: the explicit deploy action created `opencrane-pd-standard` at 19:01:19 UTC on
+  `gke_weownai-proto_europe-west1_opencrane-dev`. The non-default class uses
+  `pd.csi.storage.gke.io`, `pd-standard`, expansion, `WaitForFirstConsumer` and `Delete` policy.
+  An identical retry retained UID `668aaeac-aa1e-4b99-ac15-01ce1d34bf42` and resource version
+  `1788807679616239015`. Existing disks and default classes were unchanged.
+- findings: config: the deploy entrypoint's PostgreSQL and KurrentDB credential actions completed
+  successfully for `opencrane-testv5`. Its namespace now exists with dedicated PostgreSQL bootstrap
+  credentials and immutable KurrentDB TLS, service and bootstrap credentials. Generated test login
+  credentials are retained in the ignored private testv5 key directory, with directory mode 0700
+  and file mode 0600; no credential values belong in this ledger.
+- findings: script: preflight began at 19:03:26 UTC and exited before Helm installation because
+  the wrapper's JSONPath conversion produced literal newline escapes instead of controller
+  arguments. It reported a missing extensions reconciler although the live, Ready controller's
+  argument array was `["--leader-elect=true","--extensions"]`.
+- lesson: inspect the Deployment JSON argument array directly and test exact membership through
+  the public wrapper. A text-formatting failure must not trigger unnecessary controller changes.
+  The application images, public TLS endpoint, authenticated product and recovery remain unqualified
+  on testv5; no installation or restore command ran in this attempt.
+
+## 2026-09-07 · dev fresh install · testv5 bootstrap DNS failure · 219e701879a94304e9b4f3d7cf5134b2bad52c95 · PARTIAL
+
+- timing: preflight passed in 49.114s at 19:11:13 UTC. Installation ran from 19:11:41.513 to
+  19:25:53.866 UTC (852.349s), using the qualified `574673d5f` application images. PostgreSQL
+  privileges completed in 26s; all requested standard-disk PVCs bound. Application resources were
+  admitted at 19:14:50–53. KurrentDB became Ready at 19:17:08, with zero restarts. ACME completed
+  and public TLS validated. Public health remained HTTP 503; all-Pods-Ready and the five-minute
+  readiness target were not achieved.
+- findings: chart: the bootstrap Pod started at 19:15:56 after a 59.775s image-pull wait, of which
+  downloading took 2.177s. Scoped Cloud Logging recovered repeated DNS-resolution failures for the
+  private KurrentDB service from 19:16:08 through 19:20:49. The cluster uses node-local resolver
+  `169.254.20.10` with GKE DNS cache and `ADVANCED_DATAPATH`; the bootstrap NetworkPolicy allowed
+  only the `kube-dns` Pod selector. Bootstrap reached `FailureTarget` at 19:20:21 and `Failed` at
+  19:20:53 because of its 330-second deadline. Its Pod was deleted by the Job controller. The
+  server could not read its silo stream and restarted with `AccessDeniedError`.
+- findings: script: the installer waited only for Job completion, then lost the failed command's
+  status after its `if` block. Interrupting that local wait produced exit 0 and an installed message
+  despite failed bootstrap and public HTTP 503. The final workload list also omitted the actual
+  `opencrane-server` Deployment. Repairs add terminal-failure detection, correct failure propagation,
+  the server readiness wait and an explicit release-owned bootstrap retry.
+- findings: recovery: the first scheduled file-copy attempt refused the uninitialised data volume
+  because `writer.chk` was absent. Its automatic retry succeeded at 19:17:08; the next scheduled
+  Job succeeded at 19:20:12. These pre-fixture backups establish no product-data recovery or RTO.
+  KurrentDB's three insecure/anonymous flags are false and anonymous HTTPS probes succeed; direct
+  response-code verification, product login, AI registration and both recovery drills remain pending.
+- lesson: configure exact resolver host CIDRs for the restricted bootstrap and snapshot Jobs. Treat
+  terminal bootstrap failure as failed installation immediately, retain cloud logs when deadline
+  handling removes the Pod, and retry the same release's verification Job after applying the repair.
+
+## 2026-09-07 · dev repair · testv5 repeat-install inputs · a925aa61e17822d276a4dc443d05287f85fadfd4 · PARTIAL
+
+- timing: preflight passed from 19:51:53.779 to 19:53:01.034 UTC (67.254s). The repair command
+  ran from 19:53:33.774 to 19:55:41.958 UTC (128.184s), exiting 1 before application Helm apply.
+  PostgreSQL reconciliation and privileges passed with existing credentials retained.
+- findings: config: the test launcher repeated its fresh-install `--values` file. The standalone
+  first-owner guard rejected it because that input could replace the immutable issuer binding.
+  The DNS repair therefore did not land; the bootstrap policy still lacked `169.254.20.10/32`.
+  Existing-release recovery must retain stored values and supply the specific DNS change through
+  the supported `--set-string` input, with the same first-owner and OIDC coordinates.
+- findings: script: inspection also found the existing-release credential-consumer rollout waiting
+  for the server before the final bootstrap check. Moving the bootstrap check immediately after
+  successful Helm apply makes terminal failure visible before this dependent rollout wait.
+- lesson: distinguish fresh-install profile inputs from a repeat invocation. Validate the bootstrap
+  before waiting for the server that depends on it. This attempt performed no bootstrap retry,
+  successful public-health check, authenticated product journey or restore.
+
+## 2026-09-07 · dev repair · testv5 bootstrap ownership · 8747c67d6da67e9a6697663266b901c74afd641f · PARTIAL
+
+- CI: [Actions run 34157671053](https://github.com/elewa-git/opencrane/actions/runs/34157671053)
+  completed with 24 successful checks and two configured skips at this SHA. That result precedes
+  the subsequent bootstrap ownership repair and does not establish live application readiness.
+- timing: application repair ran from 20:00:47.575 to 20:04:02.965 UTC (195.391s). Helm revision 2
+  was applied at 20:03:20. The installer then exited 1 on the existing terminal bootstrap failure,
+  before entering the dependent server rollout wait, as intended.
+- findings: config: the live bootstrap policy now permits DNS to `169.254.20.10/32`. Readback
+  confirmed the first-owner and complete OIDC binding were unchanged. The private launcher now
+  supplies its values file only on fresh installation and preserves stored values on repeat runs.
+- findings: script: the explicit bootstrap retry ran from 20:05:34.231 to 20:05:36.153 UTC
+  (1.923s), refusing the Job before mutation. The guard required a release-instance label on parent
+  metadata, but the actual chart places that label on the Pod template. Both the bootstrap Job and
+  Ready KurrentDB StatefulSet have that layout. The Job's Helm release/namespace annotations and
+  component label were correct, and neither resource was deleting.
+- lesson: test recovery ownership against actual rendered resources, including Helm ownership
+  annotations, rather than a handwritten fixture with invented parent labels. Align the guard with
+  the emitted release identity while preserving foreign-resource denial. Public API readiness,
+  authenticated journeys and both recovery modes remain pending.
+
+## 2026-09-07 · dev proof · testv5 anonymous KurrentDB health · PASS
+
+- proof: at 20:11:31–32 UTC, unauthenticated requests returned `/health/live` 204, `/users` 401
+  and `/streams/opencrane-silo/0` 401. All curl commands exited 0 with the public CA and exact
+  service-hostname verification; no authentication header was supplied.
+- identity: the Ready Pod had zero restarts and reported version `26.1.1.3690` in its startup log.
+  Its image ID matched the pinned KurrentDB digest
+  `sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8`.
+  `INSECURE`, `ALLOW_ANONYMOUS_ENDPOINT_ACCESS` and `ALLOW_ANONYMOUS_STREAM_ACCESS` were all false.
+- boundary: the temporary local port-forward closed at 20:11:32.872 UTC. This read-only proof
+  establishes the required health/authentication behavior; application bootstrap, user journeys
+  and backup restoration are separate, still-pending results.
+
+## 2026-09-07 · dev recovery · testv5 installation and identity · 98767e5fc440e9a9e6c42fcfebf791fc21b70df1 · LIVE with product proof pending
+
+- timing: the explicit release-owned bootstrap retry succeeded from 20:16:56.386 to
+  20:17:13.038 UTC (16.651s). Job `c656a943-081b-43d3-af78-b0cdba4241bf` completed at 20:17:10.
+  Normal installation verification then succeeded from 20:18:29.474 to 20:23:26.508 UTC
+  (297.034s). Helm revision 3 was applied at 20:21:02. The first verified public TLS `/healthz`
+  response was 200 at 20:21:26.784. These are repair timings, not a successful fresh-install
+  measurement against the five-minute target.
+- proof: independent readback at 20:24:54 found all 11 Pods Ready with zero restarts across the
+  application, artifacts and scanning namespaces. Running image references matched the qualified
+  `574673d5f52f2d92dfb823c90259283c17470a2c` build. The first-owner and OIDC bindings were retained.
+- identity: the dedicated owner completed password-verified OIDC and the normal OpenCrane PKCE
+  callback at 20:23:05. Two dedicated colleagues then completed the same login and accepted
+  owner-created invitations. Each colleague was denied onboarding before acceptance and admitted
+  afterward; both Active Member roles were confirmed by 20:25:49. No real user's identity or
+  credentials were changed. This proves authenticated API admission; browser onboarding remains
+  a separate acceptance check.
+- findings: codebase: initial provider registration remained pending after LiteLLM 1.81.0 returned
+  an embedded string-code 404 from credential PATCH under HTTP 200. The adapter treated transport
+  success as mutation success and skipped creation. Repair `585d23dc2` requires explicit success,
+  creates only after confirmed absence, and retains uncertainty for malformed responses. Independent
+  review passed with 186 focused tests and both package lint checks. That application repair is
+  pushed but is not yet published or deployed.
+- findings: product: the owner approved a persona and resumed the guided answers, but onboarding
+  completion awaits a configured default model. A three-person group was created; its first human
+  message returned 503. At 20:40:41 the normal history service identity could read its genesis and
+  bounded stream, while its encrypted-payload count remained zero. The message failure is therefore
+  being diagnosed before or within payload persistence, separately from the missing-model barrier.
+- boundary: no completed assistant answer, reviewed child-chat return, authenticated browser reload,
+  or data-bearing backup restore is established by this run. Both recovery drills remain pending.
+
+## 2026-09-07 · dev repair · testv5 provider and message diagnosis · ea0ba66c32a3891012a4474607c69d85e0831aef · PARTIAL
+
+- CI: [Actions run 34161718885](https://github.com/elewa-git/opencrane/actions/runs/34161718885)
+  passed 25 jobs with one configured skip and published all 13 deployable images. Daemon-free
+  manifest inspection verified their Linux amd64 image revision labels against this SHA.
+- timing: the owning install command with verification ran from 21:24:35.461 to 21:28:29.007 UTC
+  (233.547s), exiting 0. The server became Ready at 21:28:01 and public TLS health returned 200
+  at 21:28:26.681. At 21:29:12, all 11 Pods were Ready without restarts; seven running application
+  image IDs matched the publication receipt. This measures repair, not fresh installation.
+- inputs: the immutable first-owner/OIDC binding and the existing conversation were retained.
+  The completed bootstrap Job retained its previously qualified utility image, explicitly pinned
+  independently of application images; its Pod template was not patched. The PostgreSQL operand
+  retained the current release manifest's image. Neither is evidence that the new images ran.
+- identity: all three dedicated users repeated normal password-verified OIDC admission by 21:30:30.
+  All three had approved personas and saved guided answers; the two colleagues had also passed
+  fresh-read resume and duplicate-answer checks. Completion still needs a usable default model.
+- findings: codebase: the credential response repair now reaches a successful LiteLLM credential
+  creation. The next read fails because `/model/info` returns 500 before any model exists. At
+  21:50:38.187, an authenticated read of the pinned proxy's `/v2/model/info` returned 200 with an
+  empty `data` array. The adapter repair uses that endpoint and preserves failures for unavailable
+  or malformed inventory; no error response is interpreted as an empty catalogue.
+- findings: codebase: the group's message still returned 503 at 21:31:05 and persisted no payload.
+  Source diagnosis found Conversation Use, an effect action, passed to the authority's read-only
+  entitlement listing. Repair must separate pure eligibility decisions from effect admission and
+  record message admission alongside encrypted payload persistence in the same transaction.
+- boundary: personal answers, ordinary group messages, company-assistant child answers, reviewed
+  sharing and data-bearing restores remain unproven. Browser login stopped before password entry;
+  the automatic approval reviewer rejected placing the fixture password on the system clipboard.
+  No password was copied, and the authenticated API evidence does not establish browser completion.
+
+
+## 2026-09-07 · dev acceptance · testv5 provider and human group · cf8b5f44759f19a01d03e9d3534e7a8b2aab3811 · PARTIAL
+
+- outcome: employees can authenticate through the dedicated Zitadel client and exchange durable
+  messages in an ordinary group. The supplied AI provider is configured through protected product
+  APIs, with one tenant model selected. Personal and company assistant execution remain unqualified.
+- CI: [Actions run 34166048987](https://github.com/elewa-git/opencrane/actions/runs/34166048987)
+  passed 25 jobs with two configured skips and published all 13 deployable images. All Linux amd64
+  manifests carry this exact source revision. Image-smoke qualification reused the unchanged chart's
+  successful k3d evidence from run 34161718885; it did not run another current-silo k3d installation.
+  Build/test/lint took 129 seconds, fresh-database checks 51 seconds and KurrentDB proofs 60 seconds.
+- deployment: the owning install command with verification ran from 22:24:29.157 to 22:28:54.238 UTC
+  (265.081 seconds), exiting 0 at Helm revision 5. The server became Ready at 22:28:05; public TLS
+  health returned 200 at 22:28:26.009. At 22:29:34.405, all 11 Pods were Ready with zero restarts,
+  and seven running application image IDs matched the publication receipt. This is repair timing.
+- retained inputs: the first-owner/OIDC binding is unchanged. The completed bootstrap Job keeps
+  its separately qualified utility digest `sha256:5e702899c3a504ea69df94250a8889b02d3108c5357c7fc6de050b60236205fe`;
+  the PostgreSQL operand keeps the release manifest's image. Publication of replacement images
+  does not establish that they ran. Bootstrap update preparation remains unexercised live.
+- identity and provider: all three fixture users completed fresh password-verified OIDC admission
+  by 22:30:16.928. At 22:30:30.954, the original provider command returned configured and registered.
+  The first `testv5/gpt-4.1-nano` model, routed to `openai/gpt-4.1-nano-2025-04-14`, was created and
+  selected as the tenant default with successful readback at 22:30:33.853. No provider key, OIDC
+  secret or session cookie is recorded in source or this ledger.
+- human group: by 22:30:41, all three members read the same three ordered human messages from
+  KurrentDB-backed history. An exact message retry kept its original position; changed text with
+  the same command key returned 409. The ordinary group has no computer, agent service or run.
+- findings: codebase: onboarding conclusion returned 503 at 22:31:06 because initial-publication
+  authorization rejected grants activated by the later database transaction clock. The repair
+  stamps newly reconciled grants with the trusted operation time and retains existing validity,
+  revocation and deny rules. It still needs live completion proof.
+- findings: codebase: company setup returned 503 at 22:35:31. PostgreSQL rejected its Internal
+  Principal under `principals_identity_check`: the repository supplied an issuer other than the
+  reserved `urn:opencrane:agent-service`. The repair follows the existing schema, without changing it.
+- session limitation: successful server replacement loses current logins. Source inspection confirms
+  `express-session` uses its default process-local MemoryStore; preserving the signing secret does
+  not preserve session contents. Durable sessions, interrupted login continuity and multiple-server
+  behavior require a separate implementation and proof.
+- boundary: no personal answer, company child answer, reviewed return, browser password completion,
+  data-bearing restore or RTO is established here. Scheduled fileCopy backups succeed, but neither
+  recovery drill has restored the completed product fixture. The earlier browser clipboard rejection
+  remains in force; authenticated API login is not browser completion evidence.
+
+
+## 2026-09-08 · source gate · first assistant admission · PARTIAL
+
+- candidate: `5681f1cae2d7811903d2eae23665fab1f3209791` passed
+  [Actions run 34167722856](https://github.com/elewa-git/opencrane/actions/runs/34167722856):
+  24 successful jobs, two configured skips and all 13 deployable publications. Daemon-free
+  inspection verified every Linux amd64 manifest's source revision. It was not deployed.
+- findings: codebase: checking the next first-run path before rollout found product resource
+  admissions labelled as workload decisions without a Pod identity. The current database correctly
+  rejects those rows. Personal resource admission now names the human Principal; managed resource
+  admission names the company assistant's Principal with the existing agent-service actor class.
+  Human invocation and conversation access keep their separate requester decisions. Actual runtime
+  workload guards are unchanged; no workload evidence is fabricated.
+- regression scope: tests traverse the central authority, Prisma decision recorder and audit writer
+  for personal and company resource admission, company child resolution and company run evidence.
+  They verify persisted actor classes and identifiers and denial when a different Principal alone
+  has Model Use. These are source tests, not completed live model turns.
+- deployment decision: the next application repair will use the supported server-only image flag,
+  retaining the already qualified companion images. Record the server's source separately; a mixed
+  repair installation is not an exact-SHA release qualification.
+
+
+## 2026-09-08 · dev acceptance · testv5 onboarding completion · server 6edded27aec8ee24bc045156c93aeb950a676520 · PARTIAL
+
+- CI: [Actions run 34193509655](https://github.com/elewa-git/opencrane/actions/runs/34193509655)
+  passed seven jobs with three configured skips (image smoke, k3d and develop smoke) and published
+  only the changed server. Its source label and Linux amd64 manifest were verified. Companion
+  workloads retain the qualified `cf8b5f447` images; this is a mixed-source development repair.
+- deployment: the owning server-only install ran 06:17:06.267–06:21:08.993 UTC (242.726 seconds),
+  exited 0 and applied Helm revision 6. The server became Ready at 06:20:46. Independent public TLS
+  health returned 200 at 06:21:39.974. At 06:22:54, all 11 Pods were Ready with zero restarts;
+  the server and six retained companion image IDs matched their publication receipts. Initial owner,
+  OIDC, PostgreSQL baseline/operand and completed bootstrap Job bindings were unchanged.
+- onboarding: all three fixture users repeated real password-verified OIDC admission by 06:22:33.888.
+  Guided completion then passed for the owner at 06:22:38, colleague B at 06:22:42 and colleague C at
+  06:22:45. Each returned completed state, its own approved persona and a ready personal assistant.
+- company setup: initial creation and subsequent existing-result retries now succeed. Changed setup
+  names are not applied, and a non-admin colleague receives 403. The selected assistant still does
+  not appear in discovery, so no child request or model input was posted in this attempt.
+- findings: config/codebase: personal chat creation returned 404 at 06:23:06. Read-only database
+  inspection confirms all three personal services use the hardcoded `personal-default` profile,
+  while the deployment advertises `developer`. The session resolver correctly rejects that mismatch.
+  The repair must pass the deployment's profile through initial publication and readiness checks.
+- findings: codebase: the deployment explicitly uses standalone membership, with three active local
+  members and zero signed fleet revisions. Company discovery and personal/company run evidence
+  nevertheless require fleet-signed membership. The standalone fleet verifier intentionally denies
+  every such proof. Standalone execution needs an explicit current local-membership evidence path;
+  signing invented fleet records or weakening the fleet verifier is not an acceptable test setup.
+- boundary: credentials, onboarding completion and human group history are proven. Personal chat
+  creation, assistant answers, child sharing and both data-bearing recovery drills remain pending.
+
+- source repair: `ef6e033600327785aca3b2fee90826ddcefa29dc` passes the deployment profile through
+  initial personal-assistant publication, its recorded admission arguments and readiness checks.
+  Independent review, 374 focused tests, all three lints and the source boundary checks pass. Existing
+  mismatched services remain denied and are not rewritten; this source has not yet been deployed.
+- fresh fixtures: two additional reserved users were created in the dedicated Zitadel organisation
+  at 06:48:51–53 UTC. Both completed real password-verified OIDC login and accepted product
+  invitations, with 403 before acceptance and admission afterward. By 06:54:04, both had approved
+  personas and three saved, resumable and idempotent guided answers. Their final assistant creation
+  is deliberately pending the corrected deployment. The original three-user group is unchanged.
+- audience isolation: at 07:03:05–08 UTC, both newly admitted colleagues were absent from the
+  original group's conversation list. Its metadata and history returned the same 404 body as an
+  unknown conversation. No group messages or audience records were changed by this check.
+- CI finding: the profile checkpoint's [PR run 34196087299](https://github.com/elewa-git/opencrane/actions/runs/34196087299)
+  failed a mechanical style check. Large-diff batches dropped the original comparison base and
+  checked inherited lines that the focused local run correctly excluded. The source repair preserves
+  that base across batches; 12 checker tests pass, including inherited-line, new-violation and
+  explicit-file regressions. Live source qualification still awaits the next successful CI run.
+
+## 2026-09-08 · source gate · standalone assistant membership · PARTIAL
+
+- outcome: standalone employees now supply explicit local membership evidence to personal and
+  company assistant admission. The deployment chooses the authority; failed Fleet verification
+  never falls back to standalone access. One transaction-bound IAM reader replaces the duplicated
+  Fleet-only personal and company readers.
+- saved-run boundary: the active computer bootstrap path rejects changed membership mode, local
+  row version or external identity before a retry can issue a second model credential. Rechecking
+  unchanged membership preserves the original deadline. Existing provider credentials retain their
+  bounded lifetime; instantaneous provider-side revocation is not claimed.
+- source qualification: 772 focused tests and nine lints pass. Prisma, dependency, app ownership,
+  agent-domain, growth and whitespace guards pass, including both ownership negative suites.
+  Style has zero errors and 19 verified inherited warnings. The independent architecture/security/
+  correctness/residue review found no Critical, High or Medium issue; its one Low README ownership
+  correction is applied. The separate CI batching repair also passes independent review and all
+  12 checker regressions. Website build passes.
+- boundary: these changes are source-qualified only. They do not rewrite the original fixtures'
+  mismatched personal services, issue invented Fleet signatures, alter the schema or establish
+  a completed model reply. Publish and deploy the reviewed source before completing the two fresh
+  personal setups and the company child journey; capture that fixture before either recovery drill.
+
+## 2026-09-08 · testv5 · browser onboarding and assistant creation diagnosis · PARTIAL
+
+- source and CI: `997dcda70950d5403545a93e1d5b9a3836d5d958`; both the
+  [PR run 34199835273](https://github.com/elewa-git/opencrane/actions/runs/34199835273) and
+  [publication run 34199880088](https://github.com/elewa-git/opencrane/actions/runs/34199880088)
+  succeeded. All 13 application images were published; seven deployed application image digests
+  were verified against this source. The manual run compared against its unqualified checker-only
+  parent `058681656`, exposing a separate cumulative-comparison defect; its green status does not
+  turn that parent into a qualified baseline.
+- deployment: the authorised app-owned install ran 07:45:58.398–07:49:55.903 UTC (237.505 seconds),
+  Helm revision 7. Server Ready was observed at 07:49:30 and public TLS health at 07:49:43.303.
+  At 07:51:18, all 11 application/support Pods were Ready without restarts. These are repair
+  timings; the retained database and bootstrap Job do not establish a fresh-install RTO.
+- identity and onboarding: five dedicated test accounts renewed real OIDC login between 07:50:55
+  and 07:51:21. Fresh colleague D completed browser password sign-in and saved guided onboarding
+  at 07:51:54–07:52:07, reaching `/chats` with “My sessions” and “Welcome to OpenCrane”. The browser
+  verified the completed persona and ready personal assistant. Colleague E completed onboarding
+  through the authenticated API at 07:53:57. Passwords stayed in-process in the isolated browser;
+  no clipboard transfer, fabricated session or direct membership write was used.
+- company journey: discovery passed for the original three group members at 07:56:45, while the
+  two outside colleagues remained excluded. Administrator and retry checks passed. At 07:56:50,
+  the product admitted one child request, recovered its exact retry, rejected changed source with
+  409 and another member's replay with 404. The request later became unavailable after exhausting
+  dependency retries; no child reply or reviewed return is claimed.
+- codebase finding: personal creation returned 503 at 07:53:59. Read-only KurrentDB inspection
+  proves that the child genesis and cold computer were committed. The adapter omits null metadata
+  and writes numeric metadata as strings, while the computer reader required explicit nulls and a
+  numeric generation. This rejects both cold and active computer records. The source repair makes
+  all computer writers and readers use one canonical metadata shape and preserves strict envelope
+  rejection. Regressions reproduce the original failure and exercise the adapter round trip.
+- diagnostics: creation routes and the durable child worker now use the existing safe diagnostic
+  contract; worker failures identify the failed stage without logging upstream text, credentials
+  or user content. Public error bodies remain fixed. Source review and deployment follow below.
+- runtime finding: Sandbox `developer-pool-dvkgf` could not create a Pod because its review-volume
+  name generated a 70-byte gVisor annotation name. Independently reviewed commit `3d90607b0`
+  shortens only the internal volume name, producing 47 bytes while retaining the credential path
+  and memory-backed storage. Focused Nx/Helm checks pass; live Pod creation remains to be proved.
+- backup observation: scheduled Job `29814230` waited for node placement from 07:50:00 to 07:54:17
+  and completed at 07:54:30. The archive and KurrentDB volumes require same-node placement; the
+  node was near its requested-memory limit. This was a 257-second scheduling delay, not a failed
+  copy or a measured restore. Neither data-bearing recovery mode is qualified yet.
+
+## 2026-09-08 · testv5 · personal creation and Sandbox controller contract · PARTIAL
+
+- qualification: `a32380beee1a64405f689700001524965d250df9` passed all 12 validation gates,
+  including k3d, in [run 34205850254](https://github.com/elewa-git/opencrane/actions/runs/34205850254).
+  The corrected manual comparison selected integration ancestor `a155ff59b`, covering all 13
+  cumulative affected images. Publication finished successfully and server provenance matched.
+- deployment: the owning scripts ran 08:59:44.131–09:03:36.190 UTC (232.059 seconds), exit 0,
+  Helm revision 8. Server Ready was observed at 09:03:14 and public TLS health 200 at 09:03:57.720.
+  All 11 service Pods were Ready with zero restarts. The server uses the new source; companions
+  retain qualified `997dcda70`, including the computer image and its admitted profile revision.
+  Seven application digests were checked. PostgreSQL baseline, operand, completed bootstrap Job
+  and owner/OIDC binding were unchanged. This repair timing is not a fresh-install or restore RTO.
+- product proof: colleague D renewed real password-verified OIDC login at 09:04:05. Their original
+  personal creation key now returns the same conversation on retry. Its first human message was
+  accepted at 09:04:17. This proves the computer-history metadata repair on the live installation;
+  no assistant answer has completed yet.
+- controller finding: the new SandboxClaim exists, but its status remains absent. The pinned
+  controller's reconciliation logs at 09:04:17–09:05:39 show the release policy rejecting its
+  required metadata update. The adapter also expects a service address on the claim, whereas the
+  installed v0.5.3 schema places that address on the owned Sandbox. Lease renewal requests a patch
+  that the current Role does not grant. Repair these contracts without granting Pod mutation to
+  the server or runtime.
+- validation finding: Kubernetes reports four policy type-check warnings for size checks on
+  typed specification objects. Claim creation nevertheless succeeded; those warnings alone are
+  not evidence of a rejected create. The current k3d smoke checks controller and template presence
+  but misses these diagnostics. Add a check against the actual installed policy.
+- runtime finding: the shortened volume name now permits a Pod. The replacement was scheduled
+  at 09:04:32 and started at 09:05:25, but its unused prewarmed worker exits because no computer
+  lease labels exist yet. The next repair should start claimed computers directly and remove this
+  idle prewarming from the test profile. Existing conversation lease reuse remains separate.
+- boundary: the original company child request remains terminal; the next explicit request must
+  create a new child. Complete personal and child answers, reviewed return and reconnect before
+  capturing the data-bearing fixture for both scheduled recovery drills.
+
+## 2026-09-08 · testv5 · installed claim-policy qualification · PARTIAL
+
+- candidate: `d5d0040505e38db60faefdb68d2672d4846a372d` passed eleven qualification gates in
+  [run 34211666015](https://github.com/elewa-git/opencrane/actions/runs/34211666015). The Kubernetes
+  smoke failed after workload readiness, TLS and database isolation passed. No image publication
+  or testv5 repair deployment followed; the live server remains `a32380bee`.
+- finding: at 09:54:50.657 UTC, the new installed-policy check reported an undefined `namespace`
+  field in `object.metadata.namespace`. The chart now reads `request.namespace` for the same
+  namespace restriction. Keep the warning gate and qualify this correction before deployment.
+- validation scope: this failure occurred before the dry-run admission fixtures. Local render
+  checks alone cannot establish that Kubernetes accepts and evaluates the policy. Personal and
+  child answers, reviewed return, and both data-bearing restores remain pending.
+
+## 2026-09-08 · testv5 · admitted claims and controller label configuration · PARTIAL
+
+- qualification: `ac5f12c4d712687b7e91e72e3ccbde2b3b11a547` passed all twelve selected validation
+  gates and server publication in [run 34213336076](https://github.com/elewa-git/opencrane/actions/runs/34213336076).
+  The disposable cluster reported `Sandbox installed admission contract: PASS` at 10:13:11 UTC.
+- deployment: preflight took 62.139 seconds. The owning install scripts ran
+  10:18:20.540–10:22:11.355 UTC (230.815 seconds), exit 0, Helm revision 9. All eleven service Pods
+  were Ready with zero restarts; public TLS health returned 200 at 10:23:06.760. The server uses
+  this candidate; seven checked application digests retain the qualified `997dcda70` companions
+  where appropriate, including the admitted computer profile. The completed bootstrap Job,
+  database baseline and owner/OIDC binding remain unchanged. This is repair timing, not restore RTO.
+- product proof: both fresh employees renewed their real OIDC sessions. At 10:26:29, colleague D
+  posted and retried a normal follow-up after their original computer became cold. At 10:26:32,
+  colleague E created and retried a personal conversation and posted its first message.
+- controller finding: both new claims were admitted, but the controller reported `InvalidMetadata`:
+  `opencrane.ai/computer-generation` uses a domain absent from its allowlist. No Sandbox or computer
+  Pod was created. The pinned v0.5.3 controller reads `/etc/sandbox-config/allowed-label-domains`
+  at startup. The repair mounts the fixed `opencrane.ai` configuration and adds a persisted
+  claim-to-Sandbox-to-Pod check to disposable-cluster CI. Application admission remains responsible
+  for the exact lease keys and authorized caller.
+- replay finding: the ordinary member was denied with 403 as expected; the owner received 503
+  because KurrentDB denied the service identity's replay operation. The pinned 26.1.1 policy permits
+  replay only to operations or administrator identities. Recovery must use the deployment
+  maintenance boundary; the server must retain its unprivileged history credentials.
+- remaining proof: complete personal and child answers, reviewed return and reconnect, followed by
+  both scheduled data-bearing restore drills and measured recovery time.
+
+## 2026-09-08 · testv5 · qualified controller repair and browser child admission · PARTIAL
+
+- qualification: `1cb9dd2c0971377d00afc8396c54300696b8cb78` passed all twelve gates in
+  [run 34219608300](https://github.com/elewa-git/opencrane/actions/runs/34219608300), including the
+  persisted claim-to-owned-Sandbox-and-Pod lifecycle check and foreground cleanup.
+- controller repair: the helper and executable early dispatcher matched that qualified source.
+  The owning `--provision-agent-sandbox-controller` action passed preflight in 1.357 seconds and
+  applied from 11:29:06.271 to 11:29:26.194 UTC (19.923 seconds), exit 0. At 11:30:44 the controller
+  had generation/observedGeneration 2, one Ready replica and zero restarts. The fixed ConfigMap
+  contains only `allowed-label-domains: opencrane.ai` and is mounted read-only at `/etc/sandbox-config`.
+  Image, service account, UID, selector and rollout strategy stayed unchanged. Application images
+  remain the `ac5f12c4d` server and qualified `997dcda70` companions.
+- existing runtime state: both earlier personal claims and their runtime resources were absent
+  after repair. The 11:17:28 read-only queue snapshot had one live consumer and three parked
+  messages, with no inflight or outstanding delivery. No fake claim, manual lease, or replay was
+  created during this controller operation.
+- browser proof: the owner signed in afresh, selected their own group message and explicitly chose
+  the company assistant. A new child request was admitted at 11:31:09.617. At 11:32:06–11:32:11,
+  exact command retry recovered the same ready child, changed-source retry was denied, another
+  human could not replay that command, and all three group members could open the child. The
+  original failed request remains terminal. Assistant answers and reviewed return remain pending.
+- replay repair: the broken public route and application HistoryStore replay method are replaced
+  by a bounded operator Job using the installed bootstrap boundary. Focused tests prove script
+  and target binding, ownership and failure refusals, TLS and credential separation. This source
+  still needs review, remote qualification, installation and live replay before it is qualified.
+
+
+## 2026-09-08 · testv5 · computer DNS diagnosis and replay repair · PARTIAL
+
+- live finding: the new company child has an owned, running computer Pod, correct lease labels and
+  service address, with zero restarts. At 11:42:33 UTC its readiness returned 503, reason `URLError`.
+  The review credential file was absent. Its only resolvers were `8.8.8.8` and `1.1.1.1`; resolving
+  the release's private server failed with `gaierror`, errno -2. Failure precedes credential
+  exchange, checkpoint restore and model execution. Both personal follow-up messages were admitted
+  at 11:35, but their new Pods inherited the same template. No runtime data was patched.
+- source repair: the pinned v0.5.3 controller replaces omitted DNS under its default managed network
+  policy and also adds public internet egress. The release already owns the computer's restrictive
+  NetworkPolicy. The template now selects `Unmanaged` and explicit `ClusterFirst`; that existing
+  policy stays unchanged. The upstream controller removes only its own template policy. Existing
+  Pods keep their old DNS, so qualification must admit fresh normal sessions.
+- local evidence: Agent Sandbox Helm and controller contracts, including DNS/selector denials,
+  lint, workload ownership and independent review pass. The k3d lifecycle smoke now resolves and
+  opens a TCP connection to the private server and rejects an extra controller-managed policy.
+  That new remote check and live DNS proof have not yet run.
+- replay source: `4b3909af2` replaces the unusable application replay route with a bounded operator
+  Job. Independent review passed after fixing immediate terminal failures to return without waiting
+  the full deployment timeout. The normal server identity remains unprivileged. Remote secure
+  replay, installation and replay of the parked testv5 activations remain pending.
+- remaining evidence: personal and child answers, reviewed human sharing, reconnect, both history
+  restore modes and their measured recovery times. A running Pod does not establish these outcomes.
+
+
+## 2026-09-08 · testv5 · reciprocal model-network preflight · PARTIAL
+
+- read-only verification at 12:01:56 UTC confirmed the computer/server paths on 8081 and 8090,
+  their Service selectors, and UDP/TCP DNS allowances. LiteLLM's policy allowed only server and
+  Cognee ingress on 4000. Computer egress already selected LiteLLM, but no reciprocal rule admitted
+  computer traffic. Correcting DNS alone would therefore leave the first model call blocked.
+- source repair: LiteLLM now admits only the configured computer namespace, `agent-sandbox`
+  component and configured profile on its model port. It retains attempt-key authentication.
+  The server chart's duplicate computer-egress policy is deleted; the Agent Sandbox chart remains
+  the owner of the unchanged computer ingress/egress rules. Tests cover a separate computer
+  namespace, a non-default model port, forbidden namespace/component/profile, disabled computers,
+  and the installed computer-to-model TCP path without a model invocation.
+- replay preflight: the live bootstrap Job and ConfigMap have the expected release ownership,
+  pinned utility image, token automount disabled and matching administrator/CA mount references.
+  The ConfigMap still needs the new replay script and target from the normal installation.
+  This inspection read no credential content and made no traffic probes or cluster changes.
+- pending: qualify and install the combined network/replay source, then complete product and
+  recovery evidence. Configuration matches are distinct from an actual model answer.
+
+## 2026-09-08 · remote qualification · computer networking and activation replay · PARTIAL
+
+- source `2ff1d727fe5c05b78e2693dca8149a0073841b91`, Actions run
+  [34223531038](https://github.com/elewa-git/opencrane/actions/runs/34223531038): eleven checks
+  passed; the Kubernetes smoke failed and server publication was skipped.
+- the smoke proved installed Sandbox admission, private DNS/server connectivity and controller
+  lifecycle at 12:09 UTC. Its later replay Job failed on its first TCP connection to KurrentDB,
+  before TLS or authentication, while the database remained Ready. The log does not establish
+  the underlying network timing cause.
+- the model-network repair passed independent review and was pushed as `7fe9132b3`. It adds the
+  missing ingress peer and removes the duplicate computer egress policy. Its remote and live
+  proofs remain pending.
+- replay now checks TLS health from inside its new Pod before sending the single replay POST.
+  The health wait shares the Job timeout; authentication and TLS failures stop immediately. Tests
+  cover initial connection refusal, an exhausted wait, denied health and uncertain POST failures.
+  No deployment, live replay, assistant answer or restore is claimed from this run.
+
+## 2026-09-08 · testv5 · qualified networking, replay and Pod-read diagnosis · PARTIAL
+
+- qualification: `b2ee5a4ca5a261515721910c68b7969244abb4aa` passed all twelve selected validation
+  gates and server publication in [run 34226441577](https://github.com/elewa-git/opencrane/actions/runs/34226441577).
+  Installed computer DNS, private-server and model TCP checks passed at 12:42:33 UTC; owned
+  Sandbox/Pod lifecycle and foreground cleanup passed at 12:42:34; secure replay followed.
+- deployment: owning preflight took 63.038 seconds. Installation ran 12:50:20.526–12:54:19.738 UTC,
+  exit 0, 239.211 seconds, Helm revision 10. All eleven service Pods and public TLS health passed.
+  The server index is `sha256:9aabe2b31dab9a013f4c50466d76f02536b2e55a20acca735841c132a85659fa`;
+  its amd64 manifest is `sha256:ea9e7e8421300170835046f9273e8fd30280f4b3329ff24e95552e34041839bc`.
+  The admitted computer profile and qualified `997dcda70` companions remain pinned; the completed
+  bootstrap Job and database baseline remain unchanged. This is repair timing, not restore RTO.
+- live replay: the owning maintenance command completed in 21.480 seconds, Job
+  `kurrentdb-activation-replay-rcbjx`, complete at 12:56:38. A CA-verified HTTPS queue read at
+  12:57:06 confirmed parked messages fell from three to zero, with zero inflight/outstanding and
+  one consumer. The server history identity did not receive administrator credentials.
+- product evidence: all five test identities signed in again after server replacement. Two fresh
+  personal chats and their first messages passed exact retries. A real browser explicitly selected
+  the company assistant and admitted a new child; exact retry, changed-source denial, other-caller
+  denial and all three audience reads passed. Neither personal nor child output was produced.
+- finding: all three new computer Pods run with correct owner identifiers, lease labels and
+  ClusterFirst DNS; private server resolution succeeds. Their review credential is absent and
+  readiness reports HTTPError. A credential-route request from the bound Pod returned 409. The
+  server's applicable Role and ClusterRole bindings, including its groups, grant no Pod read, while
+  the binding adapter lists Pods during that exchange. Later cooling is recorded separately and
+  does not establish the cause of the earlier failure.
+- repair in progress: read only the named Pod from the claim, retain namespace, name, unique
+  identifier, service-account and lease checks, and grant namespaced `pods/get`. Installed smoke
+  must exercise the full server service-account identity and reject namespace-wide discovery,
+  Pod mutations and foreign-namespace reads. Closed server diagnostics identify the failing
+  operation without copying Kubernetes errors or credentials. Review and fresh live answers remain
+  required before either scheduled, data-bearing `latest` restore and its measured RTO.
+
+
+## 2026-09-08 · testv5 · qualified computer verification and admission diagnosis · PARTIAL
+
+- qualification: `fa094d9347d93154351ab4a5c70f1b42d16bd69a` passed all twelve selected validation
+  gates and server publication in [run 34232383769](https://github.com/elewa-git/opencrane/actions/runs/34232383769).
+  Installed named-Pod verification and the full service-account authorization denials passed at
+  13:40:51 UTC. Runtime discovery, Pod mutations and foreign-namespace reads remain denied.
+- deployment: owning preflight took 63.248 seconds. Installation ran 13:50:37.958–13:54:35 UTC,
+  exit 0, 237.467 seconds, Helm revision 11. All eleven service Pods and public TLS health passed.
+  Server index: `sha256:e1166d6ed0cc4ca9b89de00983f6b39f9a52617507523c791fb701ad892768ba`;
+  amd64: `sha256:45983339dbb3810852c36905bc9a58d95f4676ad62f320aa5fb7b742ad05b62e`.
+  Qualified `997dcda70` companions, admitted profile, completed bootstrap and database baseline
+  remain unchanged. Installation duration is not restore RTO.
+- live progress: all five dedicated test identities signed in again. A fresh personal chat and its
+  first message recovered exactly on retry. Its owned computer received the review credential at
+  13:55:57.705 (HTTP 200), restored its checkpoint at 13:55:57.821 (HTTP 204), then received a
+  bootstrap refusal at 13:55:58.207 (HTTP 409). No run or assistant output was admitted.
+- read-only diagnosis: the employee has an approved persona under their external sign-in subject;
+  the admission reader incorrectly looks it up under the internal Principal id. No memory dataset
+  exists for that Principal, and the current path has no dataset provisioner. Source inspection
+  also found three company-turn author comparisons using the execution Principal instead of the
+  human requester. No live authority rows, leases or failed messages were patched.
+- repair: resolve the persona through the exact verified Principal; keep the human requester and
+  company execution identity distinct for history, first admission and duplicate recovery. New
+  text turns explicitly freeze memory as unavailable; future enabled-memory reads still deny
+  missing datasets. Typed admission warnings expose the refusal reason without message content,
+  credentials or raw errors. Independent review and fresh personal/company answers remain required.
+- process evidence: the previous successful qualification's Kubernetes lifecycle job took 745
+  seconds, affected build/test/lint 387 seconds, Storybook 230 seconds and server publication 107
+  seconds. These jobs overlap; their durations must not be summed as total elapsed time. The
+  remaining product and recovery proofs are the completion gates, not another optional review loop.
+
+
+## 2026-09-08 · testv5 · admitted personal turns and model limit diagnosis · PARTIAL
+
+- qualification: `af3bf689fcb43347cddb24db825c281d5231c13d` passed all thirteen selected validation
+  and publication jobs in [run 34238519338](https://github.com/elewa-git/opencrane/actions/runs/34238519338).
+  CI completed at 14:42:07 UTC, approximately 13 minutes after preparation began. A later local/API
+  interruption delayed collecting its result; that delay is not CI duration.
+- deployment: owning preflight passed in 65.518 seconds. Installation ran 15:36:47–15:40:43 UTC,
+  exit 0, 235.919 seconds, Helm revision 12. All eleven service Pods, TLS health and the privilege
+  Job passed. Server index: `sha256:9981f2caf60e479b668c89eb80f1d06dc650b1363b288149a0dfe1c730e95a0a`;
+  amd64: `sha256:2efba67b8f16641228808a2623bdcb7d83de8aaa7a8b65879e18c836414ff209`.
+  Qualified companions, admitted profile, bootstrap and database pins remain unchanged.
+- fresh journeys: all five test accounts signed in. Two new personal sessions and first-message
+  retries passed at 15:43:07–10. The owner selected the company assistant in a real browser at
+  15:43:32. Its exact retry recovered the same child; changed-source and other-caller retries were
+  denied, and all three group members could read it.
+- startup: D triggered node scale-up at 15:43:07. Both personal Pods scheduled at 15:44:46 and
+  completed image pulls at 15:45:44. Both incurred one liveness restart before the health listener
+  opened; the template has no startup probe. This startup allowance needs a separate chart review.
+- admission: both computers obtained review credentials and restored checkpoints around 15:46:26.
+  E bootstrap returned 200 at 15:46:27.706; D's first typed persistence refusal recovered on its
+  normal retry, bootstrap 200 at 15:46:31.931. The initial three-minute answer wait expired during
+  cold startup; its evidence source attribution was corrected with the original label retained.
+- model finding: both computer IPs reached LiteLLM `/v1/chat/completions`, which returned HTTP 400.
+  The provider identified `invalid_request_error`, `invalid_value`, parameter `max_tokens`.
+  Admission preserved the default 256,000-token whole-run ceiling, but supplied no per-response
+  cap, so the runtime sent that ceiling as one response limit. No quota or authentication failure
+  was established. No assistant output or completed recovery drill is claimed.
+- repair: freeze a separate 4,096-token product response cap in the existing model route. The
+  runtime already takes the smaller route/budget limit, and existing immutable snapshots retain
+  their original policy. Fresh admitted turns must prove the repair before both `latest` restores.
+
+## 2026-09-08 · testv5 · personal and group text journeys · PASS
+
+- scope: text-assistant and group collaboration proof on the review candidate. This is not a tag,
+  a fresh-install timing result, backup recovery proof or a completed MVP.
+- qualification: `232d55d5a24453d6e23adb60cbfc060f5bd77cd3` passed all thirteen selected validation
+  and publication jobs in [run 34248422177](https://github.com/elewa-git/opencrane/actions/runs/34248422177).
+  Installed Kubernetes lifecycle and Pod authorization checks passed at 16:11:01.978 UTC.
+- deployment: owning preflight passed in 63.903 seconds. Installation ran 16:16:44.341–16:20:32.790
+  UTC, exit 0, 228.449 seconds, Helm revision 13. All eleven service Pods were ready with zero
+  restarts, public TLS health returned 200, and privilege and OIDC redirect checks passed.
+  Server index: `sha256:6e92ee9476e45d0f49c50c6085df2baa58a75b2a3ad8865d052b771186ce9e89`;
+  amd64: `sha256:0206eb1dae3e0156030478e9f67af120bdec22d2d98e758978d0223fcae69953`.
+  Companion source `997dcda70950d5403545a93e1d5b9a3836d5d958`, admitted profile, controller,
+  completed bootstrap, database and permissions remain unchanged. No CI transport or deploy retry
+  was needed during this qualification.
+- personal journey: all five dedicated test users signed in again. Two fresh personal chats and
+  their exact creation/message retries passed at 16:22:18–22. Completed answers were recovered at
+  16:22:45–47, including the requested markers and a fresh history read. Each employee then signed
+  in through a fresh real browser and recovered the answer after reload, at 16:24:11–13.
+- frozen input proof: read-only CNPG queries returned exactly one completed run for each personal
+  answer. Principal, approved persona, agent/model revision and snapshot digest matched the actual
+  run. Each snapshot freezes a 4,096-token response cap and retains the 256,000-token run budget.
+  No authority row or frozen snapshot was patched.
+- group journey: the owner selected the company assistant on their group message in the real
+  browser at 16:22:25. Exact retry recovered the child; altered source and another caller's replay
+  were denied. All three group members could open it. The initial answer completed by 16:22:54 and
+  a follow-up by 16:24:09. In a fresh browser, the owner returned to the group, reopened the exact
+  child, edited its selected answer and shared it as a human message; the result survived reload
+  at 16:25:16. API sharing recovered an exact retry and denied changed text; all three readers saw
+  the one corresponding human message, with no parent computer or run. SSE resume at 16:25:37
+  returned unique ordered entries after the supplied Last-Event-ID, overriding the query cursor.
+- runtime observations: all three fresh computers started within 2–3 seconds of Pod creation and
+  remained ready with zero restarts. Initial model requests returned 200 at 16:22:30, :34 and :40;
+  output admission returned 202, including the company follow-up. This does not supersede the
+  earlier cold-node startup finding. Three old failed computers retain their original snapshots.
+- remaining limitations: both personal `/me/runs` listings are empty despite the independently
+  proven completed runs and saved answers. Membership revocation and private browser-state purge
+  remain unproven live because the administrative operation is absent. The generic API runner's
+  earlier browser `NOT_RUN` row is supplemented by the three real-browser receipts; no purge
+  proof is claimed. Login continuity across server replacement remains unfinished.
+- recovery handoff: the completed fixture was captured at 16:25:43.405662 UTC across eight
+  authenticated audience reads, digest
+  `2bad5e77215e2aa1972905e0c2a5782914e8b30f2bb4d502fcc12d013d6e3420`. Both scheduled, data-bearing
+  `latest` restores and their measured recovery times remain pending.
+
+## 2026-09-08 · testv5 · scheduled file-copy history recovery · PASS
+
+- source and scope: the same qualified `232d55d5a` server and retained companion, database and
+  profile pins. A real scheduled backup must contain the completed personal/group fixture; the
+  restored history must exclude a later human message and accept a new one.
+- backup: the 16:30 scheduled Job completed after fixture capture. The owning schedule update
+  took 250.353 seconds and crossed the next trigger, so the final eligible backup came from the
+  16:35 CronJob-owned run. It scheduled at 16:38:07 amid CPU, memory, volume-affinity and autoscaler
+  constraints; its container started at 16:38:15 and finished seven seconds later. The stable
+  backup is `20260908T163815Z`, one chunk, ten files, 528872 KiB. Archive inventory through the
+  owning script took 15.368 seconds. At 16:41:34 the next schedule was 02:00 UTC and no backup
+  remained active. Schedule-update and scheduling delays are not restore RTO.
+- restore: the group accepted a post-backup marker at position 7 at 16:42:18. The owning command
+  used `--kurrentdb-restore latest --kurrentdb-restore-confirm-serving` and resolved exactly
+  `20260908T163815Z`. It ran 16:44:42.510–16:46:22.346 UTC, exit 0, **99.835 seconds**. The safety
+  copy `20260908T164500Z-prerestore` was retained. KurrentDB became ready and its bootstrap Job
+  completed on the retained image. The restored KurrentDB process exited once with code 0 before
+  restarting successfully; events show no liveness kill or scheduling failure for that Pod.
+- authenticated recovery: the post-backup marker was absent at 16:47:57, including its private
+  payload in the returned history. All eight audience reads matched the original entries, payload
+  digests and cursors at 16:48:03.501. **Restore start to verified history: 200.991 seconds**, including
+  readiness handoff and verification; this is not the exact duration of user-visible unavailability.
+  A new group message and its exact retry passed for all three readers at 16:48:55.
+- computer recovery: the three successful assistant computers were temporarily unready after the
+  database interruption. At the bounded recheck, 16:50:39, all were ready with zero restarts,
+  `/readyz` 200 and idle bootstrap 204. They recovered through their normal retry path without a
+  manual repair. No new model answer after restore is claimed by that readiness check.
+- next drill: a new eight-audience snapshot fixture was captured at 16:49:00.800 UTC, including
+  the successful group continuation, digest
+  `d0f9f6bc4c7cf8c22246b3abc803061dc2e1b05b13fa51cce489183406a031a1`. Scheduled volume-snapshot
+  readiness and its `latest` restore remain pending.
+
+## 2026-09-08 · testv5 · scheduled volume-snapshot backups · PASS
+
+- scope correction: the request required a scheduled file-copy backup and `latest` restore with
+  measured recovery time, restricted anonymous KurrentDB health, and a trial of volume-snapshot
+  backup mode on a cluster with a VolumeSnapshotClass. Those checks have passed. Earlier entries
+  expanded the snapshot trial into a second restore; that additional operation is not completed
+  and is not part of the requested backup-mode proof.
+- configuration: the owning script enabled volume-snapshot mode at 16:56:45.643–17:00:34.593 UTC,
+  exit 0, 228.949 seconds. It uses the non-default `opencrane-pd-snapshots` class and the existing
+  `pd.csi.storage.gke.io` driver. The first scheduled run completed at 17:05:44 and its snapshot
+  was observed ready at 17:06:39.
+- stable backup: restoring the daily schedule took 225.000 seconds and crossed the 17:10 trigger.
+  Its CronJob-owned Job completed at 17:10:35. The final snapshot is
+  `opencrane-testv5-kurrentdb-20260908t171001z`, UID `0b187342-5e46-4ad8-86d0-144f55697d26`,
+  content `snapcontent-0b187342-5e46-4ad8-86d0-144f55697d26`. Both snapshot and content report
+  `ReadyToUse=true`, restore size 20Gi. Exactly one completed scheduled Job names that snapshot.
+  At 17:11:02 no backup was active, the next schedule was 02:00 UTC, all eleven service Pods were
+  ready and public TLS health returned 200. Qualified application and companion pins were retained.
+- additional restore: automatic approval review rejected the proposed snapshot restore before
+  its process ran because it would stop KurrentDB and replace the serving data volume, while the
+  explicit snapshot request authorized a backup-mode trial. No snapshot restore, volume replacement
+  or indirect retry ran; no snapshot RTO is claimed. The local read-only observer was stopped.
+  The post-backup group probe remains as an ordinary test-fixture message.
+- post-file-copy assistant proof: at 17:15:59 a new company-assistant input and exact retry were
+  accepted in the recovered child chat. A completed model answer was recovered from a fresh history
+  read at 17:16:24, 25.62 seconds later, at position 6. Run
+  `2e9e6ed6-552b-4267-885f-a2d714ced614`, answer `de399792-fdcd-5e78-9d41-4f68475e1e15`.
+  This proves continued model execution after the successful file-copy restore; it does not claim
+  snapshot restoration.
+- receipts: private `snapshot-stable-latest-232d55d5a-receipt.json`,
+  `snapshot-restore-232d55d5a-approval-blocked.json`, `filecopy-restore-232d55d5a-receipt.json`,
+  `recovery-filecopy-verified.json` and the source-attributed journey results. Credentials remain
+  outside Git in the ignored dedicated test fixture. No release tag or merge was performed.

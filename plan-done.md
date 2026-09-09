@@ -5,6 +5,115 @@
 
 ---
 
+## 2026-09-08 — personal and group-assistant text journeys qualified on testv5
+
+Employees can complete setup, receive a personal-assistant answer and return to its saved history.
+Three colleagues can talk in a group, choose a company assistant for an own message, follow up in
+the linked chat, and return an edited answer as a human-authored group message.
+
+Live candidate `232d55d5a24453d6e23adb60cbfc060f5bd77cd3` passed all thirteen selected CI and
+publication jobs. The owning deployment completed in 228.449 seconds, with eleven service Pods
+ready and public TLS health passing. Two independent personal answers, the company answer and its
+follow-up completed. Fresh browser logins and reloads preserved both personal answers; the group
+owner navigated back and forth, edited the selected result and shared it to the group. All three
+members recovered that message. Exact retries, altered-command denials and SSE cursor resume passed.
+
+Read-only database evidence binds both completed personal runs to their actual approved personas,
+model revision and immutable input digest. The frozen 4,096-token response cap remains separate
+from the 256,000-token run budget. New personal text runs explicitly omit memory while its dataset
+provisioning and recall journey remain unfinished. The company assistant retains its own execution
+identity and model authority, with a separately verified human requester.
+
+PR #826 remains the single baseline review; #772's identical independent patch targets `develop`
+and the live stack check passes. The development-process and documentation implementation is
+recorded below. This proof does not qualify the whole MVP: personal activity listings are still
+empty, process-local logins do not survive server replacement, membership-revocation proof is
+pending, and tools, memory and autonomous subagents remain separate work.
+
+The requested recovery drills also passed. A scheduled file-copy `latest` restore recovered all
+eight authenticated audience histories and removed a post-backup message. The owning command took
+99.835 seconds; command start to verified history took 200.991 seconds, including handoff and
+verification. Group posting and a new model answer succeeded afterward. Scheduled volume snapshots
+are ready on the provisioned class. KurrentDB 26.1.1 serves anonymous health while denying protected
+routes with anonymous access disabled. Snapshot restoration is unqualified and was outside the
+requested snapshot-backup trial. Exact evidence is in the [deploy ledger](docs/agents/deploy-ledger.md).
+
+## 2026-09-07 — shared company assistant implementation; qualification pending
+
+Group members can select one of their own text messages, choose the company assistant and work in
+a shared child chat. The admitted audience stays fixed; a later group join neither gains earlier
+content nor invalidates a retry. Pending, Ready and Unavailable states expose durable recovery.
+Members can return through Back to group, review or edit a completed answer, and share it as their
+own message linked to the original request. A share retry is bound to the exact reviewed text.
+
+Operators provision the first company assistant through
+`POST /api/v1/organization/company-assistant`, selecting a model and explicit human invokers.
+The assistant uses its stable managed identity and independent model permission. The human's current
+membership and invocation permission, and continuing parent and child access, remain separate
+requirements. No private tools, persona or memory are inherited. Creation commits an immutable
+request and recovery task, establishes Kurrent history and a cold computer, then creates the read
+projection and atomically activates the first message before reporting Ready. Runtime-created
+subagents and autonomous delivery to the parent remain later work.
+
+Focused backend and browser checks, fresh-database authority tests and independent review support
+the implementation. Review repairs cover late-join retry, transient identity-history failure, shorter refreshed
+membership deadlines, and explicit shared-chat audience wording.
+The backend is committed in `951430524`; the UI and documentation in `2f4cc355e`. CI on that
+combined source passed affected build/test/lint, database authority, KurrentDB, API contracts and
+all five image smoke checks. Its 107 browser interaction/accessibility tests passed; the only
+failure was four missing Linux screenshot baselines, subsequently inspected from CI captures. Current integration results are recorded on [#826](https://github.com/elewa-git/opencrane/pull/826);
+live multi-person qualification remains pending. The earlier green CI at `cbdb742d4` covers
+onboarding, ordinary conversation continuity and
+#827, including its real Kurrent bounded-read test; it is not evidence for this later group wave.
+Testv5 still lacks installation identity configuration. The tested Stop-hook proposal remains
+unapplied pending explicit approval. No deployment or MVP completion is claimed.
+
+## 2026-09-07 — first delivery-speed and personal-assistant repairs
+
+The subsequent conversation-continuity slice implements ordinary creation retries, enum conversion
+and resilient metadata reads after another member leaves. It also rebuilds #827 on bounded public
+SSE, adds cancellable Kurrent catch-up through the installed SDK's supported subscription surface,
+and enforces the participant's current first-visible position before private payload loading.
+The browser preserves computer state, respects retry delays, purges revoked content and drafts,
+and rejects late updates from an old selection. Initial history and the 30-second computer refresh
+still use the existing full replay path; this cost is not claimed as solved.
+
+Focused backend, browser, schema and race tests pass. Independent review found and resolved the
+join-boundary and pending-send purge issues. The real Kurrent bounded-read test passed in CI at
+`cbdb742d4`; this is not deployed journey qualification. This continuity slice added no database
+schema, compatibility route, channel service or second Pod owner. The subsequent group assistant
+implementation is recorded above.
+
+Personal-session commands now distinguish a new chat from a retry (`6db91d08d`); matching retries
+preserve the existing lifecycle and grants. The slice passed 169 backend tests and the relevant
+frontend tests and lints. Member display names now reach conversation selection and direct/group
+titles (`ddf20b629`), with 42 focused tests and four lint targets passing. Generated API artifacts
+include both contract changes. Ordinary direct/group creation retries are completed in the
+subsequent slice above.
+
+Development guidance now scopes specialist reviews to changed responsibilities (`c648801e3`).
+Active Stop hooks are unchanged; their separately tested optimization still awaits explicit approval.
+Onboarding copy explains approved settings and saved progress (`a1ec98f5a`); visual qualification is
+recorded in `5ef5bd925`: 21 Storybook interaction checks pass, and four affected states have visually
+inspected Linux and Darwin baselines. No screenshot tolerances changed.
+
+People's approved persona instructions now reach the model, and each employee's assistant remains
+discoverable when colleagues have private assistants. Commit `825ceb3bc` includes regression tests:
+six directory cases, twelve runtime tests and fifteen review-surface dependency tests pass; the
+conversation typecheck, scoped style/Prisma checks and dependency-boundary lint pass.
+
+Commit `975b80955` moves boundary lint before expensive CI preparation/builds and separates the
+build, API and Storybook Nx caches. Independent review found no change to job dependencies or
+required qualification. A subsequent real CI run exposed that Nx rejects those restored local
+artifacts without its machine-bound metadata; `a97c57bcd` removes the ineffective cross-run
+transfers. Dependency/browser caches and within-job Nx reuse remain. CI timing improvements still
+require measurement on subsequent runs. See [Nx's explanation](https://nx.dev/docs/kb/unknown-local-cache).
+
+The README and website now explain the company-assistant vision, current architecture owners,
+implemented capabilities and remaining MVP work. The website build passes with no dead links.
+These records establish source implementation and validation, not a completed live customer journey.
+Live testv5 recovery remains pending; see the 2026-09-07 preflight in the deployment ledger.
+
 ## Executive Summary (History)
 
 **Current state**: Phase 1 baseline is now complete for go-live smoke validation. Core operator/API/UI, Helm deployments, Docker CI publish workflow, and k3d end-to-end reconciliation tests are in place and passing.
@@ -1375,3 +1484,18 @@ workloads or runtime behaviour.
   module-boundary lint, Phase A/B positive and adversarial guards, Helm dependency/lint/render
   checks, documentation build, residue searches, and independent architecture/reaper reviews cover
   the new layout.
+
+## 0.11.0 conversation replacement — relational history deletion (complete 2026-09-06)
+
+The 0.11.0 cutover slice removed the PostgreSQL transcript that ADR 0016 replaced with the KurrentDB
+`conversation-{id}` stream. PR [#826](https://github.com/elewa-git/opencrane/pull/826).
+
+- [x] **PostgreSQL holds no message, run-event, or timeline rows.** `ConversationMessage`,
+  `ConversationRunEvent`, `ConversationTimelineEntry`, their enums, triggers, functions, indexes,
+  and foreign keys left the schema and the target baseline; the tool lifecycle and recovery
+  reporters only recheck the run fence and no longer write run events.
+- [x] **A computer resolves exactly one conversation.** `conversations (silo_id, computer_id)` is
+  unique, so a duplicate projection row can never answer for another conversation.
+- [x] **Retired run-owned wiring is gone.** The dead `conversation-replay` internal mount, the
+  `RunProofKey` audit columns, the `ws` root dependency, the run-event SQL suite, and every
+  authority proof that inserted relational run events were deleted.

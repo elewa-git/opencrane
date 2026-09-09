@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
@@ -26,6 +26,8 @@ export function inlineConditionalDensity(sourcePath, source)
 /** Print checker-compatible line coordinates when invoked as a command. */
 function _Main(sourcePath)
 {
+	if (!existsSync(sourcePath))
+		return;
 	const source = readFileSync(sourcePath, "utf8");
 	for (const line of inlineConditionalDensity(sourcePath, source))
 	{

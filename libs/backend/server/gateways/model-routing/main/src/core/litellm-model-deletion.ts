@@ -111,7 +111,11 @@ export async function _RetireLiteLlmModelDeployments(targets: readonly LiteLlmMo
 	log.info({ credentialName, deletedDeploymentCount: relevant.length }, "litellm provider models retired");
 }
 
-/** Reads the live inventory through one traced, secret-free request. */
+/**
+ * Reads inventory through the pinned LiteLLM endpoint that represents a fresh installation as an empty list.
+ * Other HTTP failures remain errors, so an unavailable catalogue cannot authorize creation or deletion.
+ * @see https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/proxy/proxy_server.py#L7502 — v2 handles the initially empty router.
+ */
 async function _readInventory(endpoint: string, masterKey: string): Promise<readonly LiteLlmModelDeploymentTarget[]>
 {
 	return ___DoWithTrace(
@@ -119,7 +123,7 @@ async function _readInventory(endpoint: string, masterKey: string): Promise<read
 		{},
 		async function _Read(): Promise<readonly LiteLlmModelDeploymentTarget[]>
 		{
-			const response = await fetch(`${endpoint}/model/info`, { headers: { Authorization: `Bearer ${masterKey}` }, signal: AbortSignal.timeout(_LITELLM_MODEL_HTTP_TIMEOUT_MS) });
+			const response = await fetch(`${endpoint}/v2/model/info`, { headers: { Authorization: `Bearer ${masterKey}` }, signal: AbortSignal.timeout(_LITELLM_MODEL_HTTP_TIMEOUT_MS) });
 			if (!response.ok)
 				throw new Error(`LiteLLM model inventory returned HTTP ${response.status}`);
 			return ___ParseAndValidateJson(await response.text(), "LiteLLM model inventory response", _parseInventory);

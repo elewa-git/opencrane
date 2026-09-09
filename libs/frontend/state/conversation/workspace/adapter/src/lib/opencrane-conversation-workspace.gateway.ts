@@ -1,10 +1,11 @@
 import { Injectable, inject } from "@angular/core";
 
-import { ControlPlaneApiService } from "@opencrane/core";
-import { ConversationEventStreamMessageError } from "@opencrane/state/conversation/stream";
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand, type SubmitConversationSteeringCommand } from "@opencrane/state/conversation/workspace";
+import type { GroupChildCreateCommand, GroupChildShareCommand, GroupChildView } from "@opencrane/models/conversations";
 
-import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
+import { ControlPlaneApiService } from "@opencrane/core";
+import { _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
+
+import { _ConversationComputerBrowserPage, _ConversationComputerBrowserTargets, _ConversationComputerCommandResult, _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
 /**
  * Talks to the signed-in Control Plane API on behalf of the conversation workspace.
@@ -32,14 +33,43 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 {
 	/** Generated client whose requests carry the browser session cookie; it supplies the caller's identity. */
 	private readonly _api = inject(ControlPlaneApiService);
-	/** Selected-conversation transport port used for participant message commands. */
-	private readonly _eventStream = inject(CONVERSATION_WORKSPACE_EVENT_STREAM);
+
+	/** Reads currently visible children and rejects a response for another parent. */
+	public async listChildren(parentConversationId: string, signal: AbortSignal): Promise<readonly GroupChildView[]>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/children", { params: { path: { conversationId: parentConversationId } }, signal });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ParseConversationGroupChildren(result.data, parentConversationId); }
+		catch { throw _InvalidResponse(); }
+	}
+
+	/** Admits the selected message and company assistant with the store-owned retry key. */
+	public async createChild(parentConversationId: string, command: GroupChildCreateCommand, signal: AbortSignal): Promise<GroupChildView>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/children", { params: { path: { conversationId: parentConversationId } }, body: command, signal });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ParseConversationGroupChild(result.data, parentConversationId, command.parentMessageId, command.parentMessagePosition); }
+		catch { throw _InvalidResponse(); }
+	}
+
+	/** Shares the reviewed text as the signed-in human without inventing an assistant-authored message. */
+	public async shareChild(childConversationId: string, command: GroupChildShareCommand, signal: AbortSignal): Promise<void>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/share", { params: { path: { conversationId: childConversationId } }, body: command, signal });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { _ParseConversationGroupShare(result.data); }
+		catch { throw _InvalidResponse(); }
+	}
 
 	/** @inheritdoc */
 	public async directory(): Promise<ConversationCreationDirectory>
 	{
 		const result = await this._api.client.GET("/me/conversations/directory");
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		if (result.data === undefined)
+			throw _InvalidResponse();
 		try { return _ConversationWorkspaceDirectory(result.data.directory); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -55,7 +85,8 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async list(): Promise<readonly ConversationSummary[]>
 	{
 		const result = await this._api.client.GET("/me/conversations", { params: { query: { includeArchived: true } } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		if (result.data === undefined)
+			throw _InvalidResponse();
 		try { return result.data.conversations.map(_ConversationSummary); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -75,7 +106,8 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async onboardingHistory(): Promise<ConversationOnboardingHistoryProjection>
 	{
 		const result = await this._api.client.GET("/me/onboarding/chat");
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
 		try { return _ConversationOnboardingHistory(result.data); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -84,8 +116,15 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async open(conversationId: string): Promise<ConversationWorkspaceDetail>
 	{
 		const result = await this._api.client.GET("/me/conversations/{conversationId}", { params: { path: { conversationId } } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationDetail(result.data.conversation); }
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try
+		{
+			const detail = _ConversationDetail(result.data.conversation);
+			if (detail.id !== conversationId)
+				throw _InvalidResponse();
+			return detail;
+		}
 		catch { throw _InvalidResponse(); }
 	}
 
@@ -94,7 +133,8 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	{
 		const body = "participantRefs" in command ? { ...command, participantRefs: [...command.participantRefs] } : command;
 		const result = await this._api.client.POST("/me/conversations", { body });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
 		try { return _ConversationDetail(result.data.conversation); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -102,22 +142,17 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	/** @inheritdoc */
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
-		const blocks = command.blocks.map(function _Block(block) { return { ...block }; });
-		try { await this._eventStream.submit({ conversationId: command.conversationId, idempotencyKey: command.idempotencyKey, blocks }); }
-		catch (error)
-		{
-			if (!(error instanceof ConversationEventStreamMessageError)) throw _InvalidResponse();
-			if (error.accessChanged) throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
-			if (error.closed) throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "This conversation is closed and cannot accept messages.");
-			throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Recoverable, error.message);
-		}
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: command.text, activation: command.activation } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
 	}
 
 	/** @inheritdoc */
 	public async archive(conversationId: string, archived: boolean): Promise<ConversationWorkspaceDetail>
 	{
 		const result = await this._api.client.PATCH("/me/conversations/{conversationId}/archive", { params: { path: { conversationId } }, body: { archived } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
 		try { return _ConversationDetail(result.data.conversation); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -126,43 +161,79 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async close(conversationId: string): Promise<ConversationWorkspaceDetail>
 	{
 		const result = await this._api.client.POST("/me/conversations/{conversationId}/close", { params: { path: { conversationId } } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
 		try { return _ConversationDetail(result.data.conversation); }
 		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
-	public async run(runId: string): Promise<ConversationRun>
+	public async readComputerFile(conversationId: string, path: string): Promise<string>
 	{
-		const result = await this._api.client.GET("/me/runs/{runId}", { params: { path: { runId } } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationRun(result.data); }
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/files", { params: { path: { conversationId }, query: { path } }, parseAs: "text" });
+		if (result.error !== undefined || typeof result.data !== "string")
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
+	/** @inheritdoc */
+	public async readComputerDiff(conversationId: string, path: string): Promise<ConversationComputerCommandResult>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/diff", { params: { path: { conversationId }, query: { path } } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ConversationComputerCommandResult(result.data); }
 		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
-	public async steer(command: SubmitConversationSteeringCommand): Promise<void>
+	public async runComputerCommand(conversationId: string, argv: readonly string[], cwd: string): Promise<ConversationComputerCommandResult>
 	{
-		const result = await this._api.client.POST("/me/runs/{runId}/steering", { params: { path: { runId: command.runId } }, body: { text: command.text, idempotencyKey: command.idempotencyKey } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/commands", { params: { path: { conversationId } }, body: { argv: [...argv], cwd } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ConversationComputerCommandResult(result.data); }
+		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
-	public async cancel(runId: string, expectedAttempt: number): Promise<ConversationRun>
+	public async listComputerBrowserTargets(conversationId: string): Promise<readonly ConversationComputerBrowserTarget[]>
 	{
-		const result = await this._api.client.POST("/me/runs/{runId}/cancellation", { params: { path: { runId } }, body: { expectedAttempt } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		const state = result.data.state === ConversationRunStates.Cancelling ? ConversationRunStates.Cancelling : ConversationRunStates.Cancelled;
-		return { runId: result.data.runId, attempt: result.data.attempt, state, conversationId: null };
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/browser/targets", { params: { path: { conversationId } } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { return _ConversationComputerBrowserTargets(result.data); }
+		catch { throw _InvalidResponse(); }
 	}
 
 	/** @inheritdoc */
-	public async retry(command: RetryConversationRunCommand): Promise<ConversationRun>
+	public async openComputerBrowserPage(conversationId: string, port: number, path: string): Promise<void>
 	{
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/runs/{runId}/retry", { params: { path: { conversationId: command.conversationId, runId: command.runId } }, body: { expectedAttempt: command.expectedAttempt } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		return { runId: result.data.runId, attempt: result.data.attempt, state: ConversationRunStates.Accepted, conversationId: command.conversationId };
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/browser/pages", { params: { path: { conversationId } }, body: { port, path } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+		try { _ConversationComputerBrowserPage(result.data); }
+		catch { throw _InvalidResponse(); }
 	}
+
+	/** @inheritdoc */
+	public async captureComputerScreenshot(conversationId: string, port: number, path: string, width: number, height: number): Promise<Blob>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/review/browser/screenshots", { params: { path: { conversationId } }, body: { port, path, width, height }, parseAs: "blob" });
+		if (result.error !== undefined || !(result.data instanceof Blob) || result.data.type !== "image/png" || result.data.size === 0)
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
+	/** @inheritdoc */
+	public async readComputerPreview(conversationId: string, port: number, path: string): Promise<string>
+	{
+		const result = await this._api.client.GET("/me/conversations/{conversationId}/review/previews/{port}/{path}", { params: { path: { conversationId, port, path } }, parseAs: "text" });
+		if (result.error !== undefined || typeof result.data !== "string")
+			throw _Failure(result.response?.status);
+		return result.data;
+	}
+
 }
 
 /**
@@ -183,9 +254,12 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
  */
 function _Failure(status: number | undefined): ConversationWorkspaceGatewayError
 {
-	if (status === 401 || status === 403 || status === 404) return new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
-	if (status === 409) return new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "This conversation changed. Refresh and try again.");
-	if (status === 408 || status === 429 || (status !== undefined && status >= 500)) return new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Recoverable, "OpenCrane could not complete that action. Try again.");
+	if (status === 401 || status === 403 || status === 404)
+		return new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
+	if (status === 409)
+		return new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "This conversation changed. Refresh and try again.");
+	if (status === 408 || status === 429 || (status !== undefined && status >= 500))
+		return new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Recoverable, "OpenCrane could not complete that action. Try again.");
 	return new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Unavailable, "The conversation workspace is unavailable.");
 }
 

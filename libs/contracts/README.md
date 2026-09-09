@@ -24,6 +24,10 @@ Two halves:
   schemas keep runtime acceptance, strict request fields, and TypeScript
   models in one package.
 
+Personal-session, ordinary chat, group-child and reviewed-share requests require an `idempotencyKey` UUID. Clients reuse it after an
+uncertain response and supply a new UUID for a new command. Group-child responses identify their
+parent request and Pending, Ready or Unavailable state; parent metadata never grants child access.
+
 ```
  apps/opencrane server ....... emits OpenAPI 3.1 spec (dist/apps/opencrane/openapi.json)
         │  openapi-typescript
@@ -45,13 +49,16 @@ verified identity provenance; it carries only immutable coordinates and canonica
 provider credentials or mutable source objects. Its `mcpTools` list records immutable MCP tool
 revision identifiers plus each saved name, description, exact input JSON Schema, and canonical
 schema digest. Registry and provider credentials remain entirely behind server-owned execution
-boundaries and never enter the snapshot or agent runtime. The compiled model
-route also freezes the model registry's generated-output allowlist; the runtime
-cannot infer image-generation authority from a prompt or provider response. Identity is
-explicitly tagged: a user run
-pins a human's signed fleet membership, while a managed run pins the derived service principal, its
-signed membership, and the exact approved non-personal scopes. A service record cannot be read as a
-user record by accident.
+boundaries and never enter the snapshot or conversation computer. The compiled model
+route also freezes the model registry's generated-output allowlist; the executor
+cannot infer image-generation authority from a prompt or provider response. The compiled budget
+preserves the admitted model-turn limit alongside token, cost, tool, and wall-clock ceilings.
+Identity evidence is explicitly tagged. A personal run pins the human's deployment-selected Fleet or Standalone membership.
+A company run pins its own Internal Principal, active service and exact published revision. Both
+carry the human requester's independently verified human membership. The strict schema lives beside the agent model and is re-exported here. Standalone evidence uses
+the local membership row/version and bounded observation instead of Fleet proof fields. The schema rejects
+mixed kinds, missing requester evidence and principal/silo/revision substitutions; current database
+and identity checks still run at admission. A stored snapshot never grants current permission.
 
 `PROMPT_COMPILER_VERSION` is the single version pin shared by revision authoring, admission, and
 the deterministic compiler. A revision that names another version is not admissible, preventing a
@@ -68,44 +75,37 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `PublicHealthReport` and its fixed service/status enums — the public-safe `/healthz` response
   shared by the server and future status consumers. It reports only
   recognisable capability names and categorical availability, never internal topology or errors.
-- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AG_UI_RUN_WAIT_STATE_EVENT`, `AgUiProjectionSourceEvent`,
-  `AgUiProjectionEvent`, and `AgUiSseRecord` — the stable AG-UI wire vocabulary shared by server and
-  browser. Projection and SSE encoding policy live in the separate backend
-  [conversation projection package](../backend/conversations/projection/main/README.md).
-- `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiA2uiSurfaceStates`, and
-  `___ParseAgUiA2uiEnvelope` — the versioned CUSTOM envelope, authoritative ten-state presentation
-  lifecycle, and strict parser for governed A2UI surfaces. Each envelope binds conversation, run,
-  message, surface, and monotonic sequence coordinates; admits only ordered upstream
-  `beginRendering`, `surfaceUpdate`, and `dataModelUpdate` operations from the accepted eleven-name
-  catalogue; and may carry one bounded display-safe reason. These are presentation facts only and
-  never grant an action or let a client infer lifecycle authority.
+- `ConversationHistoryResponse`, `ConversationEntry`, and the conversation-computer contracts — the
+  immutable history and generation-fenced computer vocabulary shared by server and browser.
+- `___ConversationComputerSchema` validates the existing public computer shape, lease generation,
+  and checkpoint metadata without admitting private extensions. Readers still bind its conversation
+  coordinate to the authenticated request.
 - `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM envelope for lossy immediate-child terminal
   updates. It never exposes child context or sibling data.
 - `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying
   only the public call id and an optional server-selected technical classification, never provider
   text, raw arguments, credentials, or retry authority.
+- `ConversationEntry`, its human/agent/service/system authors, encrypted message payload references,
+  explicit log variants, and A2UI mutations — the canonical participant-visible event contract for
+  a `conversation-{id}` history stream. `___ConversationEntrySchema` validates storage and
+  receipt-transformer records; `___ConversationComputerEntrySchema` is stricter and refuses a
+  computer-provided service attestation. Receipt verification and the bound writer's computer/stream
+  checks remain context-specific boundaries outside these structural parsers. Both carry opaque
+  payload and artifact coordinates, never plaintext bodies, storage credentials, or general
+  event-store access.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
-  model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotMcpTool`,
+  model-routing types, memory-gateway constants, `ThirdPartySource*`,
+  `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by
   personal-configuration validators, persistence, and public schemas. It keeps the readable JSON
   values stable while making patch branches compile against one shared owner.
-- `MemoryFactProvenanceSourceKinds` and `RunInputSnapshotIdentityKinds` — stable memory-source and
-  tagged-execution-identity vocabularies used by catalogue validation and frozen run-input branches.
-  Their readable serialised values remain part of the contract; the enums prevent independent
-  persistence and admission code from drifting on which branch a value selects.
-- `AGENT_RUNTIME_PROTOCOL_VERSION`, the protocol-v2 continuation contract, personal and managed runtime audience constants and validators,
-  `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and `RuntimeCandidate` — the private workload
-  protocol for an agent process that opens its own authenticated stream. The opening frame binds the
-  runtime instance to the Pod UID independently verified from its Kubernetes credential. Personal
-  and managed runtimes use distinct projected-token audiences and ServiceAccount grammars, so one
-  workload class cannot borrow the other's transport identity.
-- `RuntimeCommandKinds` and `RuntimeCandidateKinds` — documented string-backed discriminants that
-  keep workload command and candidate control flow exhaustive while preserving protocol bytes.
+- `MemoryFactProvenanceSourceKinds` and `ExecutionSubject` — stable memory-source vocabulary and the
+  evidence-bound agent identity, principal, membership, capability, run, computer-lease, requester,
+  and admission coordinates shared by run snapshots and service gates.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database

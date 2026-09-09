@@ -13,7 +13,7 @@ type ToolInvocationTransaction = ConstructorParameters<typeof PrismaToolInvocati
  * The function keeps runtime dispatch from importing the repository class while preserving the
  * same transaction for candidate acceptance and ToolInvocation admission. Replays with the same
  * candidate fingerprint are idempotent; conflicting reuse is rejected.
- * Called by: libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-authority.ts.
+ * Called by: the transaction-bound tool dispatch authority.
  * @param transaction - Transaction already accepting the runtime candidate.
  * @param intent - Frozen candidate facts.
  * @param now - Trusted server time used to set the retry deadline.

@@ -11,6 +11,7 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 {
 	return __DigestCanonicalJson({
 		runId: snapshot.runId,
+		attempt: snapshot.attempt,
 		siloId: snapshot.siloId,
 		agentServiceId: snapshot.agentServiceId,
 		agentRevisionId: snapshot.agentRevisionId,
@@ -28,9 +29,7 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		}),
 		modelRoute: snapshot.modelRoute,
 		budgetPolicy: snapshot.budgetPolicy,
-		identitySnapshot: snapshot.identitySnapshot,
-		capabilitySetDigest: snapshot.capabilitySetDigest,
-		effectiveContractDigest: snapshot.effectiveContractDigest,
+		executionSubject: snapshot.executionSubject,
 		promptCompilerVersion: snapshot.promptCompilerVersion,
 		compiledAt: snapshot.compiledAt,
 	} as unknown as JsonValue);

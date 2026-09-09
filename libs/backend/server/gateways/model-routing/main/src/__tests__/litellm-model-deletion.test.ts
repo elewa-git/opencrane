@@ -51,7 +51,7 @@ function _installLiteLlmFake(initial: readonly LiteLlmModelDeploymentTarget[], d
 	const deleted: string[] = [];
 	vi.stubGlobal("fetch", vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
 	{
-		if (url.endsWith("/model/info"))
+		if (url.endsWith("/v2/model/info"))
 			return new Response(JSON.stringify({ data: inventory.map(_entry) }), { status: 200 });
 		if (url.endsWith("/model/delete"))
 		{

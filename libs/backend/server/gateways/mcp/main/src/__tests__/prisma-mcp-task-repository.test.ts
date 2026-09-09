@@ -134,7 +134,7 @@ describe("Prisma MCP task admission", function _McpTaskAdmissionSuite()
 		const submission = _Submission();
 		const authorizationCoordinates = [{ resource: { kind: "mcp-tool-revision", id: submission.toolRevisionId }, action: "invoke" }];
 		const authorizationDecisionDigests = [`sha256:${"a".repeat(64)}`];
-		const authorizationEvidenceDigest = ___DigestCanonicalJson({ siloId: submission.siloId, principalId: submission.principalId, actorKind: "user", coordinates: authorizationCoordinates, decisionDigests: authorizationDecisionDigests, mcpTaskId: "mcp-task-1", toolRevisionId: submission.toolRevisionId, argumentsDigest: ___DigestCanonicalJson(submission.arguments) });
+		const authorizationEvidenceDigest = ___DigestCanonicalJson({ siloId: submission.siloId, caller: { principalId: submission.principalId }, coordinates: authorizationCoordinates, decisionDigests: authorizationDecisionDigests, mcpTaskId: "mcp-task-1", toolRevisionId: submission.toolRevisionId, argumentsDigest: ___DigestCanonicalJson(submission.arguments) });
 
 		await expect(repository.admitAuthorizedToolInvocation(submission.siloId, "mcp-task-1", submission.callDigest)).resolves.toMatchObject({ state: McpTaskStates.Queued, toolInvocationRowId: "invocation-1" });
 		await expect(repository.admitAuthorizedToolInvocation(submission.siloId, "mcp-task-1", submission.callDigest)).resolves.toMatchObject({ state: McpTaskStates.Queued, toolInvocationRowId: "invocation-1" });
@@ -147,13 +147,15 @@ describe("Prisma MCP task admission", function _McpTaskAdmissionSuite()
 			toolRevisionId: submission.toolRevisionId,
 			state: ToolInvocationState.Ready,
 			approvalRequired: false,
-			authorizationPrincipalId: submission.principalId,
-			authorizationActorKind: "User",
+			principalId: submission.principalId,
 			authorizationCoordinates,
 			authorizationDecisionDigests,
 			authorizationEvidenceDigest,
 		}) }));
 		const invocationData = createInvocation.mock.calls[0]![0].data;
+		expect(invocationData).not.toHaveProperty("agentIdentityId");
+		expect(invocationData).not.toHaveProperty("authorizationActorKind");
+		expect(invocationData).not.toHaveProperty("authorizationExecutionSubject");
 		expect(invocationData).not.toHaveProperty("authorizationMembershipRevision");
 		expect(invocationData).not.toHaveProperty("authorizationAssignmentDigest");
 		expect(updateTask).toHaveBeenCalledOnce();

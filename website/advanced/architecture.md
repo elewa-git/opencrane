@@ -1,100 +1,146 @@
 # Architecture
 
-OpenCrane is a **durable authority with replaceable execution**. The system is organised
-around organisation silos, immutable agent revisions and governed run attempts.
+OpenCrane separates the **saved company workspace** from the computers that execute assistant work.
+This page maps the current 0.11 owners; [the introduction](/guide/introduction) explains the product
+without implementation detail.
 
-## Control and execution
+> See also: [Conversation computers](/integrators/agent-runtime) (execution and review) ·
+> [Central authorisation](/integrators/authorization-authority) (permission checks) ·
+> [Development status](/guide/status) (implementation and qualification)
 
-```text
-                    ┌──────────────────────────────────┐
-                    │ OpenCrane control plane          │
-                    │ identity · policy · runs · audit │
-                    └───────────────┬──────────────────┘
-                                    │ authorised desired state
-                    ┌───────────────▼──────────────────┐
-                    │ agent controller                 │
-                    │ exact Kubernetes projection      │
-                    └───────────────┬──────────────────┘
-                                    │ claim one warm Pod per attempt
-                    ┌───────────────▼──────────────────┐
-                    │ agent runtime                    │
-                    │ bounded loop, no durable state   │
-                    └───────────────┬──────────────────┘
-                                    │ candidates
-                    ┌───────────────▼──────────────────┐
-                    │ governed external-action custody │
-                    └──────────────────────────────────┘
-```
-
-The server admits a run and freezes its accepted inputs before a warm Pod receives attempt authority
-or execution material. The controller can project only the assigned workload shape. The runtime can emit candidates,
-but it cannot approve or execute external actions by itself.
-
-## Durable run model
+## The current system
 
 ```text
-Conversation (`agent_session`; optional run parent)
-└── AgentRun
-    ├── immutable AgentRevision
-    ├── one RunInputSnapshot
-    ├── attempt 1..n
-    ├── ordered RunEvent records
-    ├── workload and proof evidence
-    ├── ApprovalRequest and ToolInvocation records
-    └── terminal outcome and cost
+                       ┌────────────────────────────┐
+                       │ Web workspace              │
+                       │ conversations and review   │
+                       └──────────────┬─────────────┘
+                                      │ authenticated requests
+                       ┌──────────────▼─────────────┐
+                       │ OpenCrane server           │
+                       │ checks access, admits work │
+                       │ and saves accepted results │
+                       └──────────────┬─────────────┘
+                                      │
+           ┌──────────────────────────┼──────────────────────────┐
+           │                          │                          │
+┌──────────▼───────────┐  ┌───────────▼────────────┐  ┌──────────▼───────────┐
+│ PostgreSQL           │  │ KurrentDB              │  │ Shared services     │
+│ membership, grants   │  │ conversation/computer  │  │ models, tools,      │
+│ and product records  │  │ history and activation │  │ memory and files    │
+└──────────────────────┘  └───────────┬────────────┘  └──────────────────────┘
+                                      │ server admits a claim
+                         ┌────────────▼────────────┐
+                         │ Agent Sandbox           │
+                         │ starts/replaces compute │
+                         └────────────┬────────────┘
+                                      │
+                         ┌────────────▼────────────┐
+                         │ Conversation computer   │
+                         │ model turn, workspace   │
+                         │ and private review      │
+                         └─────────────────────────┘
 ```
 
-Retries advance the attempt counter on the same logical run. Child runs are separate
-`AgentRun` records with a durable parent reservation and bounded inherited budget.
+The arrows show responsibility and coordination. The server consumes the activation queue and
+authorises a claim before Agent Sandbox creates compute; KurrentDB does not make permission
+decisions. The conversation computer calls the model through LiteLLM and returns proposed output
+to the server.
 
-## Personal and managed are separate authorities, not a flag
+## What each part owns
 
-The architecture treats *personal* and *managed* as two distinct admission and identity paths that
-happen to share the same runtime and execution machinery, not as one code path with a boolean on
-it:
+| Part | Current owner and responsibility |
+|---|---|
+| Web workspace | `apps/opencrane-ui` and `libs/frontend`: conversations, input, history and computer review. |
+| Product server | `apps/opencrane` composes the backend libraries. They check current access, admit work and persist protected changes. |
+| PostgreSQL | Current memberships, groups, grants, agent configuration, transactional product records and rebuildable conversation directory/read projections. Private message payloads are stored separately from immutable history. |
+| KurrentDB | Ordered `conversation-{id}` history, computer lifecycle evidence and durable activation delivery. History entries reference encrypted message payloads. |
+| Conversation compute | `apps/conversation-computer` performs bounded model work and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
+| Models | LiteLLM routes requests to configured providers and brokers scoped model credentials. Providers may be external to the organisation. |
+| Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. Connecting them to the conversation model loop remains product work. |
+| Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Complete personal-memory journeys remain unfinished. |
+| Files | The artifact catalogue, `apps/artifact-service`, scanner and preprocessor own stored files, validation and processing. Computer workspace checkpoints use ArtifactStore. |
 
-- **Personal admission** derives its `AgentService` through the caller's own participant-bound
-  conversation admission and verifies exactly one signed personal membership assertion — the
-  caller can only ever admit a run as themselves.
-- **Managed admission** derives the canonical `agent-service:<id>` principal, verifies its current
-  Ed25519-signed fleet membership, and intersects the active revision's exact knowledge and tool
-  attachments with effective grants — it never resolves a human caller's identity at all.
+Source paths are relative to the repository root. The
+[repository map](https://github.com/elewa-git/opencrane/blob/main/README.md#repository-map)
+links the applications and libraries.
 
-A personal run always carries an approved `PersonaRevision`; a managed run never does — its
-published revision is already its complete instruction set. Both share one run-admission capacity
-gate, one execution/runtime substrate, and one audit trail, so "what ran and under what authority"
-is answered the same way regardless of which path admitted it.
+## One conversation, recoverable compute
 
-## Isolation
+Every conversation has ordered history. An assistant conversation also has one logical computer.
+Its temporary Pod may be idle, active or absent. A lease identifies the one currently admitted
+computer generation, so a replaced Pod cannot continue submitting work as its successor.
 
-One `ClusterTenant` represents one customer organisation. Its trusted server and runtime
-namespaces are distinct. There is no Kubernetes user resource and no standing per-user runtime.
-Personal work is bound through the admitted run's subject and immutable evidence; managed work is
-bound through its own service identity and signed fleet membership — neither can borrow the
-other's authority.
+The server checks current membership and grants in PostgreSQL before protected operations.
+KurrentDB records history and lifecycle evidence. A historical permission decision is not current
+permission.
 
-## Shared services
+Checkpoint and restore preserve the computer's workspace across cooling and replacement.
+Conversation history does not depend on the Pod or browser surviving. Ordinary direct and group
+messages do not activate an assistant computer.
 
-Model routing (via LiteLLM), OCI MCP execution, skill publication, content-addressed
-artifacts and organisation memory (via the memory gateway, backed by Cognee) are control-plane
-services. They expose narrow, authenticated boundaries and do not become alternate run or policy
-authorities. A frozen run snapshot is a maximum; the control plane rechecks current authorization
-before admitting the next external effect.
+For a personal text turn, admission resolves the employee's verified internal identity to the
+sign-in identity used during onboarding, then freezes their approved persona, ordered conversation
+history and model choice. Personal memory is explicitly unavailable in this baseline: provisioning
+a dataset and recalling its content remain separate product work. This does not prevent a person
+from using their approved instructions and the current conversation.
 
-## Module structure
+Admission also freezes a 4,096-token output cap for each text response. The computer takes the
+smaller of that limit and the run's token budget, so a generous aggregate budget does not become
+an oversized request for one answer. Provider capability discovery remains separate from this
+product response limit.
 
-Server-side capabilities are organised as focused, independently buildable libraries rather than
-one large backend package — tenancy, IAM (identity, membership, grants, groups, policies,
-authorization, audit), knowledge, gateways (MCP, model routing, providers, integrations), agent
-definitions and scheduling, personal configuration/memory/personas, execution (admission, inputs,
-runs), skills and artifacts each own their routes, types and Prisma schema slice. An
-`@nx/enforce-module-boundaries` lint rule keeps imports flowing in one direction — a capability may
-depend on its own scope, `scope:shared`, and explicitly approved peers, never a silent cross-domain
-shortcut. See [`docs/agents/monorepo.md`](https://github.com/elewa-git/opencrane/blob/main/docs/agents/monorepo.md)
-for the full placement and dependency rules.
+The requester and executor are distinct roles. The human must own the input message and retain
+access to the conversation. A company assistant executes with its own identity and resource
+permissions. Retrying the same request preserves both identities and the original frozen input.
 
-→ [Governed agent runtime](/integrators/agent-runtime) ·
-[Central authorization authority](/integrators/authorization-authority) ·
-[Governed packages and container images](/integrators/governed-packages) ·
-[Organisation boundary](/operators/organisation-boundary) ·
-[Running multiple instances](/advanced/multi-instance)
+## Shared work from a group
+
+A group remains a conversation between people. Selecting **Ask company assistant** creates one
+linked assistant conversation from an explicitly chosen, caller-authored group request.
+
+```text
+Group message
+    │ explicit request, selected company assistant, fixed audience
+    ▼
+PostgreSQL admission + durable creation task
+    │ recoverable, idempotent work across the two stores
+    ▼
+Kurrent child history + cold computer → activation → bounded model answer
+    │ a participant reviews and edits the result
+    ▼
+New parent message, authored by the person who shares it
+```
+
+The transaction saves the immutable command and its workflow task together. A worker creates the
+child history and computer, then the current product projections and first request. Retries reuse
+the same identifiers; no transaction is claimed across PostgreSQL, KurrentDB and Kubernetes.
+
+The company assistant has an Internal Principal and a managed identity. It uses its own published
+revision and model grant. The human requester supplies separate, current membership and Invoke
+evidence. Personal configuration, private memory and tools are not copied to the company assistant.
+
+The child's audience is frozen at admission. Current membership and both parent and child access
+are checked before metadata, plaintext or execution is released. Rejoining the parent cannot
+reveal a request from before the participant's join boundary. Returning text to the group is an
+explicit human write bound to the source child; there is no generic upward-delivery engine.
+
+## Isolation and external actions
+
+Each organisation has its own installation boundary. Identity, database, storage and network
+controls restrict access within and across those boundaries. An assistant cannot grant itself
+additional tools or read another person's private work just because it shares infrastructure.
+
+Tool execution is a separate governed service. The intended model loop proposes actions for the
+server to check and execute; that loop is not yet connected in the current personal-conversation
+runtime. Shared-agent scheduling and autonomous delegation between assistants are also unfinished.
+
+## Baseline and evidence
+
+[ADR 0016](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0016-conversation-history-and-computers.md)
+is the architecture of record for 0.11. It supersedes the run-owned warm-Pod lifecycle and
+PostgreSQL transcript. OpenCrane does not add another Kubernetes Pod controller beside Agent Sandbox.
+
+Implemented recovery and backup machinery still needs the live drills listed in
+[development status](/guide/status). Operator inputs and procedures belong in
+[deployment configuration](/operators/deployment-configuration) and the [runbook](/operators/runbook).

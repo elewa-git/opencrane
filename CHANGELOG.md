@@ -13,6 +13,134 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+Personal and group-assistant text journeys have passed integration CI and live testv5 checks.
+The 0.11 baseline remains under review; this is not a release or a completed MVP.
+
+### Added
+
+- **Operators can back up conversation history and recover it from a scheduled file copy.**
+  Live recovery preserved completed personal and group chats and allowed new messages and an
+  assistant answer. Scheduled volume snapshots are also proven on a supported storage class;
+  restoration from a snapshot remains unqualified.
+
+- **Group members can choose a company assistant to work on one of their own messages.** Work opens
+  in a shared child chat with a fixed audience of people allowed to read the selected message.
+  Pending, Ready and Unavailable states make durable creation and recovery visible; retries preserve
+  the original audience even when somebody joins the group later.
+
+- **People can review an assistant's answer before returning it to the group.** The child has a
+  Back to group link, and members can edit the answer and share it as their own message, linked to
+  the original request. Retrying that share cannot silently change the reviewed text or post it twice.
+
+- **Operators can provision a company's first shared assistant through the API.**
+  `POST /api/v1/organization/company-assistant` selects its model and the people allowed to invoke
+  it. Setup retries preserve the existing assistant and do not restore revoked grants.
+
+- **People can use agent-session conversations whose complete history survives server and executor
+  restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
+  while the authenticated web workspace reads and posts through the same typed backend conversation
+  API and can receive the resulting assistant output.
+
+- **Personal conversations can admit and execute one fenced model turn from verified durable
+  evidence.** Admission binds the exact authenticated caller, membership, conversation history,
+  agent identity revision, capability grant, sandbox lease generation, and compiled input snapshot;
+  completion can resume after a worker restart without duplicating model output.
+
+- **People can inspect an active conversation computer from the conversation workspace.**
+  Authorized participants have workspace file, diff and browser-discovery reads. Commands,
+  screenshots, page creation and preview actions remain denied until their concrete effect
+  admissions are connected. Interactive desktops, unrestricted terminals and application
+  publishing remain later work.
+
+- **Conversation computers can cool to zero and recover their workspace on demand.** OpenCrane
+  checkpoints an idle workspace before releasing its Agent Sandbox claim, restores the checkpoint
+  into a new generation, and fences activation, model credentials, approvals, output, and review
+  access to the exact current lease.
+
+- **People can follow live chat updates and resume from their last received position.** The workspace
+  consumes bounded browser events through the existing public API. Closing the connection cancels
+  upstream reads, and revoked access clears the selected history and draft.
+
+### Changed
+
+- **Contributors get dependency-boundary failures before the expensive CI work begins.** CI avoids
+  transferring local Nx cache files that another runner cannot reuse, and implementation guidance
+  assigns specialist reviews according to the changed responsibility.
+
+- **People can understand the product and its development status from the README and website.**
+  The guides distinguish implemented conversation capabilities, remaining MVP work and live
+  qualification, with a single current architecture overview.
+
+- **Operators deploy conversation execution through Agent Sandbox instead of prestarted warm-runtime
+  pools.** The 0.11 composition uses release-pinned sandbox profiles, generation-bound claims, and
+  durable activation delivery; KurrentDB owns canonical computer history while PostgreSQL retains
+  only rebuildable transaction projections.
+
+### Fixed
+
+- **People can start distinct personal chats and retry creation safely.** A new command starts a
+  separate conversation; retrying the same command returns its existing session without reopening
+  closed work or expanding access.
+
+- **Direct and group chat creation also survives retries without duplicating conversations.** Current
+  access is rechecked, and a committed command cannot silently change its members or mode.
+
+- **A former member no longer makes the remaining participants' chat list fail.** Existing chats stay
+  readable under the caller's current permissions, and persisted modes and lifecycle states map to
+  the values the browser expects.
+
+- **People can recognize colleagues when starting and revisiting chats.** The picker and direct/group
+  titles use member display names, with generic text when a name is unavailable.
+
+- **Personal assistants use the preferences people approved during setup.** The runtime now sends
+  the compiled instructions with conversation history to the model instead of dropping them.
+  Admission resolves those settings through the employee's verified sign-in identity and can
+  complete text turns before personal-memory provisioning is available.
+
+- **A generous run budget no longer prevents an assistant from answering.** Each text response has
+  a separate output cap, with any stricter run budget still respected, so the entire run allowance
+  is not sent to the model as one response request.
+
+- **Employees can find their own personal assistant when colleagues have private assistants too.**
+  The directory selects the caller's assistant before checking its current read permission.
+
+### Removed
+
+- **Operators no longer maintain the run-owned warm-runtime lifecycle or its workload-proof
+  database authority.** The replaced runtime application, reservation and assignment records,
+  proof keys, compatibility routes, socket fallback, and migration scaffolding are absent from the
+  fresh-install-only 0.11 baseline.
+
+- **The API no longer advertises managed-agent execution controls that have no production execution
+  authority.** Managed scheduling and run-now, retry, and cancellation surfaces are absent until a
+  future phase provides their required lease and identity evidence; CodeProject, CodeService, Git,
+  isolated builds, and published PreviewApps likewise remain outside 0.11.0.
+
+### Security
+
+- **Company assistants execute with their own model authority and a separately checked human
+  requester.** Current membership, service permission, and parent and child access are checked at
+  the relevant reads and effects. Shared work inherits no person's private tools, persona or memory.
+
+- **History reads enforce where each participant's visibility begins.** Both finite reads and live
+  events recheck that boundary before loading private payloads, including a change during the read.
+
+- **Personal conversation credentials remain scoped to the admitted turn and recover safely across
+  partial failure.** LiteLLM keys are bounded by the immutable turn budget, checked against the exact
+  active lease after issuance, revoked when custody cannot be recorded, and recoverable without
+  leaving an untracked usable credential.
+
+- **A server refuses to start against a KurrentDB instance that belongs to another silo.** Stream
+  names carry no silo id, so the first start records its silo id in the `opencrane-silo` sentinel
+  stream and every later start compares against it; a mismatch stops the process before any worker
+  touches history.
+
+- **Operators cannot begin a `testv5` installation with an insecure or ambiguous history and sandbox
+  foundation.** The installer rejects missing immutable KurrentDB credentials, unhashed workload
+  images, incomplete Agent Sandbox v1beta1 prerequisites, missing gVisor runtime support, and an
+  absent zero-capacity sandbox profile; the admitted ledger disables anonymous access and creates a
+  least-privilege history identity before installation can complete.
+
 ## [0.10.0] - 2026-08-31
 
 ### Added

@@ -29,6 +29,7 @@ function _Authorization(): AuthorizationAuthority
 	const decision = { outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow" as const, grantIds: ["grant-1"], rule: null, evidence: null };
 	return {
 		decide: vi.fn().mockResolvedValue(decision),
+		decidePrincipal: vi.fn().mockResolvedValue(decision),
 		admit: vi.fn().mockResolvedValue(decision),
 		admitPrincipal: vi.fn().mockResolvedValue(decision),
 		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return decision; }); }),

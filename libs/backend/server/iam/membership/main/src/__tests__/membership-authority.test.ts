@@ -1,7 +1,7 @@
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import { describe, expect, it } from "vitest";
 
-import { __VerifyCurrentFleetMembership } from "../membership-authority";
+import { __VerifyCurrentFleetMembershipEvidence } from "../membership-authority";
 import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifier, VerifyFleetMembershipCommand } from "../membership-authority.types";
 
 /** Creates a signed fleet revision whose assertion matches the command fixture. */
@@ -115,7 +115,7 @@ describe("fleet-membership authority", function _suite()
 {
 	it("fails closed when the last signed revision exceeds maximum staleness", async function _stale()
 	{
-		const result = await __VerifyCurrentFleetMembership(new _MembershipRepository(_revision()), new _Verifier(), _command(4000));
+		const result = await __VerifyCurrentFleetMembershipEvidence(new _MembershipRepository(_revision()), new _Verifier(), _command(4000));
 
 		expect(result).toEqual({ outcome: "denied", reason: "stale", revision: 7 });
 	});
@@ -123,16 +123,16 @@ describe("fleet-membership authority", function _suite()
 	it("accepts fresh signed membership and records the revision high-watermark", async function _fresh()
 	{
 		const repository = new _MembershipRepository(_revision());
-		const result = await __VerifyCurrentFleetMembership(repository, new _Verifier(), _command(2000));
+		const result = await __VerifyCurrentFleetMembershipEvidence(repository, new _Verifier(), _command(2000));
 
-		expect(result).toEqual({ outcome: "trusted", revision: 7, trustedUntilEpochMs: 4000 });
+		expect(result).toEqual({ outcome: "trusted", evidence: expect.objectContaining({ revision: 7, trustedUntilEpochMs: 4000, subjectId: "user-1", assertionId: "assertion-1" }) });
 		expect(await repository.getHighestAcceptedRevision("fleet-1", "silo-1")).toBe(7);
 		expect(await repository.getHighestAcceptedRevision("fleet-other", "silo-1")).toBe(0);
 	});
 
 	it("rejects a subject mismatch even under a valid fleet signature", async function _wrongSubject()
 	{
-		const result = await __VerifyCurrentFleetMembership(new _MembershipRepository(_revision()), new _Verifier(), { ..._command(), subjectId: "user-other" });
+		const result = await __VerifyCurrentFleetMembershipEvidence(new _MembershipRepository(_revision()), new _Verifier(), { ..._command(), subjectId: "user-other" });
 
 		expect(result).toEqual({ outcome: "denied", reason: "assertion_mismatch", revision: 7 });
 	});
@@ -140,7 +140,7 @@ describe("fleet-membership authority", function _suite()
 	it("never reads a revision or high-watermark from a different issuer", async function _issuerIsolation()
 	{
 		const repository = new _MembershipRepository(_revision());
-		const result = await __VerifyCurrentFleetMembership(repository, new _Verifier(), { ..._command(), trustedIssuerId: "fleet-other" });
+		const result = await __VerifyCurrentFleetMembershipEvidence(repository, new _Verifier(), { ..._command(), trustedIssuerId: "fleet-other" });
 
 		expect(result).toEqual({ outcome: "denied", reason: "missing_revision", revision: 0 });
 		expect(await repository.getHighestAcceptedRevision("fleet-1", "silo-1")).toBe(0);

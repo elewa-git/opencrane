@@ -606,86 +606,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/runs/{runId}/steering": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Queue one signed-in owner's instruction for a running agent
-         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and exact retries reuse the same client key before consumption at the runtime's fenced safe boundary.
-         */
-        post: operations["submitRuntimeSteering"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List a signed-in owner's fifty most recent personal runs
-         * @description The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.
-         */
-        get: operations["listMyRuns"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/runs/{runId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Return one signed-in owner's personal run status
-         * @description The server derives the owner and silo from session and host. It never accepts owner coordinates from the request.
-         */
-        get: operations["getMyRunStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/runs/{runId}/cancellation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Cancel the exact personal run attempt observed by its signed-in owner
-         * @description The server derives owner and silo from the browser session, rejects stale attempts, and never exposes whether a foreign run exists.
-         */
-        post: operations["cancelMyRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me/persona": {
         parameters: {
             query?: never;
@@ -907,175 +827,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/conversations/directory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List self-scoped conversation creation choices
-         * @description Returns opaque active-member references and the caller's personal Agent only when exactly one active service matches their approved persona. It never returns login subjects, emails, roles, or memory identity.
-         */
-        get: operations["getMyConversationCreationDirectory"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/conversations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the signed-in participant's conversations */
-        get: operations["listMyConversations"];
-        put?: never;
-        /** Create one immutable-mode conversation */
-        post: operations["createMyConversation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/conversations/{conversationId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Open one participant-bound conversation */
-        get: operations["openMyConversation"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/conversations/{parentConversationId}/agent-threads/{childConversationId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Open one authorized child Agent-thread read model
-         * @description Composes a bounded view from canonical conversation, run, and parent-delivery authorities. It creates no second ledger and requires current participant access in both parent and child.
-         */
-        get: operations["openMyAgentThread"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Advance this participant's Agent-thread read position
-         * @description Idempotently advances one participant-local coordinate only after current parent and child access are rechecked. The observed position cannot exceed the current child timeline.
-         */
-        put: operations["markMyAgentThreadRead"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/conversations/{conversationId}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit participant input through the immutable mode strategy
-         * @description Agent-session input is committed atomically with a governed run. Direct and ordinary group input is committed without creating an AgentRun.
-         */
-        post: operations["submitMyConversationMessage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/conversations/{conversationId}/runs/{runId}/retry": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start a fresh attempt for one failed conversation run
-         * @description Requires current organisation membership, active conversation participation, the exact terminal attempt, and the still-active Agent revision. Repeating the request for that attempt returns the same new attempt.
-         */
-        post: operations["retryMyConversationRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/conversations/{conversationId}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Change participant-local archive visibility */
-        patch: operations["archiveMyConversation"];
-        trace?: never;
-    };
-    "/me/conversations/{conversationId}/close": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Permanently close one conversation */
-        post: operations["closeMyConversation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me/conversations/{conversationId}/assets": {
         parameters: {
             query?: never;
@@ -1139,26 +890,6 @@ export interface paths {
          * @description Removal succeeds only while the returned canRemove capability is true. The response is a metadata-only tombstone.
          */
         delete: operations["removeMyConversationAsset"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent-services": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List managed agent services in the signed-in caller's silo
-         * @description The server derives the silo from the browser session and request host. It returns at most two hundred managed-service summaries, ordered by most recently updated first.
-         */
-        get: operations["listManagedAgentServices"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1363,6 +1094,382 @@ export interface paths {
         put?: never;
         /** Accept an invitation using the signed-in verified email */
         post: operations["acceptOrganizationInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMyGroupConversationChildren"];
+        put?: never;
+        /**
+         * Ask the company assistant about one own group message
+         * @description Admits an idempotent shared child for a caller-owned conversation-audience text message. Every admitted recipient must already see the originating revision. Requires current parent Delegate, conversation creation and selected service Invoke. The child begins pending and becomes ready only after cold history and its activation are durable.
+         */
+        post: operations["createMyGroupConversationChild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Share reviewed assistant text back to its parent group
+         * @description Posts as the sharing human after current parent and child access checks. The verified child source becomes causation and the originating group message becomes the reply target. A retry key binds the source and exact reviewed text; this route grants no runtime parent writer.
+         */
+        post: operations["shareMyGroupConversationChildResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMyConversationCreationDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMyConversations"];
+        put?: never;
+        post: operations["createMyConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["openMyConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["archiveMyConversation"];
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["closeMyConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream participant-visible conversation updates
+         * @description Same-origin authenticated SSE on the public listener. History frames use event: history, id: nextPosition, and JSON data {entries,payloads,nextPosition,computer:null}; every bounded page rechecks current Conversation:Read authority. The exclusive Last-Event-ID revision overrides the initial afterPosition query on reconnect. Hidden entries advance the cursor without exposing their payload. event: unavailable carries a fixed conversation_unavailable or conversation_history_unavailable error and ends automatic replay. A normal bounded close is resumable. Limits per connection: 60 seconds, 30 seconds without new history, 10-second authority-refresh heartbeats, 512 KiB per frame, 2 MiB total, 128 history frames, and 5 seconds waiting for a slow browser. Each listener allows two concurrent streams and twelve starts per minute per authenticated silo/subject. Disconnect cancels upstream history and subscription work.
+         */
+        get: operations["streamMyConversationEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read participant-visible conversation history
+         * @description Reads immutable KurrentDB entries after an exclusive position cursor, then separately decrypts only private payloads referenced by entries visible to the currently authorized participant.
+         */
+        get: operations["readMyConversationHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post one encrypted participant message
+         * @description Encrypts plaintext before PostgreSQL persistence and appends only an opaque payload reference and ciphertext digest to KurrentDB.
+         */
+        post: operations["postMyConversationMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one computer workspace file */
+        get: operations["readMyConversationComputerFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one workspace diff */
+        get: operations["readMyConversationComputerDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run one allowlisted workspace command */
+        post: operations["runMyConversationComputerCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/browser/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read private browser metadata */
+        get: operations["readMyConversationComputerBrowserVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/browser/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List private browser pages */
+        get: operations["listMyConversationComputerBrowserTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/browser/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open an allowlisted localhost page */
+        post: operations["openMyConversationComputerBrowserPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/browser/screenshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture an allowlisted localhost page */
+        post: operations["captureMyConversationComputerBrowserScreenshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/review/previews/{port}/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an allowlisted localhost preview */
+        get: operations["readMyConversationComputerPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a signed-in owner's fifty most recent personal runs
+         * @description The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.
+         */
+        get: operations["listMyRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one signed-in owner's personal run status
+         * @description The server derives the owner and silo from session and host. It never accepts owner coordinates from the request.
+         */
+        get: operations["getMyRunStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/company-assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Provision the company's first shared assistant
+         * @description Requires current Organization Administer and selected Model Use. Select current human Principal IDs explicitly. Once a company assistant exists, this call returns created:false and leaves its name, policy, grants and lifecycle unchanged. Retrying can finish identity establishment after a committed setup; it cannot revive a suspended or revoked identity.
+         */
+        post: operations["provisionCompanyAssistant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2079,19 +2186,13 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "completed" | "failed";
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
             acceptedAt: string;
             /** Format: date-time */
             finishedAt: string | null;
-        };
-        SelfRunCancellation: {
-            runId: string;
-            attempt: number;
-            /** @enum {string} */
-            state: "cancelling" | "cancelled";
         };
         AgentService: {
             id: string;
@@ -4346,292 +4447,6 @@ export interface operations {
             };
         };
     };
-    submitRuntimeSteering: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Opaque run identifier. */
-                runId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    text: string;
-                    idempotencyKey: string;
-                };
-            };
-        };
-        responses: {
-            /** @description The exact steering retry was already queued. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        steeringRequestId: string;
-                        attempt: number;
-                        /** @enum {string} */
-                        state: "pending";
-                    };
-                };
-            };
-            /** @description Steering request queued for the current run attempt. */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        steeringRequestId: string;
-                        attempt: number;
-                        /** @enum {string} */
-                        state: "pending";
-                    };
-                };
-            };
-            /** @description The body is not one bounded text instruction. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description No authenticated browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The run is absent or not owned by the caller. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The owned run has no steerable live attempt. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The product authority could not persist the instruction. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    listMyRuns: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recent canonical lifecycle views for the owned runs. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        runs: components["schemas"]["SelfRunStatus"][];
-                    };
-                };
-            };
-            /** @description No browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Run status could not be read. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getMyRunStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Opaque run identifier. */
-                runId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current canonical lifecycle view for the owned run. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SelfRunStatus"];
-                };
-            };
-            /** @description The run identifier is malformed. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description No browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The run is absent or not owned by the caller. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Run status could not be read. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    cancelMyRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Opaque run identifier. */
-                runId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Attempt last observed by the browser. */
-                    expectedAttempt: number;
-                };
-            };
-        };
-        responses: {
-            /** @description The run was already, or is now, fully cancelled. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SelfRunCancellation"];
-                };
-            };
-            /** @description Cancellation is fenced while physical cleanup completes. */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SelfRunCancellation"];
-                };
-            };
-            /** @description The identifier or request body is malformed. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description No browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The browser request failed CSRF protection. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The run is absent or not owned by the caller. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The attempt is stale, terminal, or could not be safely fenced. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Cancellation authority is temporarily unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     getMyPersonaStatus: {
         parameters: {
             query?: never;
@@ -5912,953 +5727,6 @@ export interface operations {
             };
         };
     };
-    getMyConversationCreationDirectory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Privacy-safe creation choices. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        directory: {
-                            participants: {
-                                participantRef: string;
-                                isSelf: boolean;
-                            }[];
-                            /** @enum {string} */
-                            personalAgentStatus: "ready" | "unavailable" | "ambiguous";
-                            personalAgent: null | {
-                                personalAgentRef: string;
-                                displayName: string;
-                            };
-                        };
-                    };
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation directory unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    listMyConversations: {
-        parameters: {
-            query?: {
-                includeArchived?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Participant-bound conversation summaries. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        conversations: {
-                            id: string;
-                            /** @enum {string} */
-                            mode: "agent_session" | "direct" | "group";
-                            /** @enum {string} */
-                            lifecycle: "open" | "closed";
-                            agentServiceId: string | null;
-                            participantRefs: string[];
-                            /** Format: date-time */
-                            archivedAt: string | null;
-                            readThroughPosition: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                        }[];
-                    };
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    createMyConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    mode: "agent_session";
-                    personalAgentRef: string;
-                } | {
-                    /** @enum {string} */
-                    mode: "direct";
-                    participantRefs: string[];
-                } | {
-                    /** @enum {string} */
-                    mode: "group";
-                    participantRefs: string[];
-                };
-            };
-        };
-        responses: {
-            /** @description Conversation created with its bounded canonical history. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        conversation: {
-                            id: string;
-                            /** @enum {string} */
-                            mode: "agent_session" | "direct" | "group";
-                            /** @enum {string} */
-                            lifecycle: "open" | "closed";
-                            agentServiceId: string | null;
-                            participantRefs: string[];
-                            /** Format: date-time */
-                            archivedAt: string | null;
-                            readThroughPosition: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                            visibleFromPosition: string;
-                            accessEndedPosition: string | null;
-                            messages: {
-                                id: string;
-                                position: string;
-                                /** @enum {string} */
-                                role: "user" | "assistant" | "tool" | "system";
-                                /** @enum {string} */
-                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-                                /** @enum {string} */
-                                source: "user_input" | "model_output" | "tool_result" | "platform";
-                                blocks: {
-                                    id: string;
-                                    /** @enum {string} */
-                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
-                                    value: string;
-                                }[];
-                                runId: string | null;
-                                participantRef: string | null;
-                                /** Format: date-time */
-                                createdAt: string;
-                                /** Format: date-time */
-                                completedAt: string | null;
-                                agentThread: null | {
-                                    childConversationId: string;
-                                    parentConversationId: string;
-                                    rootConversationId: string;
-                                    parentMessageId: string;
-                                    initiatorUserId: string;
-                                    agentServiceId: string;
-                                    personaRevisionId: string;
-                                    firstRunId: string;
-                                };
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Invalid immutable-mode request. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description A participant or agent service is unavailable. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    openMyConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversationId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Conversation detail with bounded canonical message history. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        conversation: {
-                            id: string;
-                            /** @enum {string} */
-                            mode: "agent_session" | "direct" | "group";
-                            /** @enum {string} */
-                            lifecycle: "open" | "closed";
-                            agentServiceId: string | null;
-                            participantRefs: string[];
-                            /** Format: date-time */
-                            archivedAt: string | null;
-                            readThroughPosition: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                            visibleFromPosition: string;
-                            accessEndedPosition: string | null;
-                            messages: {
-                                id: string;
-                                position: string;
-                                /** @enum {string} */
-                                role: "user" | "assistant" | "tool" | "system";
-                                /** @enum {string} */
-                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-                                /** @enum {string} */
-                                source: "user_input" | "model_output" | "tool_result" | "platform";
-                                blocks: {
-                                    id: string;
-                                    /** @enum {string} */
-                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
-                                    value: string;
-                                }[];
-                                runId: string | null;
-                                participantRef: string | null;
-                                /** Format: date-time */
-                                createdAt: string;
-                                /** Format: date-time */
-                                completedAt: string | null;
-                                agentThread: null | {
-                                    childConversationId: string;
-                                    parentConversationId: string;
-                                    rootConversationId: string;
-                                    parentMessageId: string;
-                                    initiatorUserId: string;
-                                    agentServiceId: string;
-                                    personaRevisionId: string;
-                                    firstRunId: string;
-                                };
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation unavailable. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    openMyAgentThread: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                parentConversationId: string;
-                childConversationId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Authorized Agent-thread snapshot. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        agentThread: {
-                            parentConversationId: string;
-                            childConversationId: string;
-                            rootConversationId: string;
-                            parentMessageId: string;
-                            agentServiceId: string;
-                            agentName: string;
-                            ask: string;
-                            /** Format: date-time */
-                            createdAt: string;
-                            /** @enum {string} */
-                            lifecycle: "open" | "closed";
-                            participantCount: number;
-                            readThroughPosition: string;
-                            latestPosition: string;
-                            representedThroughPosition: string;
-                            messageCount: number;
-                            unreadMessageCount: number;
-                            cursor: string | null;
-                            messages: {
-                                id: string;
-                                position: string;
-                                /** @enum {string} */
-                                role: "user" | "assistant" | "tool" | "system";
-                                /** @enum {string} */
-                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-                                /** @enum {string} */
-                                source: "user_input" | "model_output" | "tool_result" | "platform";
-                                blocks: {
-                                    id: string;
-                                    /** @enum {string} */
-                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
-                                    value: string;
-                                }[];
-                                runId: string | null;
-                                /** Format: date-time */
-                                createdAt: string;
-                                /** Format: date-time */
-                                completedAt: string | null;
-                            }[];
-                            runs: {
-                                id: string;
-                                ordinal: number;
-                                attempt: number;
-                                /** @enum {string} */
-                                state: "queued" | "working" | "waiting" | "retrying" | "completed" | "failed" | "cancelled";
-                                /** Format: date-time */
-                                acceptedAt: string;
-                                /** Format: date-time */
-                                finishedAt: string | null;
-                            }[];
-                            deliveries: {
-                                id: string;
-                                childConversationId: string;
-                                parentConversationId: string;
-                                runId: string;
-                                /** @enum {string} */
-                                kind: "status" | "question" | "approval" | "result" | "failure" | "asset";
-                                label: string;
-                                detail: string;
-                                assetId: string | null;
-                                /** Format: date-time */
-                                createdAt: string;
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Agent thread unavailable. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    markMyAgentThreadRead: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                parentConversationId: string;
-                childConversationId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    observedPosition: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Participant read coordinate changed or was already at least this position. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        outcome: "changed" | "idempotent";
-                        readThroughPosition: string;
-                    };
-                };
-            };
-            /** @description Malformed observed position. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Agent thread unavailable. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Observed position exceeds the current child timeline. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    submitMyConversationMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversationId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    idempotencyKey: string;
-                    blocks: {
-                        id: string;
-                        /** @enum {string} */
-                        kind: "text" | "artifact";
-                        value: string;
-                    }[];
-                    /** @description In a group only, create a child Agent session using the caller's active approved persona. */
-                    agentTarget?: {
-                        agentServiceId: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Exact idempotent retry returned the canonical message. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        outcome: "idempotent";
-                        message: {
-                            id: string;
-                            position: string;
-                            /** @enum {string} */
-                            role: "user" | "assistant" | "tool" | "system";
-                            /** @enum {string} */
-                            state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-                            /** @enum {string} */
-                            source: "user_input" | "model_output" | "tool_result" | "platform";
-                            blocks: {
-                                id: string;
-                                /** @enum {string} */
-                                kind: "text" | "artifact" | "tool_call" | "tool_result";
-                                value: string;
-                            }[];
-                            runId: string | null;
-                            participantRef: string | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            /** Format: date-time */
-                            completedAt: string | null;
-                            agentThread: null | {
-                                childConversationId: string;
-                                parentConversationId: string;
-                                rootConversationId: string;
-                                parentMessageId: string;
-                                initiatorUserId: string;
-                                agentServiceId: string;
-                                personaRevisionId: string;
-                                firstRunId: string;
-                            };
-                        };
-                        agentThread: null | {
-                            childConversationId: string;
-                            parentConversationId: string;
-                            rootConversationId: string;
-                            parentMessageId: string;
-                            initiatorUserId: string;
-                            agentServiceId: string;
-                            personaRevisionId: string;
-                            firstRunId: string;
-                        };
-                    };
-                };
-            };
-            /** @description Message accepted. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        outcome: "accepted";
-                        message: {
-                            id: string;
-                            position: string;
-                            /** @enum {string} */
-                            role: "user" | "assistant" | "tool" | "system";
-                            /** @enum {string} */
-                            state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-                            /** @enum {string} */
-                            source: "user_input" | "model_output" | "tool_result" | "platform";
-                            blocks: {
-                                id: string;
-                                /** @enum {string} */
-                                kind: "text" | "artifact" | "tool_call" | "tool_result";
-                                value: string;
-                            }[];
-                            runId: string | null;
-                            participantRef: string | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            /** Format: date-time */
-                            completedAt: string | null;
-                            agentThread: null | {
-                                childConversationId: string;
-                                parentConversationId: string;
-                                rootConversationId: string;
-                                parentMessageId: string;
-                                initiatorUserId: string;
-                                agentServiceId: string;
-                                personaRevisionId: string;
-                                firstRunId: string;
-                            };
-                        };
-                        agentThread: null | {
-                            childConversationId: string;
-                            parentConversationId: string;
-                            rootConversationId: string;
-                            parentMessageId: string;
-                            initiatorUserId: string;
-                            agentServiceId: string;
-                            personaRevisionId: string;
-                            firstRunId: string;
-                        };
-                    };
-                };
-            };
-            /** @description Invalid message body. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation unavailable. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Closed, active-run, mode, or idempotency conflict. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation admission capacity is currently full; retry later. */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Admission authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    retryMyConversationRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversationId: string;
-                runId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    expectedAttempt: number;
-                };
-            };
-        };
-        responses: {
-            /** @description The next attempt was already started. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        outcome: "idempotent";
-                        runId: string;
-                        attempt: number;
-                    };
-                };
-            };
-            /** @description Fresh attempt started. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        outcome: "started";
-                        runId: string;
-                        attempt: number;
-                    };
-                };
-            };
-            /** @description Malformed retry request. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation run unavailable to this participant. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Attempt, terminal state, active Agent service, or revision no longer permits retry. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Retry authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    archiveMyConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversationId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    archived: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Participant archive visibility changed. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        conversation: {
-                            id: string;
-                            /** @enum {string} */
-                            mode: "agent_session" | "direct" | "group";
-                            /** @enum {string} */
-                            lifecycle: "open" | "closed";
-                            agentServiceId: string | null;
-                            participantRefs: string[];
-                            /** Format: date-time */
-                            archivedAt: string | null;
-                            readThroughPosition: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                            visibleFromPosition: string;
-                            accessEndedPosition: string | null;
-                            messages: {
-                                id: string;
-                                position: string;
-                                /** @enum {string} */
-                                role: "user" | "assistant" | "tool" | "system";
-                                /** @enum {string} */
-                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-                                /** @enum {string} */
-                                source: "user_input" | "model_output" | "tool_result" | "platform";
-                                blocks: {
-                                    id: string;
-                                    /** @enum {string} */
-                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
-                                    value: string;
-                                }[];
-                                runId: string | null;
-                                participantRef: string | null;
-                                /** Format: date-time */
-                                createdAt: string;
-                                /** Format: date-time */
-                                completedAt: string | null;
-                                agentThread: null | {
-                                    childConversationId: string;
-                                    parentConversationId: string;
-                                    rootConversationId: string;
-                                    parentMessageId: string;
-                                    initiatorUserId: string;
-                                    agentServiceId: string;
-                                    personaRevisionId: string;
-                                    firstRunId: string;
-                                };
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Invalid archive request. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation unavailable. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    closeMyConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversationId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Conversation permanently closed. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        conversation: {
-                            id: string;
-                            /** @enum {string} */
-                            mode: "agent_session" | "direct" | "group";
-                            /** @enum {string} */
-                            lifecycle: "open" | "closed";
-                            agentServiceId: string | null;
-                            participantRefs: string[];
-                            /** Format: date-time */
-                            archivedAt: string | null;
-                            readThroughPosition: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                            visibleFromPosition: string;
-                            accessEndedPosition: string | null;
-                            messages: {
-                                id: string;
-                                position: string;
-                                /** @enum {string} */
-                                role: "user" | "assistant" | "tool" | "system";
-                                /** @enum {string} */
-                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-                                /** @enum {string} */
-                                source: "user_input" | "model_output" | "tool_result" | "platform";
-                                blocks: {
-                                    id: string;
-                                    /** @enum {string} */
-                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
-                                    value: string;
-                                }[];
-                                runId: string | null;
-                                participantRef: string | null;
-                                /** Format: date-time */
-                                createdAt: string;
-                                /** Format: date-time */
-                                completedAt: string | null;
-                                agentThread: null | {
-                                    childConversationId: string;
-                                    parentConversationId: string;
-                                    rootConversationId: string;
-                                    parentMessageId: string;
-                                    initiatorUserId: string;
-                                    agentServiceId: string;
-                                    personaRevisionId: string;
-                                    firstRunId: string;
-                                };
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation unavailable. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description An active foreground run prevents closure. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conversation authority unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     listMyConversationAssets: {
         parameters: {
             query?: never;
@@ -6882,7 +5750,7 @@ export interface operations {
                             conversationId: string;
                             messageId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload" | "agent_output";
+                            provenance: "participant_upload";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6949,7 +5817,7 @@ export interface operations {
                             conversationId: string;
                             messageId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload" | "agent_output";
+                            provenance: "participant_upload";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6979,7 +5847,7 @@ export interface operations {
                             conversationId: string;
                             messageId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload" | "agent_output";
+                            provenance: "participant_upload";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -7113,7 +5981,7 @@ export interface operations {
                             conversationId: string;
                             messageId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload" | "agent_output";
+                            provenance: "participant_upload";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -7185,7 +6053,7 @@ export interface operations {
                             conversationId: string;
                             messageId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload" | "agent_output";
+                            provenance: "participant_upload";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -7228,46 +6096,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    listManagedAgentServices: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Managed agent services in the selected silo. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        services: components["schemas"]["AgentService"][];
-                    };
-                };
-            };
-            /** @description No authenticated browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The management authority could not read the catalogue. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
             };
         };
     };
@@ -7987,6 +6815,1275 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    listMyGroupConversationChildren: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Currently visible shared child requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        children: {
+                            conversationId: string;
+                            parentConversationId: string;
+                            /** Format: uuid */
+                            parentMessageId: string;
+                            parentMessagePosition: string;
+                            /** @enum {string} */
+                            state: "pending" | "ready" | "unavailable";
+                            agentName: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Malformed command. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation or selected source unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The retry key already names a different command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createMyGroupConversationChild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    parentMessageId: string;
+                    parentMessagePosition: string;
+                    agentServiceId: string;
+                    /** Format: uuid */
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Child creation admitted or its original request recovered. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        child: {
+                            conversationId: string;
+                            parentConversationId: string;
+                            /** Format: uuid */
+                            parentMessageId: string;
+                            parentMessagePosition: string;
+                            /** @enum {string} */
+                            state: "pending" | "ready" | "unavailable";
+                            agentName: string;
+                        };
+                    };
+                };
+            };
+            /** @description Malformed command. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation or selected source unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The retry key already names a different command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    shareMyGroupConversationChildResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    sourceEntryId: string;
+                    sourcePosition: string;
+                    /** @description Human-reviewed text, limited to 65536 UTF-8 bytes. */
+                    text: string;
+                    /** Format: uuid */
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The same reviewed share was already accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "idempotent";
+                        position: string;
+                    };
+                };
+            };
+            /** @description Reviewed text accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted";
+                        position: string;
+                    };
+                };
+            };
+            /** @description Malformed command. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation or selected source unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The retry key already names a different command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getMyConversationCreationDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Projection-only creation directory. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        directory: {
+                            companyAssistants: {
+                                agentServiceId: string;
+                                displayName: string;
+                            }[];
+                            participants: {
+                                participantRef: string;
+                                /** @description Member display name, or a generic label when no name is available. Never a login subject or email fallback. */
+                                displayName: string;
+                                isSelf: boolean;
+                            }[];
+                            /** @enum {string} */
+                            personalAgentStatus: "ready" | "unavailable" | "ambiguous";
+                            personalAgent: Record<string, never> | null;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    listMyConversations: {
+        parameters: {
+            query?: {
+                includeArchived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Participant conversation projections. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        conversations: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantRefs: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    createMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    mode: "agent_session";
+                    personalAgentRef: string;
+                    /**
+                     * Format: uuid
+                     * @description Reuse this UUID for retries of the same session creation; a new UUID starts a separate session.
+                     */
+                    idempotencyKey: string;
+                } | {
+                    /** @enum {string} */
+                    mode: "direct" | "group";
+                    participantRefs: string[];
+                    /**
+                     * Format: uuid
+                     * @description Reuse this UUID for retries of the same creation request; a new UUID starts a separate conversation.
+                     */
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conversation projection created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantRefs: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
+                        };
+                    };
+                };
+            };
+            /** @description Creation target unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    openMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation projection without transcript data. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantRefs: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
+                        };
+                    };
+                };
+            };
+            /** @description Conversation unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    archiveMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    archived: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Participant archive projection changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantRefs: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
+                        };
+                    };
+                };
+            };
+            /** @description Conversation unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    closeMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation projection closed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantRefs: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            parent: {
+                                /** Format: uuid */
+                                requestId: string;
+                                parentConversationId: string;
+                                /** Format: uuid */
+                                parentMessageId: string;
+                                parentMessagePosition: string;
+                            } | null;
+                        };
+                    };
+                };
+            };
+            /** @description Conversation unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    streamMyConversationEvents: {
+        parameters: {
+            query?: {
+                /** @description Exclusive stream revision; defaults to zero. */
+                afterPosition?: string;
+            };
+            header?: {
+                /** @description Exclusive resume revision; overrides the original query cursor. */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded SSE history and terminal unavailable frames; keep-alive comments do not advance the cursor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Malformed or out-of-range stream revision. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Same-origin browser evidence required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation unavailable to the current participant. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subject or listener event budget exhausted; Retry-After is 60 seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description History unavailable before the stream opens. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readMyConversationHistory: {
+        parameters: {
+            query?: {
+                /** @description Exclusive immutable stream position. */
+                afterPosition?: string;
+            };
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized immutable history and separately decrypted payloads. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        entries: ({
+                            /** @enum {integer} */
+                            schemaVersion: 1;
+                            /** Format: uuid */
+                            id: string;
+                            conversationId: string;
+                            position: string;
+                            /** @enum {string} */
+                            kind: "message" | "log" | "a2ui";
+                            author: Record<string, never>;
+                            /** @enum {string} */
+                            provenance: "human-authored" | "agent-authored" | "service-attested";
+                            visibility: Record<string, never>;
+                            runId: string | null;
+                            causationId: string;
+                            correlationId: string;
+                            idempotencyKey: string;
+                            /** Format: date-time */
+                            occurredAt: string;
+                            attestation: Record<string, never> | null;
+                        } & {
+                            [key: string]: unknown;
+                        })[];
+                        payloads: {
+                            [key: string]: string;
+                        };
+                        nextPosition: string;
+                        computer: Record<string, never> | null;
+                    };
+                };
+            };
+            /** @description Malformed position cursor. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation is unavailable to the current participant. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation history or private payload authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postMyConversationMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    idempotencyKey: string;
+                    text: string;
+                    /** @enum {string} */
+                    activation: "none" | "start" | "interrupt";
+                };
+            };
+        };
+        responses: {
+            /** @description The exact immutable entry was already accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "idempotent";
+                        position: string;
+                    };
+                };
+            };
+            /** @description A new immutable entry was accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted";
+                        position: string;
+                    };
+                };
+            };
+            /** @description Malformed message command. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation is unavailable to the current participant. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency or activation conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation history or private payload authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readMyConversationComputerFile: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded file bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Review surface unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readMyConversationComputerDiff: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded diff command result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        exitCode: number | null;
+                        /** @enum {string} */
+                        outcome: "completed" | "timed_out" | "output_limited";
+                        output: string;
+                        truncated: boolean;
+                    };
+                };
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Review surface unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    runMyConversationComputerCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    argv: string[];
+                    cwd?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Bounded command result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        exitCode: number | null;
+                        /** @enum {string} */
+                        outcome: "completed" | "timed_out" | "output_limited";
+                        output: string;
+                        truncated: boolean;
+                    };
+                };
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Review surface unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readMyConversationComputerBrowserVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chromium version metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMyConversationComputerBrowserTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current Chromium targets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    openMyConversationComputerBrowserPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    port: number;
+                    path: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created Chromium target. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    captureMyConversationComputerBrowserScreenshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    port: number;
+                    path: string;
+                    width: number;
+                    height: number;
+                };
+            };
+        };
+        responses: {
+            /** @description PNG screenshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readMyConversationComputerPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+                port: number;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview response body. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                    "text/plain": string;
+                    "application/json": unknown;
+                };
+            };
+            /** @description Preview port or path unavailable. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active computer unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMyRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent canonical lifecycle views for the owned runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runs: components["schemas"]["SelfRunStatus"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMyRunStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current canonical lifecycle view for the owned run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunStatus"];
+                };
+            };
+            /** @description The run identifier is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    provisionCompanyAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    modelDefinitionId: string;
+                    invokerPrincipalIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Existing company assistant returned; replacement choices were not applied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        created: boolean;
+                        assistant: {
+                            agentServiceId: string;
+                            displayName: string;
+                        };
+                    };
+                };
+            };
+            /** @description Company assistant created and identity established. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        created: boolean;
+                        assistant: {
+                            agentServiceId: string;
+                            displayName: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid setup choices. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Setup authority or selected member unavailable. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Setup dependency unavailable; the same request may be retried. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

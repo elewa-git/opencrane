@@ -11,7 +11,7 @@ export default defineConfig({
   lang: 'en-GB',
   title: 'OpenCrane',
   description:
-    'Self-hosted, Kubernetes-native control plane for governed organisational AI agents.',
+    'Company AI assistants, conversations and tools under your organisation’s control.',
   cleanUrls: true,
   lastUpdated: true,
   // Architecture diagrams in the docs use Unicode box-drawing; keep them intact.
@@ -33,10 +33,10 @@ export default defineConfig({
         text: 'Guides',
         items: [
           { text: 'Set up your personal assistant', link: '/guide/persona' },
-          { text: 'Create a managed agent', link: '/guide/first-agent' },
+          { text: 'Company assistant', link: '/guide/first-agent' },
           { text: 'Organize your company', link: '/guide/organize' },
           { text: 'Agent skills', link: '/guide/skills' },
-          { text: 'Agent delegation (child runs)', link: '/guide/child-runs' },
+          { text: 'Ask an assistant in a group', link: '/guide/child-runs' },
           { text: 'Manage tools (MCP)', link: '/guide/tools' },
           { text: 'Organizational knowledge', link: '/guide/knowledge' },
           { text: 'Control access', link: '/guide/permissions' },
@@ -61,6 +61,7 @@ export default defineConfig({
         items: [
           { text: 'What is OpenCrane?', link: '/guide/introduction' },
           { text: 'How OpenCrane works', link: '/guide/how-it-works' },
+          { text: 'Development status', link: '/guide/status' },
         ],
       },
       {
@@ -82,10 +83,10 @@ export default defineConfig({
         text: 'Guides',
         items: [
           { text: 'Set up your personal assistant', link: '/guide/persona' },
-          { text: 'Create a managed agent', link: '/guide/first-agent' },
+          { text: 'Company assistant', link: '/guide/first-agent' },
           { text: 'Organize your company', link: '/guide/organize' },
           { text: 'Agent skills', link: '/guide/skills' },
-          { text: 'Agent delegation (child runs)', link: '/guide/child-runs' },
+          { text: 'Ask an assistant in a group', link: '/guide/child-runs' },
           { text: 'Manage tools (MCP)', link: '/guide/tools' },
           { text: 'Organizational knowledge', link: '/guide/knowledge' },
           { text: 'Control who can access what', link: '/guide/permissions' },
@@ -123,7 +124,7 @@ export default defineConfig({
         items: [
           { text: 'Central authorization authority', link: '/integrators/authorization-authority' },
           { text: 'Governed packages & container images', link: '/integrators/governed-packages' },
-          { text: 'Governed agent runtime', link: '/integrators/agent-runtime' },
+          { text: 'Conversation computers', link: '/integrators/agent-runtime' },
           { text: 'OCI MCP runtime', link: '/integrators/oci-mcp-runtime' },
           { text: 'Memory write, manage & read', link: '/integrators/retrieval-memory' },
           { text: 'Long-term memory & dreaming', link: '/integrators/long-term-memory-cognee' },
@@ -160,7 +161,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the AGPL-3.0-or-later License.',
-      copyright: 'OpenCrane — self-hosted control plane for organizational AI.',
+      copyright: 'OpenCrane — AI assistants your company controls.',
     },
   },
 })

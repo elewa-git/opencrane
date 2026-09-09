@@ -16,7 +16,6 @@
         { "path": "observability", "documentation": "website/operators/deployment-configuration.md" }
       ],
       "forwardedKeys": [
-        { "path": "channelProxy", "owner": "apps/channel-proxy/helm" },
         { "path": "memoryGateway", "owner": "apps/memory-gateway/helm" },
         { "path": "opencrane-mcp-executor", "owner": "apps/mcp-executor/helm" },
         { "path": "opencrane-skill-authoring", "owner": "apps/skill-authoring/helm" },
@@ -24,6 +23,8 @@
         { "path": "artifactPreprocessor", "owner": "apps/artifact-preprocessor/helm" },
         { "path": "artifactScanner", "owner": "apps/artifact-scanner/helm" },
         { "path": "agentController", "owner": "apps/agent-controller/helm" },
+        { "path": "agentSandbox", "owner": "apps/_infra/agent-sandbox/helm" },
+        { "path": "historyStore", "owner": "apps/_infra/kurrentdb/helm" },
         { "path": "clustertenantManager", "owner": "apps/opencrane/helm" },
         { "path": "litellm", "owner": "apps/_infra/litellm/helm" },
         { "path": "controlPlaneSpa", "owner": "apps/opencrane-ui/helm" },

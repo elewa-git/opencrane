@@ -35,6 +35,42 @@
 #                            [--postgres-values FILE]
 #                            [--values FILE] [--set k=v ...] [--helm-arg ARG ...]
 #                            [--reuse-values | --reset-values]
+#                            [--kurrentdb-restore-list]
+#                            [--kurrentdb-restore BACKUP_ID [--kurrentdb-restore-confirm-serving]]
+#
+# Snapshot prerequisite (a separate action; this flag must come first):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-gke-snapshot-class NAME \
+#     --context CONTEXT --storage-class SC
+# Creates or validates one OpenCrane-owned, non-default GKE Persistent Disk snapshot class with
+# Delete retention. It exits before any silo, chart, image, database, or identity setup.
+#
+# Standard-disk prerequisite (a separate action; this flag must come first):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-gke-standard-storage-class NAME \
+#     --context CONTEXT
+# Creates or validates one owned, non-default expandable GKE pd-standard storage class.
+#
+# Agent Sandbox prerequisite (a separate action; this flag must come first):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-agent-sandbox-controller \
+#     --context CONTEXT [--preflight]
+# Installs the pinned shared controller with OpenCrane's allowed Pod-label domain.
+#
+# Fresh-install credentials (each action must come first and uses the current kubectl context):
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-postgres-bootstrap-secrets \
+#     --namespace NAMESPACE --release RELEASE
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --provision-kurrentdb-bootstrap-secrets \
+#     --namespace NAMESPACE --release RELEASE
+# These explicit actions create missing namespace-local credentials or validate existing ones.
+# They exit before ordinary install validation and never rotate existing credentials.
+#
+# KurrentDB restore: --kurrentdb-restore-list prints the scheduled backups of this silo and exits.
+# KurrentDB bootstrap: --kurrentdb-bootstrap-retry retries a failed or missing bootstrap Job and exits.
+# KurrentDB replay: --kurrentdb-replay-parked replays the silo activation queue through a separate operator Job.
+# --kurrentdb-bootstrap-prepare-update removes a completed bootstrap Job before a normal deploy changes its template.
+# --kurrentdb-restore BACKUP_ID (or `latest`) scales KurrentDB to zero, restores the data volume
+# from that backup with the same image and scripts the backup CronJob uses, scales it back up,
+# re-runs the bootstrap verification Job, and exits without touching any other release step. It
+# refuses while KurrentDB is serving traffic unless --kurrentdb-restore-confirm-serving is passed,
+# because every conversation entry written after the backup is lost.
 #
 # Value preservation: on an UPGRADE (release already exists) this engine defaults to Helm's
 # --reset-then-reuse-values, so prior --set/-f overrides are NOT silently dropped when a run
@@ -83,6 +119,32 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "${1:-}" in
+  --provision-agent-sandbox-controller)
+    shift
+    exec bash "$SCRIPT_DIR/deploy-agent-sandbox-controller.sh" "$@"
+    ;;
+  --provision-gke-standard-storage-class)
+    source "$SCRIPT_DIR/gke-standard-storage-class.sh"
+    shift
+    provision_gke_standard_storage_class "$@"
+    exit $?
+    ;;
+  --provision-gke-snapshot-class)
+    source "$SCRIPT_DIR/gke-snapshot-class.sh"
+    shift
+    provision_gke_snapshot_class "$@"
+    exit $?
+    ;;
+  --provision-postgres-bootstrap-secrets)
+    shift
+    exec bash "$SCRIPT_DIR/provision-postgres-bootstrap-secrets.sh" "$@"
+    ;;
+  --provision-kurrentdb-bootstrap-secrets)
+    shift
+    exec bash "$SCRIPT_DIR/provision-kurrentdb-bootstrap-secrets.sh" "$@"
+    ;;
+esac
 POST_DEPLOY_VERIFY="$SCRIPT_DIR/post-deploy-verify.sh"
 if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
   echo "[k8s-deploy] Post-deploy verifier is missing at '$POST_DEPLOY_VERIFY'." >&2
@@ -107,9 +169,10 @@ source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/provider-key-secrets.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/postgres-release.sh"
-source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
-source "$SCRIPT_DIR/retire-legacy-obot-mcp-server.sh"
+source "$SCRIPT_DIR/kurrentdb-restore.sh"
+source "$SCRIPT_DIR/kurrentdb-bootstrap.sh"
+source "$SCRIPT_DIR/kurrentdb-replay.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -157,7 +220,7 @@ BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
 INVITATION_SIGNING_SECRET="${OPENCRANE_INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
-RUNTIME_CONTINUATION_KEYRING_SECRET="${OPENCRANE_RUNTIME_CONTINUATION_KEYRING_SECRET:-opencrane-runtime-continuation}"
+CONVERSATION_PRIVATE_PAYLOAD_SECRET="${OPENCRANE_CONVERSATION_PRIVATE_PAYLOAD_SECRET:-opencrane-conversation-private-payload}"
 MEMBERSHIP_MODE="${OPENCRANE_MEMBERSHIP_MODE:-standalone}"
 [[ "$MEMBERSHIP_MODE" == "standalone" || "$MEMBERSHIP_MODE" == "fleet" ]] || { echo "OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet." >&2; exit 2; }
 VALUES_FILE=""
@@ -230,6 +293,13 @@ VERIFY_INSECURE="${OPENCRANE_VERIFY_INSECURE:-0}"
 POSTGRES_RELEASE=""
 RELEASE_VERSION="${OPENCRANE_RELEASE_VERSION:-}"
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
+# KurrentDB recovery actions exit before ordinary installation.
+KURRENTDB_RESTORE_BACKUP_ID=""
+KURRENTDB_RESTORE_CONFIRM_SERVING="0"
+KURRENTDB_RESTORE_LIST="0"
+KURRENTDB_BOOTSTRAP_RETRY="0"
+KURRENTDB_BOOTSTRAP_PREPARE_UPDATE="0"
+KURRENTDB_REPLAY_PARKED="0"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[k8s-deploy]\033[0m $1"; }
@@ -276,10 +346,28 @@ while [[ $# -gt 0 ]]; do
     --set)           EXTRA_SET+=(--set "$2"); shift 2 ;;
     --set-string)    EXTRA_SET+=(--set-string "$2"); shift 2 ;;
     --helm-arg)      EXTRA_HELM_ARGS+=("$2"); shift 2 ;;
+    --kurrentdb-restore)                 KURRENTDB_RESTORE_BACKUP_ID="$2"; shift 2 ;;
+    --kurrentdb-restore-confirm-serving) KURRENTDB_RESTORE_CONFIRM_SERVING="1"; shift ;;
+    --kurrentdb-restore-list)            KURRENTDB_RESTORE_LIST="1"; shift ;;
+    --kurrentdb-bootstrap-retry)         KURRENTDB_BOOTSTRAP_RETRY="1"; shift ;;
+    --kurrentdb-bootstrap-prepare-update) KURRENTDB_BOOTSTRAP_PREPARE_UPDATE="1"; shift ;;
+    --kurrentdb-replay-parked) KURRENTDB_REPLAY_PARKED="1"; shift ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
+if [[ "$KURRENTDB_REPLAY_PARKED" == "1" && ( "$KURRENTDB_BOOTSTRAP_RETRY" == "1" || "$KURRENTDB_BOOTSTRAP_PREPARE_UPDATE" == "1" || -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
+  err "--kurrentdb-replay-parked cannot be combined with bootstrap, restore or preflight actions."
+  exit 1
+fi
+if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" && ( -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
+  err "--kurrentdb-bootstrap-retry cannot be combined with restore or preflight actions."
+  exit 1
+fi
+if [[ "$KURRENTDB_BOOTSTRAP_PREPARE_UPDATE" == "1" && ( "$KURRENTDB_BOOTSTRAP_RETRY" == "1" || -n "$KURRENTDB_RESTORE_BACKUP_ID" || "$KURRENTDB_RESTORE_LIST" == "1" || "$KURRENTDB_RESTORE_CONFIRM_SERVING" == "1" || "$PREFLIGHT" == "1" ) ]]; then
+  err "--kurrentdb-bootstrap-prepare-update cannot be combined with retry, restore or preflight actions."
+  exit 1
+fi
 for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
@@ -307,6 +395,82 @@ if [[ -z "$POSTGRES_OPERAND_IMAGE" ]]; then
 fi
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
 KUBERNETES_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
+
+wait_for_final_kurrentdb_bootstrap_job_if_present()
+{
+  local job_name="${RELEASE}-kurrentdb-bootstrap"
+  local deadline=$((SECONDS + TIMEOUT)) seen_job=0
+  local job_resource job_state command_status remaining request_timeout pause_seconds
+  # A failed Job cannot become Complete. Poll both outcomes so its deadline does not consume
+  # the installer's longer timeout; a Job still running retains the configured wait budget.
+  while (( SECONDS < deadline )); do
+    remaining=$((deadline - SECONDS))
+    if (( remaining <= 0 )); then break; fi
+    request_timeout="$remaining"
+    if (( request_timeout > 30 )); then request_timeout=30; fi
+    if job_resource="$(kubectl get "job/$job_name" -n "$NAMESPACE" --ignore-not-found -o json --request-timeout="${request_timeout}s")"; then
+      command_status=0
+    else
+      command_status=$?
+      err "Unable to inventory final KurrentDB bootstrap Job '$job_name'."
+      return "$command_status"
+    fi
+    if [[ -z "$job_resource" ]]; then
+      if (( seen_job == 0 )); then return 0; fi
+      err "KurrentDB bootstrap Job '$job_name' disappeared before completing."
+      return 1
+    fi
+    seen_job=1
+    if ! job_state="$(jq -er '
+      if .apiVersion != "batch/v1" or .kind != "Job" then error("Expected a batch/v1 Job") else . end
+      | [.status.conditions[]? | select(.status == "True") | .type]
+      | if index("Failed") != null or index("FailureTarget") != null then "failed"
+        elif index("Complete") != null then "complete"
+        else "running" end
+    ' <<<"$job_resource")"; then
+      err "Unable to read final KurrentDB bootstrap Job '$job_name' conditions."
+      return 1
+    fi
+    if [[ "$job_state" == complete ]]; then return 0; fi
+    if [[ "$job_state" == failed ]]; then
+      err "KurrentDB bootstrap Job '$job_name' reported terminal failure."
+      break
+    fi
+    remaining=$((deadline - SECONDS))
+    if (( remaining <= 0 )); then break; fi
+    pause_seconds=2
+    if (( remaining < pause_seconds )); then pause_seconds="$remaining"; fi
+    sleep "$pause_seconds"
+  done
+  err "KurrentDB bootstrap Job '$job_name' did not complete successfully within its wait."
+  kubectl get "job/$job_name" -n "$NAMESPACE" -o wide --request-timeout=10s >&2 || true
+  kubectl describe "job/$job_name" -n "$NAMESPACE" --request-timeout=10s >&2 || true
+  kubectl logs "job/$job_name" -n "$NAMESPACE" --all-containers=true --pod-running-timeout=1s --request-timeout=10s >&2 || true
+  return 1
+}
+
+# KurrentDB recovery runs once the target silo is known and exits before image resolution,
+# so a silo with a broken ledger never has to wait on registry access to recover its history.
+if [[ "$KURRENTDB_REPLAY_PARKED" == "1" ]]; then
+  run_kurrentdb_replay_parked || exit $?
+  exit 0
+fi
+if [[ "$KURRENTDB_BOOTSTRAP_RETRY" == "1" ]]; then
+  run_kurrentdb_bootstrap_retry || exit $?
+  exit 0
+fi
+if [[ "$KURRENTDB_BOOTSTRAP_PREPARE_UPDATE" == "1" ]]; then
+  run_kurrentdb_bootstrap_prepare_update || exit $?
+  exit 0
+fi
+if [[ "$KURRENTDB_RESTORE_LIST" == "1" ]]; then
+  list_kurrentdb_backups || exit $?
+  exit 0
+fi
+if [[ -n "$KURRENTDB_RESTORE_BACKUP_ID" ]]; then
+  run_kurrentdb_restore "$KURRENTDB_RESTORE_BACKUP_ID" "$KURRENTDB_RESTORE_CONFIRM_SERVING" || exit $?
+  exit 0
+fi
 # --base-domain validation. When supplied it must be a syntactically valid, lowercase
 # FQDN (≥2 labels, no scheme/port/path, no trailing dot) so it can stand in for
 # release hosts.
@@ -597,6 +761,9 @@ _load_kubernetes_api_helm_args memoryGateway "memory gateway"
 MEMORY_GATEWAY_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 _load_kubernetes_api_helm_args agentController "agent controller"
 AGENT_CONTROLLER_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
+# The KurrentDB snapshot Job needs these only in volumeSnapshot mode; the chart ignores them otherwise.
+_load_kubernetes_api_helm_args historyStore.kurrentdb.backup.volumeSnapshot "KurrentDB backup"
+KURRENTDB_BACKUP_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 
 _copy_cnpg_uri_secret() {
   local source_secret="$1"
@@ -615,19 +782,23 @@ _copy_cnpg_uri_secret() {
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
-ensure_runtime_continuation_keyring_secret "$NAMESPACE" "$RUNTIME_CONTINUATION_KEYRING_SECRET"
+if ! kubectl get secret "$CONVERSATION_PRIVATE_PAYLOAD_SECRET" -n "$NAMESPACE" >/dev/null 2>&1; then
+  conversation_payload_directory="$(mktemp -d)"
+  conversation_payload_key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+  printf '{"currentKeyId":"key-1","keys":{"key-1":"%s"}}\n' "$conversation_payload_key" > "$conversation_payload_directory/keyring.json"
+  kubectl create secret generic "$CONVERSATION_PRIVATE_PAYLOAD_SECRET" -n "$NAMESPACE" --from-file="keyring.json=$conversation_payload_directory/keyring.json"
+  rm -f "$conversation_payload_directory/keyring.json"
+  rmdir "$conversation_payload_directory"
+fi
 install_postgres_release true
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-prepare_database_release_transition || exit $?
-# Publish the pooler URI before enabling the Job because the migrator reads this Secret as DATABASE_URL.
 # Five OpenCrane connections keep PgBouncer's thirty-connection logical-database budget authoritative.
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
-finish_database_release_transition || exit $?
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
@@ -877,7 +1048,6 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # and it only forces fields the chart actually applies (foreign managers of OTHER fields
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
 build_membership_helm_args
-build_runtime_continuation_keyring_helm_args
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --server-side=true
   --force-conflicts
@@ -895,11 +1065,12 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
+  --set-string "clustertenantManager.conversationPrivatePayloadKeyring.existingSecret=$CONVERSATION_PRIVATE_PAYLOAD_SECRET"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMBERSHIP_HELM_ARGS[@]}"
-  "${RUNTIME_CONTINUATION_KEYRING_HELM_ARGS[@]}"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}"
-  "${AGENT_CONTROLLER_KUBERNETES_API_ARGS[@]}")
+  "${AGENT_CONTROLLER_KUBERNETES_API_ARGS[@]}"
+  "${KURRENTDB_BACKUP_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
@@ -977,6 +1148,7 @@ fi
 append_authoritative_qualified_release_image_helm_args
 append_authoritative_cognee_image_helm_args
 helm "${helm_args[@]}" || exit $?
+wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?
 # The database consumers load their connection Secrets at startup, and Helm does not roll pods
 # when only a Secret published outside the chart changed. Stamping the Secret checksum onto the
 # pod templates rolls the consumers exactly when the credentials changed, instead of restarting
@@ -1010,36 +1182,12 @@ wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
 _verify_control_plane_spa_rollout || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
 _verify_cognee_rollout || exit $?
-wait_for_final_deployment_if_present "${RELEASE}-channel-proxy" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
+wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb" || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-opencrane-server" || exit $?
 
 _wait_for_release_certificate || exit $?
-# Only a cluster that existed before this deploy can still hold retired Obot resources. The gate
-# used to name the 0.9.2-to-0.10.0 upgrade; pre-1.0 deploys no longer declare a source release, and
-# every retirement step below tolerates the resources already being gone.
-if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
-  FINAL_SERVER_REPOSITORY="$(jq -r '.clustertenantManager.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_CONTROLLER_REPOSITORY="$(jq -r '.agentController.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_SCANNER_REPOSITORY="$(jq -r '.artifactScanner.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_RUNTIME_REPOSITORY="$(jq -r '.agentController.runtimeProfile.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
-  if [[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]; then
-    err "The final release values do not identify every replacement image repository, so the retired Obot server remains in place."
-    exit 1
-  fi
-  FINAL_PERSONAL_RUNTIME_NAMESPACE="$(jq -r '.agentController.runtimeNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_MANAGED_RUNTIME_NAMESPACE="$(jq -r '.agentController.warmRuntime.managedNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_PERSONAL_RUNTIME_NAMESPACE="${FINAL_PERSONAL_RUNTIME_NAMESPACE:-${RELEASE}-runtime}"
-  FINAL_MANAGED_RUNTIME_NAMESPACE="${FINAL_MANAGED_RUNTIME_NAMESPACE:-${RELEASE}-managed-runtime}"
-  verify_legacy_obot_replacement_ready "$NAMESPACE" "$RELEASE" "$TIMEOUT" \
-    "${FINAL_SERVER_REPOSITORY}:${CP_TAG}" \
-    "${FINAL_CONTROLLER_REPOSITORY}@${AGENT_CONTROLLER_IMAGE_DIGEST}" \
-    "${FINAL_SCANNER_REPOSITORY}@${ARTIFACT_SCANNER_IMAGE_DIGEST}" \
-    "${FINAL_RUNTIME_REPOSITORY}@${AGENT_RUNTIME_IMAGE_DIGEST}" \
-    "$FINAL_SCANNER_NAMESPACE" "$FINAL_PERSONAL_RUNTIME_NAMESPACE" "$FINAL_MANAGED_RUNTIME_NAMESPACE" || exit $?
-  retire_legacy_obot_mcp_server_resources "$NAMESPACE" "$TIMEOUT" || exit $?
-  retire_legacy_obot_database_custody "$NAMESPACE" "$RELEASE" "$TIMEOUT" || exit $?
-fi
 _post_deploy_verify || exit $?
 
 log "Done. OpenCrane is installed in namespace '$NAMESPACE'."

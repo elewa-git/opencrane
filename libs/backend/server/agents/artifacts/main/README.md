@@ -186,5 +186,5 @@ PostgreSQL-specific database clock remains in the reviewed clean target baseline
 ## See also
 
 - Parent index: [agents](../../README.md)
-- Siblings: [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) · [channel-targets](../../channel-targets/main/README.md)
+- Siblings: [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md)
 - Worker libraries: [artifact preprocessor](../../../../artifacts/preprocessor/main/README.md) · [artifact scanner](../../../../artifacts/scanner/main/README.md)

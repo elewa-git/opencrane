@@ -2,12 +2,10 @@
 
 ## Feature intent
 
-Let organisation administrators define bounded agents for scheduled or explicit work, with immutable
-revisions, optimistic concurrency, narrow attachments, and visible run history.
+Describe the future organisation-managed agent experience without implying that its management,
+invocation, history, or scheduling surface ships in the 0.11.0 personal-agent baseline.
 
-Current status: `API ready`, `UI missing`, `Design ready`. Fourteen of the fifteen operations are
-absent from generated OpenAPI. Offline validation exists, while live runtime and scheduler
-qualification must be shown separately.
+Current status: `next phase`. These operations are absent from the generated OpenAPI and runtime.
 
 ## AGT-01 — Browse managed agents
 
@@ -88,7 +86,7 @@ Acceptance criteria:
 - History shows trigger, revision, state, timestamps, and safe terminal outcome.
 - Controller/runtime unavailable and admission-capacity states are distinct from definition errors.
 
-APIs: `POST .../run-now`, `GET .../history`.
+The managed-agent HTTP management and invocation surface is not part of 0.11.0.
 
 ## AGT-07 — Manage schedules
 
@@ -103,4 +101,4 @@ Acceptance criteria:
   confirmation are covered.
 - Creating a schedule cannot imply it will fire when deployment-level scheduling is disabled.
 
-APIs: `GET/POST .../schedules`, `PUT/DELETE .../schedules/{scheduleId}`.
+The schedule API and scheduler are not part of 0.11.0.

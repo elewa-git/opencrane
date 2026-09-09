@@ -7,7 +7,6 @@ append_authoritative_qualified_release_image_helm_args()
 {
   local value_path
   for value_path in \
-    channelProxy.image.tag \
     memoryGateway.image.tag \
     artifactService.image.tag; do
     helm_args+=(--set-literal "${value_path}=${IMAGE_TAG}")
@@ -20,7 +19,6 @@ append_authoritative_qualified_release_image_helm_args()
       --set "artifactPreprocessor.enabled=true"
       --set "artifactScanner.enabled=true"
       --set-literal "agentController.image.digest=${AGENT_CONTROLLER_IMAGE_DIGEST}"
-      --set-literal "agentController.runtimeProfile.image.digest=${AGENT_RUNTIME_IMAGE_DIGEST}"
       --set-literal "agentController.skillAuthoringValidation.image.digest=${SKILL_AUTHORING_IMAGE_DIGEST}"
       --set-literal "opencrane-mcp-executor.mcpExecutor.image.digest=${MCP_EXECUTOR_IMAGE_DIGEST}"
       --set-literal "artifactPreprocessor.image.digest=${ARTIFACT_PREPROCESSOR_IMAGE_DIGEST}"
@@ -30,7 +28,7 @@ append_authoritative_qualified_release_image_helm_args()
 
 # Resolves the immutable manifests consumed by the workflow runtime charts. The public release tag
 # selects one reviewed commit, while Helm receives exact digests so a later tag move cannot change a
-# controller, runtime, MCP companion, skill validator, or artifact worker during a rollout.
+# controller, MCP companion, skill validator, or artifact worker during a rollout.
 resolve_qualified_workflow_image_digests()
 {
   local image
@@ -70,11 +68,10 @@ resolve_qualified_workflow_image_digests()
   done < <(qualified_workflow_image_references)
 
   AGENT_CONTROLLER_IMAGE_DIGEST="${resolved[0]}"
-  AGENT_RUNTIME_IMAGE_DIGEST="${resolved[1]}"
-  MCP_EXECUTOR_IMAGE_DIGEST="${resolved[2]}"
-  SKILL_AUTHORING_IMAGE_DIGEST="${resolved[3]}"
-  ARTIFACT_PREPROCESSOR_IMAGE_DIGEST="${resolved[4]}"
-  ARTIFACT_SCANNER_IMAGE_DIGEST="${resolved[5]}"
+  MCP_EXECUTOR_IMAGE_DIGEST="${resolved[1]}"
+  SKILL_AUTHORING_IMAGE_DIGEST="${resolved[2]}"
+  ARTIFACT_PREPROCESSOR_IMAGE_DIGEST="${resolved[3]}"
+  ARTIFACT_SCANNER_IMAGE_DIGEST="${resolved[4]}"
 }
 
 # Prints the workflow-owned images whose digests must be fixed into every public release render.
@@ -82,7 +79,6 @@ qualified_workflow_image_references()
 {
   printf '%s\n' \
     "ghcr.io/elewa-git/opencrane-agent-controller:${IMAGE_TAG}" \
-    "ghcr.io/elewa-git/opencrane-agent-runtime:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-mcp-executor:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-skill-authoring:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-artifact-preprocessor:${IMAGE_TAG}" \
@@ -90,11 +86,10 @@ qualified_workflow_image_references()
 }
 
 # Prints each tagged first-party image that the release will run. The server may use its dedicated
-# override, but the three auxiliary services always stay on the unified release tag.
+# override, but the two auxiliary services always stay on the unified release tag.
 qualified_release_tag_image_references()
 {
   printf '%s\n' \
-    "ghcr.io/elewa-git/opencrane-channel-proxy:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-memory-gateway:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-artifact-service:${IMAGE_TAG}" \
     "ghcr.io/elewa-git/opencrane-server:${CP_TAG}"
