@@ -20,3 +20,11 @@ export type { ArtifactScanRepository, ArtifactScannerRouterDependencies, Artifac
 export type { ArtifactReadLeaseRepository, ArtifactReadLeaseSigner, IssueArtifactReadLeaseCommand, IssueArtifactReadLeaseResult, PublishedArtifactReadTarget } from "./artifact-read-lease.types";
 export type { PersonalArtifactCaller, PersonalArtifactCatalogueRouterDependencies } from "./personal-artifact-catalogue.router.types";
 export type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort, ArtifactUploadLeaseRepository, ArtifactUploadResult, VerifiedArtifactUploadCommand } from "./artifact-upload.types";
+export { _CreateArtifactUploadGateway, _CreatePublishedArtifactReader } from "./service/artifact-upload.factory";
+export { _CreateArtifactPreprocessOutputBroker } from "./service/artifact-preprocess-output-broker.factory";
+export { _CreateArtifactServicePromotionPort } from "./service/artifact-service-promotion-port";
+export { _ReadArtifactMountedPem } from "./service/artifact-mounted-key.loader";
+export { _CreateArtifactReadLeaseSigner } from "./service/artifact-read-lease-signer.factory";
+export { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./service/artifact-service-read-port.factory";
+export { _CreateArtifactPreprocessSourceBroker } from "./service/artifact-preprocess-source-broker.factory";
+export { _CreateArtifactScanSourceBroker } from "./service/artifact-scan-source-broker.factory";

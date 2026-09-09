@@ -3,16 +3,46 @@
   "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "libs/backend/server/conversations/main/src",
-  "tags": ["type:lib", "layer:backend", "scope:conversations"],
+  "tags": [
+    "type:lib",
+    "layer:backend",
+    "scope:conversations"
+  ],
   "targets": {
-    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/conversations/main" } },
-    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/conversations/main" } },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.json --noEmit",
+        "cwd": "libs/backend/server/conversations/main"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run",
+        "cwd": "libs/backend/server/conversations/main"
+      }
+    },
+    "test:sql": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "sh ../../../../../scripts/run-postgres-authority-tests.sh src/children/__tests__/group-child-authority.sql",
+        "cwd": "libs/backend/server/conversations/main"
+      }
+    },
     "test:integration": {
       "executor": "nx:run-commands",
-      "options": { "command": "vitest run --config vitest.integration.config.ts", "cwd": "libs/backend/server/conversations/main" },
+      "options": {
+        "command": "vitest run --config vitest.integration.config.ts",
+        "cwd": "libs/backend/server/conversations/main"
+      },
       "cache": false,
-      "inputs": ["{projectRoot}/**/*", { "env": "KURRENTDB_INTEGRATION_URL" }]
-    },
-    "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../scripts/run-postgres-authority-tests.sh src/__tests__/group-child-authority.sql", "cwd": "libs/backend/server/conversations/main" } }
+      "inputs": [
+        "{projectRoot}/**/*",
+        {
+          "env": "KURRENTDB_INTEGRATION_URL"
+        }
+      ]
+    }
   }
 }

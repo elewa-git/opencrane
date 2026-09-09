@@ -57,6 +57,8 @@ path and does not install this local database gate.
 - `POST /organization/members/{membershipId}/remove` accepts exactly `{}` and returns `{ member }`.
   The member retains its identity and reports `suspended`; Owner/self removal conflicts, foreign or
   absent targets share a 404, and denied callers receive 403.
+- `_ResolveOrganizationMembershipCaller` uses verified session identity for member operations.
+
 - `_CreateOrganizationProductAccessMiddleware` admits active standalone members and the exact
   pre-membership invitation-acceptance POST.
 - `StandaloneOrganizationMembershipAuthority` owns local validation, tokens, and projections.

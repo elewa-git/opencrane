@@ -86,6 +86,11 @@ caller's silo, never installation-wide.
 
 ## Public surface
 
+The source folders follow the work: `models/` owns model definitions and routing defaults,
+`byok/` accepts and reports customer-supplied keys, `commands/` admits and reconciles external
+changes, and `authorization/` supplies the shared transaction and permission boundary. Each folder
+keeps its contracts and tests beside its implementation. `src/index.ts` remains the public entrypoint.
+
 - `providerByokRouter`, `modelRegistryRouter` — the routers mounted at
   `/api/v1/providers/byok` and `/api/v1/models`.
 - `_ProvidersOpenapiPaths` — the OpenAPI (REST API description) path fragments for this surface.

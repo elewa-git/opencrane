@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import type { ToolInvocationRecord, ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 
-import { PrismaConversationComputerLifecycleProjectionRepository } from "../../../db/prisma-conversation-computer-lifecycle-projection-repository";
+import { PrismaConversationComputerLifecycleProjectionRepository } from "../../lifecycle/db/prisma-conversation-computer-lifecycle-projection-repository";
 import { ConversationToolComputerEvidenceReader } from "./conversation-tool-computer-evidence";
 import type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies } from "./conversation-tool-dispatch.types";
 import { PrismaConversationToolAccessAuthority } from "./prisma-conversation-tool-access";

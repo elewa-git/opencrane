@@ -2,7 +2,7 @@ import type { AgentIdentity } from "@opencrane/contracts";
 import type { ToolInvocationAuthorizationEvidence, ToolInvocationRecord, ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import type { ExecutionSubject, ExecutionSubjectHumanMembershipEvidence } from "@opencrane/models/agents";
 
-import type { ConversationComputerCurrentCommand } from "../../../conversation-computers";
+import type { ConversationComputerCurrentCommand } from "@opencrane/backend/server/conversations/computers";
 
 /** Saved run facts that still match this invocation and its original input snapshot. */
 export interface ConversationToolRunEvidence

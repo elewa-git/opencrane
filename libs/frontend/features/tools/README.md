@@ -15,9 +15,27 @@ an MCP server is one such tool the user can install. This package ships two sepa
   each screen gating itself on the admin capability. Generic central grant administration owns MCP
   sharing outside this feature.
 
-The screens read connection and key state from client-side **stores/gateways** (a gateway is an
+The screens read connection and key state through component-scoped **stores/gateways** (a gateway is an
 injection token that is the port to the opencrane-server HTTP API) and render it; the server stays
 the authority on what a user may install or govern.
+
+The shared inventory store serves the catalogue and installed-tools routes. Separate administration
+stores own catalogue transitions and write-only model-key drafts. Commands for the same server or
+provider cannot overlap; independent targets keep separate pending state. Failed saves retain the
+user's draft and late completions cannot clear a newer draft.
+
+Each card or table row owns its template, styles and typed interaction outputs. Shared headings,
+chips and asynchronous feedback come from `elements/ui`; route components compose these controls
+and delegate to their stores. Search and installation joins are pure feature mappers.
+
+```
+ state gateway → route-scoped store → route → card / table row
+                        ↑                          │
+                        └──── typed user intent ───┘
+```
+
+**In this flow:** [MCP gateway](../../state/mcp/adapter/README.md) ·
+[provider-key gateway](../../state/provider-key/adapter/README.md).
 
 ## Public surface
 

@@ -14,7 +14,7 @@ export default defineConfig({
 	test: {
 		environment: "node",
 		dir: _REPO_ROOT,
-		include: ["libs/backend/server/conversations/main/src/__tests__/**/*.integration.ts"],
+		include: ["libs/backend/server/conversations/main/src/**/*.integration.ts"],
 		fileParallelism: false,
 		testTimeout: 60_000,
 		hookTimeout: 60_000,

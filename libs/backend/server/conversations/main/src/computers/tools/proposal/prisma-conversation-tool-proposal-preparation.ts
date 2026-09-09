@@ -3,9 +3,9 @@ import type { Prisma } from "@prisma/client";
 import { __AdmitPreparingToolInvocationInTransaction, PrismaAuthorizationAuthority, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
-import type { FrozenConversationComputerTurn } from "../../../conversation-computer-turn.types";
-import { ConversationToolProposalRefusal } from "../../../conversation-tool-proposal-refusal";
-import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "../../../conversation-tool-proposal.types";
+import type { FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
+import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
+import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
 import { _CreateConversationToolProposalIntent } from "./conversation-tool-proposal-intent";
 import type { AdmittedConversationToolProposal, ConversationToolProposalPreparation, ConversationToolProposalRun } from "./conversation-tool-proposal-run.types";
 

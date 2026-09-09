@@ -17,17 +17,3 @@
 	font-size: 12px;
 	color: var(--oc-danger, #c84b31);
 }
-
-.wo-keys__name {
-	font-size: 13px;
-}
-
-.wo-keys__input {
-	width: 100%;
-	max-width: 18rem;
-	font-size: 12px;
-
-	&:disabled {
-		opacity: 0.55;
-	}
-}

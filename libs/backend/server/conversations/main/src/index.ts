@@ -1,85 +1,80 @@
-export { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
-export { PrismaConversationModelCustodyUnitOfWork } from "./db/prisma-conversation-model-custody";
-export { PrismaConversationToolResultsUnitOfWork } from "./db/prisma-conversation-tool-results";
-export { ConversationComputerToolResultOutcomes } from "./conversation-computer-continuation.types";
-export type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolSelection, ConversationComputerToolResults } from "./conversation-computer-continuation.types";
 /**
- * Public entry point for `@opencrane/backend/server/conversations`.
- *
- * Only what an app composition root needs is exported: ready-to-mount routers, the
- * KurrentDB-backed history and computer authorities, their Prisma projection adapters, the
- * OpenAPI path fragments, and the few port types an app must implement or pass through. Everything
- * else — the entry validators, the redaction step, the private-payload codec — stays
- * package-private, so the history and redaction rules can only be changed inside this package.
- *
- * Imported by: the apps/opencrane/src/app composition modules (routes.ts, conversation-history-composition.ts,
- * conversation-computer-activation-composition.ts, conversation-computer-lifecycle-composition.ts,
- * conversation-computer-turn-composition.ts, run-admission-composition.ts), the run-input authority in
- * libs/backend/agents/execution/inputs, and libs/backend/server/api-spec (the conversation OpenAPI fragment).
+ * Exposes participant operations and computer orchestration to server composition.
+ * Immutable history and computer snapshots have their own sibling package entrypoints;
+ * persistence adapters, routers and the ports needed to compose this application remain here.
  */
-export { BoundConversationWriter } from "./bound-conversation-writer";
-export { PrismaAgentSessionCreationUnitOfWork } from "./agent-session-creation";
-export type { AgentSessionReleaseProfile, InitialConversationComputerResolver } from "./agent-session-creation.types";
-export type { BoundConversationWriterAppend, BoundConversationWriterBinding, BoundConversationWriterClock, BoundConversationWriterIntent, BoundConversationWriterLeaseFence, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, ComputerConversationEntryDraft } from "./bound-conversation-writer.types";
-export { __RunConversationComputerActivationListener, __StartConversationComputerActivationConsumer } from "./conversation-computer-activation";
-export { ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, ConversationComputerActivationQueueActions } from "./conversation-computer-activation.types";
-export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationConsumer, ConversationComputerActivationConsumerEvent, ConversationComputerActivationConsumerHealth, ConversationComputerActivationConsumerOptions, ConversationComputerActivationListenerOptions, ConversationComputerActivationOutcome, ConversationComputerActivationParked, ConversationComputerActivationPending, ConversationComputerActivationProjection, ConversationComputerActivationProjectionRepository, ConversationComputerActivationResubscribePolicy, ConversationComputerActiveLeaseProjectionCommand } from "./conversation-computer-activation.types";
-export { ConversationComputerActivationAuthorityAdapter } from "./conversation-computer-activation-authority";
-export { KurrentConversationComputerActivityReader, _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";
-export type { ConversationComputerActivity, ConversationComputerActivityReader } from "./conversation-computer-activity.types";
-export { ConversationComputerLifecycleAuthority } from "./conversation-computer-lifecycle";
-export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerIdlePolicy, ConversationComputerLeaseProjectionCommand, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome, ConversationComputerSandboxClaims } from "./conversation-computer-lifecycle.types";
-export { ConversationComputerCheckpointAuthority, _CheckpointArtifactId, _CheckpointRevisionId } from "./conversation-computer-checkpoint";
-export type { ConversationComputerCheckpointCapture, ConversationComputerCheckpointCatalogue, ConversationComputerCheckpointFence, ConversationComputerCheckpointPolicy, ConversationComputerCheckpointReader, ConversationComputerCheckpointRestoreCommand, ConversationComputerCheckpointRestoreResult, ConversationComputerCheckpointSandbox, ConversationComputerCheckpointUploader } from "./conversation-computer-checkpoint.types";
-export { _CreateConversationComputerCheckpointRouter } from "./conversation-computer-checkpoint.router";
-export type { ConversationComputerCheckpointRestorer, ConversationComputerCheckpointRouterOptions } from "./conversation-computer-checkpoint.router.types";
-export { ConversationComputerLifecycleScheduler, _LifecycleEventId } from "./conversation-computer-lifecycle-scheduler";
-export type { ConversationComputerLifecycleCandidate, ConversationComputerLifecycleEnumerator, ConversationComputerLifecycleReconciler } from "./conversation-computer-lifecycle-scheduler.types";
-export { ConversationComputerCheckpointFenceAdapter, ConversationComputerLifecycleDueEnumerator, ConversationComputerLifecycleWorker, HttpConversationComputerCheckpointSandbox } from "./conversation-computer-lifecycle-runtime";
-export { PrismaConversationComputerActivationProjectionRepository } from "./db/prisma-conversation-computer-activation-repository";
-export { PrismaConversationComputerLifecycleProjectionRepository } from "./db/prisma-conversation-computer-lifecycle-projection-repository";
-export { _CreateConversationComputerTurnRouter } from "./conversation-computer-turn.router";
-export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./conversation-computer-turn.types";
-export { ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityService } from "./conversation-computer-turn-authority";
-export { ActiveConversationComputerTurnCandidateResolver } from "./conversation-computer-turn-candidate-resolver";
-export { KurrentConversationComputerTurnStore } from "./conversation-computer-turn-store";
-export { PrismaConversationComputerTurnUnitOfWork } from "./db/prisma-conversation-computer-turn-unit-of-work";
-export { PrismaConversationComputerCredentialUnitOfWork } from "./db/prisma-conversation-computer-credential-issuer";
-export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPrePersistedMessageInput, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnCompileAnchor, ConversationComputerTurnCompileCommand, ConversationComputerTurnCoordinates, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
-export type { ConversationComputerRawCredentialAuthority } from "./conversation-computer-turn.types";
-export { ConversationComputerHistory } from "./conversation-computers";
-export type { ActiveConversationComputerLease, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerLeaseCoordinates, CurrentConversationComputer } from "./conversation-computers";
-export { AesGcmConversationPrivatePayloadCipher } from "./conversation-private-payload-cipher";
-export type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadKeyringDocument } from "./conversation-private-payload.types";
-export { _SelfConversationHistoryOpenapiPaths } from "./openapi";
-export { PrismaSelfConversationHistoryUnitOfWork } from "./prisma-self-conversation-history";
-export { ConversationHistoryAuthority } from "./conversation-history-authority";
-export { KurrentConversationHistoryAdmissionReader } from "./kurrent-conversation-history-admission-reader";
-export { PrismaKurrentConversationPromptMessageRepository } from "./db/prisma-kurrent-conversation-prompt-message-repository";
-export { _CreateSelfConversationHistoryRouter } from "./self-conversation-history.router";
-export { ConversationMessageActivations, ConversationMessageAdmissionOutcomes } from "./self-conversation-history.types";
-export type { ConversationCallerResolver, ConversationMessageAdmissionResult, ConversationMessageCommand, SelfConversationHistoryAuthority, SelfConversationHistoryResult } from "./self-conversation-history.types";
-export { PrismaConversationMetadataUnitOfWork } from "./prisma-conversation-metadata";
-export { _CreateConversationMetadataRouter } from "./conversation-metadata.router";
-export type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, ConversationReviewCoordinates } from "./conversation-metadata.types";
-export { _ConversationComputerReviewAuthority } from "./review/conversation-computer-review-authority";
-export { KeyedConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review-credential";
-export { _CreateConversationComputerReviewRouter } from "./review/conversation-computer-review.router";
-export type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewCredentialDeriver, ConversationComputerReviewPrincipalResolver, ConversationComputerReviewRoute, ConversationComputerReviewRouterOptions } from "./review/conversation-computer-review.types";
+export { PrismaAgentSessionCreationUnitOfWork } from "./sessions/agent-session-creation";
+export type { AgentSessionReleaseProfile, InitialConversationComputerResolver } from "./sessions/agent-session-creation.types";
+export { __RunConversationComputerActivationListener, __StartConversationComputerActivationConsumer } from "./computers/activation/conversation-computer-activation";
+export { ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, ConversationComputerActivationQueueActions } from "./computers/activation/conversation-computer-activation.types";
+export type { ConversationComputerActivationAuthority, ConversationComputerActivationCommand, ConversationComputerActivationConsumer, ConversationComputerActivationConsumerEvent, ConversationComputerActivationConsumerHealth, ConversationComputerActivationConsumerOptions, ConversationComputerActivationListenerOptions, ConversationComputerActivationOutcome, ConversationComputerActivationParked, ConversationComputerActivationPending, ConversationComputerActivationProjection, ConversationComputerActivationProjectionRepository, ConversationComputerActivationResubscribePolicy, ConversationComputerActiveLeaseProjectionCommand } from "./computers/activation/conversation-computer-activation.types";
+export { ConversationComputerActivationAuthorityAdapter } from "./computers/activation/conversation-computer-activation-authority";
+export { KurrentConversationComputerActivityReader, _ConversationComputerActiveTurnStreamName } from "./computers/lifecycle/conversation-computer-activity";
+export type { ConversationComputerActivity, ConversationComputerActivityReader } from "./computers/lifecycle/conversation-computer-activity.types";
+export { ConversationComputerLifecycleAuthority } from "./computers/lifecycle/conversation-computer-lifecycle";
+export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerIdlePolicy, ConversationComputerLeaseProjectionCommand, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome, ConversationComputerSandboxClaims } from "./computers/lifecycle/conversation-computer-lifecycle.types";
+export { ConversationComputerCheckpointAuthority, _CheckpointArtifactId, _CheckpointRevisionId } from "./computers/checkpoints/conversation-computer-checkpoint";
+export type { ConversationComputerCheckpointCapture, ConversationComputerCheckpointCatalogue, ConversationComputerCheckpointFence, ConversationComputerCheckpointPolicy, ConversationComputerCheckpointReader, ConversationComputerCheckpointRestoreCommand, ConversationComputerCheckpointRestoreResult, ConversationComputerCheckpointSandbox, ConversationComputerCheckpointUploader } from "./computers/checkpoints/conversation-computer-checkpoint.types";
+export { _CreateConversationComputerCheckpointRouter } from "./computers/checkpoints/conversation-computer-checkpoint.router";
+export type { ConversationComputerCheckpointRestorer, ConversationComputerCheckpointRouterOptions } from "./computers/checkpoints/conversation-computer-checkpoint.router.types";
+export { ConversationComputerLifecycleScheduler, _LifecycleEventId } from "./computers/lifecycle/conversation-computer-lifecycle-scheduler";
+export type { ConversationComputerLifecycleCandidate, ConversationComputerLifecycleEnumerator, ConversationComputerLifecycleReconciler } from "./computers/lifecycle/conversation-computer-lifecycle-scheduler.types";
+export { ConversationComputerCheckpointFenceAdapter, ConversationComputerLifecycleDueEnumerator, ConversationComputerLifecycleWorker, HttpConversationComputerCheckpointSandbox } from "./computers/lifecycle/conversation-computer-lifecycle-runtime";
+export { PrismaConversationComputerActivationProjectionRepository } from "./computers/activation/db/prisma-conversation-computer-activation-repository";
+export { PrismaConversationComputerLifecycleProjectionRepository } from "./computers/lifecycle/db/prisma-conversation-computer-lifecycle-projection-repository";
+export { _CreateConversationComputerTurnRouter } from "./computers/turns/conversation-computer-turn.router";
+export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./computers/turns/conversation-computer-turn.types";
+export { ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityService } from "./computers/turns/conversation-computer-turn-authority";
+export { ActiveConversationComputerTurnCandidateResolver } from "./computers/turns/conversation-computer-turn-candidate-resolver";
+export { KurrentConversationComputerTurnStore } from "./computers/turns/conversation-computer-turn-store";
+export { PrismaConversationComputerTurnUnitOfWork } from "./computers/turns/db/prisma-conversation-computer-turn-unit-of-work";
+export { PrismaConversationComputerCredentialUnitOfWork } from "./computers/turns/db/prisma-conversation-computer-credential-issuer";
+export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPrePersistedMessageInput, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnCompileAnchor, ConversationComputerTurnCompileCommand, ConversationComputerTurnCoordinates, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./computers/turns/conversation-computer-turn.types";
+export type { ConversationComputerRawCredentialAuthority } from "./computers/turns/conversation-computer-turn.types";
+export { _SelfConversationHistoryOpenapiPaths } from "./http/openapi";
+export { PrismaSelfConversationHistoryUnitOfWork } from "./messages/prisma-self-conversation-history";
+export { KurrentConversationHistoryAdmissionReader } from "./messages/kurrent-conversation-history-admission-reader";
+export { PrismaKurrentConversationPromptMessageRepository } from "./messages/db/prisma-kurrent-conversation-prompt-message-repository";
+export { _CreateSelfConversationHistoryRouter } from "./messages/self-conversation-history.router";
+export { ConversationMessageActivations, ConversationMessageAdmissionOutcomes } from "./messages/self-conversation-history.types";
+export type { ConversationCallerResolver, ConversationMessageAdmissionResult, ConversationMessageCommand, SelfConversationHistoryAuthority, SelfConversationHistoryResult } from "./messages/self-conversation-history.types";
+export { PrismaConversationMetadataUnitOfWork } from "./metadata/prisma-conversation-metadata";
+export { _CreateConversationMetadataRouter } from "./metadata/conversation-metadata.router";
+export type { ConversationMetadataAuthority, ConversationMetadataDetail, ConversationMetadataSummary, ConversationReviewCoordinates } from "./metadata/conversation-metadata.types";
+export { _ConversationComputerReviewAuthority } from "./computers/review/conversation-computer-review-authority";
+export { KeyedConversationComputerReviewCredentialDeriver } from "./computers/review/conversation-computer-review-credential";
+export { _CreateConversationComputerReviewRouter } from "./computers/review/conversation-computer-review.router";
+export type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewCredentialDeriver, ConversationComputerReviewPrincipalResolver, ConversationComputerReviewRoute, ConversationComputerReviewRouterOptions } from "./computers/review/conversation-computer-review.types";
 
-export { PrismaGroupChildAuthority } from "./prisma-group-child-authority";
-export { GROUP_CHILD_TASK } from "./group-child-task";
-export { _CreateGroupChildRouter } from "./group-child.router";
-export type { GroupChildAgentCandidate, GroupChildAgentResolver, GroupChildAuthority, GroupChildTaskInput } from "./group-child.types";
-export type { CompanyAssistantDirectory } from "./conversation-metadata.types";
+export { PrismaGroupChildAuthority } from "./children/prisma-group-child-authority";
+export { GROUP_CHILD_TASK } from "./children/group-child-task";
+export { _CreateGroupChildRouter } from "./children/group-child.router";
+export type { GroupChildAgentCandidate, GroupChildAgentResolver, GroupChildAuthority, GroupChildTaskInput } from "./children/group-child.types";
+export type { CompanyAssistantDirectory } from "./metadata/conversation-metadata.types";
+export { ConversationComputerTurnWriterFactory } from "./computers/turns/conversation-computer-turn-writer-factory";
+export { PrismaConversationComputerActivationUnitOfWork } from "./computers/activation/db/prisma-conversation-computer-activation-unit-of-work";
+export { PrismaConversationComputerLifecycleUnitOfWork } from "./computers/lifecycle/db/prisma-conversation-computer-lifecycle-unit-of-work";
+export { PrismaCompanyAssistantDirectory } from "./metadata/prisma-company-assistant-directory";
+export { PrismaConversationMetadataReader } from "./metadata/prisma-conversation-metadata-reader";
+export { PrismaGroupChildAgentResolver } from "./children/db/prisma-group-child-agent-resolver";
+export { _ResolveConversationCaller } from "./authorization/conversation-caller-resolver";
+export { _RegisterGroupChildWorkflow } from "./children/group-child-workflow";
+export { _StartConversationComputerActivationWorker } from "./computers/activation/conversation-computer-activation-composition";
+export type { ConversationComputerActivationWorker, ConversationComputerActivationWorkerHandle, ConversationComputerActivationWorkerOptions } from "./computers/activation/conversation-computer-activation-composition.types";
 
+export { _CreateConversationRunAdmission, _CreateProductionConversationRunAdmission } from "./admission/run-admission-composition";
+export type * from "./admission/run-admission-composition.types";
+
+export { __AssertConversationComputerAnswerAuthority } from "./computers/turns/conversation-computer-answer-authority";
+export { PrismaConversationModelCustodyUnitOfWork } from "./computers/turns/db/prisma-conversation-model-custody";
+export { PrismaConversationToolResultsUnitOfWork } from "./computers/tools/results/prisma-conversation-tool-results";
+export { ConversationComputerToolResultOutcomes } from "./computers/turns/conversation-computer-continuation.types";
+export type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolSelection, ConversationComputerToolResults } from "./computers/turns/conversation-computer-continuation.types";
 export { PrismaConversationToolDispatchAuthority } from "./computers/tools/dispatch/prisma-conversation-tool-dispatch-authority";
 export type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies, ConversationToolExecutionEvidence, ConversationToolAssignmentAuthority, ConversationToolAssignmentCommand } from "./computers/tools/dispatch/conversation-tool-dispatch.types";
-
-export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./db/prisma-conversation-tool-proposal";
-export { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
-export { ConversationToolProposalRefusals } from "./conversation-tool-proposal.types";
-export type { ConversationToolProposalAdmission, ConversationToolProposalRuntimeAdmission } from "./conversation-tool-proposal.types";
-
-export { ConversationComputerModelStepOutcomes } from "./conversation-computer-model.types";
-export type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";
+export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./computers/tools/proposal/prisma-conversation-tool-proposal";
+export { ConversationToolProposalRefusal } from "./computers/tools/proposal/conversation-tool-proposal-refusal";
+export { ConversationToolProposalRefusals } from "./computers/tools/proposal/conversation-tool-proposal.types";
+export type { ConversationToolProposalAdmission, ConversationToolProposalRuntimeAdmission } from "./computers/tools/proposal/conversation-tool-proposal.types";
+export { ConversationComputerModelStepOutcomes } from "./computers/turns/conversation-computer-model.types";
+export type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./computers/turns/conversation-computer-model.types";

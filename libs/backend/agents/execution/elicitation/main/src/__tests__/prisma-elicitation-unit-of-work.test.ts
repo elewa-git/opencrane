@@ -17,7 +17,7 @@ import { ExecutionSubjectMembershipKinds, PERSONAL_MEMORY_RECALL_TOOL_REVISION }
 
 import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
 import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work";
-import { _BuildMemoryPermissionPayload } from "../personal-memory-permission-payload";
+import { _BuildMemoryPermissionPayload } from "../purposes/personal-memory/personal-memory-permission-payload";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
 
@@ -188,6 +188,29 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledTimes(1);
 		expect(transaction.elicitationResponseAttempt.create).toHaveBeenCalledTimes(1);
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledTimes(1);
+	});
+
+	it.each(["input", "approval"])("keeps the run paused after a response while another %s remains pending", async function _pendingResponse(kind)
+	{
+		const transaction = _ResponseTransaction();
+		if (kind === "input")
+			transaction.elicitationRequest.count.mockResolvedValue(1);
+		else
+			transaction.approvalRequest.count.mockResolvedValue(1);
+		const command = { siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-1", response: { kind: ElicitationBodyKinds.FreeText, text: "Done" } }, now: NOW } as const;
+		await expect(_Unit(transaction).respond(command)).resolves.toMatchObject({ outcome: "accepted" });
+		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledOnce();
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+	});
+
+	it.each([ElicitationPurpose.A2uiAction, "future_protected_purpose"])("throws after a tentative response when purpose %s cannot be applied", async function _purposeFailure(purpose)
+	{
+		const transaction = _ResponseTransaction(_Request({ purpose }));
+		const command = { siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-1", response: { kind: ElicitationBodyKinds.FreeText, text: "Done" } }, now: NOW } as const;
+		await expect(_Unit(transaction).respond(command)).rejects.toThrow(/purpose/);
+		expect(transaction.elicitationResponseAttempt.create).toHaveBeenCalledOnce();
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.elicitationResultDelivery.create).not.toHaveBeenCalled();
 	});
 
 	it("replays only an identical accepted idempotency key", async function _Replays()

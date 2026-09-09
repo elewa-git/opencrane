@@ -33,3 +33,10 @@ export { PrismaRuntimeMcpEffectEligibilityAuthority } from "./runtime/prisma-run
 export type { RuntimeMcpEffectEligibility, RuntimeMcpEffectEligibilityCommand } from "./runtime/runtime-mcp-effect-eligibility.types";
 export type { McpRuntimeAuthority } from "./runtime/mcp-runtime.types";
 export * from "./openapi";
+export { _McpEraProbeFailure } from "./era-probe/mcp-era-transport.adapter";
+
+export { _CreateMcpEraProbeAdapter } from "./era-probe/mcp-era-transport.adapter";
+
+export { _CreateOciImageArtifactResolver } from "./oci-image-validation/oci-image-artifact-resolver";
+export { _ResolveMcpOciServerPromotionCaller } from "./runtime/mcp-oci-server-promotion-caller";
+export { _CreateMcpToolInvocationAdmission } from "./runtime/mcp-tool-invocation-admission.factory";

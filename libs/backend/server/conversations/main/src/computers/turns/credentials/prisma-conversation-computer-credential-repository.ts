@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 
-import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialReuseCommand } from "../../../conversation-computer-turn.types";
-import type { ConversationPrivatePayloadCipher } from "../../../conversation-private-payload.types";
-import { ConversationComputerCredentialPreparationOutcomes, ConversationComputerCredentialStates, type ConversationComputerCredentialCustody, type ConversationComputerCredentialPersistenceRepository, type ConversationComputerCredentialPreparation } from "../../../db/conversation-computer-credential-persistence.types";
-import { _AssertFencedRowCount } from "../../../db/prisma-fenced-write";
+import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialReuseCommand } from "../conversation-computer-turn.types";
+import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
+import { ConversationComputerCredentialPreparationOutcomes, ConversationComputerCredentialStates, type ConversationComputerCredentialCustody, type ConversationComputerCredentialPersistenceRepository, type ConversationComputerCredentialPreparation } from "../db/conversation-computer-credential-persistence.types";
+import { _AssertFencedRowCount } from "../db/prisma-fenced-write";
 import { _AssertCredentialReusable, _CredentialRequiresRevocation, _PrepareExistingCredential } from "./conversation-computer-credential-state";
 
 /** Owns transaction-bound claims and encrypted custody without provider I/O. */

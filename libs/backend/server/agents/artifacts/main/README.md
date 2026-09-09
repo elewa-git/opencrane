@@ -4,6 +4,10 @@
 
 ## What it owns
 
+`src/service/` owns the private ArtifactStore transport, mounted key readers, upload gateway and
+preprocessing brokers. Callers receive published bytes or verified receipts; credentials remain
+inside these adapters.
+
 An *artifact* is any file an agent produces or consumes — a skill bundle, a document, a build
 output. OpenCrane splits an artifact into two halves: the **bytes** (stored once, addressed by a
 SHA-256 content address, which is a fingerprint computed from the bytes themselves) and the
@@ -96,6 +100,11 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 
 ## Public surface
 
+- `_CreateArtifactUploadGateway` composes lease signing and verified publication.
+- `_CreatePublishedArtifactReader` returns bytes only after reloading immutable catalogue metadata.
+- `_CreateArtifactPreprocessOutputBroker`, `_CreateArtifactPreprocessSourceBroker` and
+  `_CreateArtifactScanSourceBroker` bind worker operations to authorised artifact coordinates.
+
 - `__FinalizeArtifactRevision` — commit promoted bytes into a visible, immutable revision.
 - `__IssueArtifactReadLease` — reload an active artifact's exact published revision and issue one
   internal read lease that expires after at most five minutes.
@@ -182,6 +191,13 @@ Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLe
 `tests/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
 immutable source lineage. Production TypeScript uses only typed Prisma delegates; the
 PostgreSQL-specific database clock remains in the reviewed clean target baseline.
+
+## Runtime & config
+
+Service factories accept a deployment environment with `ARTIFACT_SERVICE_URL`,
+`ARTIFACT_LEASE_PRIVATE_KEY_PATH` and `ARTIFACT_RECEIPT_PUBLIC_KEY_PATH`. The service URL must name
+a credential-free, cluster-local HTTP service. Keys are loaded from mounted files, never returned
+through the public API. Tests inject these inputs and transport responses.
 
 ## See also
 

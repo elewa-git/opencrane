@@ -35,6 +35,8 @@ nothing.
 
 ## Public surface
 
+- `___CreatePrismaClient` creates the process client with structured warning and error logging.
+
 - `___RunInPrismaUnitOfWork` runs one idempotent operation in a fresh transaction under an explicit policy.
 - `___IsRolledBackConflict` tells a domain adapter whether a failure was a proven full rollback.
 - `___ROLLED_BACK_CONFLICT_CODES` is the default proven-rollback code set (P2002, P2034).

@@ -1,14 +1,41 @@
 # OpenCrane — Active Plan
 
+## Library and component decomposition — 2026-09-09
+
+Implemented in [#843](https://github.com/elewa-git/opencrane/pull/843), stacked on
+[#831](https://github.com/elewa-git/opencrane/pull/831) at `b703e130a` after its develop merge.
+The server app contains startup, configuration, lifecycle and declarative composition. Functional
+libraries own behavior; inputs, agent services, conversations, IAM, contracts and workload identity
+use capability folders. Conversation history and computer projections have separate Nx boundaries.
+Frontend pages compose focused components and stores, with agent guidance preserving reusable
+components and their interaction, accessibility and visual contracts.
+
+The authority follow-up separates dispatch evidence, current access, proposal preparation and
+credential lifecycle, preserving their shared transactions and original deadlines. Elicitation now
+has four transaction-bound purpose owners. The final answer permission check runs at history append,
+and the extracted history integration target remains in the KurrentDB CI job.
+
+Local validation covers 125 affected projects and 260 build/test/lint tasks. One HTTP connection
+reset passed on an isolated rerun of all 110 persona tests. The workspace rebase also passes 88
+focused tests and eight browser interaction/accessibility cases. Prisma, authorization, workload,
+dependency, release-baseline and style checks pass. Independent integration review covers the
+rebased authority and access-loss behavior. Fresh CI on the published head remains required.
+
+The retained macOS and Linux screenshot candidates need human visual acceptance. Their prior
+[Linux comparison](https://github.com/elewa-git/opencrane/actions/runs/34335546198/job/102414280830)
+passed 149 component tests and three visual comparisons at the earlier `967f7c0b6` checkpoint;
+that result does not qualify this rebased head. No new screenshot candidates, deployment or live
+qualification are included in this follow-up.
+
 ## Delivery focus — 2026-09-09
 
 OpenCrane gives people and teams assistants that can work with company knowledge and tools,
 while the company controls access, data, and spending. MVP means an employee can join, set up an
 assistant, get useful work done, and collaborate in a group without understanding the runtime.
 
-The current review surface is [#826](https://github.com/elewa-git/opencrane/pull/826), based on
-`develop`. Its 0.11 conversation history and computer baseline is implemented; it is not yet a
-live-qualified MVP. [ADR 0016](docs/adr/0016-conversation-history-and-computers.md) supersedes the
+The current review order is `develop` → [#831](https://github.com/elewa-git/opencrane/pull/831)
+→ [#843](https://github.com/elewa-git/opencrane/pull/843). The merged conversation history and
+computer baseline is implemented; it is not yet a live-qualified MVP. [ADR 0016](docs/adr/0016-conversation-history-and-computers.md) supersedes the
 older run-owned runtime and relational transcript descriptions in historical plans.
 
 | Work | State and next proof |

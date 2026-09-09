@@ -5,8 +5,8 @@ import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds } from "@ope
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../../../conversation-computer-turn.types";
-import type { PreparedConversationToolProposal } from "../../../../conversation-tool-proposal.types";
+import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../../turns/conversation-computer-turn.types";
+import type { PreparedConversationToolProposal } from "../conversation-tool-proposal.types";
 import { _CreateConversationToolProposalIntent } from "../conversation-tool-proposal-intent";
 import { PrismaConversationToolProposalRunRepository } from "../prisma-conversation-tool-proposal-run-reader";
 

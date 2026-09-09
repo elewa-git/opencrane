@@ -38,7 +38,7 @@ export interface AuditDecisionWriterRepository
  * back. Most fields are optional because they only apply to some actors: the workload and pod fields
  * describe a running pod, `runId`/`attempt` a run, and the proof-key fields a signed runtime request.
  *
- * Called by: libs/backend/server/iam/authorization/main/src/prisma-authorization-authority.ts,
+ * Called by: libs/backend/server/iam/authorization/main/src/authority/persistence/prisma-authorization-authority.ts,
  * libs/backend/server/iam/membership/main/src/prisma-membership-authority.ts,
  * libs/backend/server/agents/agent-services (publication audit evidence), and
  * standalone-first-user-audit.ts in this package.

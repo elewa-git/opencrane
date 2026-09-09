@@ -6,3 +6,5 @@ export { ConversationAssetDenialReasons } from "./conversation-asset.types";
 export type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types";
 export type { ConversationAssetAuthority, ConversationAssetRouterDependencies } from "./conversation-asset.router.types";
 export type { ConversationAssetContent, ConversationAssetContentAuthority, ConversationAssetContentBroker, ConversationAssetReadTarget } from "./conversation-asset-content.types";
+export { _CreateConversationAssetAuthority, _CreateConversationAssetContentBroker } from "./service/conversation-asset-brokers.factory";
+export { _ResolveConversationAssetCaller } from "./http/conversation-asset-caller-resolver";

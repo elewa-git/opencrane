@@ -1,27 +1,27 @@
 // OpenTelemetry must be the first dependency evaluated so it can patch instrumented modules before
 // the remaining import graph runs. Keep this side-effect import first when editing the entrypoint.
-import "./app/instrument";
+import "./bootstrap/process/instrument";
 
 import { ___BindConsole } from "@opencrane/backend/observability";
 
-import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./app/config";
-import { _CreateHistoryStoreComposition } from "./app/history-store-composition";
-import { _AssertHistoryStoreSilo } from "./app/history-store-silo-guard";
-import { _StartConversationComputerActivationWorker } from "./app/conversation-computer-activation-composition";
-import { _CreateConversationComputerTurnComposition } from "./app/conversation-computer-turn-composition";
-import { _CreateConversationComputerLifecycleComposition } from "./app/conversation-computer-lifecycle-composition";
-import { _CreateInternalApp } from "./app/internal-app";
-import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
-import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
-import { _CreateProductionConversationRunAdmission } from "./app/run-admission-composition";
-import { _CreateKubernetesClients } from "./app/kubernetes-clients";
-import { _StartProcessLifecycle } from "./app/lifecycle";
-import { _log } from "./app/log";
-import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
-import { _ProcessShutdownSignal } from "./app/process-shutdown";
-import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
-import { ___CreatePrismaClient } from "./infra/db/db";
-import { ___CreatePublicHealthReportReader } from "./infra/health/public-health";
+import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./bootstrap/configuration/config";
+import { _CreateHistoryStoreComposition } from "@opencrane/backend/server/infra/history-store";
+import { _AssertHistoryStoreSilo } from "@opencrane/backend/server/infra/history-store";
+import { _StartConversationComputerActivationWorker } from "@opencrane/backend/server/conversations";
+import { _CreateConversationComputerTurnComposition } from "./bootstrap/conversations/conversation-computer-turn-composition";
+import { _CreateConversationComputerLifecycleComposition } from "./bootstrap/conversations/conversation-computer-lifecycle-composition";
+import { _CreateInternalApp } from "./bootstrap/http/internal-app";
+import { _CreateMcpWorkflowComposition } from "./bootstrap/workflows/mcp-workflow-composition";
+import { _CreateMcpRuntimeComposition } from "./bootstrap/workflows/mcp-runtime-composition";
+import { _CreateProductionConversationRunAdmission } from "@opencrane/backend/server/conversations";
+import { _CreateKubernetesClients } from "./bootstrap/process/kubernetes-clients";
+import { _StartProcessLifecycle } from "./bootstrap/process/lifecycle";
+import { _log } from "./bootstrap/process/log";
+import { _CreatePublicApp, _CreatePublicAuthentication } from "./bootstrap/http/public-app";
+
+import { _CreateArtifactUploadGateway } from "@opencrane/backend/server/agents/artifacts";
+import { ___CreatePrismaClient } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+import { ___CreatePublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 import { _CreateProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 
 /**
@@ -48,7 +48,7 @@ async function _Main(): Promise<void>
 	// 3. Compose the retained workload authorities.
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows, historyStore.historyStore);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
-	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, config.workflows.siloId, agentSandboxReleaseProfile);
+	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, config.workflows.siloId, agentSandboxReleaseProfile, { logger: _log, onExhausted: function _RequestProcessShutdown() { process.kill(process.pid, "SIGTERM"); } });
 	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, workflows.execution);
 	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
 
@@ -57,7 +57,7 @@ async function _Main(): Promise<void>
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
-	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, config.runAdmission);
+	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, config.runAdmission, _log);
 	const conversationComputerTurn = _CreateConversationComputerTurnComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, conversationRunAdmission, mcpRuntime.admitToolInvocationInTransaction);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, mcpRuntime, workflows.execution, conversationComputerTurn, conversationComputerLifecycle.router);
 	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.

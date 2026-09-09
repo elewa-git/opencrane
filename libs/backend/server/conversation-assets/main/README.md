@@ -4,6 +4,9 @@
 
 ## What it owns
 
+`src/service/` owns the participant-file broker and upload authority composition, reusing the
+artifact package for signing and private storage transport.
+
 This package owns participant upload reservations, retry-stable agent-output tickets,
 server-authorized reservation removal, server-brokered promotion into quarantine, participant-
 authorized reads of checked bytes, browser-safe file views, and atomic binding of ready files to canonical messages. It applies the
@@ -20,6 +23,11 @@ In this flow: the [artifact authority](../../agents/artifacts/main/README.md) ow
 publication, while the [conversation authority](../../conversations/main/README.md) owns messages.
 
 ## Public surface
+
+`_ResolveConversationAssetCaller` maps the verified browser principal to the domain caller in `src/http/conversation-asset-caller-resolver.ts`.
+
+- `_CreateConversationAssetAuthority` composes participant uploads and scanner availability.
+- `_CreateConversationAssetContentBroker` validates catalogue and transport metadata before streaming bytes.
 
 Import `@opencrane/backend/server/conversation-assets` for the participant and agent-output Prisma
 units of work, the private runtime output router, and the attachment factory injected into

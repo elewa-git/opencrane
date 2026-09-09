@@ -43,7 +43,7 @@ app's source.
 | [`libs/backend/server/iam/organization-members`](../../libs/backend/server/iam/organization-members/main/README.md) | Settings member directory and standalone invitation authority, or fail-closed delegation of the whole capability to Fleet billing. |
 | [`libs/backend/server/iam/audit-writer`](../../libs/backend/server/iam/audit-writer/main/README.md) | Transaction-scoped append-only authorization decision evidence with no read or policy dependency. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
-| [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
+| [`libs/backend/server/conversations`](../../libs/backend/server/conversations/README.md) | `main` owns participant authorization, metadata and computer commands; `history` owns encrypted ordered history; `computers` owns checked computer projections. Each has its own public entrypoint and dependency boundary. |
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/server/infra/history-store`](../../libs/backend/server/infra/history-store/README.md) | KurrentDB stream reads, checked appends, and subscriptions for event-history owners. |

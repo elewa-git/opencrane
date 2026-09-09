@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, input, output, signal, untracked } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, inject, input, output, signal, untracked } from "@angular/core";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import type { ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationGroupChildStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { ConversationSessionRailItemKinds, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
 import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
+import { ConversationWorkspaceSelectionCoordinator } from "../../state/conversation-workspace-selection.coordinator";
+import { ConversationWorkspaceHeaderComponent } from "../conversation-workspace-header/conversation-workspace-header.component";
 import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports";
 
 /**
@@ -23,9 +25,13 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
-export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationWorkspacePresenter, ConversationWorkspaceSelectionCoordinator, ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
+export class ConversationWorkspacePageComponent
 {
+	/** Composes read-only presentation and typed store intents without class inheritance. */
+	protected readonly vm = inject(ConversationWorkspacePresenter);
+	/** Coordinates selected conversation lifetimes across this page's store instances. */
+	private readonly _selectionCoordinator = inject(ConversationWorkspaceSelectionCoordinator);
 	/** Optional app-owned route selection adopted after the workspace list loads. */
 	public readonly conversationId = input<string | null>(null);
 	/** Reports participant selection so the app can own the canonical URL. */
@@ -49,29 +55,29 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	/** Whether the selected ordinary conversation's Activity and Files context is visible. */
 	protected readonly contextPanelOpen = signal(true);
 	/** Header trigger that receives focus after the context panel closes. */
-	@ViewChild("contextPanelToggle")
-	private _contextPanelToggle: ElementRef<HTMLButtonElement> | undefined;
+	@ViewChild(ConversationWorkspaceHeaderComponent)
+	private _header: ConversationWorkspaceHeaderComponent | undefined;
 
 	/** Move focus when Angular creates the access-change explanation. */
 	@ViewChild("accessChangedHeading")
 	private set _AccessChangedHeading(heading: ElementRef<HTMLHeadingElement> | undefined)
 	{
-		if (this.store.routeState() === ConversationWorkspaceRouteStates.AccessChanged && heading !== undefined)
+		if (this.vm.store.routeState() === ConversationWorkspaceRouteStates.AccessChanged && heading !== undefined)
 			globalThis.queueMicrotask(function _FocusHeading() { heading.nativeElement.focus(); });
 	}
 
 	/** Open one rail selection before asking the app to update the URL. */
 	protected async openConversation(conversationId: string): Promise<void>
 	{
-		await this.open(conversationId);
-		if (this.store.selected()?.id === conversationId)
+		await this.vm.open(conversationId);
+		if (this.vm.store.selected()?.id === conversationId)
 			this.conversationSelected.emit(conversationId);
 	}
 
 	/** Opens a child only after its server-confirmed creation is ready. */
 	protected async openChild(conversationId: string): Promise<void>
 	{
-		const selected = this.groupStore.childToOpen(conversationId);
+		const selected = this.vm.groupStore.childToOpen(conversationId);
 		if (selected !== null)
 			await this.openConversation(selected);
 	}
@@ -79,7 +85,7 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	/** Opens the selected child's immediate group through normal authorized navigation. */
 	protected async backToGroup(): Promise<void>
 	{
-		const parent = this.store.selected()?.parent;
+		const parent = this.vm.store.selected()?.parent;
 		if (parent != null)
 			await this.openConversation(parent.parentConversationId);
 	}
@@ -100,10 +106,10 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	/** Ask the app to select an authoritative newly created conversation. */
 	protected async create(): Promise<void>
 	{
-		const navigation = await this.store.create();
+		const navigation = await this.vm.store.create();
 		if (navigation === null)
 			return;
-		this.creating.set(false);
+		this.vm.creating.set(false);
 		this.conversationSelected.emit(navigation.conversationId);
 	}
 
@@ -117,8 +123,8 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	 */
 	protected openOnboardingHistory(): void
 	{
-		this.store.openOnboardingHistory();
-		if (this.store.onboardingHistorySelected())
+		this.vm.store.openOnboardingHistory();
+		if (this.vm.store.onboardingHistorySelected())
 			this.workspaceIndexSelected.emit();
 	}
 
@@ -129,15 +135,13 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	protected closeContextPanel(): void
 	{
 		this.contextPanelOpen.set(false);
-		const trigger = this._contextPanelToggle;
-		if (trigger !== undefined)
-			globalThis.queueMicrotask(function _RestoreContextToggleFocus() { trigger.nativeElement.focus(); });
+		this._header?.restoreContextFocus();
 	}
 
 	/** Ask the app to replace an archived selection with the next authorized row. */
 	protected async archiveConversation(): Promise<void>
 	{
-		const navigation = await this.store.archive();
+		const navigation = await this.vm.store.archive();
 		if (navigation !== null)
 			this.conversationSelected.emit(navigation.conversationId);
 	}
@@ -145,9 +149,9 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	/** Rechecks a mapped answer before moving focus and closing a narrow context overlay. */
 	protected focusActivity(target: ConversationActivityTarget): void
 	{
-		const current = this.activityRows().some(row => row.target?.conversationId === target.conversationId && row.target.runId === target.runId && row.target.entryId !== undefined && row.target.entryId === target.entryId);
+		const current = this.vm.activityRows().some(row => row.target?.conversationId === target.conversationId && row.target.runId === target.runId && row.target.entryId !== undefined && row.target.entryId === target.entryId);
 		const destination = current && target.entryId !== undefined ? globalThis.document.getElementById(target.entryId) : null;
-		if (target.conversationId !== this.store.selected()?.id || destination === null)
+		if (target.conversationId !== this.vm.store.selected()?.id || destination === null)
 		{
 			this.activityAnnouncement.set("That activity is no longer available in this conversation.");
 			return;
@@ -165,9 +169,9 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	/** Reconcile the request after the app's verified sign-in window closes. */
 	public async recoverAfterStepUp(): Promise<void>
 	{
-		const selected = this.store.selected();
+		const selected = this.vm.store.selected();
 		if (selected !== null)
-			await this.store.open(selected.id);
+			await this.vm.store.open(selected.id);
 	}
 
 	/**
@@ -180,11 +184,11 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	private _OpenRouteSelection(): void
 	{
 		const conversationId = this.conversationId();
-		if (this.store.routeState() !== this.routeStates.Ready)
+		if (this.vm.store.routeState() !== this.vm.routeStates.Ready)
 			return;
-		const selectedConversationId = untracked(this.store.selected)?.id;
+		const selectedConversationId = untracked(this.vm.store.selected)?.id;
 		if (conversationId !== null && selectedConversationId !== conversationId)
-			void this.open(conversationId);
+			void this.vm.open(conversationId);
 	}
 
 }

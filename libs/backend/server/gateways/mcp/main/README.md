@@ -140,6 +140,11 @@ external effect. Missing Job coordinates cannot reach the provider claim.
 
 ## Public surface
 
+`_ResolveMcpOciServerPromotionCaller` maps the verified browser principal to image-promotion authority.
+
+- `_CreateMcpEraProbeAdapter` maps transport failures into workflow refusal or retry outcomes.
+- `_CreateOciImageArtifactResolver` resolves immutable image inputs through the artifact catalogue.
+
 - `mcpOperatorRouter` — the Express router mounted at `/api/v1/mcp`.
 - `registerRemoteServer` — saves a draft server and its protocol-check job together.
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
@@ -154,6 +159,9 @@ external effect. Missing Job coordinates cannot reach the provider claim.
   and failure routes used by one exact MCP companion Pod.
 - `PrismaMcpRuntimeUnitOfWork` — owns the database transactions and delivery fences behind those
   public, controller, and companion routes.
+- `_CreateMcpToolInvocationAdmission` binds proposal admission to the caller's existing transaction.
+  The server supplies participants and deployment options; this package decides whether saved or new
+  executor work satisfies the proposal.
 - `PrismaMcpToolInvocationAdmissionRepository` — saves or recovers executor work inside the caller's
   existing transaction, including the conversation proposal transaction. It never opens a second
   transaction or contacts a provider.

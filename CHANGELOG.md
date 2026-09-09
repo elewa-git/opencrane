@@ -81,6 +81,10 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Changed
 
+- **Maintainers can locate and change server behavior in functional libraries and frontend behavior in
+  focused components and stores.** Capability folders group related implementation and make its
+  ownership easier to follow. This refactor remains in progress.
+
 - **Contributors get dependency-boundary failures before the expensive CI work begins.** CI avoids
   transferring local Nx cache files that another runner cannot reuse, and implementation guidance
   assigns specialist reviews according to the changed responsibility.

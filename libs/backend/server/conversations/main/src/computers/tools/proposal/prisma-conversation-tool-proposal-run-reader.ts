@@ -4,9 +4,9 @@ import { ___ExecutionSubjectSchema, type RunInputSnapshotMcpTool } from "@opencr
 import { __AreRunInputSnapshotMcpToolsValid } from "@opencrane/backend/agents/execution/inputs";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../../conversation-computer-turn.types";
-import { ConversationToolProposalRefusal } from "../../../conversation-tool-proposal-refusal";
-import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "../../../conversation-tool-proposal.types";
+import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
+import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
+import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
 import type { ConversationToolProposalRun, ConversationToolProposalRunReader } from "./conversation-tool-proposal-run.types";
 
 /**

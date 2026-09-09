@@ -4,6 +4,18 @@
 
 ## What it owns
 
+Source follows the steps that change independently:
+
+| Folder | Owns |
+| --- | --- |
+| `src/assembly/` | Snapshot assembly, source ports and admission outcomes. |
+| `src/prompt/` | Deterministic compilation and immutable content readers. |
+| `src/subjects/` | Personal and managed execution-subject evidence. |
+| `src/sources/` | Persona, tool, skill, conversation and product-authorization source adapters. |
+| `src/memory/` | Memory scope and preference readers. |
+
+Each folder keeps its focused tests in `__tests__/`; consumers use the root public barrel.
+
 This package is part of the **shared execution flow** used by both personal and managed agents.
 Before a conversation computer executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
@@ -144,8 +156,8 @@ inactive parents, and unsupported generated-output capabilities fail compilation
 
 ## Boundary
 
-Consumed by the run-admission path in the OpenCrane app, which composes the ports with real
-authority adapters. It does not select a runtime driver, approve a persona, issue capabilities, or
+Consumed by the OpenCrane bootstrap and conversation execution path. The conversation admission owner composes
+its ports with real authority adapters. It does not select a runtime driver, approve a persona, issue capabilities, or
 read mutable workspace files — and it never touches storage directly: every read goes through a
 port, and the only write goes through the [runs](../../runs/main/README.md) package's
 `RunAdmissionRepository`. The deterministic compiler reads only non-memory content already named by

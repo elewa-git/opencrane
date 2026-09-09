@@ -1,133 +1,459 @@
 {
   "version": 2,
-  "policy": "Deployable implementation source under apps is closed by default across TypeScript, JavaScript, Python, Go, Rust, JVM, Vue, and Svelte files. Named test trees are excluded because they prove the composition without becoming part of it. Every retained implementation file is exact; adding one requires an ownership decision and this registry change. Artifact broker composition is an explicit app-only class: it binds this server process's mounted credentials, private ArtifactStore service route, and durable artifact authority; it is not a reusable storage client. Public health composition is app-only because it binds this process's frozen service targets and database probe; only its public wire contract is reusable.",
+  "policy": "Deployable implementation source under apps is closed by default. Named test trees prove assembled behavior. Every retained implementation file is exact. OpenCrane server production source is limited to its entrypoint and bootstrap directory: process configuration, startup, shutdown, and declarative route or module assembly. Domain rules, persistence adapters, protocol translation, credential clients, and reusable transport policy belong to their functional libraries.",
   "forbiddenPaths": [
     "apps/opencrane/src/gateways",
     "apps/opencrane/src/reconcilers",
     "apps/opencrane/src/openapi",
-    "apps/opencrane/src/infra/auth",
-    "apps/opencrane/src/infra/middleware",
-    "apps/opencrane/src/infra/projection"
+    "apps/opencrane/src/app",
+    "apps/opencrane/src/infra"
   ],
   "allowedFiles": [
-	{ "path": "apps/opencrane/src/app/company-assistant-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/prisma.config.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
-    { "path": "apps/opencrane/scripts/emit-openapi.mts", "owner": "apps/opencrane", "classification": "build-entrypoint" },
-    { "path": "apps/opencrane/src/app/background-workers.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/background-workers.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/config.ts", "owner": "apps/opencrane", "classification": "app-config" },
-    { "path": "apps/opencrane/src/app/config.types.ts", "owner": "apps/opencrane", "classification": "app-config" },
-	{ "path": "apps/opencrane/src/app/conversation-history-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/conversation-computer-activation-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-	{ "path": "apps/opencrane/src/app/conversation-computer-activation-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-	{ "path": "apps/opencrane/src/app/conversation-computer-lifecycle-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-	{ "path": "apps/opencrane/src/app/conversation-computer-turn-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/history-store-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-	{ "path": "apps/opencrane/src/app/history-store-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-	{ "path": "apps/opencrane/src/app/history-store-silo-guard.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/instrument.ts", "owner": "apps/opencrane", "classification": "process-instrumentation" },
-    { "path": "apps/opencrane/src/app/internal-app.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/kubernetes-clients.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/kubernetes-clients.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/lifecycle.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/lifecycle.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-	{ "path": "apps/opencrane/src/app/mcp-workflow-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/mcp-workflow-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/mcp-runtime-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/mcp-runtime-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/organization-members-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/organization-members-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/run-admission-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-	{ "path": "apps/opencrane/src/app/run-admission-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/app/persona-approval-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/app/log.ts", "owner": "apps/opencrane", "classification": "process-logging" },
-    { "path": "apps/opencrane/src/app/process-shutdown.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/public-app.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/public-app.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/app/routes.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/app/routes.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/app/runtime-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/app/runtime-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/app/telemetry.ts", "owner": "apps/opencrane", "classification": "process-instrumentation" },
-    { "path": "apps/opencrane/src/app/user-onboarding-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/prisma/bootstrap/verify-persona-source-seeds.mjs", "owner": "apps/opencrane", "classification": "composition-test" },
-    { "path": "apps/opencrane/prisma/bootstrap/verify-onboarding-bootstrap-seeds.mjs", "owner": "apps/opencrane", "classification": "composition-test" },
-    { "path": "apps/opencrane/prisma/bootstrap/verify-authority-baseline.mjs", "owner": "apps/opencrane", "classification": "composition-test" },
-    { "path": "apps/opencrane/prisma/bootstrap/regenerate-target-baseline.mjs", "owner": "apps/opencrane", "classification": "composition-test" },
-    { "path": "apps/opencrane/src/index.ts", "owner": "apps/opencrane", "classification": "process-entrypoint" },
-    { "path": "apps/opencrane/src/infra/db/db.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/artifact-mounted-key.loader.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/artifact-preprocess-source-broker.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/artifact-scan-source-broker.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/artifact-read-lease-signer.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/artifact-service-read-port.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
-    { "path": "apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/infra/health/public-health.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/infra/health/public-health-probe.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/infra/health/public-health.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
-
-    { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
-    { "path": "apps/opencrane-ui/src/app/app.config.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
-    { "path": "apps/opencrane-ui/src/app/app.routes.ts", "owner": "apps/opencrane-ui", "classification": "browser-route-composition" },
-    { "path": "apps/opencrane-ui/src/app/conversation-workspace.providers.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
-    { "path": "apps/opencrane-ui/src/app/login/login-page.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-view" },
-	{ "path": "apps/opencrane-ui/src/app/login/login-return-to.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
-    { "path": "apps/opencrane-ui/src/app/operator-access.guard.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
-    { "path": "apps/opencrane-ui/src/environments/environment.dev-live.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
-    { "path": "apps/opencrane-ui/src/environments/environment.prod.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
-    { "path": "apps/opencrane-ui/src/environments/environment.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
-    { "path": "apps/opencrane-ui/src/main.ts", "owner": "apps/opencrane-ui", "classification": "browser-entrypoint" },
-    { "path": "apps/opencrane-ui/vitest.config.ts", "owner": "apps/opencrane-ui", "classification": "test-config" },
-
-    { "path": "apps/memory-gateway/src/config.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
-    { "path": "apps/memory-gateway/src/config.types.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
-    { "path": "apps/memory-gateway/src/index.ts", "owner": "apps/memory-gateway", "classification": "process-entrypoint" },
-    { "path": "apps/memory-gateway/src/instrument.ts", "owner": "apps/memory-gateway", "classification": "process-instrumentation" },
-    { "path": "apps/memory-gateway/src/log.ts", "owner": "apps/memory-gateway", "classification": "process-logging" },
-    { "path": "apps/memory-gateway/src/search-contract.ts", "owner": "apps/memory-gateway", "classification": "route-composition" },
-    { "path": "apps/memory-gateway/src/server.ts", "owner": "apps/memory-gateway", "classification": "route-composition" },
-    { "path": "apps/memory-gateway/vitest.config.ts", "owner": "apps/memory-gateway", "classification": "test-config" },
-
-    { "path": "apps/artifact-service/src/config.ts", "owner": "apps/artifact-service", "classification": "app-config" },
-    { "path": "apps/artifact-service/src/config.types.ts", "owner": "apps/artifact-service", "classification": "app-config" },
-    { "path": "apps/artifact-service/src/index.ts", "owner": "apps/artifact-service", "classification": "process-entrypoint" },
-    { "path": "apps/artifact-service/src/instrument.ts", "owner": "apps/artifact-service", "classification": "process-instrumentation" },
-    { "path": "apps/artifact-service/src/log.ts", "owner": "apps/artifact-service", "classification": "process-logging" },
-    { "path": "apps/artifact-service/src/server.ts", "owner": "apps/artifact-service", "classification": "route-composition" },
-    { "path": "apps/artifact-service/vitest.config.ts", "owner": "apps/artifact-service", "classification": "test-config" },
-
-    { "path": "apps/artifact-preprocessor/src/config.ts", "owner": "apps/artifact-preprocessor", "classification": "app-config" },
-    { "path": "apps/artifact-preprocessor/src/config.types.ts", "owner": "apps/artifact-preprocessor", "classification": "app-config" },
-    { "path": "apps/artifact-preprocessor/src/index.ts", "owner": "apps/artifact-preprocessor", "classification": "process-entrypoint" },
-    { "path": "apps/artifact-preprocessor/src/instrument.ts", "owner": "apps/artifact-preprocessor", "classification": "process-instrumentation" },
-    { "path": "apps/artifact-preprocessor/src/log.ts", "owner": "apps/artifact-preprocessor", "classification": "process-logging" },
-    { "path": "apps/artifact-preprocessor/vitest.config.ts", "owner": "apps/artifact-preprocessor", "classification": "test-config" },
-
-    { "path": "apps/artifact-scanner/src/config.ts", "owner": "apps/artifact-scanner", "classification": "app-config" },
-    { "path": "apps/artifact-scanner/src/config.types.ts", "owner": "apps/artifact-scanner", "classification": "app-config" },
-    { "path": "apps/artifact-scanner/src/index.ts", "owner": "apps/artifact-scanner", "classification": "process-entrypoint" },
-    { "path": "apps/artifact-scanner/src/instrument.ts", "owner": "apps/artifact-scanner", "classification": "process-instrumentation" },
-    { "path": "apps/artifact-scanner/src/log.ts", "owner": "apps/artifact-scanner", "classification": "process-logging" },
-    { "path": "apps/artifact-scanner/vitest.config.ts", "owner": "apps/artifact-scanner", "classification": "test-config" },
-
-    { "path": "apps/agent-controller/src/config.ts", "owner": "apps/agent-controller", "classification": "app-config" },
-    { "path": "apps/agent-controller/src/config.types.ts", "owner": "apps/agent-controller", "classification": "app-config" },
-    { "path": "apps/agent-controller/src/index.ts", "owner": "apps/agent-controller", "classification": "process-entrypoint" },
-    { "path": "apps/agent-controller/src/instrument.ts", "owner": "apps/agent-controller", "classification": "process-instrumentation" },
-    { "path": "apps/agent-controller/src/log.ts", "owner": "apps/agent-controller", "classification": "process-logging" },
-    { "path": "apps/agent-controller/vitest.config.ts", "owner": "apps/agent-controller", "classification": "test-config" },
-
-    { "path": "apps/mcp-executor/src/config.ts", "owner": "apps/mcp-executor", "classification": "app-config" },
-    { "path": "apps/mcp-executor/src/config.types.ts", "owner": "apps/mcp-executor", "classification": "app-config" },
-    { "path": "apps/mcp-executor/src/index.ts", "owner": "apps/mcp-executor", "classification": "process-entrypoint" },
-    { "path": "apps/mcp-executor/src/instrument.ts", "owner": "apps/mcp-executor", "classification": "process-instrumentation" },
-    { "path": "apps/mcp-executor/src/log.ts", "owner": "apps/mcp-executor", "classification": "process-logging" },
-    { "path": "apps/mcp-executor/vitest.config.ts", "owner": "apps/mcp-executor", "classification": "test-config" },
-
-    { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
-    { "path": "apps/conversation-computer/src/main.py", "owner": "apps/conversation-computer", "classification": "process-entrypoint" }
+    {
+      "path": "apps/opencrane/prisma.config.ts",
+      "owner": "apps/opencrane",
+      "classification": "prisma-composition"
+    },
+    {
+      "path": "apps/opencrane/scripts/emit-openapi.mts",
+      "owner": "apps/opencrane",
+      "classification": "build-entrypoint"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/background-workers.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/background-workers.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/configuration/config.ts",
+      "owner": "apps/opencrane",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/configuration/config.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-history-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-lifecycle-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-turn-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/instrument.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/internal-app.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/kubernetes-clients.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/kubernetes-clients.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/lifecycle.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/lifecycle.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/workflows/mcp-workflow-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/workflows/mcp-workflow-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/workflows/mcp-runtime-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/workflows/mcp-runtime-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/organization-members-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/organization-members-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/log.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/process-shutdown.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/public-app.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/public-app.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/routes.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/routes.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/runtime-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/runtime-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/prisma/bootstrap/verify-persona-source-seeds.mjs",
+      "owner": "apps/opencrane",
+      "classification": "composition-test"
+    },
+    {
+      "path": "apps/opencrane/prisma/bootstrap/verify-onboarding-bootstrap-seeds.mjs",
+      "owner": "apps/opencrane",
+      "classification": "composition-test"
+    },
+    {
+      "path": "apps/opencrane/prisma/bootstrap/verify-authority-baseline.mjs",
+      "owner": "apps/opencrane",
+      "classification": "composition-test"
+    },
+    {
+      "path": "apps/opencrane/prisma/bootstrap/regenerate-target-baseline.mjs",
+      "owner": "apps/opencrane",
+      "classification": "composition-test"
+    },
+    {
+      "path": "apps/opencrane/src/index.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/process/memory-gateway-client.factory.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/vitest.config.ts",
+      "owner": "apps/opencrane",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/app.component.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/app.config.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/app.routes.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-route-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/conversation-workspace.providers.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/login/login-page.component.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-entry-view"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/login/login-return-to.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-entry-guard"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/operator-access.guard.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-entry-guard"
+    },
+    {
+      "path": "apps/opencrane-ui/src/environments/environment.dev-live.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-config"
+    },
+    {
+      "path": "apps/opencrane-ui/src/environments/environment.prod.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-config"
+    },
+    {
+      "path": "apps/opencrane-ui/src/environments/environment.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-config"
+    },
+    {
+      "path": "apps/opencrane-ui/src/main.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-entrypoint"
+    },
+    {
+      "path": "apps/opencrane-ui/vitest.config.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/memory-gateway/src/config.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/memory-gateway/src/config.types.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/memory-gateway/src/index.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/memory-gateway/src/instrument.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/memory-gateway/src/log.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/memory-gateway/src/search-contract.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/memory-gateway/src/server.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/memory-gateway/vitest.config.ts",
+      "owner": "apps/memory-gateway",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/artifact-service/src/config.ts",
+      "owner": "apps/artifact-service",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/artifact-service/src/config.types.ts",
+      "owner": "apps/artifact-service",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/artifact-service/src/index.ts",
+      "owner": "apps/artifact-service",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/artifact-service/src/instrument.ts",
+      "owner": "apps/artifact-service",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/artifact-service/src/log.ts",
+      "owner": "apps/artifact-service",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/artifact-service/src/server.ts",
+      "owner": "apps/artifact-service",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/artifact-service/vitest.config.ts",
+      "owner": "apps/artifact-service",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/artifact-preprocessor/src/config.ts",
+      "owner": "apps/artifact-preprocessor",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/artifact-preprocessor/src/config.types.ts",
+      "owner": "apps/artifact-preprocessor",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/artifact-preprocessor/src/index.ts",
+      "owner": "apps/artifact-preprocessor",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/artifact-preprocessor/src/instrument.ts",
+      "owner": "apps/artifact-preprocessor",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/artifact-preprocessor/src/log.ts",
+      "owner": "apps/artifact-preprocessor",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/artifact-preprocessor/vitest.config.ts",
+      "owner": "apps/artifact-preprocessor",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/artifact-scanner/src/config.ts",
+      "owner": "apps/artifact-scanner",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/artifact-scanner/src/config.types.ts",
+      "owner": "apps/artifact-scanner",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/artifact-scanner/src/index.ts",
+      "owner": "apps/artifact-scanner",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/artifact-scanner/src/instrument.ts",
+      "owner": "apps/artifact-scanner",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/artifact-scanner/src/log.ts",
+      "owner": "apps/artifact-scanner",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/artifact-scanner/vitest.config.ts",
+      "owner": "apps/artifact-scanner",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/agent-controller/src/config.ts",
+      "owner": "apps/agent-controller",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/agent-controller/src/config.types.ts",
+      "owner": "apps/agent-controller",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/agent-controller/src/index.ts",
+      "owner": "apps/agent-controller",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/agent-controller/src/instrument.ts",
+      "owner": "apps/agent-controller",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/agent-controller/src/log.ts",
+      "owner": "apps/agent-controller",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/agent-controller/vitest.config.ts",
+      "owner": "apps/agent-controller",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/mcp-executor/src/config.ts",
+      "owner": "apps/mcp-executor",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/mcp-executor/src/config.types.ts",
+      "owner": "apps/mcp-executor",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/mcp-executor/src/index.ts",
+      "owner": "apps/mcp-executor",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/mcp-executor/src/instrument.ts",
+      "owner": "apps/mcp-executor",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/mcp-executor/src/log.ts",
+      "owner": "apps/mcp-executor",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/mcp-executor/vitest.config.ts",
+      "owner": "apps/mcp-executor",
+      "classification": "test-config"
+    },
+    {
+      "path": "apps/skill-authoring/src/authoring_worker.py",
+      "owner": "apps/skill-authoring",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/conversation-computer/src/main.py",
+      "owner": "apps/conversation-computer",
+      "classification": "process-entrypoint"
+    }
   ],
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",

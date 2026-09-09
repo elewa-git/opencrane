@@ -18,7 +18,7 @@ import { PrismaArtifactPublicationUnitOfWork } from "./prisma-artifact-publicati
  * publication, the preprocessing record, and the saved task receipt commit or roll back together.
  *
  * Called by: `_CreateArtifactUploadGateway` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts.
+ * service/artifact-upload.factory.ts.
  *
  * @param prisma - The product database client.
  * @param workflow - Guarded engine that saves PDF tasks within the publication database transaction.
@@ -37,8 +37,8 @@ export function _CreateArtifactUploadAuthority(prisma: PrismaClient, workflow: P
  * cannot hold a database lock. The fence on each call is what keeps the job safe instead.
  *
  * Called by: `_CreateArtifactPreprocessOutputBroker` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts, and
- * `_CreateOptionalRuntimeComposition` in apps/opencrane/src/app/runtime-composition.ts.
+ * service/artifact-preprocess-output-broker.factory.ts, and
+ * `_CreateOptionalRuntimeComposition` in apps/opencrane/src/bootstrap/process/runtime-composition.ts.
  *
  * @param prisma - The product database client.
  * @returns The repository the router and both brokers use. Unlike the upload authority, it lets
@@ -55,8 +55,8 @@ export function _CreateArtifactPreprocessAuthority(prisma: PrismaClient): Artifa
  * Both of its jobs are plain reads, so it takes no locks and cannot block an upload or a
  * preprocessing claim.
  *
- * Called by: `_CreateSkillAuthoringArtifactReader` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts.
+ * Called by: `_CreatePublishedArtifactReader` in
+ * service/artifact-upload.factory.ts.
  *
  * @param prisma - The product database client.
  * @returns The internal published-revision read repository.

@@ -14,8 +14,8 @@ import type { __UserOnboardingChatAuthority } from "./user-onboarding-chat-autho
  * would let a signed-in user drive somebody else's onboarding. Returning null makes the router
  * answer 401 without reaching any authority.
  *
- * Called by: every route built in __CreateUserOnboardingRouter; supplied by the app as
- * `_ResolveUserOnboardingOwner` in apps/opencrane/src/app/routes.ts.
+ * Called by: every route built in __CreateUserOnboardingRouter; implemented by
+ * `_ResolveUserOnboardingOwner` in http/user-onboarding-owner-resolver.ts.
  */
 export interface UserOnboardingOwnerResolver
 {
@@ -45,7 +45,7 @@ export interface UserOnboardingRouterDependencies
  * replayed or out-of-order notification is safe.
  *
  * Implemented by: UserOnboardingPersonaWorkflowCoordinator in user-onboarding.http.ts, adapted to
- * persona's own port in apps/opencrane/src/app/user-onboarding-composition.ts.
+ * persona's own port in composition/user-onboarding-composition.ts.
  */
 export interface UserOnboardingPersonaWorkflowPort
 {

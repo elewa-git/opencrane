@@ -1,8 +1,8 @@
 import { ExternalActionRecoveryModes, type ToolInvocationAuthorizationCoordinate, type ToolInvocationAuthorizationEvidence, type ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { FrozenConversationComputerTurn } from "../../../conversation-computer-turn.types";
-import type { PreparedConversationToolProposal } from "../../../conversation-tool-proposal.types";
+import type { FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
+import type { PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
 import type { ConversationToolProposalRun } from "./conversation-tool-proposal-run.types";
 
 /**

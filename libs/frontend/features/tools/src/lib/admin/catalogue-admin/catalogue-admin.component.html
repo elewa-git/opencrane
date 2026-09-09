@@ -1,11 +1,12 @@
 <div class="wo-admin">
 	<div class="wo-admin__inner">
-		@if (canAdminister()) {
+		@if (store.canAdminister()) {
 			<wo-section-heading
 				title="MCP Catalogue"
-				[subtitle]="servers().length + ' servers · ' + pendingCount() + ' awaiting review. Approve and publish servers after grants are managed through central authorization.'"
+				[subtitle]="store.servers().length + ' servers · ' + store.pendingCount() + ' awaiting review. Approve and publish servers after grants are managed through central authorization.'"
 			/>
 
+			<wo-resource-feedback [loading]="store.loading()" [error]="store.error() ?? store.readError()" [retryAvailable]="store.readError() !== null" (retryRequested)="store.refresh()" />
 			<table class="wo-table">
 				<thead>
 					<tr>
@@ -18,34 +19,8 @@
 					</tr>
 				</thead>
 				<tbody>
-					@for (server of servers(); track server.id) {
-						<tr [class.wo-admin__row--off]="server.approvalStatus === status.Disabled">
-							<td>
-								<div class="wo-mono wo-admin__name">{{ server.name }}</div>
-								<div class="wo-admin__desc">{{ server.description }}</div>
-							</td>
-							<td class="wo-admin__muted">{{ server.publisher }}</td>
-							<td><wo-scope-chip [label]="typeChips[server.type].label" [tone]="typeChips[server.type].tone" /></td>
-							<td class="wo-admin__muted">{{ server.entitlementSummary }}</td>
-							<td><wo-scope-chip [label]="approvalChips[server.approvalStatus].label" [tone]="approvalChips[server.approvalStatus].tone" /></td>
-							<td class="wo-admin__actions">
-								@switch (server.approvalStatus) {
-									@case (status.PendingReview) {
-										<button type="button" class="wo-tools__act" (click)="approve(server)">Approve</button>
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="reject(server)">Reject</button>
-									}
-									@case (status.Approved) {
-										<button type="button" class="wo-tools__act" (click)="publish(server)">Publish</button>
-									}
-									@case (status.Published) {
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="setEnabled(server, false)">Disable</button>
-									}
-									@case (status.Disabled) {
-										<button type="button" class="wo-tools__act" (click)="setEnabled(server, true)">Re-enable</button>
-									}
-								}
-							</td>
-						</tr>
+					@for (server of store.servers(); track server.id) {
+						<tr wo-catalogue-admin-row [server]="server" [busy]="store.busy().has(server.id)" (approveRequested)="store.approve(server)" (publishRequested)="store.publish(server)" (rejectRequested)="store.reject(server)" (enabledRequested)="store.setEnabled(server, $event)"></tr>
 					}
 				</tbody>
 			</table>

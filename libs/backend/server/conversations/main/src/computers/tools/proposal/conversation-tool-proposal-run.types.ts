@@ -1,8 +1,8 @@
 import type { ExecutionSubject } from "@opencrane/models/agents";
 import type { ProductAuthorizationWorkloadContext, ToolInvocationAdmissionOutcomes, ToolInvocationAdmissionResult } from "@opencrane/backend/server/iam/authorization";
 
-import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../../conversation-computer-turn.types";
-import type { PreparedConversationToolProposal } from "../../../conversation-tool-proposal.types";
+import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
+import type { PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
 
 /** Run facts checked against the saved input before a tool proposal can be admitted. */
 export interface ConversationToolProposalRun

@@ -4,6 +4,10 @@
 
 ## What it owns
 
+The source tree separates `company-assistants/`, `personal-agents/`, `revisions/` and
+`execution-evidence/`. Each owner keeps its persistence adapters under `db/` and tests under
+`__tests__/`, so changing publication does not require searching a shared database folder.
+
 This package owns immutable `AgentService` revisions, personal-assistant configuration, and explicit
 setup of one company assistant per silo. The company assistant can be selected for a group child
 conversation once its published revision, identity, model permission and the caller's access are ready.
@@ -43,6 +47,9 @@ until those capabilities have a supported company policy.
 
 ## Public surface
 
+- `_CreateCompanyAssistantComposition` supplies the initial managed-agent policy and authenticated
+  administrator router from the deployment profile and injected logger.
+
 - `PrismaPersonalAgentBootstrapRepository` creates or repairs the personal service during onboarding.
 - `PrismaAgentRevisionModelSelectionRepository` materializes an accepted model choice as a new revision.
 - `PrismaAgentRevisionPersonaSelectionRepository` materializes an approved persona as a new revision.
@@ -66,7 +73,13 @@ The app supplies transaction-scoped dependencies for admission and revision chan
 owns its Serializable transaction and retries up to three unique-create or serialization conflicts.
 It establishes identity history only after PostgreSQL commits; no Prisma delegates reach callers.
 
-## Company assistant setup
+## Boundary
+
+Only the owning authority may publish an agent revision or record product-access evidence.
+Callers supply the current transaction and deployment profile; they cannot replace these checks
+with request fields.
+
+### Company assistant setup
 
 An authenticated operator calls `POST /api/v1/organization/company-assistant` with `name`,
 `modelDefinitionId`, and explicit `invokerPrincipalIds`. These are current local human Principal IDs,
@@ -81,6 +94,13 @@ An existing assistant returns `created: false`: changed choices are not applied,
 not restored, and paused or retired services are not revived. A failed identity append can be retried
 from the committed service and first revision; suspended or revoked identities remain unavailable.
 
+## Dependency direction
+
+Tagged `scope:agent-services`, this package may depend on shared agent models, audit, authentication,
+authorization, membership, checked IAM identity history, the history-store append contract, and
+shared utilities. IAM identity and history-store do not depend back on this package. It does not
+depend on an app, scheduling worker, or the execution-runs package.
+
 ## Data and persistence
 
 The package uses `AgentService`, `AgentRevision`, revision boundary attachments, skill assignments,
@@ -89,13 +109,6 @@ also creates one Internal Principal and exact managed authorization grants. Its 
 identity is stored through `AgentIdentityHistory`, rather than a parallel relational identity record.
 The Principal uses the database's reserved `urn:opencrane:agent-service` issuer, the service ID as
 its subject, and no email. The baseline rejects any other issuer for an Internal Principal.
-
-## Dependency direction
-
-Tagged `scope:agent-services`, this package may depend on shared agent models, audit, authentication,
-authorization, membership, checked IAM identity history, the history-store append contract, and
-shared utilities. IAM identity and history-store do not depend back on this package. It does not
-depend on an app, scheduling worker, or the execution-runs package.
 
 ## See also
 

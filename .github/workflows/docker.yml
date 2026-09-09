@@ -441,6 +441,9 @@ jobs:
       - name: Prove the KurrentDB client against the live server
         run: npx nx run backend-server-infra-history-store:test:integration
 
+      - name: Prove conversation history authority
+        run: npx nx run backend-server-conversation-history:test:integration
+
       - name: Prove conversation conflicts and saved answer recovery
         run: npx nx run backend-server-conversations:test:integration
 

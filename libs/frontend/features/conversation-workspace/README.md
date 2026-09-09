@@ -6,7 +6,7 @@
 
 This package owns the normal workspace where a participant can open, create, read, and contribute
 to direct, group, and Agent-session conversations. Its thin page composes the approved conversation,
-asset, Activity, elicitation, and A2UI elements. A feature presenter derives browser-safe display
+asset, Activity, elicitation, and A2UI elements. A component-scoped presenter derives browser-safe display
 models and delegates every command to the existing state stores. Its feature-local route coordinator
 owns index/selection URLs and sign-in recovery through the platform seam.
 The existing creation dialog disables its choices during submission. A failed request keeps the
@@ -53,6 +53,11 @@ server-stamped message author. The page owns composition and existing navigation
 covers the choice, empty, pending, retry, ready-child, and accepted-share states, including a narrow
 request dialog. None of these presentation hints replace server source or permission checks.
 
+The page injects its presenter through composition. A separate selection coordinator starts initial
+reads, clears file state before changing conversations, and selects the current computer generation.
+Pure status mappers derive composer and connection states. Each service is provided on the page,
+so navigating away destroys its effects and all selected-conversation state with it.
+
 Creation closes when loading or access loss replaces the ready workspace. Its local visibility
 is reset, so reloading cannot reopen a stale modal over the access-change explanation.
 
@@ -61,8 +66,9 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
 - `CONVERSATION_WORKSPACE_ROUTES` is the child route table the app mounts at `/chats`.
 - `ConversationWorkspacePageComponent` is the composition shell. It emits exact navigation intents
   to the feature-local route coordinator.
-- `ConversationWorkspacePresenter` maps store projections to shared element presentations and
-  delegates typed user intents to the stores that own them.
+- Internal header, transcript and composer components own separate typed presentation contracts.
+  The header restores context-trigger focus, the transcript owns message anchors and scrolling,
+  and the composer emits draft/send/reconnect intents. They reuse the established conversation elements.
 - `ConversationOnboardingHistoryComponent` renders the completed bootstrap transcript without message,
   asset, run, archive, or close controls.
 - `ConversationWorkspaceContextPanelComponent` composes closable Activity and Files presentation without

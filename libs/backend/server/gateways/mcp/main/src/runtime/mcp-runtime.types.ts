@@ -292,3 +292,6 @@ export interface McpRuntimeCompanionRepository
 	/** Move one expired invocation claim into manual recovery. */
 	recoverNextExpiredInvocation(): Promise<boolean>;
 }
+
+/** Admit or recover executor work within the caller's existing proposal transaction. */
+export type McpToolInvocationAdmission = (transaction: unknown, invocationRowId: string) => Promise<boolean>;

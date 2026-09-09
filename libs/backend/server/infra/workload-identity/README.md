@@ -25,10 +25,9 @@ identity for the next transport or backend authority.
 **In this flow:** [conversations](../../conversations/main/README.md) ·
 [execution runs](../../../agents/execution/runs/main/README.md)
 
-It owns the fixed agent-controller, OCI MCP executor, artifact-preprocessor, artifact-scanner, and
-memory-gateway server adapters; the skill-worker adapter whose exact coordinates
-are checked by durable bootstrap authority; and the mutually exclusive personal/managed runtime
-adapters. Invariant: an unauthenticated review, wrong
+It owns fixed-account reviewers for the agent controller, artifact preprocessor, artifact scanner,
+and memory-gateway server; and Pod-bound reviewers for the MCP executor, conversation computer,
+and skill-validation worker. Invariant: an unauthenticated review, wrong
 audience, unexpected namespace or ServiceAccount, missing bound Pod UID, or ambiguous runtime
 audience returns no identity. The raw token and full Kubernetes response never leave this package.
 
@@ -41,14 +40,21 @@ audience returns no identity. The raw token and full Kubernetes response never l
 - `_CreateSkillAuthoringValidationTokenReviewer` — binds the Python validation Job to its fixed
   audience, namespace, ServiceAccount, and saved Pod UID.
 - `_CreateArtifactPreprocessorTokenReviewer` — binds preprocessing to its isolated worker namespace.
-- `_CreateRuntimeTokenReviewer` — separates personal and managed runtime audience, namespace, and
-  ServiceAccount grammars.
-- `_ValidateRuntimeIdentityNamespaces`, `_ValidateIsolatedWorkloadNamespace` — fail startup when
-  trusted and untrusted workload identity planes overlap or use malformed Kubernetes names.
+- `_CreateConversationComputerTokenReviewer` — binds a computer to the release-selected namespace,
+  ServiceAccount, audience, and Kubernetes-confirmed Pod UID.
+- `_CreateArtifactScannerTokenReviewer` and `_CreateMemoryGatewayServerTokenReviewer` — bind the
+  scanner and memory-gateway caller to their fixed deployment identities.
+- `_ValidateIsolatedWorkloadNamespace` — fails startup when a worker shares the server namespace or
+  its configured Kubernetes name is malformed.
 - `RuntimeTokenReviewer`, `RuntimeWorkloadIdentity`, and the fixed/skill reviewer types — narrow
   credential-free ports consumed by transports and backend routers.
 
 ## Boundary
+
+`configuration/` validates namespace configuration. `token-review/` owns the Kubernetes review,
+subject parsing, and credential-free types. `reviewers/` binds those operations to fixed-account
+or Pod-bound callers. All reviewers share the same audience check and subject parser; splitting
+their composition does not add another authentication authority.
 
 This library authenticates Kubernetes workload identity only. It does not look up a run, assignment,
 organisation, grant, approval, or artifact, and it never authorizes an action from a token alone.

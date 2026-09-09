@@ -12,7 +12,7 @@
     ],
     "production": [
       "default",
-      "!{projectRoot}/src/__tests__/**"
+      "!{projectRoot}/src/**/__tests__/**"
     ]
   },
   "targetDefaults": {
