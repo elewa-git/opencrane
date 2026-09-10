@@ -1,5 +1,6 @@
 export { PrismaAgentRevisionModelSelectionRepository } from "./revisions/db/prisma-agent-revision-model-selection";
-export { PrismaCompanyAssistantProvisioningRepository, CompanyAssistantProvisioningDenied } from "./company-assistants/db/prisma-company-assistant-provisioning";
+export { PrismaCompanyAssistantProvisioningRepository } from "./company-assistants/db/prisma-company-assistant-provisioning";
+export { CompanyAssistantProvisioningDenied } from "./company-assistants/company-assistant.errors";
 export { PrismaCompanyAssistantProvisioningUnitOfWork } from "./company-assistants/db/prisma-company-assistant-provisioning-unit-of-work";
 export { _CreateCompanyAssistantProvisioningRouter } from "./company-assistants/company-assistant-provisioning.router";
 export { _CompanyAssistantOpenapiPaths } from "./company-assistants/openapi";

@@ -12,8 +12,9 @@ baseline and follow-up PRs from remaining product work and live verification.
 | Durable conversations | Creation, posting and history reads, including ordinary direct/group messages and personal assistant conversations. History is stored in KurrentDB. All three modes distinguish a new chat from a retried creation command. |
 | Recognizable chats | Member display names in the participant picker and direct/group chat titles, with generic text for missing names. |
 | Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. The event stream supplies message history and live changes; computer inspection refreshes separately. |
-| Personal model turns | Approved persona instructions and conversation history feed a bounded text request. The server keeps model input and keys and saves the answer for restart. Text checkpoint `378a755b6` has passed full CI; live qualification of that replacement remains outstanding. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
+| Personal model turns | Approved persona instructions and conversation history feed a bounded request. The server keeps model input and keys and saves the answer for restart. Absurd advances the turn through model work and at most one permitted tool result and text-only continuation. Live qualification of this replacement remains outstanding. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
 | Company assistant in groups | Explicit assistant selection on an own group message, recoverable child creation, fixed audience, current parent and child access checks, follow-up answers, and human-reviewed sharing back. Administrator setup uses the API. |
+| Company assistant tool selection | Administrators read and replace exact tools through the API. Changes create immutable revisions and grants for the assistant's own identity; stale edits conflict. Edits preserve the original budget. Connection activation, the management screen and live retrieval proof remain unfinished. |
 | Computer inspection | Workspace file, diff and browser discovery routes. Commands, page creation, screenshots and preview actions remain denied until their concrete effect admissions are connected. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
 | History operations | Scheduled backups, restore tooling and health checks. A scheduled file-copy restore recovered completed personal/group chats, removed a later message and allowed new group messages and an assistant answer. Scheduled volume snapshots are ready; restoring them remains unqualified. |
@@ -24,57 +25,48 @@ current review work and its evidence.
 
 ## Still to complete
 
-- **Useful work across tools:** the internal continuation in [PR #830](https://github.com/elewa-git/opencrane/pull/830)
-  can use one permitted tool result in a final assistant answer. CI passes; this change is not yet
-  installed. A stacked follow-up moves durable turn progression from the conversation Pod into the
-  existing Absurd workflow boundary; its CI and live qualification remain pending. A real
-  integration, company-assistant tool assignment, visible tool progress and
-  human-approved changes still need their complete product journeys.
-- **Recovery controls:** when a model response cannot be recovered, preserve the pending run and
-  show the person what happened and what they can do next. The current server keeps the spent
-  request reservation and does not send another paid request. That restraint is implemented in
-  source; the user-facing recovery controls remain unfinished.
-- **Personal memory:** complete remembering, recalling, correcting and forgetting information
-  across conversations.
-- **Shared work:** restore supported managed-agent scheduling and triggered execution, and complete
-  delegation between assistants.
-- **Inputs and outputs:** complete the user journeys for attachments, generated files and their
-  recovery across refresh, retry and conversation closure.
-- **Administration:** complete the product surfaces for permissions, activity and cost without
-  requiring an employee to understand internal execution concepts. The follow-up implementation
-  gives people read access to each new personal run when it starts. Two new testv5 runs now appear
-  in their owners' activity API and remain invisible to the other employee. The follow-up UI adds
-  recent status, refresh and links to loaded answers. Fresh browser checks now pass for both
-  employees, including keyboard navigation, narrow screens and recovery after reload.
-  Existing older runs receive no backfill. Revoked access is checked on every read. Another follow-up
-  adds standalone member removal and clears retained workspace content after access loss. Owner
-  and self-removal are protected; Fleet removal is unavailable. This work is under review and
-  remains unqualified live. See [Remove a company member](/guide/permissions#remove-a-company-member).
-- **Login continuity:** preserve authenticated sessions across server replacement and support
-  multiple servers consistently. The follow-up implements encrypted PostgreSQL sessions with
-  fixed expiry and logout protection. CI and fresh PostgreSQL tests pass; fresh-install live
-  qualification remains pending. The current
-  testv5 server uses process-local sessions and requires a new sign-in after replacement.
+The active delivery order is:
+
+1. **Real tool retrieval:** connect and qualify a dedicated company integration so a permitted
+   record informs an answer and its result survives reload and restart. Internal continuation and
+   [company tool assignment](/guide/first-agent#choose-its-tools) are implemented; credential
+   activation and participant-visible result evidence remain unfinished.
+2. **Approved external actions:** let a person review the exact action, target and arguments before
+   one approval permits that action once. Changed arguments, expiry or revoked access must stop it.
+3. **Long-term memory:** complete remembering, recalling, correcting and forgetting information
+   across conversations, with consent and isolated personal and company datasets.
+4. **Visible work controls:** show waiting, running and finished work, required decisions and
+   supported cancellation. Recent personal activity is implemented; tool progress and controls
+   still need their complete journey.
+5. **Rich interaction:** complete durable choices, free-text questions and structured results that
+   remain accessible after refresh.
+6. **Documents and generated files:** complete attachment-to-answer and generated-file journeys,
+   including access checks and recovery across refresh, retry and conversation closure.
+7. **Autonomous delegation:** let an assistant delegate bounded work with explicit context,
+   narrower permissions and one recorded result.
+8. **Scheduled work:** let people review recurring work that checks current authority each time
+   it runs, with clear handling of overlaps, missed runs and retries.
+9. **Complete administration:** finish agent, connection, model, permission and spending controls.
+   Standalone member removal and browser clearing after access loss are implemented in review;
+   the real-account journey remains unqualified. See [Remove a company member](/guide/permissions#remove-a-company-member).
+10. **Action recovery:** explain uncertain outcomes and provide supported reconciliation and safe
+    retry controls. The server already preserves a spent model request without dispatching it again;
+    the full recovery experience remains unfinished.
+
+Login continuity also needs fresh-install live qualification. Encrypted PostgreSQL sessions with
+fixed expiry and logout protection are implemented and pass CI and fresh PostgreSQL tests.
 
 Durable application source, builds and published apps are later work. Temporary computer previews
 do not publish an application.
 
 Answer recovery saves the exact prepared answer before posting it, so a restart can recognise its
-original content and timestamp. Text checkpoint `378a755b6` in
-[#830](https://github.com/elewa-git/opencrane/pull/830) passes
-[full CI](https://github.com/elewa-git/opencrane/actions/runs/34300559935), including all seven fresh
-PostgreSQL targets and 24 real KurrentDB cases (seven conversation and 17 adapter, excluding skips).
-Its corrected PR metadata also passes
-[topology CI](https://github.com/elewa-git/opencrane/actions/runs/34301556387).
-
-The continuation implementation at `ada28f1f7` in PR #830 passes
-[full CI](https://github.com/elewa-git/opencrane/actions/runs/34303700943). Independent review also
-passes. Live qualification remains pending.
-Both paths preserve a spent request when its response is unavailable, without paid redispatch. A continuation uses the original key and subtracts the entire first token reservation
-before reserving its final request. LiteLLM and provider-internal retries have not been qualified as
-exactly-once execution. The answer-recovery, tool-handoff, Absurd orchestration and continuation changes
-have not been rolled out to testv5. T1 retrieval, T2/T3 approved actions and U1 visible recovery remain
-open delivery work.
+original content and timestamp. The Absurd implementation in
+[#849](https://github.com/elewa-git/opencrane/pull/849) passes CI and independent review; its live
+testv5 qualification remains separate. The conversation Pod no longer schedules model work.
+An unavailable response stays recorded without paid redispatch, and a continuation uses the original
+key and remaining call and token allowance. Provider-internal retries have not been qualified as
+exactly-once execution. Company tool assignment enables the next retrieval step; it does not prove
+that a live integration is connected or that the complete tool journey is ready.
 
 ## Proven in the test installation
 

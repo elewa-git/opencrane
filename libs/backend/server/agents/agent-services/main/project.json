@@ -6,6 +6,7 @@
   "tags": ["type:lib", "layer:backend", "scope:agent-services"],
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/agents/agent-services/main" } },
-    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/agents/agent-services/main" } }
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --exclude '**/*.sql.test.ts'", "cwd": "libs/backend/server/agents/agent-services/main" } },
+    "test:sql": { "executor": "nx:run-commands", "options": { "command": "vitest run src/company-assistants/db/__tests__/company-assistant-tools.sql.test.ts", "cwd": "libs/backend/server/agents/agent-services/main" } }
   }
 }

@@ -1,7 +1,6 @@
 import { AgentRevisionState, AuthorizationBoundaryCoverage, AuthorizationBoundaryKind, Prisma } from "@prisma/client";
 
-import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
-import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevisionContent, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import { __DigestAgentRevisionContent, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevisionContent, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
 import type { AgentRevisionWriterRepository, CreateAgentRevisionWithinTransactionCommand } from "./prisma-agent-revision-writer.types";
 
@@ -86,9 +85,10 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 			}),
 		},
 		mcpToolAssignments: {
-			create: command.content.mcpToolRevisionIds.map(function _MapMcpTool(toolRevisionId)
+			// Prisma takes the revision and service coordinates from the enclosing revision create.
+			create: command.content.mcpToolRevisionIds.map(function _MapMcpTool(toolRevisionId): Prisma.AgentRevisionMcpToolAssignmentUncheckedCreateWithoutAgentRevisionInput
 			{
-				return { toolRevisionId, agentServiceId: command.agentServiceId, siloId: command.siloId };
+				return { toolRevisionId, siloId: command.siloId };
 			}),
 		},
 		boundaryAttachments: {
