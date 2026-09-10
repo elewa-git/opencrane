@@ -96,6 +96,15 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(compiled.tools.map(function _name(t): string { return t.name; })).toEqual(["alpha", "zulu"]);
 	});
 
+	it("does not offer approval-gated tools to a managed assistant", async function _HidesCompanyApprovals()
+	{
+		const subject = _executionSubject();
+		const managed = { ...subject, principalId: "company-principal", identity: { ...subject.identity, principalId: "company-principal" }, membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "company-principal", siloId: subject.siloId, agentServiceId: "svc-1", agentRevisionId: "rev-1", agentRevisionDigest: "sha256:revision", decisionEvidenceId: "sha256:decision", trustedUntil: "2099-01-01T00:00:00.000Z" } } as const;
+		const compiled = await __CompileRunInput(_snapshot({ executionSubject: managed }), 1, _repositories());
+
+		expect(compiled.tools.map(function _name(t): string { return t.name; })).toEqual(["zulu"]);
+	});
+
 	it("passes exact immutable MCP tool revisions to the tool-definition port", async function _PassesMcpToolRevisions()
 	{
 		let received: RunInputSnapshot["mcpTools"] | null = null;

@@ -61,7 +61,7 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	await dependencies.toolProposals.admit(selected, currentExecution.candidate, proposal.command, { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadKind: "pod", workloadUid: workload.podUid, podUid: workload.podUid });
 	const result = await dependencies.toolResults.read(selected, workload);
 	if (result.outcome === ConversationComputerToolResultOutcomes.Pending)
-		return { outcome: "tool_pending", toolInvocationId: selection.proposalId };
+		return { outcome: "tool_pending", toolInvocationId: selection.proposalId, waitFor: result.waitFor, waitUntilEpochMs: result.waitUntilEpochMs };
 	if (result.outcome !== ConversationComputerToolResultOutcomes.Available)
 		return { outcome: "authority_ended" };
 	const pair = ___ConversationModelContinuationSchema.parse({ call: declaration.call, resultContent: ___CanonicalizeJson(result.payload) });
@@ -95,7 +95,7 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 /** Select one unambiguous frozen definition, then reuse the existing schema and budget validator. */
 function _Proposal(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, call: ConversationModelToolCall)
 {
-	const matching = candidate.compiledInput.tools.filter(tool => tool.name === call.name && !tool.requiresApproval);
+	const matching = candidate.compiledInput.tools.filter(tool => tool.name === call.name);
 	if (matching.length !== 1)
 		throw new Error("Conversation model selected an unavailable or ambiguous tool");
 	const command = ___ParseAndValidateJson(call.arguments, "Conversation tool arguments", argumentsValue => ___ConversationToolProposalSchema.parse({ bootstrapId: turn.bootstrapId, toolRevisionId: matching[0]!.toolRevisionId, arguments: argumentsValue }));
@@ -123,7 +123,7 @@ function _FirstReservation(turn: FrozenConversationComputerTurn, candidate: Conv
 	if (ceilings.some(value => value !== null && (!Number.isSafeInteger(value) || value <= 0)) || input.budget.maxModelTurns === null || !Number.isSafeInteger(input.budget.maxModelTurns) || input.budget.maxModelTurns < 1 || limits.length === 0 || !Number.isSafeInteger(authorityExpiresAtEpochMs) || authorityExpiresAtEpochMs <= Date.now())
 		throw new Error("Conversation model request has no remaining frozen allowance");
 	const total = input.budget.maxCompletionTokens ?? Math.min(...limits) * 2;
-	const maySelect = input.budget.maxModelTurns >= 2 && total >= 2 && Number.isSafeInteger(total) && (input.budget.maxToolInvocations === null || Number.isSafeInteger(input.budget.maxToolInvocations) && input.budget.maxToolInvocations >= 1) && input.tools.some(tool => !tool.requiresApproval);
+	const maySelect = input.budget.maxModelTurns >= 2 && total >= 2 && Number.isSafeInteger(total) && (input.budget.maxToolInvocations === null || Number.isSafeInteger(input.budget.maxToolInvocations) && input.budget.maxToolInvocations >= 1) && input.tools.length > 0;
 	const tools = maySelect ? ConversationModelToolModes.Select : ConversationModelToolModes.None;
 	const maxCompletionTokens = maySelect ? Math.min(...limits, Math.floor(total / 2)) : Math.min(...limits);
 	const facts = { ordinal: 1 as const, tools, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000) };

@@ -41,6 +41,11 @@ The package owns request, response-attempt, result-delivery, and one-use memory-
 Tool approval keeps its own audit row, and runtime, browser, and A2UI payloads cannot select the
 respondent, dataset, or protected action.
 
+For a personal approval, the assigned participant answers the server-issued request. IAM changes
+the invocation to ready or failed inside that response transaction, and an injected wake port emits
+the existing saved-turn event only after the final pending input is gone. The wake port belongs to
+conversation composition, so this package does not create a scheduler or dispatch a tool.
+
 Runtime protocol code passes its existing transaction into `PrismaRuntimeElicitationUnitOfWork`.
 That unit constructs one repository from the same transaction and reuses it for the callback. This
 keeps the run lock, request change, candidate acceptance, and expiry decision in one commit without

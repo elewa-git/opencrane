@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
+import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 import { CONVERSATION_COMPUTER_TURN_TASK } from "../conversation-computer-turn-task";
 import type { ConversationComputerTurnTaskInput } from "../conversation-computer-turn-workflow.types";
 import { _RegisterConversationComputerTurnWorkflow } from "../conversation-computer-turn-workflow";
@@ -40,6 +41,53 @@ describe("conversation computer turn workflow", function _Suite()
 		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1" }, { outcome: "completed" }]);
 		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
 		expect(fixture.context.waitForEvent).toHaveBeenCalledExactlyOnceWith("tool-result:tool-1");
+		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
+	});
+
+	it("waits on the separate approval event before terminal result delivery", async function _ApprovalWake()
+	{
+		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" }, { outcome: "completed" }]);
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+		expect(fixture.context.waitForEvent).toHaveBeenCalledExactlyOnceWith("tool-approval:tool-1");
+		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
+	});
+
+	it("resumes a saved approval through the workflow engine and admits one executor on replay", async function _ApprovalEngineJourney()
+	{
+		const execution = new __FakeWorkflowEngine();
+		const state = { approved: false, advances: 0, executions: 0 };
+		const authority = {
+			start: vi.fn().mockResolvedValue(_TURN),
+			advance: vi.fn(async function _Advance()
+			{
+				state.advances++;
+				if (!state.approved)
+					return { outcome: "tool_pending" as const, toolInvocationId: "tool-approval", waitFor: "approval" as const };
+				state.executions++;
+				return { outcome: "completed" as const };
+			}),
+		};
+		_RegisterConversationComputerTurnWorkflow(execution, { authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "silo-1" });
+		const task = await execution.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: _TASK.idempotencyKey, input: _INPUT });
+		const running = execution._DrainPendingTasks();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(state.advances).toBe(1);
+		state.approved = true;
+		await execution.emitEvent(task, { eventName: "tool-approval:tool-approval", payload: { owner: "user-1" } });
+		await running;
+		expect(state.executions).toBe(1);
+		await execution._DrainPendingTasks();
+		expect(state.executions).toBe(1);
+	});
+
+	it("re-enters the saved turn when its approval wait reaches the durable deadline", async function _ApprovalTimeout()
+	{
+		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval", waitUntilEpochMs: Date.now() + 30_000 }, { outcome: "completed" }]);
+		const waitForEvent = fixture.context.waitForEvent as unknown as ReturnType<typeof vi.fn>;
+		waitForEvent.mockResolvedValueOnce({ eventName: "tool-approval:tool-1", payload: null, timedOut: true });
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+		expect(fixture.context.waitForEvent).toHaveBeenCalledWith("tool-approval:tool-1", { timeoutAt: expect.any(Date) });
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
 	});
 

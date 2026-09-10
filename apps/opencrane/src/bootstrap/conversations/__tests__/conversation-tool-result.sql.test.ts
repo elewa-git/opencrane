@@ -89,7 +89,7 @@ async function _Completed(reserve = true)
 	const fixture = await _SeedConversationToolProposalSqlFixture();
 	const runtime = _ToolHandoffSqlRuntime(_First, fixture);
 	_Runtimes.add(runtime);
-	await new PrismaConversationToolProposalUnitOfWork(_First, fixture.dependencies, runtime.admission).admit(fixture.turn, fixture.candidate, fixture.proposal, _AUDITED_WORKLOAD);
+	await new PrismaConversationToolProposalUnitOfWork(_First, fixture.dependencies, runtime.admission, async function _ApprovalExpiry() {}).admit(fixture.turn, fixture.candidate, fixture.proposal, _AUDITED_WORKLOAD);
 	const registered = (await runtime.register())!;
 	const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
 	if (command === null || typeof command === "string" || command.kind !== "invocation")

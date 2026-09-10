@@ -18,7 +18,7 @@ import { _CreateConversationToolDispatchDependencies } from "../../workflows/mcp
  * Immutable rows remain in the disposable CI database until its normal teardown. This helper
  * never disables constraints, deletes product history or connects to a Kubernetes database.
  */
-export async function _SeedConversationToolProposalSqlFixture(options: { readonly runLifetimeMs?: number; readonly trustLifetimeMs?: number; readonly currentLeaseLifetimeMs?: number; readonly currentMembershipLifetimeMs?: number } = {})
+export async function _SeedConversationToolProposalSqlFixture(options: { readonly runLifetimeMs?: number; readonly trustLifetimeMs?: number; readonly currentLeaseLifetimeMs?: number; readonly currentMembershipLifetimeMs?: number; readonly approvalRequired?: boolean } = {})
 {
 	const prefix = `tool-proof-${randomUUID()}`;
 	const id = (suffix: string) => `${prefix}-${suffix}`;
@@ -44,7 +44,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 		requester: { membership, siloId, requesterPrincipalId: principalId, requestIdempotencyKey: id("request"), authenticatedAt: now.toISOString() },
 		admission: { authorizingPrincipalId: principalId, decisionEvidenceId: id("admission-evidence"), admittedAt: now.toISOString() } });
 	const schema = { type: "object", required: ["query"], properties: { query: { type: "string" } }, additionalProperties: false };
-	const tool = { name: "records.read", toolRevisionId: id("tool"), description: "Read a dedicated test record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
+	const tool = { name: "records.read", toolRevisionId: id("tool"), description: "Read a dedicated test record", requiresApproval: options.approvalRequired === true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
 	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: 1_024, maxToolInvocations: 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
 	const snapshot: RunInputSnapshot = { runId, attempt: 1, siloId, agentServiceId, agentRevisionId, snapshotVersion: 1, conversationId, messageIds: [], personaRevisionId: id("persona"), preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: schema, inputSchemaDigest: tool.parametersSchemaDigest }], modelRoute: { alias: modelId, modelDefinitionId: modelId, litellmModelId: `litellm-${modelId}`, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budgetPolicy, executionSubject: subject, promptCompilerVersion: "tool-proof-v1", digest: "", compiledAt: now.toISOString() };
 	const snapshotDigest = __DigestRunInputSnapshot(snapshot);
@@ -72,6 +72,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 		await setup.query("UPDATE agent_services SET state='active', active_revision_id=$2 WHERE id=$1", [agentServiceId, agentRevisionId]);
 		await setup.query("SELECT pg_temp.seed_agent_conversation($1, $2, $3)", [conversationId, siloId, agentServiceId]);
 		await setup.query("SELECT pg_temp.seed_participant($1, $2)", [conversationId, principalId]);
+		await setup.query("INSERT INTO conversation_computer_active_leases (computer_id, silo_id, conversation_id, agent_identity_id, lease_id, lease_generation, expires_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1, $6, $7)", [computerId, siloId, conversationId, agentIdentityId, lease.leaseId, leaseExpiresAt, now]);
 		await setup.query("INSERT INTO agent_runs (id, silo_id, agent_service_id, agent_revision_id, conversation_id, trigger, agent_identity_id, principal_id, execution_subject, request_idempotency_key, input_snapshot_digest) VALUES ($1, $2, $3, $4, $5, 'interactive', $6, $7, $8::jsonb, $9, $10)", [runId, siloId, agentServiceId, agentRevisionId, conversationId, agentIdentityId, principalId, JSON.stringify(subject), id("request"), snapshotDigest]);
 		await setup.query("INSERT INTO run_input_snapshots (id, run_id, attempt, snapshot_version, silo_id, agent_service_id, agent_revision_id, agent_identity_id, principal_id, execution_subject, conversation_id, model_route, mcp_tools, memory_query_policy, budget_policy, prompt_compiler_version, input_digest, created_at, persona_revision_id) VALUES ($1, $2, 1, 1, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, '{}'::jsonb, $12::jsonb, 'tool-proof-v1', $13, $14, $15)", [id("snapshot"), runId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId, JSON.stringify(subject), conversationId, JSON.stringify(snapshot.modelRoute), JSON.stringify(snapshot.mcpTools), JSON.stringify(budgetPolicy), snapshotDigest, now, id("persona")]);
 		await setup.query("SET CONSTRAINTS ALL IMMEDIATE");

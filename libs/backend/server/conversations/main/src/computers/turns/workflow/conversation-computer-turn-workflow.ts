@@ -52,8 +52,15 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 						await context.sleepUntil(new Date(progress.notBeforeEpochMs), `model-${progress.ordinal}-deadline`);
 						break;
 					case "tool_pending":
-						await context.waitForEvent(_ToolResultEventName(progress.toolInvocationId));
+					{
+						const approvalWait = progress.waitFor === "approval" && progress.waitUntilEpochMs !== undefined ? { timeoutAt: new Date(progress.waitUntilEpochMs) } : undefined;
+						const eventName = progress.waitFor === "approval" ? _ToolApprovalEventName(progress.toolInvocationId) : _ToolResultEventName(progress.toolInvocationId);
+						if (approvalWait === undefined)
+							await context.waitForEvent(eventName);
+						else
+							await context.waitForEvent(eventName, approvalWait);
 						break;
+					}
 					case "retry":
 						recoveryCycle += 1;
 						await context.sleepUntil(new Date(Date.now() + _TURN_RETRY_MILLISECONDS), `recovery-${recoveryCycle}`);
@@ -69,6 +76,14 @@ export function _ToolResultEventName(toolInvocationId: string): string
 	if (toolInvocationId.trim().length === 0)
 		throw new Error("Conversation turn tool event requires an invocation id");
 	return `tool-result:${toolInvocationId}`;
+}
+
+/** Names the separate wake emitted when an owner changes a deferred invocation's readiness. */
+export function _ToolApprovalEventName(toolInvocationId: string): string
+{
+	if (toolInvocationId.trim().length === 0)
+		throw new Error("Conversation turn approval event requires an invocation id");
+	return `tool-approval:${toolInvocationId}`;
 }
 
 /** Reject a task that crossed its declared receipt, silo or immutable activation coordinates. */

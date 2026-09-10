@@ -9,7 +9,7 @@ export enum ConversationModelToolModes
 {
 	/** Requests text without sending tool definitions; a returned tool call must be rejected. */
 	None = "none",
-	/** Offers frozen tools that need no approval; the response may select at most one. */
+	/** Offers frozen tools; the response may select at most one and approval-gated calls remain proposals. */
 	Select = "select",
 }
 

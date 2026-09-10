@@ -85,8 +85,9 @@ a tool's identity, arguments or result.
   immutable history and generation-fenced computer vocabulary shared by server and browser.
 - `ConversationToolProposal`, `___ConversationToolProposalSchema` and
   `ConversationToolProposalReceipt` — the private workload request for one frozen tool revision
-  and bounded JSON arguments. It accepts no caller-selected identity or approval. A receipt
-  confirms storage only; it contains no provider result or execution claim.
+  and bounded JSON arguments. It accepts no caller-selected identity; its approval requirement is
+  copied from the frozen tool definition and remains a proposal until server-owned IAM decides it.
+  A receipt confirms storage only; it contains no provider result or execution claim.
 - `___ConversationComputerSchema` validates the existing public computer shape, lease generation,
   and checkpoint metadata without admitting private extensions. Readers still bind its conversation
   coordinate to the authenticated request.

@@ -21,11 +21,11 @@ export function _PrepareConversationToolProposal(turn: FrozenConversationCompute
 	const tool = input.tools.find(item => item.toolRevisionId === proposal.toolRevisionId);
 	if (turn.outputSourceCommandId !== null || proposal.bootstrapId !== turn.bootstrapId || input.digest !== turn.compile.digest
 		|| input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt || candidate.binding.expectedRevision !== turn.binding.expectedRevision
-		|| tool === undefined || tool.requiresApproval || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest
+		|| tool === undefined || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest
 		|| !__ValidateDeferredToolArguments(tool.parametersSchema, proposal.arguments))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 	const deadline = input.budget.wallClockDeadlineEpochMs;
-	if (deadline === null || !Number.isSafeInteger(deadline) || deadline <= Date.now()
+	if (deadline === null || !Number.isSafeInteger(deadline) || (deadline <= Date.now() && !tool.requiresApproval)
 		|| (input.budget.maxToolInvocations !== null && (!Number.isSafeInteger(input.budget.maxToolInvocations) || input.budget.maxToolInvocations < 1)))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 	const hex = createHash("sha256").update(JSON.stringify(["conversation-tool-proposal", turn.compile.runId, turn.compile.attempt, 1])).digest("hex");

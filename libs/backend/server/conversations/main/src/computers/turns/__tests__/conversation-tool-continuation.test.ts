@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
+import { ConversationModelResponseKinds, ConversationModelToolModes, ConversationToolProposalOutcomes } from "@opencrane/contracts";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
+import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -115,6 +117,51 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(1);
+	});
+
+	it("pauses an approval proposal, admits exactly once after the owner decision, and replays safely", async function _ApprovalReplay()
+	{
+		const f = await _ToolContinuationHarness();
+		Object.assign(f.candidate.compiledInput.tools[0], { requiresApproval: true });
+		let decision: "awaiting" | "ready" = "awaiting";
+		f.proposals.admit.mockImplementation(async function _Admit(turn)
+		{
+			if (decision === "ready")
+				f.toolFlags.executions++;
+			return { proposalId: turn.toolSelection!.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
+		});
+		f.results.read.mockImplementation(async function _Read(turn)
+		{
+			if (decision === "awaiting")
+				return { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor: "approval", waitUntilEpochMs: Date.now() + 60_000 } as const;
+			const payload = { toolInvocationId: turn.toolSelection!.proposalId, outcome: "succeeded" as const, result: { record: "private-result" } };
+			return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), notAfterEpochMs: Date.now() + 60_000 } as const;
+		});
+
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "tool_pending", waitFor: "approval" });
+		expect(f.toolFlags.executions).toBe(0);
+		decision = "ready";
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
+		expect(f.toolFlags.executions).toBe(1);
+		expect(f.model.request).toHaveBeenCalledTimes(2);
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
+		expect(f.toolFlags.executions).toBe(1);
+	});
+
+	it("leaves a denied approval terminal without admitting an external executor", async function _DeniedApproval()
+	{
+		const f = await _ToolContinuationHarness();
+		Object.assign(f.candidate.compiledInput.tools[0], { requiresApproval: true });
+		let denied = false;
+		f.proposals.admit.mockResolvedValue({ proposalId: f.call.id, outcome: ConversationToolProposalOutcomes.Existing });
+		f.results.read.mockImplementation(async function _Read()
+		{
+			return denied ? { outcome: ConversationComputerToolResultOutcomes.Unavailable } as const : { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor: "approval" } as const;
+		});
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "tool_pending", waitFor: "approval" });
+		denied = true;
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "authority_ended" });
+		expect(f.toolFlags.executions).toBe(0);
 	});
 
 	it("recovers exact continuation custody after its response is lost before reservation", async function _ContinuationCustody()

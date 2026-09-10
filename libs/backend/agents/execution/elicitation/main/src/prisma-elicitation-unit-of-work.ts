@@ -1,7 +1,7 @@
 import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { __DigestCanonicalJson, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { __DigestCanonicalJson, __FindToolInvocationInTransaction, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationBody, type RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
@@ -15,7 +15,7 @@ import { PrismaToolApprovalPurposeAuthority } from "./purposes/tool-approval/pri
 import { PrismaA2uiActionPurposeAuthority } from "./purposes/a2ui-action/prisma-a2ui-action-purpose";
 import { PrismaPersonalMemoryPermissionPurposeAuthority } from "./purposes/personal-memory/prisma-personal-memory-permission-purpose";
 import { _Projection, _ProjectionAt, _PublicPurpose, _PublicState } from "./elicitation-prisma-mapping";
-import type { ElicitationRepository, ElicitationUnitOfWork, ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, PersonalMemoryPermissionAuthority, PersonalMemoryPermissionVerificationResult, RespondToElicitationCommand, RespondToElicitationResult } from "./elicitation.types";
+import type { ElicitationRepository, ElicitationRunWakeFactory, ElicitationRunWakePort, ElicitationUnitOfWork, ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, PersonalMemoryPermissionAuthority, PersonalMemoryPermissionVerificationResult, RespondToElicitationCommand, RespondToElicitationResult } from "./elicitation.types";
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
 export class PrismaElicitationRepository implements ElicitationRepository
@@ -28,11 +28,14 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	private readonly _productAuthorization: ElicitationProductAuthorization;
 	/** Selects the transaction-bound implementation for every saved purpose. */
 	private readonly _purposeStrategies: ElicitationPurposeStrategies;
+	/** Optional workflow wake owned by application composition. */
+	private readonly _wake: ElicitationRunWakePort | null;
 
 	/** Bind all request, response, purpose, and resume operations to one transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, wake: ElicitationRunWakePort | null = null)
 	{
 		this._transaction = transaction;
+		this._wake = wake;
 		this._memoryPermission = new PrismaPersonalMemoryPermissionPurposeAuthority(this._transaction);
 		this._productAuthorization = new PrismaElicitationProductAuthorizationRepository(this._transaction);
 		this._purposeStrategies = {
@@ -129,10 +132,13 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		let approvalRequestId: string | null = null;
 		if (request.purpose === ElicitationPurpose.ToolApproval)
 		{
-			const approval = await transaction.approvalRequest.findUnique({ where: { elicitationRequestId: request.id }, select: { id: true } });
+			const approval = await transaction.approvalRequest.findUnique({ where: { elicitationRequestId: request.id }, select: { id: true, toolInvocationRowId: true } });
 			if (approval === null)
 				return { outcome: "unauthorized" };
 			approvalRequestId = approval.id;
+			const invocation = await __FindToolInvocationInTransaction(transaction, approval.toolInvocationRowId);
+			if (invocation === null || invocation.runId !== request.runId || invocation.attempt !== request.attempt)
+				return { outcome: "unauthorized" };
 		}
 		if (!await this._productAuthorization.admitResponse(command.siloId, command.subjectId, command.conversationId, approvalRequestId, command.submission.response as unknown as JsonValue, command.now))
 			return { outcome: "unauthorized" };
@@ -151,6 +157,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			const resumed = await transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
 			if (resumed.count !== 1)
 				throw new Error("elicitation response lost its waiting run fence");
+			await this._wakeDecidedToolApprovals(request.runId, request.attempt);
 		}
 		return { outcome: "accepted", projection: { requestId: request.id, state: publicState, idempotent: false, resolvedAt: command.now.toISOString() } };
 	}
@@ -247,6 +254,24 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const resumed = await this._transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
 		if (resumed.count !== 1)
 			throw new Error("elicitation expiry lost its waiting run fence");
+		await this._wakeDecidedToolApprovals(request.runId, request.attempt);
+	}
+
+	/** Wake every terminal tool approval when the last input releases the run. */
+	private async _wakeDecidedToolApprovals(runId: string, attempt: number): Promise<void>
+	{
+		if (this._wake === null)
+			return;
+		const approvals = await this._transaction.approvalRequest.findMany({ where: { runId, attempt, state: { in: [ApprovalRequestState.Approved, ApprovalRequestState.Denied, ApprovalRequestState.Expired] } }, select: { toolInvocationRowId: true }, orderBy: { id: "asc" } });
+		const invocationIds = new Set<string>();
+		for (const approval of approvals)
+		{
+			const invocation = await __FindToolInvocationInTransaction(this._transaction, approval.toolInvocationRowId);
+			if (invocation !== null && invocation.runId === runId && invocation.attempt === attempt)
+				invocationIds.add(invocation.toolInvocationId);
+		}
+		for (const invocationId of invocationIds)
+			await this._wake.wake(runId, attempt, invocationId);
 	}
 }
 
@@ -264,11 +289,14 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 {
 	/** Canonical client used only to begin transactions. */
 	private readonly _prisma: PrismaClient;
+	/** Application-owned workflow wake factory bound inside each response transaction. */
+	private readonly _wakeFactory: ElicitationRunWakeFactory | null;
 
 	/** Bind the transaction owner to product persistence. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, wakeFactory: ElicitationRunWakeFactory | null = null)
 	{
 		this._prisma = prisma;
+		this._wakeFactory = wakeFactory;
 	}
 
 	/** Open one request atomically. */
@@ -323,9 +351,10 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 	/** Construct exactly one transaction-bound repository. */
 	private async _execute<TResult>(work: (repository: ElicitationRepository) => Promise<TResult>): Promise<TResult>
 	{
+		const unit = this;
 		return this._prisma.$transaction(async function _Transaction(transaction): Promise<TResult>
 		{
-			const repository = new PrismaElicitationRepository(transaction);
+			const repository = new PrismaElicitationRepository(transaction, unit._wakeFactory === null ? null : unit._wakeFactory(transaction));
 			return work(repository);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}

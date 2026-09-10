@@ -130,13 +130,23 @@ export interface IWorkflowTaskQueueAuthority
 }
 
 /** One application event delivered to a task. */
-export interface IWorkflowTaskEvent<TPayload>
-{
-	/** Event name the receiving task waits for. */
-	readonly eventName: string;
-	/** Application-owned event data; this contract does not prescribe its schema. */
-	readonly payload: TPayload;
-}
+export type IWorkflowTaskEvent<TPayload> =
+	| {
+		/** Event name the receiving task waits for. */
+		readonly eventName: string;
+		/** Application-owned event data; this contract does not prescribe its schema. */
+		readonly payload: TPayload;
+		/** A delivered event is never a timeout. */
+		readonly timedOut?: false;
+	}
+	| {
+		/** Event name whose durable wait reached its deadline. */
+		readonly eventName: string;
+		/** A timed-out wait has no application payload. */
+		readonly payload: null;
+		/** Discriminates timeout from a delivered event. */
+		readonly timedOut: true;
+	};
 
 /** Receipt for an event accepted for a specific task. */
 export interface IWorkflowTaskEventReceipt
@@ -205,7 +215,7 @@ export interface IWorkflowTaskContext
 	/** Run one named operation so an engine can resume it without repeating a completed effect. */
 	checkpoint<TResult>(step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>;
 	/** Wait until an event with this name is delivered to the current task. */
-	waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>;
+	waitForEvent<TPayload>(eventName: string, options?: { readonly timeoutAt?: Date }): Promise<IWorkflowTaskEvent<TPayload>>;
 	/** Admit a child task that belongs to the current task's workflow engine. */
 	spawnChild<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>;
 	/** Wait for a child task receipt and return the result produced by its handler. */

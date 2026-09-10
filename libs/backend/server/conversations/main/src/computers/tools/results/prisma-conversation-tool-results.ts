@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { __ConsumeRunToolResultInTransaction, __ReadRunToolResultInTransaction, RunToolResultReadOutcomes } from "@opencrane/backend/server/iam/authorization";
+import { __ConsumeRunToolResultInTransaction, __ReadRunToolResultInTransaction, RunToolResultPendingKinds, RunToolResultReadOutcomes } from "@opencrane/backend/server/iam/authorization";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -58,7 +58,12 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 		const command = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: selection.proposalId, runtimeInstanceId: turn.computerId, commandId: turn.bootstrapId, requestFingerprint: selection.requestFingerprint };
 		let result = await __ReadRunToolResultInTransaction(this.transaction, command);
 		if (result.outcome !== RunToolResultReadOutcomes.Available)
-			return { outcome: result.outcome === RunToolResultReadOutcomes.Pending && !consume ? ConversationComputerToolResultOutcomes.Pending : ConversationComputerToolResultOutcomes.Unavailable };
+		{
+			if (result.outcome !== RunToolResultReadOutcomes.Pending || consume)
+				return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+			const waitFor = result.pendingKind === RunToolResultPendingKinds.Approval ? "approval" : "result";
+			return { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor, waitUntilEpochMs: result.pendingUntilEpochMs };
+		}
 		const reservation = turn.continuationReservation;
 		if (reservation !== null && (reservation.proposalId !== selection.proposalId || reservation.resultDigest !== result.payloadDigest))
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };

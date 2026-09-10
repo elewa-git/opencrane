@@ -3,7 +3,7 @@ import type { ConversationModelRequest, ConversationModelResponse, ConversationM
 export type ConversationComputerModelProgress =
 	| { readonly outcome: "completed" | "response_unavailable" | "authority_ended" | "retry" }
 	| { readonly outcome: "model_pending"; readonly notBeforeEpochMs: number; readonly ordinal: 1 | 2 }
-	| { readonly outcome: "tool_pending"; readonly toolInvocationId: string };
+	| { readonly outcome: "tool_pending"; readonly toolInvocationId: string; readonly waitFor?: "approval" | "result"; readonly waitUntilEpochMs?: number };
 
 /**
  * Records the consumed request allowance in revision 1 of the turn stream, without prompt or key.

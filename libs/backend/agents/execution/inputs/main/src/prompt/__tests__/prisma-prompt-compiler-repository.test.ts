@@ -1,9 +1,16 @@
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it, vi } from "vitest";
 
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PrismaPromptCompilerRepository, PrismaPromptCompilerUnitOfWork } from "../prisma-prompt-compiler-repository";
+
+/** Builds the verified personal execution subject required by the compiler boundary. */
+function _executionSubject()
+{
+	return { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-09-06T00:00:00.000Z" }, membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2099-01-01T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: "2026-09-06T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-09-06T00:00:00.000Z", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "requester-membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "requester-decision-1", trustedUntil: "2099-01-01T00:00:00.000Z" } }, admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-09-06T00:00:00.000Z" } } as const;
+}
 
 /** Build the narrow transaction doubles used by immutable prompt repository tests. */
 function _Transaction()
@@ -27,7 +34,7 @@ describe("PrismaPromptCompilerRepository", function _PrismaPromptCompilerReposit
 		const messages = { loadMessages: vi.fn().mockResolvedValue([]) };
 		const createMessages = vi.fn().mockReturnValue(messages);
 		const compiler = new PrismaPromptCompilerUnitOfWork(prisma as never, createMessages);
-		const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: { alias: "tenant-model", modelDefinitionId: "model-1", litellmModelId: "deployment-1", maxOutputTokens: 4096, generatedOutputCapabilities: ["image_png"] }, budgetPolicy: { maxCompletionTokens: 256000, maxCostUsdMicros: 100, maxToolInvocations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: {} as never, promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: `sha256:${"a".repeat(64)}`, compiledAt: "2026-09-06T00:00:00.000Z" };
+		const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: { alias: "tenant-model", modelDefinitionId: "model-1", litellmModelId: "deployment-1", maxOutputTokens: 4096, generatedOutputCapabilities: ["image_png"] }, budgetPolicy: { maxCompletionTokens: 256000, maxCostUsdMicros: 100, maxToolInvocations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _executionSubject(), promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: `sha256:${"a".repeat(64)}`, compiledAt: "2026-09-06T00:00:00.000Z" };
 
 		await expect(compiler.compile(snapshot, 1)).resolves.toEqual(expect.objectContaining({ runId: "run-1", messages: [], model: expect.objectContaining({ modelAlias: "tenant-model", maxOutputTokens: 4096 }), budget: expect.objectContaining({ maxCompletionTokens: 256000 }) }));
 		expect(createMessages).toHaveBeenCalledWith(transaction);

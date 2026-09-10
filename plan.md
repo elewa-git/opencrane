@@ -19,7 +19,7 @@ lanes while the common protocol work proceeds.
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; standard remote connection activation, participant result evidence and one real integration come first, followed by the required hosted MCP slice. |
-| 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | Reuse IAM deferred approval and elicitation; connect approval-required model tools and disclose the exact external target and connection owner. |
+| 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry and durable resume are locally proven. Bind the company approver and disclose the exact connection owner and external target before qualifying a real action. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | Reuse conversation events, stores and approved components; preserve current access on reconnect. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Complete the existing server-issued interaction and presentation contracts. |
@@ -315,7 +315,8 @@ their own completion track; they are not silently bundled into the first tool PR
 | R1 — reliable login | IMPLEMENTED, CI GREEN at `44fd8f328` — encrypted PostgreSQL sessions, fixed deadlines, revision-checked saves and logout markers. All 52 auth tests and [CI](https://github.com/elewa-git/opencrane/actions/runs/34274625541) pass, including all seven SQL targets on fresh PostgreSQL and six real-client session proofs. Fresh-install live qualification remains pending; testv5 retains the earlier database baseline. |
 | A1 — membership revocation and closed-work proof | IMPLEMENTED, IN REVIEW — standalone administrators can remove another non-Owner member through Settings. The server suspends the existing membership, protects Owner/self removal and rechecks current authority on retries. Workspace access loss clears retained private content and rejects delayed results. Focused unit checks and all 123 browser checks pass; five real PostgreSQL cases join the CI gate. The real-account removal and closed-work journey remains to qualify live. Fleet removal remains unsupported. |
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
-| T2, M1, U1, U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
+| T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
+| M1, U1, U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
 The 10 September priority order supersedes the earlier overnight sequencing and morning handoff.
@@ -414,6 +415,29 @@ snapshot restore was rejected before execution by automatic approval review; no 
 time is claimed.
 Cluster changes use the authorized app-owned scripts; exact inputs, incidents and proof belong in
 the [deploy ledger](docs/agents/deploy-ledger.md).
+
+### Personal approval slice — implementation and local integration complete
+
+This owned slice is stacked on PR #852 at `abeed031373f8461b97f3a7ae6997e61c3348a5e` and keeps approval-gated
+personal tools in the existing model/proposal loop. The model receives frozen definitions; a personal
+proposal preserves its arguments, schema digests and original run allowance, records a deferred IAM
+request assigned to the run's exact `Principal.subject`, and pauses the saved Absurd turn in
+`WaitingForInput`. An owner decision marks the invocation ready or terminally failed, then wakes the
+existing turn event so restart and duplicate admission reuse the same invocation without another MCP
+dispatch. Expiry, stale fencing and changed arguments fail closed.
+
+Managed company approval tools remain filtered at model selection and rejected before proposal
+preparation because the entitled human resolver and connection authority are not yet bound. The
+remote credential/connection schema therefore remains an integration boundary for the next slice;
+this personal approval path does not claim a live remote effect.
+
+Validation evidence: the final disposable PostgreSQL run passes proposal (`17`), approval (`3`),
+result (`4`) and all authority SQL checks after the mixed-batch wake repair. Full conversation coverage (`467`) passed, full
+elicitation coverage (`45`) passed with permitted HTTP listeners, IAM coverage (`243`) passed,
+OpenCrane lint and build passed, and Absurd adapter coverage (`33`) plus lint passed. PostgreSQL
+integration and OpenCrane lint also passed after stacking onto #852. Independent review and
+architecture post-review passed. These are source and integration checks; no live remote-provider,
+hosted-MCP or fresh-install qualification is claimed here.
 
 ## Later work
 

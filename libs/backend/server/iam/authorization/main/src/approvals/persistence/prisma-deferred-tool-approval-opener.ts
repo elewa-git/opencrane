@@ -64,6 +64,42 @@ export async function __OpenDeferredToolApproval(prisma: PrismaClient, command: 
 	return unitOfWork.open(command);
 }
 
+/** Open one approval inside an existing caller-owned transaction without creating a nested transaction. */
+export async function __OpenDeferredToolApprovalInTransaction(transaction: Prisma.TransactionClient, command: OpenDeferredToolApprovalCommand): Promise<boolean>
+{
+	const argumentsDigest = __DigestCanonicalJson(command.arguments);
+	const parametersSchemaDigest = __DigestCanonicalJson(command.parametersSchema);
+	if (argumentsDigest !== command.argumentsDigest || parametersSchemaDigest !== command.parametersSchemaDigest || !__ValidateDeferredToolArguments(command.parametersSchema, command.arguments))
+	{
+		await __MarkToolInvocationApprovalRejectedInTransaction(transaction, command.invocationId, command.now, "approval_arguments_invalid");
+		return false;
+	}
+	const projection = __ProjectDeferredToolApproval(command.parametersSchema, command.arguments);
+	const result = await __DeferToolRequest(transaction, {
+		interruptId: command.interruptId,
+		runId: command.runId,
+		attempt: command.attempt,
+		toolInvocationRowId: command.invocationId,
+		toolRevisionId: command.toolRevisionId,
+		reviewedArguments: command.arguments,
+		argumentsDigest: command.argumentsDigest,
+		reviewedParametersSchema: command.parametersSchema,
+		reviewedParametersSchemaDigest: parametersSchemaDigest,
+		safeProposedArguments: projection.proposedArguments,
+		responseSchema: projection.responseSchema,
+		actionDigest: __DigestCanonicalJson({ runId: command.runId, attempt: command.attempt, toolInvocationId: command.toolInvocationId, toolRevisionId: command.toolRevisionId, argumentsDigest: command.argumentsDigest }),
+		effectivePolicyDigest: command.capabilitySetDigest,
+		approverPolicyRevision: "mcp-server-requires-approval",
+		now: command.now,
+		expiresAt: command.expiresAt,
+	});
+	if (result.outcome !== DeferToolRequestOutcomes.Unavailable)
+		return true;
+	if (!await __MarkToolInvocationApprovalRejectedInTransaction(transaction, command.invocationId, command.now, "approval_unavailable"))
+		throw new Error("deferred approval lost its awaiting-approval invocation fence");
+	return false;
+}
+
 /** Opens one approval and cleans up when the transaction throws without revealing whether it committed. */
 class PrismaDeferredToolApprovalOpenUnitOfWork implements DeferredToolApprovalOpenUnitOfWork
 {

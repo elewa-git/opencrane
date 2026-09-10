@@ -7,7 +7,7 @@ vi.mock("../../grants/persistence/prisma-managed-authorization-grant-repository"
 	return { __ReconcileManagedAuthorizationGrantsInTransaction: vi.fn().mockResolvedValue(2) };
 });
 
-import { __OpenDeferredToolApproval } from "../persistence/prisma-deferred-tool-approval-opener";
+import { __OpenDeferredToolApproval, __OpenDeferredToolApprovalInTransaction } from "../persistence/prisma-deferred-tool-approval-opener";
 import { __DigestCanonicalJson } from "../../authority/canonical-json-digest";
 
 /** Current immutable execution subject for the live conversation-computer lease. */
@@ -60,6 +60,14 @@ function _LiveTransaction()
 
 describe("Prisma deferred-tool approval opener", function _describeOpener()
 {
+	it("opens directly in the caller transaction without a nested transaction", async function _opensInCallerTransaction()
+	{
+		const transaction = _LiveTransaction();
+
+		await expect(__OpenDeferredToolApprovalInTransaction(transaction as unknown as Prisma.TransactionClient, _Command())).resolves.toBe(true);
+		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ toolInvocationRowId: "invocation-1", reviewedToolArguments: { calendarId: "primary" } }) }));
+	});
+
 	it("creates the approval inside the caller-owned transaction", async function _createsApproval()
 	{
 		const transaction = _LiveTransaction();

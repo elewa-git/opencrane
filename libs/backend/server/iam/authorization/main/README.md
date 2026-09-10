@@ -74,7 +74,7 @@ the ordinary exact boundary-matching rules.
   grant on the retiring coordinates inside the owning product transaction.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
-- `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
+- `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`, `__OpenDeferredToolApprovalInTransaction`,
   `__CreatePrismaMcpToolInvocationParticipantFactory`, and their lifecycle contracts own durable human approval and
   provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
   invocation carry the same immutable execution subject, including the active conversation-computer
