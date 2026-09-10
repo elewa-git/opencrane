@@ -22,13 +22,16 @@ both reads occur at the same final identity and revocation fence as every other 
 ```
 
 **In this flow:** [execution inputs](../../../execution/inputs/main/README.md) freezes the selected
-coordinates, and the [memory gateway](../../../../../server/_infra/memory-gateway-client/README.md)
+coordinates, and the [memory gateway](../../../../server/infra/memory-gateway-client/README.md)
 is the only fact-content boundary.
 
 The invariant is identity-bound selection: neither a request nor a tool argument can choose a
 dataset by identifier. The repository reads only the exact silo, organisation, and verified subject;
-it returns only active, consented facts whose provenance names that subject. It stores no fact text
-and never calls Cognee.
+it returns only active, consented facts whose provenance names that subject. Cognee search results
+keep separate chunk and document UUIDs. This slice leaves the catalog's `cogneeExternalId` field
+unchanged and does not claim that existing rows contain Cognee document UUIDs; a future durable
+operation must prove that mapping before it adopts a receipt. The catalog stores no fact text and
+never calls Cognee.
 
 ## Public surface
 
@@ -72,8 +75,9 @@ Tagged `scope:personal-memory`, this backend package may depend only on its own 
 ## Data & persistence
 
 Owns `MemoryDataset` and `MemoryFactCatalog` in `memory.prisma` and reads them through the repository
-port using the existing `RunAdmissionTransaction`. The removed generic outbox is not a second
-memory-authority path; durable fact content remains behind the memory gateway.
+port using the existing `RunAdmissionTransaction`. The existing durable workflow remains the future
+owner of operation keys and recovery; no memory outbox, queue or scheduler is introduced. Durable
+fact content remains behind the memory gateway.
 
 ## See also
 

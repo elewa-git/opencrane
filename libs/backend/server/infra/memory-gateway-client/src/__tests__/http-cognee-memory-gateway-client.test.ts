@@ -8,7 +8,7 @@ import { __CreateHttpCogneeMemoryGatewayClient } from "../http-cognee-memory-gat
 import type { CogneeFetch } from "../http-cognee-memory-gateway-client.types";
 import type { MemoryProvenance } from "../memory-gateway-client.types";
 import { MemoryProvenanceIncompleteError } from "../memory-provenance";
-import { MemoryGatewayProtocolError } from "../personal-memory-record";
+import { MemoryGatewayProtocolError } from "../personal-memory-record-receipt";
 import { MemoryGatewayUnavailableError } from "../unavailable-memory-gateway-client";
 
 /** One recorded outbound exchange captured by the fetch seam. */
@@ -49,6 +49,15 @@ beforeAll(function _registerContextManager(): void { _RegisterContextManager(); 
 
 /** Provenance satisfying every mandatory attribution field. */
 const _PROVENANCE: MemoryProvenance = { centralAgentId: "svc-1", agentRevisionId: "rev-1", runId: "run-1", recordedAt: "2026-08-01T10:00:00.000Z", sourceRef: "doc-1" };
+
+/** Cognee Data/document UUID shared by two recalled chunks. */
+const _DOCUMENT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+/** First Cognee CHUNKS result UUID for the shared document. */
+const _CHUNK_ONE_ID = "11111111-aaaa-4111-8111-111111111111";
+
+/** Second Cognee CHUNKS result UUID for the shared document. */
+const _CHUNK_TWO_ID = "22222222-aaaa-4222-8222-222222222222";
 
 /** Builds a fetch seam recording exchanges and answering by URL path. */
 function _fetchSeam(recorded: _RecordedRequest[], answers: Record<string, () => Response>): CogneeFetch
@@ -91,17 +100,29 @@ describe("Cognee memory gateway reads", function _ReadSuite()
 	it("searches only the frozen dataset and bounds projected facts", async function _Query()
 	{
 		const recorded: _RecordedRequest[] = [];
-		const answers = { "/api/v1/search": function _search() { return _json([{ id: "f1", text: "one" }, { id: "f2", text: "two" }, { id: "f3", text: "three" }]); } };
+		const answers = { "/api/v1/search": function _search() { return _json([
+			{ id: _CHUNK_ONE_ID, document_id: _DOCUMENT_ID, text: "one", ignored_vendor_field: true },
+			{ id: _CHUNK_TWO_ID, document_id: _DOCUMENT_ID, text: "two" },
+			{ id: "33333333-aaaa-4333-8333-333333333333", document_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", text: "three" },
+		]); } };
 		const result = await _client(recorded, answers).query({ siloId: "silo-1", cogneeDatasetId: "11111111-1111-4111-8111-111111111111", subjectId: "user-1", query: "what", maxResults: 2 });
-		expect(result.facts).toEqual([{ factId: "f1", content: "one" }, { factId: "f2", content: "two" }]);
+		expect(result.facts).toEqual([
+			{ cogneeDocumentId: _DOCUMENT_ID, cogneeChunkId: _CHUNK_ONE_ID, content: "one" },
+			{ cogneeDocumentId: _DOCUMENT_ID, cogneeChunkId: _CHUNK_TWO_ID, content: "two" },
+		]);
 		expect(recorded[0].body).toEqual({ query: "what", search_type: "CHUNKS", dataset_ids: ["11111111-1111-4111-8111-111111111111"], top_k: 2 });
 		expect(recorded[0].body).not.toHaveProperty("datasets");
 	});
 
 	it("drops malformed entries and rejects an unrecognised response", async function _ValidateResponse()
 	{
-		const malformed = { "/api/v1/search": function _search() { return _json([{ text: "orphan" }, { id: "f2", text: "kept" }]); } };
-		await expect(_client([], malformed).query({ siloId: "silo-1", cogneeDatasetId: "22222222-2222-4222-8222-222222222222", subjectId: "user-1", query: "q", maxResults: 10 })).resolves.toEqual({ facts: [{ factId: "f2", content: "kept" }] });
+		const malformed = { "/api/v1/search": function _search() { return _json([
+			{ id: _CHUNK_ONE_ID, text: "missing document" },
+			{ id: _CHUNK_ONE_ID, data_id: _DOCUMENT_ID, text: "wrong document field" },
+			{ id: "not-a-uuid", document_id: _DOCUMENT_ID, text: "bad chunk" },
+			{ id: _CHUNK_TWO_ID, document_id: _DOCUMENT_ID, text: "kept" },
+		]); } };
+		await expect(_client([], malformed).query({ siloId: "silo-1", cogneeDatasetId: "22222222-2222-4222-8222-222222222222", subjectId: "user-1", query: "q", maxResults: 10 })).resolves.toEqual({ facts: [{ cogneeDocumentId: _DOCUMENT_ID, cogneeChunkId: _CHUNK_TWO_ID, content: "kept" }] });
 		const unknown = { "/api/v1/search": function _search() { return _json({ unexpected: true }); } };
 		await expect(_client([], unknown).query({ siloId: "silo-1", cogneeDatasetId: "22222222-2222-4222-8222-222222222222", subjectId: "user-1", query: "q", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayProtocolError);
 	});
@@ -109,11 +130,11 @@ describe("Cognee memory gateway reads", function _ReadSuite()
 	it("recalls only attributable scoped records", async function _ScopedRecall()
 	{
 		const answers = { "/api/v1/search": function _search() { return _json([
-			{ id: "f1", text: JSON.stringify({ v: 1, content: "kept", provenance: _PROVENANCE }) },
-			{ id: "f2", text: JSON.stringify({ v: 1, content: "no provenance" }) },
+			{ id: _CHUNK_ONE_ID, document_id: _DOCUMENT_ID, text: JSON.stringify({ v: 1, content: "kept", provenance: _PROVENANCE }) },
+			{ id: _CHUNK_TWO_ID, document_id: _DOCUMENT_ID, text: JSON.stringify({ v: 1, content: "no provenance" }) },
 		]); } };
 		const result = await _client([], answers).recallScoped({ siloId: "silo-1", cogneeDatasetId: "33333333-3333-4333-8333-333333333333", query: "q", maxResults: 10 });
-		expect(result.facts).toEqual([{ factId: "f1", content: "kept", provenance: _PROVENANCE }]);
+		expect(result.facts).toEqual([{ cogneeDocumentId: _DOCUMENT_ID, cogneeChunkId: _CHUNK_ONE_ID, content: "kept", provenance: _PROVENANCE }]);
 	});
 });
 
@@ -123,9 +144,9 @@ describe("Cognee memory gateway writes", function _WriteSuite()
 	{
 		const recorded: _RecordedRequest[] = [];
 		const client = _client(recorded, {});
-		await expect(client.recordPersonalFact({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "ds-1", content: "remember", idempotencyKey: "key-1" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
-		await expect(client.correct({ siloId: "silo-1", subjectId: "user-1", factId: "fact-1", correctedContent: "fixed" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
-		await expect(client.forget({ siloId: "silo-1", subjectId: "user-1", factId: "fact-1" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.recordPersonalFact({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "ds-1", content: "remember" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.correct({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "ds-1", cogneeDocumentId: _DOCUMENT_ID, correctedContent: "fixed" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.forget({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "ds-1", cogneeDocumentId: _DOCUMENT_ID })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 		expect(recorded).toHaveLength(0);
 	});
 

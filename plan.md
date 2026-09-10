@@ -184,6 +184,16 @@ own operation intent, checkpoints and recovery. No new memory outbox, scheduler 
 idempotency store is introduced. Remember, cross-conversation recall, correction and forget remain
 unqualified until their identifier, receipt and ambiguous-response contracts are proven.
 
+The bounded M1 contract-repair wave starts from immutable base
+`abeed031373f8461b97f3a7ae6997e61c3348a5e`. Architecture preflight passed for extending the
+existing memory-gateway client and shared memory contract without a route, schema, store, queue or
+enabled mutation. Cognee CHUNKS identity is represented as separate document and chunk UUIDs;
+future correction and forgetting must use the admitted dataset plus the document UUID. A write
+result is transport evidence rather than durable or indexed completion, and unavailable mutations
+prove that no request was sent. The source evidence is pinned to the version-matched Cognee `v1.2.1`
+tag commit `15e48600cac49c6962fd688aaf783f5deda18660`; it has not been independently attested as the source
+of the pinned OCI image digest, so it does not qualify or enable mutation.
+
 
 ## Absurd-owned conversation turn progression - 2026-09-09
 

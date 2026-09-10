@@ -1,15 +1,18 @@
 /**
  * One fact the memory gateway returned for a recall.
  *
- * Both fields come from the gateway. `factId` is its own identifier and is the ONLY handle a caller
- * may later use to correct or forget the fact — nothing local ever names a fact. Facts arrive in the
- * gateway's own order. Nothing here says which run or agent produced the fact; for that use
- * {@link ScopedMemoryFact}, which carries provenance.
+ * Cognee returns one chunk identifier and the separate source-document identifier in every CHUNKS
+ * result. The document identifier, together with the admitted dataset, is the mutation coordinate;
+ * the chunk identifier identifies only this recalled passage. Facts arrive in the gateway's own
+ * order. Nothing here says which run or agent produced the fact; for that use {@link ScopedMemoryFact},
+ * which carries provenance.
  */
 export interface MemoryFact
 {
-	/** Opaque identifier minted by the gateway; never locally synthesized. */
-	readonly factId: string;
+	/** Cognee Data/document UUID that may later be paired with the admitted dataset for a mutation. */
+	readonly cogneeDocumentId: string;
+	/** Cognee CHUNKS UUID for this recalled passage; it is never a correction or deletion target. */
+	readonly cogneeChunkId: string;
 	/** Stored fact text as held by the gateway. */
 	readonly content: string;
 }
@@ -51,11 +54,11 @@ export interface MemoryQueryResult
  * A request to store one fact in a subject's personal memory.
  *
  * Nothing here is derived by the client: the caller supplies the Cognee dataset UUID (OpenCrane's own
- * catalog id never crosses this boundary), the exact text to store, and a delivery key it can repeat
- * safely. No shipped client performs this write yet — both throw `MemoryGatewayUnavailableError` —
- * so treat this as the contract a write-capable gateway must meet.
+ * catalog id never crosses this boundary) and the exact text to store. The durable workflow owns the
+ * operation key and rejects changed bytes before calling this port; Cognee 1.2.1 has no HTTP delivery
+ * key. No shipped client performs this write yet — both throw `MemoryGatewayUnavailableError`.
  *
- * @see {@link PersonalMemoryRecordResult} for the two outcomes a write can have.
+ * @see {@link PersonalMemoryRecordReceipt} for the evidence a future verified write may return.
  */
 export interface PersonalMemoryRecordCommand
 {
@@ -67,52 +70,24 @@ export interface PersonalMemoryRecordCommand
 	readonly cogneeDatasetId: string;
 	/** Exact durable fact content, sent only to the remote memory gateway. */
 	readonly content: string;
-	/**
-	 * Key that makes retrying a delivery safe.
-	 *
-	 * Sending the same key again with byte-identical `content`, for the same subject and dataset, is
-	 * allowed and stores nothing new — the result comes back with `idempotent` set. Sending the same
-	 * key with DIFFERENT content is refused; see {@link PersonalMemoryRecordDenied}.
-	 */
-	readonly idempotencyKey: string;
 }
 
 /**
- * The outcome of one personal-memory write: either accepted or refused.
+ * Gateway evidence that identifies the document found after a personal-memory write attempt.
  *
- * Callers MUST branch on `outcome`. {@link PersonalMemoryRecorded} means the fact is stored and
- * carries the gateway's own identifier and digest; {@link PersonalMemoryRecordDenied} means nothing
- * was stored because the delivery key was reused with different content. Neither arm throws, so code
- * that assumes success silently loses a refused write.
+ * This receipt does not mean the catalog adopted the fact or that every Cognee index is complete.
+ * The durable workflow must compare the dataset and digest with its admitted operation before it
+ * records progress. Transport ambiguity is carried by an error with
+ * `MemoryMutationDeliveryStates.Ambiguous`, never by a fabricated receipt.
  */
-export type PersonalMemoryRecordResult = PersonalMemoryRecorded | PersonalMemoryRecordDenied;
-
-/** The gateway stored the fact (or found it already stored) and returned its own record of it. */
-export interface PersonalMemoryRecorded
+export interface PersonalMemoryRecordReceipt
 {
-	/** Always "recorded". This is the tag that tells this arm apart from the refusal. */
-	readonly outcome: "recorded";
-	/** True when an earlier delivery with the same key had already stored this exact content, so nothing new was written. */
-	readonly idempotent: boolean;
-	/** The fact's identifier, minted by the gateway. The only handle for a later correction or deletion. */
-	readonly cogneeExternalId: string;
-	/** Digest of the stored content, always lowercase `sha256:<64 hex chars>`; compare it against your own hash of what you sent. */
+	/** Cognee dataset UUID in which the gateway verified the document. */
+	readonly cogneeDatasetId: string;
+	/** Cognee Data/document UUID returned by dataset membership recovery, never a CHUNKS id. */
+	readonly cogneeDocumentId: string;
+	/** Digest of the complete verified source content, always lowercase `sha256:<64 hex chars>`. */
 	readonly contentDigest: string;
-}
-
-/**
- * The gateway refused the write and stored nothing new.
- *
- * This happens when the `idempotencyKey` has already been used for different content in this subject
- * and dataset. Retrying is pointless: either resend the original content under that key, or choose a
- * new key. The fact stored by the first delivery is untouched.
- */
-export interface PersonalMemoryRecordDenied
-{
-	/** Always "denied". This is the tag that tells this arm apart from the acceptance. */
-	readonly outcome: "denied";
-	/** The only refusal reason: this delivery key was already used for different content. */
-	readonly reason: "idempotency_conflict";
 }
 
 /** Request to correct the content of one stored fact. */
@@ -122,8 +97,10 @@ export interface MemoryCorrectionCommand
 	readonly siloId: string;
 	/** Subject whose personal memory is being corrected. */
 	readonly subjectId: string;
-	/** Gateway-minted fact reference to correct. */
-	readonly factId: string;
+	/** Cognee dataset UUID frozen by the admitted operation. */
+	readonly cogneeDatasetId: string;
+	/** Cognee Data/document UUID verified as a member of the admitted dataset. */
+	readonly cogneeDocumentId: string;
 	/** Replacement content to store for the fact. */
 	readonly correctedContent: string;
 }
@@ -135,8 +112,10 @@ export interface MemoryForgetCommand
 	readonly siloId: string;
 	/** Subject whose personal memory is being pruned. */
 	readonly subjectId: string;
-	/** Gateway-minted fact reference to forget. */
-	readonly factId: string;
+	/** Cognee dataset UUID frozen by the admitted operation. */
+	readonly cogneeDatasetId: string;
+	/** Cognee Data/document UUID verified as a member of the admitted dataset. */
+	readonly cogneeDocumentId: string;
 }
 
 /**
@@ -264,23 +243,24 @@ export interface MemoryGatewayClient
 	/**
 	 * Stores one fact in the authenticated subject's personal memory.
 	 *
-	 * @param command - Subject, dataset, exact content, and the repeatable delivery key.
-	 * @returns Either the gateway's record of the stored fact, or a refusal when the delivery key was
-	 *   reused with different content. Branch on `outcome`; a refusal does not throw.
+	 * @param command - Subject, admitted dataset, and exact content. The durable workflow owns the
+	 *   operation key and rejects conflicting bytes before this call.
+	 * @returns Dataset, document and digest evidence. The receipt does not prove catalog adoption or
+	 *   completed indexing.
 	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
 	 */
-	recordPersonalFact(command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordResult>;
+	recordPersonalFact(command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordReceipt>;
 	/**
 	 * Replaces the content of one stored fact.
 	 *
-	 * @param command - Subject and the gateway-minted `factId`, plus the replacement content.
+	 * @param command - Subject, admitted dataset, Cognee document UUID, and replacement content.
 	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
 	 */
 	correct(command: MemoryCorrectionCommand): Promise<void>;
 	/**
 	 * Deletes one stored fact.
 	 *
-	 * @param command - Subject and the gateway-minted `factId` to remove.
+	 * @param command - Subject, admitted dataset, and Cognee document UUID to remove.
 	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
 	 */
 	forget(command: MemoryForgetCommand): Promise<void>;

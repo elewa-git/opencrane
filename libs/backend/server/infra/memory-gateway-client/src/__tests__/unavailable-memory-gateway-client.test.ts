@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
+
 import { __AssertMemoryProvenanceComplete, MemoryProvenanceIncompleteError } from "../memory-provenance";
-import { __AssertPersonalMemoryRecordResult, MemoryGatewayProtocolError } from "../personal-memory-record";
+import { __AssertPersonalMemoryRecordReceipt, MemoryGatewayMutationProtocolError } from "../personal-memory-record-receipt";
 import type { MemoryProvenance } from "../memory-gateway-client.types";
 import { __UnavailableMemoryGatewayClient, MemoryGatewayUnavailableError } from "../unavailable-memory-gateway-client";
 
@@ -22,19 +24,21 @@ describe("unavailable memory gateway client", function _suite()
 	it("fails closed rather than minting a personal-memory fact identifier", async function _recordPersonalFact()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.recordPersonalFact({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-user-1", content: "Use UK spelling", idempotencyKey: "interview-1:answer-1" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		const failure = await client.recordPersonalFact({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-user-1", content: "Use UK spelling" }).catch(function _capture(error: unknown) { return error; });
+		expect(failure).toBeInstanceOf(MemoryGatewayUnavailableError);
+		expect((failure as MemoryGatewayUnavailableError).deliveryState).toBe(MemoryMutationDeliveryStates.ProvenNotSent);
 	});
 
 	it("fails closed rather than pretending a correction landed", async function _correct()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.correct({ siloId: "silo-1", subjectId: "subject-1", factId: "fact-1", correctedContent: "corrected" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.correct({ siloId: "silo-1", subjectId: "subject-1", cogneeDatasetId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", cogneeDocumentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", correctedContent: "corrected" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 
 	it("fails closed rather than pretending a fact was forgotten", async function _forget()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.forget({ siloId: "silo-1", subjectId: "subject-1", factId: "fact-1" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.forget({ siloId: "silo-1", subjectId: "subject-1", cogneeDatasetId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", cogneeDocumentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 
 	it("fails closed on scoped recall", async function _recallScoped()
@@ -68,18 +72,28 @@ describe("memory provenance guard", function _provenanceSuite()
 	});
 });
 
-describe("personal-memory record response guard", function _recordResponseSuite()
+describe("personal-memory record receipt guard", function _recordResponseSuite()
 {
-	it("accepts canonical gateway evidence and the explicit idempotency collision", function _accepts()
+	it("accepts exact dataset, document and digest evidence", function _accepts()
 	{
-		expect(() => __AssertPersonalMemoryRecordResult({ outcome: "recorded", idempotent: false, cogneeExternalId: "gateway-fact-1", contentDigest: `sha256:${"a".repeat(64)}` })).not.toThrow();
-		expect(() => __AssertPersonalMemoryRecordResult({ outcome: "denied", reason: "idempotency_conflict" })).not.toThrow();
+		expect(__AssertPersonalMemoryRecordReceipt({ cogneeDatasetId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", cogneeDocumentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", contentDigest: `sha256:${"a".repeat(64)}` })).toEqual({ cogneeDatasetId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", cogneeDocumentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", contentDigest: `sha256:${"a".repeat(64)}` });
 	});
 
-	it("rejects noncanonical gateway digest evidence", function _rejects()
+	it("rejects noncanonical or expanded evidence as an ambiguous mutation", function _rejects()
 	{
-		expect(() => __AssertPersonalMemoryRecordResult({ outcome: "recorded", idempotent: true, cogneeExternalId: "gateway-fact-1", contentDigest: "a".repeat(64) })).toThrow(MemoryGatewayProtocolError);
-		expect(() => __AssertPersonalMemoryRecordResult({ outcome: "unexpected", idempotent: true, cogneeExternalId: "gateway-fact-1", contentDigest: `sha256:${"a".repeat(64)}` })).toThrow(MemoryGatewayProtocolError);
-		expect(() => __AssertPersonalMemoryRecordResult({ outcome: "recorded", idempotent: false, cogneeExternalId: " ", contentDigest: `sha256:${"a".repeat(64)}` })).toThrow(MemoryGatewayProtocolError);
+		expect(() => __AssertPersonalMemoryRecordReceipt({ cogneeDatasetId: "not-a-uuid", cogneeDocumentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", contentDigest: `sha256:${"a".repeat(64)}` })).toThrow(MemoryGatewayMutationProtocolError);
+		expect(() => __AssertPersonalMemoryRecordReceipt({ cogneeDatasetId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", cogneeDocumentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", contentDigest: "a".repeat(64) })).toThrow(MemoryGatewayMutationProtocolError);
+		expect(() => __AssertPersonalMemoryRecordReceipt({ cogneeDatasetId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", cogneeDocumentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", contentDigest: `sha256:${"a".repeat(64)}`, indexed: true })).toThrow(MemoryGatewayMutationProtocolError);
+		let captured: unknown;
+		try
+		{
+			__AssertPersonalMemoryRecordReceipt(null);
+		}
+		catch (error)
+		{
+			captured = error;
+		}
+		expect(captured).toBeInstanceOf(MemoryGatewayMutationProtocolError);
+		expect((captured as MemoryGatewayMutationProtocolError).deliveryState).toBe(MemoryMutationDeliveryStates.Ambiguous);
 	});
 });
