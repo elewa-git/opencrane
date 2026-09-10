@@ -65,7 +65,9 @@ Before the companion receives provider arguments, the authorization participant 
 conversation authority and can close denied Ready work with a failed result. A terminal winner
 closes the MCP execution without contacting the provider. The claim is capped by the original run
 deadline, active computer lease and frozen/current membership trust, within the configured claim
-duration. PostgreSQL checks the paired invocation claim and preserves its absolute expiry even if
+duration. The command also carries the exact tool revision's saved input schema, which the companion
+uses to build MCP parameter headers. It never discovers a replacement schema during dispatch.
+PostgreSQL checks the paired invocation claim and preserves its absolute expiry even if
 the MCP write is delayed; the returned command uses that saved expiry.
 
 History reads happen before the claim inside its bounded SQL transaction, while provider I/O stays

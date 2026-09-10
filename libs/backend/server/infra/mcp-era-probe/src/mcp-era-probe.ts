@@ -1,11 +1,13 @@
 import { lookup } from "node:dns/promises";
 
+import { ___BuildMcpDiscoveryRequest, ___BuildMcpRequestHeaders } from "@opencrane/contracts";
+
 import { ___DoWithoutTrace, ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { _McpEraProbeEndpoint, _McpEraProbeIsPublicAddress } from "./mcp-era-probe-address-policy";
 import { McpEraProbeConfigurationError, McpEraProbeTransportError } from "./mcp-era-probe.errors";
 import { _McpEraProbeHttpsRequest, _McpEraProbeTransportFailure, _McpEraProbeWithDeadline } from "./mcp-era-probe-https";
-import { _McpEraProbeDiscoveryRequest, _McpEraProbeDiscoveryResult } from "./mcp-era-probe-protocol";
+import { _MCP_ERA_PROBE_REQUEST_ID, _McpEraProbeDiscoveryResult } from "./mcp-era-probe-protocol";
 import type { McpEraProbeClient, McpEraProbeDnsAddress, McpEraProbeDnsResolver, McpEraProbeHttpsClientOptions, McpEraProbeHttpsRequest, McpEraProbeHttpsResponse, McpEraProbeResult } from "./mcp-era-probe.types";
 
 /**
@@ -50,12 +52,13 @@ export function __CreateHttpsMcpEraProbeClient(options: McpEraProbeHttpsClientOp
 					if (addresses.length === 0 || addresses.some(function _UnsafeAddress(address) { return !_McpEraProbeIsPublicAddress(address); }))
 						throw new McpEraProbeConfigurationError("unsafe_address");
 
+					const discovery = ___BuildMcpDiscoveryRequest(_MCP_ERA_PROBE_REQUEST_ID, options.protocolVersion);
 					let response: McpEraProbeHttpsResponse;
 					try
 					{
 						response = await ___DoWithoutTrace(function _RequestWithoutUrlTrace(): Promise<McpEraProbeHttpsResponse>
 						{
-							return request({ endpoint, resolvedAddress: addresses[0] as McpEraProbeDnsAddress, body: _McpEraProbeDiscoveryRequest(options.protocolVersion), headers: { accept: "application/json, text/event-stream", "content-type": "application/json", "MCP-Protocol-Version": options.protocolVersion, "Mcp-Method": "server/discover" }, timeoutMilliseconds: options.requestTimeoutMilliseconds, maximumResponseBytes: options.maximumResponseBytes, signal });
+							return request({ endpoint, resolvedAddress: addresses[0] as McpEraProbeDnsAddress, body: new TextEncoder().encode(JSON.stringify(discovery)), headers: ___BuildMcpRequestHeaders(discovery), timeoutMilliseconds: options.requestTimeoutMilliseconds, maximumResponseBytes: options.maximumResponseBytes, signal });
 						});
 					}
 					catch (error) { return _McpEraProbeTransportFailure(error); }

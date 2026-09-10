@@ -32,10 +32,10 @@ describe("HTTPS MCP era probe", function _describeMcpEraProbe()
 		const request = vi.fn<McpEraProbeHttpsRequest>(async function _request(command: McpEraProbeHttpsRequestCommand): Promise<McpEraProbeHttpsResponse>
 		{
 			expect(command.resolvedAddress).toEqual(_PUBLIC_ADDRESS);
-			expect(command.headers["MCP-Protocol-Version"]).toBe("2026-07-28");
-			expect(command.headers["Mcp-Method"]).toBe("server/discover");
-			expect(command.headers.accept).toBe("application/json, text/event-stream");
-			expect(JSON.parse(new TextDecoder().decode(command.body))).toEqual({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", method: "server/discover", params: { _meta: { protocolVersion: "2026-07-28", clientCapabilities: {} } } });
+			expect(new Headers(command.headers).get("MCP-Protocol-Version")).toBe("2026-07-28");
+			expect(new Headers(command.headers).get("Mcp-Method")).toBe("server/discover");
+			expect(new Headers(command.headers).get("accept")).toBe("application/json, text/event-stream");
+			expect(JSON.parse(new TextDecoder().decode(command.body))).toEqual({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", method: "server/discover", params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } });
 			return _DiscoveryResponse();
 		});
 
@@ -48,7 +48,7 @@ describe("HTTPS MCP era probe", function _describeMcpEraProbe()
 	it("accepts a compliant Server-Sent Events discovery reply", async function _AcceptsSseDiscovery()
 	{
 		const response = _DiscoveryResponse();
-		const body = new TextEncoder().encode(`event: message\ndata: ${new TextDecoder().decode(response.body)}\n\n`);
+		const body = new TextEncoder().encode(`: keepalive\n\ndata: {"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"probe","progress":1}}\n\nevent: message\ndata: ${new TextDecoder().decode(response.body)}\n\n`);
 		const client = _Client(async function _Sse(): Promise<McpEraProbeHttpsResponse> { return { status: 200, headers: { "content-type": "text/event-stream" }, body }; });
 
 		await expect(client.probe({ endpoint: "https://mcp.example.com" })).resolves.toMatchObject({ protocolVersion: "2026-07-28" });

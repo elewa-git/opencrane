@@ -88,6 +88,14 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Changed
 
+- **Integrators can use one pinned standard MCP contract for executor discovery and tool calls.** The
+  companion sends the required protocol metadata and schema-bound call headers, decodes valid JSON
+  and request-scoped SSE responses with progress notifications, preserves structured tool output, and
+  discovers up to 256 tools across bounded pages while rejecting duplicate names and cursor loops.
+  The duplicate executor-specific protocol surface has been removed. Remote connections remain
+  discovery-only; provider credentials, external hosted egress and live qualification are still
+  outstanding.
+
 - **Assistant turns now progress durably through model work and one permitted tool round trip.**
   Conversation activation atomically admits the existing Absurd task, which resumes saved model
   deadlines, waits for the exact terminal tool result, and finishes output after a server restart.

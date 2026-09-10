@@ -35,7 +35,7 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 		// 1. Match every authenticated workload coordinate before revealing whether work exists.
 		if (!_IdentityMatchesOptions(identity, this._options))
 			return null;
-		let execution = await this._transaction.mcpRuntimeExecution.findFirst({ where: { siloId: this._options.siloId, executionReference, workloadState: McpExecutorWorkloadState.Registered, podUid: identity.podUid }, include: { serverRevision: { include: { tools: { select: { id: true, name: true } } } } } });
+		let execution = await this._transaction.mcpRuntimeExecution.findFirst({ where: { siloId: this._options.siloId, executionReference, workloadState: McpExecutorWorkloadState.Registered, podUid: identity.podUid }, include: { serverRevision: { include: { tools: { select: { id: true, name: true, inputSchema: true } } } } } });
 		if (execution === null || execution.commandState === McpExecutorCommandState.Succeeded || execution.commandState === McpExecutorCommandState.Failed || execution.commandState === McpExecutorCommandState.RecoveryRequired)
 			return null;
 		const now = await this._databaseNow();
@@ -51,7 +51,7 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 				return null;
 			}
 			await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, commandState: McpExecutorCommandState.Claimed, companionClaimFence: execution.companionClaimFence, companionClaimExpiresAt: execution.companionClaimExpiresAt }, data: { commandState: McpExecutorCommandState.Pending, companionClaimFence: null, companionClaimExpiresAt: null } });
-			execution = await this._transaction.mcpRuntimeExecution.findUniqueOrThrow({ where: { id: execution.id }, include: { serverRevision: { include: { tools: { select: { id: true, name: true } } } } } });
+			execution = await this._transaction.mcpRuntimeExecution.findUniqueOrThrow({ where: { id: execution.id }, include: { serverRevision: { include: { tools: { select: { id: true, name: true, inputSchema: true } } } } } });
 		}
 
 		// 3. Claim authorization before the MCP row so a tool call and its effect fence are inseparable.
@@ -97,7 +97,7 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 		const tool = execution.serverRevision.tools.find(function _SelectedTool(candidate) { return candidate.id === invocation.toolRevisionId; });
 		if (tool === undefined)
 			throw new Error("MCP invocation no longer matches its immutable tool revision");
-		return { kind: McpCompanionCommandKinds.Invocation, ...lease, invocationId: invocation.toolInvocationId, toolName: tool.name, arguments: invocation.effectiveArguments };
+		return { kind: McpCompanionCommandKinds.Invocation, ...lease, invocationId: invocation.toolInvocationId, toolName: tool.name, inputSchema: tool.inputSchema as JsonValue, arguments: invocation.effectiveArguments };
 	}
 
 	/** Save one checked discovery or invocation result through the current companion fence. */

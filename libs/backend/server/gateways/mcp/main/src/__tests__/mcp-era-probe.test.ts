@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { __CreateHttpsMcpEraProbeClient } from "@opencrane/backend/server/infra/mcp-era-probe";
+
 import { WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
@@ -8,6 +10,7 @@ import type { IMcpOperatorRepository, McpEraProbeTargetRecord, McpOperatorServer
 import { __CreateMcpEraProbeWorkflow, __McpEraProbeTaskKey } from "../era-probe/mcp-era-probe";
 import { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions, McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeClient, McpEraProbeTaskInput, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
+import { _CreateMcpEraProbeAdapter } from "../era-probe/mcp-era-transport.adapter";
 import { McpEraProbeFailure, McpEraProbeFailureCodes } from "../era-probe/mcp-era-probe-failure";
 
 /** Mutable product state used by the engine-free workflow cases. */
@@ -249,6 +252,27 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 
 		expect(execution.taskSnapshot(admitted.receipt).result).toMatchObject({ decision: McpEraProbeDecisions.Rejected, failureCode: code });
 		expect(state.target).toMatchObject({ eraProbeStatus: "Rejected", eraProtocolVersion: null, eraProbeFailureCode: code });
+		expect(state.auditCount).toBe(1);
+	});
+
+	it("records whitespace-only discovery versions as rejected instead of leaving registration pending", async function _rejectBlankVersion()
+	{
+		const state = _State();
+		const execution = new __FakeWorkflowEngine();
+		const transport = __CreateHttpsMcpEraProbeClient({
+			protocolVersion: "2026-07-28", requestTimeoutMilliseconds: 1_000, maximumResponseBytes: 1_024,
+			resolve: async function _resolve() { return [{ address: "93.184.216.34", family: 4 }]; },
+			request: async function _reply()
+			{
+				return { status: 200, headers: { "content-type": "application/json" }, body: new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", result: { resultType: "complete", supportedVersions: [" \t"], capabilities: {}, ttlMs: 3_600_000, cacheScope: "public" } })) };
+			},
+		});
+		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe: _CreateMcpEraProbeAdapter(transport) });
+		const admitted = await workflow.admit(_Transaction(), _Input());
+		await _Drain(execution);
+
+		expect(execution.taskSnapshot(admitted.receipt).result).toMatchObject({ decision: McpEraProbeDecisions.Rejected, failureCode: McpEraProbeFailureCodes.NotMcpServer });
+		expect(state.target).toMatchObject({ eraProbeStatus: McpEraProbeStates.Rejected, eraProtocolVersion: null, eraProbeFailureCode: McpEraProbeFailureCodes.NotMcpServer });
 		expect(state.auditCount).toBe(1);
 	});
 

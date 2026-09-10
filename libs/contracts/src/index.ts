@@ -48,3 +48,5 @@ export { ___ConversationToolProposalSchema } from "./conversations/conversation-
 
 export * from "./conversations/conversation-model.types";
 export { ___ConversationModelToolCallSchema, ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema } from "./conversations/conversation-model.validator";
+
+export * from "./mcp/protocol";

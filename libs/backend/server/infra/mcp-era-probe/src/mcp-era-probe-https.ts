@@ -1,5 +1,6 @@
 import { request as _httpsRequest } from "node:https";
 
+import { _ReadMcpEraProbeResponse } from "./mcp-era-probe-response";
 import type { McpEraProbeHttpsRequestCommand, McpEraProbeHttpsResponse } from "./mcp-era-probe.types";
 import { McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "./mcp-era-probe.errors";
 
@@ -9,36 +10,6 @@ function _ResponseHeaders(headers: import("node:http").IncomingHttpHeaders): Rec
 	const normalized: Record<string, string | undefined> = {};
 	for (const [name, value] of Object.entries(headers)) normalized[name] = Array.isArray(value) ? value.join(",") : value;
 	return normalized;
-}
-
-/** Read a finite response body and stop before retaining an oversized reply. */
-function _ReadResponse(response: import("node:http").IncomingMessage, maximumResponseBytes: number): Promise<Uint8Array>
-{
-	return new Promise(function _ReadResponsePromise(resolve, reject)
-	{
-		const declaredLength = Number(response.headers["content-length"] ?? "0");
-		if (!Number.isFinite(declaredLength) || declaredLength < 0 || declaredLength > maximumResponseBytes)
-		{
-			response.destroy();
-			reject(new McpEraProbeTransportError("oversize"));
-			return;
-		}
-		const chunks: Buffer[] = [];
-		let byteLength = 0;
-		response.on("data", function _Receive(chunk: Buffer)
-		{
-			byteLength += chunk.byteLength;
-			if (byteLength > maximumResponseBytes)
-			{
-				response.destroy();
-				reject(new McpEraProbeTransportError("oversize"));
-				return;
-			}
-			chunks.push(chunk);
-		});
-		response.once("error", reject);
-		response.once("end", function _End() { resolve(Buffer.concat(chunks, byteLength)); });
-	});
 }
 
 /** Send one HTTPS request while binding the socket to its reviewed DNS address. */
@@ -60,7 +31,7 @@ export async function _McpEraProbeHttpsRequest(command: McpEraProbeHttpsRequestC
 			{ response.destroy(); reject(new McpEraProbeTransportError("redirect")); return; }
 			if (status < 200 || status >= 300)
 			{ response.destroy(); reject(new McpEraProbeTransportError(`http_${status}`)); return; }
-			try { resolve({ status, headers: _ResponseHeaders(response.headers), body: await _ReadResponse(response, command.maximumResponseBytes) }); }
+			try { resolve({ status, headers: _ResponseHeaders(response.headers), body: await _ReadMcpEraProbeResponse(response, command.maximumResponseBytes) }); }
 			catch (error) { reject(error); }
 		});
 		request.setTimeout(command.timeoutMilliseconds, function _Timeout() { request.destroy(new McpEraProbeTransportError("timeout")); });
