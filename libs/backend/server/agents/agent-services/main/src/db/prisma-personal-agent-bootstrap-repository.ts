@@ -1,6 +1,7 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
 import type { InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
+import { PersonalAgentBootstrapConflict } from "../personal-agent-bootstrap-conflict";
 import { AgentRevisionPersonaSelectionMaterializationCodes } from "../agent-revision-persona-selection.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "../personal-agent-bootstrap.types";
 import type { PersonalAgentProductCaller, PersonalAgentProductEffects } from "../personal-agent-product-effects.types";
@@ -89,16 +90,22 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 	private readonly productEffects: PersonalAgentProductEffects;
 	/** Deployment-selected profile required by new and existing personal services. */
 	private readonly workloadProfile: string;
+	/** Complete admission profile names, copied so a caller cannot change them during a repair. */
+	private readonly configuredWorkloadProfiles: ReadonlySet<string>;
 
 	/** Creates the personal-agent strategy inside an existing Serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver, workloadProfile: string, productEffects: PersonalAgentProductEffects | null = null)
+	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver, workloadProfile: string, configuredWorkloadProfiles: readonly string[], productEffects: PersonalAgentProductEffects | null = null)
 	{
 		if (workloadProfile.trim().length === 0 || workloadProfile.trim() !== workloadProfile)
 			throw new Error("Personal agent bootstrap requires a configured workload profile");
+		const profiles = new Set(configuredWorkloadProfiles);
+		if (profiles.size === 0 || profiles.size !== configuredWorkloadProfiles.length || !profiles.has(workloadProfile) || configuredWorkloadProfiles.some(function _InvalidProfile(profile) { return profile.trim().length === 0 || profile.trim() !== profile; }))
+			throw new Error("Personal agent bootstrap requires the complete configured workload profiles");
 		this.transaction = transaction;
 		this.defaultModelResolver = defaultModelResolver;
 		this.productEffects = productEffects ?? new PrismaPersonalAgentProductEffectsAuthority(transaction);
 		this.workloadProfile = workloadProfile;
+		this.configuredWorkloadProfiles = profiles;
 	}
 
 	/**
@@ -145,14 +152,17 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			{
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceIdentityConflict);
 			}
-			if (matching.length !== 1 || matching[0]?.id !== deterministic.id || deterministic.state !== AgentServiceState.Active || deterministic.activeRevisionId === null || deterministic.activeRevision?.personaRevisionId === null || deterministic.workloadProfile !== this.workloadProfile)
+			if (matching.length !== 1 || matching[0]?.id !== deterministic.id || deterministic.state !== AgentServiceState.Active || deterministic.activeRevisionId === null || deterministic.activeRevision?.personaRevisionId === null)
 			{
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			}
 			const activeRevision = deterministic.activeRevision;
 			if (activeRevision === null || activeRevision.personaRevisionId === null)
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
-			return this._EnsureCurrentPersona(command, persona, { id: deterministic.id, activeRevisionId: deterministic.activeRevisionId, workloadProfile: deterministic.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId }, caller);
+			const service = { id: deterministic.id, activeRevisionId: deterministic.activeRevisionId, workloadProfile: deterministic.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId };
+			if (service.workloadProfile !== this.workloadProfile && !await this._RepairUnusedProfile(command, persona, service, caller))
+				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
+			return this._EnsureCurrentPersona(command, persona, { ...service, workloadProfile: this.workloadProfile }, caller);
 		}
 		if (matching.length === 1)
 		{
@@ -167,6 +177,31 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 		// 4. Delegate initial publication after bootstrap has proved that no service exists.
 		const publicationRepository = new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver, this.workloadProfile, this.productEffects);
 		return publicationRepository.publish(command, persona, caller);
+	}
+
+	/**
+	 * Correct a completed onboarding's unused service when its old profile cannot admit sessions.
+	 *
+	 * Session creation checks the same complete profile list before appending history. Requiring the
+	 * old name to be absent closes that creation path while this Serializable transaction proves no
+	 * conversation or run exists. A configured old profile or any prior use requires a separate
+	 * lifecycle operation; this repair never changes existing computer leases or execution evidence.
+	 * Authorization and the exact profile comparison commit together. Losing the comparison throws
+	 * so onboarding rolls back the decision and every other write in this attempt.
+	 */
+	private async _RepairUnusedProfile(command: PersonalAgentBootstrapCommand, persona: _ApprovedPersona, service: _ReadyPersonalService, caller: PersonalAgentProductCaller): Promise<boolean>
+	{
+		if (command.readinessKind !== "repair" || service.id !== command.onboardingId || service.personaRevisionId !== persona.id || !this.configuredWorkloadProfiles.has(this.workloadProfile) || this.configuredWorkloadProfiles.has(service.workloadProfile))
+			return false;
+		const where = { id: service.id, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: service.activeRevisionId, workloadProfile: service.workloadProfile, conversations: { none: {} }, runs: { none: {} } };
+		const unused = await this.transaction.agentService.findFirst({ where, select: { id: true } });
+		if (unused === null)
+			return false;
+		await this.productEffects.admitUnusedProfileChange({ caller, onboardingId: command.onboardingId, agentServiceId: service.id, agentRevisionId: service.activeRevisionId, sourceWorkloadProfile: service.workloadProfile, targetWorkloadProfile: this.workloadProfile, now: command.provisionedAt });
+		const changed = await this.transaction.agentService.updateMany({ where, data: { workloadProfile: this.workloadProfile, updatedAt: command.provisionedAt } });
+		if (changed.count !== 1)
+			throw new PersonalAgentBootstrapConflict();
+		return true;
 	}
 
 	/** Reconcile one existing service to the owner's current approved persona without replacing it. */

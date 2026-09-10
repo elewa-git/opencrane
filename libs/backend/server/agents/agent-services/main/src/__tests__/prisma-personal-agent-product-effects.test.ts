@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AuthorizationAuthority, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PersonalAgentSelectedResourceKinds } from "../personal-agent-product-effects.types";
 import { PrismaPersonalAgentProductEffectsAuthority } from "../prisma-personal-agent-product-effects";
@@ -57,6 +58,29 @@ describe("PrismaPersonalAgentProductEffectsAuthority", function _ProductEffectsS
 		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
 
 		await expect(effects.admitRevisionSelection({ caller: _CALLER, source: _RESOURCES, target: { ..._RESOURCES, agentRevisionId: "revision-3", modelDefinitionId: "model-2" }, now: new Date("2026-08-29T08:00:00.000Z"), selectedResource: PersonalAgentSelectedResourceKinds.Model, argumentsValue: { modelAlias: "careful-model" } })).rejects.toThrow("not authorized");
+	});
+
+	it("admits an unused profile repair with an exact source/target digest and no grant reconciliation", async function _AdmitsUnusedProfileRepair()
+	{
+		const dependencies = _Dependencies();
+		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
+		const now = new Date("2026-08-29T08:00:00.000Z");
+		const sourceWorkloadProfile = "legacy-profile";
+		const targetWorkloadProfile = "developer";
+
+		await effects.admitUnusedProfileChange({ caller: _CALLER, onboardingId: "onboarding-1", agentServiceId: _RESOURCES.agentServiceId, agentRevisionId: _RESOURCES.agentRevisionId, sourceWorkloadProfile, targetWorkloadProfile, now });
+
+		expect(dependencies.managedGrants.reconcileManagedResourceGrants).not.toHaveBeenCalled();
+		expect(dependencies.authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ siloId: _CALLER.siloId, principalId: _CALLER.principalId, actorKind: "user", actorId: _CALLER.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: _RESOURCES.agentServiceId }, action: ProductAuthorizationActions.Edit, argumentsDigest: ___DigestCanonicalJson({ onboardingId: "onboarding-1", readinessKind: "repair", agentServiceId: _RESOURCES.agentServiceId, agentRevisionId: _RESOURCES.agentRevisionId, sourceWorkloadProfile, targetWorkloadProfile }), nowEpochMs: now.getTime() }));
+	});
+
+	it("propagates central denial for an unused profile repair without restoring grants", async function _RejectsUnusedProfileRepair()
+	{
+		const dependencies = _Dependencies(AuthorizationDecisionOutcomes.Deny);
+		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
+
+		await expect(effects.admitUnusedProfileChange({ caller: _CALLER, onboardingId: "onboarding-1", agentServiceId: _RESOURCES.agentServiceId, agentRevisionId: _RESOURCES.agentRevisionId, sourceWorkloadProfile: "legacy-profile", targetWorkloadProfile: "developer", now: new Date("2026-08-29T08:00:00.000Z") })).rejects.toThrow("not authorized");
+		expect(dependencies.managedGrants.reconcileManagedResourceGrants).not.toHaveBeenCalled();
 	});
 
 	it("keeps two personal owners isolated when their revisions share one ModelDefinition", async function _IsolatesSharedModel()

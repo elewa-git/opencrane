@@ -61,6 +61,25 @@ export interface AdmitPersonalAgentRevisionSelectionCommand
 	readonly selectedResource: PersonalAgentSelectedResourceKinds;
 }
 
+/** Exact configuration correction for a personal service that has never admitted work. */
+export interface AdmitUnusedPersonalAgentProfileChangeCommand
+{
+	/** Authenticated owner whose central Edit permission must still be allowed. */
+	readonly caller: PersonalAgentProductCaller;
+	/** Completed onboarding that owns the deterministic service. */
+	readonly onboardingId: string;
+	/** Stable service whose profile changes without replacing its identity. */
+	readonly agentServiceId: string;
+	/** Published revision that must remain current throughout the correction. */
+	readonly agentRevisionId: string;
+	/** Saved profile that is no longer configured for session admission. */
+	readonly sourceWorkloadProfile: string;
+	/** Deployment-selected profile used by future session admission. */
+	readonly targetWorkloadProfile: string;
+	/** Trusted instant used for authorization and the service update. */
+	readonly now: Date;
+}
+
 /** Central product-effect adapter used inside personal-agent Serializable transactions. */
 export interface PersonalAgentProductEffects
 {
@@ -76,4 +95,6 @@ export interface PersonalAgentProductEffects
 	admitRevisionSelection(command: AdmitPersonalAgentRevisionSelectionCommand): Promise<void>;
 	/** Projects exact successor grants and admits publication after its row exists. */
 	admitRevisionPublication(command: AdmitPersonalAgentRevisionSelectionCommand): Promise<void>;
+	/** Admits one unused-service correction without restoring any owner grants. */
+	admitUnusedProfileChange(command: AdmitUnusedPersonalAgentProfileChangeCommand): Promise<void>;
 }

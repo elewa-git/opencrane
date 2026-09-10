@@ -1,10 +1,10 @@
 import type { Prisma } from "@prisma/client";
 
 import { _CreatePersonaWorkflowEvidenceRepository, PersonaWorkflowColours, type PersonaOnboardingCaller, type PersonaOnboardingWorkflowPort, type PersonaWorkflowEvidenceRepository } from "@opencrane/backend/agents/personal/personas";
-import { InitialPersonalAgentDefaultModelResolutionStatuses, PersonalAgentBootstrapStatuses, PrismaPersonalAgentBootstrapRepository, PrismaPersonalAgentProductEffectsAuthority, type InitialPersonalAgentDefaultModelResolver } from "@opencrane/backend/server/agents/agent-services";
+import { InitialPersonalAgentDefaultModelResolutionStatuses, PersonalAgentBootstrapConflict, PersonalAgentBootstrapStatuses, PrismaPersonalAgentBootstrapRepository, PrismaPersonalAgentProductEffectsAuthority, type InitialPersonalAgentDefaultModelResolver, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult } from "@opencrane/backend/server/agents/agent-services";
 import { DefaultModelDefinitionResolutionStatuses, PrismaDefaultModelDefinitionResolverRepository } from "@opencrane/backend/server/gateways/model-routing";
 import type { Logger } from "@opencrane/backend/observability";
-import { type UserOnboardingOwner, type UserOnboardingOwnerResolver, type UserOnboardingPersonaEvidencePort, type UserOnboardingPersonalAgentBootstrapPort, UserOnboardingBootstrapArchetypes, UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingPersonaColours, __CreateUserOnboardingRouter, __UserOnboardingAuthority, __UserOnboardingChatAuthority, _CreateUserOnboardingRepository, PrismaUserOnboardingCompletionUnitOfWork, UserOnboardingPersonaWorkflowCoordinator } from "@opencrane/backend/server/agents/onboarding";
+import { type UserOnboardingOwner, type UserOnboardingOwnerResolver, type UserOnboardingPersonaEvidencePort, type UserOnboardingPersonalAgentBootstrapPort, UserOnboardingBootstrapArchetypes, UserOnboardingCompletionConflict, UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingPersonaColours, __CreateUserOnboardingRouter, __UserOnboardingAuthority, __UserOnboardingChatAuthority, _CreateUserOnboardingRepository, PrismaUserOnboardingCompletionUnitOfWork, UserOnboardingPersonaWorkflowCoordinator } from "@opencrane/backend/server/agents/onboarding";
 
 import type { UserOnboardingRouteComposition } from "./routes.types";
 
@@ -14,30 +14,31 @@ type UserOnboardingPrismaClient = Parameters<typeof _CreateUserOnboardingReposit
 /**
  * Compose the owner-only onboarding router with the deployment's conversation-computer profile.
  * @param workloadProfile Profile name from the same release configuration used for conversations.
+ * @param configuredWorkloadProfiles Complete profile names accepted by session admission.
  * @throws When the configured profile is empty or contains surrounding whitespace.
  */
-export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaClient, logger: Logger, resolveOwner: UserOnboardingOwnerResolver, workloadProfile: string): UserOnboardingRouteComposition
+export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaClient, logger: Logger, resolveOwner: UserOnboardingOwnerResolver, workloadProfile: string, configuredWorkloadProfiles: readonly string[]): UserOnboardingRouteComposition
 {
 	if (workloadProfile.trim().length === 0 || workloadProfile.trim() !== workloadProfile)
 		throw new Error("Onboarding requires the configured conversation-computer profile");
 	const repository = _CreateUserOnboardingRepository(prisma);
 	const personaEvidence = _CreateUserOnboardingPersonaEvidence(_CreatePersonaWorkflowEvidenceRepository(prisma));
-	const completion = new PrismaUserOnboardingCompletionUnitOfWork(prisma, function _PersonalAgent(transaction) { return _CreatePersonalAgentBootstrap(transaction, logger, workloadProfile); });
+	const completion = new PrismaUserOnboardingCompletionUnitOfWork(prisma, function _PersonalAgent(transaction) { return _CreatePersonalAgentBootstrap(transaction, logger, workloadProfile, configuredWorkloadProfiles); });
 	const authority = new __UserOnboardingAuthority(repository, personaEvidence, 1, completion);
 	const chatAuthority = new __UserOnboardingChatAuthority(authority, repository, personaEvidence, completion);
 	return { router: __CreateUserOnboardingRouter({ authority, chatAuthority, resolveOwner, logger }), personaWorkflow: _CreatePersonaOnboardingWorkflow(authority) };
 }
 
 /** Adapt agent-services' richer result to onboarding's narrow cross-domain readiness port. */
-function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, logger: Logger, workloadProfile: string): UserOnboardingPersonalAgentBootstrapPort
+function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, logger: Logger, workloadProfile: string, configuredWorkloadProfiles: readonly string[]): UserOnboardingPersonalAgentBootstrapPort
 {
 	const defaultModelResolver = _CreateInitialPersonalAgentDefaultModelResolver(transaction);
 	const productEffects = new PrismaPersonalAgentProductEffectsAuthority(transaction);
-	const repository = new PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver, workloadProfile, productEffects);
+	const repository = new PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver, workloadProfile, configuredWorkloadProfiles, productEffects);
 	return {
 		async ensureReady(command)
 		{
-			const result = await repository.ensureReady(command);
+			const result = await _PreparePersonalAgent(repository, command);
 			if (result.status === PersonalAgentBootstrapStatuses.Ready)
 			{
 				const fields = { operation: "user_onboarding.personal_agent_ready_attempt", siloId: command.siloId, subjectId: command.subjectId, onboardingId: command.onboardingId, agentServiceId: result.agentServiceId, agentRevisionId: result.agentRevisionId, created: result.created, revised: result.revised };
@@ -48,6 +49,21 @@ function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, lo
 			return { status: UserOnboardingPersonalAgentBootstrapStatuses.Denied };
 		},
 	};
+}
+
+/** Translate an agent comparison conflict into the onboarding owner's rollback and retry signal. */
+async function _PreparePersonalAgent(repository: PersonalAgentBootstrapRepository, command: PersonalAgentBootstrapCommand): Promise<PersonalAgentBootstrapResult>
+{
+	try
+	{
+		return await repository.ensureReady(command);
+	}
+	catch (error)
+	{
+		if (error instanceof PersonalAgentBootstrapConflict)
+			throw new UserOnboardingCompletionConflict();
+		throw error;
+	}
 }
 
 /** Adapt model-routing's result vocabulary into agent-services' narrow initial-publication port. */
@@ -97,7 +113,8 @@ function _CreateUserOnboardingPersonaEvidence(repository: PersonaWorkflowEvidenc
 		async readApprovedBootstrapEvidence(owner, personaRevisionId)
 		{
 			const evidence = await repository.readApprovedBootstrapEvidence(owner, personaRevisionId);
-			if (evidence === null) return null;
+			if (evidence === null)
+				return null;
 			const primaryColour = _PersonaColour(evidence.primaryColour);
 			return { personaRevisionId: evidence.personaRevisionId, displayName: evidence.displayName, primaryColour, archetype: _Archetype(primaryColour) };
 		},

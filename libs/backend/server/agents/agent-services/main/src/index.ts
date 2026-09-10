@@ -20,10 +20,12 @@ export type { RuntimeAgentEffectEligibility, RuntimeAgentEffectEligibilityComman
 export { AgentRevisionPersonaSelectionMaterializationCodes } from "./agent-revision-persona-selection.types";
 export { PrismaPersonalAgentBootstrapRepository } from "./db/prisma-personal-agent-bootstrap-repository";
 export { PersonalAgentProductEffectDenied, PrismaPersonalAgentProductEffectsAuthority } from "./prisma-personal-agent-product-effects";
-export type { PersonalAgentProductEffects } from "./personal-agent-product-effects.types";
+export type { AdmitUnusedPersonalAgentProfileChangeCommand, PersonalAgentProductEffects } from "./personal-agent-product-effects.types";
+export { PersonalAgentBootstrapConflict } from "./personal-agent-bootstrap-conflict";
 export { InitialPersonalAgentDefaultModelResolutionStatuses } from "./initial-personal-agent-publication.types";
 export type { InitialPersonalAgentDefaultModelResolver } from "./initial-personal-agent-publication.types";
 export { PersonalAgentBootstrapStatuses } from "./personal-agent-bootstrap.types";
+export type { PersonalAgentBootstrapCommand, PersonalAgentBootstrapRepository, PersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
 export { __ExecutionCapabilityEvidence } from "./execution-capability-evidence";
 export type { ExecutionCapabilityEvidence, ExecutionCapabilityEvidenceInput } from "./execution-capability-evidence.types";
 export { PrismaPersonalExecutionEvidenceRepository } from "./db/prisma-personal-execution-evidence-repository";

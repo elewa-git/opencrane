@@ -25,6 +25,11 @@ The package owns the survey hand-off and first guided exchange end to end:
    existing owned personal service when present; creation uses the onboarding identifier as the
    deterministic identity only when no service exists.
 
+If that deterministic service has never admitted a conversation or run, agent-services may correct
+an old profile that is no longer configured. The owner's central Edit decision and the source
+comparison commit in the same transaction. The correction preserves onboarding answers, persona,
+identity and revision history. Any prior use or a still-configured old profile prevents this repair.
+
 ```text
  authenticated session       persona evidence authority
    silo + OIDC subject          interview + approval
@@ -63,6 +68,8 @@ single onboarding-first lock order and requires approval to match the current pi
 - `PrismaUserOnboardingCompletionUnitOfWork` opens a fresh Serializable transaction for completion
   and repair, and `UserOnboardingPersonalAgentBootstrapPort` is the narrow capability the app must
   bind to the same transaction client.
+- App adapters translate a transaction-local personal-agent source-comparison loss into
+  `UserOnboardingCompletionConflict`; this unit of work rolls back and retries that typed conflict.
 - `UserOnboardingReadinessStatuses` is the stable result vocabulary returned across that boundary.
 - `__CreateUserOnboardingRouter` exposes route state plus the four owner-only chat endpoints, while
   `UserOnboardingPersonaWorkflowCoordinator` translates accepted persona events into workflow transitions.
