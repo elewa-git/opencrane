@@ -36,6 +36,33 @@ function _App(dependencies: SelfElicitationRouterDependencies)
 
 describe("__CreateSelfElicitationRouter", function _Suite()
 {
+	it("lists only through session-derived conversation ownership", async function _ListsOpen()
+	{
+		const listOpenOwned = vi.fn().mockResolvedValue([{ requestId: "request-1" }]);
+		const dependencies = _Dependencies({ elicitations: _Elicitations({ listOpenOwned }) });
+		const response = await request(_App(dependencies)).get("/api/v1/me/conversations/conversation-1/elicitations?subjectId=forged&limit=1000");
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ elicitations: [{ requestId: "request-1" }] });
+		expect(listOpenOwned).toHaveBeenCalledWith("silo-1", "conversation-1", "user-1", new Date("2026-08-11T10:00:00.000Z"));
+	});
+
+	it("rejects an invalid selected conversation before listing", async function _RejectsInvalidConversation()
+	{
+		const dependencies = _Dependencies();
+		const response = await request(_App(dependencies)).get("/api/v1/me/conversations/%20/elicitations");
+		expect(response.status).toBe(400);
+		expect(dependencies.elicitations.listOpenOwned).not.toHaveBeenCalled();
+	});
+
+	it("maps an unavailable pending read without exposing internal error detail", async function _MapsPendingReadFailure()
+	{
+		const dependencies = _Dependencies({ elicitations: _Elicitations({ listOpenOwned: vi.fn().mockRejectedValue(new Error("database detail")) }) });
+		const response = await request(_App(dependencies)).get("/api/v1/me/conversations/conversation-1/elicitations");
+		expect(response.status).toBe(503);
+		expect(response.body).toEqual({ error: "elicitation_read_unavailable" });
+		expect(dependencies.logger.error).toHaveBeenCalledWith(expect.objectContaining({ operation: "elicitation.list_open", siloId: "silo-1" }), "Open elicitation read failed");
+	});
+
 	it("reads only through session-derived ownership", async function _Reads()
 	{
 		const elicitation = { requestId: "request-1" } as never;
@@ -81,6 +108,7 @@ describe("__CreateSelfElicitationRouter", function _Suite()
 	it("requires a browser session for reads and answers", async function _RequiresSession()
 	{
 		const dependencies = _Dependencies({ resolveCaller: function _Missing() { return null; } });
+		expect((await request(_App(dependencies)).get("/api/v1/me/conversations/conversation-1/elicitations")).status).toBe(401);
 		expect((await request(_App(dependencies)).get("/api/v1/me/conversations/conversation-1/elicitations/request-1")).status).toBe(401);
 		expect((await request(_App(dependencies)).post("/api/v1/me/conversations/conversation-1/elicitations/request-1/responses").send({})).status).toBe(401);
 	});

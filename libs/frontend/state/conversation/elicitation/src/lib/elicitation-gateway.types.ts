@@ -6,6 +6,8 @@ export type GeneratedElicitationSubmission = paths["/me/conversations/{conversat
 /** Signed-in browser port for generic participant input. */
 export interface ConversationElicitationGateway
 {
+	/** List at most fifty current requests assigned to the caller in one readable conversation. */
+	listOpen(conversationId: string): Promise<readonly ConversationElicitation[]>;
 	/** Read one exact active-participant request. */
 	read(conversationId: string, requestId: string): Promise<ConversationElicitation>;
 	/** Submit one typed idempotent response. */

@@ -566,6 +566,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{conversationId}/elicitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List pending participant-input requests
+         * @description Returns at most fifty unexpired requests assigned to the authenticated participant in the selected readable conversation. Protected purpose payloads, credentials, and resume material are never returned.
+         */
+        get: operations["listMyOpenConversationElicitations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{conversationId}/elicitations/{requestId}": {
         parameters: {
             query?: never;
@@ -4262,6 +4282,115 @@ export interface operations {
                 };
             };
             /** @description The elicitation Activity index is temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyOpenConversationElicitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Conversation containing the request. */
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current owned requests in oldest-first order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        elicitations: {
+                            /** @constant */
+                            version: "opencrane.elicitation.v1";
+                            requestId: string;
+                            conversationId: string;
+                            runId: string;
+                            attempt: number;
+                            assignedParticipantId: string;
+                            /** @enum {string} */
+                            purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
+                            body: {
+                                /** @constant */
+                                kind: "approval";
+                                prompt: string;
+                                action: string;
+                                target: string;
+                                dataUse: string;
+                                externalSystem?: string;
+                                consequence: string;
+                                cost?: string;
+                            } | {
+                                /** @constant */
+                                kind: "single_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                            } | {
+                                /** @constant */
+                                kind: "multiple_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                                minimumSelections: number;
+                                maximumSelections: number;
+                            } | {
+                                /** @constant */
+                                kind: "free_text";
+                                prompt: string;
+                                maximumLength: number;
+                                allowEmpty: boolean;
+                            };
+                            requiresStepUp: boolean;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            /** Format: date-time */
+                            expiresAt: string;
+                            /** Format: date-time */
+                            resolvedAt?: string;
+                            safeReason?: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description The selected conversation coordinate is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request list. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The elicitation authority is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -449,6 +449,24 @@ integration and OpenCrane lint also passed after stacking onto #852. Independent
 architecture post-review passed. These are source and integration checks; no live remote-provider,
 hosted-MCP or fresh-install qualification is claimed here.
 
+### Selected-conversation elicitation discovery — source validated, review passed
+
+The authenticated browser API can list up to fifty current requests assigned to the caller in one
+selected conversation. The existing elicitation authority checks active membership, current
+participation and central Conversation/Read permission before returning the browser-safe request
+projections. The Activity index and named request read remain separate capabilities.
+
+This slice does not mount the existing elicitation card or add a polling, queue or scheduling path.
+An authoritative live trigger and exact human-readable tool, action and safe-argument disclosure
+remain required before the product can claim a visible informed-approval journey. Remote-provider
+metadata and live provider qualification remain separate work.
+
+Validation evidence: elicitation authority (`50`), frontend elicitation state (`8`) and shared
+contracts (`122`) tests pass. All three focused TypeScript lint targets, generated-client replay,
+ESLint boundaries, agent style, Prisma boundaries and module growth pass. The five style warnings
+name pre-existing response-outcome comparisons; no warning names added code. Independent integrated
+review and architecture post-review pass with no findings.
+
 ### Testv5 access repair — preserve existing data
 
 Fresh owner sign-in succeeds. The remaining onboarding denial is `service_not_ready`: the exact
@@ -464,9 +482,14 @@ actual composition tests (5) and fresh PostgreSQL repair tests (5) pass. The SQL
 Edit denial, audit rollback, exhausted source comparisons and concurrent conversation creation;
 the existing onboarding transaction retries conflicts and refuses a service that becomes used.
 Relevant type checks, the server build, style, boundaries and module-growth checks pass. Independent
-review and architecture post-review pass. Publication and a separately authorized live repair
-remain open. No live database, deployment, identities, conversation history or stored files have
-been changed.
+review and architecture post-review pass. The source is published in draft #855 at
+`26ffbf65447a96e9f928754af5c81eab475010bc`. The minimal deployment candidate
+`a198ff2431511a55673f2c137a42b861d03c8247` is stacked directly on the deployed server source.
+Normal CI run `34478251765` passed and published server image digest
+`4e259a6ef71086513d611973e4e97754671902553b6f35bce2550d4e81d90c50`. Read-only preservation
+inspection and the final read-only preflight pass. Explicit approval for the live installation
+remains pending, and no live database, deployment, identities, conversation history or stored files
+have been changed.
 
 The live PostgreSQL release metadata and deployed server manifest carry different baseline digests.
 This is an unresolved provenance problem; the readiness schema was read successfully and the

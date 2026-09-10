@@ -19,7 +19,8 @@ grants no access and does not copy an answer into this state package.
 ## Public surface
 
 - `ConversationElicitationStore` — component-scoped command, draft, step-up, and reconciliation state.
-- `OpenCraneConversationElicitationGateway` — generated-client adapter for request, response, and Activity reads.
+- `OpenCraneConversationElicitationGateway` — generated-client adapter for selected-conversation
+  pending lists, named request reads, responses, and Activity reads.
 - `__MapElicitationActivity` and `__MapToolActivity` — pure canonical-reference mappers.
 - `ConversationActivityKinds`, `ConversationActivityRow`, and `RunToolProgressPhases` — the derived row vocabulary and public tool-phase categories used by the Activity feature.
 
