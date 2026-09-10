@@ -467,6 +467,9 @@ ESLint boundaries, agent style, Prisma boundaries and module growth pass. The fi
 name pre-existing response-outcome comparisons; no warning names added code. Independent integrated
 review and architecture post-review pass with no findings.
 
+CI caught a missing website OpenAPI snapshot after the typed client was generated. The website
+snapshot is now synchronized with the same emitted schema, and the documentation build passes.
+
 ### Testv5 access repair — preserve existing data
 
 Fresh owner sign-in succeeds. The remaining onboarding denial is `service_not_ready`: the exact
