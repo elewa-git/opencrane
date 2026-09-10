@@ -1,3 +1,53 @@
+/**
+ * Selects the author shape used to read an entry.
+ *
+ * The value is stored at `entry.author.kind` in Kurrent conversation history and returned by the
+ * conversation API. Renaming a value changes both the stored event and API contracts.
+ */
+export enum ConversationAuthorKinds
+{
+	/** Identifies an authenticated human participant. */
+	Human = "human",
+	/** Identifies the stable agent identity acting for an agent service. */
+	Agent = "agent",
+	/** Identifies an OpenCrane service backed by service attestation. */
+	Service = "service",
+	/** Identifies the platform author backed by OpenCrane service attestation. */
+	System = "system",
+}
+
+/**
+ * Selects the entry shape used to read participant-visible history.
+ *
+ * The value is stored at `entry.kind` in Kurrent conversation history and returned by the
+ * conversation API. Renaming a value changes both the stored event and API contracts.
+ */
+export enum ConversationEntryKinds
+{
+	/** Identifies a participant or agent message. */
+	Message = "message",
+	/** Identifies a participant-visible execution log. */
+	Log = "log",
+	/** Identifies an A2UI surface operation. */
+	A2UI = "a2ui",
+}
+
+/**
+ * Selects the content shape used inside a message entry.
+ *
+ * The value is stored at `entry.blocks[].kind` in Kurrent conversation history and returned by the
+ * conversation API. Renaming a value changes both the stored event and API contracts.
+ */
+export enum ConversationMessageContentBlockKinds
+{
+	/** Identifies a reference to encrypted text. */
+	Text = "text",
+	/** Identifies a published artifact revision. */
+	Artifact = "artifact",
+	/** Identifies a human or agent mention. */
+	Mention = "mention",
+}
+
 /** Lists the kinds of server-stamped authors that can appear in participant-visible history. */
 export type ConversationAuthor = HumanConversationAuthor | AgentConversationAuthor | ServiceConversationAuthor | SystemConversationAuthor;
 
@@ -5,7 +55,7 @@ export type ConversationAuthor = HumanConversationAuthor | AgentConversationAuth
 export interface HumanConversationAuthor
 {
 	/** Selects the human author handler. */
-	readonly kind: "human";
+	readonly kind: `${ConversationAuthorKinds.Human}`;
 	/** Identifies the principal that authored the entry. */
 	readonly principalId: string;
 	/** Identifies the conversation participant represented by this author. */
@@ -24,7 +74,7 @@ export interface HumanConversationAuthor
 export interface AgentConversationAuthor
 {
 	/** Selects the agent author handler. */
-	readonly kind: "agent";
+	readonly kind: `${ConversationAuthorKinds.Agent}`;
 	/** Identifies the agent identity used for current authorization. */
 	readonly agentIdentityId: string;
 	/** Identifies the agent service represented by this identity. */
@@ -39,7 +89,7 @@ export interface AgentConversationAuthor
 export interface ServiceConversationAuthor
 {
 	/** Selects the service author handler. */
-	readonly kind: "service";
+	readonly kind: `${ConversationAuthorKinds.Service}`;
 	/** Identifies the service that owns the attested fact. */
 	readonly serviceId: string;
 	/** Captures the service display name at append time. */
@@ -50,7 +100,7 @@ export interface ServiceConversationAuthor
 export interface SystemConversationAuthor
 {
 	/** Selects the system author handler. */
-	readonly kind: "system";
+	readonly kind: `${ConversationAuthorKinds.System}`;
 	/** Fixes the sole system identifier accepted by this contract. */
 	readonly systemId: "opencrane";
 	/** Fixes the historical system display name. */
@@ -142,7 +192,7 @@ export type MessageContentBlock = TextMessageContentBlock | ArtifactMessageConte
 export interface TextMessageContentBlock extends MessageContentBlockBase
 {
 	/** Selects the encrypted text block handler. */
-	readonly kind: "text";
+	readonly kind: `${ConversationMessageContentBlockKinds.Text}`;
 	/** Identifies the private payload containing the encrypted text. */
 	readonly payloadRef: string;
 	/** Identifies the ciphertext digest verified by the payload store. */
@@ -153,7 +203,7 @@ export interface TextMessageContentBlock extends MessageContentBlockBase
 export interface ArtifactMessageContentBlock extends MessageContentBlockBase
 {
 	/** Selects the artifact block handler. */
-	readonly kind: "artifact";
+	readonly kind: `${ConversationMessageContentBlockKinds.Artifact}`;
 	/** Identifies the artifact logical record. */
 	readonly artifactId: string;
 	/** Identifies the immutable artifact revision. */
@@ -168,7 +218,7 @@ export interface ArtifactMessageContentBlock extends MessageContentBlockBase
 export interface MentionMessageContentBlock extends MessageContentBlockBase
 {
 	/** Selects the mention block handler. */
-	readonly kind: "mention";
+	readonly kind: `${ConversationMessageContentBlockKinds.Mention}`;
 	/** States whether the target identifies a human or agent. */
 	readonly targetKind: "human" | "agent";
 	/** Identifies the mentioned human or agent. */
@@ -186,7 +236,7 @@ export interface MentionMessageContentBlock extends MessageContentBlockBase
 export interface MessageEntry extends ConversationEntryBase
 {
 	/** Selects the message entry handler. */
-	readonly kind: "message";
+	readonly kind: `${ConversationEntryKinds.Message}`;
 	/** States the current immutable message lifecycle representation. */
 	readonly state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
 	/** Lists the ordered safe content blocks. */
@@ -211,7 +261,7 @@ export type LogEntry = RunLogEntry | ModelLogEntry | ToolCallLogEntry | Artifact
 export interface LogEntryBase extends ConversationEntryBase
 {
 	/** Selects the structured log entry handler. */
-	readonly kind: "log";
+	readonly kind: `${ConversationEntryKinds.Log}`;
 	/** Stores the safe participant-visible summary. */
 	readonly summary: string;
 	/** References optional safe technical details outside the event ledger. */
@@ -306,7 +356,7 @@ export type A2UIEntry = A2UIWriteEntry | A2UIRemoveEntry;
 export interface A2UIEntryBase extends ConversationEntryBase
 {
 	/** Selects the A2UI entry handler. */
-	readonly kind: "a2ui";
+	readonly kind: `${ConversationEntryKinds.A2UI}`;
 	/** Identifies the surface updated by this entry. */
 	readonly surfaceId: string;
 	/** Names the admitted A2UI schema version. */

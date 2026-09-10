@@ -1,5 +1,21 @@
 # OpenCrane — Active Plan
 
+## Absurd-owned conversation turn progression - 2026-09-09
+
+In progress as a direct follow-up to [#843](https://github.com/elewa-git/opencrane/pull/843).
+Conversation activation saves one `conversation-computer-turn` task through the existing Absurd
+transaction boundary. The server workflow selects and advances durable model, optional tool-result,
+continuation and output state; the Agent Sandbox Pod retains only its lease-fenced workspace,
+checkpoint and review bootstrap. The private Pod bootstrap and `/model-step` scheduler paths are
+deleted rather than retained as compatibility routes.
+
+The change must preserve one original model dispatch and one permitted text-only continuation under
+the original remaining allowance across process restarts. Terminal tool evidence wakes the exact
+saved workflow in the same transaction. Stale leases, generations and ended authority fail closed.
+Local validation, architecture post-review, independent review and draft PR creation remain required.
+Fresh testv5 installation and live journey qualification remain a separate gate. Visible tool
+progress, approval controls and user-facing recovery controls remain later slices.
+
 ## Library and component decomposition — 2026-09-09
 
 Implemented in [#843](https://github.com/elewa-git/opencrane/pull/843), stacked on

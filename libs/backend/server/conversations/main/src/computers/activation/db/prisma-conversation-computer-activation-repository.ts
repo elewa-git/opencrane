@@ -1,9 +1,9 @@
 import type { Prisma } from "@prisma/client";
 
-import type { ConversationComputerActivationCommand, ConversationComputerActivationProjection, ConversationComputerActivationProjectionRepository, ConversationComputerActiveLeaseProjectionCommand } from "../conversation-computer-activation.types";
+import type { ConversationComputerActivationCommand, ConversationComputerActivationProjection, ConversationComputerActivationProjectionStore, ConversationComputerActiveLeaseProjectionCommand } from "../conversation-computer-activation.types";
 
 /** Resolves immutable computer coordinates from the rebuildable relational projection. */
-export class PrismaConversationComputerActivationProjectionRepository implements ConversationComputerActivationProjectionRepository
+export class PrismaConversationComputerActivationProjectionRepository implements ConversationComputerActivationProjectionStore
 {
 	/** Connects the narrow coordinate read to the product database. */
 	public constructor(private readonly prisma: Prisma.TransactionClient) {}

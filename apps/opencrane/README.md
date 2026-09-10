@@ -40,11 +40,11 @@ Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. compose conversation-computer transport with the bounded personal run-admission port. Admission
-   rechecks Kurrent identity, lease and message history plus every immutable compiler input; it never
-   substitutes request identity, relational conversation history, or a partial PostgreSQL authority;
+3. register the Absurd-owned conversation-turn workflow with the bounded personal run-admission
+   port, then start activation only after the handler exists. Admission rechecks Kurrent identity,
+   lease and message history plus every immutable compiler input;
 4. build the public and internal Express applications; and
-5. start the registered workflow and bounded background workers, then open both listeners under one
+5. start the workflow runtime and bounded background workers, then open both listeners under one
    coordinated shutdown path. Signed-in conversation updates use the public SSE route.
 
 The route registry is deliberately a catalogue rather than a second application layer:
@@ -58,7 +58,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
 | Internal `:8081` | Controller | run-attempt, workflow-owned skill-authoring validation, and OCI MCP Job dispatch |
 | Internal `:8081` | Runtime | one-use bootstrap, command stream, candidate ingest, skill-authoring exchange |
-| Internal `:8081` | Workers and replay | Pod-bound MCP command/result exchange, artifact preprocessing, and controller-selected conversation replay |
+| Internal `:8081` | Workers and replay | Pod-bound MCP command/result exchange, artifact preprocessing, controller-selected conversation replay, and the lease-fenced computer review credential |
 
 The invariant is simple: a request creates or changes durable product state before a worker is
 trusted to act. Runtime input is frozen for the accepted attempt, and events are recorded in order
@@ -84,7 +84,7 @@ All other production source lives in `src/bootstrap/`:
 | --- | --- |
 | `configuration/` | Read and type deployment configuration once. |
 | `http/` | Assemble authenticated public and workload-facing routers. |
-| `conversations/` | Connect conversation history, computer lifecycle, and turn ports. |
+| `conversations/` | Connect conversation history and computer lifecycle; register the durable turn workflow and mount its review credential route. |
 | `workflows/` | Compose MCP transport and declare workflow tasks. |
 | `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
 
@@ -118,7 +118,8 @@ bind it to durable assignment evidence.
 
 The server chart owns the server's network boundary. The
 [Agent Sandbox chart](../_infra/agent-sandbox/README.md) owns computer ingress and egress, and the
-[LiteLLM chart](../_infra/litellm/README.md) admits those computer peers at the model service.
+[LiteLLM chart](../_infra/litellm/README.md) admits this server and Cognee at the model service.
+Conversation-computer Pods have no direct model-service path.
 
 ### Run admission boundary
 

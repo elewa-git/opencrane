@@ -48,6 +48,22 @@ export interface ConversationHistoryReadResult
 	readonly entries: readonly ConversationEntry[];
 }
 
+/**
+ * Selects the immutable ownership shape for a conversation stream.
+ *
+ * The value is stored at `genesis.mode` in Kurrent conversation history. Renaming a value changes
+ * how every saved conversation genesis is read.
+ */
+export enum ConversationHistoryModes
+{
+	/** Identifies a conversation bound to one agent service. */
+	AgentSession = "agent_session",
+	/** Identifies a direct participant conversation without a bound agent service. */
+	Direct = "direct",
+	/** Identifies a group conversation. */
+	Group = "group",
+}
+
 /** Immutable coordinates established by the first event in every conversation stream. */
 export interface ConversationHistoryGenesis
 {
@@ -60,7 +76,7 @@ export interface ConversationHistoryGenesis
 	/** Identifies the silo that owns the complete stream. */
 	readonly siloId: string;
 	/** Fixes the immutable conversation mode. */
-	readonly mode: "agent_session" | "direct" | "group";
+	readonly mode: `${ConversationHistoryModes}`;
 	/** Identifies the bound service for an agent session. */
 	readonly agentServiceId: string | null;
 	/** Identifies the principal that created the stream. */

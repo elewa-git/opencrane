@@ -34,7 +34,7 @@ product incident key.
 | Computer history | cold computer advances to claim-pending with one lease generation | activation command or checked claim creation stalled |
 | Agent Sandbox claim | claim resolves to the release-owned template and exact Pod | external controller, CRD or admission policy failed |
 | Computer readiness | `/readyz` succeeds on the claimed Pod | required lease coordinates or process health failed |
-| Bootstrap | Pod-bound request returns one frozen pending turn | token, lease, membership or model admission failed |
+| Workflow admission | active lease and Absurd task share one transaction | activation, lease publication or durable workflow admission failed |
 | Output | assistant entry appears at the next KurrentDB stream revision | output fence, payload custody or history append failed |
 
 ## Computer stuck before activation

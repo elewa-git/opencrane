@@ -8,8 +8,8 @@ A **run** is one request for an agent to do work. An **attempt** is one try at f
 This package admits personal and company-assistant conversation runs and freezes their fixed input in one database transaction.
 For a new personal run, that transaction also grants its verified owner permission to read its activity.
 The active conversation-computer lease and its Sandbox claim are independently proven inputs; the
-transaction does not create or claim that runtime. The conversation computer continues the turn after
-admission; this package does not create a second managed workflow task for it.
+transaction does not create or claim that runtime. Conversation activation admits one Absurd task,
+and the admitted run stores the exact task receipt allowed to advance it.
 
 ```text
  request
@@ -21,7 +21,7 @@ admission; this package does not create a second managed workflow task for it.
  └────────────────────────────────────────────────────────────┘
    │
    ▼
- independently lease-bound conversation computer continues the turn
+ Absurd resumes the server-owned turn under the saved run receipt
    │
    ▼
  agent works → server saves events → lifecycle settles the governed workload
@@ -51,7 +51,7 @@ does not grant permission to use a run.
 ## Public surface
 
 - `PrismaConversationRunLifecycleUnitOfWork` — idempotently advances an exact lease-fenced
-  conversation attempt from accepted to running after durable bootstrap, and from running to
+  conversation attempt from accepted to running after the workflow freezes its turn, and from running to
   completed only after durable assistant output. Worker restart uncertainty converges on the same state.
 
 - `PrismaRunAdmissionUnitOfWork` saves a new run and its first lease-bound input snapshot together.
@@ -61,8 +61,8 @@ does not grant permission to use a run.
 ## Boundary
 
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input
-assembler supplies the fixed run input. The conversation-computer boundary runs the model loop
-through an Agent Sandbox lease.
+assembler supplies the fixed run input. The conversation workflow runs the server-owned model loop and rechecks the Agent Sandbox lease and
+generation before each effect. The Pod does not schedule or call the model loop.
 
 The current text-turn baseline uses approved personal instructions, conversation history and the
 selected model. New runs explicitly freeze memory as unavailable. Dataset provisioning and memory
@@ -79,7 +79,9 @@ shared backend libraries. It never imports an application or Kubernetes client.
 ## Data and persistence
 
 The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Initial admission saves
-the run, attempt-one snapshot and personal-owner read grant together. A failure rolls them all back.
+the run, attempt-one snapshot and personal-owner read grant together. A conversation run later binds
+one immutable Absurd task receipt before model or tool work can proceed. A failure rolls back its
+whole transaction.
 
 ## See also
 

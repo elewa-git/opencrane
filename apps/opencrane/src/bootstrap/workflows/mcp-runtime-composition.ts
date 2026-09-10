@@ -6,7 +6,7 @@ import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@o
 import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { _CreateMcpToolInvocationAdmission, _ResolveMcpOciServerPromotionCaller, __CreateMcpOciServerPromotionRouter, __CreateMcpRuntimeCompanionRouter, __CreateMcpRuntimeControllerRouter, __CreateMcpTaskWorkflow, PrismaMcpRuntimeUnitOfWork, PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/server/gateways/mcp";
 import { ManagedExecutionEvidenceAuthority, PersonalExecutionEvidenceAuthority, PrismaManagedExecutionEvidenceRepository, PrismaPersonalExecutionEvidenceRepository } from "@opencrane/backend/server/agents/agent-services";
-import { PrismaConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "@opencrane/backend/server/conversations";
+import { PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "@opencrane/backend/server/conversations";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { __HumanMembershipRevision, _CreateHumanMembershipEvidenceConfig, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -27,7 +27,10 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.
 	const executorNamespace = _ValidateIsolatedWorkloadNamespace(config.mcpExecutorNamespace, config.serverNamespace);
 	const dispatchDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
 	const participantFactory = __CreatePrismaMcpToolInvocationParticipantFactory(
-		new PrismaToolInvocationLifecycleEventUnitOfWork(prisma),
+		new PrismaToolInvocationLifecycleEventUnitOfWork(prisma, async function _EmitTurnEvent(transaction, event)
+		{
+			await new PrismaConversationComputerTurnWorkflowEventRepository(transaction, workflows.execution).emit(event);
+		}),
 		new PrismaToolRecoveryEventReporter(),
 		new PrismaToolInvocationRunRecoveryAuthority(),
 		{

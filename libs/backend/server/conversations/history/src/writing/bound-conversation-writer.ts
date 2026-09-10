@@ -1,6 +1,6 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 
-import { ___ConversationComputerEntrySchema, type ConversationEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ___ConversationComputerEntrySchema, type ConversationEntry } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -12,7 +12,7 @@ const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{
 const _CONVERSATION_ENTRY_EVENT_TYPE = "opencrane.conversation-entry.v1";
 
 /**
- * Prepares one exact entry and appends only that saved intent through its bound conversation.
+ * Prepares one exact entry and verifies or appends it through its bound conversation.
  *
  * The turn owner persists preparation before calling append. Readback is limited to the next
  * position in this binding; a matching saved event proves acceptance, while an empty slot still
@@ -96,6 +96,23 @@ export class BoundConversationWriter
 		finally { this.inFlight = false; }
 	}
 
+	/** Confirm that an atomic owner already committed the exact saved event; an empty slot fails closed. */
+	public async confirm(saved: BoundConversationWriterIntent): Promise<ConversationEntry>
+	{
+		if (this.appended || this.inFlight)
+			throw new Error("Bound conversation writer is single-use");
+		const intent = _ReadBoundConversationWriterIntent(this.binding, saved);
+		this.inFlight = true;
+		try
+		{
+			if (!await this._IsAccepted(intent))
+				throw new Error("Bound conversation writer cannot confirm its atomically committed output");
+			this.appended = true;
+			return intent.event.data.entry;
+		}
+		finally { this.inFlight = false; }
+	}
+
 	/** Read only the frozen next position and compare the complete application event envelope. */
 	private async _IsAccepted(intent: BoundConversationWriterIntent): Promise<boolean>
 	{
@@ -131,7 +148,7 @@ function _Intent(binding: BoundConversationWriterBinding, entry: ConversationEnt
  *
  * The complete envelope must equal the one this binding permits, including metadata, author,
  * position and schema fields. Parsing returns owned data so later awaits cannot observe caller
- * mutation. Called by: the turn store on write/read and BoundConversationWriter.append.
+ * mutation. Called by: the turn store on write/read and BoundConversationWriter append or confirm.
  */
 export function _ReadBoundConversationWriterIntent(binding: BoundConversationWriterBinding, value: unknown): BoundConversationWriterIntent
 {
@@ -144,7 +161,7 @@ export function _ReadBoundConversationWriterIntent(binding: BoundConversationWri
 		throw new Error("Bound conversation writer entry exceeds its maximum byte size");
 	if (binding.expectedRevision < 0n || !_UUID_PATTERN.test(entry.id) || entry.conversationId !== binding.conversationId
 		|| entry.position !== (binding.expectedRevision + 1n).toString() || entry.idempotencyKey !== entry.id
-		|| entry.author.kind !== "agent" || entry.author.agentIdentityId !== binding.agentIdentityId
+		|| entry.author.kind !== ConversationAuthorKinds.Agent || entry.author.agentIdentityId !== binding.agentIdentityId
 		|| entry.author.agentServiceId !== binding.agentServiceId || entry.author.name !== binding.agentName
 		|| entry.author.avatarArtifactRevisionId !== binding.agentAvatarArtifactRevisionId || entry.runId !== binding.runId
 		|| entry.provenance !== "agent-authored" || entry.attestation !== null)

@@ -37,7 +37,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const saved = (await f.store.load(f.output.bootstrapId))!.outputReceipt!;
 		const compilerCalls = f.compiler.compile.mock.calls.length;
 		f.flags.stamp = 100;
-		await expect(f.restart().bootstrap(f.command)).resolves.toBeNull();
+		await expect(f.restart().start(f.workflowCommand)).resolves.toBeNull();
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(1);
 		expect(f.history.streams.get(f.stream)![2].data).toEqual(saved.event.data);
 		expect(f.flags.runState).toBe("completed");
@@ -45,9 +45,28 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 		expect(f.flags.payloadWrites).toBe(1);
 		expect(f.outputPayloads.store).toHaveBeenCalledOnce();
-		if (step !== "intent" && step !== "settle")
-			expect(f.compiler.compile).toHaveBeenCalledTimes(compilerCalls);
+		expect(f.compiler.compile).toHaveBeenCalledTimes(compilerCalls + 1);
 		expect(JSON.stringify(saved)).not.toContain(f.output.text);
+	});
+
+	it("admits the later pending message after finishing a predecessor with saved output", async function _SavedPredecessor()
+	{
+		const f = await _OutputRecoveryHarness();
+		f.credentials.revoke.mockRejectedValueOnce(new Error("revoke response lost"));
+		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("revoke response lost");
+		const events = f.history.streams.get(f.stream)!;
+		events.push({ ...events[1], id: "next-human", revision: 3n });
+		const next = {
+			...f.candidate,
+			latestPendingEntryId: "next-human",
+			latestPendingEntryPosition: "3",
+			binding: { ...f.candidate.binding, runId: "run-2", expectedRevision: 3n },
+			compiledInput: { ...f.candidate.compiledInput, runId: "run-2", digest: `sha256:${"b".repeat(64)}` },
+		};
+		f.compiler.compile.mockResolvedValue(next);
+		await expect(f.restart().start({ ...f.workflowCommand, causationId: "next-human", causationPosition: "3" })).resolves.toMatchObject({ latestPendingEntryId: "next-human", latestPendingEntryPosition: "3", compile: { runId: "run-2" } });
+		expect(f.credentials.revoke).toHaveBeenCalledTimes(2);
+		expect(await f.store.loadActive({ siloId: "silo-1", computerId: f.command.computerId, lease: f.command.lease })).toMatchObject({ latestPendingEntryId: "next-human", latestPendingEntryPosition: "3" });
 	});
 
 	it("rejects changed text on an explicit retry and recovers the unchanged answer without another payload", async function _ChangedText()
@@ -86,7 +105,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const f = await _OutputRecoveryHarness();
 		await f.authority.appendOutput(f.output);
 		const first = (await f.store.load(f.output.bootstrapId))!;
-		const next = { ...first, bootstrapId: "8957851b-21c1-4890-ae32-fb6de5224f2d", latestPendingEntryId: "next-human", outputReceipt: null, outputSourceCommandId: null, binding: { ...first.binding, expectedRevision: 3n, runId: "next-run" }, compile: { ...first.compile, runId: "next-run" } };
+		const next = { ...first, bootstrapId: "8957851b-21c1-4890-ae32-fb6de5224f2d", latestPendingEntryId: "next-human", latestPendingEntryPosition: "3", outputReceipt: null, outputSourceCommandId: null, binding: { ...first.binding, expectedRevision: 3n, runId: "next-run" }, compile: { ...first.compile, runId: "next-run" } };
 		await f.store.createOrRead(next);
 		let settlementAppends = 0;
 		f.history.beforeAppend = async function _Count(command)
@@ -100,7 +119,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		expect(f.history.streams.get(f.stream)!).toHaveLength(3);
 	});
 
-	it.each(["authority", "visibility", "lease", "pod"])("refuses a missing output after %s is lost", async function _NoNewAppendWithoutAuthority(kind)
+	it.each(["lease", "pod"])("refuses committed-output recovery after the %s fence is lost", async function _NoRecoveryWithoutLease(kind)
 	{
 		const f = await _OutputRecoveryHarness();
 		f.history.afterAppend = async function _StopAfterIntent(command)
@@ -109,16 +128,26 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 				throw new Error("intent saved");
 		};
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("intent saved");
-		if (kind === "authority")
-			f.flags.mayAppend = false;
-		if (kind === "visibility")
-			f.flags.mayUseVisibility = false;
 		if (kind === "lease")
 			f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";
-		const command = kind === "pod" ? { ...f.command, workload: { ...f.command.workload, podUid: "foreign-pod" } } : f.command;
-		await expect(f.restart().bootstrap(command)).rejects.toThrow();
-		expect(f.history.streams.get(f.stream)!).toHaveLength(2);
+		if (kind === "pod")
+			f.pods.resolve.mockResolvedValueOnce(null);
+		await expect(f.restart().start(f.workflowCommand)).rejects.toThrow();
+		expect(f.history.streams.get(f.stream)!).toHaveLength(3);
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
+	});
+
+	it.each(["authority", "visibility"])("finishes an already committed output after %s changes", async function _CommittedOutput(kind)
+	{
+		const f = await _OutputRecoveryHarness();
+		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
+		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("completion unavailable");
+		if (kind === "authority")
+			f.flags.mayAppend = false;
+		else
+			f.flags.mayUseVisibility = false;
+		await expect(f.restart().start(f.workflowCommand)).resolves.toBeNull();
+		expect(f.history.streams.get(f.stream)!).toHaveLength(3);
 	});
 
 	it("refuses a wrong Pod even when its target answer is already accepted", async function _WrongRecoveryPod()
@@ -126,7 +155,8 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const f = await _OutputRecoveryHarness();
 		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("completion unavailable");
-		await expect(f.restart().bootstrap({ ...f.command, workload: { ...f.command.workload, podUid: "foreign-pod" } })).rejects.toThrow("lease-bound Sandbox Pod");
+		f.pods.resolve.mockResolvedValueOnce(null);
+		await expect(f.restart().start(f.workflowCommand)).rejects.toThrow("lease-bound Sandbox Pod");
 		expect(f.credentials.revoke).not.toHaveBeenCalled();
 	});
 
@@ -138,42 +168,77 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const events = f.history.streams.get(f.stream)!;
 		events.push({ ...events[1], id: "later-human", revision: 3n });
 		const calls = f.compiler.compile.mock.calls.length;
-		await f.restart().bootstrap(f.command);
-		expect(f.compiler.compile).toHaveBeenCalledTimes(calls);
+		await f.restart().start(f.workflowCommand);
+		expect(f.compiler.compile).toHaveBeenCalledTimes(calls + 1);
 		expect(events).toHaveLength(4);
 		expect(events[3].id).toBe("later-human");
 	});
 
-	it("cannot complete over a different event occupying the target slot or a failed run", async function _Conflicts()
+	it("cannot finish a committed output after its run has already failed", async function _FailedRun()
 	{
 		const f = await _OutputRecoveryHarness();
-		const turn = (await f.store.load(f.output.bootstrapId))!;
-		const intent = await _PrepareConversationOutputIntent(turn, f.output.sourceCommandId);
-		await f.store.markOutput(turn.bootstrapId, intent);
-		const events = f.history.streams.get(f.stream)!;
-		events.push({ ...events[1], id: "foreign-entry", revision: 2n });
-		await expect(f.restart().bootstrap(f.command)).rejects.toThrow("different history");
-		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
-		events[2] = { ...intent.event, streamName: f.stream, revision: 2n, recordedAt: new Date() };
+		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
+		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("completion unavailable");
 		f.flags.runState = "failed";
-		await expect(f.restart().bootstrap(f.command)).rejects.toThrow("already failed");
+		await expect(f.restart().start(f.workflowCommand)).rejects.toThrow("already failed");
 		expect(f.credentials.revoke).not.toHaveBeenCalled();
 	});
 
-	it("refuses a competing history append that wins after the last read", async function _HistoryRace()
+	it("fails closed when a turn receipt exists without its atomically paired participant event", async function _MissingAtomicPair()
 	{
 		const f = await _OutputRecoveryHarness();
+		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
+		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("completion unavailable");
+		f.history.streams.get(f.stream)!.pop();
+		await expect(f.restart().start(f.workflowCommand)).rejects.toThrow("atomically committed output");
+		expect(f.history.streams.get(f.stream)).toHaveLength(2);
+	});
+
+	it("keeps the frozen input and appends after a later human wins the first output position", async function _HistoryRace()
+	{
+		const f = await _OutputRecoveryHarness();
+		let raced = false;
 		f.history.beforeAppend = async function _CompetingWriter(command)
 		{
-			if (command.streamName === f.stream)
+			if (!raced && command.streamName === f.stream)
 			{
+				raced = true;
 				const events = f.history.streams.get(f.stream)!;
 				events.push({ ...events[1], id: "competing-human", revision: 2n });
 			}
 		};
-		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("different history");
-		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
+		await expect(f.authority.appendOutput(f.output)).resolves.toBe("accepted");
+		expect(f.runLifecycle.complete).toHaveBeenCalledOnce();
 		expect(f.history.streams.get(f.stream)![2].id).toBe("competing-human");
+		expect(f.history.streams.get(f.stream)![3].data).toEqual((await f.store.load(f.output.bootstrapId))!.outputReceipt!.event.data);
+		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt!.expectedRevision).toBe("2");
+	});
+
+	it("rejects a lease change during payload storage before either output event commits", async function _LeaseChangedDuringPayload()
+	{
+		const f = await _OutputRecoveryHarness();
+		const store = f.outputPayloads.store.getMockImplementation()!;
+		f.outputPayloads.store.mockImplementationOnce(async function _ChangeLease(...args)
+		{
+			const payload = await store(...args);
+			f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";
+			return payload;
+		});
+		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("current active lease generation");
+		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		expect(f.history.streams.get(f.stream)).toHaveLength(2);
+	});
+
+	it("rejects a lease change during output preparation before either output event commits", async function _LeaseChangedDuringPreparation()
+	{
+		const f = await _OutputRecoveryHarness();
+		f.flags.duringVisibility = async function _ChangeLease()
+		{
+			f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";
+		};
+		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("current active lease generation");
+		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		expect(f.history.streams.get(f.stream)).toHaveLength(2);
 	});
 
 	it("keeps an accepted answer pending while exact readback is unavailable", async function _UnavailableReadback()
@@ -191,7 +256,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("history read unavailable");
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
 		f.history.beforeRead = async function _Restored() {};
-		await f.restart().bootstrap(f.command);
+		await f.restart().start(f.workflowCommand);
 		expect(f.history.streams.get(f.stream)!).toHaveLength(3);
 	});
 

@@ -24,6 +24,12 @@ describe("AgentSandboxPodBindingAdapter", function _Suite()
 		expect(fixture.coreApi.readNamespacedPod).toHaveBeenCalledExactlyOnceWith({ namespace: "testv5", name: "sandbox-one" });
 	});
 
+	it("resolves the live Pod identity from release-fixed coordinates", async function _ResolveIdentity()
+	{
+		const fixture = _Fixture();
+		await expect(fixture.adapter.resolve({ computerId: fixture.command.computerId, lease: fixture.command.lease, namespace: "testv5", serviceAccountName: "conversation-computer" })).resolves.toEqual(fixture.command.workload);
+	});
+
 	it.each(["uid", "name", "namespace"] as const)("rejects a Pod with a foreign %s", async function _ForeignIdentity(field)
 	{
 		const fixture = _Fixture();

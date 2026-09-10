@@ -16,13 +16,15 @@ browser
 Ingress ──► OpenCrane public API
 
 conversation-computer Pod
-  │ projected identity + bootstrap status and model-step request
+  │ projected identity + startup review/checkpoint requests
   ▼
 OpenCrane internal runtime API
-  │
-  ├──► model routing
-  ├──► governed tool custody
-  └──► memory and artifact services
+
+Absurd worker ──► OpenCrane server authority
+                    │
+                    ├──► model routing
+                    ├──► governed tool custody
+                    └──► memory and artifact services
 ```
 
 There is no public route, Service or Ingress for an individual runtime Pod. A Pod also has no
@@ -44,12 +46,15 @@ projections.
 
 Network reachability is not authority. OpenCrane separately verifies the projected token
 audience, namespace, ServiceAccount, Pod UID, computer id, lease id and generation.
-Bootstrap returns only a turn id and status; model-step accepts exactly `{bootstrapId}`. The server
-keeps compiled prompts and attempt-scoped model credentials, selects any permitted tool and appends
-accepted output itself. The computer has no direct LiteLLM egress allowance; LiteLLM ingress admits
-the same-release server and Cognee. The text checkpoint and these policies have passed full CI but
-are not deployed on testv5. The continuation implementation in PR #830 preserves this network
-boundary and awaits CI and live qualification. See [development status](/guide/status) for qualification.
+The Pod uses its projected identity only to fetch its lease-derived review credential and restore
+its fenced workspace at startup. It does not call a model route or poll turn state. The existing
+Absurd worker advances the server workflow, while the server keeps compiled prompts and
+attempt-scoped model credentials, selects any permitted tool and appends accepted output itself.
+Before a real sandbox execution boundary, the server resolves the current claim, Pod UID,
+ServiceAccount, lease and generation. The computer has no direct LiteLLM egress allowance; LiteLLM
+ingress admits the same-release server and Cognee. The text checkpoint and these policies have
+passed full CI but are not deployed on testv5. The continuation and its Absurd orchestration
+follow-up await live qualification. See [development status](/guide/status) for qualification.
 
 ::: tip
 Treat `NetworkPolicy` as the portable L3/L4 floor and workload proof as the application
@@ -71,7 +76,7 @@ controller; do not install a CRD by itself.
 4. Render the chart and inspect the Agent Sandbox template, claim policy and resource limits.
 5. Verify the generated Service is private and the Pod has no Ingress, mutation RBAC or persistent volume.
 6. Verify only the ingress controller can reach the public API port.
-7. Verify the computer can reach the private server and cannot connect directly to LiteLLM.
+7. Verify the computer can reach only the private review-credential and checkpoint surfaces it needs, and cannot connect directly to LiteLLM.
 
 Source: [`apps/opencrane/helm/templates/_networkpolicy.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_networkpolicy.tpl),
 [`apps/_infra/agent-sandbox/helm/templates/_resources.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/agent-sandbox/helm/templates/_resources.tpl),

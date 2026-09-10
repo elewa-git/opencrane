@@ -5,6 +5,7 @@ import type { HistoryPersistentRecordedEvent, HistoryPersistentSubscription } fr
 import { ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActivationConsumer, type ConversationComputerActivationConsumerEvent, type ConversationComputerActivationConsumerHealth, type ConversationComputerActivationConsumerOptions, type ConversationComputerActivationListenerOptions, type ConversationComputerActivationOutcome, type ConversationComputerActivationResubscribePolicy } from "./conversation-computer-activation.types";
 
 const _ACTIVATION_EVENT_TYPE = "opencrane.computer.activation-requested.v1";
+const _UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 /** First wait before a not-ready or transiently failed delivery is handed back for redelivery. */
 const _RETRY_BASE_MILLISECONDS = 1_000;
 /**
@@ -270,7 +271,9 @@ function _ActivationCommand(delivery: HistoryPersistentRecordedEvent): Conversat
 	const computerId = delivery.data["computerId"];
 	const conversationId = delivery.data["conversationId"];
 	const generation = delivery.data["generation"];
-	if (typeof siloId !== "string" || siloId.length === 0 || delivery.streamName !== `computer-activations-${siloId}` || typeof computerId !== "string" || computerId.length === 0 || typeof conversationId !== "string" || conversationId.length === 0 || typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1)
+	const causationPosition = delivery.data["causationPosition"];
+	const causationId = delivery.metadata["causationId"];
+	if (!_UUID.test(delivery.id) || typeof causationId !== "string" || !_UUID.test(causationId) || typeof causationPosition !== "string" || !/^(0|[1-9][0-9]*)$/u.test(causationPosition) || typeof siloId !== "string" || siloId.length === 0 || delivery.streamName !== `computer-activations-${siloId}` || typeof computerId !== "string" || computerId.length === 0 || typeof conversationId !== "string" || conversationId.length === 0 || typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1)
 		return null;
-	return { siloId, computerId, conversationId, generation };
+	return { activationEventId: delivery.id.toLowerCase(), causationId: causationId.toLowerCase(), causationPosition, siloId, computerId, conversationId, generation };
 }

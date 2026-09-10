@@ -9,6 +9,7 @@ import { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-
 
 import type { ConversationComputerActivationWorkerHandle, ConversationComputerActivationWorkerOptions } from "./conversation-computer-activation-composition.types";
 import type { Logger } from "@opencrane/backend/observability";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 /** Consumer group the KurrentDB bootstrap Job provisions for every silo. */
 const _ACTIVATION_GROUP = "conversation-computer-activation";
@@ -23,9 +24,9 @@ const _ACTIVATION_GROUP = "conversation-computer-activation";
  *
  * Called by: `_Main` in apps/opencrane/src/index.ts.
  */
-export async function _StartConversationComputerActivationWorker(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, historyStore: HistoryStore, siloId: string, profile: ConversationComputerActivationProfile, options: ConversationComputerActivationWorkerOptions): Promise<ConversationComputerActivationWorkerHandle>
+export async function _StartConversationComputerActivationWorker(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, historyStore: HistoryStore, workflows: Pick<IWorkflowEngine, "spawn">, siloId: string, profile: ConversationComputerActivationProfile, options: ConversationComputerActivationWorkerOptions): Promise<ConversationComputerActivationWorkerHandle>
 {
-	const projections = new PrismaConversationComputerActivationUnitOfWork(prisma);
+	const projections = new PrismaConversationComputerActivationUnitOfWork(prisma, workflows);
 	const claims = new AgentSandboxClaimAdapter(customApi);
 	const authority = new ConversationComputerActivationAuthorityAdapter(projections, historyStore, claims, profile);
 	const stop = new AbortController();

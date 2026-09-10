@@ -11,6 +11,12 @@ import type { ActiveLeaseScope, ComputerScope } from "@opencrane/contracts";
  */
 export interface ConversationComputerActivationCommand
 {
+	/** Identifies this immutable activation delivery and the durable workflow admitted for it. */
+	readonly activationEventId: string;
+	/** Identifies the conversation entry whose activation requested this turn. */
+	readonly causationId: string;
+	/** Records that entry's immutable conversation position for ordered workflow admission. */
+	readonly causationPosition: string;
 	/** Identifies the silo-local activation queue. */
 	readonly siloId: string;
 	/** Identifies the logical computer to wake. */
@@ -246,7 +252,16 @@ export interface ConversationComputerActivationProjectionRepository
 {
 	/** Resolves coordinates or returns null for a foreign or non-agent conversation. */
 	resolve(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationProjection | null>;
-	/** Publishes the active lease after Kurrent has accepted the Active event. */
+	/** Publishes the active lease and admits its server turn workflow after Kurrent has accepted the Active event. */
+	publishActiveLease(command: ConversationComputerActiveLeaseProjectionCommand, activation: Pick<ConversationComputerActivationCommand, "activationEventId" | "causationId" | "causationPosition">): Promise<void>;
+}
+
+/** Keeps direct relational lease projection access inside the activation UnitOfWork. */
+export interface ConversationComputerActivationProjectionStore
+{
+	/** Resolves coordinates or returns null for a foreign or non-agent conversation. */
+	resolve(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationProjection | null>;
+	/** Publishes and verifies the exact active lease projection. */
 	publishActiveLease(command: ConversationComputerActiveLeaseProjectionCommand): Promise<void>;
 }
 

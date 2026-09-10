@@ -70,5 +70,5 @@ export async function _ToolContinuationHarness()
 		}),
 	};
 	Object.assign(overrides, { modelCustody: custody, toolResults: results, toolProposals: proposals });
-	return { ...f, authority: f.restart(), call, rows, custody, results, proposals, toolFlags: flags, step: { bootstrapId: f.output.bootstrapId, workload: f.command.workload } };
+	return { ...f, authority: f.restart(), call, rows, custody, results, proposals, toolFlags: flags, step: f.output.bootstrapId };
 }

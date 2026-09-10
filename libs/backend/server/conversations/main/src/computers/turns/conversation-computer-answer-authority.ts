@@ -1,17 +1,16 @@
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import { ConversationComputerToolResultOutcomes } from "./conversation-computer-continuation.types";
-import type { ConversationComputerAnswerAuthorityDependencies, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerAnswerAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /**
- * Recheck current history, Pod and selected-tool authority before a new answer is physically appended.
- * A saved intent does not replace these checks. BoundConversationWriter calls this only for an empty
- * output slot; exact already-accepted history remains recoverable after later authority loss.
- * Called by: output preparation and the composed bound writer's append fence.
- * @returns The current deadline, shortened by the selected tool result's authority when applicable.
+ * Recheck current history, Pod and selected-tool authority immediately before the turn store's atomic append.
+ * A saved receipt names an already committed event and does not replace these checks for a new answer.
+ * Called by: ConversationComputerTurnAuthority and the generic writer fence retained by its factory.
+ * @returns The current candidate and deadline from the same check used for the physical append.
  * @throws Error when current access, the original result digest or its authority deadline fails.
  */
-export async function __AssertConversationComputerAnswerAuthority(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity, dependencies: ConversationComputerAnswerAuthorityDependencies): Promise<number>
+export async function __AssertConversationComputerAnswerAuthority(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity, dependencies: ConversationComputerAnswerAuthorityDependencies): Promise<{ readonly candidate: ConversationComputerTurnCandidate; readonly notAfterEpochMs: number }>
 {
 	const current = await dependencies.candidates.assertCurrent(turn, workload);
 	let notAfter = Date.parse(current.credentialExpiresAt);
@@ -24,5 +23,5 @@ export async function __AssertConversationComputerAnswerAuthority(turn: FrozenCo
 	}
 	if (!Number.isSafeInteger(notAfter) || notAfter <= Date.now())
 		throw new Error("Conversation answer authority expired before append");
-	return notAfter;
+	return { candidate: current, notAfterEpochMs: notAfter };
 }

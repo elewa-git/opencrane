@@ -45,9 +45,9 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   DB profile turns it on. When on, `LITELLM_SALT_KEY` (from `litellm.existingSaltSecret`) encrypts stored
   provider keys and must never be rotated, or those keys become unreadable.
 - `litellm.image.*`, `.podAnnotations`, `.service.port` — image, restart, and port controls.
-- The app-owned policy admits same-release OpenCrane and Cognee on the service port. Conversation
-  computer Pods request model work through the server and receive no direct LiteLLM ingress allowance.
-  Their own policy also denies direct model egress. The LiteLLM policy remains active whenever Agent
+- The app-owned policy admits same-release OpenCrane and Cognee on the service port. OpenCrane owns
+  model requests for conversation turns; conversation-computer Pods receive no model input or direct
+  LiteLLM ingress allowance. Their own policy also denies direct model egress. The LiteLLM policy remains active whenever Agent
   Sandbox is enabled. Egress is limited to PostgreSQL,
   DNS when enabled, and TLS provider APIs; coarse platform policies exclude LiteLLM so they cannot
   widen this boundary.

@@ -1,4 +1,4 @@
-import type { CompiledRunInput, ConversationEntry } from "@opencrane/contracts";
+import type { CompiledRunInput, ConversationEntry, MessageEntry } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +11,7 @@ const _COMMAND = {
   lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
 };
 
-function _Entry(): ConversationEntry {
+function _Entry(): MessageEntry {
   return {
     schemaVersion: 1,
     id: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
@@ -72,8 +72,7 @@ function _Genesis(): HistoryRecordedEvent {
   };
 }
 
-function _Event(): HistoryRecordedEvent {
-  const entry = _Entry();
+function _Event(entry: ConversationEntry = _Entry()): HistoryRecordedEvent {
   return {
     streamName: "conversation-conversation-1",
     id: entry.id,
@@ -86,20 +85,16 @@ function _Event(): HistoryRecordedEvent {
       correlationId: entry.correlationId,
       idempotencyKey: entry.idempotencyKey,
     },
-    revision: 1n,
+    revision: BigInt(entry.position),
     recordedAt: new Date(entry.occurredAt),
   };
-}
-
-async function* _Events(): AsyncIterable<HistoryRecordedEvent> {
-  yield _Genesis();
-  yield _Event();
 }
 
 function _Harness(
   memberships: readonly object[] = [{ subject: "user-1" }],
   admission = { admit: vi.fn().mockResolvedValue({ compiledInput: _CompiledInput(), authorityExpiresAt: "2099-01-01T00:00:00.000Z" }) },
   existingPayload: object | null = null,
+  events: readonly HistoryRecordedEvent[] = [_Genesis(), _Event()],
 ) {
   const authorization = _ConversationAuthorizationFixture();
   const transaction = {
@@ -167,7 +162,7 @@ function _Harness(
         await operation(transaction),
     ),
   };
-  const history = { readStream: vi.fn().mockImplementation(_Events) };
+  const history = { readStream: vi.fn(async function* _History() { yield* events; }) };
   const cipher = {
     decrypt: vi.fn().mockReturnValue("Hello"),
     encrypt: vi.fn().mockReturnValue({
@@ -288,6 +283,16 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
       },
     });
   });
+
+	it("recompiles a frozen message from its original prefix while reserving the current output head", async function _AnchoredPrefix()
+	{
+		const first = _Entry();
+		const second = { ..._Entry(), id: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", position: "2", idempotencyKey: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", causationId: "source-2", correlationId: "request-2", blocks: [{ id: "block-2", kind: "text" as const, payloadRef: "payload-2", ciphertextDigest: "sha256:cipher" }] } satisfies ConversationEntry;
+		const harness = _Harness(undefined, undefined, null, [_Genesis(), _Event(first), _Event(second)]);
+		const candidate = await harness.authority.compile(_COMMAND, { expectedRevision: 1n, latestPendingEntryId: first.id });
+		expect(candidate).toMatchObject({ latestPendingEntryId: first.id, latestPendingEntryPosition: "1", binding: { expectedRevision: 2n } });
+		expect(harness.admission.admit).toHaveBeenCalledWith(expect.objectContaining({ requestIdempotencyKey: first.id, messageInput: { mode: "pre_persisted_history", messageId: first.id, historyRevision: "1", orderedMessageIds: [first.id] } }));
+	});
 
   it("fails closed when the application-owned admission port rejects the run", async function _AdmissionDenied() {
     const admission = {

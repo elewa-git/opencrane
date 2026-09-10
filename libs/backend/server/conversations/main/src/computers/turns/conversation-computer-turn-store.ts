@@ -12,16 +12,20 @@ import { _ReadBoundConversationWriterIntent } from "@opencrane/backend/server/co
 import { _ConversationComputerActiveTurnStreamName } from "../lifecycle/conversation-computer-activity";
 import type { ConversationComputerOutputDecision, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
+import { ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates } from "@opencrane/contracts";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
 const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v2";
 const _ACTIVE_EVENT = "opencrane.conversation-computer-turn-active.v1";
 const _SETTLED_EVENT = "opencrane.conversation-computer-turn-settled.v1";
 
+/** Reports that newer conversation history won the output position before the atomic commit. */
+export class ConversationComputerOutputPositionConflictError extends Error {}
+
 /** Persists immutable turn coordinates, a compile digest, and terminal output coordinates in a deterministic Kurrent stream; compiled content never enters it. */
 export class KurrentConversationComputerTurnStore implements ConversationComputerTurnStore
 {
-	public constructor(private readonly history: Pick<HistoryStore, "append" | "readStream">) {}
+	public constructor(private readonly history: Pick<HistoryStore, "append" | "appendAtomic" | "readStream">) {}
 
 	/** Create the deterministic turn stream or return the byte-equivalent frozen turn. */
 	public async createOrRead(turn: FrozenConversationComputerTurn): Promise<FrozenConversationComputerTurn>
@@ -132,7 +136,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	 * Consume the first model allowance at revision 1 and verify the complete stored reservation.
 	 * A duplicate event-id acknowledgement is not enough: the stored fields must match this call's
 	 * fresh fence. A reservation present when this method starts always returns false.
-	 * Called by: ConversationComputerTurnAuthority.modelStep.
+	 * Called by: ConversationComputerTurnAuthority.advance.
 	 */
 	public async reserveModel(bootstrapId: string, reservation: ConversationComputerModelReservation): Promise<boolean>
 	{
@@ -170,7 +174,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		return active === null ? null : await this.load(active);
 	}
 
-	/** Save the full intent before history append, then return the exact stored winner for this command. */
+	/** Commit the saved decision and participant-visible answer at their checked stream heads. */
 	public async markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<ConversationComputerOutputDecision>
 	{
 		const requested = structuredClone(receipt);
@@ -179,10 +183,15 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			throw new Error("Conversation computer turn does not record this output decision");
 		const reservation = _OutputReservation(turn);
 		const intent = _OutputIntent(turn, requested);
+		const appendAtomic = this.history.appendAtomic;
+		const turnStreamName = _Stream(bootstrapId);
+		const turnExpectedRevision = reservation.ordinal === 1 ? 1n : 3n;
+		const conversationExpectedRevision = BigInt(intent.expectedRevision);
+		const outputEvent = { id: intent.event.id, type: _OUTPUT_EVENT, data: { bootstrapId, modelInvocationFence: reservation.invocationFence, intent }, metadata: { bootstrapId } };
 		let outcome: ConversationComputerOutputDecision["outcome"] = turn.outputReceipt === null ? "accepted" : "idempotent";
 		try
 		{
-			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: reservation.ordinal === 1 ? 1n : 3n, events: [{ id: intent.event.id, type: _OUTPUT_EVENT, data: { bootstrapId, modelInvocationFence: reservation.invocationFence, intent }, metadata: { bootstrapId } }] });
+			await appendAtomic.call(this.history, { expectedHeads: [{ streamName: turnStreamName, revision: turnExpectedRevision }, { streamName: intent.streamName, revision: conversationExpectedRevision }], appends: [{ streamName: turnStreamName, expectedRevision: turnExpectedRevision, events: [outputEvent] }, { streamName: intent.streamName, expectedRevision: conversationExpectedRevision, events: [intent.event] }] });
 		}
 		catch (error)
 		{
@@ -191,7 +200,9 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			outcome = "idempotent";
 		}
 		const existing = await this.load(bootstrapId);
-		if (existing === null || existing.outputReceipt === null || !_SameReceipt(existing.outputReceipt, intent))
+		if (existing === null || existing.outputReceipt === null)
+			throw new ConversationComputerOutputPositionConflictError("Conversation computer output position changed before its atomic commit");
+		if (!_SameReceipt(existing.outputReceipt, intent))
 			throw new Error("Conversation computer turn does not record this output decision");
 		return { outcome, receipt: existing.outputReceipt };
 	}
@@ -321,6 +332,7 @@ function _Serializable(turn: FrozenConversationComputerTurn): Record<string, unk
 		leaseId: turn.lease.leaseId,
 		binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() },
 		latestPendingEntryId: turn.latestPendingEntryId,
+		latestPendingEntryPosition: turn.latestPendingEntryPosition,
 		modelAlias: turn.modelAlias,
 		maximumBudgetUsd: turn.maximumBudgetUsd,
 		credentialLifetimeSeconds: turn.credentialLifetimeSeconds,
@@ -343,7 +355,7 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 	if (event.type !== _FROZEN_EVENT || event.id !== bootstrapId || event.streamName !== _Stream(bootstrapId))
 		throw new Error("Conversation computer turn received an invalid frozen event");
 	const value = event.data["turn"] as _StoredFrozenTurn;
-	if (value?.bootstrapId !== bootstrapId || typeof value.binding?.expectedRevision !== "string" || typeof value.compile?.digest !== "string" || typeof value.compile.runId !== "string" || typeof value.compile.attempt !== "number" || typeof value.compile.promptCompilerVersion !== "string")
+	if (value?.bootstrapId !== bootstrapId || typeof value.binding?.expectedRevision !== "string" || typeof value.latestPendingEntryPosition !== "string" || !/^(0|[1-9][0-9]*)$/u.test(value.latestPendingEntryPosition) || typeof value.compile?.digest !== "string" || typeof value.compile.runId !== "string" || typeof value.compile.attempt !== "number" || typeof value.compile.promptCompilerVersion !== "string")
 		throw new Error("Conversation computer turn received malformed frozen data");
 	return {
 		bootstrapId: value.bootstrapId,
@@ -352,6 +364,7 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 		lease: { leaseId: value.leaseId, leaseGeneration: value.generation, sandboxClaimId: value.sandboxClaimId },
 		binding: { ...value.binding, expectedRevision: BigInt(value.binding.expectedRevision) },
 		latestPendingEntryId: value.latestPendingEntryId,
+		latestPendingEntryPosition: value.latestPendingEntryPosition,
 		modelAlias: value.modelAlias,
 		maximumBudgetUsd: value.maximumBudgetUsd,
 		credentialLifetimeSeconds: value.credentialLifetimeSeconds,
@@ -381,9 +394,12 @@ function _Output(event: HistoryRecordedEvent, turn: FrozenConversationComputerTu
 /** Require a completed text answer whose event id matches the server's model reservation. */
 function _OutputIntent(turn: FrozenConversationComputerTurn, value: unknown): ConversationComputerTurnOutputReceipt
 {
-	const intent = _ReadBoundConversationWriterIntent(turn.binding, value);
+	const expectedRevision = (value as { readonly expectedRevision?: unknown } | null)?.expectedRevision;
+	if (typeof expectedRevision !== "string" || !/^(0|[1-9][0-9]*)$/u.test(expectedRevision) || BigInt(expectedRevision) < turn.binding.expectedRevision)
+		throw new Error("Conversation computer output decision has an invalid history position");
+	const intent = _ReadBoundConversationWriterIntent({ ...turn.binding, expectedRevision: BigInt(expectedRevision) }, value);
 	const entry = intent.event.data.entry;
-	if (intent.event.id !== _OutputReservation(turn).invocationFence || entry.kind !== "message" || entry.state !== "completed" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
+	if (intent.event.id !== _OutputReservation(turn).invocationFence || entry.kind !== ConversationEntryKinds.Message || entry.state !== MessageStates.Completed || entry.blocks.length !== 1 || entry.blocks[0].kind !== ConversationMessageContentBlockKinds.Text
 		|| entry.replyToEntryId !== turn.latestPendingEntryId || entry.addressedAgentIdentityId !== null || entry.activation !== "none"
 		|| entry.visibility.audience !== "conversation" || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
 		throw new Error("Conversation computer output decision has a different answer shape");

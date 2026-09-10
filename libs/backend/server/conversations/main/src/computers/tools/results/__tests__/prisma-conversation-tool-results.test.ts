@@ -26,7 +26,7 @@ const _REFERENCE = "44444444-4444-4444-8444-444444444444";
 async function _savedTurn(reserve: boolean)
 {
 	const streams = new Map<string, HistoryRecordedEvent[]>();
-	const history: Pick<HistoryStore, "append" | "readStream"> = {
+	const history: Pick<HistoryStore, "append" | "appendAtomic" | "readStream"> = {
 		async append(command)
 		{
 			const events = streams.get(command.streamName) ?? [];
@@ -37,6 +37,24 @@ async function _savedTurn(reserve: boolean)
 				events.push({ ...structuredClone(event), metadata: Object.fromEntries(Object.entries(event.metadata).map(([key, value]) => [key, String(value)])), streamName: command.streamName, revision: BigInt(events.length), recordedAt: new Date() });
 			streams.set(command.streamName, events);
 			return { streamName: command.streamName, revision: BigInt(events.length - 1) };
+		},
+		async appendAtomic(command)
+		{
+			for (const head of command.expectedHeads)
+			{
+				const events = streams.get(head.streamName) ?? [];
+				const expected = head.revision === HistoryExpectedRevisions.NoStream ? -1n : head.revision;
+				if (expected !== BigInt(events.length - 1))
+					throw new Error("Fixture received a conflicting atomic history append");
+			}
+			for (const append of command.appends)
+			{
+				const events = streams.get(append.streamName) ?? [];
+				for (const event of append.events)
+					events.push({ ...structuredClone(event), metadata: Object.fromEntries(Object.entries(event.metadata).map(([key, value]) => [key, String(value)])), streamName: append.streamName, revision: BigInt(events.length), recordedAt: new Date() });
+				streams.set(append.streamName, events);
+			}
+			return command.appends.map(append => ({ streamName: append.streamName, revision: BigInt((streams.get(append.streamName) ?? []).length - 1) }));
 		},
 		async *readStream(request)
 		{
@@ -49,8 +67,10 @@ async function _savedTurn(reserve: boolean)
 		binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 },
 		lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "test-v1", digest: _DIGEST },
 		latestPendingEntryId: "input-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60,
+		latestPendingEntryPosition: "1",
 		modelReservation: null, toolSelection: null, continuationReservation: null, outputReceipt: null, outputSourceCommandId: null,
 	};
+	streams.set("conversation-conversation-1", [0n, 1n].map(revision => ({ id: `input-${revision.toString()}`, type: "input", data: {}, metadata: {}, streamName: "conversation-conversation-1", revision, recordedAt: _NOW })));
 	await store.createOrRead(frozen);
 	const first = { ordinal: 1 as const, tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000 };
 	await store.reserveModel(frozen.bootstrapId, { ...first, invocationFence: _FIRST, requestDigest: _ConversationModelRequestDigest(frozen, first) });

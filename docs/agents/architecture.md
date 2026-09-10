@@ -27,10 +27,12 @@ authoritative for memberships, grants, approvals, budgets, and transaction-bound
 See [ADR 0016](../adr/0016-conversation-history-and-computers.md). Artifact bytes live behind
 `ArtifactStore`; database records own their identity, version, authorization, and lineage.
 
-A conversation computer receives a frozen run snapshot, reports candidates and events, and owns no
-durable product authority. Agent Sandbox starts or replaces its Pod after the server admits a claim
-for the configured profile. The active computer lease fences the current generation. Kubernetes
-objects project that admitted work; their existence does not authorise a run.
+The server freezes the run snapshot and owns model selection, tool continuation, and canonical
+conversation output. A conversation-computer Pod receives none of that material; it prepares the
+isolated workspace and review surface and owns no durable product authority. Agent Sandbox starts
+or replaces the Pod after the server admits a claim for the configured profile. The active computer
+lease fences the current generation. Kubernetes objects project that admitted work; their existence
+does not authorise a run.
 
 ## Organisation boundary
 

@@ -30,7 +30,7 @@ function _RequestDigest(turn: FrozenConversationComputerTurn, reservation: Omit<
 async function _TurnStore(fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, invocation: { toolInvocationId: string; requestFingerprint: string }, payloadDigest: string, reserve: boolean)
 {
 	const streams = new Map<string, HistoryRecordedEvent[]>();
-	const history: Pick<HistoryStore, "append" | "readStream"> = {
+	const history: Pick<HistoryStore, "append" | "appendAtomic" | "readStream"> = {
 		async append(command)
 		{
 			const events = streams.get(command.streamName) ?? [];
@@ -41,6 +41,24 @@ async function _TurnStore(fixture: Awaited<ReturnType<typeof _SeedConversationTo
 				events.push({ ...structuredClone(event), metadata: Object.fromEntries(Object.entries(event.metadata).map(([key, value]) => [key, String(value)])), streamName: command.streamName, revision: BigInt(events.length), recordedAt: new Date() });
 			streams.set(command.streamName, events);
 			return { streamName: command.streamName, revision: BigInt(events.length - 1) };
+		},
+		async appendAtomic(command)
+		{
+			for (const head of command.expectedHeads)
+			{
+				const events = streams.get(head.streamName) ?? [];
+				const expected = head.revision === HistoryExpectedRevisions.NoStream ? -1n : head.revision;
+				if (expected !== BigInt(events.length - 1))
+					throw new Error("SQL fixture atomic history append conflicted");
+			}
+			for (const append of command.appends)
+			{
+				const events = streams.get(append.streamName) ?? [];
+				for (const event of append.events)
+					events.push({ ...structuredClone(event), metadata: Object.fromEntries(Object.entries(event.metadata).map(([key, value]) => [key, String(value)])), streamName: append.streamName, revision: BigInt(events.length), recordedAt: new Date() });
+				streams.set(append.streamName, events);
+			}
+			return command.appends.map(append => ({ streamName: append.streamName, revision: BigInt((streams.get(append.streamName) ?? []).length - 1) }));
 		},
 		async *readStream(request)
 		{

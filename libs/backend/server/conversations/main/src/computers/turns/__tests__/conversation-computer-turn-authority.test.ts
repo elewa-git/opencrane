@@ -60,18 +60,22 @@ function _Harness() {
     siloId: "testv5",
     toolProposals: { admit: vi.fn() },
     candidates: {
-      resolve: vi
+      resolve: vi.fn(),
+      resolveForWorkflow: vi
         .fn()
-        .mockResolvedValue({
+        .mockResolvedValue({ candidate: {
           binding: _BINDING,
           compiledInput: _COMPILED,
           latestPendingEntryId: "entry-1",
+          latestPendingEntryPosition: "1",
           modelAlias: "testv5-default",
           maximumBudgetUsd: 0.1,
           credentialLifetimeSeconds: 300,
           credentialExpiresAt: "2099-01-01T00:00:00.000Z",
           lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
-        }),
+        }, workload: _WORKLOAD }),
+      assertCurrentForWorkflow: vi.fn().mockResolvedValue(undefined),
+      assertLeaseForWorkflow: vi.fn().mockResolvedValue(_WORKLOAD),
       assertCurrent: vi.fn().mockResolvedValue(undefined),
       admit: vi.fn().mockResolvedValue(undefined),
     },
@@ -137,9 +141,10 @@ function _Harness() {
       }),
       settle: vi.fn(async function _Settle() { active = false; }),
     },
-    writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ append, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) },
+    writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ confirm: append, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) },
   };
-  dependencies.candidates.assertCurrent.mockImplementation(() => dependencies.candidates.resolve());
+  dependencies.candidates.assertCurrentForWorkflow.mockImplementation(() => dependencies.candidates.resolveForWorkflow());
+  dependencies.candidates.assertCurrent.mockImplementation(async () => (await dependencies.candidates.resolveForWorkflow()).candidate);
   return {
     authority: new ConversationComputerTurnAuthority(dependencies),
     append,
@@ -150,11 +155,13 @@ function _Harness() {
 describe("ConversationComputerTurnAuthority", function _Suite() {
   it("hands out the derived review credential after Pod admission without compiling or admitting a run", async function _ReviewCredential() {
     const { authority, dependencies } = _Harness();
-    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD };
+    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 },
+      causationId: "entry-1",
+      causationPosition: "1", workload: _WORKLOAD };
     expect(await authority.reviewCredential(command)).toEqual({ reviewCredential: "keyed-review-secret" });
     expect(dependencies.candidates.admit).toHaveBeenCalledWith(command);
     expect(dependencies.reviewCredentials.derive).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 } });
-    expect(dependencies.candidates.resolve).not.toHaveBeenCalled();
+    expect(dependencies.candidates.resolveForWorkflow).not.toHaveBeenCalled();
     expect(dependencies.runLifecycle.start).not.toHaveBeenCalled();
     dependencies.candidates.admit.mockRejectedValue(new Error("not the bound Pod"));
     await expect(authority.reviewCredential(command)).rejects.toThrow("not the bound Pod");
@@ -166,12 +173,13 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const command = {
       computerId: "computer-1",
       lease: { leaseId: "lease-1", leaseGeneration: 2 },
-      workload: _WORKLOAD,
+      causationId: "entry-1",
+      causationPosition: "1",
     };
-    const first = await authority.bootstrap(command);
-    const duplicate = await authority.bootstrap(command);
+    const first = await authority.start(command);
+    const duplicate = await authority.start(command);
     expect(duplicate?.bootstrapId).toBe(first?.bootstrapId);
-    expect(first).toEqual({ bootstrapId: first!.bootstrapId, outcome: "ready" });
+    expect(first).toMatchObject({ bootstrapId: first!.bootstrapId });
     const frozen = dependencies.store.createOrRead.mock.calls[0]?.[0];
     expect(frozen).not.toHaveProperty("compiledInput");
     expect(frozen?.compile).toEqual({
@@ -185,17 +193,17 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
 
   it("appends one safe encrypted payload reference and makes the retry idempotent", async function _Output() {
     const { authority, append, dependencies } = _Harness();
-    const bootstrap = await authority.bootstrap({
+    const bootstrap = await authority.start({
       computerId: "computer-1",
       lease: { leaseId: "lease-1", leaseGeneration: 2 },
-      workload: _WORKLOAD,
+      causationId: "entry-1",
+      causationPosition: "1",
     });
     const command = {
       bootstrapId: bootstrap!.bootstrapId,
       sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
       modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"),
       text: "Hi",
-      workload: _WORKLOAD,
     };
     await _ReserveConversationOutputFixture(dependencies.store, command.bootstrapId, command.sourceCommandId);
     await expect(authority.appendOutput(command)).resolves.toBe("accepted");
@@ -213,10 +221,11 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
 
   it("converges after the history append succeeds but the first completion marker fails", async function _AppendResponseLoss() {
     const { authority, append, dependencies } = _Harness();
-    const bootstrap = await authority.bootstrap({
+    const bootstrap = await authority.start({
       computerId: "computer-1",
       lease: { leaseId: "lease-1", leaseGeneration: 2 },
-      workload: _WORKLOAD,
+      causationId: "entry-1",
+      causationPosition: "1",
     });
     dependencies.runLifecycle.complete
       .mockRejectedValueOnce(new Error("lifecycle unavailable"))
@@ -226,14 +235,13 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
       modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"),
       text: "Hi",
-      workload: _WORKLOAD,
     };
     await _ReserveConversationOutputFixture(dependencies.store, command.bootstrapId, command.sourceCommandId);
     await expect(authority.appendOutput(command)).rejects.toThrow(
       "lifecycle unavailable",
     );
     const restartedWorker = new ConversationComputerTurnAuthority(dependencies);
-    await expect(restartedWorker.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD })).resolves.toBeNull();
+    await expect(restartedWorker.start({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, causationId: "entry-1", causationPosition: "1" })).resolves.toBeNull();
     expect(append).toHaveBeenCalledTimes(2);
     expect(append.mock.calls[0]?.[0].event.id).toBe(
       append.mock.calls[1]?.[0].event.id,
@@ -247,20 +255,26 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const command = {
       computerId: "computer-1",
       lease: { leaseId: "lease-1", leaseGeneration: 2 },
-      workload: _WORKLOAD,
+      causationId: "entry-1",
+      causationPosition: "1",
     };
-    await authority.bootstrap(command);
-    dependencies.candidates.resolve.mockResolvedValue({
-      binding: _BINDING,
-      compiledInput: { ..._COMPILED, instructions: "Changed", digest: `sha256:${"c".repeat(64)}` },
-      latestPendingEntryId: "entry-1",
-      modelAlias: "testv5-default",
-      maximumBudgetUsd: 0.1,
-      credentialLifetimeSeconds: 300,
-          credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-      lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
+    await authority.start(command);
+    dependencies.candidates.assertCurrentForWorkflow.mockResolvedValue({
+      candidate: {
+        binding: _BINDING,
+        compiledInput: { ..._COMPILED, instructions: "Changed", digest: `sha256:${"c".repeat(64)}` },
+        latestPendingEntryId: "entry-1",
+        latestPendingEntryPosition: "1",
+        modelAlias: "testv5-default",
+        maximumBudgetUsd: 0.1,
+        credentialLifetimeSeconds: 300,
+        credentialExpiresAt: "2099-01-01T00:00:00.000Z",
+        lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
+      },
+      workload: _WORKLOAD,
     });
-    await expect(authority.bootstrap(command)).rejects.toThrow(
+    dependencies.candidates.resolveForWorkflow.mockResolvedValue(await dependencies.candidates.assertCurrentForWorkflow());
+    await expect(authority.start(command)).rejects.toThrow(
       /recompiled input .* does not match the frozen turn digest/,
     );
     expect(dependencies.credentials.issueOnce).not.toHaveBeenCalled();
@@ -268,26 +282,21 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
 
   it("rejects stale or cross-silo workload evidence before credential or output use", async function _Fence() {
     const { authority, dependencies } = _Harness();
-    dependencies.candidates.assertCurrent.mockRejectedValue(
+    dependencies.candidates.assertCurrentForWorkflow.mockRejectedValue(
       new Error("stale lease, generation, revision, or Pod binding"),
     );
-    await expect(
-      authority.bootstrap({
-        computerId: "computer-1",
-        lease: { leaseId: "lease-old", leaseGeneration: 3 },
-        workload: { ..._WORKLOAD, namespace: "foreign" },
-      }),
-    ).rejects.toThrow(/stale lease/);
+    await expect(authority.start({ computerId: "computer-1", lease: { leaseId: "lease-old", leaseGeneration: 3 }, causationId: "entry-1", causationPosition: "1" })).rejects.toThrow(/stale lease/);
     expect(dependencies.credentials.issueOnce).not.toHaveBeenCalled();
   });
   it("uses the current absolute authority bound when reserving the model request", async function () {
     const { authority, dependencies } = _Harness();
-    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, workload: _WORKLOAD };
-    const bootstrap = await authority.bootstrap(command);
-    const candidate = await dependencies.candidates.resolve(command);
+    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, causationId: "entry-1", causationPosition: "1" };
+    const bootstrap = await authority.start(command);
+    const execution = await dependencies.candidates.resolveForWorkflow(command);
+    const candidate = execution.candidate;
     const notAfter = new Date(Date.now() + 20_000).toISOString();
-    dependencies.candidates.resolve.mockResolvedValue({ ...candidate, credentialLifetimeSeconds: 20, credentialExpiresAt: notAfter });
-    expect(await authority.modelStep({ bootstrapId: bootstrap!.bootstrapId, workload: _WORKLOAD })).toEqual({ outcome: "completed" });
+    dependencies.candidates.resolveForWorkflow.mockResolvedValue({ candidate: { ...candidate, credentialLifetimeSeconds: 20, credentialExpiresAt: notAfter }, workload: _WORKLOAD });
+    expect(await authority.advance(bootstrap!.bootstrapId)).toEqual({ outcome: "completed" });
     expect(dependencies.credentials.issueOnce).toHaveBeenLastCalledWith(expect.objectContaining({ expirySeconds: 20, notAfter }));
     expect(dependencies.model.request).toHaveBeenCalledWith(expect.objectContaining({ maxCompletionTokens: 512, notAfterEpochMs: Date.parse(notAfter) }));
   });

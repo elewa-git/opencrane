@@ -72,9 +72,10 @@ PostgreSQL, KurrentDB and Kubernetes.
 
 ## External-action contract
 
-The runtime may propose a tool call but cannot authorize or execute it. OpenCrane resolves the exact
-tool revision and then checks the snapshot, grant, approval, budget, and idempotency state. Only a
-server-owned executor receives the scoped credential and performs the action.
+The server-owned conversation model may select one tool call but cannot authorize or execute it.
+OpenCrane resolves the exact tool revision and then checks the snapshot, grant, approval, budget,
+and idempotency state. Only a server-owned executor receives the scoped credential and performs the
+action. Other runtime classes remain subject to the same separation.
 
 If policy, approval, credential, budget, or audit persistence is unavailable, execution fails closed.
 A result that cannot be persisted is not reported as a durable success.
@@ -86,8 +87,9 @@ captures role, tone and language, answer structure, challenge preference, initia
 approval boundaries, working habits, and memory boundaries. The user may review, edit, replace, or
 restart the result.
 
-The runtime receives only the approved revision through the compiled input. It does not own or
-mutate durable persona files.
+The server resolves the approved revision into compiled input and never sends that input to the
+conversation-computer Pod. Neither the Pod nor another runtime may own or mutate durable persona
+files.
 
 ## Storage and retention
 

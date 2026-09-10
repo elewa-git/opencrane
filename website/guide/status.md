@@ -26,7 +26,9 @@ current review work and its evidence.
 
 - **Useful work across tools:** the internal continuation in [PR #830](https://github.com/elewa-git/opencrane/pull/830)
   can use one permitted tool result in a final assistant answer. CI passes; this change is not yet
-  installed. A real integration, company-assistant tool assignment, visible tool progress and
+  installed. A stacked follow-up moves durable turn progression from the conversation Pod into the
+  existing Absurd workflow boundary; its CI and live qualification remain pending. A real
+  integration, company-assistant tool assignment, visible tool progress and
   human-approved changes still need their complete product journeys.
 - **Recovery controls:** when a model response cannot be recovered, preserve the pending run and
   show the person what happened and what they can do next. The current server keeps the spent
@@ -70,7 +72,7 @@ The continuation implementation at `ada28f1f7` in PR #830 passes
 passes. Live qualification remains pending.
 Both paths preserve a spent request when its response is unavailable, without paid redispatch. A continuation uses the original key and subtracts the entire first token reservation
 before reserving its final request. LiteLLM and provider-internal retries have not been qualified as
-exactly-once execution. The answer-recovery, tool-handoff, server model-step and continuation changes
+exactly-once execution. The answer-recovery, tool-handoff, Absurd orchestration and continuation changes
 have not been rolled out to testv5. T1 retrieval, T2/T3 approved actions and U1 visible recovery remain
 open delivery work.
 

@@ -37,14 +37,14 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		const currentActiveLease = _IsCurrentActiveLease(current.computer.leaseGeneration, lease, command.generation, now);
 		if (current.computer.state === ConversationComputerStates.Warm && currentActiveLease)
 		{
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer, lease));
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer, lease), command);
 			return "idempotent";
 		}
 		if (current.computer.state === ConversationComputerStates.Cooling && currentActiveLease)
 		{
 			const reactivatedAt = now.toISOString();
 			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${lease.id}:${command.generation}:${current.revision}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease });
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer, lease));
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer, lease), command);
 			return "activated";
 		}
 
@@ -64,7 +64,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		// that as the idempotent replay it is instead of a denial.
 		if (current.computer.state === ConversationComputerStates.Warm && _IsCurrentActiveLease(current.computer.leaseGeneration, current.lease, command.generation, new Date()))
 		{
-			await this.projections.publishActiveLease(_ActiveProjection(current.computer, current.lease));
+			await this.projections.publishActiveLease(_ActiveProjection(current.computer, current.lease), command);
 			return "idempotent";
 		}
 		if (current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)
@@ -78,7 +78,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		// 4. Fence the assigned sandbox into history before the queue acknowledges activation.
 		const activeLease: ComputerLease = { ...current.lease, sandboxClaimId: claim.claimId, sandboxId: claim.sandboxId, serviceFQDN: claim.serviceFQDN, state: ComputerLeaseStates.Active };
 		await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-lease-active", activeLease.id), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: new Date().toISOString() }, lease: activeLease });
-		await this.projections.publishActiveLease(_ActiveProjection(current.computer, activeLease));
+		await this.projections.publishActiveLease(_ActiveProjection(current.computer, activeLease), command);
 		return "activated";
 	}
 }

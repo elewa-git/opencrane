@@ -1,7 +1,7 @@
 import { ___ConversationEntrySchema, type ConversationEntry } from "@opencrane/contracts";
 import { type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ConversationHistoryGenesis, ConversationHistoryGenesisReadCommand, ConversationHistoryReadCommand, ConversationHistoryReadResult } from "./conversation-history-reader.types";
+import { ConversationHistoryModes, type ConversationHistoryGenesis, type ConversationHistoryGenesisReadCommand, type ConversationHistoryReadCommand, type ConversationHistoryReadResult } from "./conversation-history-reader.types";
 import { _ParseGroupChildOrigin } from "./conversation-genesis.validator";
 
 /** Names the sole versioned event that this reader exposes as a participant-visible entry. */
@@ -129,11 +129,11 @@ function _ValidatedGenesis(event: HistoryRecordedEvent, command: ConversationHis
 	if (typeof value !== "object" || value === null || Array.isArray(value))
 		throw new Error("Conversation history read received malformed genesis data");
 	const genesis = value as ConversationHistoryGenesis;
-	if (genesis.schemaVersion !== 1 || genesis.siloId !== command.siloId || genesis.conversationId !== command.conversationId || !["agent_session", "direct", "group"].includes(genesis.mode) || !_Identifier(genesis.createdByPrincipalId) || !Number.isFinite(Date.parse(genesis.createdAt)))
+	if (genesis.schemaVersion !== 1 || genesis.siloId !== command.siloId || genesis.conversationId !== command.conversationId || !Object.values(ConversationHistoryModes).includes(genesis.mode as ConversationHistoryModes) || !_Identifier(genesis.createdByPrincipalId) || !Number.isFinite(Date.parse(genesis.createdAt)))
 		throw new Error("Conversation history read received invalid genesis coordinates");
-	if ((genesis.mode === "agent_session") !== _Identifier(genesis.agentServiceId ?? ""))
+	if ((genesis.mode === ConversationHistoryModes.AgentSession) !== _Identifier(genesis.agentServiceId ?? ""))
 		throw new Error("Conversation history read received an invalid genesis service binding");
-	if (genesis.origin !== undefined && (genesis.mode !== "agent_session" || _ParseGroupChildOrigin(genesis.origin, genesis.conversationId) === null))
+	if (genesis.origin !== undefined && (genesis.mode !== ConversationHistoryModes.AgentSession || _ParseGroupChildOrigin(genesis.origin, genesis.conversationId) === null))
 		throw new Error("Conversation history read received an invalid child origin");
 	return genesis;
 }

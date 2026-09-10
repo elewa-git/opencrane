@@ -31,6 +31,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `children/` | Admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
+| `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits and terminal tool-result wakeups. |
 | `computers/turns/credentials/` | Credential issuance, exact recovery and cleanup use repositories supplied by the credential unit of work. |
 | `authorization/` | Transaction-bound product permission and membership checks. |
 | `http/` | Public OpenAPI descriptions. |
@@ -41,8 +42,9 @@ signed-in participant ──► main ◄── HERE ──► history
 - `PrismaAgentSessionCreationUnitOfWork` creates or recovers a personal assistant conversation from its caller-scoped UUID.
 - `PrismaSelfConversationHistoryUnitOfWork` and `_CreateSelfConversationHistoryRouter` bind current access to messages, history and event streams.
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child requests and recovery.
-- Computer activation, lifecycle, checkpoint, turn and review authorities, routers and adapter ports support server composition. The activation worker receives a process logger and an explicit exhaustion callback.
-- `ConversationComputerTurnWriterFactory` owns append-time output, audience, lease and selected-result checks; the activation and lifecycle units of work own their transaction isolation.
+- Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
+- Lifecycle, checkpoint, turn and review authorities, routers and adapter ports support server composition. The activation worker receives a process logger and an explicit exhaustion callback.
+- `ConversationComputerTurnAuthority` owns the final output-authority recheck, the turn store owns the atomic receipt-and-answer commit, and `ConversationComputerTurnWriterFactory` prepares and exactly confirms that answer. The activation and lifecycle units of work own their transaction isolation.
 - `PrismaCompanyAssistantDirectory`, `PrismaGroupChildAgentResolver`, `_ResolveConversationCaller` and `_RegisterGroupChildWorkflow` bind current identity and recovery to participant operation owners.
 - `_SelfConversationHistoryOpenapiPaths` contributes the conversation API description.
 
@@ -62,7 +64,8 @@ and company identity, and returns text to the parent only through an explicit hu
 Archive changes one participant's list and is reversible. Close permanently makes the conversation
 read-only. Computer review reads require current Read permission; interactive effects remain denied
 until concrete argument-bound Use admission exists. Computer turns delegate run admission through
-an injected port and reject a changed frozen input digest or stale lease before issuing credentials.
+an injected port. Their Absurd workflow binds its receipt to the admitted run before any model or
+tool effect, and every server effect rejects a changed frozen input, stale lease or stale generation.
 
 ## Tool and answer authority
 
@@ -76,8 +79,9 @@ The dispatch coordinator delegates saved run and budget evidence, current comput
 conversation access to their owners. It does not decide the invocation lifecycle; central IAM owns
 those state transitions. A terminal result remains readable only while its original authority holds.
 
-The turn store records model reservations and the exact answer intent before history append. A new
-physical append rechecks the workload lease, selected result digest and authority deadline through
+The turn store atomically commits the exact answer receipt and participant-visible history event. Absurd
+owns durable deadlines, waits, restart recovery and selection of the next saved step. A new
+physical append rechecks the workload lease, generation, Pod, history position, selected result digest and authority deadline through
 `__AssertConversationComputerAnswerAuthority`. An already accepted matching history entry can be
 recovered after later authority loss. Provider credentials are issued after their reservation commits;
 exact retries reuse the saved receipt and failed cleanup prevents a replacement key.

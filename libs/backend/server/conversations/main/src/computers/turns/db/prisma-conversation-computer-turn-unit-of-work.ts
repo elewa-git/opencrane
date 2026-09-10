@@ -2,12 +2,12 @@ import { PrismaGroupChildAccessRepository } from "../../../children/db/prisma-gr
 import { createHash } from "node:crypto";
 import { AgentRevisionState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { ConversationPrivatePayloadCipher, EncryptedConversationPrivatePayload } from "@opencrane/backend/server/conversations/history";
-import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnCompileCommand, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnCompileCommand, ConversationComputerTurnHistoryAnchor, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { PrismaConversationProductAuthorizationRepository } from "../../../authorization/db/conversation-product-authorization";
 
 /** Resolves a pending turn and delegates its durable run admission before Kurrent freezes it. */
@@ -27,19 +27,23 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 	}
 
 	/** Compile the latest unhandled human entry with the current published revision; later refreshes conflict with the frozen digest. */
-	public async compile(command: ConversationComputerTurnCompileCommand): Promise<ConversationComputerTurnCandidate | null>
+	public async compile(command: ConversationComputerTurnCompileCommand, anchor?: ConversationComputerTurnHistoryAnchor): Promise<ConversationComputerTurnCandidate | null>
 	{
 		const { siloId, conversationId, computerId, agentIdentityId } = command.computer;
 		const history = await this.histories.read({ siloId, conversationId });
-		const messages = history.entries.filter((entry): entry is MessageEntry => entry.kind === "message" && entry.state === "completed");
-		const lastAgent = messages.findLastIndex(entry => entry.author.kind === "agent");
-		const pending = messages.slice(lastAgent + 1).findLast(entry => entry.author.kind === "human" && (entry.addressedAgentIdentityId === null || entry.addressedAgentIdentityId === agentIdentityId));
+		const expectedRevision = anchor?.expectedRevision ?? BigInt(history.entries.at(-1)?.position ?? "0");
+		const entries = anchor === undefined ? history.entries : history.entries.filter(entry => BigInt(entry.position) <= expectedRevision);
+		if (BigInt(entries.at(-1)?.position ?? "-1") !== expectedRevision)
+			return null;
+		const messages = entries.filter((entry): entry is MessageEntry => entry.kind === ConversationEntryKinds.Message && entry.state === MessageStates.Completed);
+		const answered = new Set(messages.filter(entry => entry.author.kind === ConversationAuthorKinds.Agent && entry.replyToEntryId !== null).map(entry => entry.replyToEntryId));
+		const pending = messages.findLast(entry => entry.author.kind === ConversationAuthorKinds.Human && !answered.has(entry.id) && (entry.addressedAgentIdentityId === null || entry.addressedAgentIdentityId === agentIdentityId));
 		if (pending === undefined)
 			return null;
-		if (pending.author.kind !== "human")
+		if (pending.author.kind !== ConversationAuthorKinds.Human || anchor !== undefined && pending.id !== anchor.latestPendingEntryId)
 			throw new Error("Conversation computer turn requires a pending human entry");
 		const pendingAuthor = pending.author;
-		const expectedRevision = BigInt(history.entries.at(-1)?.position ?? "0");
+		const outputRevision = BigInt(history.entries.at(-1)?.position ?? "0");
 		const loaded = await (async () =>
 		{
 			const conversation = await this.prisma.conversation.findFirst({ where: { id: conversationId, siloId, computerId, lifecycle: ConversationLifecycle.Open, service: { is: { state: AgentServiceState.Active } } }, select: { participants: { where: { accessEndedPosition: null }, select: { userId: true } }, service: { select: { id: true, name: true, activeRevision: { select: { id: true, state: true, publishedAt: true, promptPolicyVersion: true, personaRevisionId: true, budget: true, modelDefinition: { select: { publicModelName: true, generatedOutputCapabilities: true } } } } } } } });
@@ -68,7 +72,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 			throw new Error("Conversation computer turn requires unexpired run and membership authority");
 		if (compiledInput.runId !== runId || compiledInput.attempt !== 1)
 			throw new Error("Conversation computer run admission returned input for another run attempt");
-		return { binding: { siloId, conversationId, computerId, leaseGeneration: command.lease.leaseGeneration, agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: Math.min(300, remainingAuthoritySeconds), credentialExpiresAt: new Date(authorityExpiresAt).toISOString(), lease: command.lease };
+		return { binding: { siloId, conversationId, computerId, leaseGeneration: command.lease.leaseGeneration, agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision: outputRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, latestPendingEntryPosition: pending.position, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: Math.min(300, remainingAuthoritySeconds), credentialExpiresAt: new Date(authorityExpiresAt).toISOString(), lease: command.lease };
 	}
 
 	/** Encrypt and idempotently persist assistant text before history references it, moving the conversation to the top of every list. */
@@ -108,9 +112,9 @@ export class PrismaConversationComputerTurnUnitOfWork implements ConversationCom
 		return this._Run(repository => repository.resolve(siloId, computerId), Prisma.TransactionIsolationLevel.RepeatableRead);
 	}
 
-	public compile(command: ConversationComputerTurnCompileCommand)
+	public compile(command: ConversationComputerTurnCompileCommand, anchor?: ConversationComputerTurnHistoryAnchor)
 	{
-		return this._Run(repository => repository.compile(command), Prisma.TransactionIsolationLevel.RepeatableRead);
+		return this._Run(repository => repository.compile(command, anchor), Prisma.TransactionIsolationLevel.RepeatableRead);
 	}
 
 	public store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string)

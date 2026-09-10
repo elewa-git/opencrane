@@ -90,25 +90,25 @@ cached caller input, workload state, or a permissive default.
 
 ## Runtime boundary
 
-[`apps/conversation-computer`](../../apps/conversation-computer) implements a bounded model turn
-inside the computer claimed for an assistant conversation. Approved persona instructions and
-conversation history reach the model. Connecting model tool requests to the existing governed
-executor remains pending. The server admits work against the active lease generation and
-canonical history.
+The OpenCrane server implements each bounded model turn and advances it through the existing
+durable Absurd workflow. Approved persona instructions and conversation history stay in the server,
+which also owns model credentials, budgets, permitted tool execution, continuation, and canonical
+output. The claimed [`apps/conversation-computer`](../../apps/conversation-computer) Pod prepares
+the isolated workspace and review surface under the active lease generation.
 
 The runtime:
 
 - has no direct Postgres access or Kubernetes RBAC;
 - receives no provider master secret;
 - cannot append canonical events directly;
-- reports candidates that the control plane validates and persists;
+- does not receive model input, outcome state, tool results, or conversation output;
 - executes no external action directly; and
 - keeps framework types, identifiers, and checkpoints behind the language-neutral protocol.
 
 The server creates one Agent Sandbox claim for an admitted conversation computer. Cooling persists a
 checkpoint before releasing that claim; a later message either reactivates the same lease or claims
-the next fenced generation from the durable checkpoint. Network policy limits the computer to its
-required control-plane and model-proxy paths.
+the next fenced generation from the durable checkpoint. Network policy limits the computer to
+lease-fenced review credential and checkpoint interactions with the private server.
 
 Source implementations:
 
@@ -118,10 +118,11 @@ Source implementations:
 
 ## External actions and artifacts
 
-The tool-execution target keeps model suggestions separate from authority. OpenCrane checks the
+The tool-execution path keeps model suggestions separate from authority. OpenCrane checks the
 immutable snapshot, tool revision, grant, approval, idempotency and budget before a server-owned
-executor receives scoped credentials. The executor foundations exist; a complete model-to-tool,
-approval and durable-result journey still needs implementation and qualification.
+executor receives scoped credentials. One permitted result can wake the durable turn workflow for
+one text-only continuation. Visible progress, approval UX, and recovery controls still need
+implementation and qualification.
 
 Artifact bytes are likewise brokered. The catalogue resolves the exact active revision, the
 authorization library signs a short-lived read lease, and

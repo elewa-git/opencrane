@@ -12,6 +12,7 @@ const _TURN: FrozenConversationComputerTurn = {
 	lease: { leaseId: "lease-1", leaseGeneration: 4, sandboxClaimId: "computer-1-g4" },
 	binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 4, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Archive", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 7n, maximumEntryBytes: 10_000 },
 	latestPendingEntryId: "human-entry-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 300,
+	latestPendingEntryPosition: "1",
 	compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "v1", digest: "sha256:input" },
 	outputSourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", outputReceipt: null,
 	toolSelection: null, continuationReservation: null, modelReservation: null,
