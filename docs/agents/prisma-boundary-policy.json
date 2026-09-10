@@ -1048,6 +1048,22 @@
 					{
 						"adapter": "PrismaAgentRevisionWriterRepository",
 						"importPath": "../../revisions/db/prisma-agent-revision-writer"
+					},
+					{
+						"adapter": "PrismaCompanyAssistantToolsRepository",
+						"importPath": "./prisma-company-assistant-tools"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/agents/agent-services/main/src/company-assistants/db/prisma-company-assistant-tools.ts",
+				"adapter": "PrismaCompanyAssistantToolsRepository",
+				"contract": "CompanyAssistantToolsRepository",
+				"contractImportPath": "../company-assistant-provisioning.types",
+				"constructs": [
+					{
+						"adapter": "PrismaAgentRevisionWriterRepository",
+						"importPath": "../../revisions/db/prisma-agent-revision-writer"
 					}
 				]
 			},

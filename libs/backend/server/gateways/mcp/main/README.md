@@ -69,8 +69,11 @@ duration. PostgreSQL checks the paired invocation claim and preserves its absolu
 the MCP write is delayed; the returned command uses that saved expiry.
 
 History reads happen before the claim inside its bounded SQL transaction, while provider I/O stays
-after commit. The history read does not create a cross-store lock. Conversation model requests,
-result resumption and participant-visible tool history remain unfinished.
+after commit. The history read does not create a cross-store lock. The conversation server now
+owns model requests and result resumption: its Absurd workflow waits for the exact terminal tool
+result and may reserve one text-only continuation within the original remaining allowance. The
+ConversationComputer Pod does not schedule that work. Participant-visible tool history, company
+credential activation and a complete live retrieval journey remain unfinished.
 
 An installed server can then run a tool through a public task. The task keeps its state, input,
 result, and failure in the database, so a server restart does not repeat the tool call.
@@ -113,6 +116,12 @@ Individual users browse the approved directory and install servers they may use.
 servers, the same response lists tools from the newest Ready server revision, including the frozen
 input schema and digest an agent author must save. The API never returns credentials and never
 labels an install connected before a real connection exists.
+
+Company tool selection belongs to [agent services](../../../agents/agent-services/main/README.md).
+Its administrator API publishes exact assignments and grants for the assistant's own Principal,
+the service's saved identity. It does not create a connection or transfer a person's credentials.
+The install states `NeedsCredential` and `SharedKey` describe configuration; neither proves that
+credential activation or a provider call has succeeded.
 
 ## Rules
 

@@ -10,7 +10,7 @@ const _IDENTITY = { schemaVersion: 1, kind: "managed", id: "company-identity", s
 /** Supplies independent current company authority and human fleet evidence. */
 function _Fixture()
 {
-	const revision = { agentServiceId: "company-service", agentRevisionId: "revision-1", agentRevisionDigest: "sha256:revision", principalId: "company-principal", name: "Company assistant", workloadProfile: "company", modelDefinitionId: "model-1", budget: { maxDurationMs: 10_000 } };
+	const revision = { agentServiceId: "company-service", agentRevisionId: "revision-1", agentRevisionDigest: "sha256:revision", principalId: "company-principal", name: "Company assistant", workloadProfile: "company", modelDefinitionId: "model-1", mcpToolRevisionIds: ["tool-1"], budget: { maxDurationMs: 10_000 } };
 	const human = { kind: "fleet", principalId: "human-1", siloId: "silo-1", decisionEvidenceId: "human-assertion", revision: 7, assertionId: "human-assertion", payloadDigest: "sha256:human", trustedUntil: new Date(6_000).toISOString() };
 	const repository = { loadCurrent: vi.fn().mockResolvedValue(revision), verifyRequesterMembership: vi.fn().mockResolvedValue(human) };
 	const admitPrincipal = vi.fn().mockResolvedValueOnce({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:invoke" } }).mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:model" } });
@@ -30,6 +30,20 @@ describe("ManagedExecutionEvidenceAuthority", function _Suite()
 		expect(f.admitPrincipal).toHaveBeenNthCalledWith(1, expect.objectContaining({ principalId: "human-1", action: ProductAuthorizationActions.Invoke, membershipRevision: 7 }));
 		expect(f.admitPrincipal).toHaveBeenNthCalledWith(2, expect.objectContaining({ principalId: "company-principal", action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-1" } }));
 		expect(f.admitPrincipal.mock.calls[1]?.[0]).not.toHaveProperty("membershipRevision");
+	});
+
+	it("binds the exact tool selection into the effective contract digest", async function _BindsTools()
+	{
+		const first = _Fixture();
+		const second = _Fixture();
+		second.repository.loadCurrent.mockResolvedValue({ ...second.revision, mcpToolRevisionIds: ["tool-2"] });
+		const firstResult = await first.authority.load(first.command, first.transaction as never);
+		const secondResult = await second.authority.load(second.command, second.transaction as never);
+		expect(firstResult.outcome).toBe("loaded");
+		expect(secondResult.outcome).toBe("loaded");
+		if (firstResult.outcome !== "loaded" || secondResult.outcome !== "loaded")
+			throw new Error("Expected current company execution evidence");
+		expect(firstResult.value.capability.effectiveContractDigest).not.toBe(secondResult.value.capability.effectiveContractDigest);
 	});
 
 	it.each([null, { agentRevisionId: "revision-2" }, { principalId: "other" }, { budget: [] }])("rejects changed current company authority %j before any grant admission", async function _RejectsCurrent(patch)

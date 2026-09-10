@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaManagedExecutionEvidenceRepository } from "../prisma-managed-execution-evidence-repository";
 
-/** Supplies the smallest published company revision; every extension must be refused explicitly. */
+/** Supplies the smallest published company revision; unsupported extensions remain refused explicitly. */
 function _Row()
 {
 	return { id: "service-1", principalId: "company-principal", name: "Company", workloadProfile: "company", activeRevisionId: "revision-1", activeRevision: { id: "revision-1", siloId: "silo-1", agentServiceId: "service-1", state: AgentRevisionState.Published, digest: "sha256:revision", personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxDurationMs: 60_000 }, skillAssignments: [], mcpToolAssignments: [], boundaryAttachments: [] } };
@@ -19,8 +19,16 @@ describe("PrismaManagedExecutionEvidenceRepository", function _Suite()
 		expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "service-1", siloId: "silo-1", kind: AgentServiceKind.Managed, state: AgentServiceState.Active, principal: { is: { siloId: "silo-1", provenance: PrincipalProvenance.Internal } } } }));
 	});
 
+	it("returns assigned MCP tool revisions in stable order for the company principal", async function _LoadsTools()
+	{
+		const row = _Row();
+		const findFirst = vi.fn().mockResolvedValue({ ...row, activeRevision: { ...row.activeRevision, mcpToolAssignments: [{ toolRevisionId: "tool-z" }, { toolRevisionId: "tool-a" }] } });
+		const repository = new PrismaManagedExecutionEvidenceRepository({ agentService: { findFirst } } as never, {} as never);
+		await expect(repository.loadCurrent("silo-1", "service-1")).resolves.toMatchObject({ principalId: "company-principal", mcpToolRevisionIds: ["tool-a", "tool-z"] });
+	});
+
 	it.each([
-		{ state: AgentRevisionState.Draft }, { id: "other-revision" }, { siloId: "other-silo" }, { agentServiceId: "other-service" }, { personaRevisionId: "personal-persona" }, { skillAssignments: [{ skillId: "skill" }] }, { mcpToolAssignments: [{ toolRevisionId: "tool" }] }, { boundaryAttachments: [{ id: "memory-boundary" }] },
+		{ state: AgentRevisionState.Draft }, { id: "other-revision" }, { siloId: "other-silo" }, { agentServiceId: "other-service" }, { personaRevisionId: "personal-persona" }, { skillAssignments: [{ skillId: "skill" }] }, { boundaryAttachments: [{ id: "memory-boundary" }] },
 	])("rejects an unpublished, substituted or extended revision %j", async function _RejectsRevision(patch)
 	{
 		const row = _Row();

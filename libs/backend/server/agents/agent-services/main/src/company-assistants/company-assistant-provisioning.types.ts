@@ -15,12 +15,45 @@ export type CompanyAssistantProvisioningCallerResolver = (request: Request) => C
 export interface CompanyAssistantProvisioningAuthority
 {
 	provision(caller: CompanyAssistantProvisioningCaller, command: CompanyAssistantProvisioningCommand): Promise<CompanyAssistantProvisioningResult>;
+	/** Reads the current assignment after checking the administrator's current permission. */
+	getTools(caller: CompanyAssistantProvisioningCaller): Promise<CompanyAssistantToolsSelection>;
+	/** Publishes a successor only when the caller still names the active source revision. */
+	setTools(caller: CompanyAssistantProvisioningCaller, command: CompanyAssistantToolsCommand): Promise<CompanyAssistantToolsSelection>;
 }
 
 /** Publishes PostgreSQL authority in an existing transaction without performing external history writes. */
-export interface CompanyAssistantProvisioningRepository
+export interface CompanyAssistantProvisioningRepository extends CompanyAssistantToolsRepository
 {
 	provision(caller: CompanyAssistantProvisioningCaller, command: CompanyAssistantProvisioningCommand, now: Date): Promise<CompanyAssistantProvisioningResult>;
+}
+
+/** Reads or replaces tool assignments using the caller's existing database transaction. */
+export interface CompanyAssistantToolsRepository
+{
+	/** Reads a current assignment without recording an effect admission. */
+	getTools(caller: CompanyAssistantProvisioningCaller, now: Date): Promise<CompanyAssistantToolsSelection>;
+	/** Records assignment authority and publishes the revision and grants in this transaction. */
+	setTools(caller: CompanyAssistantProvisioningCaller, command: CompanyAssistantToolsCommand, now: Date): Promise<CompanyAssistantToolsSelection>;
+}
+
+/** Replaces the company's complete tool selection against one observed active revision. */
+export interface CompanyAssistantToolsCommand
+{
+	/** Names the active revision observed by GET; stale requests must refresh before another edit. */
+	readonly expectedActiveRevisionId: string;
+	/** Names at most 32 unique immutable tool revisions; an empty list removes every assignment. */
+	readonly toolRevisionIds: readonly string[];
+}
+
+/** Returns the authoritative current selection without credentials or private execution coordinates. */
+export interface CompanyAssistantToolsSelection
+{
+	/** Identifies the silo's stable company assistant. */
+	readonly agentServiceId: string;
+	/** Identifies the immutable revision that owns this selection. */
+	readonly activeRevisionId: string;
+	/** Lists exact selected tool revisions in canonical order. */
+	readonly toolRevisionIds: readonly string[];
 }
 
 /** Carries the explicit administrator choices for the silo's first company assistant. */

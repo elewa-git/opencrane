@@ -1,8 +1,67 @@
 # OpenCrane — Active Plan
 
+## Delivery priorities — 2026-09-10
+
+The user selected this order. Each track delivers a useful journey through the existing owners;
+published applications and code work are deferred. Narrow prerequisites, such as a connection setup
+API or the approval needed for one action, land with the first capability that needs them. Full
+administration and action recovery retain their places below.
+
+| Priority | Track | Completion means | Current next step |
+| --- | --- | --- | --- |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; the result survives reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; connection activation, participant result evidence and one real integration remain. |
+| 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | Reuse IAM deferred approval and elicitation; connect approval-required model tools and disclose the exact external target and connection owner. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
+| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | Reuse conversation events, stores and approved components; preserve current access on reconnect. |
+| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Complete the existing server-issued interaction and presentation contracts. |
+| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | Connect existing upload/scan, model input and artifact finalisation owners. |
+| 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
+| 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
+| 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete protected settings over the owners established by the earlier tracks. |
+| 10 | T3 — action recovery | People and operators can reconcile uncertain effects, inspect cancellation races and perform supported safe retries. | Add provider-specific reconciliation and repair controls over durable invocation evidence. |
+
+Every earlier track includes its required current-authority checks, bounded retries, lease/generation
+fencing and honest failure state. Priority 10 is the complete recovery experience; it is not a reason
+to defer duplicate-effect prevention. [#844](https://github.com/elewa-git/opencrane/issues/844) spans
+retrieval, approval, controls and recovery; its full acceptance closes only when those slices pass.
+The [delivery plan](docs/design/mvp-delivery-plan.md) records owners and acceptance for each slice.
+
+### First execution slice: company tool selection
+
+Implemented on `feat/0.12-real-tool-retrieval`, directly above
+[#849](https://github.com/elewa-git/opencrane/pull/849), with immutable review base
+`b4f275b3f090e9387a1b0de658968700c0b7ad04`. Reuse the earlier company-tools implementation and
+adapt it to #843's capability folders; do not reopen its obsolete flattened implementation.
+Architecture preflight passes for the existing agent-services, revision and execution-evidence owners.
+
+An administrator reads and replaces the assistant's exact tool selection through the API. One
+transaction publishes an immutable successor revision and its service-owned grants, with current
+Administer/Assign checks and a comparison against the expected active revision. Tool edits preserve
+the saved model budget. New company assistants receive the two-call limit needed for one tool result
+and one final answer. Dispatch continues to use the company identity; a person's private permissions
+or credentials cannot substitute for it.
+
+Source work can proceed independently of live setup. Credential activation is absent from the current
+MCP installation contract; an installed or SharedKey-labelled server is not proof of a working
+connection. T1 remains open until authorized connection custody/activation, a dedicated read-only
+integration and durable participant result evidence are proven. Full work controls remain priority 4.
+No integration or live cluster state has been inspected in this execution slice.
+
+Validation on this slice: 127 agent-services, 65 personal-configuration, 113 execution-inputs,
+95 contracts and 30 dispatch tests pass, plus five real PostgreSQL tests on the exact fresh baseline.
+The disposable database was stopped after qualification. Backend/contracts type checks and server
+build pass; generated API contracts and website schema are synchronized. Architecture preflight,
+architecture post-review and independent source review pass. Prisma, authorization, workflow,
+workload composition, domain, dependency, release, style and module-growth checks pass.
+The website build passes, including the generated API pages. This slice is ready for its incremental
+draft PR; CI and testv5/live acceptance remain separate evidence. The next source slice owns
+connection activation and its execution binding.
+
+
 ## Absurd-owned conversation turn progression - 2026-09-09
 
-In progress as a direct follow-up to [#843](https://github.com/elewa-git/opencrane/pull/843).
+Implemented in [#849](https://github.com/elewa-git/opencrane/pull/849), directly above
+[#843](https://github.com/elewa-git/opencrane/pull/843), at `b4f275b3f`.
 Conversation activation saves one `conversation-computer-turn` task through the existing Absurd
 transaction boundary. The server workflow selects and advances durable model, optional tool-result,
 continuation and output state; the Agent Sandbox Pod retains only its lease-fenced workspace,
@@ -12,7 +71,8 @@ deleted rather than retained as compatibility routes.
 The change must preserve one original model dispatch and one permitted text-only continuation under
 the original remaining allowance across process restarts. Terminal tool evidence wakes the exact
 saved workflow in the same transaction. Stale leases, generations and ended authority fail closed.
-Local validation, architecture post-review, independent review and draft PR creation remain required.
+Local validation, architecture post-review and independent review pass. The draft PR, CI and image
+publication are complete; the change remains unmerged.
 Fresh testv5 installation and live journey qualification remain a separate gate. Visible tool
 progress, approval controls and user-facing recovery controls remain later slices.
 
@@ -50,7 +110,9 @@ while the company controls access, data, and spending. MVP means an employee can
 assistant, get useful work done, and collaborate in a group without understanding the runtime.
 
 The current review order is `develop` → [#831](https://github.com/elewa-git/opencrane/pull/831)
-→ [#843](https://github.com/elewa-git/opencrane/pull/843). The merged conversation history and
+→ [#843](https://github.com/elewa-git/opencrane/pull/843)
+→ [#849](https://github.com/elewa-git/opencrane/pull/849) → the T1 company-tool selection follow-up.
+The merged conversation history and
 computer baseline is implemented; it is not yet a live-qualified MVP. [ADR 0016](docs/adr/0016-conversation-history-and-computers.md) supersedes the
 older run-owned runtime and relational transcript descriptions in historical plans.
 
@@ -124,16 +186,14 @@ their own completion track; they are not silently bundled into the first tool PR
 | R2 — visible personal activity | ✅ COMPLETE in [#829](https://github.com/elewa-git/opencrane/pull/829). UI `6692b2e59` and server `e50cdcc5b` are installed on testv5. Linux CI and publication pass. Two employees see their completed work, open its saved answer by keyboard, refresh without starting work, and recover activity after reload. Narrow-screen focus and cross-employee API isolation pass. See [completed work](plan-done.md) and the [deploy ledger](docs/agents/deploy-ledger.md). |
 | R1 — reliable login | IMPLEMENTED, CI GREEN at `44fd8f328` — encrypted PostgreSQL sessions, fixed deadlines, revision-checked saves and logout markers. All 52 auth tests and [CI](https://github.com/elewa-git/opencrane/actions/runs/34274625541) pass, including all seven SQL targets on fresh PostgreSQL and six real-client session proofs. Fresh-install live qualification remains pending; testv5 retains the earlier database baseline. |
 | A1 — membership revocation and closed-work proof | IMPLEMENTED, IN REVIEW — standalone administrators can remove another non-Owner member through Settings. The server suspends the existing membership, protects Owner/self removal and rechecks current authority on retries. Workspace access loss clears retained private content and rejects delayed results. Focused unit checks and all 123 browser checks pass; five real PostgreSQL cases join the CI gate. The real-account removal and closed-work journey remains to qualify live. Fleet removal remains unsupported. |
-| T1 — first permitted tool retrieval | INTERNAL CONTINUATION IMPLEMENTED in [#830](https://github.com/elewa-git/opencrane/pull/830), `ada28f1f7`; [CI](https://github.com/elewa-git/opencrane/actions/runs/34303700943) passes all seven SQL targets, 25 real KurrentDB cases, affected builds/tests and image validation. One permitted tool can feed one final model answer using the frozen run and remaining budget. Images are not published or installed. Real integration acceptance, company-assistant tool assignment and participant-visible tool progress remain unfinished; the live installed integration list is empty. |
-| T2/T3/U1 — approved actions and visible recovery | DEPENDS ON T1 — exact approval, cancellation, uncertain outcomes, retries and accessible workspace controls. |
-| M1/F1 — explicit memory and durable files | PREFLIGHT COMPLETE — memory needs a verified dataset-scoped recall/deletion contract and recoverable correction before writes are enabled. Existing upload/quarantine/scan owners can support files; document content is not yet connected to model input and assistant-generated file finalisation remains unfinished. Keep each journey independent. |
-| D1/S1 — autonomous delegation and shared schedules | DEPENDS ON ACTION CONTRACTS — bounded authority, budgets, cancellation and durable results. |
-| A2/Q1 — administration and operational acceptance | PLANNED THROUGHOUT — extend protected product surfaces and prove each newly landed journey. |
+| T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
+| T2, M1, U1, U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
+| Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
-The overnight run on 8–9 September continues these slices in dependency order and hands off at
-08:00 Nairobi time. It commits and pushes reviewed progress, maintains incremental PRs and records
-blockers without treating the whole MVP as a one-night promise. See the delivery plan for the
-morning checkpoint and operating boundaries.
+The 10 September priority order supersedes the earlier overnight sequencing and morning handoff.
+Execute bounded, independently reviewed slices on the live stack and record implementation, CI and
+live evidence separately. Deployment, release tags and the full testv5 qualification remain separate
+gates; no overnight automation is created by this plan.
 
 ## Extend the proven text journeys
 
@@ -154,7 +214,7 @@ ADR 0016, then projects the child and commits its first message with activation.
 creation becomes Ready. The company assistant uses its own managed identity and model permission;
 the human requester's current membership and invocation permission remain separate requirements.
 Runtime subagents
-([#320](https://github.com/elewa-git/opencrane/issues/320)) require explicit parent-run delegation,
+([#845](https://github.com/elewa-git/opencrane/issues/845), building on #320) require explicit parent-run delegation,
 budget, cancellation and result ownership and remain later work. Neither journey may silently
 inherit a person's private tools or memory.
 
@@ -182,7 +242,7 @@ tracks, not instructions to rebuild everything named here:
 - **Shared scheduled work:** restore supported managed scheduling and trigger execution against
   current identity and lease contracts; prove pause, resume, overlap, retry and cancellation. Removed
   0.10 execution routes are not a compatibility path. See
-  [#332](https://github.com/elewa-git/opencrane/issues/332).
+  [#848](https://github.com/elewa-git/opencrane/issues/848), building on the retired #332 work.
 - **Company administration:** finish membership, effective access, agent/tool configuration, audit,
   model/provider selection, budget and spending screens over the existing protected APIs. See
   [#224](https://github.com/elewa-git/opencrane/issues/224) and
@@ -230,7 +290,7 @@ the [deploy ledger](docs/agents/deploy-ledger.md).
 ## Later work
 
 - [#765](https://github.com/elewa-git/opencrane/issues/765): Git-backed project source, isolated
-  builds, immutable published artifacts and PreviewApps after the conversation baseline.
+  builds, immutable published artifacts, PreviewApps and code work after the ten priorities above.
 - Warm pooling, extra compute tiers and scale optimization wait for measured latency and cost.
 - A generic plugin framework waits for two concrete consumers that need the same extension contract.
 - [#513](https://github.com/elewa-git/opencrane/issues/513): evaluate provider-native model tracing
