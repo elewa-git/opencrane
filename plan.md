@@ -28,7 +28,8 @@ The [delivery plan](docs/design/mvp-delivery-plan.md) records owners and accepta
 
 ### First execution slice: company tool selection
 
-Implemented on `feat/0.12-real-tool-retrieval`, directly above
+Implemented in draft [#850](https://github.com/elewa-git/opencrane/pull/850) on
+`feat/0.12-real-tool-retrieval`, directly above
 [#849](https://github.com/elewa-git/opencrane/pull/849), with immutable review base
 `b4f275b3f090e9387a1b0de658968700c0b7ad04`. Reuse the earlier company-tools implementation and
 adapt it to #843's capability folders; do not reopen its obsolete flattened implementation.
@@ -53,9 +54,9 @@ The disposable database was stopped after qualification. Backend/contracts type 
 build pass; generated API contracts and website schema are synchronized. Architecture preflight,
 architecture post-review and independent source review pass. Prisma, authorization, workflow,
 workload composition, domain, dependency, release, style and module-growth checks pass.
-The website build passes, including the generated API pages. This slice is ready for its incremental
-draft PR; CI and testv5/live acceptance remain separate evidence. The next source slice owns
-connection activation and its execution binding.
+The website build passes, including the generated API pages. Commit `376380280` is pushed and
+reviewable in draft #850. CI and testv5/live acceptance remain separate evidence. The next source
+slice owns connection activation and its execution binding.
 
 
 ## Absurd-owned conversation turn progression - 2026-09-09
@@ -111,7 +112,8 @@ assistant, get useful work done, and collaborate in a group without understandin
 
 The current review order is `develop` → [#831](https://github.com/elewa-git/opencrane/pull/831)
 → [#843](https://github.com/elewa-git/opencrane/pull/843)
-→ [#849](https://github.com/elewa-git/opencrane/pull/849) → the T1 company-tool selection follow-up.
+→ [#849](https://github.com/elewa-git/opencrane/pull/849)
+→ [#850](https://github.com/elewa-git/opencrane/pull/850) for T1 company-tool selection.
 The merged conversation history and
 computer baseline is implemented; it is not yet a live-qualified MVP. [ADR 0016](docs/adr/0016-conversation-history-and-computers.md) supersedes the
 older run-owned runtime and relational transcript descriptions in historical plans.

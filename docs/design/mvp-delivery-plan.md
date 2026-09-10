@@ -41,7 +41,7 @@ conversational routines, superseding removed scheduling routes from #332.
 ## First execution wave: real tool retrieval
 
 The review stack is `develop` → #831 (member access) → #843 (library/component decomposition)
-→ #849 (Absurd turns) → the company-tool selection follow-up. The first slice starts from immutable
+→ #849 (Absurd turns) → [#850](https://github.com/elewa-git/opencrane/pull/850) (company tool selection). The first slice starts from immutable
 base `b4f275b3f090e9387a1b0de658968700c0b7ad04` on `feat/0.12-real-tool-retrieval`.
 Recheck live ancestry before publishing each PR; do not duplicate an open predecessor's patch.
 
