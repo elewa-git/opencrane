@@ -73,6 +73,32 @@ Architecture preflight passes for slice 1 using existing packages. A read-only i
 is still needed for live acceptance. Source implementation can continue while that choice is pending.
 No connector credentials, installed integration inventory or live cluster state are assumed by this plan.
 
+### Standard MCP connectivity
+
+The proposed existing OpenCrane server path must support standard MCP connectivity for the first
+business journey. OpenCrane acts as the MCP host and uses a server-owned client to
+discover and call tools on an explicitly configured remote MCP endpoint. Providers must not need an
+OpenCrane-specific operation-plan protocol. The [MCP architecture](https://modelcontextprotocol.io/docs/learn/architecture)
+distinguishes remote HTTP servers from local executable servers; implementation must declare its
+supported protocol versions and authentication methods rather than imply universal compatibility.
+
+Connection setup must associate the endpoint and authentication with the executing personal or
+company identity. Discovery records reviewed tool schemas; a new listing cannot silently widen an
+already admitted turn's tools or authority. Before each dispatch, check the exact connection owner,
+generation, current tool permission and saved arguments. Credentials are used only for their intended
+MCP endpoint and never copied into model input, conversation history or sandbox commands. Endpoint
+and authorization discovery must reject unintended internal targets and credential-bearing redirects.
+
+The remote MCP server owns its own provider implementation. OpenCrane owns permission, approval,
+budget, invocation evidence and conversation output, with Absurd selecting durable steps and handling
+restart. A lost response after a call is not permission to replay an external effect. Use the existing
+invocation evidence and recovery owners; do not introduce another orchestration mechanism.
+
+Uploaded MCP executables remain a distinct isolated execution path. They must not be moved into the
+OpenCrane server process or given raw credentials merely to make connectivity work. A future hosted
+connector path must explicitly establish its trust, credential and network boundaries. The first
+remote connection does not claim that arbitrary uploaded connectors now have authenticated egress.
+
 ## Next wave: approved external actions
 
 The current model selector and tool proposal reject approval-required tools, and the proposal intent

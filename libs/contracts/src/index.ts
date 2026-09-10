@@ -24,6 +24,7 @@ export * from "./inputs/prompt-compiler-version";
 export * from "./agents/personal-configuration.types";
 export * from "./api/public-health.types";
 export * from "./skills/skill-authoring-validation-bootstrap-reference";
+export * from "./tool-progress";
 export * from "./inputs/run-input-snapshot.types";
 export * from "./agents/agent-controller-identity.types";
 export * from "./agents/agent-identity.types";

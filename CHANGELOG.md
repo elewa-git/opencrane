@@ -19,6 +19,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **People can distinguish tool progress from an assistant's final answer in recent personal activity.**
+  The activity view shows queued, running, result-received and needs-attention tool phases while
+  preserving the separate run status. Reads check the current personal owner and run permission;
+  tool arguments, results and credentials are not returned. Refresh only reads status, and an answer
+  link still requires an authorized, loaded final message. Company participant receipts and complete
+  work controls remain later slices.
+
 - **Standalone administrators can remove a colleague's company access from Settings.** The member
   remains recorded as suspended; Owner and self-removal are protected. Proven access loss clears
   retained workspace content and invitation results, and delayed requests cannot restore them.

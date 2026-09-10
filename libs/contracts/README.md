@@ -64,8 +64,14 @@ and identity checks still run at admission. A stored snapshot never grants curre
 the deterministic compiler. A revision that names another version is not admissible, preventing a
 runtime from silently interpreting a frozen snapshot with different assembly rules.
 
+The `tool-progress/` folder owns the small personal run-status projection. `RunToolProgress` carries
+only a finite phase; its strict validator rejects unknown phases and added fields. `latestTool: null`
+means no invocation in this attempt, not a failed progress read. It never authorizes a call or exposes
+a tool's identity, arguments or result.
+
 ## Public surface
 
+- `RunToolProgress`, `RunToolProgressPhases` and `___RunToolProgressSchema` — the safe phase shared by personal status and its activity presenter.
 - `___CreateControlPlaneClient`, `ControlPlaneClient`, `paths` — the typed HTTP client and its path map.
 - `API_ERROR_LIMITS`, `ApiErrorEnvelope`, `ApiValidationIssue`, `ApiValidationIssueLocations`, and
   `___ParseApiErrorEnvelope` — the generated public error contract and bounded runtime parser used

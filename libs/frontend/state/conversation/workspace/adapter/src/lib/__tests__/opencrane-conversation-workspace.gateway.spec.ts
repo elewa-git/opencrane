@@ -33,7 +33,7 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 
 	it("reads recent personal work with cancellation and rejects unknown status or duplicate rows", async function _PersonalRuns()
 	{
-		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: "2026-09-08T12:00:01Z" };
+		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", latestTool: { phase: "result_received" }, finishedAt: "2026-09-08T12:00:01Z" };
 		const get = vi.fn().mockResolvedValueOnce({ data: { runs: [run] } }).mockResolvedValueOnce({ data: { runs: [{ ...run, state: "unknown" }] } }).mockResolvedValueOnce({ data: { runs: [run, run] } }).mockResolvedValueOnce({ error: { message: "server secret" }, response: { status: 403 } });
 		const gateway = _Gateway(vi.fn(), get);
 		const signal = new AbortController().signal;

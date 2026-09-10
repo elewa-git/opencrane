@@ -24,7 +24,7 @@ function _Detail(id = "chat-1"): ConversationWorkspaceDetail
 /** Creates a current API projection with no copied transcript or internal authority fields. */
 function _Run(conversationId = "chat-1", state: ConversationPersonalRun["state"] = "completed"): ConversationPersonalRun
 {
-	return { runId: `run-${conversationId}`, conversationId, state, attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00.000Z", finishedAt: state === "completed" ? "2026-09-08T12:00:02.000Z" : null };
+	return { runId: `run-${conversationId}`, conversationId, state, attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00.000Z", latestTool: null, finishedAt: state === "completed" ? "2026-09-08T12:00:02.000Z" : null };
 }
 
 /** Provides signals that can change independently while an uncancellable request is pending. */

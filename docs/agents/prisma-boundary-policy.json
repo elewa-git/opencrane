@@ -1195,6 +1195,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/iam/authorization/main/src/tool-invocations/progress/persistence/prisma-run-tool-progress-repository.ts",
+				"adapter": "PrismaRunToolProgressRepository",
+				"contract": "RunToolProgressRepository",
+				"contractImportPath": "../run-tool-progress.types",
+				"constructs": [
+					{
+						"adapter": "PrismaRunToolProgressRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/computers/tools/dispatch/prisma-conversation-tool-run-evidence.ts",
 				"adapter": "PrismaConversationToolRunEvidenceRepository",
 				"contract": "ConversationToolRunEvidenceReader",

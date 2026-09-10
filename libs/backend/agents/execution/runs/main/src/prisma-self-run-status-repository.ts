@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import type { RunToolProgress } from "@opencrane/contracts";
+import { __ReadRunToolProgressInTransaction, PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
@@ -28,7 +29,12 @@ export class PrismaSelfRunStatusRepository implements SelfRunStatusRepository
 		const resources = runs.map(run => ({ kind: ProductAuthorizationResourceKinds.AgentRun, id: run.id }));
 		const allowed = await this._authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: Date.now() });
 		const allowedIds = new Set(allowed.map(resource => resource.id));
-		return runs.filter(run => allowedIds.has(run.id)).slice(0, 50).map(_toSelfRunStatus);
+		const transaction = this._prisma;
+		return Promise.all(runs.filter(run => allowedIds.has(run.id)).slice(0, 50).map(async function _ReadProgress(run)
+		{
+			const latestTool = await __ReadRunToolProgressInTransaction(transaction, { siloId: caller.siloId, runId: run.id, attempt: run.attempt });
+			return _toSelfRunStatus(run, latestTool);
+		}));
 	}
 
 	/** Read only the exact run owned by the session subject in the selected silo. */
@@ -41,7 +47,10 @@ export class PrismaSelfRunStatusRepository implements SelfRunStatusRepository
 		}
 		const resources = [{ kind: ProductAuthorizationResourceKinds.AgentRun, id: run.id }] as const;
 		const allowed = await this._authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: Date.now() });
-		return allowed.length === 1 ? _toSelfRunStatus(run) : null;
+		if (allowed.length !== 1)
+			return null;
+		const latestTool = await __ReadRunToolProgressInTransaction(this._prisma, { siloId: caller.siloId, runId: run.id, attempt: run.attempt });
+		return _toSelfRunStatus(run, latestTool);
 	}
 }
 
@@ -82,9 +91,9 @@ export class PrismaSelfRunStatusUnitOfWork implements SelfRunStatusRepository
 }
 
 /** Convert the selected canonical Prisma fields into the stable product status shape. */
-function _toSelfRunStatus(run: { id: string; attempt: number; state: { toString(): string }; conversationId: string | null; agentRevisionId: string; acceptedAt: Date; finishedAt: Date | null }): SelfRunStatus
+function _toSelfRunStatus(run: { id: string; attempt: number; state: { toString(): string }; conversationId: string | null; agentRevisionId: string; acceptedAt: Date; finishedAt: Date | null }, latestTool: RunToolProgress | null): SelfRunStatus
 {
-	return { runId: run.id, attempt: run.attempt, state: _state(run.state.toString()), conversationId: run.conversationId, agentRevisionId: run.agentRevisionId, acceptedAt: run.acceptedAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null };
+	return { runId: run.id, attempt: run.attempt, state: _state(run.state.toString()), latestTool, conversationId: run.conversationId, agentRevisionId: run.agentRevisionId, acceptedAt: run.acceptedAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null };
 }
 
 /** Map Prisma's PascalCase lifecycle enum to the product API's stable lowercase spelling. */

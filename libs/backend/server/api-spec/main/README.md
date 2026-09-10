@@ -35,6 +35,10 @@ edits. This package describes the API; it does not implement any endpoint.
 - `spec` — the composed OpenAPI 3.1 document (`openapi`, `info`, `servers`, `components`, `security`,
   and the merged `paths`).
 
+Personal run status documents `latestTool` as either null or one safe phase. The schema shares the
+contract enum and rejects extra progress properties. It distinguishes tool result receipt from the
+run's completion without exposing arguments, results or execution coordinates.
+
 ## Boundary
 
 Consumed by the server's HTTP layer (served as `/openapi.json`) and by the contracts-client generator.

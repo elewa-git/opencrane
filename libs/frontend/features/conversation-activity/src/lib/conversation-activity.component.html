@@ -10,7 +10,10 @@
 			<li>
 				<div class="activity__summary">
 					<span class="activity__marker" [class.activity__marker--failed]="row.kind === kinds.ToolFailure" aria-hidden="true"></span>
-					<div><strong>{{ row.label }}</strong><time [attr.datetime]="row.occurredAt">{{ row.occurredAt | date:'medium' }}</time></div>
+					<div>
+						<strong>{{ row.label }}</strong><time [attr.datetime]="row.occurredAt">{{ row.occurredAt | date:'medium' }}</time>
+						@if (row.kind === kinds.Run) { @if (row.latestTool; as tool) { <wo-scope-chip [label]="toolPhase(tool.phase).label" [tone]="toolPhase(tool.phase).tone" /> } }
+					</div>
 					@if (row.kind === kinds.ToolFailure && row.retrying) { <span class="activity__retrying">Retrying</span> }
 					@if (row.kind === kinds.Elicitation) { <span class="activity__state">{{ row.status }}</span> }
 					@if (row.kind === kinds.Run) { <wo-scope-chip [label]="runStatus(row.status).label" [tone]="runStatus(row.status).tone" /> }
