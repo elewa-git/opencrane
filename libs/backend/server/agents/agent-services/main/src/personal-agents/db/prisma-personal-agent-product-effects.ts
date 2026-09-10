@@ -4,7 +4,7 @@ import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { PersonalAgentSelectedResourceKinds, type AdmitInitialPersonalAgentPublicationCommand, type AdmitPersonalAgentRevisionSelectionCommand, type PersonalAgentCurrentResources, type PersonalAgentProductCaller, type PersonalAgentProductEffects } from "../personal-agent-product-effects.types";
+import { PersonalAgentSelectedResourceKinds, type AdmitInitialPersonalAgentPublicationCommand, type AdmitPersonalAgentRevisionSelectionCommand, type AdmitUnusedPersonalAgentProfileChangeCommand, type PersonalAgentCurrentResources, type PersonalAgentProductCaller, type PersonalAgentProductEffects } from "../personal-agent-product-effects.types";
 
 /** Prefixes grants derived from one durable personal-agent owner and its revision relations. */
 const _PERSONAL_AGENT_OWNER_GRANT_MANAGER_ID = "personal-agent-owner-access";
@@ -110,6 +110,13 @@ export class PrismaPersonalAgentProductEffectsAuthority implements PersonalAgent
 		const argumentsDigest = ___DigestCanonicalJson(command.argumentsValue);
 		await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: command.target.agentRevisionId }, ProductAuthorizationActions.Edit, argumentsDigest, command.now);
 		await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: command.target.agentRevisionId }, ProductAuthorizationActions.Publish, argumentsDigest, command.now);
+	}
+
+	/** @inheritdoc */
+	async admitUnusedProfileChange(command: AdmitUnusedPersonalAgentProfileChangeCommand): Promise<void>
+	{
+		const argumentsDigest = ___DigestCanonicalJson({ onboardingId: command.onboardingId, readinessKind: "repair", agentServiceId: command.agentServiceId, agentRevisionId: command.agentRevisionId, sourceWorkloadProfile: command.sourceWorkloadProfile, targetWorkloadProfile: command.targetWorkloadProfile });
+		await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.AgentService, id: command.agentServiceId }, ProductAuthorizationActions.Edit, argumentsDigest, command.now);
 	}
 
 	/** Writes the complete owner grant set for one exact resource. */

@@ -33,11 +33,19 @@ selection changes append and publish another immutable revision rather than edit
 repositories re-read the exact source revision, enforce silo and ownership coordinates, record
 central authorization decisions, and update the active revision in their caller's transaction.
 
-The app supplies the deployment's conversation-computer profile when composing personal-agent
-bootstrap. Initial publication stores that name, and readiness requires an existing service to
-match it. An absent profile prevents startup; a mismatched stored profile is refused without
-rewriting the service. The product's initial revision policy supplies budgets and prompt policy,
-while the deployment selects which computer can run it.
+The app supplies the selected conversation-computer profile and the complete list accepted by
+session admission. Initial publication stores the selected name. Completed-onboarding repair can
+correct a mismatched name only on the exact deterministic personal service, with its current
+approved persona and published revision, when it has no conversations or runs and the old name is
+absent from that complete list. Session creation rejects that old name before writing history.
+The central authority must allow the owner's Edit decision, and the source profile, revision and
+absence of prior use must still match when the update occurs. Both names enter the audit digest.
+
+The correction preserves the service, revision, persona and identity. Its Edit decision uses current
+grants; a denial leaves the profile unchanged. It cannot cancel work or alter computer leases.
+A service with any prior use or a still-configured old profile remains unavailable for this repair.
+The product's initial revision policy supplies budgets
+and prompt policy, while the deployment selects which computer can run it.
 
 The package also owns personal execution evidence. Admission proves that the personal service is
 active, its requested revision is still published and active, current deployment-selected human membership proves the

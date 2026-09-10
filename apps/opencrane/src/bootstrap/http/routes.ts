@@ -60,7 +60,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 {
 	if (agentSandboxReleaseProfile === undefined)
 		throw new Error("Product routes require the configured conversation-computer profile");
-	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner, agentSandboxReleaseProfile.profileName);
+	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner, agentSandboxReleaseProfile.profileName, [agentSandboxReleaseProfile.profileName]);
 	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, mcpWorkflows.execution);
 	const computerReviewAuthority = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataReader(prisma), new ConversationComputerHistory(historyStore), KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversationPrivatePayloadKeyringPath)));
 	const computerReview = computerReviewAuthority === null ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace, logger: _log }, _ResolveRequestPrincipal);

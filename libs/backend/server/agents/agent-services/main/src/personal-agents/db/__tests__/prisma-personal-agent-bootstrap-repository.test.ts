@@ -56,6 +56,26 @@ function _Transaction()
 	};
 }
 
+/** Creates a deterministic active service whose profile can be changed by the repair CAS. */
+function _RepairTransaction()
+{
+	const transaction = _Transaction();
+	const service = {
+		id: _COMMAND.onboardingId,
+		siloId: _COMMAND.siloId,
+		kind: "Personal",
+		state: "Active",
+		activeRevisionId: "revision-existing",
+		workloadProfile: "legacy-profile",
+		activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" },
+	};
+	transaction.agentService.findMany.mockImplementation(async function _ReadMatchingServices() { return [service]; });
+	transaction.agentService.findUnique.mockImplementation(async function _ReadDeterministicService() { return service; });
+	transaction.agentService.findFirst.mockResolvedValue({ id: service.id, activeRevisionId: service.activeRevisionId, workloadProfile: service.workloadProfile, conversations: [], runs: [] });
+	transaction.agentService.updateMany.mockImplementation(async function _RepairProfile() { service.workloadProfile = "developer"; return { count: 1 }; });
+	return { transaction, service };
+}
+
 /** Resolves the configured default for tests that reach initial publication. */
 const _DEFAULT_MODEL_RESOLVER: InitialPersonalAgentDefaultModelResolver = {
 	async resolve()
@@ -74,13 +94,14 @@ function _ProductEffects()
 		admitInitialPublication: vi.fn().mockResolvedValue(undefined),
 		admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
 		admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+		admitUnusedProfileChange: vi.fn().mockResolvedValue(undefined),
 	};
 }
 
 /** Constructs the repository without widening production code to a test-only client shape. */
-function _Repository(transaction: ReturnType<typeof _Transaction>, productEffects: ReturnType<typeof _ProductEffects> = _ProductEffects()): PrismaPersonalAgentBootstrapRepository
+function _Repository(transaction: ReturnType<typeof _Transaction>, productEffects: ReturnType<typeof _ProductEffects> = _ProductEffects(), configuredWorkloadProfiles: readonly string[] = ["developer"]): PrismaPersonalAgentBootstrapRepository
 {
-	return new PrismaPersonalAgentBootstrapRepository(transaction as unknown as Prisma.TransactionClient, _DEFAULT_MODEL_RESOLVER, "developer", productEffects);
+	return new PrismaPersonalAgentBootstrapRepository(transaction as unknown as Prisma.TransactionClient, _DEFAULT_MODEL_RESOLVER, "developer", configuredWorkloadProfiles, productEffects);
 }
 
 describe("Prisma personal-agent bootstrap repository", function _Suite()
@@ -88,7 +109,14 @@ describe("Prisma personal-agent bootstrap repository", function _Suite()
 	it.each(["", " ", " developer"])("rejects unusable configured profile %j before any authority read", function _InvalidProfile(profile)
 	{
 		const transaction = _Transaction();
-		expect(function _Construct() { return new PrismaPersonalAgentBootstrapRepository(transaction as never, _DEFAULT_MODEL_RESOLVER, profile, _ProductEffects()); }).toThrow("configured workload profile");
+		expect(function _Construct() { return new PrismaPersonalAgentBootstrapRepository(transaction as never, _DEFAULT_MODEL_RESOLVER, profile, ["developer"], _ProductEffects()); }).toThrow("configured workload profile");
+		expect(transaction.personaRevision.findUnique).not.toHaveBeenCalled();
+	});
+
+	it.each([{ configuredWorkloadProfiles: [] }, { configuredWorkloadProfiles: [""] }, { configuredWorkloadProfiles: ["developer", "developer"] }])("rejects malformed configured profile registry %j before any authority read", function _InvalidProfileRegistry({ configuredWorkloadProfiles }: { readonly configuredWorkloadProfiles: readonly string[] })
+	{
+		const transaction = _Transaction();
+		expect(function _Construct() { return new PrismaPersonalAgentBootstrapRepository(transaction as never, _DEFAULT_MODEL_RESOLVER, "developer", configuredWorkloadProfiles, _ProductEffects()); }).toThrow("configured workload profile");
 		expect(transaction.personaRevision.findUnique).not.toHaveBeenCalled();
 	});
 
@@ -126,6 +154,93 @@ describe("Prisma personal-agent bootstrap repository", function _Suite()
 		expect(transaction.agentService.create).not.toHaveBeenCalled();
 		expect(transaction.agentRevision.create).not.toHaveBeenCalled();
 		expect(transaction.auditDecision.create).not.toHaveBeenCalled();
+	});
+
+	it("repairs an unused deterministic service in place while preserving identity and revision", async function _RepairsUnusedService()
+	{
+		const fake = _RepairTransaction();
+		const productEffects = _ProductEffects();
+
+		await expect(_Repository(fake.transaction, productEffects).ensureReady({ ..._COMMAND, readinessKind: "repair" })).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: _COMMAND.onboardingId, agentRevisionId: "revision-existing", created: false, revised: false });
+		expect(productEffects.admitUnusedProfileChange).toHaveBeenCalledWith({ caller: { siloId: _COMMAND.siloId, subjectId: _COMMAND.subjectId, principalId: "principal-a" }, onboardingId: _COMMAND.onboardingId, agentServiceId: _COMMAND.onboardingId, agentRevisionId: "revision-existing", sourceWorkloadProfile: "legacy-profile", targetWorkloadProfile: "developer", now: _COMMAND.provisionedAt });
+		expect(fake.transaction.agentService.updateMany).toHaveBeenCalledWith({ where: { id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Active", activeRevisionId: "revision-existing", workloadProfile: "legacy-profile", conversations: { none: {} }, runs: { none: {} } }, data: { workloadProfile: "developer", updatedAt: _COMMAND.provisionedAt } });
+		expect(productEffects.admitUnusedProfileChange.mock.invocationCallOrder[0]).toBeLessThan(fake.transaction.agentService.updateMany.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER);
+		expect(fake.transaction.agentRevision.create).not.toHaveBeenCalled();
+		expect(fake.transaction.agentRevision.update).not.toHaveBeenCalled();
+		expect(fake.transaction.auditDecision.create).not.toHaveBeenCalled();
+	});
+
+	it("rejects a repair when the old profile remains in the complete configured registry", async function _RejectsRetainedProfile()
+	{
+		const fake = _RepairTransaction();
+		const productEffects = _ProductEffects();
+
+		await expect(_Repository(fake.transaction, productEffects, ["legacy-profile", "developer"]).ensureReady({ ..._COMMAND, readinessKind: "repair" })).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.ServiceNotReady });
+		expect(productEffects.admitUnusedProfileChange).not.toHaveBeenCalled();
+		expect(fake.transaction.agentService.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("makes a profile repair replay idempotent without a second authority decision", async function _ReplaysRepair()
+	{
+		const fake = _RepairTransaction();
+		const productEffects = _ProductEffects();
+		const repository = _Repository(fake.transaction, productEffects);
+
+		await expect(repository.ensureReady({ ..._COMMAND, readinessKind: "repair" })).resolves.toMatchObject({ status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: _COMMAND.onboardingId, agentRevisionId: "revision-existing" });
+		await expect(repository.ensureReady({ ..._COMMAND, readinessKind: "repair" })).resolves.toMatchObject({ status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: _COMMAND.onboardingId, agentRevisionId: "revision-existing" });
+		expect(productEffects.admitUnusedProfileChange).toHaveBeenCalledOnce();
+		expect(fake.transaction.agentService.updateMany).toHaveBeenCalledOnce();
+		expect(fake.transaction.agentRevision.create).not.toHaveBeenCalled();
+	});
+
+	it("rejects a completed onboarding mismatch and a repair on a non-deterministic service", async function _RejectsNonRepairableProfiles()
+	{
+		const completed = _Transaction();
+		const completedService = { id: _COMMAND.onboardingId, activeRevisionId: "revision-existing", workloadProfile: "legacy-profile", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId, modelDefinitionId: "model-1" } };
+		completed.agentService.findMany.mockResolvedValue([completedService]);
+		completed.agentService.findUnique.mockResolvedValue({ ...completedService, siloId: _COMMAND.siloId, kind: "Personal", state: "Active" });
+		await expect(_Repository(completed).ensureReady(_COMMAND)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.ServiceNotReady });
+		expect(completed.agentService.updateMany).not.toHaveBeenCalled();
+
+		const nonDeterministic = _Transaction();
+		nonDeterministic.agentService.findMany.mockResolvedValue([completedService]);
+		await expect(_Repository(nonDeterministic).ensureReady({ ..._COMMAND, readinessKind: "repair" })).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.ServiceNotReady });
+		expect(nonDeterministic.agentService.updateMany).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ label: "used", findFirstResult: null },
+		{ label: "stale source", findFirstResult: null },
+	])("rejects a $label deterministic repair before central admission", async function _RejectsUsedOrStale({ label, findFirstResult })
+	{
+		const fake = _RepairTransaction();
+		const productEffects = _ProductEffects();
+		fake.transaction.agentService.findFirst.mockResolvedValue(findFirstResult);
+
+		await expect(_Repository(fake.transaction, productEffects).ensureReady({ ..._COMMAND, readinessKind: "repair" })).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.ServiceNotReady });
+		expect(productEffects.admitUnusedProfileChange).not.toHaveBeenCalled();
+		expect(fake.transaction.agentService.updateMany).not.toHaveBeenCalled();
+		if (label === "used")
+			expect(fake.transaction.agentService.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversations: { none: {} }, runs: { none: {} } }) }));
+	});
+
+	it("propagates a denied profile-effect decision before changing the service", async function _RejectsAuthorization()
+	{
+		const fake = _RepairTransaction();
+		const productEffects = _ProductEffects();
+		productEffects.admitUnusedProfileChange.mockRejectedValue(new Error("authorization unavailable"));
+
+		await expect(_Repository(fake.transaction, productEffects).ensureReady({ ..._COMMAND, readinessKind: "repair" })).rejects.toThrow("authorization unavailable");
+		expect(fake.transaction.agentService.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("fails the repair when the service compare-and-swap loses its source", async function _RejectsCasLoss()
+	{
+		const fake = _RepairTransaction();
+		fake.transaction.agentService.updateMany.mockResolvedValue({ count: 0 });
+
+		await expect(_Repository(fake.transaction).ensureReady({ ..._COMMAND, readinessKind: "repair" })).rejects.toThrow("lost its source comparison");
+		expect(fake.transaction.agentService.updateMany).toHaveBeenCalledOnce();
 	});
 
 	it("adopts one earlier ready personal service when the deterministic identity is unused", async function _ExistingPersonalService()

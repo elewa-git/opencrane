@@ -449,6 +449,33 @@ integration and OpenCrane lint also passed after stacking onto #852. Independent
 architecture post-review passed. These are source and integration checks; no live remote-provider,
 hosted-MCP or fresh-install qualification is claimed here.
 
+### Testv5 access repair — preserve existing data
+
+Fresh owner sign-in succeeds. The remaining onboarding denial is `service_not_ready`: the exact
+personal service still names `personal-default`, while the current server admits `developer`.
+Read-only inspection found no conversations, runs, computer leases, child requests or tool claims
+for that service. Its owner, approved persona and completed onboarding evidence are valid.
+
+The user requires all current test data to be preserved. Architecture preflight permits a narrow
+completed-onboarding correction only for that unused deterministic service, with an unconfigured
+old profile, current central Edit permission, and a transaction-bound source comparison. Used
+services and retained profiles remain denied. Agent-services tests (140), onboarding tests (49),
+actual composition tests (5) and fresh PostgreSQL repair tests (5) pass. The SQL proof covers current
+Edit denial, audit rollback, exhausted source comparisons and concurrent conversation creation;
+the existing onboarding transaction retries conflicts and refuses a service that becomes used.
+Relevant type checks, the server build, style, boundaries and module-growth checks pass. Independent
+review and architecture post-review pass. Publication and a separately authorized live repair
+remain open. No live database, deployment, identities, conversation history or stored files have
+been changed.
+
+The live PostgreSQL release metadata and deployed server manifest carry different baseline digests.
+This is an unresolved provenance problem; the readiness schema was read successfully and the
+profile mismatch, not a demonstrated missing table or column, caused this denial.
+The deployment candidate applies only this repair to the current server source. The existing
+installer reconciles PostgreSQL Helm values but preserves the existing cluster's baseline binding;
+it does not apply the source baseline to that database. This development repair cannot count as
+fresh-install or release qualification.
+
 ## Later work
 
 - [#765](https://github.com/elewa-git/opencrane/issues/765): Git-backed project source, isolated

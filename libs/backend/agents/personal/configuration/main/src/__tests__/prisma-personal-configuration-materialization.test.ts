@@ -64,6 +64,7 @@ function _Materializer(prisma: never, logger?: never): _PersonalConfigurationMat
 			admitInitialPublication: vi.fn().mockResolvedValue(undefined),
 			admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
 			admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+			admitUnusedProfileChange: vi.fn().mockResolvedValue(undefined),
 		};
 	}), logger);
 }

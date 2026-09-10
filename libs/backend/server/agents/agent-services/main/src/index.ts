@@ -21,10 +21,11 @@ export type { RuntimeAgentEffectEligibility, RuntimeAgentEffectEligibilityComman
 export { AgentRevisionPersonaSelectionMaterializationCodes } from "./revisions/agent-revision-persona-selection.types";
 export { PrismaPersonalAgentBootstrapRepository } from "./personal-agents/db/prisma-personal-agent-bootstrap-repository";
 export { PersonalAgentProductEffectDenied, PrismaPersonalAgentProductEffectsAuthority } from "./personal-agents/db/prisma-personal-agent-product-effects";
-export type { PersonalAgentProductEffects } from "./personal-agents/personal-agent-product-effects.types";
+export type { AdmitUnusedPersonalAgentProfileChangeCommand, PersonalAgentProductEffects } from "./personal-agents/personal-agent-product-effects.types";
+export { PersonalAgentBootstrapConflict } from "./personal-agents/personal-agent-bootstrap-conflict";
 export { InitialPersonalAgentDefaultModelResolutionStatuses } from "./personal-agents/initial-personal-agent-publication.types";
 export type { InitialPersonalAgentDefaultModelResolver } from "./personal-agents/initial-personal-agent-publication.types";
-export { PersonalAgentBootstrapStatuses } from "./personal-agents/personal-agent-bootstrap.types";
+export { PersonalAgentBootstrapStatuses, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult } from "./personal-agents/personal-agent-bootstrap.types";
 export { __ExecutionCapabilityEvidence } from "./execution-evidence/execution-capability-evidence";
 export type { ExecutionCapabilityEvidence, ExecutionCapabilityEvidenceInput } from "./execution-evidence/execution-capability-evidence.types";
 export { PrismaPersonalExecutionEvidenceRepository } from "./execution-evidence/db/prisma-personal-execution-evidence-repository";
