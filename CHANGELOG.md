@@ -14,7 +14,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 ## [Unreleased]
 
 Personal and group-assistant text journeys and recent personal activity have passed integration
-CI and live testv5 checks.
+CI and earlier live testv5 checks. Current testv5 onboarding is blocked by an unused personal
+assistant's outdated computer profile; its data-preserving repair remains under qualification.
 The 0.11 baseline remains under review; this is not a release or a completed MVP.
 
 ### Added
@@ -126,6 +127,10 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   only rebuildable transaction projections.
 
 ### Fixed
+
+- **Completed setup can recover an unused personal assistant whose computer profile is no longer configured.**
+  The repair keeps setup answers, identity and revision history, requires current edit permission,
+  and refuses any assistant with prior conversations or runs. Live qualification remains separate.
 
 - **Browser login can survive server replacement and requests reaching different servers.** The
   follow-up stores encrypted sessions in PostgreSQL, preserves fixed expiry and prevents delayed

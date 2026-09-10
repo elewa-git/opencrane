@@ -1,9 +1,10 @@
 import express from "express";
 import request from "supertest";
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, ModelRoutingScope, PersonaRevisionState, PrincipalProvenance, UserOnboardingCompletionProvenance, UserOnboardingState, type PrismaClient } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Logger } from "@opencrane/backend/observability";
+import { PersonalAgentBootstrapConflict, PrismaPersonalAgentBootstrapRepository, type PersonalAgentBootstrapCommand } from "@opencrane/backend/server/agents/agent-services";
 import { PRODUCT_AUTHORIZATION_CATALOG_DIGEST, PRODUCT_AUTHORIZATION_CATALOG_ID, PRODUCT_AUTHORIZATION_CATALOG_REVISION } from "@opencrane/models/authorization";
 
 import { _CreateUserOnboardingComposition } from "@opencrane/backend/server/agents/onboarding";
@@ -268,7 +269,7 @@ function _App(fixture: ReturnType<typeof _PrismaFixture>)
 		if (fields.err !== undefined)
 			fixture.errors.push(fields.err);
 	}) } as unknown as Logger;
-	const composition = _CreateUserOnboardingComposition(fixture.prisma, logger, function _ResolveOwner() { return _OWNER; }, "developer");
+	const composition = _CreateUserOnboardingComposition(fixture.prisma, logger, function _ResolveOwner() { return _OWNER; }, "developer", ["developer"]);
 	const app = express();
 	app.use(express.json());
 	app.use("/api/v1/me/onboarding", composition.router);
@@ -277,10 +278,12 @@ function _App(fixture: ReturnType<typeof _PrismaFixture>)
 
 describe("personal Agent onboarding app composition", function _PersonalAgentCompositionSuite()
 {
+	afterEach(function _RestoreRepositoryMethods() { vi.restoreAllMocks(); });
+
 	it("refuses missing deployment profile configuration before creating the router", function _MissingProfile()
 	{
 		const fixture = _PrismaFixture(true);
-		expect(function _Compose() { return _CreateUserOnboardingComposition(fixture.prisma, {} as Logger, function _ResolveOwner() { return _OWNER; }, ""); }).toThrow("configured conversation-computer profile");
+		expect(function _Compose() { return _CreateUserOnboardingComposition(fixture.prisma, {} as Logger, function _ResolveOwner() { return _OWNER; }, "", []); }).toThrow("configured conversation-computer profile");
 		expect(fixture.attempts()).toBe(0);
 	});
 
@@ -302,5 +305,34 @@ describe("personal Agent onboarding app composition", function _PersonalAgentCom
 		await request(_App(fixture)).post("/api/v1/me/onboarding/chat/conclude").send({}).expect(503);
 		expect(fixture.state()).toMatchObject({ onboardingState: UserOnboardingState.BootstrapChatInProgress, completionProvenance: null, agentService: null, agentRevision: null, auditCount: 0, authorizationGrants: [_AgentServiceCollectionGrant()] });
 		expect(fixture.attempts()).toBe(3);
+	});
+
+	it("retries an agent-service comparison only after rolling back its staged writes", async function _RetriesAgentComparison()
+	{
+		const fixture = _PrismaFixture(true);
+		const original = PrismaPersonalAgentBootstrapRepository.prototype.ensureReady;
+		const preparation = vi.spyOn(PrismaPersonalAgentBootstrapRepository.prototype, "ensureReady").mockImplementationOnce(async function _LoseFirstComparison(this: PrismaPersonalAgentBootstrapRepository, command: PersonalAgentBootstrapCommand)
+		{
+			await original.call(this, command);
+			throw new PersonalAgentBootstrapConflict();
+		});
+		await request(_App(fixture)).post("/api/v1/me/onboarding/chat/conclude").send({}).expect(200);
+		expect(preparation.mock.calls.map(function _ReadinessKind(call) { return call[0].readinessKind; })).toEqual(["completion", "completion", "repair"]);
+		expect(fixture.state()).toMatchObject({ onboardingState: UserOnboardingState.Completed, auditCount: 6, agentService: { id: _ONBOARDING_ID, workloadProfile: "developer" } });
+		expect(fixture.state().authorizationGrants).toHaveLength(19);
+	});
+
+	it("returns unavailable after three agent-service conflicts without committing audit or Agent writes", async function _ExhaustsAgentComparisons()
+	{
+		const fixture = _PrismaFixture(true);
+		const original = PrismaPersonalAgentBootstrapRepository.prototype.ensureReady;
+		const preparation = vi.spyOn(PrismaPersonalAgentBootstrapRepository.prototype, "ensureReady").mockImplementation(async function _LoseEveryComparison(this: PrismaPersonalAgentBootstrapRepository, command: PersonalAgentBootstrapCommand)
+		{
+			await original.call(this, command);
+			throw new PersonalAgentBootstrapConflict();
+		});
+		await request(_App(fixture)).post("/api/v1/me/onboarding/chat/conclude").send({}).expect(503);
+		expect(preparation).toHaveBeenCalledTimes(3);
+		expect(fixture.state()).toMatchObject({ onboardingState: UserOnboardingState.BootstrapChatInProgress, completionProvenance: null, agentService: null, agentRevision: null, auditCount: 0, authorizationGrants: [_AgentServiceCollectionGrant()] });
 	});
 });

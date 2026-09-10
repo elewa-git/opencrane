@@ -5,8 +5,9 @@
 ## What it owns
 
 `src/composition/` connects persona evidence, initial model selection and personal-agent readiness
-inside the existing onboarding completion transaction. The app only supplies the deployment profile,
-caller resolver and logger; `src/http/` supplies the verified-session owner resolver.
+inside the existing onboarding completion transaction. The app supplies the selected deployment
+profile, the complete profile list used by session admission, the caller resolver and logger;
+`src/http/` supplies the verified-session owner resolver.
 
 This package owns the server-tracked workflow that routes one authenticated person through persona
 survey and bootstrap chat before the main product. Authentication supplies the silo and stable OIDC
@@ -28,6 +29,11 @@ The package owns the survey hand-off and first guided exchange end to end:
 8. Repair older `bootstrap_concluded` rows idempotently on the next onboarding read. Repair keeps an
    existing owned personal service when present; creation uses the onboarding identifier as the
    deterministic identity only when no service exists.
+
+If that deterministic service has never admitted a conversation or run, agent-services may correct
+an old profile that is no longer configured. The owner's central Edit decision and the exact source
+comparison commit in this same transaction. The correction preserves onboarding answers, persona,
+identity and revision history. Any prior use or a still-configured old profile prevents this repair.
 
 ```text
  authenticated session       persona evidence authority
