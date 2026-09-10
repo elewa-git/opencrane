@@ -17,7 +17,7 @@ Complete administration, rich interaction and action recovery keep their later p
 
 | Priority / ID | User outcome and owner | Required contract | Completion evidence |
 | --- | --- | --- | --- |
-| 1 / T1 | Retrieve real company information and explain it. Agent services own assignment; input assembly freezes definitions; conversation turns and MCP own invocation/results. | Current company or personal identity, exact tool revision, authorized connection custody, saved run budget and existing tool dispatch. | One real read-only record is retrieved in personal and company-child chats. The answer and durable result remain after reload/restart. Wrong silo, withdrawn tool, revoked grant, stale lease/generation and unavailable credentials fail closed. Recovery cannot repeat dispatch or refresh the continuation allowance. |
+| 1 / T1 | Retrieve real company information and explain it. Agent services own assignment; input assembly freezes definitions; conversation turns and MCP own invocation/results. | Current company or personal identity, exact tool revision, authorized connection custody, saved run budget and existing tool dispatch. | A standard remote MCP and a hosted MCP each complete discovery, authenticated invocation and a real read. Personal and company-child chats retain the answer and durable result after reload/restart. Wrong silo, withdrawn tool, revoked grant, stale lease/generation and unavailable credentials fail closed. Recovery cannot repeat dispatch or refresh the continuation allowance. |
 | 2 / T2 | Review and approve a precise external change. IAM owns the decision and effect admission; elicitation owns the participant interaction; MCP owns execution. | T1 dispatch and connection binding; an authorized human approver, exact saved arguments and current permission at execution. | Show target, arguments/changed fields, consequences and connection owner before approval. One approval permits one exact effect. Reject, cancel, expiry, changed arguments, revoked membership/grant/connection and stale attempts prevent dispatch. A timeout after submission is durably uncertain and is never blindly retried. |
 | 3 / M1 | Remember, recall, correct and forget information across conversations. The memory gateway owns fact content; the personal catalog owns metadata, consent and provenance. | Verified gateway-native dataset and stable deletion identity frozen in admitted authority; recoverable correction. | Remember a fact, recall it in a new conversation, correct it and forget it. Show consent/provenance/sensitivity. Other employees, silos and unentitled groups cannot recall it. Failed corrections/deletions can finish safely after restart. Never infer the dataset from a subject ID or rewrite an old run snapshot. |
 | 4 / U1 | Follow and control assistant work. Existing conversation events, workspace stores and reusable components own the experience. | Durable activity/result events and the supported decision/cancellation contracts from T1/T2. | Proposed, running, waiting, failed, cancelled and completed work survives reload and SSE resume. Relevant decisions, result links and cancellation are accessible on desktop and narrow screens. Current access governs every read; projections never authorize work. |
@@ -94,10 +94,30 @@ budget, invocation evidence and conversation output, with Absurd selecting durab
 restart. A lost response after a call is not permission to replay an external effect. Use the existing
 invocation evidence and recovery owners; do not introduce another orchestration mechanism.
 
-Uploaded MCP executables remain a distinct isolated execution path. They must not be moved into the
-OpenCrane server process or given raw credentials merely to make connectivity work. A future hosted
-connector path must explicitly establish its trust, credential and network boundaries. The first
-remote connection does not claim that arbitrary uploaded connectors now have authenticated egress.
+### Hosted MCP execution
+
+The user also requires running MCP servers inside OpenCrane. This is a required T1 delivery slice,
+following the first remote retrieval journey; it is not part of the deferred published-apps work.
+Run a standard MCP executable in a dedicated managed workload, separate from the OpenCrane server
+process and the ConversationComputer. Reuse the existing MCP executor where its ownership fits.
+
+Remote and hosted MCPs share the catalogue, tool discovery, immutable definitions, assignment,
+permissions, approval, invocation evidence and results. They have explicit transport and execution
+policies; neither mode is a fallback for the other. Absurd remains the workflow owner. Hosting an
+MCP server does not give it authority to schedule model work or acquire a new budget.
+
+The hosted slice must make scoped credentials and provider connectivity usable by an ordinary MCP
+server without exposing unrelated connections. The current uploaded-image sandbox has neither;
+running it successfully is not proof of a working authenticated connector. Establish the image
+trust policy, workload identity, connection owner/generation, credential delivery and rotation,
+permitted egress, lifecycle and cleanup before enabling that capability. Credential-bearing hosted
+execution requires its own architecture preflight and denial tests; do not silently relax the
+current uploaded-image policy. No connector receives model credentials or another owner's secrets.
+
+Acceptance includes one hosted MCP discovery/call under the correct personal or company connection,
+revocation before dispatch, stale lease/generation rejection, bounded resource use, restart without
+blind replay of an uncertain effect, and cleanup. First-journey remote qualification does not close
+this hosted slice or imply that arbitrary uploaded executables have authenticated egress.
 
 ## Next wave: approved external actions
 

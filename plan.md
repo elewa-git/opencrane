@@ -9,7 +9,7 @@ administration and action recovery retain their places below.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
-| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; the result survives reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; connection activation, participant result evidence and one real integration remain. |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; standard remote connection activation, participant result evidence and one real integration come first, followed by the required hosted MCP slice. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | Reuse IAM deferred approval and elicitation; connect approval-required model tools and disclose the exact external target and connection owner. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | Reuse conversation events, stores and approved components; preserve current access on reconnect. |
@@ -86,8 +86,9 @@ need their own saved append intents and ordering within the existing turn/workfl
 from a transaction callback without those coordinates would break restart recovery. The personal
 activity phase projection can land independently while this canonical receipt work is designed.
 
-The personal activity slice is implemented on `feat/0.12-personal-tool-activity`, directly above
-#850. Recent work now shows its latest tool as queued, running, result received or needing attention,
+The personal activity slice is implemented in draft [#851](https://github.com/elewa-git/opencrane/pull/851)
+on `feat/0.12-personal-tool-activity`, directly above #850. Recent work now shows its latest tool as
+queued, running, result received or needing attention,
 separately from the overall run state. Owner and current Read authorization precede a phase-only
 lookup in the same transaction. An unknown state or failed lookup stays an error; it cannot become
 an empty activity result. A tool result does not produce an answer link before the completed answer
@@ -101,9 +102,11 @@ Generated contracts and website OpenAPI are synchronized, and the website build 
 build and 32 suites / 158 behavior tests pass. Prisma, authorization, workflow, dependency, release,
 style and module-growth checks pass. The independent reviewer noted the bounded cost of up to 50
 progress reads per list, with no demonstrated regression. Both new desktop and narrow activity
-stories have inspected Darwin screenshots and passing scoped comparisons. Linux screenshots need
-the CI renderer; the older candidates use a different presentation and cannot be reused. Draft
-publication and Linux validation remain; testv5/live qualification stays a separate gate.
+stories have inspected Darwin screenshots and passing scoped comparisons. Linux CI run
+`34454953777` rendered source `0925e7cd4`; only the two missing new baselines failed. The exact
+images from `storybook-visual-evidence-1` were inspected and added, without changing older baselines.
+CI must validate the committed Linux images. The published review chain is #831 → #843 → #849 →
+#850 → #851; live stack integrity passes. Testv5/live qualification stays a separate gate.
 
 
 
@@ -122,6 +125,14 @@ owner and generation are bound to the admitted invocation and rechecked before d
 credentials cannot satisfy company execution. Absurd continues to own durable progression and
 uncertain outcomes; no new scheduler, queue or broker is introduced. Exact transport/authentication
 support and the existing MCP package changes are being audited before implementation.
+
+Running MCP servers inside OpenCrane is also explicitly required. After the first remote business
+journey, qualify a hosted MCP in a dedicated managed workload using the existing executor owner.
+Shared discovery, tool permissions, approvals, invocation evidence and Absurd progression remain
+the same. Hosted execution needs an explicit image-trust, scoped credential, connection generation,
+provider egress and lifecycle contract; the current credentialless, restricted uploaded-image path
+does not establish those capabilities. Keep it separate from the server process and the
+ConversationComputer. This required T1 slice is not deferred with published applications/code work.
 
 The bounded memory preflight confirms dataset-explicit recall and unavailable mutation methods.
 Correction/forget must prove how gateway fact IDs map to the pinned Cognee document identity and
