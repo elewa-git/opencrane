@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { ___DoWithoutTrace } from "@opencrane/backend/observability";
 
-import { MemoryGatewayProtocolError } from "./personal-memory-record";
+import { MemoryGatewayProtocolError } from "./personal-memory-record-receipt";
 import type { CogneeFetch, CogneeMemoryGatewayHttpOptions, CogneeSession, MemoryGatewayTransportFailureCode } from "./http-cognee-memory-gateway-client.types";
 
 /** Maximum body accepted from one Cognee exchange. */

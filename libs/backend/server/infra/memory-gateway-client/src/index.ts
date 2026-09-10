@@ -14,8 +14,8 @@
  */
 export { __UnavailableMemoryGatewayClient, MemoryGatewayUnavailableError } from "./unavailable-memory-gateway-client";
 export { __AssertMemoryProvenanceComplete, MemoryProvenanceIncompleteError } from "./memory-provenance";
-export { __AssertPersonalMemoryRecordResult, MemoryGatewayProtocolError } from "./personal-memory-record";
+export { __AssertPersonalMemoryRecordReceipt, MemoryGatewayMutationProtocolError, MemoryGatewayProtocolError } from "./personal-memory-record-receipt";
 export { __CreateHttpCogneeMemoryGatewayClient } from "./http-cognee-memory-gateway-client";
 export { MemoryGatewayTransportError } from "./cognee-http";
 export type { CogneeFetch, CogneeMemoryGatewayHttpOptions, MemoryGatewayTransportFailureCode } from "./http-cognee-memory-gateway-client.types";
-export type { MemoryCorrectionCommand, MemoryFact, MemoryForgetCommand, MemoryGatewayClient, MemoryProvenance, MemoryQueryCommand, MemoryQueryResult, PersonalMemoryRecordCommand, PersonalMemoryRecordDenied, PersonalMemoryRecorded, PersonalMemoryRecordResult, ScopedMemoryFact, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types";
+export type { MemoryCorrectionCommand, MemoryFact, MemoryForgetCommand, MemoryGatewayClient, MemoryProvenance, MemoryQueryCommand, MemoryQueryResult, PersonalMemoryRecordCommand, PersonalMemoryRecordReceipt, ScopedMemoryFact, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types";

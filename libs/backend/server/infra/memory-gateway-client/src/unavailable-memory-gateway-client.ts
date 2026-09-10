@@ -1,9 +1,14 @@
+import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
+
 import { __AssertMemoryProvenanceComplete } from "./memory-provenance";
-import type { MemoryCorrectionCommand, MemoryForgetCommand, MemoryGatewayClient, MemoryQueryCommand, MemoryQueryResult, PersonalMemoryRecordCommand, PersonalMemoryRecordResult, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types";
+import type { MemoryCorrectionCommand, MemoryForgetCommand, MemoryGatewayClient, MemoryQueryCommand, MemoryQueryResult, PersonalMemoryRecordCommand, PersonalMemoryRecordReceipt, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types";
 
 /** Typed failure emitted when no authenticated memory-gateway transport is configured. */
 export class MemoryGatewayUnavailableError extends Error
 {
+	/** Proves that an unavailable client did not hand mutation bytes to any transport. */
+	readonly deliveryState = MemoryMutationDeliveryStates.ProvenNotSent;
+
 	/** Creates a failure that cannot be mistaken for a successful recall or write. */
 	constructor()
 	{
@@ -22,7 +27,7 @@ export class __UnavailableMemoryGatewayClient implements MemoryGatewayClient
 	}
 
 	/** Rejects personal-memory retention rather than inventing an external identifier or digest. */
-	async recordPersonalFact(_command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordResult>
+	async recordPersonalFact(_command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordReceipt>
 	{
 		throw new MemoryGatewayUnavailableError();
 	}
