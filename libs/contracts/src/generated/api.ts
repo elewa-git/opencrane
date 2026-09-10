@@ -2244,6 +2244,10 @@ export interface components {
             attempt: number;
             /** @enum {string} */
             state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "completed" | "failed";
+            latestTool: {
+                /** @enum {string} */
+                phase: "queued" | "running" | "result_received" | "needs_attention";
+            } | null;
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */

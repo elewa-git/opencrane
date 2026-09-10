@@ -58,6 +58,13 @@ does not grant permission to use a run.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status
   only after the current exact `AgentRun/Read` grant is checked in the same database snapshot.
 
+Personal status includes `latestTool`, either null or the latest invocation's safe phase in the
+current attempt. Reads first filter by the authenticated personal owner and current `AgentRun/Read`
+permission, then ask the invocation owner for that phase in the same transaction. The response
+contains no tool arguments, result content, credentials or provider identifiers. A received tool
+result does not mean the assistant has finished its answer. Company-child runs remain outside this
+personal activity API; canonical participant receipts belong to conversation history.
+
 ## Boundary
 
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input

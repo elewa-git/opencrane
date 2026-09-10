@@ -23,6 +23,9 @@ export interface ConversationActivityTarget
 /** Reuses the public status vocabulary without importing execution authority into browser state. */
 export type ConversationActivityRunState = paths["/me/runs/{runId}"]["get"]["responses"][200]["content"]["application/json"]["state"];
 
+/** Reuses the public tool phase without adding tool identities or private payload fields. */
+export type ConversationActivityRunToolProgress = paths["/me/runs/{runId}"]["get"]["responses"][200]["content"]["application/json"]["latestTool"];
+
 /** One visible failed attempt accepted by the derived Activity mapper. */
 export interface ToolFailureActivityAttempt
 {
@@ -47,4 +50,4 @@ export interface ToolFailureActivitySource
 export type ConversationActivityRow =
 	| { readonly kind: ConversationActivityKinds.Elicitation; readonly id: string; readonly label: string; readonly occurredAt: string; readonly status: ElicitationRequestStates; readonly target: ConversationActivityTarget }
 	| { readonly kind: ConversationActivityKinds.ToolFailure; readonly id: string; readonly label: string; readonly occurredAt: string; readonly retrying: boolean; readonly technicalDetails: SafeToolTechnicalDetails; readonly target: ConversationActivityTarget }
-	| { readonly kind: ConversationActivityKinds.Run; readonly id: string; readonly label: string; readonly occurredAt: string; readonly status: ConversationActivityRunState; readonly target: ConversationActivityTarget | null };
+	| { readonly kind: ConversationActivityKinds.Run; readonly id: string; readonly label: string; readonly occurredAt: string; readonly status: ConversationActivityRunState; readonly latestTool: ConversationActivityRunToolProgress; readonly target: ConversationActivityTarget | null };

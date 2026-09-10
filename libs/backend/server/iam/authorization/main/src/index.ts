@@ -21,7 +21,8 @@ export type { DeferredToolApprovalLifecycleInput } from "./approvals/deferred-to
 export { DeferToolRequestOutcomes } from "./approvals/deferred-tool-approval-open.types";
 export type { DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./approvals/deferred-tool-approval-open.types";
 export { __OpenDeferredToolApproval } from "./approvals/persistence/prisma-deferred-tool-approval-opener";
-export { __AdmitPreparingToolInvocationInTransaction, __PrepareToolInvocationInTransaction, __ReadRunToolResultInTransaction, __ConsumeRunToolResultInTransaction } from "./tool-invocations/persistence/tool-invocation-transaction";
+export { __AdmitPreparingToolInvocationInTransaction, __PrepareToolInvocationInTransaction, __ReadRunToolProgressInTransaction, __ReadRunToolResultInTransaction, __ConsumeRunToolResultInTransaction } from "./tool-invocations/persistence/tool-invocation-transaction";
+export type { ReadRunToolProgressCommand, RunToolProgressRepository } from "./tool-invocations/progress";
 export { RunToolResultReadOutcomes } from "./tool-invocations/run-tool-result-delivery.types";
 export type { ConsumeRunToolResultCommand, ReadRunToolResultCommand, ReadRunToolResultResult } from "./tool-invocations/run-tool-result-delivery.types";
 export { PrismaToolInvocationElicitationRepository } from "./tool-invocations/persistence/prisma-tool-invocation-elicitation-repository";

@@ -14,6 +14,7 @@ baseline and follow-up PRs from remaining product work and live verification.
 | Live conversation updates | Bounded, resumable browser events with current access checks. Revocation clears the selected history and draft, and late responses cannot restore them. The event stream supplies message history and live changes; computer inspection refreshes separately. |
 | Personal model turns | Approved persona instructions and conversation history feed a bounded request. The server keeps model input and keys and saves the answer for restart. Absurd advances the turn through model work and at most one permitted tool result and text-only continuation. Live qualification of this replacement remains outstanding. New runs explicitly exclude personal memory while provisioning and recall remain unfinished. |
 | Company assistant in groups | Explicit assistant selection on an own group message, recoverable child creation, fixed audience, current parent and child access checks, follow-up answers, and human-reviewed sharing back. Administrator setup uses the API. |
+| Personal tool activity | Recent activity shows the latest tool phase separately from the assistant's overall work. A received tool result does not create an answer link; the final message must already be loaded and readable. This phase display is implemented in the follow-up; its live qualification remains pending. |
 | Company assistant tool selection | Administrators read and replace exact tools through the API. Changes create immutable revisions and grants for the assistant's own identity; stale edits conflict. Edits preserve the original budget. Connection activation, the management screen and live retrieval proof remain unfinished. |
 | Computer inspection | Workspace file, diff and browser discovery routes. Commands, page creation, screenshots and preview actions remain denied until their concrete effect admissions are connected. |
 | Computer recovery | Retrying failed starts, renewing or replacing active computers, and saving and restoring workspaces. |
@@ -36,8 +37,8 @@ The active delivery order is:
 3. **Long-term memory:** complete remembering, recalling, correcting and forgetting information
    across conversations, with consent and isolated personal and company datasets.
 4. **Visible work controls:** show waiting, running and finished work, required decisions and
-   supported cancellation. Recent personal activity is implemented; tool progress and controls
-   still need their complete journey.
+   supported cancellation. Recent personal activity and its tool-phase display are implemented; complete controls
+   and company participant receipts still need their full journey.
 5. **Rich interaction:** complete durable choices, free-text questions and structured results that
    remain accessible after refresh.
 6. **Documents and generated files:** complete attachment-to-answer and generated-file journeys,

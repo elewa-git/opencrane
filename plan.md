@@ -9,7 +9,7 @@ administration and action recovery retain their places below.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
-| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; the result survives reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; connection activation, participant result evidence and one real integration remain. |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; standard remote connection activation, participant result evidence and one real integration come first, followed by the required hosted MCP slice. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | Reuse IAM deferred approval and elicitation; connect approval-required model tools and disclose the exact external target and connection owner. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | Reuse conversation events, stores and approved components; preserve current access on reconnect. |
@@ -57,6 +57,90 @@ workload composition, domain, dependency, release, style and module-growth check
 The website build passes, including the generated API pages. Commit `376380280` is pushed and
 reviewable in draft #850. CI and testv5/live acceptance remain separate evidence. The next source
 slice owns connection activation and its execution binding.
+
+
+### Parallel execution wave — 2026-09-10
+
+The user requested cheaper subagents and concurrent execution wherever the work is independent.
+Use Luna for bounded implementation, source audits and focused checks, and Sol for the connection
+trust-boundary investigation. The coordinator owns shared contracts, architecture decisions,
+integration and exact-head review. Keep one writer per source area and preserve the ten-priority
+acceptance order; preparatory work on a later capability does not mark an earlier journey complete.
+
+The next wave starts above #850 at immutable base `9d6daa7eb6c63231005250d5637cc05e73ca7972`.
+
+| Lane | Independent work | Integration boundary |
+| --- | --- | --- |
+| Connection custody and activation | Trace the existing credential owner and executor resolution; define the smallest protected activation/binding slice and its denial tests. | Architecture preflight before changing credential, schema or execution authority. Secrets stay out of chat, workflow input and the Pod. |
+| Durable tool progress | Reuse the unpublished personal tool-progress work under current capability folders; preserve authorization before phase-only reads. | Shared contracts settle before UI adaptation. Component-manager pre/post and independent review remain required. Personal activity is not company participant history. |
+| Memory preparation | Verify pinned gateway dataset, recall/deletion identity and recoverable correction; produce a source-grounded M1 handoff. | Read-only preparation while retrieval implements. No memory writes until custody, consent and recovery are proven. |
+
+The coordinator also traces the existing conversation history writer for company-visible tool
+receipts. Reuse saved invocation/result identity and the current history/workflow boundaries; do not
+create another event queue or treat a progress projection as canonical conversation history.
+
+The history trace confirms that `ToolCallLogEntry` already represents safe tool phases and artifact
+references, and `BoundConversationWriter` already prepares a saved, idempotent append intent.
+The current turn authority reserves one exact final-output position. Intermediate tool logs therefore
+need their own saved append intents and ordering within the existing turn/workflow owner; appending
+from a transaction callback without those coordinates would break restart recovery. The personal
+activity phase projection can land independently while this canonical receipt work is designed.
+
+The personal activity slice is implemented in draft [#851](https://github.com/elewa-git/opencrane/pull/851)
+on `feat/0.12-personal-tool-activity`, directly above #850. Recent work now shows its latest tool as
+queued, running, result received or needing attention,
+separately from the overall run state. Owner and current Read authorization precede a phase-only
+lookup in the same transaction. An unknown state or failed lookup stays an error; it cannot become
+an empty activity result. A tool result does not produce an answer link before the completed answer
+is loaded and readable. Refresh remains a status read. This does not complete company participant
+history, connection activation or full visible work controls.
+
+Architecture preflight/post-review, component-manager pre/post and independent review pass. Focused
+contracts, IAM, execution-run, browser state, activity and workspace tests and lint pass. Server and
+UI production builds pass; the UI build needed an unsandboxed retry after local process failures.
+Generated contracts and website OpenAPI are synchronized, and the website build passes. Storybook
+build and 32 suites / 158 behavior tests pass. Prisma, authorization, workflow, dependency, release,
+style and module-growth checks pass. The independent reviewer noted the bounded cost of up to 50
+progress reads per list, with no demonstrated regression. Both new desktop and narrow activity
+stories have inspected Darwin screenshots and passing scoped comparisons. Linux CI run
+`34454953777` rendered source `0925e7cd4`; only the two missing new baselines failed. The exact
+images from `storybook-visual-evidence-1` were inspected and added, without changing older baselines.
+CI must validate the committed Linux images. The published review chain is #831 → #843 → #849 →
+#850 → #851; live stack integrity passes. Testv5/live qualification stays a separate gate.
+
+
+
+The connection audit confirms that the existing OCI companion accepts only a lease, invocation ID,
+tool name and arguments. Uploaded MCP code has neither provider credentials nor outbound provider
+egress. The per-person install labels are not credential custody, and company execution does not
+consult them. A label-only activation command is not a deliverable.
+
+The user clarified that the proposed server path must support standard MCP connectivity.
+The next retrieval slice must connect a configured remote MCP endpoint, discover its tools and call
+permitted tools through the standard protocol with server-held connection credentials. It must not
+require each provider to implement a proprietary operation-plan extension. Remote MCP connections
+and uploaded MCP executables have different execution boundaries: uploaded code remains isolated,
+and remote credentials never enter the ConversationComputer Pod. The remote endpoint, connection
+owner and generation are bound to the admitted invocation and rechecked before dispatch. Personal
+credentials cannot satisfy company execution. Absurd continues to own durable progression and
+uncertain outcomes; no new scheduler, queue or broker is introduced. Exact transport/authentication
+support and the existing MCP package changes are being audited before implementation.
+
+Running MCP servers inside OpenCrane is also explicitly required. After the first remote business
+journey, qualify a hosted MCP in a dedicated managed workload using the existing executor owner.
+Shared discovery, tool permissions, approvals, invocation evidence and Absurd progression remain
+the same. Hosted execution needs an explicit image-trust, scoped credential, connection generation,
+provider egress and lifecycle contract; the current credentialless, restricted uploaded-image path
+does not establish those capabilities. Keep it separate from the server process and the
+ConversationComputer. This required T1 slice is not deferred with published applications/code work.
+
+The bounded memory preflight confirms dataset-explicit recall and unavailable mutation methods.
+Correction/forget must prove how gateway fact IDs map to the pinned Cognee document identity and
+carry the admitted dataset. The available copied upstream source is not immutable-image proof.
+Keep catalog records limited to metadata, provenance, consent and digest; existing Absurd workflows
+own operation intent, checkpoints and recovery. No new memory outbox, scheduler or gateway
+idempotency store is introduced. Remember, cross-conversation recall, correction and forget remain
+unqualified until their identifier, receipt and ambiguous-response contracts are proven.
 
 
 ## Absurd-owned conversation turn progression - 2026-09-09

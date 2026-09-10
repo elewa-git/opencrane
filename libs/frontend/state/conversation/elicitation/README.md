@@ -10,15 +10,18 @@ time, restores that draft after verified sign-in, and adopts only the server's r
 
 It also maps canonical request references and safe tool histories into Activity rows. It never
 creates a run, chooses the respondent, interprets protected A2UI actions, or reads personal memory.
-Its shared `ConversationActivityRow` also accepts a personal-run status row with an optional answer
-target. The workspace feature derives that row from its authorized run read and currently rendered
-transcript. The target grants no access and does not copy an answer into this state package.
+Its shared `ConversationActivityRow` accepts a personal-run status row with an optional answer
+target and nullable public tool phase. The phase has no tool identity or private payload, and a
+result received phase does not mean that the assistant has completed its answer. The workspace
+feature derives that row from its authorized run read and currently rendered transcript. The target
+grants no access and does not copy an answer into this state package.
 
 ## Public surface
 
 - `ConversationElicitationStore` — component-scoped command, draft, step-up, and reconciliation state.
 - `OpenCraneConversationElicitationGateway` — generated-client adapter for request, response, and Activity reads.
 - `__MapElicitationActivity` and `__MapToolActivity` — pure canonical-reference mappers.
+- `ConversationActivityKinds`, `ConversationActivityRow`, and `RunToolProgressPhases` — the derived row vocabulary and public tool-phase categories used by the Activity feature.
 
 ## Dependency direction
 

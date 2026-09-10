@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { MessageEntry } from "@opencrane/contracts";
+import { RunToolProgressPhases } from "@opencrane/contracts";
 import type { ConversationPersonalRun } from "@opencrane/state/conversation/workspace";
 
 import { _PersonalRunActivity } from "../conversation-personal-run-activity.mapper";
 
 /** Models a completed API run without implying that its answer is loaded. */
-const _RUN: ConversationPersonalRun = { runId: "run", conversationId: "chat", state: "completed", attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: "2026-09-08T12:00:01Z" };
+const _RUN: ConversationPersonalRun = { runId: "run", conversationId: "chat", state: "completed", attempt: 1, agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", latestTool: null, finishedAt: "2026-09-08T12:00:01Z" };
+/** Models a still-running run after its tool result arrived but before an answer is committed. */
+const _RUNNING_WITH_TOOL_RESULT: ConversationPersonalRun = { ..._RUN, state: "running", latestTool: { phase: RunToolProgressPhases.ResultReceived }, finishedAt: null };
 /** Models an authorized completed agent answer before the feature maps its private payload. */
 const _ANSWER: MessageEntry = { schemaVersion: 1, id: "answer", conversationId: "chat", position: "9", author: { kind: "agent", agentIdentityId: "identity", agentServiceId: "service", name: "Assistant", avatarArtifactRevisionId: null }, provenance: "agent-authored", visibility: { audience: "conversation" }, runId: "run", causationId: "run", correlationId: "chat", idempotencyKey: "answer", occurredAt: "2026-09-08T12:00:01Z", attestation: null, kind: "message", state: "completed", blocks: [], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
 
@@ -24,6 +27,14 @@ describe("recent activity answer links", function _Suite()
 	{
 		expect(_PersonalRunActivity([_RUN], "chat", [], new Set())[0]!.target).toBeNull();
 		expect(_PersonalRunActivity([_RUN], "chat", [_ANSWER], new Set())[0]!.target).toBeNull();
+	});
+
+	it("keeps tool-result progress separate from answer readiness", function _ToolResultProgress()
+	{
+		const row = _PersonalRunActivity([_RUNNING_WITH_TOOL_RESULT], "chat", [], new Set())[0]!;
+		expect(row.status).toBe("running");
+		expect(row.latestTool).toEqual({ phase: RunToolProgressPhases.ResultReceived });
+		expect(row.target).toBeNull();
 	});
 
 	it("rejects answers for another run or conversation and unfinished messages", function _WrongAnswer()

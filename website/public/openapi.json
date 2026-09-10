@@ -1736,7 +1736,8 @@
           "conversationId",
           "agentRevisionId",
           "acceptedAt",
-          "finishedAt"
+          "finishedAt",
+          "latestTool"
         ],
         "properties": {
           "runId": {
@@ -1758,6 +1759,25 @@
               "completed",
               "failed"
             ]
+          },
+          "latestTool": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "phase"
+            ],
+            "properties": {
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "result_received",
+                  "needs_attention"
+                ]
+              }
+            }
           },
           "conversationId": {
             "type": "string",

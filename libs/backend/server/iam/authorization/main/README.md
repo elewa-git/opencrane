@@ -103,6 +103,11 @@ the conversation owner must first prove the saved second-model-request reservati
 permission. An exact replay preserves its first acknowledgement time, and consumed results remain
 readable for restart verification. Neither API grants model dispatch or starts a provider call.
 
+`__ReadRunToolProgressInTransaction` reads the latest invocation phase for an already authorized
+run, scoped to silo, run and current attempt. The personal status owner must check ownership and
+current Read permission in that same transaction first. This projection does not consume a result,
+record a new decision or grant any authority; database errors remain errors rather than empty work.
+
 ## Boundary
 
 Source is grouped into `authority/`, `grants/`, `approvals/`, and `tool-invocations/`. Each keeps
