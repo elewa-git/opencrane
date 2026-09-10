@@ -7,6 +7,15 @@ published applications and code work are deferred. Narrow prerequisites, such as
 API or the approval needed for one action, land with the first capability that needs them. Full
 administration and action recovery retain their places below.
 
+An active execution goal now covers these ten tracks. Continue through reviewed, coherent slices
+with cheaper parallel agents, keeping source/CI evidence separate from live qualification. The
+current wave starts from #851 at `e4901da0a4cd23cb71a0b0dd303408b39563d823` on
+`feat/0.12-mcp-protocol-conformance`. Its first change fixes the shared standard MCP exchange used
+by remote probing and hosted execution: request metadata/headers, response envelopes and bounded
+JSON/SSE response handling. This prerequisite changes neither credential custody nor workflow
+authority. Approval integration and hosted credential/network policy are prepared in independent
+lanes while the common protocol work proceeds.
+
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; standard remote connection activation, participant result evidence and one real integration come first, followed by the required hosted MCP slice. |
@@ -105,13 +114,14 @@ progress reads per list, with no demonstrated regression. Both new desktop and n
 stories have inspected Darwin screenshots and passing scoped comparisons. Linux CI run
 `34454953777` rendered source `0925e7cd4`; only the two missing new baselines failed. The exact
 images from `storybook-visual-evidence-1` were inspected and added, without changing older baselines.
-CI must validate the committed Linux images. The published review chain is #831 → #843 → #849 →
-#850 → #851; live stack integrity passes. Testv5/live qualification stays a separate gate.
+CI run `34455745285` passes on committed source `e4901da0a4cd23cb71a0b0dd303408b39563d823`,
+including the Linux images. The published review chain is #831 → #843 → #849 → #850 → #851;
+live stack integrity passes. Testv5/live qualification stays a separate gate.
 
 
 
 The connection audit confirms that the existing OCI companion accepts only a lease, invocation ID,
-tool name and arguments. Uploaded MCP code has neither provider credentials nor outbound provider
+tool name, frozen input schema and arguments. Uploaded MCP code has neither provider credentials nor outbound provider
 egress. The per-person install labels are not credential custody, and company execution does not
 consult them. A label-only activation command is not a deliverable.
 
@@ -124,7 +134,21 @@ and remote credentials never enter the ConversationComputer Pod. The remote endp
 owner and generation are bound to the admitted invocation and rechecked before dispatch. Personal
 credentials cannot satisfy company execution. Absurd continues to own durable progression and
 uncertain outcomes; no new scheduler, queue or broker is introduced. Exact transport/authentication
-support and the existing MCP package changes are being audited before implementation.
+support is pinned to MCP 2026-07-28. The current protocol slice moves pure wire validation into
+`contracts/src/mcp/protocol`, removes the executor-only protocol package and duplicate probe parser,
+and preserves the existing socket and authority owners. It adds required request metadata and
+headers, bounded JSON/SSE responses, tool pagination and durable structured results. Connection
+activation and real provider qualification still follow this shared contract repair.
+
+The protocol slice passes 122 contracts, 22 companion, 46 remote probe and 152 MCP domain tests,
+with their TypeScript lint targets. Server, MCP executor and UI production builds pass. Dependency,
+Prisma, workflow, authorization, workload ownership/composition, agent-domain, release, style and
+module-growth checks pass, as do the workload and agent-domain negative tests. The executor's
+two application tests, image and Helm contracts also pass. Architecture preflight, post-review and
+mandatory independent review pass with no remaining findings. The independent review verified
+lease expiry immediately before dispatch, response-stream cleanup, durable content validation and
+required discovery fields; the added regressions cover each of those boundaries. This establishes
+the shared protocol prerequisite, not connection activation or a qualified real retrieval journey.
 
 Running MCP servers inside OpenCrane is also explicitly required. After the first remote business
 journey, qualify a hosted MCP in a dedicated managed workload using the existing executor owner.
@@ -133,6 +157,24 @@ the same. Hosted execution needs an explicit image-trust, scoped credential, con
 provider egress and lifecycle contract; the current credentialless, restricted uploaded-image path
 does not establish those capabilities. Keep it separate from the server process and the
 ConversationComputer. This required T1 slice is not deferred with published applications/code work.
+
+The hosted preflight found no reusable arbitrary connector credential store or provider-egress
+profile. Model-provider Secrets remain model-only. Hosted admission must freeze an approved image,
+connection owner/generation, exact scoped Secret reference and enforced destination policy. The
+current standard Kubernetes NetworkPolicy contract cannot express FQDN restrictions; provider
+egress stays denied until the selected destination policy is implemented and qualified. This is a
+qualification dependency, not evidence that the current cluster has been inspected.
+
+Personal approved actions are being implemented independently on
+`feat/0.12-personal-tool-approval` from the same #851 base. Reuse the existing deferred approval and
+elicitation authority, bind the request to the personal owner, and let Absurd resume the saved turn
+after approval. Denial, expiry, changed authority and ambiguous effects must never dispatch another
+call. Company approval tools remain unavailable until an entitled human approver and company
+connection binding can be proven; a service Principal cannot substitute for either.
+Independent review found approval-resume defects: the proposal reader rejected approved invocations,
+the wake used a database row ID instead of the public invocation ID, and unanswered requests lacked
+a durable expiry wake. The parallel lane is repairing those paths and adding an approval-to-execution
+journey test. Personal approvals remain in progress until that complete path and restart behavior pass.
 
 The bounded memory preflight confirms dataset-explicit recall and unavailable mutation methods.
 Correction/forget must prove how gateway fact IDs map to the pinned Cognee document identity and

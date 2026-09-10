@@ -38,7 +38,7 @@ export interface McpEraProbeHttpsResponse
 	readonly status: number;
 	/** Lower-cased HTTP response headers. */
 	readonly headers: Readonly<Record<string, string | undefined>>;
-	/** Complete response bytes after the transport has enforced its body limit. */
+	/** Bounded bytes through the final response; an SSE connection may still have been open. */
 	readonly body: Uint8Array;
 }
 
@@ -80,7 +80,7 @@ export interface McpEraProbeResult
  * Checks whether a remote endpoint speaks the only MCP revision OpenCrane admits.
  *
  * This is the adapter contract used by the MCP domain. The infrastructure package owns DNS,
- * HTTPS, response limits, and JSON-RPC validation but never decides whether a successful probe
+ * HTTPS and response limits, delegates JSON-RPC validation to shared contracts, and never decides whether a successful probe
  * authorizes registration. Called by: `__CreateMcpEraProbeWorkflow` during remote-server review.
  */
 export interface McpEraProbeClient

@@ -30,7 +30,8 @@ describe("MCP companion wire", function _DescribeWire()
 	it("shares strict claim and terminal validators with the server route", function _ValidatesWire()
 	{
 		expect(__ParseMcpCompanionClaimRequest(_IDENTITY)).toEqual(_IDENTITY);
-		expect(__ParseMcpCompanionClaimResponse({ kind: McpCompanionCommandKinds.Discovery, ..._LEASE }, new Date("2026-01-01T00:00:00.000Z"))).toEqual({ kind: McpCompanionCommandKinds.Discovery, ..._LEASE });
+			expect(__ParseMcpCompanionClaimResponse({ kind: McpCompanionCommandKinds.Discovery, ..._LEASE }, new Date("2026-01-01T00:00:00.000Z"))).toEqual({ kind: McpCompanionCommandKinds.Discovery, ..._LEASE });
+			expect(__ParseMcpCompanionClaimResponse({ kind: McpCompanionCommandKinds.Invocation, ..._LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: {}, inputSchema: { type: "object" } }, new Date("2026-01-01T00:00:00.000Z"))).toMatchObject({ kind: McpCompanionCommandKinds.Invocation, inputSchema: { type: "object" } });
 		expect(__ParseMcpCompanionCompletionRequest({ ..._IDENTITY, executionId: _LEASE.executionId, claimFence: _LEASE.claimFence, completion: { kind: McpCompanionCommandKinds.Discovery, tools: [] } })).toMatchObject({ completion: { kind: McpCompanionCommandKinds.Discovery } });
 		expect(__ParseMcpCompanionFailureRequest({ ..._IDENTITY, executionId: _LEASE.executionId, claimFence: _LEASE.claimFence, failureCode: McpCompanionFailureCodes.DiscoveryFailed })).toMatchObject({ failureCode: McpCompanionFailureCodes.DiscoveryFailed });
 	});
@@ -38,7 +39,8 @@ describe("MCP companion wire", function _DescribeWire()
 	it("rejects extra identity fields, stale leases, and invented failure codes", function _RejectsInvalidWire()
 	{
 		expect(function _ExtraIdentity() { __ParseMcpCompanionClaimRequest({ ..._IDENTITY, token: "secret" }); }).toThrow(/invalid shape/u);
-		expect(function _Expired() { __ParseMcpCompanionClaimResponse({ kind: McpCompanionCommandKinds.Discovery, ..._LEASE, expiresAt: "2020-01-01T00:00:00.000Z" }, new Date("2026-01-01T00:00:00.000Z")); }).toThrow(/expired/u);
+			expect(function _Expired() { __ParseMcpCompanionClaimResponse({ kind: McpCompanionCommandKinds.Discovery, ..._LEASE, expiresAt: "2020-01-01T00:00:00.000Z" }, new Date("2026-01-01T00:00:00.000Z")); }).toThrow(/expired/u);
+		expect(function _MissingFrozenSchema() { __ParseMcpCompanionClaimResponse({ kind: McpCompanionCommandKinds.Invocation, ..._LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} }, new Date("2026-01-01T00:00:00.000Z")); }).toThrow(/invalid shape/u);
 		expect(function _InventedFailure() { __ParseMcpCompanionFailureRequest({ ..._IDENTITY, executionId: _LEASE.executionId, claimFence: _LEASE.claimFence, failureCode: "remote_error_text" }); }).toThrow(/invalid shape/u);
 	});
 });
@@ -126,25 +128,33 @@ describe("MCP companion Pod-local adapter", function _DescribeServer()
 	it("discovers before listing and before exactly one admitted invocation", async function _SequencesProtocol()
 	{
 		const methods: string[] = [];
+		const requests: { readonly method: string; readonly init: RequestInit }[] = [];
 		const fetcher: McpCompanionFetch = vi.fn(async function _Fetch(_input, init)
 		{
 			const request = JSON.parse(String(init?.body)) as { readonly id: string; readonly method: string };
 			methods.push(request.method);
+			requests.push({ method: request.method, init: init ?? {} });
 			if (request.method === "server/discover")
-				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"] } });
+				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"], capabilities: {}, ttlMs: 3_600_000, cacheScope: "public" } });
 			if (request.method === "tools/list")
-				return _Json({ jsonrpc: "2.0", id: request.id, result: { tools: [] } });
-			return _Json({ jsonrpc: "2.0", id: request.id, result: { isError: false, content: [{ type: "text", text: "done" }] } });
+				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", ttlMs: 3_600_000, cacheScope: "public", tools: [] } });
+			return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", isError: false, content: [{ type: "text", text: "done" }], structuredContent: { ok: true } } });
 		});
 		const server = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: fetcher });
 		await expect(server.discover(new AbortController().signal)).resolves.toEqual([]);
-		const command = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: { day: "today" } } as const;
-		await expect(server.call(command, new AbortController().signal)).resolves.toMatchObject({ isError: false });
-		expect(methods).toEqual(["server/discover", "tools/list", "server/discover", "tools/call"]);
+		const command = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: { day: "today" }, inputSchema: { type: "object", properties: { day: { type: "string", "x-mcp-header": "X-Day" } } } } as const;
+		await expect(server.call(command, new AbortController().signal)).resolves.toMatchObject({ isError: false, structuredContent: { ok: true } });
+		expect(methods).toEqual(["server/discover", "tools/list", "tools/call"]);
 		expect(methods.filter(function _Calls(method) { return method === "tools/call"; })).toHaveLength(1);
+		expect((requests[0]!.init.headers as Record<string, string>)["MCP-Protocol-Version"]).toBe("2026-07-28");
+		expect((requests[1]!.init.headers as Record<string, string>)["MCP-Protocol-Version"]).toBe("2026-07-28");
+		expect((requests[2]!.init.headers as Record<string, string>)["MCP-Protocol-Version"]).toBe("2026-07-28");
+		expect((requests[2]!.init.headers as Record<string, string>)["Mcp-Name"]).toBe("calendar.read");
+		expect((requests[2]!.init.headers as Record<string, string>)["Mcp-Param-X-Day"]).toBe("today");
+		expect((requests[0]!.init.headers as Record<string, string>)["Mcp-Name"]).toBeUndefined();
 	});
 
-	it("refuses the tool side effect when discovery consumes the lease", async function _FencesToolCall()
+	it("refuses the tool side effect when its lease is already expired", async function _FencesToolCall()
 	{
 		vi.useFakeTimers();
 		try
@@ -156,18 +166,73 @@ describe("MCP companion Pod-local adapter", function _DescribeServer()
 			{
 				const request = JSON.parse(String(init?.body)) as { readonly id: string; readonly method: string };
 				methods.push(request.method);
-				vi.setSystemTime(new Date(startedAt.getTime() + 6));
-				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"] } });
+				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", isError: false, content: [] } });
 			});
 			const server = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: fetcher });
-			const command = { kind: McpCompanionCommandKinds.Invocation, lease: { ..._LEASE, expiresAt: new Date(startedAt.getTime() + 5).toISOString() }, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} } as const;
+			const command = { kind: McpCompanionCommandKinds.Invocation, lease: { ..._LEASE, expiresAt: new Date(startedAt.getTime() - 5).toISOString() }, invocationId: "invocation-1", toolName: "calendar.read", arguments: {}, inputSchema: { type: "object" } } as const;
 			await expect(server.call(command, new AbortController().signal)).rejects.toThrow(/expired/u);
-			expect(methods).toEqual(["server/discover"]);
+			expect(methods).toEqual([]);
 		}
 		finally
 		{
 			vi.useRealTimers();
 		}
+	});
+
+	it("follows bounded tool-list pagination and rejects a cursor loop", async function _BoundsPagination()
+	{
+		let listCalls = 0;
+		const fetcher: McpCompanionFetch = vi.fn(async function _Fetch(_input, init)
+		{
+			const request = JSON.parse(String(init?.body)) as { readonly method: string; readonly id: string; readonly params: { readonly cursor?: string } };
+			if (request.method === "server/discover")
+				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"], capabilities: {}, ttlMs: 3_600_000, cacheScope: "public" } });
+			listCalls += 1;
+			return listCalls === 1
+				? _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", ttlMs: 3_600_000, cacheScope: "public", tools: [{ name: `tool-${listCalls}`, inputSchema: { type: "object" } }], nextCursor: "cursor-1" } })
+				: _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", ttlMs: 3_600_000, cacheScope: "public", tools: [{ name: `tool-${listCalls}`, inputSchema: { type: "object" } }] } });
+		});
+		const server = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: fetcher });
+		await expect(server.discover(new AbortController().signal)).resolves.toEqual([
+			{ name: "tool-1", description: null, inputSchema: { type: "object" } },
+			{ name: "tool-2", description: null, inputSchema: { type: "object" } },
+		]);
+
+		const loopingFetcher: McpCompanionFetch = vi.fn(async function _Fetch(_input, init)
+		{
+			const request = JSON.parse(String(init?.body)) as { readonly method: string; readonly id: string };
+			if (request.method === "server/discover")
+				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"], capabilities: {}, ttlMs: 3_600_000, cacheScope: "public" } });
+			return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", ttlMs: 3_600_000, cacheScope: "public", tools: [], nextCursor: "loop" } });
+		});
+		const loopingServer = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: loopingFetcher });
+		await expect(loopingServer.discover(new AbortController().signal)).rejects.toThrow(/cursor loop/u);
+	});
+
+	it("decodes SSE progress and cancels the stream after the matching final result", async function _DecodesSse()
+	{
+		let cancelled = false;
+		const encoder = new TextEncoder();
+		const fetcher: McpCompanionFetch = vi.fn(async function _Fetch(_input, init)
+		{
+			const request = JSON.parse(String(init?.body)) as { readonly id: string };
+			const stream = new ReadableStream<Uint8Array>({
+				start(controller)
+				{
+					controller.enqueue(encoder.encode('data: {"jsonrpc":"2.0","method":"notifications/progress","params":{}}\n\n'));
+					controller.enqueue(encoder.encode(`data: {"jsonrpc":"2.0","id":"${request.id}","result":{"resultType":"complete","isError":false,"content":[]}}\n\n`));
+				},
+				cancel()
+				{
+					cancelled = true;
+				},
+			});
+			return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+		});
+		const server = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: fetcher });
+		const command = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-sse", toolName: "calendar.read", arguments: {}, inputSchema: { type: "object" } } as const;
+		await expect(server.call(command, new AbortController().signal)).resolves.toEqual({ isError: false, content: [] });
+		expect(cancelled).toBe(true);
 	});
 });
 
@@ -192,7 +257,7 @@ describe("MCP companion orchestration", function _DescribeOrchestration()
 
 	it("reports readiness failure under the claimed command lease before MCP work starts", async function _ReportsReadinessFailure()
 	{
-		const command: McpCompanionCommand = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} };
+		const command: McpCompanionCommand = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: {}, inputSchema: { type: "object" } };
 		const discover = vi.fn();
 		const call = vi.fn();
 		const fail = vi.fn().mockResolvedValue(undefined);
@@ -218,7 +283,7 @@ describe("MCP companion orchestration", function _DescribeOrchestration()
 
 	it("does not repeat a tool call or report failure after ambiguous completion", async function _PreservesAmbiguity()
 	{
-		const command: McpCompanionCommand = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: { secret: "never-log" } };
+		const command: McpCompanionCommand = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: { secret: "never-log" }, inputSchema: { type: "object" } };
 		const call = vi.fn().mockResolvedValue({ isError: false, content: [] });
 		const complete = vi.fn().mockRejectedValue(new Error("completion response lost"));
 		const fail = vi.fn();
@@ -231,7 +296,7 @@ describe("MCP companion orchestration", function _DescribeOrchestration()
 
 	it("reports one stable code and logs no arguments or remote error text", async function _ReportsSafeFailure()
 	{
-		const command: McpCompanionCommand = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: { secret: "never-log" } };
+		const command: McpCompanionCommand = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: { secret: "never-log" }, inputSchema: { type: "object" } };
 		const logger = _Logger() as unknown as { readonly warn: ReturnType<typeof vi.fn> };
 		const fail = vi.fn().mockResolvedValue(undefined);
 		const dependencies: McpCompanionDependencies = { remote: { claim: vi.fn().mockResolvedValue(command), complete: vi.fn(), fail }, server: { ready: vi.fn().mockResolvedValue(undefined), discover: vi.fn(), call: vi.fn().mockRejectedValue(new Error("provider said SECRET_VALUE")) }, log: logger as never };

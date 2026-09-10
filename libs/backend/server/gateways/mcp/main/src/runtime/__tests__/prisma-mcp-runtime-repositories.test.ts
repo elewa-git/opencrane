@@ -191,6 +191,22 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toMatchObject({ kind: "discovery", executionId: "execution-1", expiresAt: expiry.toISOString() });
 	});
 
+	it("dispatches the exact selected revision schema beside the saved arguments", async function _claimFrozenSchema()
+	{
+		const expiry = new Date("2026-08-26T00:01:00.000Z");
+		const inputSchema = { type: "object", properties: { account: { type: "string", "x-mcp-header": "Account" } } };
+		const execution = { id: "execution-1", siloId: "silo-1", kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Pending, podUid: "pod-1", workloadUid: "job-1", companionClaimFence: null, companionClaimExpiresAt: null, toolInvocationId: "invocation-1", serverRevision: { tools: [{ id: "other-tool", name: "other", inputSchema: { type: "object" } }, { id: "selected-tool", name: "records.find", inputSchema }] } };
+		const transaction = {
+			mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateManyAndReturn: vi.fn().mockResolvedValue([{ companionClaimExpiresAt: expiry }]) },
+			mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:00:00.000Z") }) },
+		};
+		const toolInvocations = { claim: vi.fn().mockResolvedValue({ outcome: "claimed", claim: { fence: "tool-fence", revision: 1 }, invocation: { toolInvocationId: "invocation-1", toolRevisionId: "selected-tool", effectiveArguments: { account: "saved-account" } } }) };
+		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, toolInvocations as never, _Options());
+
+		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toMatchObject({ kind: "invocation", toolName: "records.find", inputSchema, arguments: { account: "saved-account" } });
+		expect(transaction.mcpRuntimeExecution.findFirst).toHaveBeenCalledWith(expect.objectContaining({ include: { serverRevision: { include: { tools: { select: { id: true, name: true, inputSchema: true } } } } } }));
+	});
+
 	it("recovers an expired invocation without another companion Pod claim", async function _RecoversExpiredInvocation()
 	{
 		const now = new Date("2026-08-26T00:02:00.000Z");

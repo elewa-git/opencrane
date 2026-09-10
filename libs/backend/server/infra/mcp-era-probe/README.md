@@ -5,8 +5,8 @@
 ## What it owns
 
 This library makes the one external request needed to check a reviewed MCP server before the MCP
-domain records it. It owns HTTPS, DNS review, response limits, JSON-RPC validation, and the evidence
-digest. It does not own server registration, database writes, workflow scheduling, session setup, or
+domain records it. It owns HTTPS, DNS review, response limits, and the evidence digest. The shared
+MCP contract in `@opencrane/contracts` builds requests and validates JSON-RPC and SSE framing. It does not own server registration, database writes, workflow scheduling, session setup, or
 tool execution.
 
 ```text
@@ -27,6 +27,9 @@ In this flow:
 - This adapter rejects URL credentials, IP-literal hosts, redirects, oversized bodies, and malformed
   JSON-RPC. It returns any well-formed announced version; the MCP domain accepts `2026-07-28` and
   records another version as rejected evidence.
+- JSON and request-scoped SSE use the same bounded decoder as the hosted companion. Progress
+  notifications cannot become discovery evidence, and a matching final SSE response closes the
+  connection immediately. Required version metadata and HTTP headers come from that shared contract.
 - The probe is discovery-only. It does not call `initialize`, create a session, fall back to an
   earlier protocol revision, open a session, or execute a tool.
 
@@ -46,7 +49,7 @@ catalogue data, starts a workflow, creates an MCP session, or runs a remote tool
 
 ## Dependency direction
 
-This is `layer:infra` with `scope:mcp`. It may use Node networking, utilities, and observability, but
+This is `layer:infra` with `scope:mcp`. It may use Node networking, shared contracts, utilities, and observability, but
 it never imports the MCP domain or an application composition root. The app assigns this adapter to
 the domain port structurally.
 

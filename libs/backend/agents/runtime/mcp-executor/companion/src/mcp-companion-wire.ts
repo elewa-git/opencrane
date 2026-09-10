@@ -1,6 +1,7 @@
+import { ___ParseMcpDiscoveredTools, ___ParseMcpToolCallResult } from "@opencrane/contracts";
+
 import { McpCompanionCommandKinds, McpCompanionFailureCodes } from "./mcp-companion.types";
 import type { McpCompanionClaimRequest, McpCompanionClaimResponse, McpCompanionCompletionRequest, McpCompanionDiscoveryResult, McpCompanionFailureRequest, McpCompanionInvocationResult, McpCompanionTerminalRequest } from "./mcp-companion-wire.types";
-import { __ParseMcpExecutorDiscoveredTools, __ParseMcpExecutorToolCallResult } from "@opencrane/backend/agents/runtime/mcp-executor/protocol";
 
 /** Parse the exact workload identity accepted by `POST /claim`. */
 export function __ParseMcpCompanionClaimRequest(value: unknown): McpCompanionClaimRequest
@@ -18,8 +19,11 @@ export function __ParseMcpCompanionClaimResponse(value: unknown, now: Date = new
 	const lease = _Lease(value, now);
 	if (value["kind"] === McpCompanionCommandKinds.Discovery && _ExactKeys(value, ["kind", "executionId", "claimFence", "expiresAt"]))
 		return { kind: McpCompanionCommandKinds.Discovery, ...lease };
-	if (value["kind"] === McpCompanionCommandKinds.Invocation && _ExactKeys(value, ["kind", "executionId", "claimFence", "expiresAt", "invocationId", "toolName", "arguments"]) && _Coordinate(value["invocationId"], 256) && _Coordinate(value["toolName"], 128) && _JsonValue(value["arguments"]))
-		return { kind: McpCompanionCommandKinds.Invocation, ...lease, invocationId: value["invocationId"], toolName: value["toolName"], arguments: value["arguments"] };
+	if (value["kind"] === McpCompanionCommandKinds.Invocation && _ExactKeys(value, ["kind", "executionId", "claimFence", "expiresAt", "invocationId", "toolName", "arguments", "inputSchema"]) && _Coordinate(value["invocationId"], 256) && _Coordinate(value["toolName"], 128) && _JsonValue(value["arguments"]) && _JsonValue(value["inputSchema"]))
+	{
+		_ParseFrozenTool(value["toolName"], value["inputSchema"]);
+		return { kind: McpCompanionCommandKinds.Invocation, ...lease, invocationId: value["invocationId"], toolName: value["toolName"], arguments: value["arguments"], inputSchema: value["inputSchema"] };
+	}
 	throw new Error("MCP companion claim response had an invalid shape");
 }
 
@@ -72,12 +76,20 @@ function _Completion(value: unknown): McpCompanionDiscoveryResult | McpCompanion
 	try
 	{
 		if (value["kind"] === McpCompanionCommandKinds.Discovery && _ExactKeys(value, ["kind", "tools"]))
-			return { kind: McpCompanionCommandKinds.Discovery, tools: __ParseMcpExecutorDiscoveredTools(value["tools"]) };
+			return { kind: McpCompanionCommandKinds.Discovery, tools: ___ParseMcpDiscoveredTools(value["tools"]) };
 		if (value["kind"] === McpCompanionCommandKinds.Invocation && _ExactKeys(value, ["kind", "result"]))
-			return { kind: McpCompanionCommandKinds.Invocation, result: __ParseMcpExecutorToolCallResult(value["result"]) };
+			return { kind: McpCompanionCommandKinds.Invocation, result: ___ParseMcpToolCallResult(value["result"]) };
 	}
 	catch {}
 	throw new Error("MCP companion completion data had an invalid shape");
+}
+
+/** Validate the frozen schema against the command's tool name before dispatch. */
+function _ParseFrozenTool(toolName: string, inputSchema: unknown): void
+{
+	const tools = ___ParseMcpDiscoveredTools([{ name: toolName, description: null, inputSchema }]);
+	if (tools.length !== 1 || tools[0]?.name !== toolName)
+		throw new Error("MCP invocation schema did not match its tool name");
 }
 
 /** Accept one non-array JSON object. */

@@ -163,9 +163,14 @@ Tests live with their capability; cross-contract acceptance tests stay in `src/_
 `generated/api.ts` remains generated output. The public `src/index.ts` composes these owners, so
 callers keep importing `@opencrane/contracts` without depending on internal file layout.
 
-The one contract surface for public control-plane calls and first-party workload protocols; callers
-import it instead of duplicating wire shapes. It defines types, validates first-party wire models,
-and builds a client — it holds no business policy, persistence, or server state. Runtime and controller frames remain private workload
+The one contract surface for public control-plane calls, first-party workload protocols and the
+external MCP 2026-07-28 wire format; callers import it instead of duplicating wire shapes. The
+`mcp/protocol` folder builds stateless discovery, tool-list and tool-call requests, mirrors required
+HTTP metadata, and decodes bounded JSON or request-scoped SSE responses. It validates optional tool
+metadata before projecting the durable tool and result fields OpenCrane stores. Fetch, sockets,
+credentials, DNS policy, retries and lifecycle remain with the calling adapter.
+
+It defines types, validates first-party wire models, and builds a client — it holds no business policy, persistence, or server state. Runtime and controller frames remain private workload
 contracts rather than public browser endpoints. External proprietary frontends should generate their
 client from the released spec (see below), keeping a clean process/network boundary.
 
