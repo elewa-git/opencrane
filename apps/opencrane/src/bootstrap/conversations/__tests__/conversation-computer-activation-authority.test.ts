@@ -24,7 +24,7 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 0n, computer, lease: null }).mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 1n, computer: { ...computer, state: ConversationComputerStates.ClaimPending }, lease: claimedLease });
 		const append = vi.spyOn(ConversationComputerHistory.prototype, "append").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 1n });
 
-		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("activated");
+		await expect(authority.activate({ activationEventId: "activation-event-1", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("activated");
 
 		expect(load).toHaveBeenCalledTimes(2);
 		expect(append).toHaveBeenCalledTimes(2);
@@ -41,7 +41,7 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		const computer = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", state: ConversationComputerStates.Cooling, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:05:00.000Z" };
 		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 2n, computer, lease });
 		const append = vi.spyOn(ConversationComputerHistory.prototype, "append").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 3n });
-		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("activated");
+		await expect(authority.activate({ activationEventId: "activation-event-1", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("activated");
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.Warm, leaseGeneration: 1 }), lease }));
 		expect(claims.claim).not.toHaveBeenCalled();
 		expect(append.mock.invocationCallOrder[0]).toBeLessThan(projections.publishActiveLease.mock.invocationCallOrder[0]!);
@@ -55,7 +55,7 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		const lease = { schemaVersion: 1 as const, id: "lease-1", computerId: "computer-one", generation: 1, sandboxClaimId: "computer-one-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5-computers.svc.cluster.local", state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T00:00:01.000Z", expiresAt: "2026-09-05T00:01:01.000Z", releasedAt: null };
 		const computer = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", state: ConversationComputerStates.Warm, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z" };
 		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 2n, computer, lease });
-		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("denied");
+		await expect(authority.activate({ activationEventId: "activation-event-1", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 })).resolves.toBe("denied");
 		expect(projections.publishActiveLease).not.toHaveBeenCalled();
 		load.mockRestore();
 	});
@@ -66,7 +66,7 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		const lease = { schemaVersion: 1 as const, id: "lease-1", computerId: "computer-one", generation: 1, sandboxClaimId: "computer-one-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5-computers.svc.cluster.local", state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T00:00:01.000Z", expiresAt: "2099-09-05T00:01:01.000Z", releasedAt: null };
 		const computer = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", state: ConversationComputerStates.Warm, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z" };
 		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 2n, computer, lease });
-		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 2 })).resolves.toBe("denied");
+		await expect(authority.activate({ activationEventId: "activation-event-1", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 2 })).resolves.toBe("denied");
 		expect(projections.publishActiveLease).not.toHaveBeenCalled();
 		load.mockRestore();
 	});
@@ -78,8 +78,8 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		const computer = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", state: ConversationComputerStates.Cooling, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:05:00.000Z" };
 		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 2n, computer, lease }).mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 4n, computer, lease });
 		const append = vi.spyOn(ConversationComputerHistory.prototype, "append").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 3n });
-		await authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 });
-		await authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 });
+		await authority.activate({ activationEventId: "activation-event-1", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 });
+		await authority.activate({ activationEventId: "activation-event-2", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1 });
 		expect(append.mock.calls[0]![0].eventId).not.toBe(append.mock.calls[1]![0].eventId);
 		load.mockRestore();
 		append.mockRestore();
@@ -95,7 +95,7 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		const claimed = { ...released, id: "lease-new", generation: 2, sandboxClaimId: "computer-one-g2", sandboxId: null, serviceFQDN: null, state: ComputerLeaseStates.Claimed, releasedAt: null };
 		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 3n, computer, lease: released }).mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 4n, computer: { ...computer, state: ConversationComputerStates.ClaimPending, leaseGeneration: 2 }, lease: claimed });
 		const append = vi.spyOn(ConversationComputerHistory.prototype, "append").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 4n });
-		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 2 })).resolves.toBe("activated");
+		await expect(authority.activate({ activationEventId: "activation-event-1", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 2 })).resolves.toBe("activated");
 		expect(append).toHaveBeenNthCalledWith(1, expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 2 }), lease: expect.objectContaining({ generation: 2 }) }));
 		expect(claims.claim).toHaveBeenCalledWith(expect.objectContaining({ generation: 2, reason: "recovery_requested" }));
 		load.mockRestore();
@@ -111,7 +111,7 @@ describe("ConversationComputerActivationAuthorityAdapter", function _Suite()
 		const claimed = { ...released, id: "lease-new", generation: 2, sandboxClaimId: "computer-one-g2", sandboxId: null, serviceFQDN: null, state: ComputerLeaseStates.Claimed, releasedAt: null };
 		const load = vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 3n, computer, lease: released }).mockResolvedValueOnce({ streamName: "conversation-computer-computer-one", revision: 4n, computer: { ...computer, state: ConversationComputerStates.ClaimPending, leaseGeneration: 2 }, lease: claimed });
 		const append = vi.spyOn(ConversationComputerHistory.prototype, "append").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 4n });
-		await expect(authority.activate({ siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 2 })).resolves.toBe("activated");
+		await expect(authority.activate({ activationEventId: "activation-event-1", causationId: "message-1", causationPosition: "1", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 2 })).resolves.toBe("activated");
 		expect(append).toHaveBeenNthCalledWith(1, expect.objectContaining({ expectedRevision: 3n, computer: expect.objectContaining({ state: ConversationComputerStates.ClaimPending, leaseGeneration: 2 }) }));
 		expect(claims.claim).toHaveBeenCalledWith(expect.objectContaining({ generation: 2, reason: "recovery_requested" }));
 		load.mockRestore();

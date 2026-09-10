@@ -18,7 +18,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 	it("keeps original input and exact tool-call pairing, spends one shared allowance and posts one final answer", async function _Answer()
 	{
 		const f = await _ToolContinuationHarness();
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "completed" });
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		const [first, second] = f.model.request.mock.calls.map(call => call[0]);
 		expect(first).toMatchObject({ tools: ConversationModelToolModes.Select, maxCompletionTokens: 50, continuation: null });
@@ -29,7 +29,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.credentials.reuseExact).toHaveBeenCalledOnce();
 		expect(f.toolFlags).toMatchObject({ executions: 1, acknowledgements: 1, consumed: true });
-		const turn = (await f.store.load(f.step.bootstrapId))!;
+		const turn = (await f.store.load(f.step))!;
 		expect(turn.toolSelection).not.toBeNull();
 		expect(turn.continuationReservation?.ordinal).toBe(2);
 		expect(turn.continuationReservation?.invocationFence).not.toBe(turn.modelReservation?.invocationFence);
@@ -38,7 +38,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 		for (const secret of ["private-query", "private-result", "Private assistant declaration", "test-only-key"])
 			expect(stored).not.toContain(secret);
 		expect(f.rows.size).toBe(2);
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "completed" });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 	});
 
@@ -53,11 +53,11 @@ describe("one governed tool and its model continuation", function _Continuation(
 			await store(turn, declaration);
 			throw new Error("custody response lost");
 		});
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
-		expect((await f.store.load(f.step.bootstrapId))?.toolSelection).toBeNull();
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
+		expect((await f.store.load(f.step))?.toolSelection).toBeNull();
 		now += 40_000;
-		expect(await f.restart().bootstrap(f.command)).toEqual({ bootstrapId: f.step.bootstrapId, outcome: "ready" });
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "completed" });
+		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.step });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(1);
@@ -79,8 +79,8 @@ describe("one governed tool and its model continuation", function _Continuation(
 			f.history.afterAppend = fault;
 		else
 			f.history.beforeAppend = fault;
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "completed" });
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: after ? "retry" : "model_pending" });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		expect(f.toolFlags.executions).toBe(1);
 	});
@@ -94,25 +94,25 @@ describe("one governed tool and its model continuation", function _Continuation(
 			await admit(turn);
 			throw new Error("admission response lost");
 		});
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "completed" });
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.toolFlags.executions).toBe(1);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 	});
 
-	it("polls pending tool work past the first response deadline without replaying the model or key", async function _PendingTool()
+	it("waits on pending tool work past the first response deadline without replaying the model or key", async function _PendingTool()
 	{
 		let now = Date.now();
 		vi.spyOn(Date, "now").mockImplementation(() => now);
 		const f = await _ToolContinuationHarness();
 		f.toolFlags.pending = true;
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "tool_pending", toolInvocationId: expect.any(String) });
 		now += 40_000;
-		expect(await f.restart().bootstrap(f.command)).toMatchObject({ outcome: "ready" });
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "pending" });
+		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.step });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "tool_pending", toolInvocationId: expect.any(String) });
 		expect(f.model.request).toHaveBeenCalledOnce();
 		f.toolFlags.pending = false;
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "completed" });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(1);
 	});
@@ -126,10 +126,10 @@ describe("one governed tool and its model continuation", function _Continuation(
 			await store(turn, continuation);
 			throw new Error("continuation custody response lost");
 		});
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
-		expect((await f.store.load(f.step.bootstrapId))?.continuationReservation).toBeNull();
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
+		expect((await f.store.load(f.step))?.continuationReservation).toBeNull();
 		expect(f.toolFlags.consumed).toBe(false);
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "completed" });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 	});
 
@@ -155,10 +155,10 @@ describe("one governed tool and its model continuation", function _Continuation(
 		}
 		if (boundary === "response")
 			f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call }).mockRejectedValueOnce(new Error("paid response lost"));
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
-		expect((await f.store.load(f.step.bootstrapId))?.continuationReservation).not.toBeNull();
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
+		expect((await f.store.load(f.step))?.continuationReservation).not.toBeNull();
 		now += 30_000;
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "response_unavailable" });
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "response_unavailable" });
 		expect(f.model.request).toHaveBeenCalledTimes(boundary === "response" ? 2 : 1);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(1);
@@ -177,7 +177,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 				throw new Error("stop after continuation custody");
 			}
 		};
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
 		const barrier = _Barrier();
 		let arrivals = 0;
 		f.history.beforeAppend = async function _Race(command)
@@ -190,13 +190,13 @@ describe("one governed tool and its model continuation", function _Continuation(
 				await barrier.promise;
 			}
 		};
-		const outcomes = await Promise.all([f.restart().modelStep(f.step), f.restart().modelStep(f.step)]);
+		const outcomes = await Promise.all([f.restart().advance(f.step), f.restart().advance(f.step)]);
 		expect(outcomes.filter(result => result.outcome === "completed")).toHaveLength(1);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		expect(f.toolFlags).toMatchObject({ executions: 1, acknowledgements: 1 });
 	});
 
-	it.each([false, true])("rechecks a revoked tool only for an empty final-answer slot: already accepted %s", async function _RevokedSavedAnswer(accepted)
+	it.each([false, true])("recovers only an atomically committed final answer after tool authority ends: already accepted %s", async function _RevokedSavedAnswer(accepted)
 	{
 		const f = await _ToolContinuationHarness();
 		let failed = false;
@@ -218,13 +218,20 @@ describe("one governed tool and its model continuation", function _Continuation(
 					throw new Error("history unavailable before append");
 				}
 			};
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
-		expect((await f.store.load(f.step.bootstrapId))?.outputReceipt).not.toBeNull();
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
+		expect((await f.store.load(f.step))?.outputReceipt === null).toBe(!accepted);
 		f.toolFlags.allowed = false;
 		if (accepted)
-			await expect(f.restart().bootstrap(f.command)).resolves.toBeNull();
+			await expect(f.restart().start(f.workflowCommand)).resolves.toBeNull();
 		else
-			await expect(f.restart().bootstrap(f.command)).rejects.toThrow("tool authority");
+		{
+			const pending = await f.restart().advance(f.step);
+			expect(pending).toMatchObject({ outcome: "model_pending", ordinal: 2 });
+			if (pending.outcome !== "model_pending")
+				throw new Error("Expected the saved continuation reservation to remain pending");
+			vi.spyOn(Date, "now").mockReturnValue(pending.notBeforeEpochMs + 1);
+			await expect(f.restart().advance(f.step)).resolves.toEqual({ outcome: "response_unavailable" });
+		}
 		expect(f.history.streams.get(f.stream)).toHaveLength(accepted ? 3 : 2);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 	});
@@ -237,8 +244,8 @@ describe("one governed tool and its model continuation", function _Continuation(
 			f.toolFlags.allowed = false;
 			return { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" };
 		});
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
-		expect((await f.store.load(f.step.bootstrapId))?.outputReceipt).toBeNull();
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
+		expect((await f.store.load(f.step))?.outputReceipt).toBeNull();
 		expect(f.history.streams.get(f.stream)).toHaveLength(2);
 	});
 
@@ -246,20 +253,20 @@ describe("one governed tool and its model continuation", function _Continuation(
 	{
 		const f = await _ToolContinuationHarness();
 		f.model.request.mockResolvedValue({ kind: ConversationModelResponseKinds.Tool, call: f.call });
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect(f.toolFlags.executions).toBe(1);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
-		expect((await f.store.load(f.step.bootstrapId))?.outputReceipt).toBeNull();
+		expect((await f.store.load(f.step))?.outputReceipt).toBeNull();
 	});
 
 	it("cannot issue another key when exact credential reuse fails", async function _ExpiredKey()
 	{
 		const f = await _ToolContinuationHarness();
 		f.credentials.reuseExact.mockRejectedValueOnce(new Error("original key expired"));
-		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
-		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "pending" });
+		expect(await f.restart().advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect(f.credentials.reuseExact).toHaveBeenCalledOnce();
 	});
 });

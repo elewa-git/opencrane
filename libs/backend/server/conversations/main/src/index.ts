@@ -22,8 +22,8 @@ export type { ConversationComputerLifecycleCandidate, ConversationComputerLifecy
 export { ConversationComputerCheckpointFenceAdapter, ConversationComputerLifecycleDueEnumerator, ConversationComputerLifecycleWorker, HttpConversationComputerCheckpointSandbox } from "./computers/lifecycle/conversation-computer-lifecycle-runtime";
 export { PrismaConversationComputerActivationProjectionRepository } from "./computers/activation/db/prisma-conversation-computer-activation-repository";
 export { PrismaConversationComputerLifecycleProjectionRepository } from "./computers/lifecycle/db/prisma-conversation-computer-lifecycle-projection-repository";
-export { _CreateConversationComputerTurnRouter } from "./computers/turns/conversation-computer-turn.router";
-export type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority, ConversationComputerTurnRouterOptions } from "./computers/turns/conversation-computer-turn.types";
+export { _CreateConversationComputerReviewCredentialRouter } from "./computers/turns/conversation-computer-review-credential.router";
+export type { ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority } from "./computers/turns/conversation-computer-turn.types";
 export { ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityService } from "./computers/turns/conversation-computer-turn-authority";
 export { ActiveConversationComputerTurnCandidateResolver } from "./computers/turns/conversation-computer-turn-candidate-resolver";
 export { KurrentConversationComputerTurnStore } from "./computers/turns/conversation-computer-turn-store";
@@ -76,5 +76,8 @@ export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposa
 export { ConversationToolProposalRefusal } from "./computers/tools/proposal/conversation-tool-proposal-refusal";
 export { ConversationToolProposalRefusals } from "./computers/tools/proposal/conversation-tool-proposal.types";
 export type { ConversationToolProposalAdmission, ConversationToolProposalRuntimeAdmission } from "./computers/tools/proposal/conversation-tool-proposal.types";
-export { ConversationComputerModelStepOutcomes } from "./computers/turns/conversation-computer-model.types";
-export type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./computers/turns/conversation-computer-model.types";
+export type { ConversationComputerModelReservation, ConversationComputerModelTransport } from "./computers/turns/conversation-computer-model.types";
+export { CONVERSATION_COMPUTER_TURN_TASK } from "./computers/turns/workflow/conversation-computer-turn-task";
+export { PrismaConversationComputerTurnWorkflowReceiptBinder } from "./computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-binder";
+export { _RegisterConversationComputerTurnWorkflow, _ToolResultEventName } from "./computers/turns/workflow/conversation-computer-turn-workflow";
+export { PrismaConversationComputerTurnWorkflowEventRepository } from "./computers/turns/workflow/prisma-conversation-computer-turn-workflow-events";

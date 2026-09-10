@@ -4,13 +4,13 @@ import { _ModelReservationFixture, _ReserveConversationOutputFixture } from "./c
 import { randomUUID } from "node:crypto";
 
 import { KurrentDBClient } from "@kurrent/kurrentdb-client";
-import { _KurrentHistoryStore, type HistoryAppend, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { _KurrentHistoryStore, type HistoryAppend, type HistoryAtomicAppend, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { BoundConversationWriter } from "@opencrane/backend/server/conversations/history";
 import type { BoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
 import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
-import { KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
+import { ConversationComputerOutputPositionConflictError, KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
 
@@ -52,6 +52,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 			bootstrapId: randomUUID(), siloId, computerId,
 			lease: { leaseId: randomUUID(), leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` },
 			latestPendingEntryId: randomUUID(), modelAlias: "proof-model", maximumBudgetUsd: 0.05,
+			latestPendingEntryPosition: "1",
 			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null,
 			binding: { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId: randomUUID(), agentServiceId: randomUUID(), agentName: "Ada", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 },
 			compile: { runId, attempt: 1, promptCompilerVersion: "proof-v1", digest: `sha256:${"a".repeat(64)}` },
@@ -80,19 +81,27 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		let arrivals = 0;
 		let release!: () => void;
 		const barrier = new Promise<void>(resolve => { release = resolve; });
+		async function _Race<T>(revision: HistoryAppend["expectedRevision"], write: () => Promise<T>): Promise<T>
+		{
+			expect(revision).toBe(expectedRevision);
+			arrivals += 1;
+			if (arrivals === 2)
+				release();
+			await barrier;
+			return write();
+		}
 		return [0, 1].map(function _Client()
 		{
 			const history = _Connect();
 			return new KurrentConversationComputerTurnStore({
 				readStream: history.readStream.bind(history),
+				appendAtomic: async function _AtSameAtomicRevision(command: HistoryAtomicAppend)
+				{
+					return _Race(command.appends[0]!.expectedRevision, async function _AtomicWrite() { return history.appendAtomic(command); });
+				},
 				append: async function _AtSameRevision(command: HistoryAppend)
 				{
-					expect(command.expectedRevision).toBe(expectedRevision);
-					arrivals += 1;
-					if (arrivals === 2)
-						release();
-					await barrier;
-					return history.append(command);
+					return _Race(command.expectedRevision, async function _Write() { return history.append(command); });
 				},
 			});
 		});
@@ -151,30 +160,30 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		expect(restored.toolSelection).toEqual(selection);
 		expect(restored.continuationReservation).toEqual(winner);
 		expect(restored.outputReceipt).toEqual(intent);
-		await _Writer(_Connect(), restored).append(restored.outputReceipt!);
+		await _Writer(_Connect(), restored).confirm(restored.outputReceipt!);
 		expect(await _Outputs(history, intent)).toHaveLength(1);
 	});
 
-	it("persists the complete prepared answer and recovers it across fresh clients before and after append", async function ()
+	it("persists the complete answer atomically and recovers it across fresh clients", async function ()
 	{
 		const first = _Connect();
 		const turn = await _Freeze(first);
 		const prepared = await _PrepareConversationOutputIntent(turn, randomUUID());
 		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(first), turn.bootstrapId, prepared.event.id);
 		await new KurrentConversationComputerTurnStore(first).markOutput(turn.bootstrapId, prepared);
-		expect(await _Outputs(first, prepared)).toEqual([]);
+		expect(await _Outputs(first, prepared)).toHaveLength(1);
 
 		const restarted = _Connect();
 		const loaded = await new KurrentConversationComputerTurnStore(restarted).load(turn.bootstrapId);
 		expect(loaded?.outputReceipt).toEqual(prepared);
 		const appendFence = vi.fn().mockResolvedValue(undefined);
-		await expect(_Writer(restarted, loaded!, appendFence).append(loaded!.outputReceipt!)).resolves.toEqual(prepared.event.data.entry);
-		expect(appendFence).toHaveBeenCalledOnce();
+		await expect(_Writer(restarted, loaded!, appendFence).confirm(loaded!.outputReceipt!)).resolves.toEqual(prepared.event.data.entry);
+		expect(appendFence).not.toHaveBeenCalled();
 
 		const restartedAgain = _Connect();
 		const accepted = await new KurrentConversationComputerTurnStore(restartedAgain).load(turn.bootstrapId);
 		const noNewAppend = vi.fn().mockRejectedValue(new Error("the original input head has advanced"));
-		await expect(_Writer(restartedAgain, accepted!, noNewAppend).append(accepted!.outputReceipt!)).resolves.toEqual(prepared.event.data.entry);
+		await expect(_Writer(restartedAgain, accepted!, noNewAppend).confirm(accepted!.outputReceipt!)).resolves.toEqual(prepared.event.data.entry);
 		expect(noNewAppend).not.toHaveBeenCalled();
 		const outputs = await _Outputs(restartedAgain, prepared);
 		expect(outputs).toHaveLength(1);
@@ -183,35 +192,20 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		expect(outputs[0]!.metadata).toEqual(prepared.event.metadata);
 		const restartedStore = new KurrentConversationComputerTurnStore(restartedAgain);
 		await restartedStore.settle(accepted!);
-		const next = { ...turn, bootstrapId: randomUUID(), latestPendingEntryId: randomUUID() };
+		const next = { ...turn, bootstrapId: randomUUID(), latestPendingEntryId: randomUUID(), latestPendingEntryPosition: "2" };
 		await restartedStore.createOrRead(next);
 		await restartedStore.settle(accepted!);
 		expect((await restartedStore.loadActive(next))?.bootstrapId).toBe(next.bootstrapId);
 	});
 
-	it.each([false, true])("rejects a competing append after the empty read, including an event-ID alias: %s", async function (sameId)
+	it("rejects a stale output position without saving a turn receipt", async function _StaleOutputPosition()
 	{
 		const history = _Connect();
 		const turn = await _Freeze(history);
 		const intent = await _PrepareConversationOutputIntent(turn, randomUUID());
 		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(history), turn.bootstrapId, intent.event.id);
-		await new KurrentConversationComputerTurnStore(history).markOutput(turn.bootstrapId, intent);
-		const competing = { ...structuredClone(intent.event), id: sameId ? intent.event.id : randomUUID(), data: { entry: { ...intent.event.data.entry, occurredAt: "2026-09-09T00:01:00.000Z" } } };
-		let intercepted = false;
-		const boundary = {
-			readStream: history.readStream.bind(history),
-			append: async function _Race(command: HistoryAppend)
-			{
-				expect(intercepted).toBe(false);
-				intercepted = true;
-				await history.append({ ...command, events: [competing] });
-				return history.append(command);
-			},
-		};
-		await expect(_Writer(boundary, turn).append(intent)).rejects.toThrow("different history");
-		expect(intercepted).toBe(true);
-		const outputs = await _Outputs(history, intent);
-		expect(outputs).toHaveLength(1);
-		expect(outputs[0]).toMatchObject({ ...competing, revision: 1n });
+		await history.append({ streamName: intent.streamName, expectedRevision: turn.binding.expectedRevision, events: [{ ...intent.event, id: randomUUID() }] });
+		await expect(new KurrentConversationComputerTurnStore(history).markOutput(turn.bootstrapId, intent)).rejects.toBeInstanceOf(ConversationComputerOutputPositionConflictError);
+		expect((await new KurrentConversationComputerTurnStore(_Connect()).load(turn.bootstrapId))?.outputReceipt).toBeNull();
 	});
 });

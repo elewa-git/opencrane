@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 
-import type { ConversationEntry } from "./conversation-entry.types";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, type ConversationEntry } from "./conversation-entry.types";
 
 const _IdentifierSchema = z.string().trim().min(1);
 const _InstantSchema = z.string().datetime({ offset: true });
@@ -15,16 +15,12 @@ const _PositionSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
 const _HumanAuthoredProvenance = "human-authored";
 const _AgentAuthoredProvenance = "agent-authored";
 const _ServiceAttestedProvenance = "service-attested";
-const _HumanAuthorKind = "human";
-const _AgentAuthorKind = "agent";
-const _ServiceAuthorKind = "service";
-const _SystemAuthorKind = "system";
 const _OpenCraneServiceId = "opencrane";
 const _AuthorSchema = z.discriminatedUnion("kind", [
-	z.object({ kind: z.literal("human"), principalId: _IdentifierSchema, participantId: _IdentifierSchema, issuer: _IdentifierSchema, authenticatedAt: _InstantSchema, name: _IdentifierSchema, avatarArtifactRevisionId: _IdentifierSchema.nullable() }).strict(),
-	z.object({ kind: z.literal("agent"), agentIdentityId: _IdentifierSchema, agentServiceId: _IdentifierSchema, name: _IdentifierSchema, avatarArtifactRevisionId: _IdentifierSchema.nullable() }).strict(),
-	z.object({ kind: z.literal("service"), serviceId: _IdentifierSchema, name: _IdentifierSchema }).strict(),
-	z.object({ kind: z.literal("system"), systemId: z.literal("opencrane"), name: z.literal("OpenCrane") }).strict(),
+	z.object({ kind: z.literal(ConversationAuthorKinds.Human), principalId: _IdentifierSchema, participantId: _IdentifierSchema, issuer: _IdentifierSchema, authenticatedAt: _InstantSchema, name: _IdentifierSchema, avatarArtifactRevisionId: _IdentifierSchema.nullable() }).strict(),
+	z.object({ kind: z.literal(ConversationAuthorKinds.Agent), agentIdentityId: _IdentifierSchema, agentServiceId: _IdentifierSchema, name: _IdentifierSchema, avatarArtifactRevisionId: _IdentifierSchema.nullable() }).strict(),
+	z.object({ kind: z.literal(ConversationAuthorKinds.Service), serviceId: _IdentifierSchema, name: _IdentifierSchema }).strict(),
+	z.object({ kind: z.literal(ConversationAuthorKinds.System), systemId: z.literal("opencrane"), name: z.literal("OpenCrane") }).strict(),
 ]);
 const _VisibilitySchema = z.discriminatedUnion("audience", [
 	z.object({ audience: z.literal("conversation") }).strict(),
@@ -47,20 +43,20 @@ const _EntryBase = {
 	attestation: _AttestationSchema.nullable(),
 };
 const _MessageContentBlockSchema = z.discriminatedUnion("kind", [
-	z.object({ id: _IdentifierSchema, kind: z.literal("text"), payloadRef: _IdentifierSchema, ciphertextDigest: _IdentifierSchema }).strict(),
-	z.object({ id: _IdentifierSchema, kind: z.literal("artifact"), artifactId: _IdentifierSchema, artifactRevisionId: _IdentifierSchema, name: _IdentifierSchema, mediaType: _IdentifierSchema }).strict(),
-	z.object({ id: _IdentifierSchema, kind: z.literal("mention"), targetKind: z.enum(["human", "agent"]), targetId: _IdentifierSchema, name: _IdentifierSchema }).strict(),
+	z.object({ id: _IdentifierSchema, kind: z.literal(ConversationMessageContentBlockKinds.Text), payloadRef: _IdentifierSchema, ciphertextDigest: _IdentifierSchema }).strict(),
+	z.object({ id: _IdentifierSchema, kind: z.literal(ConversationMessageContentBlockKinds.Artifact), artifactId: _IdentifierSchema, artifactRevisionId: _IdentifierSchema, name: _IdentifierSchema, mediaType: _IdentifierSchema }).strict(),
+	z.object({ id: _IdentifierSchema, kind: z.literal(ConversationMessageContentBlockKinds.Mention), targetKind: z.enum([ConversationAuthorKinds.Human, ConversationAuthorKinds.Agent]), targetId: _IdentifierSchema, name: _IdentifierSchema }).strict(),
 ]);
 const _MessageEntrySchema = z.object({
 	..._EntryBase,
-	kind: z.literal("message"),
+	kind: z.literal(ConversationEntryKinds.Message),
 	state: z.enum(["pending", "streaming", "completed", "failed", "cancelled"]),
 	blocks: z.array(_MessageContentBlockSchema).min(1).refine(function _HasUniqueBlockIds(blocks): boolean { return new Set(blocks.map(function _BlockId(block): string { return block.id; })).size === blocks.length; }),
 	replyToEntryId: _IdentifierSchema.nullable(),
 	addressedAgentIdentityId: _IdentifierSchema.nullable(),
 	activation: z.enum(["none", "start", "interrupt"]),
 }).strict();
-const _LogEntryBase = { ..._EntryBase, kind: z.literal("log"), summary: _IdentifierSchema, detailsRef: _IdentifierSchema.nullable() };
+const _LogEntryBase = { ..._EntryBase, kind: z.literal(ConversationEntryKinds.Log), summary: _IdentifierSchema, detailsRef: _IdentifierSchema.nullable() };
 const _LogEntrySchema = z.discriminatedUnion("logKind", [
 	z.object({ ..._LogEntryBase, logKind: z.literal("run"), runId: _IdentifierSchema, phase: z.enum(["queued", "started", "interrupted", "completed", "failed", "recovery_required"]) }).strict(),
 	z.object({ ..._LogEntryBase, logKind: z.literal("model"), modelCallId: _IdentifierSchema, phase: z.enum(["started", "streaming", "completed", "failed", "cancelled"]) }).strict(),
@@ -70,20 +66,20 @@ const _LogEntrySchema = z.discriminatedUnion("logKind", [
 	z.object({ ..._LogEntryBase, logKind: z.literal("approval"), approvalId: _IdentifierSchema, action: _IdentifierSchema, phase: z.enum(["requested", "granted", "denied", "expired", "revoked"]) }).strict(),
 ]);
 const _A2UIEntrySchema = z.discriminatedUnion("operation", [
-	z.object({ ..._EntryBase, kind: z.literal("a2ui"), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("replace"), payloadRef: _IdentifierSchema, payloadDigest: _IdentifierSchema }).strict(),
-	z.object({ ..._EntryBase, kind: z.literal("a2ui"), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("patch"), payloadRef: _IdentifierSchema, payloadDigest: _IdentifierSchema }).strict(),
-	z.object({ ..._EntryBase, kind: z.literal("a2ui"), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("remove"), payloadRef: z.null(), payloadDigest: z.null() }).strict(),
+	z.object({ ..._EntryBase, kind: z.literal(ConversationEntryKinds.A2UI), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("replace"), payloadRef: _IdentifierSchema, payloadDigest: _IdentifierSchema }).strict(),
+	z.object({ ..._EntryBase, kind: z.literal(ConversationEntryKinds.A2UI), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("patch"), payloadRef: _IdentifierSchema, payloadDigest: _IdentifierSchema }).strict(),
+	z.object({ ..._EntryBase, kind: z.literal(ConversationEntryKinds.A2UI), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal("remove"), payloadRef: z.null(), payloadDigest: z.null() }).strict(),
 ]);
 
 const _ConversationEntrySchema = z.union([_MessageEntrySchema, _LogEntrySchema, _A2UIEntrySchema]);
 
 function _ValidateProvenance(entry: ConversationEntry, context: z.RefinementCtx): void
 {
-	if (entry.provenance === _HumanAuthoredProvenance && entry.author.kind !== _HumanAuthorKind)
+	if (entry.provenance === _HumanAuthoredProvenance && entry.author.kind !== ConversationAuthorKinds.Human)
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["author"], message: "human-authored entries require a human author" });
 	}
-	if (entry.provenance === _AgentAuthoredProvenance && entry.author.kind !== _AgentAuthorKind)
+	if (entry.provenance === _AgentAuthoredProvenance && entry.author.kind !== ConversationAuthorKinds.Agent)
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["author"], message: "agent-authored entries require an agent author" });
 	}
@@ -91,11 +87,11 @@ function _ValidateProvenance(entry: ConversationEntry, context: z.RefinementCtx)
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["attestation"], message: "service-attested entries require a service attestation" });
 	}
-	if (entry.author.kind === _ServiceAuthorKind && entry.attestation !== null && entry.attestation.serviceId !== entry.author.serviceId)
+	if (entry.author.kind === ConversationAuthorKinds.Service && entry.attestation !== null && entry.attestation.serviceId !== entry.author.serviceId)
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["attestation", "serviceId"], message: "a service author must match its attestation service" });
 	}
-	if (entry.author.kind === _SystemAuthorKind && (entry.provenance !== _ServiceAttestedProvenance || entry.attestation === null || entry.attestation.serviceId !== _OpenCraneServiceId))
+	if (entry.author.kind === ConversationAuthorKinds.System && (entry.provenance !== _ServiceAttestedProvenance || entry.attestation === null || entry.attestation.serviceId !== _OpenCraneServiceId))
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["attestation"], message: "a system author requires an OpenCrane service attestation" });
 	}
@@ -103,7 +99,7 @@ function _ValidateProvenance(entry: ConversationEntry, context: z.RefinementCtx)
 
 function _ValidateComputerAuthoredEntry(entry: ConversationEntry, context: z.RefinementCtx): void
 {
-	if (entry.author.kind !== _AgentAuthorKind)
+	if (entry.author.kind !== ConversationAuthorKinds.Agent)
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["author"], message: "a computer entry requires its bound agent author" });
 	}

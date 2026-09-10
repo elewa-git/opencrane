@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-/** Untrusted tool selection submitted by the Pod bound to an admitted conversation turn. */
+/** Untrusted model-selected tool call admitted against one server-owned conversation turn. */
 export interface ConversationToolProposal
 {
 	/** Identifies the frozen turn; the server derives its run, principal and lease. */

@@ -522,8 +522,22 @@
 			{
 				"path": "libs/backend/server/conversations/main/src/computers/activation/db/prisma-conversation-computer-activation-repository.ts",
 				"adapter": "PrismaConversationComputerActivationProjectionRepository",
-				"contract": "ConversationComputerActivationProjectionRepository",
+				"contract": "ConversationComputerActivationProjectionStore",
 				"contractImportPath": "../conversation-computer-activation.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-repository.ts",
+				"adapter": "PrismaConversationComputerTurnWorkflowReceiptRepository",
+				"contract": "ConversationComputerTurnWorkflowReceiptBinder",
+				"contractImportPath": "./conversation-computer-turn-workflow-receipt.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/turns/workflow/prisma-conversation-computer-turn-workflow-events.ts",
+				"adapter": "PrismaConversationComputerTurnWorkflowEventRepository",
+				"contract": "ConversationComputerTurnWorkflowEventRepository",
+				"contractImportPath": "./conversation-computer-turn-workflow-receipt.types",
 				"constructs": []
 			},
 			{
@@ -2002,6 +2016,18 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-binder.ts",
+				"adapter": "PrismaConversationComputerTurnWorkflowReceiptUnitOfWork",
+				"contract": "ConversationComputerTurnWorkflowReceiptBinder",
+				"contractImportPath": "./conversation-computer-turn-workflow-receipt.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerTurnWorkflowReceiptRepository",
+						"importPath": "./prisma-conversation-computer-turn-workflow-receipt-repository"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/computers/lifecycle/db/prisma-conversation-computer-lifecycle-unit-of-work.ts",
 				"adapter": "PrismaConversationComputerLifecycleUnitOfWork",
 				"contract": "ConversationComputerAttemptActivity",
@@ -2055,7 +2081,7 @@
 			"apps/opencrane/src/bootstrap/http/public-app.ts",
 			"libs/backend/server/conversations/main/src/admission/run-admission-composition.ts",
 			"apps/opencrane/src/bootstrap/conversations/conversation-computer-lifecycle-composition.ts",
-			"apps/opencrane/src/bootstrap/conversations/conversation-computer-turn-composition.ts",
+			"apps/opencrane/src/bootstrap/conversations/conversation-computer-workflow-composition.ts",
 			"apps/opencrane/src/bootstrap/http/internal-app.ts",
 			"apps/opencrane/src/bootstrap/conversations/conversation-history-composition.ts",
 			"libs/backend/server/conversations/main/src/sessions/agent-session-creation.ts",

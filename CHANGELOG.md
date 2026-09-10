@@ -81,6 +81,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Changed
 
+- **Assistant turns now progress durably through model work and one permitted tool round trip.**
+  Conversation activation atomically admits the existing Absurd task, which resumes saved model
+  deadlines, waits for the exact terminal tool result, and finishes output after a server restart.
+  The server preserves one original model request and at most one text-only continuation under its
+  saved remaining call and token allowance; `response_unavailable` remains durable. Live testv5
+  qualification remains pending.
+
 - **Maintainers can locate and change server behavior in functional libraries and frontend behavior in
   focused components and stores.** Capability folders group related implementation and make its
   ownership easier to follow. This refactor remains in progress.
@@ -138,6 +145,11 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Removed
 
+- **Conversation-computer Pods no longer schedule server-owned model work.** The Pod retains its
+  lease-fenced workspace bootstrap, checkpoint restore, health and review-credential interactions;
+  model-readiness polling, Pod-owned outcome branching, and the private `/model-step` route and call
+  are absent.
+
 - **Operators no longer maintain the run-owned warm-runtime lifecycle or its workload-proof
   database authority.** The replaced runtime application, reservation and assignment records,
   proof keys, compatibility routes, socket fallback, and migration scaffolding are absent from the
@@ -149,6 +161,10 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   isolated builds, and published PreviewApps likewise remain outside 0.11.0.
 
 ### Security
+
+- **Recovered conversation work remains bound to the current Agent Sandbox lease and generation.**
+  The server derives live Pod identity at each isolated-execution boundary and rejects stale leases,
+  stale generations and ended authority before advancing work or accepting output.
 
 - **Queued run-owned tool calls recheck current access before execution.** The MCP executor
   refuses a revoked permission or stale conversation lease before contacting the tool. A definite

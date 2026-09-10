@@ -6,13 +6,13 @@ import { __AssertConversationComputerAnswerAuthority } from "./conversation-comp
 import type { ConversationComputerToolResults } from "./conversation-computer-continuation.types";
 import type { ConversationComputerBoundWriterFactory, ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
-/** Binds output writes to the admitted turn, conversation audience, workload lease and selected tool result. */
+/** Binds output preparation and exact atomic-commit confirmation to the admitted turn. */
 export class ConversationComputerTurnWriterFactory implements ConversationComputerBoundWriterFactory
 {
-	/** Connects append-time checks to the same durable turn and admission authorities. */
+	/** Keeps the generic writer's checks available while the turn authority owns the atomic commit. */
 	public constructor(private readonly history: Pick<HistoryStore, "append" | "readStream">, private readonly turns: Pick<ConversationComputerTurnStore, "load">, private readonly candidates: Pick<ConversationComputerTurnCandidateResolver, "assertCurrent">, private readonly toolResults: Pick<ConversationComputerToolResults, "read">) {}
 
-	/** Builds a writer that repeats all mutable checks immediately before appending output. */
+	/** Builds a writer that prepares an answer and can confirm its exact participant event. */
 	public create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): BoundConversationWriter
 	{
 		const turns = this.turns;

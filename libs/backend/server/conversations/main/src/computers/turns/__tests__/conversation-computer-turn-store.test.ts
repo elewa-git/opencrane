@@ -14,6 +14,7 @@ const _TURN = {
   computerId: "computer-1",
   lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
   latestPendingEntryId: "entry-1",
+  latestPendingEntryPosition: "1",
   modelAlias: "testv5-default",
   maximumBudgetUsd: 0.05,
   credentialLifetimeSeconds: 300,
@@ -50,6 +51,7 @@ const _STORED_TURN = {
   leaseId: "lease-1",
   binding: { ..._TURN.binding, expectedRevision: "1" },
   latestPendingEntryId: _TURN.latestPendingEntryId,
+  latestPendingEntryPosition: "1",
   modelAlias: _TURN.modelAlias,
   maximumBudgetUsd: _TURN.maximumBudgetUsd,
   credentialLifetimeSeconds: _TURN.credentialLifetimeSeconds,
@@ -67,6 +69,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
       });
     const store = new KurrentConversationComputerTurnStore({
       append,
+      appendAtomic: vi.fn(),
       readStream: vi.fn(() => (async function* _Empty() {})()),
     });
     const leaking = {
@@ -93,7 +96,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
 
   it("gathers the stored flat lease fields back into the lease bundle", async function _LoadsStoredShape() {
     const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
-    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()) });
+    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), appendAtomic: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()) });
     await expect(store.load(_ID)).resolves.toEqual(_TURN);
   });
 
@@ -111,6 +114,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
     };
     const store = new KurrentConversationComputerTurnStore({
       append: vi.fn(),
+      appendAtomic: vi.fn(),
       readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()),
     });
     await expect(store.load(_ID)).rejects.toThrow("malformed frozen data");
@@ -155,6 +159,7 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
           yield outputEvent;
         })(),
       ),
+	  appendAtomic: vi.fn().mockRejectedValue(new WrongExpectedVersionError(undefined, { streamName: `conversation-computer-turn-${_ID}`, expected: 1n, current: 2n })),
     };
     await expect(
       new KurrentConversationComputerTurnStore(history).markOutput(

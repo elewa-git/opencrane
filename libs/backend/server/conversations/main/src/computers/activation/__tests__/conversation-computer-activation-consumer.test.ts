@@ -5,9 +5,9 @@ import { __ConsumeConversationComputerActivation, __StartConversationComputerAct
 import { ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, type ConversationComputerActivationConsumerEvent } from "../conversation-computer-activation.types";
 
 /** One valid activation delivery. */
-function _Delivery(id = "activation-1"): HistoryPersistentRecordedEvent
+function _Delivery(id = "11111111-1111-4111-8111-111111111111"): HistoryPersistentRecordedEvent
 {
-	return { id, streamName: "computer-activations-silo-1", type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 1 }, metadata: {}, revision: 0n, recordedAt: new Date("2026-09-06T00:00:00.000Z"), retryCount: 0 };
+	return { id, streamName: "computer-activations-silo-1", type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 1, causationPosition: "1" }, metadata: { causationId: "22222222-2222-4222-8222-222222222222" }, revision: 0n, recordedAt: new Date("2026-09-06T00:00:00.000Z"), retryCount: 0 };
 }
 
 /** A hand-driven persistent subscription: the test pushes deliveries, ends it, or fails it. */
@@ -58,13 +58,13 @@ describe("supervised conversation computer activation consumer", function _Suite
 		const stop = new AbortController();
 
 		const consumer = __StartConversationComputerActivationConsumer(open, authority, { signal: stop.signal, onEvent: observed.onEvent, wait: _instantWait, random: () => 0.5 });
-		first.push(_Delivery("activation-1"));
+		first.push(_Delivery("11111111-1111-4111-8111-111111111111"));
 		await vi.waitFor(function _FirstAcknowledged() { expect(first.subscription.acknowledge).toHaveBeenCalledOnce(); });
 		first.fail(new Error("connection reset"));
 		await vi.waitFor(function _SecondOpen() { expect(open).toHaveBeenCalledTimes(2); });
 		expect(first.subscription.close).toHaveBeenCalledOnce();
 		expect(consumer.health()).toEqual({ state: ConversationComputerActivationConsumerStates.Subscribed, consecutiveFailures: 1 });
-		second.push(_Delivery("activation-2"));
+		second.push(_Delivery("33333333-3333-4333-8333-333333333333"));
 		await vi.waitFor(function _SecondAcknowledged() { expect(second.subscription.acknowledge).toHaveBeenCalledOnce(); });
 		stop.abort();
 		await consumer.done;
@@ -160,7 +160,7 @@ describe("supervised conversation computer activation consumer", function _Suite
 		stop.abort();
 		await consumer.done;
 
-		expect(session.subscription.retry).toHaveBeenCalledWith(expect.objectContaining({ id: "activation-1" }), pending.reason);
+		expect(session.subscription.retry).toHaveBeenCalledWith(expect.objectContaining({ id: "11111111-1111-4111-8111-111111111111" }), pending.reason);
 		expect((session.subscription.retry as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]).toBeLessThan((session.subscription.close as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!);
 		expect(session.subscription.acknowledge).not.toHaveBeenCalled();
 		expect(observed.kinds()).toEqual([ConversationComputerActivationConsumerEventKinds.Subscribed, ConversationComputerActivationConsumerEventKinds.Stopped]);

@@ -52,7 +52,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 	await setup.connect();
 	try
 	{
-		await setup.query(await readFile(new URL("../../../../scripts/sql/authority-fixtures.sql", import.meta.url), "utf8"));
+		await setup.query(await readFile(new URL("../../../../../../scripts/sql/authority-fixtures.sql", import.meta.url), "utf8"));
 		await setup.query("BEGIN");
 		await setup.query("SELECT pg_temp.seed_silo_model($1, $2)", [siloId, modelId]);
 		await setup.query("SELECT pg_temp.seed_external_user($1, $2)", [siloId, principalId]);
@@ -96,7 +96,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 		computers: { load: async function _Computer() { return { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { state: ComputerLeaseStates.Active, id: lease.leaseId, generation: 1, computerId, sandboxId: id("sandbox"), expiresAt: leaseExpiresAt } } as never; } } };
 	const binding = { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId, agentServiceId, agentName: "SQL assistant", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 };
 	const compiledInput = { promptCompilerVersion: "tool-proof-v1", runId, attempt: 1, instructions: "Read the requested test record.", messages: [], tools: [tool], model: { modelAlias: modelId, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budget: { ...budgetPolicy, maxCostUsdMicros: null }, digest: ___DigestCanonicalJson(id("compiled-input")) };
-	const turn: FrozenConversationComputerTurn = { bootstrapId: randomUUID(), siloId, computerId, lease, binding, latestPendingEntryId: id("message"), modelAlias: modelId, maximumBudgetUsd: 1, credentialLifetimeSeconds: 120, compile: { runId, attempt: 1, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null };
+	const turn: FrozenConversationComputerTurn = { bootstrapId: randomUUID(), siloId, computerId, lease, binding, latestPendingEntryId: id("message"), latestPendingEntryPosition: "1", modelAlias: modelId, maximumBudgetUsd: 1, credentialLifetimeSeconds: 120, compile: { runId, attempt: 1, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null };
 	const candidate: ConversationComputerTurnCandidate = { ...turn, compiledInput, credentialExpiresAt: trustedUntil };
 	return { siloId, runId, principalId, subject, turn, candidate, dependencies, leaseExpiresAt, proposal: { bootstrapId: turn.bootstrapId, toolRevisionId: tool.toolRevisionId, arguments: { query: "dedicated record" } }, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
 }

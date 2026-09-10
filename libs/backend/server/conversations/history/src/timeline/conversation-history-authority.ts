@@ -3,7 +3,7 @@ import { ___ConversationEntrySchema } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult } from "./conversation-history-authority.types";
-import type { ConversationHistoryGenesis } from "./conversation-history-reader.types";
+import { ConversationHistoryModes, type ConversationHistoryGenesis } from "./conversation-history-reader.types";
 import { _ParseGroupChildOrigin } from "./conversation-genesis.validator";
 
 /** Recognizes event identifiers that can also serve as the entry idempotency key. */
@@ -31,9 +31,9 @@ export class ConversationHistoryAuthority
 	{
 		if (!_UUID_PATTERN.test(eventId) || !_Identifier(genesis.siloId) || !_Identifier(genesis.conversationId) || !_Identifier(genesis.createdByPrincipalId) || !Number.isFinite(Date.parse(genesis.createdAt)))
 			throw new Error("Conversation genesis requires valid immutable coordinates");
-		if ((genesis.mode === "agent_session") !== _Identifier(genesis.agentServiceId ?? ""))
+		if ((genesis.mode === ConversationHistoryModes.AgentSession) !== _Identifier(genesis.agentServiceId ?? ""))
 			throw new Error("Conversation genesis requires an exact service binding");
-		if (genesis.origin !== undefined && (genesis.mode !== "agent_session" || _ParseGroupChildOrigin(genesis.origin, genesis.conversationId) === null))
+		if (genesis.origin !== undefined && (genesis.mode !== ConversationHistoryModes.AgentSession || _ParseGroupChildOrigin(genesis.origin, genesis.conversationId) === null))
 			throw new Error("Conversation genesis requires a valid child origin");
 		return { streamName: `conversation-${genesis.conversationId}`, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: eventId, type: "opencrane.conversation-created.v1", data: { genesis }, metadata: { siloId: genesis.siloId, conversationId: genesis.conversationId, causationId: eventId, correlationId: eventId, idempotencyKey: eventId } }] };
 	}
@@ -80,7 +80,7 @@ export class ConversationHistoryAuthority
 			throw new Error("Conversation activation append requires checked computer and queue coordinates");
 		try
 		{
-			const receipts = await this.historyStore.appendAtomic({ expectedHeads: [{ streamName, revision: command.expectedRevision }, { streamName: queueStreamName, revision: command.activation.queueExpectedRevision }], appends: [{ streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] }, { streamName: queueStreamName, expectedRevision: command.activation.queueExpectedRevision, events: [{ id: command.activation.eventId, type: "opencrane.computer.activation-requested.v1", data: { siloId: command.siloId, computerId: command.activation.computerId, conversationId: command.conversationId, generation: command.activation.generation }, metadata: { causationId: entry.id, correlationId: entry.correlationId, idempotencyKey: command.activation.eventId } }] }] });
+			const receipts = await this.historyStore.appendAtomic({ expectedHeads: [{ streamName, revision: command.expectedRevision }, { streamName: queueStreamName, revision: command.activation.queueExpectedRevision }], appends: [{ streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] }, { streamName: queueStreamName, expectedRevision: command.activation.queueExpectedRevision, events: [{ id: command.activation.eventId, type: "opencrane.computer.activation-requested.v1", data: { siloId: command.siloId, computerId: command.activation.computerId, conversationId: command.conversationId, generation: command.activation.generation, causationPosition: entry.position }, metadata: { causationId: entry.id, correlationId: entry.correlationId, idempotencyKey: command.activation.eventId } }] }] });
 			const receipt = receipts.find(item => item.streamName === streamName);
 			if (receipt === undefined)
 				throw new Error("Conversation activation append omitted its conversation receipt");

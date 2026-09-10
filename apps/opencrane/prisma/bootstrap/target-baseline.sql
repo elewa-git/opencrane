@@ -1635,6 +1635,9 @@ CREATE TABLE "agent_runs" (
     "attempt" INTEGER NOT NULL DEFAULT 1,
     "state" "AgentRunState" NOT NULL DEFAULT 'accepted',
     "input_snapshot_digest" TEXT NOT NULL,
+    "workflow_task_id" TEXT,
+    "workflow_task_name" TEXT,
+    "workflow_task_key" TEXT,
     "accepted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "started_at" TIMESTAMP(3),
     "finished_at" TIMESTAMP(3),
@@ -2616,6 +2619,9 @@ CREATE INDEX "third_party_source_items_source_id_idx" ON "third_party_source_ite
 CREATE UNIQUE INDEX "third_party_source_items_source_id_kind_upstream_id_key" ON "third_party_source_items"("source_id", "kind", "upstream_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_workflow_task_id_key" ON "agent_runs"("workflow_task_id");
+
+-- CreateIndex
 CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
 
 -- CreateIndex
@@ -2644,6 +2650,9 @@ CREATE UNIQUE INDEX "agent_runs_id_input_snapshot_digest_key" ON "agent_runs"("i
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("conversation_id", "id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_workflow_task_key" ON "agent_runs"("workflow_task_name", "workflow_task_key");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
@@ -3881,6 +3890,13 @@ BEGIN
         OR NEW."execution_subject" IS DISTINCT FROM OLD."execution_subject"
         OR NEW."accepted_at" IS DISTINCT FROM OLD."accepted_at" THEN
         RAISE EXCEPTION 'AgentRun accepted inputs are immutable';
+    END IF;
+    IF OLD."workflow_task_id" IS NOT NULL AND (
+        NEW."workflow_task_id" IS DISTINCT FROM OLD."workflow_task_id"
+        OR NEW."workflow_task_name" IS DISTINCT FROM OLD."workflow_task_name"
+        OR NEW."workflow_task_key" IS DISTINCT FROM OLD."workflow_task_key"
+    ) THEN
+        RAISE EXCEPTION 'AgentRun workflow task binding is immutable';
     END IF;
     IF OLD."state" IN ('completed', 'failed') THEN
         RAISE EXCEPTION 'terminal AgentRun attempt coordinates are immutable';
@@ -5842,6 +5858,12 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_nonempty_check" CHECK (
         btrim("agent_revision_id") <> '' AND btrim("request_idempotency_key") <> '' AND
         btrim("input_snapshot_digest") <> '' AND
         "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$'
+    );
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_workflow_task_check" CHECK (
+        ("workflow_task_id" IS NULL AND "workflow_task_name" IS NULL AND "workflow_task_key" IS NULL) OR
+        ("workflow_task_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND
+         "workflow_task_name" = 'conversation-computer-turn' AND
+         "workflow_task_key" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_check" CHECK (
         ("state" IN ('completed', 'failed') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR

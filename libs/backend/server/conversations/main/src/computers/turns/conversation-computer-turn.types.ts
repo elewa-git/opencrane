@@ -1,5 +1,5 @@
 import type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolResults, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
-import type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";
+import type { ConversationComputerModelProgress, ConversationComputerModelReservation, ConversationComputerModelTransport } from "./conversation-computer-model.types";
 import type { ConversationToolProposalAdmission } from "../tools/proposal/conversation-tool-proposal.types";
 import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
@@ -10,8 +10,8 @@ import type { BoundConversationWriterBinding, BoundConversationWriterIntent } fr
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
 import type { ConversationComputerReviewCredentialDeriver } from "../review/conversation-computer-review.types";
 
-/** Coordinates a sandbox Pod must prove before receiving one pending turn. */
-export interface ConversationComputerBootstrapCommand
+/** Coordinates a sandbox Pod must prove before receiving its review credential. */
+export interface ConversationComputerPodLeaseCommand
 {
 	/** Identifies the logical computer fixed on the Pod label. */
 	readonly computerId: string;
@@ -21,15 +21,24 @@ export interface ConversationComputerBootstrapCommand
 	readonly workload: RuntimeWorkloadIdentity;
 }
 
-/**
- * Returns a turn id and closed status without revealing prompt content or model credentials.
- * Ready permits a model-step request; pending and response_unavailable permit status polling only.
- * These wire values must match the Python worker's bootstrap validation.
- */
-export interface ConversationComputerBootstrap
+/** Server-owned lease coordinates that let one durable workflow select the next saved turn. */
+export interface ConversationComputerTurnWorkflowCommand
 {
-	readonly bootstrapId: string;
-	readonly outcome: "ready" | "pending" | "response_unavailable";
+	/** Identifies the logical computer named by the activation delivery. */
+	readonly computerId: string;
+	/** Names the exact active lease and generation selected by the activation authority. */
+	readonly lease: LeaseScope;
+	/** Identifies the human entry whose durable activation owns this workflow. */
+	readonly causationId: string;
+	/** Records the human entry's immutable conversation position. */
+	readonly causationPosition: string;
+}
+
+/** Current turn input and live Agent Sandbox identity resolved from server-owned evidence. */
+export interface ConversationComputerTurnExecution
+{
+	readonly candidate: ConversationComputerTurnCandidate;
+	readonly workload: RuntimeWorkloadIdentity;
 }
 
 /**
@@ -58,19 +67,17 @@ export interface ConversationComputerOutputCommand
 	readonly modelNotAfterEpochMs: number;
 	/** Plain assistant text accepted only into encrypted private payload storage. */
 	readonly text: string;
-	/** Carries only the TokenReviewed Pod identity. */
-	readonly workload: RuntimeWorkloadIdentity;
 }
 
-/** Product authority behind the private transport. */
+/** Product authority shared by the lease-fenced review credential route and durable server workflow. */
 export interface ConversationComputerTurnAuthority
 {
-	/** Return the review gateway secret after the same lease and Pod checks as bootstrap, without admitting a run. */
-	reviewCredential(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerReviewCredentialGrant>;
-	/** Return turn status, or null after saved-output recovery or while no work is admitted. */
-	bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>;
-	/** Advance one server-owned model/tool step, or report its existing status. */
-	modelStep(command: ConversationComputerModelStepCommand): Promise<ConversationComputerModelStepResult>;
+	/** Return the review gateway secret after current lease and Pod checks, without admitting a run. */
+	reviewCredential(command: ConversationComputerPodLeaseCommand): Promise<ConversationComputerReviewCredentialGrant>;
+	/** Freeze or recover the next turn selected by one durable activation workflow. */
+	start(command: ConversationComputerTurnWorkflowCommand): Promise<FrozenConversationComputerTurn | null>;
+	/** Advance one saved server-owned turn without accepting Pod-supplied model authority. */
+	advance(turnId: string): Promise<ConversationComputerModelProgress>;
 }
 
 /** Server-resolved coordinates shared by a freshly compiled candidate and its frozen record. */
@@ -80,6 +87,8 @@ export interface ConversationComputerTurnCoordinates
 	readonly binding: BoundConversationWriterBinding;
 	/** Pending human entry the turn answers; it also anchors the deterministic bootstrap identifier. */
 	readonly latestPendingEntryId: string;
+	/** Records the pending human entry's immutable conversation position. */
+	readonly latestPendingEntryPosition: string;
 	/** Names the one model alias the attempt credential may call. */
 	readonly modelAlias: string;
 	/** Caps the attempt credential's spend in US dollars. */
@@ -162,10 +171,16 @@ export interface ConversationComputerOutputDecision
 export interface ConversationComputerTurnCandidateResolver
 {
 	/** Throw unless the command names the current active lease and the TokenReviewed Pod bound to it; admit nothing. */
-	admit(command: ConversationComputerBootstrapCommand): Promise<void>;
-	resolve(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerTurnCandidate | null>;
+	admit(command: ConversationComputerPodLeaseCommand): Promise<void>;
+	resolve(command: ConversationComputerPodLeaseCommand): Promise<ConversationComputerTurnCandidate | null>;
+	/** Resolve a candidate and its live Pod identity without accepting a Pod request as authority. */
+	resolveForWorkflow(command: ConversationComputerTurnWorkflowCommand): Promise<ConversationComputerTurnExecution | null>;
 	/** Return the current recompiled candidate only when it still matches the frozen turn. */
 	assertCurrent(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<ConversationComputerTurnCandidate>;
+	/** Recheck the current candidate and live Pod identity for a server-owned workflow effect. */
+	assertCurrentForWorkflow(turn: FrozenConversationComputerTurn): Promise<ConversationComputerTurnExecution>;
+	/** Recheck only the live lease and Pod after output acceptance has changed conversation history. */
+	assertLeaseForWorkflow(turn: FrozenConversationComputerTurn): Promise<RuntimeWorkloadIdentity>;
 }
 
 /** Locates immutable computer coordinates from the workload's reviewed silo. */
@@ -185,11 +200,18 @@ export interface ConversationComputerTurnCompileCommand
 	readonly lease: ClaimedLeaseScope;
 }
 
+/** Selects the exact history prefix that produced one already frozen turn. */
+export interface ConversationComputerTurnHistoryAnchor
+{
+	readonly expectedRevision: bigint;
+	readonly latestPendingEntryId: string;
+}
+
 /** Compiles pending history and the service's current published revision for a new frozen turn. */
 export interface ConversationComputerPendingTurnCompiler
 {
 	/** Returns the compiled candidate, or null when no human entry is waiting for the agent. */
-	compile(command: ConversationComputerTurnCompileCommand): Promise<ConversationComputerTurnCandidate | null>;
+	compile(command: ConversationComputerTurnCompileCommand, anchor?: ConversationComputerTurnHistoryAnchor): Promise<ConversationComputerTurnCandidate | null>;
 }
 
 /** Identifies the canonical Kurrent history already persisted before run admission. */
@@ -261,7 +283,7 @@ export interface ConversationComputerCredentialIssueCommand
 	readonly notAfter: string;
 }
 
-/** Returns server-held key material and the receipt a later model step must match. */
+/** Returns server-held key material and the receipt a later workflow pass must match. */
 export interface ConversationComputerCredentialReceipt
 {
 	/** Carries the raw key in server memory; never persist it in the turn stream. */
@@ -285,7 +307,7 @@ export interface ConversationComputerCredentialReuseCommand extends Conversation
 	readonly expectedExpiresAt: string;
 }
 
-/** Keeps one attempt key across model steps without replacing spent or uncertain custody. */
+/** Keeps one attempt key across model requests without replacing spent or uncertain custody. */
 export interface ConversationComputerCredentialIssuer
 {
 	/** Mint for the live first-reservation owner or recover its usable custody; refusal never grants another dispatch. */
@@ -305,7 +327,7 @@ export interface ConversationComputerOutputPayloadStore
 /** Creates the single-use writer whose binding was frozen with the bootstrap. */
 export interface ConversationComputerBoundWriterFactory
 {
-	create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Pick<BoundConversationWriter, "prepare" | "append">;
+	create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Pick<BoundConversationWriter, "prepare" | "confirm">;
 }
 
 /** Dependencies of the durable computer-turn product authority. */
@@ -366,7 +388,7 @@ export interface ConversationComputerRawCredentialAuthority
 }
 
 /** Dependencies fixed before the private conversation-computer router is mounted. */
-export interface ConversationComputerTurnRouterOptions
+export interface ConversationComputerReviewCredentialRouterOptions
 {
 	/** Records the fixed operation and sanitized diagnostic when authority rejects a request; never receives request or credential data. */
 	readonly logger: Pick<Logger, "warn">;

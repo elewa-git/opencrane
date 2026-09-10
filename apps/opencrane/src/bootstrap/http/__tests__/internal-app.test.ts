@@ -63,10 +63,8 @@ describe("internal workload app", function _Suite()
 
 	it.each([
 		{ method: "GET", path: "/review-credential" },
-		{ method: "GET", path: "/bootstrap" },
-		{ method: "POST", path: "/output" },
 		{ method: "POST", path: "/checkpoint/export" },
-	])("provides request context and a logger before the early $path handler", async function _EarlyComputerContext({ method, path })
+	])("provides request context and a logger before the retained $path handler", async function _EarlyComputerContext({ method, path })
 	{
 		const turn = Router();
 		const checkpoint = Router();
@@ -76,8 +74,6 @@ describe("internal workload app", function _Suite()
 			res.json({ requestId: ___GetContext()?.requestId, loggerRequestId: req.id, hasLogger: typeof req.log?.warn === "function", body: req.body });
 		}
 		turn.get("/review-credential", _ObservedRequest);
-		turn.get("/bootstrap", _ObservedRequest);
-		turn.post("/output", _ObservedRequest);
 		checkpoint.post("/export", _ObservedRequest);
 		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime(), undefined, turn, checkpoint);
 		const pending = method === "GET"

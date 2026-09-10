@@ -28,9 +28,10 @@ change — a retry, an audit, or a replay all see the exact same record, identif
 
 The current text-chat policy freezes a maximum of 4,096 generated tokens per response into the model
 route. This is OpenCrane's response limit; the revision's total run budget stays separate, including
-the initial personal assistant's 256,000-token ceiling. The runtime uses the smaller of those two
-limits. It consumes one admitted model turn and refuses the model request when the turn limit is
-absent or below one. Tool execution and loops with multiple model turns remain future work.
+the initial personal assistant's 256,000-token ceiling. The server uses the smaller of those two
+limits. It may spend the original model dispatch and, after one permitted tool result, at most one
+text-only continuation from the same frozen call and token allowance. Further tool or model loops
+remain future work.
 
 The current text-chat baseline supplies conversation history and the personal assistant's approved
 persona. It resolves that persona through the verified local Principal (OpenCrane's permission
@@ -100,9 +101,9 @@ current Use on the conversation. No personal persona, memory or tool assignment 
 company revision. An explicit no-personal-memory policy returns an empty preference list without
 opening the personal-memory repository.
 
-The production conversation computer repeats this authority check during bootstrap and before
-output, including retries that return an existing run snapshot. Current service state, revision,
-identity, current human membership and required grants must still admit the operation. The frozen
+The server repeats this authority check while its durable turn workflow selects and advances saved
+progress, including retries that recover an existing run snapshot. Current service state, revision,
+identity, current human membership and required grants must still admit each effect. The frozen
 snapshot supplies evidence and input limits; it cannot restore removed access.
 Retries recover the memory policy from the saved snapshot. A valid `none` scope stays disabled;
 `personal` requires both saved dataset identifiers. Unknown or inconsistent saved scopes are denied.

@@ -50,7 +50,7 @@
       "classification": "process-composition"
     },
     {
-      "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-turn-composition.ts",
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-workflow-composition.ts",
       "owner": "apps/opencrane",
       "classification": "route-composition"
     },

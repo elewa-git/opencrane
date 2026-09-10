@@ -203,8 +203,9 @@ function _StandaloneComputerFixture()
 	const resolveCandidate = async function _ResolveCandidate()
 			{
 				const result = await port.admit(command);
-				return { binding: { siloId: "silo-1", conversationId: "child-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Company", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 }, lease: command.lease, compiledInput: result.compiledInput, latestPendingEntryId: "message-1", modelAlias: "company-model", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: result.authorityExpiresAt };
+				return { binding: { siloId: "silo-1", conversationId: "child-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Company", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 }, lease: command.lease, compiledInput: result.compiledInput, latestPendingEntryId: "message-1", latestPendingEntryPosition: "1", modelAlias: "company-model", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: result.authorityExpiresAt };
 			};
+	const workload = { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" };
 	const computer = new ConversationComputerTurnAuthorityService({
 		logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, model: { request: vi.fn() },
 		toolProposals: { admit: vi.fn() },
@@ -213,29 +214,33 @@ function _StandaloneComputerFixture()
 		runLifecycle: { start: vi.fn(), complete: vi.fn() },
 		store: { reserveModel: vi.fn(), selectTool: vi.fn(), reserveContinuation: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), settle: vi.fn() },
 		candidates: {
-			admit: vi.fn(), assertCurrent: resolveCandidate,
-			resolve: resolveCandidate
+			admit: vi.fn(),
+			resolve: resolveCandidate,
+			resolveForWorkflow: async function _ResolveForWorkflow() { return { candidate: await resolveCandidate(), workload }; },
+			assertCurrentForWorkflow: async function _AssertCurrentForWorkflow() { return { candidate: await resolveCandidate(), workload }; },
+			assertLeaseForWorkflow: vi.fn().mockResolvedValue(workload),
+			assertCurrent: resolveCandidate,
 		},
 	});
-	const bootstrap = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 }, workload: { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" } };
-	return { database, row, principal, issueOnce, computer, bootstrap, compilers, advance: function _Advance() { now += 60_000; }, selectFleet: function _SelectFleet() { config = { mode: FleetMembershipDeploymentModes.Fleet, trustedIssuerId: "fleet", maximumStalenessMs: 300_000, verifier: { verify: vi.fn() } }; } };
+	const workflowCommand = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 }, causationId: "message-1", causationPosition: "1" };
+	return { database, row, principal, issueOnce, computer, workflowCommand, compilers, advance: function _Advance() { now += 60_000; }, selectFleet: function _SelectFleet() { config = { mode: FleetMembershipDeploymentModes.Fleet, trustedIssuerId: "fleet", maximumStalenessMs: 300_000, verifier: { verify: vi.fn() } }; } };
 }
 
-describe("standalone membership on actual computer bootstrap retry", function _StandaloneRetrySuite()
+describe("standalone membership on actual workflow start retry", function _StandaloneRetrySuite()
 {
-	it("rechecks an unreserved bootstrap without issuing a model credential", async function _UnchangedRetry()
+	it("rechecks an unreserved workflow start without issuing a model credential", async function _UnchangedRetry()
 	{
 		const f = _StandaloneComputerFixture();
-		await expect(f.computer.bootstrap(f.bootstrap)).resolves.toMatchObject({ outcome: "ready" });
+		await expect(f.computer.start(f.workflowCommand)).resolves.toMatchObject({ bootstrapId: expect.any(String) });
 		f.advance();
-		await expect(f.computer.bootstrap(f.bootstrap)).resolves.toMatchObject({ outcome: "ready" });
+		await expect(f.computer.start(f.workflowCommand)).resolves.toMatchObject({ bootstrapId: expect.any(String) });
 		expect(f.issueOnce).not.toHaveBeenCalled();
 	});
 
 	it.each(["version", "row", "inactive", "issuer", "mode"])("refuses changed %s authority before the first model request", async function _ChangedRetry(change)
 	{
 		const f = _StandaloneComputerFixture();
-		const turn = await f.computer.bootstrap(f.bootstrap);
+		await f.computer.start(f.workflowCommand);
 		f.advance();
 		if (change === "version")
 			f.database.orgMembership.findUnique.mockResolvedValue({ ...f.row, updatedAt: new Date("2026-09-07T00:01:30.000Z") });
@@ -247,8 +252,7 @@ describe("standalone membership on actual computer bootstrap retry", function _S
 			f.database.principal.findFirst.mockResolvedValue({ ...f.principal, issuer: "https://other.test" });
 		if (change === "mode")
 			f.selectFleet();
-		await expect(f.computer.bootstrap(f.bootstrap)).rejects.toThrow("Conversation run admission was denied");
-		await expect(f.computer.modelStep({ bootstrapId: turn!.bootstrapId, workload: f.bootstrap.workload })).resolves.toEqual({ outcome: "authority_ended" });
+		await expect(f.computer.start(f.workflowCommand)).rejects.toThrow("Conversation run admission was denied");
 		expect(f.issueOnce).not.toHaveBeenCalled();
 	});
 });

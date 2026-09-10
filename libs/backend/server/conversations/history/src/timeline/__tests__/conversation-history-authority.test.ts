@@ -95,7 +95,7 @@ describe("ConversationHistoryAuthority", function ()
 		expect(result).toEqual({ outcome: ConversationHistoryAppendOutcomes.Appended, receipt: { streamName: "conversation-conversation-1", revision: 8n } });
 		expect(appendAtomic).toHaveBeenCalledWith(expect.objectContaining({
 			expectedHeads: [{ streamName: "conversation-conversation-1", revision: 7n }, { streamName: "computer-activations-silo-1", revision: 2n }],
-			appends: expect.arrayContaining([expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2 } })] })]),
+			appends: expect.arrayContaining([expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2, causationPosition: "8" } })] })]),
 		}));
 	});
 });
