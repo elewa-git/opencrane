@@ -49,7 +49,7 @@ export function _CreateConversationToolProposalIntent(turn: FrozenConversationCo
 		arguments: proposal.arguments,
 		argumentsDigest: proposal.argumentsDigest,
 		requestFingerprint: proposal.requestFingerprint,
-		approvalRequired: false,
+		approvalRequired: proposal.tool.requiresApproval,
 		recoveryMode: ExternalActionRecoveryModes.Manual,
 		recoveryKey: null,
 	};

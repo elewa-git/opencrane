@@ -337,14 +337,14 @@ function _toolAnswer(call = _toolCall()): Record<string, unknown>
 
 describe("one selected tool and its paired continuation", function _toolExchange()
 {
-	it("offers only frozen nonapproval definitions and accepts one exact original declaration", async function _firstCall()
+	it("offers every frozen definition and accepts one exact original declaration", async function _firstCall()
 	{
 		const call = _toolCall({ content: "  Looking it up.\n" });
 		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(call)));
 		vi.stubGlobal("fetch", fetchMock);
 		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "write_file", requiresApproval: true })]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
 		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
-		expect(body.tools).toEqual([{ type: "function", function: { name: "read_file", description: "Read a file.", parameters: _tool().parametersSchema } }]);
+		expect(body.tools).toEqual([_tool(), _tool({ name: "write_file", requiresApproval: true })].map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parametersSchema } })));
 		expect(body).toMatchObject({ tool_choice: "auto", parallel_tool_calls: false, n: 1, stream: false });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(_telemetry.fields).toEqual([{}]);
@@ -382,7 +382,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 	});
 
 	it.each([
-		[], [_tool({ requiresApproval: true })], [_tool(), _tool()], [_tool(), _tool({ requiresApproval: true })],
+		[], [_tool(), _tool()],
 		[_tool({ name: "not.legal" })], [_tool({ parametersSchemaDigest: "sha256:changed" })],
 		[_tool({ parametersSchema: [] })], [_tool({ description: "\ud800" })],
 	].map(tools => ({ tools })))("rejects unusable frozen offer %# before dispatch", async function _badOffer({ tools })
@@ -391,6 +391,15 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		vi.stubGlobal("fetch", fetchMock);
 		await expect(__RequestConversationModel(_selection(tools))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("accepts an approval-gated saved continuation", async function _approvalContinuation()
+	{
+		const input = _selection([_tool({ requiresApproval: true })]);
+		const fetchMock = vi.fn().mockResolvedValue(_response());
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel({ ...input, tools: ConversationModelToolModes.None, continuation: { call: _toolCall(), resultContent: "approved result" } })).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Text });
+		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
 	it.each([
@@ -428,7 +437,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
-	it.each(["approval", "unknown", "changed-schema", "select", "oversized", "unicode"])("rejects unusable continuation %s before dispatch", async function _badContinuation(kind)
+	it.each(["unknown", "changed-schema", "select", "oversized", "unicode"])("rejects unusable continuation %s before dispatch", async function _badContinuation(kind)
 	{
 		const input = _selection([_tool({ requiresApproval: kind === "approval", parametersSchemaDigest: kind === "changed-schema" ? "bad" : _tool().parametersSchemaDigest })]);
 		let resultContent = "result";

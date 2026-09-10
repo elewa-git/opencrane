@@ -13,6 +13,9 @@ export interface ConversationToolProposalAdmission
 /** Create existing executor work in the proposal's transaction; never open another transaction or call a provider. */
 export type ConversationToolProposalRuntimeAdmission = (transaction: unknown, invocationRowId: string) => Promise<boolean>;
 
+/** Expires linked approval and elicitation rows in the caller's proposal transaction. */
+export type ConversationToolApprovalExpiry = (transaction: unknown, command: { readonly runId: string; readonly attempt: number; readonly now: Date }) => Promise<void>;
+
 /** Server-derived immutable facts passed into the proposal's transactional admission owner. */
 export interface PreparedConversationToolProposal
 {

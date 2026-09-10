@@ -79,6 +79,13 @@ The dispatch coordinator delegates saved run and budget evidence, current comput
 conversation access to their owners. It does not decide the invocation lifecycle; central IAM owns
 those state transitions. A terminal result remains readable only while its original authority holds.
 
+Approval-gated personal proposals preserve the frozen arguments, schema and run allowance in the
+existing invocation slot, then pause the run in `WaitingForInput` through deferred IAM approval.
+Only the exact current run owner may answer its elicitation. Approval marks the invocation ready and
+wakes the saved Absurd turn task; denial, expiry or stale authority produces no MCP dispatch and
+wakes the same continuation to record the terminal outcome. Managed company approval tools remain
+unavailable at model selection and proposal preparation until an entitled human resolver is bound.
+
 The turn store atomically commits the exact answer receipt and participant-visible history event. Absurd
 owns durable deadlines, waits, restart recovery and selection of the next saved step. A new
 physical append rechecks the workload lease, generation, Pod, history position, selected result digest and authority deadline through

@@ -75,4 +75,20 @@ describe("Prisma conversation computer turn workflow events", function _Suite()
 
 		expect(emitEventInTransaction).not.toHaveBeenCalled();
 	});
+
+	it("wakes the exact saved turn after an approval decision", async function _ApprovalWake()
+	{
+		const transaction = _Transaction();
+		const emitEventInTransaction = vi.fn().mockResolvedValue({ eventId: "event-approval" });
+		const repository = new PrismaConversationComputerTurnWorkflowEventRepository(transaction, { emitEventInTransaction });
+
+		await repository.wake("run-1", 2, "call-approval");
+
+		expect(transaction.agentRun.findUnique).toHaveBeenCalledWith({ where: { id_attempt: { id: "run-1", attempt: 2 } }, select: { workflowTaskId: true, workflowTaskName: true, workflowTaskKey: true } });
+		expect(emitEventInTransaction).toHaveBeenCalledWith(
+			{ client: transaction },
+			{ taskId: "task-1", taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: "activation-1" },
+			{ eventName: "tool-approval:call-approval", payload: { runId: "run-1", attempt: 2, toolInvocationId: "call-approval" } },
+		);
+	});
 });

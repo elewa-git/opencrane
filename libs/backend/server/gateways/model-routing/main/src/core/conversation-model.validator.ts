@@ -34,8 +34,6 @@ function _offeredTools(tools: readonly CompiledToolDefinition[]): readonly Compi
 		if (!tool || typeof tool.name !== "string" || !/^[A-Za-z0-9_-]{1,64}$/u.test(tool.name) || names.has(tool.name) || typeof tool.requiresApproval !== "boolean")
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 		names.add(tool.name);
-		if (tool.requiresApproval)
-			continue;
 		if (typeof tool.description !== "string" || !_isRecord(tool.parametersSchema) || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest)
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 		offered.push(tool);

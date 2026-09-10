@@ -155,6 +155,10 @@ It receives canonical conversation messages through `VerifiedConversationPromptM
 so it has no relational transcript path. Missing rows, changed schemas, foreign model coordinates,
 inactive parents, and unsupported generated-output capabilities fail compilation closed.
 
+Approval-gated definitions remain available to personal model selection as declarative proposals.
+Managed company runs remove them from the compiled offer until an entitled human resolver and
+connection authority are bound; the compiler never turns a tool definition into permission to run it.
+
 ## Boundary
 
 Consumed by the OpenCrane bootstrap and conversation execution path. The conversation admission owner composes

@@ -75,9 +75,9 @@ export type { ConversationToolDispatchAuthority, ConversationToolDispatchDepende
 export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./computers/tools/proposal/prisma-conversation-tool-proposal";
 export { ConversationToolProposalRefusal } from "./computers/tools/proposal/conversation-tool-proposal-refusal";
 export { ConversationToolProposalRefusals } from "./computers/tools/proposal/conversation-tool-proposal.types";
-export type { ConversationToolProposalAdmission, ConversationToolProposalRuntimeAdmission } from "./computers/tools/proposal/conversation-tool-proposal.types";
+export type { ConversationToolApprovalExpiry, ConversationToolProposalAdmission, ConversationToolProposalRuntimeAdmission } from "./computers/tools/proposal/conversation-tool-proposal.types";
 export type { ConversationComputerModelReservation, ConversationComputerModelTransport } from "./computers/turns/conversation-computer-model.types";
 export { CONVERSATION_COMPUTER_TURN_TASK } from "./computers/turns/workflow/conversation-computer-turn-task";
 export { PrismaConversationComputerTurnWorkflowReceiptBinder } from "./computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-binder";
-export { _RegisterConversationComputerTurnWorkflow, _ToolResultEventName } from "./computers/turns/workflow/conversation-computer-turn-workflow";
+export { _RegisterConversationComputerTurnWorkflow, _ToolApprovalEventName, _ToolResultEventName } from "./computers/turns/workflow/conversation-computer-turn-workflow";
 export { PrismaConversationComputerTurnWorkflowEventRepository } from "./computers/turns/workflow/prisma-conversation-computer-turn-workflow-events";

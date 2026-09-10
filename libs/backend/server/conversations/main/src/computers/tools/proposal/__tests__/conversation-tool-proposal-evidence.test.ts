@@ -70,6 +70,7 @@ describe("proposal run and slot evidence", function _suite()
 	it("reads the running attempt and saved snapshot using their complete identity coordinates", async function _boundReads()
 	{
 		const f = _fixture();
+		f.proposal = { ...f.proposal, tool: { ...f.proposal.tool, requiresApproval: true } };
 		await expect(f.reader.load(f.turn, f.candidate, f.proposal)).resolves.toEqual({ subject: f.subject, agentRevisionId: "revision-1" });
 		expect(f.transaction.agentRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: {
 			id: "run-1", attempt: 1, siloId: "silo-1", state: AgentRunState.Running,
@@ -125,9 +126,10 @@ describe("proposal permission evidence", function _evidence()
 	{
 		const f = _fixture();
 		const run = { subject: f.subject, agentRevisionId: "revision-1" };
+		const proposal = { ...f.proposal, tool: { ...f.proposal.tool, requiresApproval: true } };
 		const coordinate = { resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-1" }, action: ProductAuthorizationActions.Invoke } as const;
-		const first = _CreateConversationToolProposalIntent(f.turn, run, f.proposal, coordinate, ___DigestCanonicalJson("first-decision"));
-		const next = _CreateConversationToolProposalIntent(f.turn, run, f.proposal, coordinate, ___DigestCanonicalJson("next-decision"));
+		const first = _CreateConversationToolProposalIntent(f.turn, run, proposal, coordinate, ___DigestCanonicalJson("first-decision"));
+		const next = _CreateConversationToolProposalIntent(f.turn, run, proposal, coordinate, ___DigestCanonicalJson("next-decision"));
 		expect(next.requestFingerprint).toBe(first.requestFingerprint);
 		expect(next.requestIdentity).toEqual(first.requestIdentity);
 		expect(next.authorizationEvidence.evidenceDigest).not.toBe(first.authorizationEvidence.evidenceDigest);
@@ -135,5 +137,6 @@ describe("proposal permission evidence", function _evidence()
 		expect(evidenceDigest).toBe(___DigestCanonicalJson({ ...binding, agentRevisionId: first.agentRevisionId, runId: first.runId, attempt: first.attempt, argumentsDigest: first.argumentsDigest } as unknown as JsonValue));
 		expect(first.authorizationEvidence.executionSubject).toBe(f.subject);
 		expect(first.authorizationEvidence.coordinates).toEqual([coordinate]);
+		expect(first.approvalRequired).toBe(true);
 	});
 });

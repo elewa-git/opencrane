@@ -41,9 +41,18 @@ export enum RunToolResultReadOutcomes
 	Unavailable = "unavailable",
 }
 
+/** Identifies the durable wake that can make a pending invocation progress. */
+export enum RunToolResultPendingKinds
+{
+	/** An owner decision must move the invocation to Ready or Failed. */
+	Approval = "approval",
+	/** An executor result event must complete the already-admitted invocation. */
+	Execution = "execution",
+}
+
 /** Keeps result content out of pending or unavailable outcomes. */
 export type ReadRunToolResultResult =
-	| { readonly outcome: RunToolResultReadOutcomes.Pending | RunToolResultReadOutcomes.Unavailable }
+	| { readonly outcome: RunToolResultReadOutcomes.Pending | RunToolResultReadOutcomes.Unavailable; readonly pendingKind?: RunToolResultPendingKinds; readonly pendingUntilEpochMs?: number }
 	| {
 		/** Confirms storage integrity, not permission to disclose or dispatch. */
 		readonly outcome: RunToolResultReadOutcomes.Available;

@@ -1,4 +1,4 @@
-import { AgentRunState, ElicitationPurpose, ElicitationRequestState, ExternalActionClaimKind, PersonalMemoryPermissionReceiptState, Prisma, ToolInvocationState } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationPurpose, ElicitationRequestState, ExternalActionClaimKind, PersonalMemoryPermissionReceiptState, Prisma, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const _productAuthorization = vi.hoisted(function _ProductAuthorization()
@@ -6,25 +6,37 @@ const _productAuthorization = vi.hoisted(function _ProductAuthorization()
 	return { canRead: vi.fn().mockResolvedValue(true), filterReadable: vi.fn(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), admitResponse: vi.fn().mockResolvedValue(true) };
 });
 
+const _deferredAuthorization = vi.hoisted(function _DeferredAuthorization()
+{
+	return { decide: vi.fn().mockResolvedValue({ outcome: "approved" }), expire: vi.fn().mockResolvedValue(undefined) };
+});
+
 vi.mock("../elicitation-product-authorization", function _MockProductAuthorization()
 {
 	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = _productAuthorization.canRead; filterReadableConversationIds = _productAuthorization.filterReadable; admitResponse = _productAuthorization.admitResponse; } };
+});
+
+vi.mock("@opencrane/backend/server/iam/authorization", async function _MockAuthorization(importOriginal)
+{
+	const original = await importOriginal<typeof import("@opencrane/backend/server/iam/authorization")>();
+	return { ...original, __DecideDeferredToolRequest: _deferredAuthorization.decide, __ExpireDeferredToolApprovalBatch: _deferredAuthorization.expire };
 });
 
 import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationAuthorizationEvidence, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { ElicitationBodyKinds, ElicitationPurposes, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
-import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
+import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
+import type { ElicitationRunWakePort } from "../elicitation.types";
 import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work";
 import { _BuildMemoryPermissionPayload } from "../purposes/personal-memory/personal-memory-permission-payload";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
 
 /** Bind one transaction double to the process-owned unit-of-work boundary. */
-function _Unit(transaction: object): PrismaElicitationUnitOfWork
+function _Unit(transaction: object, wake: ElicitationRunWakePort | null = null): PrismaElicitationUnitOfWork
 {
-	return new PrismaElicitationUnitOfWork({ $transaction: vi.fn(async function _Transaction(operation) { return operation(transaction); }) } as never);
+	return new PrismaElicitationUnitOfWork({ $transaction: vi.fn(async function _Transaction(operation) { return operation(transaction); }) } as never, wake === null ? null : function _WakeFactory() { return wake; });
 }
 
 /** Active membership and current parent-coupled participant access. */
@@ -47,7 +59,7 @@ function _ResponseTransaction(request = _Request())
 		elicitationRequest: { findUnique: vi.fn().mockResolvedValue(request), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(0) },
 		elicitationResponseAttempt: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "attempt-1" }) },
 		agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-		approvalRequest: { findUnique: vi.fn(), count: vi.fn().mockResolvedValue(0) },
+		approvalRequest: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
 		elicitationResultDelivery: { create: vi.fn().mockResolvedValue({ id: "delivery-1" }) },
 		personalMemoryPermissionReceipt: { create: vi.fn().mockResolvedValue({ id: "receipt-1" }) },
 		toolInvocation: { findUnique: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -188,6 +200,74 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledTimes(1);
 		expect(transaction.elicitationResponseAttempt.create).toHaveBeenCalledTimes(1);
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledTimes(1);
+	});
+
+	it("resumes the saved turn after the exact owner approves a tool", async function _WakesApprovedTool()
+	{
+		const request = _Request({ purpose: ElicitationPurpose.ToolApproval, bodyKind: "Approval", body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow this action?", action: "Update a record", target: "remote record", dataUse: "Send the reviewed arguments", consequence: "The remote record changes" } });
+		const transaction = _ResponseTransaction(request);
+		const invocationRowId = "invocation-row-1";
+		const publicInvocationId = "public-invocation-1";
+		transaction.approvalRequest.findUnique.mockResolvedValue({ id: "approval-1", siloId: "silo-1", reviewedToolArguments: { recordId: "record-1" }, toolInvocationRowId: invocationRowId });
+		transaction.approvalRequest.findMany.mockResolvedValue([{ id: "approval-1", toolInvocationRowId: invocationRowId, state: ApprovalRequestState.Approved }]);
+		transaction.toolInvocation.findUnique.mockResolvedValue(_MemoryInvocation({ id: invocationRowId, toolInvocationId: publicInvocationId }));
+		const wake = { wake: vi.fn().mockResolvedValue(undefined) };
+
+		await expect(_Unit(transaction, wake).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-approval", response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: NOW })).resolves.toMatchObject({ outcome: "accepted", projection: { state: "answered" } });
+		expect(_deferredAuthorization.decide).toHaveBeenCalledWith(transaction, expect.objectContaining({ approvalRequestId: "approval-1", reviewerSubjectId: "user-1", decidedBy: "user-1", arguments: { recordId: "record-1" } }));
+		expect(wake.wake).toHaveBeenCalledOnce();
+		expect(wake.wake).toHaveBeenCalledWith("run-1", 2, publicInvocationId);
+	});
+
+	it("wakes a decided tool approval when a generic request resolves last", async function _WakesEarlierApprovedTool()
+	{
+		const transaction = _ResponseTransaction();
+		const invocationRowId = "invocation-row-approved";
+		const publicInvocationId = "public-invocation-approved";
+		transaction.approvalRequest.findMany.mockResolvedValue([{ id: "approval-approved", toolInvocationRowId: invocationRowId, state: ApprovalRequestState.Approved }]);
+		transaction.toolInvocation.findUnique.mockResolvedValue(_MemoryInvocation({ id: invocationRowId, toolInvocationId: publicInvocationId }));
+		const wake = { wake: vi.fn().mockResolvedValue(undefined) };
+
+		await expect(_Unit(transaction, wake).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "generic-last-approved", response: { kind: ElicitationBodyKinds.FreeText, text: "Done" } }, now: NOW })).resolves.toMatchObject({ outcome: "accepted" });
+		expect(transaction.approvalRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { runId: "run-1", attempt: 2, state: { in: [ApprovalRequestState.Approved, ApprovalRequestState.Denied, ApprovalRequestState.Expired] } } }));
+		expect(wake.wake).toHaveBeenCalledExactlyOnceWith("run-1", 2, publicInvocationId);
+	});
+
+	it("wakes the public invocation after an approval request expires", async function _WakesExpiredTool()
+	{
+		const request = _Request({ purpose: ElicitationPurpose.ToolApproval, bodyKind: "Approval", body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow this action?", action: "Update a record", target: "remote record", dataUse: "Send the reviewed arguments", consequence: "The remote record changes" }, expiresAt: new Date("2026-08-11T09:59:00.000Z") });
+		const invocationRowId = "invocation-row-1";
+		const publicInvocationId = "public-invocation-1";
+		let runState: AgentRunState = AgentRunState.WaitingForInput;
+		const transaction = {
+			elicitationRequest: { findMany: vi.fn().mockResolvedValue([request]), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(0) },
+			approvalRequest: { findUnique: vi.fn().mockResolvedValue({ toolInvocationRowId: invocationRowId }), findMany: vi.fn().mockResolvedValue([{ id: "approval-1", toolInvocationRowId: invocationRowId, state: ApprovalRequestState.Expired }]), count: vi.fn().mockResolvedValue(0) },
+			agentRun: { findUnique: vi.fn().mockImplementation(async function _Run() { return { id: "run-1", attempt: 2, state: runState }; }), updateMany: vi.fn().mockImplementation(async function _Resume() { runState = AgentRunState.Running; return { count: 1 }; }) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_MemoryInvocation({ id: invocationRowId, toolInvocationId: publicInvocationId })) },
+		} as const;
+		const wake = { wake: vi.fn().mockResolvedValue(undefined) };
+
+		await expect(new PrismaElicitationRepository(transaction as never, wake).expireDue({ runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: true });
+		expect(wake.wake).toHaveBeenCalledWith("run-1", 2, publicInvocationId);
+	});
+
+	it("wakes an expired tool approval when a generic request expires last", async function _WakesEarlierExpiredTool()
+	{
+		const request = _Request({ expiresAt: new Date("2026-08-11T09:59:00.000Z") });
+		const invocationRowId = "invocation-row-expired";
+		const publicInvocationId = "public-invocation-expired";
+		let runState: AgentRunState = AgentRunState.WaitingForInput;
+		const transaction = {
+			elicitationRequest: { findMany: vi.fn().mockResolvedValue([request]), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(0) },
+			approvalRequest: { findMany: vi.fn().mockResolvedValue([{ id: "approval-expired", toolInvocationRowId: invocationRowId, state: ApprovalRequestState.Expired }]), count: vi.fn().mockResolvedValue(0) },
+			elicitationResultDelivery: { create: vi.fn().mockResolvedValue({ id: "delivery-1" }) },
+			agentRun: { findUnique: vi.fn().mockImplementation(async function _Run() { return { id: "run-1", attempt: 2, state: runState }; }), updateMany: vi.fn().mockImplementation(async function _Resume() { runState = AgentRunState.Running; return { count: 1 }; }) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_MemoryInvocation({ id: invocationRowId, toolInvocationId: publicInvocationId })) },
+		} as const;
+		const wake = { wake: vi.fn().mockResolvedValue(undefined) };
+
+		await expect(new PrismaElicitationRepository(transaction as never, wake).expireDue({ runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: true });
+		expect(wake.wake).toHaveBeenCalledExactlyOnceWith("run-1", 2, publicInvocationId);
 	});
 
 	it.each(["input", "approval"])("keeps the run paused after a response while another %s remains pending", async function _pendingResponse(kind)

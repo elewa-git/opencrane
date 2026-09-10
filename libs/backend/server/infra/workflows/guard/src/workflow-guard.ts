@@ -313,9 +313,9 @@ class _WorkflowTaskContext implements IWorkflowTaskContext
 	}
 
 	/** Receives an event after rejecting any credential-shaped fields from its saved payload. */
-	async waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>
+	async waitForEvent<TPayload>(eventName: string, options: { readonly timeoutAt?: Date } = {}): Promise<IWorkflowTaskEvent<TPayload>>
 	{
-		const event = await this.context.waitForEvent<TPayload>(eventName);
+		const event = await this.context.waitForEvent<TPayload>(eventName, options);
 		_AssertPersistableWorkflowPayload(event.payload);
 		return event;
 	}

@@ -61,6 +61,11 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   allowance; new assistants permit two model requests for one tool result and a final answer.
   Credential activation, a management screen and live retrieval qualification remain unfinished.
 
+- **Personal assistants can wait for their owner's approval before calling a tool.** A decision
+  applies to the saved arguments and original run allowance. Approved work resumes after a restart
+  without repeating the call; denial, expiry, lost access or changed arguments prevent execution.
+  Live remote-provider and hosted-MCP qualification remain separate.
+
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
   while the authenticated web workspace reads and posts through the same typed backend conversation

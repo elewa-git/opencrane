@@ -44,12 +44,12 @@ describe("one frozen conversation tool proposal", function _Suite()
 		expect(next.proposalId).toBe(original.proposalId);
 		expect(next.requestFingerprint).not.toBe(original.requestFingerprint);
 	});
-	it("rejects a tool outside the compiled set, changed schema and approval-required work", function _ExactTool()
+	it("rejects a tool outside the compiled set and changed schema while retaining approval metadata", function _ExactTool()
 	{
 		const f = _Fixture();
 		expect(() => _PrepareConversationToolProposal(f.turn, f.candidate, { ...f.proposal, toolRevisionId: "other" })).toThrow("invalid");
 		f.tool.requiresApproval = true;
-		expect(() => _PrepareConversationToolProposal(f.turn, f.candidate, f.proposal)).toThrow("invalid");
+		expect(_PrepareConversationToolProposal(f.turn, f.candidate, f.proposal).tool.requiresApproval).toBe(true);
 		f.tool.requiresApproval = false;
 		f.tool.parametersSchemaDigest = `sha256:${"0".repeat(64)}`;
 		expect(() => _PrepareConversationToolProposal(f.turn, f.candidate, f.proposal)).toThrow("invalid");

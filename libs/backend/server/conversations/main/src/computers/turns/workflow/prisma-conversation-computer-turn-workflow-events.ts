@@ -3,7 +3,7 @@ import { ToolInvocationEventTypes, type ToolInvocationLifecycleEvent } from "@op
 import type { IWorkflowEngine, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { CONVERSATION_COMPUTER_TURN_TASK } from "./conversation-computer-turn-task";
-import { _ToolResultEventName } from "./conversation-computer-turn-workflow";
+import { _ToolApprovalEventName, _ToolResultEventName } from "./conversation-computer-turn-workflow";
 import type { ConversationComputerTurnWorkflowEventRepository } from "./conversation-computer-turn-workflow-receipt.types";
 
 /** Delivers a terminal tool observation to its saved conversation workflow in the result transaction. */
@@ -24,6 +24,20 @@ export class PrismaConversationComputerTurnWorkflowEventRepository implements Co
 			{ client: this.transaction },
 			task,
 			{ eventName: _ToolResultEventName(event.payload.toolInvocationId), payload: { runId: event.runId, attempt: event.attempt, toolInvocationId: event.payload.toolInvocationId, eventType: event.eventType } },
+		);
+	}
+
+	/** Wake the exact saved turn after an approval decision changes its invocation readiness. */
+	public async wake(runId: string, attempt: number, toolInvocationId: string): Promise<void>
+	{
+		const run = await this.transaction.agentRun.findUnique({ where: { id_attempt: { id: runId, attempt } }, select: { workflowTaskId: true, workflowTaskName: true, workflowTaskKey: true } });
+		const task = _TaskReceipt(run);
+		if (task === null)
+			return;
+		await this.workflows.emitEventInTransaction(
+			{ client: this.transaction },
+			task,
+			{ eventName: _ToolApprovalEventName(toolInvocationId), payload: { runId, attempt, toolInvocationId } },
 		);
 	}
 }

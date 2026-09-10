@@ -97,11 +97,13 @@ derived from their governed Global resource, so a late first POST cannot create 
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
   compiled run deadline or 25 seconds, including time spent reading the body.
 
-The first request can offer the frozen tools that need no approval. Names must be unique and legal,
-with parameters matching their saved schema digests. The model may return text or propose exactly
-one offered tool. The shared declaration retains the provider call id, original argument string
-and accompanying text. Arguments must contain a bounded JSON object; the conversation and IAM
-owners still validate the actual schema and current permission before any execution.
+The first request can offer every frozen tool definition, including tools that need owner approval.
+Names must be unique and legal, with parameters matching their saved schema digests. The model may
+return text or propose exactly one offered tool. The shared declaration retains the provider call
+id, original argument string and accompanying text. Arguments must contain a bounded JSON object;
+the conversation and IAM owners still validate the actual schema and current permission before any
+execution. Managed company runs filter approval-gated tools before model selection until an entitled
+human resolver exists; personal runs can park the exact proposal in deferred approval.
 
 A continuation supplies that saved declaration and its authorized result. The adapter appends an
 assistant tool-call message and a tool-result message with the same provider call id after the

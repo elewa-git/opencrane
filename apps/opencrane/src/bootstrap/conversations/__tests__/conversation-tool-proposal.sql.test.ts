@@ -31,7 +31,7 @@ function _Runtime(client: PrismaClient, fixture: Awaited<ReturnType<typeof _Seed
 /** Compose the same atomic admission port used by the application. */
 function _Owner(client: PrismaClient, fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>)
 {
-	return new PrismaConversationToolProposalUnitOfWork(client, fixture.dependencies, _Runtime(client, fixture).admission);
+	return new PrismaConversationToolProposalUnitOfWork(client, fixture.dependencies, _Runtime(client, fixture).admission, async function _ApprovalExpiry() {});
 }
 
 /** Hold the first two count reads until both transactions have observed the unreserved slot. */
@@ -107,7 +107,7 @@ describe("conversation tool proposal admission on fresh PostgreSQL", function _S
 		let created = 0;
 		const client = _First.$extends({ query: { toolInvocation: { async create({ args, query }) { const row = await query(args); created++; return row; } } } });
 		const dependencies = { ...f.dependencies, computers: { load: async function _RevokedComputer() { return null; } } };
-		const owner = new PrismaConversationToolProposalUnitOfWork(client as unknown as PrismaClient, dependencies, _Runtime(_First, f).admission);
+		const owner = new PrismaConversationToolProposalUnitOfWork(client as unknown as PrismaClient, dependencies, _Runtime(_First, f).admission, async function _ApprovalExpiry() {});
 		const auditsBefore = await _Second.auditDecision.count({ where: { siloId: f.siloId } });
 		await expect(owner.admit(f.turn, f.candidate, f.proposal, _WORKLOAD)).rejects.toThrow("conversation_tool_proposal_denied");
 		expect(created).toBe(1);

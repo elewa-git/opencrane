@@ -1,6 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
+import { PrismaElicitationRepository } from "@opencrane/backend/agents/execution/elicitation";
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
-import { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork, ConversationComputerTurnWriterFactory, ActiveConversationComputerTurnCandidateResolver, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, KurrentConversationComputerTurnStore, PrismaConversationComputerCredentialUnitOfWork, PrismaConversationComputerTurnUnitOfWork, PrismaConversationComputerTurnWorkflowReceiptBinder, _CreateConversationComputerReviewCredentialRouter, _RegisterConversationComputerTurnWorkflow, type ConversationComputerRunAdmissionPort, type ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
+import { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork, ConversationComputerTurnWriterFactory, ActiveConversationComputerTurnCandidateResolver, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, KurrentConversationComputerTurnStore, PrismaConversationComputerCredentialUnitOfWork, PrismaConversationComputerTurnUnitOfWork, PrismaConversationComputerTurnWorkflowReceiptBinder, PrismaConversationComputerTurnWorkflowEventRepository, _CreateConversationComputerReviewCredentialRouter, _RegisterConversationComputerTurnWorkflow, type ConversationComputerRunAdmissionPort, type ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import { AesGcmConversationPrivatePayloadCipher, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
 import { __RequestConversationModel, _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "@opencrane/backend/server/gateways/model-routing";
@@ -8,7 +9,7 @@ import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/
 import { AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import { type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { _CreateConversationComputerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
-import { type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { type AgentSandboxReleaseProfileConfig } from "../configuration/config.types";
 import { _log } from "../process/log";
 import { _CreateConversationToolDispatchDependencies } from "../workflows/mcp-runtime-composition";
@@ -24,7 +25,11 @@ export function _CreateConversationComputerWorkflowComposition(prisma: PrismaCli
 	const credentials = new PrismaConversationComputerCredentialUnitOfWork(prisma, cipher, { issue: _IssueAttemptLiteLlmKey, revoke: _RevokeAttemptLiteLlmKey, revokeByAlias: _RevokeAttemptLiteLlmKeyByAlias }, siloId);
 	const turnStore = new KurrentConversationComputerTurnStore(history);
 	const toolDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
-	const toolProposals = new PrismaConversationToolProposalUnitOfWork(prisma, toolDependencies, runtimeAdmission);
+	async function _ExpireApproval(transaction: unknown, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<void>
+	{
+		await new PrismaElicitationRepository(transaction as Prisma.TransactionClient, new PrismaConversationComputerTurnWorkflowEventRepository(transaction as Prisma.TransactionClient, workflows)).expireDue(command);
+	}
+	const toolProposals = new PrismaConversationToolProposalUnitOfWork(prisma, toolDependencies, runtimeAdmission, _ExpireApproval);
 	const toolResults = new PrismaConversationToolResultsUnitOfWork(prisma, siloId, turnStore, candidates, toolDependencies);
 	const writers = new ConversationComputerTurnWriterFactory(history, turnStore, candidates, toolResults);
 	const modelCustody = new PrismaConversationModelCustodyUnitOfWork(prisma, cipher);

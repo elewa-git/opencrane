@@ -3,7 +3,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaToolInvocationRepository } from "../persistence/prisma-tool-invocation-repository";
-import { RunToolResultReadOutcomes, type ReadRunToolResultCommand } from "../run-tool-result-delivery.types";
+import { RunToolResultPendingKinds, RunToolResultReadOutcomes, type ReadRunToolResultCommand } from "../run-tool-result-delivery.types";
 import { ExternalActionClaimKinds } from "../tool-invocation-lifecycle.types";
 import { __ConsumeRunToolResultInTransaction, __ReadRunToolResultInTransaction } from "../persistence/tool-invocation-transaction";
 import type { ToolResultDeliveryPayload } from "../tool-invocation.types";
@@ -46,7 +46,7 @@ describe("__ReadRunToolResultInTransaction", function _resultReader()
 		const fixture = _reader(row);
 		const result = await __ReadRunToolResultInTransaction(fixture.transaction, _COMMAND);
 		expect(result).toMatchObject({ outcome: RunToolResultReadOutcomes.Available, invocation: { id: row.id, toolInvocationId: _COMMAND.toolInvocationId }, payload: row.resultDelivery.payload, payloadDigest: row.resultDelivery.payloadDigest, consumed: false });
-		expect(fixture.findFirst).toHaveBeenCalledExactlyOnceWith({ where: { ..._COMMAND, mcpTaskId: null, run: { is: { id: _COMMAND.runId, siloId: _COMMAND.siloId, attempt: _COMMAND.attempt, state: AgentRunState.Running } } }, include: { run: { select: { id: true, siloId: true, attempt: true, state: true } }, resultDelivery: true } });
+		expect(fixture.findFirst).toHaveBeenCalledExactlyOnceWith({ where: { ..._COMMAND, mcpTaskId: null, run: { is: { id: _COMMAND.runId, siloId: _COMMAND.siloId, attempt: _COMMAND.attempt, state: { in: [AgentRunState.Running, AgentRunState.WaitingForInput] } } } }, include: { run: { select: { id: true, siloId: true, attempt: true, state: true } }, resultDelivery: true } });
 		expect(row.resultDelivery.state).toBe(ToolResultDeliveryState.Pending);
 		expect(row.resultDelivery.consumedAt).toBeNull();
 	});
@@ -81,6 +81,15 @@ describe("__ReadRunToolResultInTransaction", function _resultReader()
 	{
 		const row = { ..._row(), state, result: null, completedAt: null, resultDelivery: null };
 		await expect(__ReadRunToolResultInTransaction(_reader(row).transaction, _COMMAND)).resolves.toEqual({ outcome: RunToolResultReadOutcomes.Pending });
+	});
+
+	it("retains the approval deadline for the conversation workflow timeout", async function _ApprovalDeadline()
+	{
+		const row = { ..._row(), state: ToolInvocationState.AwaitingApproval, result: null, completedAt: null, resultDelivery: null, run: { ..._row().run, state: AgentRunState.WaitingForInput } };
+		const findFirst = vi.fn().mockResolvedValueOnce(row).mockResolvedValueOnce({ expiresAt: new Date(_NOW.getTime() + 30_000) });
+		const transaction = { toolInvocation: { findFirst }, approvalRequest: { findFirst } } as unknown as Prisma.TransactionClient;
+
+		await expect(__ReadRunToolResultInTransaction(transaction, _COMMAND)).resolves.toEqual({ outcome: RunToolResultReadOutcomes.Pending, pendingKind: RunToolResultPendingKinds.Approval, pendingUntilEpochMs: _NOW.getTime() + 30_000 });
 	});
 
 	it("keeps an ambiguous provider outcome unavailable instead of inventing a result", async function _recoveryRequired()
