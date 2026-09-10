@@ -22,7 +22,7 @@ function _Elicitation(): ConversationElicitation
 /** Create a generated-port double for the component-scoped store. */
 function _Gateway(): ConversationElicitationGateway
 {
-	return { read: vi.fn().mockResolvedValue(_Elicitation()), respond: vi.fn(), listActivity: vi.fn() };
+	return { listOpen: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue(_Elicitation()), respond: vi.fn(), listActivity: vi.fn() };
 }
 
 beforeAll(function _InitializeAngularTesting()

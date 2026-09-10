@@ -29,6 +29,8 @@ the generic elicitation result.
 
 - `PrismaElicitationUnitOfWork` — starts serializable transactions for browser responses, request
   reads, and personal-memory permission checks.
+- `_CreateSelfElicitationRouter` — lists up to fifty current requests for one readable conversation,
+  reads a named request, and submits one typed response through session-derived ownership.
 - `PrismaRuntimeElicitationUnitOfWork` — opens runtime proposals and expires due requests on the
   dispatch transaction that already holds the run lock; it never nests another transaction.
 - `PersonalMemoryPermissionAuthority` — opens and verifies the exact execution-user receipt without reading or consuming remembered content.

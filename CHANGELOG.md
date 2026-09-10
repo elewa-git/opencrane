@@ -20,6 +20,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **Authenticated clients can discover pending input for one selected conversation.** The read
+  returns at most fifty unexpired requests assigned to the current participant after active
+  membership, conversation participation and central read permission are checked. It exposes no
+  protected purpose payload, credentials or resume material. The approval card, live notification
+  trigger and informed tool-action disclosure remain unfinished.
+
 - **People can distinguish tool progress from an assistant's final answer in recent personal activity.**
   The activity view shows queued, running, result-received and needs-attention tool phases while
   preserving the separate run status. Reads check the current personal owner and run permission;

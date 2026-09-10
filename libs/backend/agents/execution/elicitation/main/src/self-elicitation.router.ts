@@ -8,6 +8,28 @@ import type { SelfElicitationCaller, SelfElicitationRouterDependencies } from ".
 export function __CreateSelfElicitationRouter(dependencies: SelfElicitationRouterDependencies): Router
 {
 	const router = Router();
+	router.get("/:conversationId/elicitations", async function _ListOpen(request: Request, response: Response)
+	{
+		const caller = _RequireCaller(request, response, dependencies);
+		const conversationId = _ConversationId(request);
+		if (caller === null)
+			return;
+		if (conversationId === null)
+		{
+			_Respond(response, 400, "invalid_elicitation_coordinates");
+			return;
+		}
+		try
+		{
+			const elicitations = await dependencies.elicitations.listOpenOwned(caller.siloId, conversationId, caller.subjectId, dependencies.clock.now());
+			response.status(200).json({ elicitations });
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "elicitation.list_open", siloId: caller.siloId }, "Open elicitation read failed");
+			_Respond(response, 503, "elicitation_read_unavailable");
+		}
+	});
 	router.get("/:conversationId/elicitations/:requestId", async function _Read(request: Request, response: Response)
 	{
 		const caller = _RequireCaller(request, response, dependencies);
@@ -84,12 +106,19 @@ function _RequireCaller(request: Request, response: Response, dependencies: Self
 	return caller;
 }
 
+/** Parse the selected non-empty conversation coordinate. */
+function _ConversationId(request: Request): string | null
+{
+	const conversationId = request.params["conversationId"];
+	return typeof conversationId === "string" && conversationId.trim().length > 0 ? conversationId : null;
+}
+
 /** Parse two non-empty path coordinates. */
 function _Coordinates(request: Request): { readonly conversationId: string; readonly requestId: string } | null
 {
-	const conversationId = request.params["conversationId"];
+	const conversationId = _ConversationId(request);
 	const requestId = request.params["requestId"];
-	return typeof conversationId === "string" && conversationId.trim().length > 0 && typeof requestId === "string" && requestId.trim().length > 0 ? { conversationId, requestId } : null;
+	return conversationId !== null && typeof requestId === "string" && requestId.trim().length > 0 ? { conversationId, requestId } : null;
 }
 
 /** Parse an optional bounded Activity page size. */

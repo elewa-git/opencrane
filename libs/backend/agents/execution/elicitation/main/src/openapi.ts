@@ -42,6 +42,21 @@ export const _ElicitationOpenapiPaths = {
 			},
 		},
 	},
+	"/me/conversations/{conversationId}/elicitations": {
+		get: {
+			operationId: "listMyOpenConversationElicitations",
+			summary: "List pending participant-input requests",
+			description: "Returns at most fifty unexpired requests assigned to the authenticated participant in the selected readable conversation. Protected purpose payloads, credentials, and resume material are never returned.",
+			tags: ["Conversations"],
+			parameters: _ConversationParameters(),
+			responses: {
+				200: { description: "Current owned requests in oldest-first order.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["elicitations"], properties: { elicitations: { type: "array", maxItems: 50, items: _ELICITATION_SCHEMA } } } } } },
+				400: _Error("The selected conversation coordinate is invalid."),
+				401: _Error("No authenticated browser session owns the request list."),
+				503: _Error("The elicitation authority is temporarily unavailable."),
+			},
+		},
+	},
 	"/me/conversations/{conversationId}/elicitations/{requestId}": {
 		get: {
 			operationId: "getMyConversationElicitation",
@@ -83,9 +98,15 @@ export const _ElicitationOpenapiPaths = {
 function _Parameters()
 {
 	return [
-		{ name: "conversationId", in: "path", required: true, schema: { type: "string" }, description: "Conversation containing the request." },
+		..._ConversationParameters(),
 		{ name: "requestId", in: "path", required: true, schema: { type: "string" }, description: "Opaque elicitation identifier." },
 	] as const;
+}
+
+/** Selected conversation path coordinate shared by list, read, and response operations. */
+function _ConversationParameters()
+{
+	return [{ name: "conversationId", in: "path", required: true, schema: { type: "string" }, description: "Conversation containing the request." }] as const;
 }
 
 /** Build one bounded error response schema. */

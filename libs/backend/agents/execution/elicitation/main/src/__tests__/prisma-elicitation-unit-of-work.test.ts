@@ -412,6 +412,26 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversation: { siloId: "silo-1" } }) }));
 	});
 
+	it("lists only current requests assigned to the admitted conversation participant", async function _ListsOpenOwned()
+	{
+		const transaction = { ..._Access(), elicitationRequest: { findMany: vi.fn().mockResolvedValue([_Request()]) } };
+		await expect(_Unit(transaction).listOpenOwned("silo-1", "conversation-1", "user-1", NOW)).resolves.toEqual([expect.objectContaining({ requestId: "request-1", conversationId: "conversation-1", assignedParticipantId: "user-1", state: "requested" })]);
+		expect(_productAuthorization.canRead).toHaveBeenCalledWith("silo-1", "user-1", "conversation-1", NOW);
+		expect(transaction.elicitationRequest.findMany).toHaveBeenCalledWith({
+			where: { siloId: "silo-1", conversationId: "conversation-1", assignedParticipantId: "user-1", state: ElicitationRequestState.Requested, expiresAt: { gt: NOW }, assignedParticipant: { accessEndedPosition: null } },
+			orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+			take: 50,
+		});
+	});
+
+	it("does not inspect requests when central conversation read is denied", async function _DeniesUnreadableConversation()
+	{
+		_productAuthorization.canRead.mockResolvedValue(false);
+		const transaction = { ..._Access(), elicitationRequest: { findMany: vi.fn() } };
+		await expect(_Unit(transaction).listOpenOwned("silo-1", "conversation-1", "user-1", NOW)).resolves.toEqual([]);
+		expect(transaction.elicitationRequest.findMany).not.toHaveBeenCalled();
+	});
+
 	it("denies child open, response, and activity after immediate-parent access ends", async function _DeniesRevokedParent()
 	{
 		const access = { orgMembership: { count: vi.fn().mockResolvedValue(1) }, conversationParticipant: { findFirst: vi.fn().mockResolvedValue(null) } };
