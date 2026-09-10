@@ -26,6 +26,37 @@ Completed implementation moves to `plan-done.md`; live evidence belongs in
 [`docs/agents/deploy-ledger.md`](docs/agents/deploy-ledger.md). A green test, a pushed change, a
 deployed image, and a proven user journey are separate facts.
 
+## Rebuild the local-development stack
+
+The closed proposals [#702](https://github.com/elewa-git/opencrane/pull/702),
+[#713](https://github.com/elewa-git/opencrane/pull/713), and
+[#737](https://github.com/elewa-git/opencrane/pull/737) are behavioural references, not branches to
+revive. Rebuild their useful developer journeys as three independently usable pull requests from
+the current fresh-install baseline:
+
+```text
+develop
+  -> Tier 1: frontend-only onboarding and conversation fixtures
+       -> Tier 2: local application profiles
+            -> Tier 3: k3d and Codespaces qualification
+```
+
+The replacement must not restore database migrations, release transitions, channel-proxy, the
+retired warm runtime, Obot, relational conversation history, or other 0.10 compatibility paths.
+PostgreSQL remains product authority, KurrentDB remains canonical conversation history, and Agent
+Sandbox remains the Kubernetes computer boundary.
+
+| Slice | State and acceptance |
+| --- | --- |
+| Local Tier 1 — frontend-only development | READY FOR REVIEW from current `develop` — plain `npm run serve:opencrane-ui` enters onboarding; the `commander`, `catalyst`, `anchor`, and `analyst` commands open the matching reviewed archetype conversation. Current routed components and state ports run over one backend-free in-memory profile, with deterministic failure/recovery scenarios and a network tripwire. Local state, UI, gateway, Storybook, documentation, boundary and all seven Angular build gates pass; independent architecture, correctness, residue and contract-verification gates pass. Remote CI remains pending on the successor PR. |
+| Local Tier 2 — application development | PLANNED after reviewed Tier 1 — `npm run dev:tier2` is the `core` profile and starts the current server, UI, PostgreSQL clean baseline, and KurrentDB. `npm run dev:tier2:agent` adds the current Conversation Computer through a local development supervisor; `npm run dev:tier2:agent:local-llm`, `:remote-llm`, and `:simulated-llm` retain the three explicit model alternatives without claiming Kubernetes isolation. Abort, stop, suspend, failed startup, and the next launch clean only exactly owned processes, containers, networks, and disposable secrets. `--reset` recreates the paired PostgreSQL/KurrentDB fresh baseline; it never upgrades it. |
+| Local Tier 3 — k3d and Codespaces | PLANNED after reviewed Tier 2 — `npm run dev:tier3` remains the short alias for the credential-free `npm run dev:tier3:infra` profile, which proves the current silo, PostgreSQL, KurrentDB, Cognee, LiteLLM, Agent Sandbox prerequisites, ingress, storage, and browser routing without provider credentials. `npm run dev:tier3:agent` adds one governed provider setup and one current Agent Sandbox conversation turn. Minimum host target is 4 cores, 16 GB memory, and 32 GB storage; recommended is 8 cores, 32 GB memory, and 64 GB storage. The minimum-host flow must report a measured storage shortfall instead of deleting unrelated dependencies, caches, clusters, or developer state. |
+
+Each parent head is frozen, validated, independently reviewed, and checked against the live pull-
+request graph before its child branches. If the Tier 3 minimum cannot pass without deleting
+unrelated developer state, report the measured shortfall for a product decision instead of pruning
+that state or silently raising the requirement.
+
 ## The MVP we are working toward
 
 An employee signs in, reviews how their assistant should work, starts a conversation, and gets a

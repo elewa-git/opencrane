@@ -144,6 +144,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Overview', link: '/contributing/overview' },
+          { text: 'Local development', link: '/contributing/local-development' },
           { text: 'The CI pipeline', link: '/contributing/ci-pipeline' },
           { text: 'Deploying', link: '/contributing/deploying' },
           { text: 'Versions and migrations', link: '/contributing/versions-and-migrations' },

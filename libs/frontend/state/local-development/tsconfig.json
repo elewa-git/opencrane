@@ -1,0 +1,13 @@
+{
+  "extends": "../../../../tsconfig.frontend.json",
+  "compilerOptions": { "outDir": "../../../../dist/out-tsc", "types": [], "composite": true, "tsBuildInfoFile": "../../../../dist/out-tsc/libs/frontend/state/local-development/tsconfig.tsbuildinfo" },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
+  "references": [
+    { "path": "../../../models/user-onboarding/main" },
+    { "path": "../conversation/assets" },
+    { "path": "../conversation/stream" },
+    { "path": "../conversation/workspace" },
+    { "path": "../onboarding" }
+  ]
+}

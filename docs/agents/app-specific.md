@@ -92,6 +92,11 @@ The governed persona onboarding path is split deliberately:
 - [`state/persona/adapter`](../../libs/frontend/state/persona/adapter/README.md) is the typed adapter
   over the generated signed-in-owner API.
 
+Backend-free Tier 1 development uses
+[`state/local-development`](../../libs/frontend/state/local-development/README.md) to bind the same
+current onboarding and conversation ports to one disposable in-memory owner. Live and production
+builds never import that provider composition.
+
 Recoverable conversation input follows the same ownership direction:
 
 - [`elements/elicitation`](../../libs/frontend/elements/elicitation/README.md) owns the four typed draft controls;
