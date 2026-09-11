@@ -87,8 +87,15 @@ Run `34599650427` passed attestation, synthetic login, dataset creation and inge
 a harness parsing error: authenticated CHUNKS search returns a dataset envelope. The fixture now
 requires exactly the requested dataset envelope in that mode and keeps the ACL-disabled flat
 response separate. Eight fast provider tests cover authentication, proxy forwarding and malformed
-or foreign-dataset search responses. Positive isolation, recovery and deletion still require the
-next exact-image run; successful HTTP calls alone do not prove them.
+or foreign-dataset search responses.
+The exact-image run `34600864382` at `5902fb82109ebba2b357dba44bb42b787b9e0dd9` then passed
+authenticated dataset isolation, useful multi-chunk recall, document identity, committed-response
+loss, restart recovery and shared-reference preservation. Final-reference deletion failed: API,
+raw-route, graph and vector visibility disappeared, but the original uploaded file remained under
+the provider's data root. The retained artifact records this as a provider guarantee failure, not
+a harness error. The current image does not qualify for Forget; keep the failing assertion and
+publication gate. A separate whole-provider candidate must prove erasure, local path ownership and
+recovery after an interrupted deletion before memory mutation can be enabled.
 Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
 subsequent product slices are complete. Local container VMs are not started for this work.
 
@@ -460,8 +467,9 @@ their own completion track; they are not silently bundled into the first tool PR
 | A1 — membership revocation and closed-work proof | IMPLEMENTED, IN REVIEW — standalone administrators can remove another non-Owner member through Settings. The server suspends the existing membership, protects Owner/self removal and rechecks current authority on retries. Workspace access loss clears retained private content and rejects delayed results. Focused unit checks and all 123 browser checks pass; five real PostgreSQL cases join the CI gate. The real-account removal and closed-work journey remains to qualify live. Fleet removal remains unsupported. |
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
-| U1 | IN PROGRESS: requester-only personal Stop passes source review and local validation; CI and live qualification remain distinct gates. |
-| M1, U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
+| U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
+| M1 | IN PROGRESS: #863 qualifies the exact provider image. Isolation and restart recovery pass in the authenticated candidate, but final-reference deletion leaves original source bytes; provider repair and product memory journeys remain. |
+| U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
 The 10 September priority order supersedes the earlier overnight sequencing and morning handoff.

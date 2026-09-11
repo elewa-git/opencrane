@@ -112,6 +112,12 @@ memory writes. An empty result cannot stand in for an
 unavailable provider, a lost response cannot authorize another write, and a chunk identifier cannot
 stand in for the owning document during deletion.
 
+The pinned 1.2.1 image currently fails the last-reference erasure check: it removes retrieval and
+dataset visibility but retains the original uploaded file. Its authenticated candidate passes
+isolation and restart recovery; that does not qualify deletion or enable personal memory. Keep the
+failed evidence and test assertion until a separately reviewed provider image passes the complete
+contract, including interrupted-deletion recovery and local file ownership.
+
 CI selects this uncached target whenever the existing image-smoke selection includes Cognee. A
 selected run fails if Docker or a required provider proof is unavailable. Logs and a machine-readable
 result are retained under `.nx/test-results/cognee-memory-contract` and uploaded by the workflow.
