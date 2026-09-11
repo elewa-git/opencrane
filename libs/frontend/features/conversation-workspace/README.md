@@ -29,6 +29,15 @@ transcript. The page checks that link again before focusing it, closes the narro
 respects reduced-motion preferences. Company-assistant children keep their existing shared-chat
 surface; this personal index does not claim complete tool history or run controls.
 
+The newest caller-owned run in a personal chat appears above the controlled composer through the
+existing conversation run-action element. Active work offers **Stop**. Submission keeps a pending
+state visible until the run read reports cancellation or another terminal state. If an accepted
+message remains unconfirmed after one minute, the participant can explicitly try a new Stop.
+An ambiguous HTTP submission retains its original UUID. Stop errors stay with the chat and run
+that produced them. The feature mapper
+exposes no run coordinate. Shared company children do not render this control because their current
+projection does not prove which participant requested the run.
+
 ```
  bounded snapshot ──► workspace store ──► feature presenter ──► thin page
                            ▲                       │                 │

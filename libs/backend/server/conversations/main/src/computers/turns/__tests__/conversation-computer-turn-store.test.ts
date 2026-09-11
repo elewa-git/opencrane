@@ -19,7 +19,7 @@ const _TURN = {
   maximumBudgetUsd: 0.05,
   credentialLifetimeSeconds: 300,
   outputSourceCommandId: null,
-  outputReceipt: null,
+  outputReceipt: null, cancellationReceipt: null,
   toolSelection: null, continuationReservation: null, modelReservation: null,
   binding: {
     siloId: "testv5",
@@ -98,6 +98,26 @@ describe("KurrentConversationComputerTurnStore", function _Suite() {
     const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
     const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), appendAtomic: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()) });
     await expect(store.load(_ID)).resolves.toEqual(_TURN);
+  });
+
+  it("loads a terminal cancellation winner and refuses a later model reservation", async function _CancellationWinner() {
+    const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
+    const commandId = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
+    const receipt = { commandId, commandDigest: `sha256:${"b".repeat(64)}`, occurredAt: "2026-09-11T08:00:00.000Z" };
+    const cancelledEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 1n, recordedAt: new Date(), id: commandId, type: "opencrane.conversation-computer-turn-cancelled.v1", data: receipt, metadata: { bootstrapId: _ID } };
+    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), appendAtomic: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; yield cancelledEvent; })()) });
+
+    await expect(store.load(_ID)).resolves.toMatchObject({ cancellationReceipt: receipt, outputReceipt: null });
+    await expect(store.reserveModel(_ID, _ModelReservationFixture(_TURN, "51c1f1dc-0010-4f13-9c2f-d3841ffd6651"))).resolves.toBe(false);
+  });
+
+  it("rejects extra fields in a durable cancellation receipt", async function _MalformedCancellation() {
+    const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
+    const commandId = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
+    const cancelledEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 1n, recordedAt: new Date(), id: commandId, type: "opencrane.conversation-computer-turn-cancelled.v1", data: { commandId, commandDigest: `sha256:${"b".repeat(64)}`, occurredAt: "2026-09-11T08:00:00.000Z", hidden: "payload" }, metadata: { bootstrapId: _ID } };
+    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), appendAtomic: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; yield cancelledEvent; })()) });
+
+    await expect(store.load(_ID)).rejects.toThrow();
   });
 
   it("rejects a frozen event that lacks the compile anchor", async function _MalformedFrozen() {

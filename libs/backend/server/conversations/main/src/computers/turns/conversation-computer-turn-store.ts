@@ -4,20 +4,23 @@ import { _ConversationModelReservationEvent, _ReadConversationModelReservation, 
 import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
 import { createHash } from "node:crypto";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { HistoryExpectedRevisions, type HistoryAppend, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ReadBoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
 import { _ConversationComputerActiveTurnStreamName } from "../lifecycle/conversation-computer-activity";
-import type { ConversationComputerOutputDecision, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerOutputDecision, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
 import { ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates } from "@opencrane/contracts";
+import { _ConversationComputerTurnCancellationReceiptSchema } from "./conversation-computer-turn-cancellation.validator";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
 const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v2";
 const _ACTIVE_EVENT = "opencrane.conversation-computer-turn-active.v1";
 const _SETTLED_EVENT = "opencrane.conversation-computer-turn-settled.v1";
+/** Names the terminal turn event written when Stop wins against final output. */
+export const _CANCELLED_EVENT = "opencrane.conversation-computer-turn-cancelled.v1";
 
 /** Reports that newer conversation history won the output position before the atomic commit. */
 export class ConversationComputerOutputPositionConflictError extends Error {}
@@ -56,6 +59,13 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		{
 			if (event.revision === 0n)
 				frozen = _Frozen(event, bootstrapId);
+			else if (event.type === _CANCELLED_EVENT && frozen !== null && frozen.outputReceipt === null && frozen.cancellationReceipt === null)
+			{
+				const current: FrozenConversationComputerTurn = frozen;
+				frozen = { ...current, cancellationReceipt: _Cancellation(event, current) };
+			}
+			else if (frozen?.cancellationReceipt !== null)
+				throw new Error("Conversation computer turn continued after cancellation");
 			else if (event.revision === 1n && frozen !== null)
 				{
 				const current: FrozenConversationComputerTurn = frozen;
@@ -92,7 +102,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	public async selectTool(bootstrapId: string, selection: ConversationComputerToolSelection): Promise<void>
 	{
 		const turn = await this.load(bootstrapId);
-		if (turn === null || turn.outputReceipt !== null || turn.continuationReservation !== null)
+		if (turn === null || turn.outputReceipt !== null || turn.cancellationReceipt !== null || turn.continuationReservation !== null)
 			throw new Error("Conversation computer cannot select another tool");
 		const event = _ConversationToolSelectionEvent(turn, selection);
 		_ReadConversationToolSelection({ ...event, streamName: _Stream(bootstrapId), revision: 2n, recordedAt: new Date() } as HistoryRecordedEvent, turn);
@@ -114,7 +124,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	public async reserveContinuation(bootstrapId: string, reservation: ConversationComputerContinuationReservation): Promise<boolean>
 	{
 		const turn = await this.load(bootstrapId);
-		if (turn === null || turn.toolSelection === null || turn.continuationReservation !== null || turn.outputReceipt !== null)
+		if (turn === null || turn.toolSelection === null || turn.continuationReservation !== null || turn.outputReceipt !== null || turn.cancellationReceipt !== null)
 			return false;
 		const event = _ConversationModelReservationEvent(turn, reservation);
 		_ReadConversationContinuationReservation({ ...event, streamName: _Stream(bootstrapId), revision: 3n, recordedAt: new Date() } as HistoryRecordedEvent, turn);
@@ -141,7 +151,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	public async reserveModel(bootstrapId: string, reservation: ConversationComputerModelReservation): Promise<boolean>
 	{
 		const turn = await this.load(bootstrapId);
-		if (turn === null || turn.modelReservation !== null || turn.toolSelection !== null || turn.outputReceipt !== null)
+		if (turn === null || turn.modelReservation !== null || turn.toolSelection !== null || turn.outputReceipt !== null || turn.cancellationReceipt !== null)
 			return false;
 		const event = _ConversationModelReservationEvent(turn, reservation);
 		_ReadConversationModelReservation({ ...event, streamName: _Stream(bootstrapId), revision: 1n, recordedAt: new Date() } as HistoryRecordedEvent, turn);
@@ -219,7 +229,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			throw new Error("Conversation computer cannot settle a different active turn");
 		try
 		{
-			await this.history.append({ streamName, expectedRevision: last.revision, events: [{ id: _Uuid("settled", turn.bootstrapId), type: _SETTLED_EVENT, data: { bootstrapId: turn.bootstrapId }, metadata: _Metadata(turn) }] });
+			await this.history.append(this.settlementAppend(turn, last.revision));
 		}
 		catch (error)
 		{
@@ -228,6 +238,14 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		}
 		if (!_HasSettlement(await _Events(this.history, streamName), turn))
 			throw new Error("Conversation computer cannot confirm its own settlement");
+	}
+
+	/** Builds this turn's checked active-pointer settlement for a larger atomic history transaction. */
+	public settlementAppend(turn: FrozenConversationComputerTurn, expectedRevision: bigint): HistoryAppend
+	{
+		if (expectedRevision < 0n)
+			throw new Error("Conversation computer settlement requires an existing active pointer");
+		return { streamName: _ActiveStream(turn), expectedRevision, events: [{ id: _Uuid("settled", turn.bootstrapId), type: _SETTLED_EVENT, data: { bootstrapId: turn.bootstrapId }, metadata: _Metadata(turn) }] };
 	}
 
 	private async _Activate(turn: FrozenConversationComputerTurn): Promise<void>
@@ -347,7 +365,7 @@ function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown
 }
 
 /** Shape of the frozen event data as it is stored: the lease flattened to `generation`, `leaseId` and `sandboxClaimId`, and the stream revision as a string. */
-type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolSelection" | "continuationReservation" | "modelReservation"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
+type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "cancellationReceipt" | "toolSelection" | "continuationReservation" | "modelReservation"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
 
 /** Rebuild the in-memory record from the stored event, gathering the flat lease fields into the `lease` bundle. */
 function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConversationComputerTurn
@@ -371,10 +389,35 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 		compile: value.compile,
 		outputSourceCommandId: null,
 		outputReceipt: null,
+		cancellationReceipt: null,
 		toolSelection: null,
 		continuationReservation: null,
 		modelReservation: null,
 	};
+}
+
+/** Validate the terminal Stop decision against the frozen turn and its next open revision. */
+function _Cancellation(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerTurnCancellationReceipt
+{
+	const receipt = _ConversationComputerTurnCancellationReceiptSchema.parse(event.data);
+	const expectedRevision = _NextTurnRevision(turn);
+	if (event.streamName !== _Stream(turn.bootstrapId) || event.revision !== expectedRevision)
+		throw new Error("Conversation computer turn received an invalid cancellation decision");
+	if (event.id !== receipt.commandId || event.metadata["bootstrapId"] !== turn.bootstrapId || ___DigestCanonicalJson(event.data as JsonValue) !== ___DigestCanonicalJson(receipt as unknown as JsonValue))
+		throw new Error("Conversation computer cancellation decision has a different event identity");
+	return receipt;
+}
+
+/** Return the checked revision at which the next decision must append. */
+function _NextTurnRevision(turn: FrozenConversationComputerTurn): bigint
+{
+	if (turn.continuationReservation !== null)
+		return 4n;
+	if (turn.toolSelection !== null)
+		return 3n;
+	if (turn.modelReservation !== null)
+		return 2n;
+	return 1n;
 }
 
 /** Read one complete output decision and validate it against this frozen turn. */

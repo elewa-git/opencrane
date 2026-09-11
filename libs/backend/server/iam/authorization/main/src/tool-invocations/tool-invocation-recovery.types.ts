@@ -67,6 +67,8 @@ export enum ToolInvocationRunRecoveryEnterResults
 	Entered = "entered",
 	/** The exact run attempt was already in the required manual-recovery state. */
 	AlreadyRecoveryRequired = "already_recovery_required",
+	/** The run is cancelling, so the invocation may clear its claim without reopening the run or asking a participant to recover it. */
+	Cancelling = "cancelling",
 	/** The run identity, attempt, or state does not permit this recovery transition. */
 	Conflict = "conflict",
 }

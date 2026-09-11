@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { KurrentDBClient } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, _KurrentHistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { ConversationEntryKinds } from "@opencrane/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ConversationHistoryAuthority } from "../conversation-history-authority";
@@ -64,7 +65,12 @@ function _command(siloId: string, conversationId: string, expectedRevision: bigi
 /** Adds the activation coordinates that `appendWithActivation` checks against the silo queue head. */
 function _activationCommand(siloId: string, conversationId: string, expectedRevision: bigint, queueExpectedRevision: HistoryExpectedRevisions.NoStream | bigint): ConversationHistoryActivationAppendCommand
 {
-	return { ..._command(siloId, conversationId, expectedRevision), activation: { computerId: "computer-1", generation: 1, eventId: randomUUID(), queueExpectedRevision } };
+	const command = _command(siloId, conversationId, expectedRevision);
+	if (command.entry.kind !== ConversationEntryKinds.A2UI)
+		throw new Error("test fixture requires an A2UI entry");
+	const { surfaceId: _surface, a2uiSchemaVersion: _schema, operation: _operation, payloadRef: _payload, payloadDigest: _digest, ...common } = command.entry;
+	const entry = { ...common, author: { kind: "human" as const, principalId: "principal-1", participantId: "subject-1", issuer: "https://issuer.test", authenticatedAt: "2026-09-01T00:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored" as const, runId: null, kind: "message" as const, state: "completed" as const, blocks: [{ id: `block-${command.entry.id}`, kind: "text" as const, payloadRef: `payload-${command.entry.id}`, ciphertextDigest: `sha256:${command.entry.id}` }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "start" as const };
+	return { ...command, entry, activation: { computerId: "computer-1", generation: 1, eventId: randomUUID(), queueExpectedRevision } };
 }
 
 /** Builds one system log whose attestation points to the receipt committed beside it. */

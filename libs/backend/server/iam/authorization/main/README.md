@@ -91,8 +91,10 @@ the ordinary exact boundary-matching rules.
   A read outage propagates so the transaction rolls back.
   Task-owned calls retain their distinct task projection. The unused external-action transaction
   wrapper is removed; the MCP runtime owns production dispatch.
-- `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
-  tool work inside the runs domain's cancellation transaction.
+- `PrismaRunWorkCancellationRepository` lets the runs domain close requested elicitations,
+  pending approvals and only provider-free Preparing, AwaitingApproval or Ready invocations after
+  KurrentDB records cancellation as the terminal winner. Dispatched or uncertain outcomes remain
+  durable; expired claims may shed their lease while their recovery state is preserved.
 
 Run-owned tool result reads use `__ReadRunToolResultInTransaction`. The caller supplies all saved
 run, attempt, computer, command, public invocation and fingerprint coordinates. IAM checks the

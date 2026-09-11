@@ -10,6 +10,7 @@ import { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-
 import type { ConversationComputerActivationWorkerHandle, ConversationComputerActivationWorkerOptions } from "./conversation-computer-activation-composition.types";
 import type { Logger } from "@opencrane/backend/observability";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 
 /** Consumer group the KurrentDB bootstrap Job provisions for every silo. */
 const _ACTIVATION_GROUP = "conversation-computer-activation";
@@ -34,7 +35,7 @@ export async function _StartConversationComputerActivationWorker(prisma: PrismaC
 	const consumer = __StartConversationComputerActivationConsumer(
 		function _Open() { return historyStore.subscribePersistent({ streamName, groupName: _ACTIVATION_GROUP }); },
 		authority,
-		{ signal: stop.signal, resubscribe: options.resubscribe, wait: options.wait, onEvent: function _OnEvent(event) { _LogConsumerEvent(event, streamName, options.logger); } },
+		{ signal: stop.signal, resubscribe: options.resubscribe, wait: options.wait, stop: { authority: options.stopAuthority, history: new ConversationHistoryReader(historyStore) }, onEvent: function _OnEvent(event) { _LogConsumerEvent(event, streamName, options.logger); } },
 	);
 	const onExhausted = options.onExhausted;
 	void consumer.done.then(function _ConsumerSettled()

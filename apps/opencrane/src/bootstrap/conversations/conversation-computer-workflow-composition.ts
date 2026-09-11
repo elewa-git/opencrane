@@ -1,7 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import { PrismaElicitationRepository } from "@opencrane/backend/agents/execution/elicitation";
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
-import { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork, ConversationComputerTurnWriterFactory, ActiveConversationComputerTurnCandidateResolver, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationToolResultNotificationPublisher, KurrentConversationApprovalNotificationPublisher, KurrentConversationComputerTurnStore, PrismaConversationApprovalNotificationUnitOfWork, PrismaConversationComputerCredentialUnitOfWork, PrismaConversationComputerTurnUnitOfWork, PrismaConversationComputerTurnWorkflowReceiptBinder, PrismaConversationComputerTurnWorkflowEventRepository, _CreateConversationComputerReviewCredentialRouter, _RegisterConversationComputerTurnWorkflow, type ConversationComputerRunAdmissionPort, type ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
+import { _ConversationComputerStopAuthority, _RegisterConversationComputerStopWorkflow, PrismaConversationComputerStopAdmissionUnitOfWork, PrismaConversationComputerStopLifecycleUnitOfWork, PrismaConversationComputerStopTargetUnitOfWork, KurrentConversationComputerStopActiveTurnReader, KurrentConversationComputerStopPublisher, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork, ConversationComputerTurnWriterFactory, ActiveConversationComputerTurnCandidateResolver, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationToolResultNotificationPublisher, KurrentConversationApprovalNotificationPublisher, KurrentConversationComputerTurnStore, PrismaConversationApprovalNotificationUnitOfWork, PrismaConversationComputerCredentialUnitOfWork, PrismaConversationComputerTurnUnitOfWork, PrismaConversationComputerTurnWorkflowReceiptBinder, PrismaConversationComputerTurnWorkflowEventRepository, _CreateConversationComputerReviewCredentialRouter, _RegisterConversationComputerTurnWorkflow, type ConversationComputerRunAdmissionPort, type ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import { AesGcmConversationPrivatePayloadCipher, ConversationHistoryAuthority, ConversationHistoryReader, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
 import { __RequestConversationModel, _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "@opencrane/backend/server/gateways/model-routing";
@@ -27,7 +27,9 @@ export function _CreateConversationComputerWorkflowComposition(prisma: PrismaCli
 	const toolDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
 	async function _ExpireApproval(transaction: unknown, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<void>
 	{
-		await new PrismaElicitationRepository(transaction as Prisma.TransactionClient, new PrismaConversationComputerTurnWorkflowEventRepository(transaction as Prisma.TransactionClient, workflows)).expireDue(command);
+		const events = new PrismaConversationComputerTurnWorkflowEventRepository(transaction as Prisma.TransactionClient, workflows);
+		const elicitations = new PrismaElicitationRepository(transaction as Prisma.TransactionClient, events);
+		await elicitations.expireDue(command);
 	}
 	const toolProposals = new PrismaConversationToolProposalUnitOfWork(prisma, toolDependencies, runtimeAdmission, _ExpireApproval);
 	const toolResults = new PrismaConversationToolResultsUnitOfWork(prisma, siloId, turnStore, candidates, toolDependencies);
@@ -40,5 +42,12 @@ export function _CreateConversationComputerWorkflowComposition(prisma: PrismaCli
 	const authority = new ConversationComputerTurnAuthorityService({ logger: _log, model: { request: __RequestConversationModel }, modelCustody, toolResults, toolResultNotifications, toolProposals, siloId, candidates, credentials, endpoint: process.env.LITELLM_ENDPOINT ?? "", outputPayloads: unitOfWork, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
 	const approvalNotifications = new KurrentConversationApprovalNotificationPublisher(new PrismaConversationApprovalNotificationUnitOfWork(prisma), historyAuthority, historyReader, history);
 	_RegisterConversationComputerTurnWorkflow(workflows, { approvalNotifications, authority, receipts: new PrismaConversationComputerTurnWorkflowReceiptBinder(prisma), siloId });
-	return _CreateConversationComputerReviewCredentialRouter({ logger: _log, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName), authority });
+	const stopAdmissions = new PrismaConversationComputerStopAdmissionUnitOfWork(prisma, workflows);
+	const stopTargets = new PrismaConversationComputerStopTargetUnitOfWork(prisma, new KurrentConversationComputerStopActiveTurnReader(history));
+	const stopPublisher = new KurrentConversationComputerStopPublisher(history);
+	const stopAuthority = new _ConversationComputerStopAuthority(stopAdmissions, stopTargets, stopPublisher);
+	const stopLifecycle = new PrismaConversationComputerStopLifecycleUnitOfWork(prisma);
+	_RegisterConversationComputerStopWorkflow(workflows, { admissions: stopAdmissions, publisher: stopPublisher, lifecycle: stopLifecycle, credentials });
+	const reviewCredentialRouter = _CreateConversationComputerReviewCredentialRouter({ logger: _log, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName), authority });
+	return { reviewCredentialRouter, stopAuthority };
 }

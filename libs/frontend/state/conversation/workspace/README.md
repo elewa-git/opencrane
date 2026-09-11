@@ -50,7 +50,14 @@ does not promise that no older work exists. Selection, identity, access and hist
 invalidate the read; cancelled or late responses cannot restore an earlier selection. Active work
 and inputs awaiting admission refresh every five seconds for up to one minute, then require an
 explicit refresh. Failed reads clear rows; access denial stops retries until the chat is reopened.
-This store reads status and never starts, cancels or retries assistant execution.
+For the newest active personal run, it also owns one retry-stable Stop control message. The HTTP
+acknowledgement means only that the message was admitted: cancellation or completion must come back
+through the authoritative run read before the presentation claims a result. If an acknowledged Stop
+has no confirmed result after one minute, the store shows that uncertainty and permits a fresh explicit
+Stop command. It never submits that new command automatically. An ambiguous HTTP failure keeps the
+same key for a retry even after that minute. Selection or access loss purges the pending command.
+Company-child controls remain absent because the personal index does not carry
+a protected requester fact for those shared conversations.
 
 ## Public surface
 

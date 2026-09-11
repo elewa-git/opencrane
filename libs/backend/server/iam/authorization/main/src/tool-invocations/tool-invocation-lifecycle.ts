@@ -53,7 +53,11 @@ function _claimed(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleA
 			: ToolInvocationLifecycleActions.Fail;
 	}
 	if (input.event !== ToolInvocationLifecycleEvents.DispatchAmbiguous && input.event !== ToolInvocationLifecycleEvents.DispatchClaimExpired)
+	{
+		if (input.event === ToolInvocationLifecycleEvents.CancellationClaimExpired)
+			return ToolInvocationLifecycleActions.RequireManualRecovery;
 		return ToolInvocationLifecycleActions.Reject;
+	}
 	if (input.recoveryMode === ExternalActionRecoveryModes.ProviderIdempotency)
 		return ToolInvocationLifecycleActions.RedispatchIdempotently;
 	if (input.recoveryMode === ExternalActionRecoveryModes.Reconciliation)
@@ -83,6 +87,8 @@ function _reconciling(input: ToolInvocationLifecycleInput): ToolInvocationLifecy
 			: ToolInvocationLifecycleActions.RequireManualRecovery;
 	}
 	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimExpired)
+		return ToolInvocationLifecycleActions.RetryReconciliation;
+	if (input.event === ToolInvocationLifecycleEvents.CancellationClaimExpired)
 		return ToolInvocationLifecycleActions.RetryReconciliation;
 	if (input.event === ToolInvocationLifecycleEvents.ReconcileInconclusive)
 		return ToolInvocationLifecycleActions.RequireManualRecovery;

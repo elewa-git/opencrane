@@ -1,5 +1,40 @@
 # OpenCrane — Active Plan
 
+## Execution checkpoint — 2026-09-11
+
+Draft #858 is fully green at `3cb899d68c851bfb0073c42933fc77fba3fe0e17`:
+CI run `34578065587` includes the real KurrentDB lost-response recovery case, database authority,
+build/test/lint, API generation, all 169 Storybook behavior tests, Linux visual checks, and server/UI
+image publication. The complete PR stack check passes. No testv5 deployment is implied.
+
+The requester-only Stop slice starts from that exact commit on
+`feat/0.12-conversation-work-cancellation`. Source implementation now covers the participant Stop
+message, server-selected saved target, Absurd cleanup, private Kurrent receipt and personal Stop
+control. Authorized Kurrent selection binds every delivery to the same target or no-target outcome
+before SQL rechecks authority and admits cancellation. Final output and cancellation compete on the
+same turn-stream revision. A committed answer
+remains successful; cancellation closes pending approvals while preserving dispatched or uncertain
+effects. Recovery resumes the saved task without another model request or a fresh allowance.
+
+The user approved this source implementation and tests. Local validation passes: 1,098 tests and
+seven package lint/type checks across the server, conversations, runs, IAM, history, API and contracts;
+155 frontend tests and their type checks; 15 SQL tests; 174 Storybook behavior/accessibility tests;
+and all three macOS visual checks. Server and production UI builds, API generation, Prisma,
+style, module-growth and release-baseline checks pass. The new SQL case proves an active participant
+with Conversation Use still cannot select another requester's turn. The Kurrent integration target
+collects successfully with three local tests passed and twelve service-dependent cases skipped;
+the real service and Linux screenshot references require CI on the pushed commit.
+
+Architecture and independent reviews cover the final source; all raised findings are resolved.
+Database tests use an isolated local PostgreSQL instance, not testv5. Personal controls are the first UI journey; controls
+for other participants remain an unresolved actor-policy decision. Source completion does not
+qualify a live Stop journey or authorize deployment.
+
+Company-tool approval implementation and remote MCP activation retain their recorded approval
+blocks. The testv5 repair still preserves all current data and awaits deployment approval. Its
+strengthened wrapper passed independent review and a fresh read-only inspection of image, baseline
+and volume coordinates. No install, database reset or test-data deletion occurred.
+
 ## Delivery priorities — 2026-09-10
 
 The user selected this order. Each track delivers a useful journey through the existing owners;
@@ -46,16 +81,16 @@ references, with no changes to existing images or comparison tolerances.
 The new Kurrent suite initially failed during import because the IAM barrel loaded an ungenerated
 Prisma enum. A reviewed test-only mock supplies the two delivery outcome constants; the publisher,
 real Kurrent client, atomic append and recovery remain unmocked. Local import/collection passes,
-with six live cases skipped because no local Kurrent endpoint was configured. Exact-head CI still
-owes the real-Kurrent proof and full completion. Testv5, real provider and hosted MCP qualification
+with six live cases skipped because no local Kurrent endpoint was configured. The successor exact-head
+CI run recorded above now passes the real-Kurrent proof and full completion. Testv5, real provider and hosted MCP qualification
 remain separate gates.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
-| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Finish result-history CI, then standard remote connection activation and one real integration, followed by the required hosted MCP slice. |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented and result-history CI passes. Standard remote connection activation awaits its recorded approval, then one real integration and the required hosted MCP slice follow. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
-| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | Reuse conversation events, stores and approved components; preserve current access on reconnect. |
+| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass source review and local validation; publish the draft, complete CI and qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Complete the existing server-issued interaction and presentation contracts. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | Connect existing upload/scan, model input and artifact finalisation owners. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
@@ -368,7 +403,8 @@ their own completion track; they are not silently bundled into the first tool PR
 | A1 — membership revocation and closed-work proof | IMPLEMENTED, IN REVIEW — standalone administrators can remove another non-Owner member through Settings. The server suspends the existing membership, protects Owner/self removal and rechecks current authority on retries. Workspace access loss clears retained private content and rejects delayed results. Focused unit checks and all 123 browser checks pass; five real PostgreSQL cases join the CI gate. The real-account removal and closed-work journey remains to qualify live. Fleet removal remains unsupported. |
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
-| M1, U1, U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
+| U1 | IN PROGRESS: requester-only personal Stop passes source review and local validation; CI and live qualification remain distinct gates. |
+| M1, U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
 The 10 September priority order supersedes the earlier overnight sequencing and morning handoff.

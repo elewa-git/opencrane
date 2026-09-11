@@ -44,6 +44,14 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 		await expect(gateway.listPersonalRuns(signal)).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
 	});
 
+	it("appends an explicit Stop control message without requesting another turn", async function _StopWork()
+	{
+		const post = vi.fn().mockResolvedValue({ data: { outcome: "appended", position: "3" } });
+		const gateway = _Gateway(post);
+		await gateway.requestStop({ conversationId: "conversation-1", idempotencyKey: "stop-command-1" });
+		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "stop-command-1", text: "Stop", activation: "stop" } });
+	});
+
 	it("binds a child request to the selected parent and preserves its retry command and abort signal", async function _ChildRequest()
 	{
 		const command = { parentMessageId: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", parentMessagePosition: "2", agentServiceId: "company", idempotencyKey: "c26f4e78-56ee-4ed2-a8be-06f13ef98164" };

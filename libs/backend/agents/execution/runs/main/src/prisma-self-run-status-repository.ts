@@ -1,11 +1,11 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRunState, Prisma, type PrismaClient } from "@prisma/client";
 
 import type { RunToolProgress } from "@opencrane/contracts";
 import { __ReadRunToolProgressInTransaction, PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
-import type { SelfRunStatus, SelfRunStatusCaller, SelfRunStatusRepository } from "./self-run-status.router.types";
+import { SelfRunStates, type SelfRunStatus, type SelfRunStatusCaller, type SelfRunStatusRepository } from "./self-run-status.router.types";
 
 /** Reads lifecycle-eligible owner runs and filters them through central authorization. */
 export class PrismaSelfRunStatusRepository implements SelfRunStatusRepository
@@ -91,15 +91,26 @@ export class PrismaSelfRunStatusUnitOfWork implements SelfRunStatusRepository
 }
 
 /** Convert the selected canonical Prisma fields into the stable product status shape. */
-function _toSelfRunStatus(run: { id: string; attempt: number; state: { toString(): string }; conversationId: string | null; agentRevisionId: string; acceptedAt: Date; finishedAt: Date | null }, latestTool: RunToolProgress | null): SelfRunStatus
+function _toSelfRunStatus(run: { id: string; attempt: number; state: AgentRunState; conversationId: string | null; agentRevisionId: string; acceptedAt: Date; finishedAt: Date | null }, latestTool: RunToolProgress | null): SelfRunStatus
 {
-	return { runId: run.id, attempt: run.attempt, state: _state(run.state.toString()), latestTool, conversationId: run.conversationId, agentRevisionId: run.agentRevisionId, acceptedAt: run.acceptedAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null };
+	return { runId: run.id, attempt: run.attempt, state: _state(run.state), latestTool, conversationId: run.conversationId, agentRevisionId: run.agentRevisionId, acceptedAt: run.acceptedAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null };
 }
 
 /** Map Prisma's PascalCase lifecycle enum to the product API's stable lowercase spelling. */
-function _state(value: string): string
+function _state(value: AgentRunState): SelfRunStates
 {
-	if (value === "WaitingForInput")
-		return "waiting_for_input";
-	return value.replace(/([a-z])([A-Z])/gu, "$1_$2").toLowerCase();
+	return _RUN_STATES[value];
 }
+
+const _RUN_STATES: Readonly<Record<AgentRunState, SelfRunStates>> = {
+	[AgentRunState.Accepted]: SelfRunStates.Accepted,
+	[AgentRunState.Queued]: SelfRunStates.Queued,
+	[AgentRunState.Assigned]: SelfRunStates.Assigned,
+	[AgentRunState.Running]: SelfRunStates.Running,
+	[AgentRunState.WaitingForInput]: SelfRunStates.WaitingForInput,
+	[AgentRunState.RecoveryRequired]: SelfRunStates.RecoveryRequired,
+	[AgentRunState.Cancelling]: SelfRunStates.Cancelling,
+	[AgentRunState.Cancelled]: SelfRunStates.Cancelled,
+	[AgentRunState.Completed]: SelfRunStates.Completed,
+	[AgentRunState.Failed]: SelfRunStates.Failed,
+};

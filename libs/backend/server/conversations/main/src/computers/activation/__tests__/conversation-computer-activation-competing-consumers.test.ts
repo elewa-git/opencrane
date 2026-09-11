@@ -74,7 +74,7 @@ function _Consumer(store: Pick<HistoryStore, "append" | "readHead" | "readStream
 /** One activation-requested delivery for generation 1 of the seeded computer. */
 function _Delivery(retryCount = 0): HistoryPersistentRecordedEvent
 {
-	return { id: "11111111-1111-4111-8111-111111111111", streamName: "computer-activations-silo-1", type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1, causationPosition: "1" }, metadata: { causationId: "22222222-2222-4222-8222-222222222222" }, revision: 0n, recordedAt: new Date(), retryCount };
+	return { id: "11111111-1111-4111-8111-111111111111", streamName: "computer-activations-silo-1", type: "opencrane.computer.activation-requested.v1", data: { action: "start", siloId: "silo-1", computerId: "computer-one", conversationId: "conversation-1", generation: 1, causationPosition: "1" }, metadata: { causationId: "22222222-2222-4222-8222-222222222222" }, revision: 0n, recordedAt: new Date(), retryCount };
 }
 
 /** Exact activation command retained after validating the delivery. */

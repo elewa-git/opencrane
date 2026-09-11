@@ -218,6 +218,11 @@ leaves activations unread. Operator notes:
   computer and generation, and the PostgreSQL lease projection only accepts an identical row. The
   loser of a race gets a revision conflict, retries the delivery, and then observes the finished
   activation as an idempotent replay.
+- A `stop` delivery reloads its exact human causation entry and admits one requester-bound cancellation
+  task. It acknowledges durable admission without starting replacement work. Final output and Stop
+  contend on the same turn-stream revision, so only one can publish the turn's terminal outcome.
+  `npm exec -- nx run opencrane:test:stop-sql` exercises the saved authority and cleanup against a
+  disposable `DATABASE_URL`; the target uses UTC so fixture timestamps match database timestamps.
 - A dropped or ended subscription is logged at `warn` and reopened with jittered backoff (1 s doubling
   to 30 s). After 20 consecutive drops without a healthy session (roughly eight minutes of a KurrentDB
   outage) the consumer logs `fatal` with `conversation computer activation consumer gave up`, sends

@@ -57,6 +57,10 @@ does not grant permission to use a run.
 - `PrismaRunAdmissionUnitOfWork` saves a new run and its first lease-bound input snapshot together.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status
   only after the current exact `AgentRun/Read` grant is checked in the same database snapshot.
+- `PrismaConversationRunCancellationRepository` binds one requester-authorized Stop command,
+  its audit decision and its Absurd cleanup task to the original run attempt. KurrentDB selects
+  cancellation or final output first; SQL then converges to `Cancelled/UserCancelled` or the existing
+  successful completion without reopening the run.
 
 Personal status includes `latestTool`, either null or the latest invocation's safe phase in the
 current attempt. Reads first filter by the authenticated personal owner and current `AgentRun/Read`
@@ -64,6 +68,8 @@ permission, then ask the invocation owner for that phase in the same transaction
 contains no tool arguments, result content, credentials or provider identifiers. A received tool
 result does not mean the assistant has finished its answer. Company-child runs remain outside this
 personal activity API; canonical participant receipts belong to conversation history.
+The status projection exposes `cancelling` while durable arbitration or cleanup remains active and
+`cancelled` only after provider claims no longer hold a fence.
 
 ## Boundary
 

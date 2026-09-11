@@ -8,7 +8,7 @@ import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { ELICITATION_GATEWAY, type ConversationElicitationGateway } from "@opencrane/state/conversation/elicitation";
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationHistoryProjection, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
-import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationPersonalRunsGateway, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
 import { ConversationWorkspaceRouteComponent } from "../conversation-workspace-route/conversation-workspace-route.component";
 
@@ -41,6 +41,9 @@ const _ELICITATION: ConversationElicitation = { version: CONVERSATION_ELICITATIO
 
 /** Current immutable-history projection rendered by every responsive shell contract. */
 const _HISTORY: ConversationHistoryProjection = { ...__CreateConversationHistoryProjection(), entries: [_ENTRY], payloads: { "payload-1": _LONG_CONTENT }, nextPosition: "2" };
+
+/** Cancelled work has no assistant answer because cancellation won the terminal race. */
+const _CANCELLED_HISTORY: ConversationHistoryProjection = __CreateConversationHistoryProjection();
 
 /** Tool result followed by a durable assistant answer in canonical conversation order. */
 const _TOOL_RESULT_HISTORY: ConversationHistoryProjection = { ...__CreateConversationHistoryProjection(), entries: [_TOOL_RESULT, { ..._ENTRY, position: "2" }], payloads: { "payload-1": "The customer account is active and the renewal date is confirmed." }, nextPosition: "3" };
@@ -101,16 +104,22 @@ const _ROUTER = { navigate: async function _Navigate() { return true; } };
 /** Keeps desktop and sign-in capabilities unavailable in the browser story. */
 const _PLATFORM = { isDesktop: false, bindFolder: async function _BindFolder() { throw new Error("Story command unavailable."); }, openAuthenticationWindow: function _OpenAuthenticationWindow() { return null; } };
 /** Supplies a completed personal status that links to the rendered history fixture. */
-const _PERSONAL_RUNS = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "completed", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: _ENTRY.occurredAt }]; } };
+const _PERSONAL_RUNS: ConversationPersonalRunsGateway = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "completed", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: _ENTRY.occurredAt }]; }, requestStop: async function _Stop() { return; } };
+/** Keeps one personal run active after its accepted Stop message until authority catches up. */
+const _ACTIVE_PERSONAL_RUNS: ConversationPersonalRunsGateway = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "running", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: null }]; }, requestStop: async function _Stop() { return; } };
+/** Supplies the durable terminal state without a remaining Stop control. */
+const _CANCELLED_PERSONAL_RUNS: ConversationPersonalRunsGateway = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "cancelled", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: "2026-09-05T19:30:00.000Z" }]; }, requestStop: async function _Stop() { throw new Error("Terminal work cannot stop again."); } };
+/** Retains the current active state when Stop admission is ambiguous. */
+const _CONFLICTING_PERSONAL_RUNS: ConversationPersonalRunsGateway = { ..._ACTIVE_PERSONAL_RUNS, requestStop: async function _Stop() { throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "private conflict"); } };
 /** Supplies the current request independently from the log's unrelated approval identifier. */
 const _ELICITATIONS = { listOpen: async function _List() { return [_ELICITATION]; }, read: async function _Read() { return _ELICITATION; }, respond: async function _Respond() { throw new Error("Story command unavailable."); }, listActivity: async function _Activity() { return []; } };
 /** Leaves ordinary workspace stories without a participant request. */
 const _NO_ELICITATIONS = { listOpen: async function _List() { return []; }, read: async function _Read() { throw new Error("No elicitation selected."); }, respond: async function _Respond() { throw new Error("Story command unavailable."); }, listActivity: async function _Activity() { return []; } };
 
 /** Supplies explicit test-only ports around the real routed workspace shell. */
-function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY, elicitations: ConversationElicitationGateway = _NO_ELICITATIONS): Decorator
+function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY, elicitations: ConversationElicitationGateway = _NO_ELICITATIONS, personalRuns: ConversationPersonalRunsGateway = _PERSONAL_RUNS): Decorator
 {
-	return moduleMetadata({ providers: [{ provide: CONVERSATION_CURRENT_SUBJECT, useValue: function _Subject() { return "self"; } }, { provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useValue: _PERSONAL_RUNS }, { provide: CONVERSATION_GROUP_CHILD_GATEWAY, useValue: {} }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: workspace }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: ELICITATION_GATEWAY, useValue: elicitations }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
+	return moduleMetadata({ providers: [{ provide: CONVERSATION_CURRENT_SUBJECT, useValue: function _Subject() { return "self"; } }, { provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useValue: personalRuns }, { provide: CONVERSATION_GROUP_CHILD_GATEWAY, useValue: {} }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: workspace }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: ELICITATION_GATEWAY, useValue: elicitations }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
 }
 
 /** Defines the routed workspace viewport contracts without replacing its production stores. */
@@ -218,6 +227,38 @@ export const PersonalToolApproval: Story = { tags: ["visual-test"], decorators: 
 
 /** Keeps the informed approval reachable after the compact context overlay closes. */
 export const PersonalToolApprovalNarrow: Story = { ...PersonalToolApproval, tags: ["visual-test", "visual-test-narrow"] };
+
+/** Keeps current personal work visible while an admitted Stop awaits authoritative state. */
+export const PersonalStopPendingNarrow: Story = { tags: ["visual-test", "visual-test-narrow"], decorators: [_Providers(_HISTORY, _WORKSPACE_GATEWAY, _NO_ELICITATIONS, _ACTIVE_PERSONAL_RUNS)], play: async function _StopPending({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	await userEvent.click(await canvas.findByRole("button", { name: "Close activity pane" }));
+	await userEvent.click(await canvas.findByRole("button", { name: "Stop" }));
+	expect(await canvas.findByText("Stop requested", { exact: true })).toBeVisible();
+	expect(canvas.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+	expect(canvas.queryByText("run-1")).not.toBeInTheDocument();
+} };
+
+/** Shows the durable cancelled state without pretending the initial click completed cleanup. */
+export const PersonalWorkStopped: Story = { tags: ["visual-test"], decorators: [_Providers(_CANCELLED_HISTORY, _WORKSPACE_GATEWAY, _NO_ELICITATIONS, _CANCELLED_PERSONAL_RUNS)], play: async function _Stopped({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(await canvas.findByText("Work stopped", { exact: true })).toBeVisible();
+	expect(canvas.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+	expect(canvas.queryByRole("button", { name: "Open answer" })).not.toBeInTheDocument();
+	expect(canvas.queryByText("run-1")).not.toBeInTheDocument();
+} };
+
+/** Retains Stop and safe recovery copy when admission races current authority. */
+export const PersonalStopConflict: Story = { decorators: [_Providers(_HISTORY, _WORKSPACE_GATEWAY, _NO_ELICITATIONS, _CONFLICTING_PERSONAL_RUNS)], play: async function _Conflict({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	await userEvent.click(await canvas.findByRole("button", { name: "Stop" }));
+	const conflict = await canvas.findByText(/Work changed before Stop was accepted/u);
+	await waitFor(function _ConflictVisible() { expect(conflict).toBeVisible(); });
+	expect(canvas.getByRole("button", { name: "Stop" })).toBeEnabled();
+	expect(canvas.queryByText(/private conflict/u)).not.toBeInTheDocument();
+} };
 
 /** Verifies that recent activity opens the answer already rendered by the real workspace page. */
 export const PersonalActivityAnswer: Story = { decorators: [_Providers(_HISTORY)], play: async function _OpenAnswer({ canvasElement })

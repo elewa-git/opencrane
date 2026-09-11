@@ -14,8 +14,8 @@ import { ConversationComposerStates, ConversationMessageTones, ConversationStatu
 /** Records emitted draft intent from the Storybook-only composer host. */
 const _DRAFT_CHANGED = fn();
 
-/** Records the explicit failed-run retry intent emitted by the shared action row. */
-const _RETRY_REQUESTED = fn();
+/** Records the explicit current-work Stop intent emitted by the shared action row. */
+const _STOP_REQUESTED = fn();
 
 /** Storybook host that proves the controlled composer output binding in a real Angular template. */
 @Component({ selector: "wo-desktop-conversation-story", standalone: true, imports: [ConversationComposerComponent], template: `<div style="max-width:720px;padding:20px"><wo-conversation-composer [draft]="draft" [state]="state" placeholder="Message this conversation…" (draftChange)="recordDraft($event)" /></div>`, changeDetection: ChangeDetectionStrategy.OnPush })
@@ -92,20 +92,46 @@ export const MessageAndStatusStates: Story =
 	}
 };
 
-/** Sanitized rich content and failed-run actions stay presentation-only. */
-export const RichMessageAndFailedRun: Story =
+/** Active personal work exposes one explicit Stop intent without run coordinates. */
+export const ActiveWorkControl: Story =
 {
 	tags: ["visual-test"],
 	render: function render()
 	{
-		return { props: { rich: { messageId: "message-rich", html: "<h3>Comparison</h3><p>The proposed term is <strong>lower risk</strong>.</p>", label: "Agent comparison" }, run: { statusLabel: "Run failed", canCancel: false, canRetry: true, canSteer: false, busy: false }, retryRequested: _RETRY_REQUESTED }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px"><wo-conversation-rich-text [presentation]="rich" /><wo-conversation-run-actions [presentation]="run" (retryRequested)="retryRequested()" /></div>` };
+		return { props: { run: { statusLabel: "Assistant working", detail: "You can stop further work while this request is active.", canStop: true, busy: false, error: null }, stopRequested: _STOP_REQUESTED }, template: `<div style="max-width:720px;padding:20px"><wo-conversation-run-actions [presentation]="run" (stopRequested)="stopRequested()" /></div>` };
 	},
 	play: async function play({ canvasElement })
 	{
-		_RETRY_REQUESTED.mockClear();
+		_STOP_REQUESTED.mockClear();
 		const canvas = within(canvasElement);
-		await expect(canvas.getByRole("button", { name: "Retry run" })).toBeEnabled();
-		await userEvent.click(canvas.getByRole("button", { name: "Retry run" }));
-		await expect(_RETRY_REQUESTED).toHaveBeenCalledTimes(1);
+		await expect(canvas.getByRole("button", { name: "Stop" })).toBeEnabled();
+		await userEvent.click(canvas.getByRole("button", { name: "Stop" }));
+		await expect(_STOP_REQUESTED).toHaveBeenCalledTimes(1);
+	}
+};
+
+/** Pending Stop keeps the work visible and prevents a duplicate request. */
+export const StoppingWork: Story =
+{
+	tags: ["visual-test"],
+	render: function render() { return { props: { run: { statusLabel: "Stop requested", detail: "Waiting for OpenCrane to confirm the current work state.", canStop: true, busy: true, error: null } }, template: `<div style="max-width:720px;padding:20px"><wo-conversation-run-actions [presentation]="run" /></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await expect(canvas.getByRole("button", { name: "Stop" })).toBeDisabled();
+		await expect(canvas.getByRole("status")).toHaveTextContent("Stop requested");
+	}
+};
+
+/** Durable cancelled work remains legible in the narrow composer surface. */
+export const StoppedWorkNarrow: Story =
+{
+	tags: ["visual-test", "visual-test-narrow"],
+	render: function render() { return { props: { run: { statusLabel: "Work stopped", detail: "OpenCrane recorded this work as cancelled.", canStop: false, busy: false, error: null } }, template: `<div style="width:390px;padding:12px"><wo-conversation-run-actions [presentation]="run" /></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await expect(canvas.getByRole("status")).toHaveTextContent("Work stopped");
+		await expect(canvas.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
 	}
 };

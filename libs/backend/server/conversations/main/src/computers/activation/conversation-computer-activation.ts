@@ -1,8 +1,11 @@
 import { setTimeout as _Sleep } from "node:timers/promises";
 
 import type { HistoryPersistentRecordedEvent, HistoryPersistentSubscription } from "@opencrane/backend/server/infra/history-store";
+import { ConversationAuthorKinds, ConversationEntryKinds } from "@opencrane/contracts";
+import { ConversationComputerStopStatuses, type ConversationComputerStopCommand } from "../interruptions/conversation-computer-stop.types";
+import { ConversationMessageActivations } from "../../messages/self-conversation-history.types";
 
-import { ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActivationConsumer, type ConversationComputerActivationConsumerEvent, type ConversationComputerActivationConsumerHealth, type ConversationComputerActivationConsumerOptions, type ConversationComputerActivationListenerOptions, type ConversationComputerActivationOutcome, type ConversationComputerActivationResubscribePolicy } from "./conversation-computer-activation.types";
+import { ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, ConversationComputerActivationQueueActions, ConversationComputerControlActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActivationConsumer, type ConversationComputerActivationConsumerEvent, type ConversationComputerActivationConsumerHealth, type ConversationComputerActivationConsumerOptions, type ConversationComputerActivationListenerOptions, type ConversationComputerActivationOutcome, type ConversationComputerActivationResubscribePolicy } from "./conversation-computer-activation.types";
 
 const _ACTIVATION_EVENT_TYPE = "opencrane.computer.activation-requested.v1";
 const _UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -54,13 +57,18 @@ export function _ActivationRetryDelayMilliseconds(retryCount: number): number
  */
 export async function __ConsumeConversationComputerActivation(subscription: Pick<HistoryPersistentSubscription, "acknowledge" | "park" | "retry">, authority: ConversationComputerActivationAuthority, delivery: HistoryPersistentRecordedEvent, options: ConversationComputerActivationListenerOptions = {}): Promise<void>
 {
-	const command = _ActivationCommand(delivery);
-	if (command === null)
+	const control = _ActivationCommand(delivery);
+	if (control === null)
 	{
 		await subscription.park(delivery, "invalid conversation computer activation event");
 		return;
 	}
-	const outcome = await _Outcome(authority, command);
+	if (control.action === ConversationComputerControlActions.Stop)
+	{
+		await _ConsumeStop(subscription, delivery, control.command, options);
+		return;
+	}
+	const outcome = await _Outcome(authority, control.command);
 	if (typeof outcome === "string")
 	{
 		await subscription.acknowledge(delivery);
@@ -74,6 +82,53 @@ export async function __ConsumeConversationComputerActivation(subscription: Pick
 	// Shutdown cuts the wait short so the held delivery goes back to the group immediately.
 	await (options.wait ?? _Wait)(_ActivationRetryDelayMilliseconds(delivery.retryCount), options.signal);
 	await subscription.retry(delivery, outcome.reason);
+}
+
+/** Resolve the immutable human requester and map Stop outcomes without invoking activation. */
+async function _ConsumeStop(subscription: Pick<HistoryPersistentSubscription, "acknowledge" | "park" | "retry">, delivery: HistoryPersistentRecordedEvent, command: ConversationComputerActivationCommand, options: ConversationComputerActivationListenerOptions): Promise<void>
+{
+	if (options.stop === undefined)
+	{
+		await subscription.park(delivery, "conversation computer Stop authority is unavailable");
+		return;
+	}
+	let history;
+	try
+	{
+		history = await options.stop.history.read({ siloId: command.siloId, conversationId: command.conversationId, fromRevision: BigInt(command.causationPosition), maxCount: 1, maximumBytes: 65_536 });
+	}
+	catch
+	{
+		await (options.wait ?? _Wait)(_ActivationRetryDelayMilliseconds(delivery.retryCount), options.signal);
+		await subscription.retry(delivery, "conversation history unavailable while resolving Stop requester");
+		return;
+	}
+	const entry = history.entries[0];
+	if (entry === undefined || entry.id !== command.causationId || entry.position !== command.causationPosition || entry.kind !== ConversationEntryKinds.Message || entry.activation !== ConversationMessageActivations.Stop || entry.author.kind !== ConversationAuthorKinds.Human)
+	{
+		await subscription.park(delivery, "conversation computer Stop requester is invalid");
+		return;
+	}
+	const stop: ConversationComputerStopCommand = { commandId: command.activationEventId, siloId: command.siloId, conversationId: command.conversationId, computerId: command.computerId, generation: command.generation, causationId: command.causationId, causationPosition: command.causationPosition, requester: { principalId: entry.author.principalId, subjectId: entry.author.participantId, issuer: entry.author.issuer, authenticatedAt: entry.author.authenticatedAt } };
+	let outcome;
+	try
+	{
+		outcome = await options.stop.authority.stop(stop);
+	}
+	catch
+	{
+		await (options.wait ?? _Wait)(_ActivationRetryDelayMilliseconds(delivery.retryCount), options.signal);
+		await subscription.retry(delivery, "conversation computer Stop authority unavailable");
+		return;
+	}
+	if (outcome.status !== ConversationComputerStopStatuses.Retry)
+	{
+		await subscription.acknowledge(delivery);
+		return;
+	}
+	const wait = Math.max(0, outcome.notBeforeEpochMs - (options.stop.now ?? Date.now)());
+	await (options.wait ?? _Wait)(Math.min(wait, _RETRY_MAX_MILLISECONDS), options.signal);
+	await subscription.retry(delivery, "conversation computer Stop cleanup is pending");
 }
 
 /** Turn an authority exception into the retry outcome so only queue-action failures propagate. */
@@ -263,7 +318,7 @@ async function _Wait(milliseconds: number, signal?: AbortSignal): Promise<void>
 }
 
 /** Validates a silo-scoped activation queue event before it reaches computer authority. */
-function _ActivationCommand(delivery: HistoryPersistentRecordedEvent): ConversationComputerActivationCommand | null
+function _ActivationCommand(delivery: HistoryPersistentRecordedEvent): { readonly action: ConversationComputerControlActions; readonly command: ConversationComputerActivationCommand } | null
 {
 	if (delivery.type !== _ACTIVATION_EVENT_TYPE || !delivery.streamName.startsWith("computer-activations-"))
 		return null;
@@ -272,8 +327,9 @@ function _ActivationCommand(delivery: HistoryPersistentRecordedEvent): Conversat
 	const conversationId = delivery.data["conversationId"];
 	const generation = delivery.data["generation"];
 	const causationPosition = delivery.data["causationPosition"];
+	const action = delivery.data["action"];
 	const causationId = delivery.metadata["causationId"];
-	if (!_UUID.test(delivery.id) || typeof causationId !== "string" || !_UUID.test(causationId) || typeof causationPosition !== "string" || !/^(0|[1-9][0-9]*)$/u.test(causationPosition) || typeof siloId !== "string" || siloId.length === 0 || delivery.streamName !== `computer-activations-${siloId}` || typeof computerId !== "string" || computerId.length === 0 || typeof conversationId !== "string" || conversationId.length === 0 || typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1)
+	if (action !== ConversationComputerControlActions.Start && action !== ConversationComputerControlActions.Stop || !_UUID.test(delivery.id) || typeof causationId !== "string" || !_UUID.test(causationId) || typeof causationPosition !== "string" || !/^(0|[1-9][0-9]*)$/u.test(causationPosition) || typeof siloId !== "string" || siloId.length === 0 || delivery.streamName !== `computer-activations-${siloId}` || typeof computerId !== "string" || computerId.length === 0 || typeof conversationId !== "string" || conversationId.length === 0 || typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1)
 		return null;
-	return { activationEventId: delivery.id.toLowerCase(), causationId: causationId.toLowerCase(), causationPosition, siloId, computerId, conversationId, generation };
+	return { action, command: { activationEventId: delivery.id.toLowerCase(), causationId: causationId.toLowerCase(), causationPosition, siloId, computerId, conversationId, generation } };
 }

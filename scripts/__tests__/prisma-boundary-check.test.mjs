@@ -300,6 +300,20 @@ test("requires transaction-scoped repository construction to match the owning po
 	assert.equal(namedRootConfig.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 });
 
+test("checks every repeated construction against its own transaction without duplicate policy entries", function _RepeatedConstruction()
+{
+	const path = "libs/widgets/prisma-widget-unit-of-work.ts";
+	const source = _Fixture("positive-unit-of-work").replace("\n\tasync run()", "\n\tasync read() { return this.prisma.$transaction(async function _Read(tx) { return new PrismaWidgetRepository(tx); }); }\n\tasync run()");
+	assert.deepEqual(validateOwnerDeclarations(path, source, _OWNERS), []);
+	assert.deepEqual(inspectPrismaBoundary(path, source, ["widget"], _OWNERS), []);
+	const rootClient = source.replace("function _Read(tx) { return new PrismaWidgetRepository(tx)", "function _Read(tx) { return new PrismaWidgetRepository(this.prisma)");
+	assert.equal(validateOwnerDeclarations(path, rootClient, _OWNERS).some(function _Unbound(finding) { return finding.rule === "PRISMA-POLICY-CONSTRUCTION"; }), true);
+	assert.equal(inspectPrismaBoundary(path, rootClient, ["widget"], _OWNERS).some(function _Unbound(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+	const duplicateOwner = { ..._OWNERS.unitsOfWork[0], constructs: [..._OWNERS.unitsOfWork[0].constructs, ..._OWNERS.unitsOfWork[0].constructs] };
+	const owners = { ..._OWNERS, unitsOfWork: [duplicateOwner] };
+	assert.throws(function _DuplicateDeclaration() { validatePolicy({ version: 1, owners, rawProcedureCalls: [], exemptions: [] }); }, /duplicate Prisma-boundary construction declaration/u);
+});
+
 test("treats a transaction-bound authority like a repository construction", function _AcceptsAuthorityConstruction()
 {
 	const source = _Fixture("positive-unit-of-work")

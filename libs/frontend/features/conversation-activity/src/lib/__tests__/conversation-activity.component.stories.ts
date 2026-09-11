@@ -13,7 +13,7 @@ const _ROWS: readonly ConversationActivityRow[] = [
 ];
 
 /** Covers each state accepted by the current public run response. */
-const _RUN_STATES: readonly ConversationActivityRunState[] = ["accepted", "queued", "assigned", "running", "waiting_for_input", "recovery_required", "completed", "failed"];
+const _RUN_STATES: readonly ConversationActivityRunState[] = ["accepted", "queued", "assigned", "running", "waiting_for_input", "cancelling", "cancelled", "recovery_required", "completed", "failed"];
 
 /** Storybook metadata for the safe derived Activity index. */
 const meta: Meta<ConversationActivityComponent> = { title: "Conversation/Activity", component: ConversationActivityComponent, tags: ["autodocs", "visual-test"], parameters: { docs: { description: { component: "Derived canonical references. A failed attempt is visible while retrying; bounded technical fields remain behind native disclosure." } } } };

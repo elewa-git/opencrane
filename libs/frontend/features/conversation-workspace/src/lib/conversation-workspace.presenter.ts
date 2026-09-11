@@ -9,6 +9,7 @@ import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, Conversation
 
 import { _GroupRequestSource, _GroupShareSource } from "./conversation-group.mapper";
 import { _PersonalRunActivity } from "./conversation-personal-run-activity.mapper";
+import { _ConversationRunActions } from "./conversation-run-actions.mapper";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
 import { _ComposerState, _ComputerStatus, _ConnectionStatus } from "./presentation/conversation-workspace-status.mapper";
@@ -74,6 +75,8 @@ export class ConversationWorkspacePresenter
 	public readonly activityRows = computed(() => _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, new Set(this.messages().flatMap(entry => entry.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? [entry.message.id] : []))));
 	/** Presents read progress separately from the server's run lifecycle. */
 	public readonly activityReadState = computed(this._ActivityReadState.bind(this));
+	/** Current personal work state and Stop availability for the shared action row. */
+	public readonly runActions = computed(() => _ConversationRunActions(this.personalRuns.currentRun(), this.personalRuns.stopPending(), this.personalRuns.stopBusy(), this.personalRuns.stopError()));
 	/** Existing asset presentations for transcript and Files views. */
 	public readonly assets = computed(this._Assets.bind(this));
 	/** Participant-facing name for the selected context panel. */
@@ -117,6 +120,8 @@ export class ConversationWorkspacePresenter
 	public async send(): Promise<void> { await this.store.send(); }
 	/** Ask the selected workspace store to replace a paused or failed socket. */
 	public reconnect(): void { this.store.reconnect(); }
+	/** Ask the personal work store to append one retry-stable Stop control message. */
+	public async stopCurrentWork(): Promise<void> { await this.personalRuns.requestStop(); }
 	/** Keep the selected approval response in its component-scoped state owner. */
 	public selectElicitation(value: ElicitationResponseValue): void { this.elicitationStore.select(value); }
 	/** Submit the selected response through the existing authority-backed store. */

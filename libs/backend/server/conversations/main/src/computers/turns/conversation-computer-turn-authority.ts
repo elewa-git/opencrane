@@ -200,7 +200,7 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		credentialLifetimeSeconds: candidate.credentialLifetimeSeconds,
 		compile: { runId: input.runId, attempt: input.attempt, promptCompilerVersion: input.promptCompilerVersion, digest: input.digest },
 		outputSourceCommandId: null,
-		outputReceipt: null,
+		outputReceipt: null, cancellationReceipt: null,
 		toolSelection: null,
 		continuationReservation: null,
 		modelReservation: null,

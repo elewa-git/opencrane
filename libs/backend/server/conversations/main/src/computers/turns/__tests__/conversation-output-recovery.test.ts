@@ -105,7 +105,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const f = await _OutputRecoveryHarness();
 		await f.authority.appendOutput(f.output);
 		const first = (await f.store.load(f.output.bootstrapId))!;
-		const next = { ...first, bootstrapId: "8957851b-21c1-4890-ae32-fb6de5224f2d", latestPendingEntryId: "next-human", latestPendingEntryPosition: "3", outputReceipt: null, outputSourceCommandId: null, binding: { ...first.binding, expectedRevision: 3n, runId: "next-run" }, compile: { ...first.compile, runId: "next-run" } };
+		const next = { ...first, bootstrapId: "8957851b-21c1-4890-ae32-fb6de5224f2d", latestPendingEntryId: "next-human", latestPendingEntryPosition: "3", outputReceipt: null, cancellationReceipt: null, outputSourceCommandId: null, binding: { ...first.binding, expectedRevision: 3n, runId: "next-run" }, compile: { ...first.compile, runId: "next-run" } };
 		await f.store.createOrRead(next);
 		let settlementAppends = 0;
 		f.history.beforeAppend = async function _Count(command)

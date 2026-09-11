@@ -123,7 +123,8 @@ export function validateOwnerDeclarations(path, source, owners)
 			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-OWNER", `repository owner ${declaration.adapter} constructor must accept Prisma.TransactionClient`, `class:${declaration.adapter}`));
 		}
 		const actual = constructions.filter(function _Owner(construction) { return construction.owner?.name === declaration.adapter; });
-		const actualKeys = actual.map(_ConstructionKey).sort();
+		// A policy entry permits an adapter/import pair; each call below still proves its transaction.
+		const actualKeys = [...new Set(actual.map(_ConstructionKey))].sort();
 		const declaredKeys = declaration.constructs.map(_ConstructionKey).sort();
 		if (JSON.stringify(actualKeys) !== JSON.stringify(declaredKeys))
 		{

@@ -68,7 +68,7 @@ async function _savedTurn(reserve: boolean)
 		lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "test-v1", digest: _DIGEST },
 		latestPendingEntryId: "input-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60,
 		latestPendingEntryPosition: "1",
-		modelReservation: null, toolSelection: null, continuationReservation: null, outputReceipt: null, outputSourceCommandId: null,
+		modelReservation: null, toolSelection: null, continuationReservation: null, outputReceipt: null, cancellationReceipt: null, outputSourceCommandId: null,
 	};
 	streams.set("conversation-conversation-1", [0n, 1n].map(revision => ({ id: `input-${revision.toString()}`, type: "input", data: {}, metadata: {}, streamName: "conversation-conversation-1", revision, recordedAt: _NOW })));
 	await store.createOrRead(frozen);

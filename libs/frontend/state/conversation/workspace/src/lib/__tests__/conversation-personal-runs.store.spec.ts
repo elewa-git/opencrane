@@ -28,14 +28,14 @@ function _Run(conversationId = "chat-1", state: ConversationPersonalRun["state"]
 }
 
 /** Provides signals that can change independently while an uncancellable request is pending. */
-function _Store(listPersonalRuns = vi.fn().mockResolvedValue([_Run()]))
+function _Store(listPersonalRuns = vi.fn().mockResolvedValue([_Run()]), requestStop = vi.fn().mockResolvedValue(undefined))
 {
 	const selected = signal<ConversationWorkspaceDetail | null>(_Detail());
 	const subject = signal<string | null>("user-1");
 	const routeState = signal(ConversationWorkspaceRouteStates.Ready);
 	const live = signal(__CreateConversationHistoryProjection());
-	TestBed.configureTestingModule({ providers: [ConversationPersonalRunsStore, { provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useValue: { listPersonalRuns } }, { provide: CONVERSATION_CURRENT_SUBJECT, useValue: subject }, { provide: ConversationWorkspaceStore, useValue: { selected, routeState, live } }] });
-	return { store: TestBed.inject(ConversationPersonalRunsStore), selected, subject, routeState, live, listPersonalRuns };
+	TestBed.configureTestingModule({ providers: [ConversationPersonalRunsStore, { provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useValue: { listPersonalRuns, requestStop } }, { provide: CONVERSATION_CURRENT_SUBJECT, useValue: subject }, { provide: ConversationWorkspaceStore, useValue: { selected, routeState, live } }] });
+	return { store: TestBed.inject(ConversationPersonalRunsStore), selected, subject, routeState, live, listPersonalRuns, requestStop };
 }
 
 /** Lets a request finish after its scope is no longer selected. */
@@ -125,6 +125,169 @@ describe("personal recent work", function _Suite()
 		await _Settle();
 		expect(fixture.listPersonalRuns).not.toHaveBeenCalled();
 		expect(fixture.store.eligible()).toBe(false);
+	});
+
+	it("keeps company-child work outside the personal requester control", async function _CompanyChild()
+	{
+		const fixture = _Store();
+		fixture.selected.set({ ..._Detail(), parent: { requestId: "request", parentConversationId: "group", parentMessageId: "message", parentMessagePosition: "2" } });
+		await _Settle();
+		expect(fixture.store.eligible()).toBe(false);
+		expect(fixture.store.currentRun()).toBeNull();
+		await expect(fixture.store.requestStop()).resolves.toBe(false);
+		expect(fixture.requestStop).not.toHaveBeenCalled();
+	});
+
+	it("keeps Stop pending until an authoritative cancelling state is read", async function _AuthoritativeStop()
+	{
+		const list = vi.fn().mockResolvedValueOnce([_Run("chat-1", "running")]).mockResolvedValue([{ ..._Run("chat-1", "running"), state: "cancelling" }]);
+		const fixture = _Store(list);
+		await vi.waitFor(() => expect(fixture.store.currentRun()?.state).toBe("running"));
+		await expect(fixture.store.requestStop()).resolves.toBe(true);
+		expect(fixture.requestStop).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "chat-1", runId: "run-chat-1", attempt: 1 }));
+		await vi.waitFor(() => expect(fixture.store.currentRun()?.state).toBe("cancelling"));
+		await _Settle();
+		expect(fixture.store.stopPending()).toBe(false);
+		expect(fixture.store.stopError()).toBeNull();
+	});
+
+	it("reuses the same Stop key after an ambiguous failure", async function _StableRetry()
+	{
+		const unavailable = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Recoverable, "private");
+		const requestStop = vi.fn().mockRejectedValueOnce(unavailable).mockRejectedValueOnce(unavailable);
+		const fixture = _Store(vi.fn().mockResolvedValue([_Run("chat-1", "running")]), requestStop);
+		await vi.waitFor(() => expect(fixture.store.currentRun()?.state).toBe("running"));
+		await expect(fixture.store.requestStop()).resolves.toBe(false);
+		await expect(fixture.store.requestStop()).resolves.toBe(false);
+		expect(requestStop).toHaveBeenCalledTimes(2);
+		expect(requestStop.mock.calls[1]![0].idempotencyKey).toBe(requestStop.mock.calls[0]![0].idempotencyKey);
+		expect(fixture.store.stopPending()).toBe(true);
+		expect(fixture.store.stopError()).not.toContain("private");
+	});
+
+	it("uses a fresh key after a definite conflict while retaining ambiguous retry keys", async function _ConflictRetry()
+	{
+		const conflict = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "private");
+		const requestStop = vi.fn().mockRejectedValueOnce(conflict).mockResolvedValueOnce(undefined);
+		const fixture = _Store(vi.fn().mockResolvedValue([_Run("chat-1", "running")]), requestStop);
+		await vi.waitFor(() => expect(fixture.store.currentRun()?.state).toBe("running"));
+		await expect(fixture.store.requestStop()).resolves.toBe(false);
+		expect(fixture.store.stopBusy()).toBe(false);
+		expect(fixture.store.stopPending()).toBe(false);
+		await _Settle();
+		await expect(fixture.store.requestStop()).resolves.toBe(true);
+		expect(requestStop.mock.calls[1]![0].idempotencyKey).not.toBe(requestStop.mock.calls[0]![0].idempotencyKey);
+	});
+
+	it("allows a fresh explicit Stop when an acknowledged message never changes the run", async function _UnconfirmedAdmission()
+	{
+		vi.useFakeTimers();
+		const fixture = _Store(vi.fn().mockResolvedValue([_Run("chat-1", "running")]));
+		await _Settle();
+		await vi.advanceTimersByTimeAsync(70_000);
+		await _Settle();
+		await expect(fixture.store.requestStop()).resolves.toBe(true);
+		await _Settle();
+		const reads = fixture.listPersonalRuns.mock.calls.length;
+		await vi.advanceTimersByTimeAsync(5_000);
+		await _Settle();
+		expect(fixture.listPersonalRuns.mock.calls.length).toBeGreaterThan(reads);
+		expect(fixture.store.stopPending()).toBe(true);
+		await vi.advanceTimersByTimeAsync(55_000);
+		await _Settle();
+		expect(fixture.store.stopPending()).toBe(false);
+		expect(fixture.store.stopError()).toContain("Stop has not been confirmed");
+		expect(fixture.store.currentRun()?.state).toBe("running");
+		expect(fixture.requestStop).toHaveBeenCalledOnce();
+		await expect(fixture.store.requestStop()).resolves.toBe(true);
+		expect(fixture.requestStop.mock.calls[1]![0].idempotencyKey).not.toBe(fixture.requestStop.mock.calls[0]![0].idempotencyKey);
+	});
+
+	it("keeps an ambiguous Stop retry key after the confirmation window would have ended", async function _AmbiguousDeadline()
+	{
+		vi.useFakeTimers();
+		const unavailable = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Recoverable, "private");
+		const fixture = _Store(vi.fn().mockResolvedValue([_Run("chat-1", "running")]), vi.fn().mockRejectedValue(unavailable));
+		await _Settle();
+		await expect(fixture.store.requestStop()).resolves.toBe(false);
+		await _Settle();
+		await vi.advanceTimersByTimeAsync(70_000);
+		await _Settle();
+		expect(fixture.store.stopPending()).toBe(true);
+		await expect(fixture.store.requestStop()).resolves.toBe(false);
+		expect(fixture.requestStop.mock.calls[1]![0].idempotencyKey).toBe(fixture.requestStop.mock.calls[0]![0].idempotencyKey);
+	});
+
+	it("does not report an unconfirmed Stop after cancellation becomes authoritative", async function _ConfirmedBeforeDeadline()
+	{
+		vi.useFakeTimers();
+		const list = vi.fn().mockResolvedValue([_Run("chat-1", "running")]);
+		const fixture = _Store(list);
+		await _Settle();
+		await expect(fixture.store.requestStop()).resolves.toBe(true);
+		list.mockResolvedValue([_Run("chat-1", "cancelled")]);
+		await _Settle();
+		await vi.advanceTimersByTimeAsync(5_000);
+		await _Settle();
+		expect(fixture.store.stopPending()).toBe(false);
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(fixture.store.stopError()).toBeNull();
+	});
+
+	it.each(["queued", "assigned", "recovery_required"])("matches server admission for %s", async function _LifecycleAdmission(state)
+	{
+		const requestStop = vi.fn().mockResolvedValue(undefined);
+		const fixture = _Store(vi.fn().mockResolvedValue([{ ..._Run("chat-1", "running"), state }]), requestStop);
+		await vi.waitFor(() => expect(fixture.store.currentRun()?.state).toBe(state));
+		await expect(fixture.store.requestStop()).resolves.toBe(state === "recovery_required");
+		expect(requestStop).toHaveBeenCalledTimes(state === "recovery_required" ? 1 : 0);
+	});
+
+	it.each(["conflict", "unconfirmed"])("does not carry a %s Stop error into another chat", async function _StopErrorSelection(kind)
+	{
+		vi.useFakeTimers();
+		const requestStop = vi.fn().mockResolvedValue(undefined);
+		if (kind === "conflict")
+			requestStop.mockRejectedValue(new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "private"));
+		const list = vi.fn().mockResolvedValue([_Run("chat-1", "running"), _Run("chat-2", "running")]);
+		const fixture = _Store(list, requestStop);
+		await _Settle();
+		await fixture.store.requestStop();
+		await _Settle();
+		if (kind === "unconfirmed")
+			await vi.advanceTimersByTimeAsync(60_000);
+		await _Settle();
+		expect(fixture.store.stopError()).not.toBeNull();
+		fixture.selected.set(_Detail("chat-2"));
+		expect(fixture.store.stopError()).toBeNull();
+		await _Settle();
+		expect(fixture.store.currentRun()?.runId).toBe("run-chat-2");
+		expect(fixture.store.stopError()).toBeNull();
+		expect(fixture.store.stopPending()).toBe(false);
+	});
+
+	it("purges current work and pending Stop state when the command proves access loss", async function _StopAccessLoss()
+	{
+		const denied = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "private");
+		const fixture = _Store(vi.fn().mockResolvedValue([_Run("chat-1", "running")]), vi.fn().mockRejectedValue(denied));
+		await vi.waitFor(() => expect(fixture.store.currentRun()?.state).toBe("running"));
+		await expect(fixture.store.requestStop()).resolves.toBe(false);
+		expect(fixture.store.currentRun()).toBeNull();
+		expect(fixture.store.stopPending()).toBe(false);
+		expect(fixture.store.stopError()).toBeNull();
+	});
+
+	it("fences a late Stop acknowledgement after selection changes", async function _StaleStop()
+	{
+		const stop = _Deferred<void>();
+		const fixture = _Store(vi.fn().mockResolvedValue([_Run("chat-1", "running")]), vi.fn().mockReturnValue(stop.promise));
+		await vi.waitFor(() => expect(fixture.store.currentRun()?.state).toBe("running"));
+		const pending = fixture.store.requestStop();
+		fixture.selected.set(_Detail("chat-2"));
+		await _Settle();
+		expect(fixture.store.stopPending()).toBe(false);
+		stop.resolve();
+		await expect(pending).resolves.toBe(false);
 	});
 
 	it("refreshes active work despite unchanged heartbeats and stops after one minute", async function _RefreshWindow()

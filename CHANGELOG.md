@@ -20,6 +20,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **People can stop their own current personal-assistant turn from the conversation.** Stop checks
+  current access, saves the selected turn and prevents further model or tool work. Pending approvals
+  close when cancellation wins; an answer already committed remains successful. Work already sent
+  to a provider keeps its recovery evidence. Server restarts resume the saved cleanup without
+  creating a replacement model request or granting a fresh allowance. Shared-participant controls
+  and testv5 qualification remain unfinished.
+
 - **People can review a personal assistant's proposed tool call in the conversation.** The approval
   card shows the saved tool and system names and reviewable arguments, then requires a separate
   confirmation to approve or deny. Requests with hidden secret fields allow denial only. Pending

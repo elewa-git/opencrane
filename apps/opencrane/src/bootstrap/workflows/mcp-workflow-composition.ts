@@ -5,7 +5,7 @@ import { _CreateOciRegistryAuthorizationReader } from "@opencrane/backend/server
 
 import type { PrismaClient } from "@prisma/client";
 
-import { CONVERSATION_COMPUTER_TURN_TASK, GROUP_CHILD_TASK } from "@opencrane/backend/server/conversations";
+import { CONVERSATION_COMPUTER_STOP_TASK, CONVERSATION_COMPUTER_TURN_TASK, GROUP_CHILD_TASK } from "@opencrane/backend/server/conversations";
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
@@ -66,6 +66,7 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 {
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
 		{ taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, queue: "control-plane" },
+		{ taskName: CONVERSATION_COMPUTER_STOP_TASK.taskName, queue: "control-plane" },
 		{ taskName: GROUP_CHILD_TASK.taskName, queue: "control-plane" },
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
 		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },

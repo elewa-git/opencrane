@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { ConversationMode, Prisma, type PrismaClient } from "@prisma/client";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { ComputerLeaseStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationAuthorKinds, ConversationEntryKinds, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
 
 import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
 import { ConversationHistoryAppendOutcomes } from "@opencrane/backend/server/conversations/history";
@@ -106,7 +106,11 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 			const history = await this.historyReader.read({ siloId: caller.siloId, conversationId });
 			const existing = history.entries.find(entry => entry.id === command.idempotencyKey);
 			if (existing !== undefined)
+			{
+				if (existing.kind !== ConversationEntryKinds.Message || existing.author.kind !== ConversationAuthorKinds.Human || existing.author.principalId !== caller.principalId || existing.author.participantId !== caller.subjectId || existing.activation !== command.activation)
+					throw new Error("Conversation message idempotency key was already used for a different command");
 				return { outcome: ConversationMessageAdmissionOutcomes.Idempotent, position: existing.position };
+			}
 			const expectedRevision = history.entries.length === 0 ? 0n : BigInt(history.entries.at(-1)!.position);
 			const position = (expectedRevision + 1n).toString();
 			const entry = _MessageEntry(caller, conversationId, command, projection, payload, position);
@@ -127,7 +131,9 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 		const current = await this.dependencies.computerReader.load({ computer: { siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId! }, profileRevisionId: projection.computerProfileRevisionId! });
 		if (current === null || current.computer.leaseGeneration < 1)
 			throw new Error("Conversation computer activation requires a current checked computer generation");
-		const generation = current.lease?.state === ComputerLeaseStates.Released || current.lease?.state === ComputerLeaseStates.Lost ? current.computer.leaseGeneration + 1 : current.computer.leaseGeneration;
+		let generation = current.computer.leaseGeneration;
+		if (command.activation === ConversationMessageActivations.Start && (current.lease?.state === ComputerLeaseStates.Released || current.lease?.state === ComputerLeaseStates.Lost))
+			generation += 1;
 		const queueStreamName = `computer-activations-${caller.siloId}`;
 		const queueHead = await this.historyStore.readHead(queueStreamName);
 		if (queueHead.streamName !== queueStreamName)

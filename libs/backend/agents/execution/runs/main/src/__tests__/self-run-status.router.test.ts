@@ -4,7 +4,7 @@ import { describe, expect, it, vi, type Mock } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreateSelfRunStatusRouter } from "../self-run-status.router";
-import type { SelfRunStatus, SelfRunStatusCaller } from "../self-run-status.router.types";
+import { SelfRunStates, type SelfRunStatus, type SelfRunStatusCaller } from "../self-run-status.router.types";
 
 /** Read signature exposed by the owner-bound run-status repository. */
 type ReadOwned = (caller: SelfRunStatusCaller, runId: string) => Promise<SelfRunStatus | null>;
@@ -23,7 +23,7 @@ describe("self run status router", function _suite()
 {
 	it("reads only with session-derived owner coordinates", async function _readsOwnedRun()
 	{
-		const status = { runId: "run-1", attempt: 2, state: "running", latestTool: null, conversationId: "conversation-1", agentRevisionId: "revision-1", acceptedAt: "2026-07-26T12:00:00.000Z", finishedAt: null };
+		const status = { runId: "run-1", attempt: 2, state: SelfRunStates.Running, latestTool: null, conversationId: "conversation-1", agentRevisionId: "revision-1", acceptedAt: "2026-07-26T12:00:00.000Z", finishedAt: null };
 		const { app, readOwned } = _app({ siloId: "silo-1", principalId: "principal-1" }, vi.fn(async function _read() { return status; }));
 		const response = await request(app).get("/run-1");
 		expect(response.status).toBe(200);
@@ -33,7 +33,7 @@ describe("self run status router", function _suite()
 
 	it("lists only the caller's recent runs through the owner-bound repository", async function _listsOwnedRuns()
 	{
-		const status = { runId: "run-1", attempt: 2, state: "running", latestTool: null, conversationId: "conversation-1", agentRevisionId: "revision-1", acceptedAt: "2026-07-26T12:00:00.000Z", finishedAt: null };
+		const status = { runId: "run-1", attempt: 2, state: SelfRunStates.Running, latestTool: null, conversationId: "conversation-1", agentRevisionId: "revision-1", acceptedAt: "2026-07-26T12:00:00.000Z", finishedAt: null };
 		const { app, listOwned } = _app({ siloId: "silo-1", principalId: "principal-1" }, undefined, vi.fn(async function _list() { return [status]; }));
 		const response = await request(app).get("/");
 		expect(response.status).toBe(200);

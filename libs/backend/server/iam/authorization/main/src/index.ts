@@ -39,3 +39,6 @@ export { ___RunSerializableAuthorizationTransaction } from "./authority/persiste
 export type { PrismaAuthorizationTransactionAuthorityFactory, PrismaAuthorizationTransactionWork } from "./authority/persistence/prisma-authorization-transaction.types";
 export { PrismaManagedShareRevocationRepository } from "./grants/persistence/prisma-managed-share-revocation-repository";
 export type { ManagedShareRevocationRepository } from "./grants/managed-share-revocation-repository.types";
+
+export * from "./approvals/run-work-cancellation.types";
+export { PrismaRunWorkCancellationRepository } from "./approvals/prisma-run-work-cancellation";

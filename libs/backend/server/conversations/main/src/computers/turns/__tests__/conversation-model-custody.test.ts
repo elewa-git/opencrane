@@ -15,7 +15,7 @@ const _TURN = {
 	lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
 	latestPendingEntryId: "entry-1", modelAlias: "model-1", maximumBudgetUsd: 0.05, credentialLifetimeSeconds: 300,
 	latestPendingEntryPosition: "1",
-	outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null,
+	outputSourceCommandId: null, outputReceipt: null, cancellationReceipt: null, toolSelection: null, continuationReservation: null,
 	binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 },
 	compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "computer-v1", digest: _DIGEST },
 	modelReservation: { invocationFence: "784aec47-a8ce-42e7-8643-7cce098812eb", ordinal: 1, tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, requestDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW + 300_000, dispatchDeadlineEpochMs: _NOW + 25_000 },

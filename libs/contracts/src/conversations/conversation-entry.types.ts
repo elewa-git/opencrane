@@ -48,6 +48,24 @@ export enum ConversationMessageContentBlockKinds
 	Mention = "mention",
 }
 
+/**
+ * Selects the work transition committed with a participant message.
+ *
+ * The value is stored at `entry.activation` in Kurrent conversation history and returned by the
+ * conversation API. Renaming a value changes both the stored event and API contracts.
+ */
+export enum ConversationMessageActivations
+{
+	/** Records the message without requesting agent work. */
+	None = "none",
+	/** Requests agent work after the message is committed. */
+	Start = "start",
+	/** Requests current work to stop before replacement work starts. */
+	Interrupt = "interrupt",
+	/** Requests that the original requester's current turn stop without replacement work. */
+	Stop = "stop",
+}
+
 /** Lists the kinds of server-stamped authors that can appear in participant-visible history. */
 export type ConversationAuthor = HumanConversationAuthor | AgentConversationAuthor | ServiceConversationAuthor | SystemConversationAuthor;
 
@@ -245,8 +263,8 @@ export interface MessageEntry extends ConversationEntryBase
 	readonly replyToEntryId: string | null;
 	/** Identifies the agent addressed by this message when one exists. */
 	readonly addressedAgentIdentityId: string | null;
-	/** States whether this message starts or interrupts agent work. */
-	readonly activation: "none" | "start" | "interrupt";
+	/** Selects ordinary text, new work, interruption with replacement, or stopping without another turn. */
+	readonly activation: `${ConversationMessageActivations}`;
 }
 
 /**

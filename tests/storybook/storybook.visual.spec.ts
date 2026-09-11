@@ -87,7 +87,8 @@ test("intermediate conversation workspace keeps its rail and context inside the 
 		const headerBox = await header.boundingBox();
 		const composerBox = await composer.boundingBox();
 		const railFooterBox = await railFooter.boundingBox();
-		if (routeHostBox === null || pageHostBox === null || workspaceBox === null || railBox === null || contextPanelBox === null || headerBox === null || composerBox === null || railFooterBox === null) throw new Error("The routed workspace layout is not visible.");
+		if (routeHostBox === null || pageHostBox === null || workspaceBox === null || railBox === null || contextPanelBox === null || headerBox === null || composerBox === null || railFooterBox === null)
+			throw new Error("The routed workspace layout is not visible.");
 
 		expect(Math.round(routeHostBox.height)).toBe(viewport.height);
 		expect(Math.round(pageHostBox.height)).toBe(viewport.height);
@@ -133,7 +134,8 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 
 		// 2. Wait for the shared stable-render prerequisites before any pixel comparison.
 		await _OpenStableStory(page, story.id);
-		if (story.tags?.includes(VISUAL_FULL_VIEWPORT_TAG)) await _AssertFullViewportStory(page);
+		if (story.tags?.includes(VISUAL_FULL_VIEWPORT_TAG))
+			await _AssertFullViewportStory(page);
 		// 3. Capture the complete feature composition against this platform's reviewed baseline.
 		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{
@@ -234,7 +236,8 @@ async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 	// wait for their route to leave loading because CI once captured before the selected conversation rendered.
 	await expect(page.locator("#storybook-root")).not.toBeEmpty({ timeout: 15_000 });
 	await page.evaluate(async () => document.fonts.ready);
-	if (storyId.startsWith("conversations-workspace-shell--")) await expect(page.locator(".conversation-workspace:not([data-route-state=\"loading\"])")).toHaveCount(1, { timeout: 15_000 });
+	if (storyId.startsWith("conversations-workspace-shell--"))
+		await expect(page.locator(".conversation-workspace:not([data-route-state=\"loading\"])")).toHaveCount(1, { timeout: 15_000 });
 	if (storyId === "conversations-workspace-shell--personal-tool-approval" || storyId === "conversations-workspace-shell--personal-tool-approval-narrow")
 	{
 		const scrollOwner = page.locator(".conversation-workspace__body");
@@ -251,7 +254,7 @@ async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 				return false;
 			const approvalBottom = bounds.y + bounds.height;
 			const bodyBottom = bodyBounds.y + bodyBounds.height;
-			return narrowApproval ? approvalBottom <= bodyBottom && approvalBottom > bodyBounds.y : bounds.y >= bodyBounds.y && bounds.y < bodyBottom;
+			return bounds.y < bodyBottom && approvalBottom > bodyBounds.y;
 		}).toBe(true);
 		if (narrowApproval)
 		{
