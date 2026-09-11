@@ -6,11 +6,11 @@
   "targets": {
     "lint": {
       "executor": "nx:run-commands",
-      "options": { "command": "bash -n apps/_infra/cognee/deploy/image-policy.sh apps/_infra/cognee/tests/image-contract.sh apps/_infra/cognee/tests/image-policy-contract.sh apps/_infra/cognee/tests/image-smoke.sh" }
+      "options": { "command": "for script in apps/_infra/cognee/deploy/*.sh apps/_infra/cognee/tests/*.sh; do bash -n \"$script\" || exit; done && PYTHONPYCACHEPREFIX=.nx/python python3 -m compileall -q apps/_infra/cognee/tests/fixtures" }
     },
     "test": {
       "executor": "nx:run-commands",
-      "options": { "command": "bash apps/_infra/cognee/tests/image-contract.sh && bash apps/_infra/cognee/tests/image-policy-contract.sh" }
+      "options": { "command": "bash apps/_infra/cognee/tests/image-contract.sh && bash apps/_infra/cognee/tests/image-policy-contract.sh && PYTHONPYCACHEPREFIX=.nx/python python3 -m unittest discover -s apps/_infra/cognee/tests/fixtures -p 'test_provider_*.py'" }
     },
     "container": {
       "executor": "nx:run-commands",
@@ -25,6 +25,14 @@
     "image-smoke": {
       "executor": "nx:run-commands",
       "options": { "command": "bash apps/_infra/cognee/tests/image-smoke.sh", "cwd": "." }
+    },
+    "memory-contract": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "docker build --platform linux/amd64 -t opencrane-cognee:memory-contract -f apps/_infra/cognee/deploy/Dockerfile . && bash apps/_infra/cognee/tests/memory-contract.sh opencrane-cognee:memory-contract",
+        "cwd": "."
+      }
     },
     "helm-lint": {
       "executor": "nx:run-commands",

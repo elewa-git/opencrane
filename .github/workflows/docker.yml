@@ -78,6 +78,7 @@ jobs:
       has_deployables: ${{ steps.affected.outputs.has_deployables }}
       image_smokes: ${{ steps.affected.outputs.image_smokes }}
       has_image_smokes: ${{ steps.affected.outputs.has_image_smokes }}
+      cognee_memory_contract_required: ${{ steps.affected.outputs.cognee_memory_contract_required }}
       develop_smoke_images: ${{ steps.affected.outputs.develop_smoke_images }}
       develop_smoke_projects: ${{ steps.affected.outputs.develop_smoke_projects }}
       api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
@@ -675,11 +676,50 @@ jobs:
           IMAGE_SMOKE_PROJECT: ${{ matrix.project }}
         run: npx nx run "$IMAGE_SMOKE_PROJECT:image-smoke"
 
+  cognee_memory_contract:
+    name: Cognee memory provider contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: prepare
+    if: needs.prepare.outputs.cognee_memory_contract_required == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install provider-contract dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Prove the pinned memory provider contract
+        env:
+          NX_DAEMON: 'false'
+        run: npm exec -- nx run cognee:memory-contract
+
+      - name: Preserve provider qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognee-memory-contract-${{ github.run_attempt }}
+          path: .nx/test-results/cognee-memory-contract
+          if-no-files-found: error
+          retention-days: 14
+
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke]
+    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke, cognee_memory_contract]
     # Manual publication bypasses failed validation only when the operator repeats this workflow's SHA.
     # The exact match prevents approval for one commit from publishing a different commit.
     if: >-
@@ -696,7 +736,8 @@ jobs:
           (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
           needs.storybook_visual.result == 'success' &&
           (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
-          (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped')))
+          (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped') &&
+          (needs.cognee_memory_contract.result == 'success' || needs.cognee_memory_contract.result == 'skipped')))
       }}
     permissions:
       contents: read
@@ -768,7 +809,7 @@ jobs:
     name: Publish develop smoke image (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke, build-and-push]
+    needs: [prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke, cognee_memory_contract, build-and-push]
     if: >-
       ${{
         always() &&
@@ -781,6 +822,7 @@ jobs:
         needs.storybook_visual.result == 'success' &&
         needs.develop_smoke.result == 'success' &&
         (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped') &&
+        (needs.cognee_memory_contract.result == 'success' || needs.cognee_memory_contract.result == 'skipped') &&
         (needs['build-and-push'].result == 'success' || needs['build-and-push'].result == 'skipped')
       }}
     permissions:
