@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ComputerLeaseStates, ConversationComputerStates } from "../index";
+import { ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "../index";
 import type { ComputerLease, ComputerProfileRevision, ConversationComputer } from "../index";
 
 describe("conversation computer contracts", function ()
@@ -38,9 +38,7 @@ describe("conversation computer contracts", function ()
 			id: "lease-3",
 			computerId: computer.id,
 			generation: computer.leaseGeneration,
-			sandboxClaimId: "claim-3",
-			sandboxId: "sandbox-3",
-			serviceFQDN: "sandbox-3.testv5.svc.cluster.local",
+			realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "claim-3", sandboxId: "sandbox-3", serviceFQDN: "sandbox-3.testv5.svc.cluster.local" },
 			state: ComputerLeaseStates.Active,
 			claimedAt: "2026-08-31T20:01:00.000Z",
 			expiresAt: "2026-08-31T20:06:00.000Z",

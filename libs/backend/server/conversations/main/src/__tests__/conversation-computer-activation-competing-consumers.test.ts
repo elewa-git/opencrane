@@ -1,4 +1,4 @@
-import { ConversationComputerStates } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAppendReceipt, type HistoryPersistentRecordedEvent, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore, type HistoryStreamHead } from "@opencrane/backend/server/infra/history-store";
 import { describe, expect, it, vi } from "vitest";
 
@@ -10,7 +10,7 @@ const _PROFILE_REVISION = `sha256:${"a".repeat(64)}`;
 const _PROFILE = { profileRevisionId: _PROFILE_REVISION, profileName: "developer", warmPoolName: "developer-pool", namespace: "testv5-computers", leaseTtlMilliseconds: 3_600_000 };
 const _COLD = { schemaVersion: 1 as const, id: "computer-one", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: _PROFILE_REVISION, state: ConversationComputerStates.Cold, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z" };
 const _STREAM = "conversation-computer-computer-one";
-const _ASSIGNED = { claimId: "computer-one-g1", outcome: "existing" as const, sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5-computers.svc.cluster.local" };
+const _ASSIGNED = { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-one-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5-computers.svc.cluster.local" } as const;
 
 /** In-memory KurrentDB stand-in that keeps the two rules the authority relies on: the revision fence and idempotent same-id appends. */
 class _MemoryHistoryStore implements Pick<HistoryStore, "append" | "readHead" | "readStream">
@@ -63,7 +63,7 @@ async function _SeededStore(): Promise<_MemoryHistoryStore>
 }
 
 /** Builds one consumer: its own authority, projections spy, and subscription spies over a shared store. */
-function _Consumer(store: Pick<HistoryStore, "append" | "readHead" | "readStream">, claims = { claim: vi.fn().mockResolvedValue(_ASSIGNED) })
+function _Consumer(store: Pick<HistoryStore, "append" | "readHead" | "readStream">, claims = { prepare: vi.fn().mockReturnValue({ ..._ASSIGNED, sandboxId: null, serviceFQDN: null }), claim: vi.fn().mockResolvedValue(_ASSIGNED), inspect: vi.fn(), renew: vi.fn(), release: vi.fn(), bind: vi.fn() })
 {
 	const projections = { resolve: vi.fn().mockResolvedValue({ agentIdentityId: "identity-1", profileRevisionId: _PROFILE_REVISION }), publishActiveLease: vi.fn().mockResolvedValue(undefined) };
 	const authority = new ConversationComputerActivationAuthorityAdapter(projections, store, claims, _PROFILE);

@@ -85,6 +85,20 @@ route table mounts only onboarding and chats, does not use the live
 authentication guard, and redirects unsupported live-only routes to the selected entry. Tier 1 makes
 no API, PostgreSQL, KurrentDB, Docker, Cognee, LiteLLM, Agent Sandbox, or Kubernetes connection.
 
+Tier 2 keeps the live gateways and production route table, but directs them to the loopback
+development server through a separate build configuration:
+
+```bash
+npm exec nx run opencrane-ui:serve:tier2 -- --host local-development.localhost --port 4200
+```
+
+The root `npm run dev:tier2*` commands own this child process in normal use. The distinct
+`proxy.tier2.conf.json` file leaves `development-live` pointed at the shared development service and
+keeps the backend-free Tier 1 configurations unchanged. The Tier 2 build consumes the launcher's
+private `development-session` URL parameter once, removes it from browser history, retains it in that
+tab, and adds it only to relative `/api/v1` requests. Production, development-live and Tier 1 builds
+do not contain that build-specific request-header policy.
+
 ## Boundary
 
 Browser-only presentation. It holds no server secrets and no database; onboarding progress, persona
@@ -103,7 +117,8 @@ Build-time and container config (there is no server-side env here — it is a st
 
 | Concern | Where | Notes |
 |---|---|---|
-| Gateway/route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | local fixtures for default/named development · live adapters for production and development-live; chosen by build `fileReplacements` |
+| Gateway/route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | local fixtures for default/named Tier 1 development · live adapters for production, development-live and Tier 2; chosen by build `fileReplacements` |
+| Tier 2 browser session and proxy | `src/app/http-profile.provider.tier2.ts`, `proxy.tier2.conf.json` | carries the per-launch tab credential on `/api/v1` only, forwards those routes to the loopback Tier 2 server, and preserves the browser's dedicated local host for server-side origin checks |
 | Static serving | `deploy/nginx.conf` | `nginxinc/nginx-unprivileged`, listens `:8080`, `/healthz` probe, immutable caching for hashed assets, SPA fallback to `index.html` |
 | Image | `deploy/Dockerfile` | `ghcr.io/elewa-git/opencrane-ui` |
 | Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart. The composer supplies the reviewed image's exact OCI digest; deployment fails rather than reporting success if this workload does not roll out with that digest. |

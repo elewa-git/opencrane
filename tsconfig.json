@@ -169,6 +169,9 @@
       "@opencrane/backend/server/infra/history-store": [
         "./libs/backend/server/infra/history-store/src/index.ts"
       ],
+      "@opencrane/backend/server/infra/conversation-computer-host": [
+        "./libs/backend/server/infra/conversation-computer-host/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/workloads/contract": [
         "./libs/backend/agents/runtime/workloads/contract/src/index.ts"
       ],

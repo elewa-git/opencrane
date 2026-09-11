@@ -270,12 +270,6 @@ export interface ConversationComputerActivationProfile
 {
 	/** Immutable image/profile revision admitted by the release. */
 	readonly profileRevisionId: string;
-	/** Profile name selected by the SandboxClaim. */
-	readonly profileName: string;
-	/** Warm pool fixed for this profile. */
-	readonly warmPoolName: string;
-	/** Isolated Agent Sandbox namespace. */
-	readonly namespace: string;
 	/** Maximum lifetime of one computer lease. */
 	readonly leaseTtlMilliseconds: number;
 }

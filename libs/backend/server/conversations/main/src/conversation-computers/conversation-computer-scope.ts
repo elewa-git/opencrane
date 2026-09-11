@@ -1,4 +1,4 @@
-import type { ComputerLease, ComputerScope, ConversationComputer, LeaseScope } from "@opencrane/contracts";
+import type { ComputerLease, ComputerScope, ConversationComputer, RealizedLeaseScope } from "@opencrane/contracts";
 
 /**
  * Copies the four ownership coordinates out of a stored computer snapshot.
@@ -19,7 +19,7 @@ export function _ComputerScopeOf(computer: ConversationComputer): ComputerScope
  * so this is the one place the two names meet.
  * @see LeaseScope
  */
-export function _LeaseScopeOf(lease: ComputerLease): LeaseScope
+export function _LeaseScopeOf(lease: ComputerLease): RealizedLeaseScope
 {
-	return { leaseId: lease.id, leaseGeneration: lease.generation };
+	return { leaseId: lease.id, leaseGeneration: lease.generation, realization: lease.realization };
 }

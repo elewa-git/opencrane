@@ -1,13 +1,13 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
-import { __StartConversationComputerActivationConsumer, ConversationComputerActivationAuthorityAdapter, ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, PrismaConversationComputerActivationProjectionRepository, type ConversationComputerActivationConsumerEvent, type ConversationComputerActivationProjectionRepository } from "@opencrane/backend/server/conversations";
+import { __StartConversationComputerActivationConsumer, ConversationComputerActivationAuthorityAdapter, ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, PrismaConversationComputerActivationProjectionRepository, type ConversationComputerActivationConsumerEvent, type ConversationComputerActivationProfile, type ConversationComputerActivationProjectionRepository, type ConversationComputerRealizer } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
-import { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 
 import type { ConversationComputerActivationWorkerHandle, ConversationComputerActivationWorkerOptions } from "./conversation-computer-activation-composition.types";
 import type { AgentSandboxReleaseProfileConfig } from "./config.types";
 import { _log } from "./log";
+import { AgentSandboxConversationComputerRealizer } from "./conversation-computer-agent-sandbox-realizer";
 
 /** Consumer group the KurrentDB bootstrap Job provisions for every silo. */
 const _ACTIVATION_GROUP = "conversation-computer-activation";
@@ -22,14 +22,20 @@ const _ACTIVATION_GROUP = "conversation-computer-activation";
  *
  * Called by: `_Main` in apps/opencrane/src/index.ts.
  */
-export async function _StartConversationComputerActivationWorker(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, historyStore: HistoryStore, siloId: string, profile: AgentSandboxReleaseProfileConfig, options: ConversationComputerActivationWorkerOptions = {}): Promise<ConversationComputerActivationWorkerHandle>
+export async function _StartConversationComputerActivationWorker(prisma: PrismaClient, coreApi: k8s.CoreV1Api, customApi: k8s.CustomObjectsApi, historyStore: HistoryStore, siloId: string, profile: AgentSandboxReleaseProfileConfig, options: ConversationComputerActivationWorkerOptions = {}): Promise<ConversationComputerActivationWorkerHandle>
+{
+	const realizer = new AgentSandboxConversationComputerRealizer(customApi, coreApi, profile);
+	return _StartConversationComputerActivationConsumer(prisma, historyStore, siloId, profile, realizer, options);
+}
+
+/** Start the realization-neutral activation consumer used by production and Tier 2. */
+export async function _StartConversationComputerActivationConsumer(prisma: PrismaClient, historyStore: HistoryStore, siloId: string, profile: ConversationComputerActivationProfile, realizer: ConversationComputerRealizer, options: ConversationComputerActivationWorkerOptions = {}): Promise<ConversationComputerActivationWorkerHandle>
 {
 	const projections: ConversationComputerActivationProjectionRepository = {
 		resolve: function _Resolve(command) { return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction) { const repository = new PrismaConversationComputerActivationProjectionRepository(transaction); return repository.resolve(command); }, { isolationLevel: "ReadCommitted", operation: "conversation computer activation projection" }); },
 		publishActiveLease: function _PublishActiveLease(command) { return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction) { const repository = new PrismaConversationComputerActivationProjectionRepository(transaction); return repository.publishActiveLease(command); }, { isolationLevel: "Serializable", operation: "conversation computer active lease projection" }); },
 	};
-	const claims = new AgentSandboxClaimAdapter(customApi);
-	const authority = new ConversationComputerActivationAuthorityAdapter(projections, historyStore, claims, profile);
+	const authority = new ConversationComputerActivationAuthorityAdapter(projections, historyStore, realizer, profile);
 	const stop = new AbortController();
 	const streamName = `computer-activations-${siloId}`;
 	const consumer = __StartConversationComputerActivationConsumer(

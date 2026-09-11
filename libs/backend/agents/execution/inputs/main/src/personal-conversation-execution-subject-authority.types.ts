@@ -1,5 +1,5 @@
 import type { PersonalExecutionEvidenceAuthorityPort } from "@opencrane/backend/server/agents/agent-services";
-import type { AgentScope, ClaimedLeaseScope, ComputerLease, ComputerScope, ConversationComputer } from "@opencrane/contracts";
+import type { AgentScope, ComputerLease, ComputerScope, ConversationComputer, RealizedLeaseScope } from "@opencrane/contracts";
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 
 import type { ExecutionSubjectAuthority } from "./session-assembly.types";
@@ -19,8 +19,8 @@ export interface PersonalConversationExecutionSubjectCoordinates
 	readonly computer: ComputerScope;
 	/** Names the bound agent service, its published revision and the computer profile revision. */
 	readonly agent: AgentScope;
-	/** Names the active lease, its generation and the SandboxClaim whose Pod binding was verified. */
-	readonly lease: ClaimedLeaseScope;
+	/** Names the active lease, its generation and the realization whose process binding was verified. */
+	readonly lease: RealizedLeaseScope;
 	/** Principal stamped on the pending human entry and rechecked against current membership and Use authority. */
 	readonly requesterPrincipalId: string;
 	/** Issuer loaded from that exact durable Principal rather than accepted from the computer. */

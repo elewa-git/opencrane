@@ -1,4 +1,4 @@
-import type { CompiledRunInput, ConversationEntry } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, type CompiledRunInput, type ConversationEntry } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,8 +8,8 @@ import { _ConversationAuthorizationFixture } from "./conversation-authorization.
 const _COMMAND = {
   computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" },
   profileRevisionId: "profile-1",
-  lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
-};
+  lease: { leaseId: "lease-1", leaseGeneration: 2, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g2", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } },
+} as const;
 
 function _Entry(): ConversationEntry {
   return {

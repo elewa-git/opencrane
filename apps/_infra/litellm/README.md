@@ -3,7 +3,7 @@
 > [apps](../../README.md) › [_infra](../README.md) › litellm
 
 <!-- A vendored-infra app: a pinned third-party product we run and wrap in Helm. No import
-     alias — the deliverable is a Helm named-template library. Named by `project.json` (`litellm`). -->
+     alias. Named by `project.json` (`litellm`). -->
 
 ## What it owns
 
@@ -20,7 +20,13 @@ composed by the silo umbrella chart ([`deploy-k8s`](../deploy-k8s/README.md)).
 ## Public surface
 
 `Entrypoint:` the Helm named-template library under `helm/`. The umbrella chart includes the
-deployment, service, Secret, and `opencrane.litellm.networkPolicy` templates. No importable code.
+deployment, service, Secret, and `opencrane.litellm.networkPolicy` templates.
+
+`local-development/` — selects one provider/model from the production-owned catalogue and writes
+the secret-free, session-owned LiteLLM configuration used by Tier 2. See its
+[local-development README](local-development/README.md). The Tier 2 coordinator runs the reviewed
+deployment tag through an immutable multi-platform digest and waits for an authenticated `/v1/models`
+response before the server can reserve a model attempt.
 
 ## Boundary
 
@@ -31,12 +37,15 @@ mounted/existing Kubernetes Secrets, never inlined.
 
 ## Dependency direction
 
-An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imported by no package.
+An app entrypoint (`type:app`, `scope:litellm`) composed by the silo chart. The repository-level
+Tier 2 coordinator imports only the local-development helpers; production applications do not. Its
+declared model-routing dependency tracks the public provider catalogue in the Nx affected graph.
 
 ## Runtime & config
 
 - **Pinned image:** `ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable` (the `non_root` wolfi-free
-  build — the plain wolfi image crashes Prisma).
+  build — the plain wolfi image crashes Prisma). Cluster deployment owns this reviewed tag; Tier 2
+  pins the tag's multi-platform digest in its coordinator.
 - `litellm.enabled` / `opencrane.litellmShared` — render an in-cluster workload, or use a shared endpoint.
 - `litellm.masterKey` / `litellm.existingSecret` (+ `secretKey`) — the LiteLLM master key.
 - `litellm.databaseUrl` / `litellm.existingDatabaseSecret` (+ `databaseSecretKey`) — Postgres connection

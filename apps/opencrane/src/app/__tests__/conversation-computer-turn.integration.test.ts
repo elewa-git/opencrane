@@ -3,6 +3,7 @@ import express from "express";
 import request from "supertest";
 import {
   ComputerLeaseStates,
+  ConversationComputerRealizationKinds,
   ConversationComputerStates,
 } from "@opencrane/contracts";
 import {
@@ -37,9 +38,7 @@ describe("conversation computer turn integration", function _Suite() {
       id: "lease-one",
       computerId: computer.id,
       generation: 1,
-      sandboxClaimId: "computer-one-g1",
-      sandboxId: null,
-      serviceFQDN: null,
+      realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-one-g1", sandboxId: null, serviceFQDN: null } as const,
       state: ComputerLeaseStates.Claimed,
       claimedAt: "2026-09-05T00:00:00.000Z",
       expiresAt: "2099-09-05T00:00:00.000Z",
@@ -66,20 +65,12 @@ describe("conversation computer turn integration", function _Suite() {
       },
       {} as never,
       {
-        claim: vi
-          .fn()
-          .mockResolvedValue({
-            claimId: "computer-one-g1",
-            outcome: "existing",
-            sandboxId: "sandbox-one",
-            serviceFQDN: "sandbox-one.testv5.svc.cluster.local",
-          }),
+        prepare: vi.fn(),
+        claim: vi.fn().mockResolvedValue({ kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-one-g1", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" }),
+        inspect: vi.fn(), renew: vi.fn(), release: vi.fn(), bind: vi.fn(),
       } as never,
       {
         profileRevisionId: computer.profileRevisionId,
-        profileName: "developer",
-        warmPoolName: "pool",
-        namespace: "testv5",
         leaseTtlMilliseconds: 60_000,
       },
     );
@@ -134,7 +125,7 @@ describe("conversation computer turn integration", function _Suite() {
             maximumBudgetUsd: 0.1,
             credentialLifetimeSeconds: 300,
             credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-            lease: { leaseId: "lease-one", leaseGeneration: 1, sandboxClaimId: "computer-one-g1" },
+            lease: { leaseId: "lease-one", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-one-g1", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" } },
           };
     const authority = new ConversationComputerTurnAuthorityService({
       logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) },
@@ -192,12 +183,13 @@ describe("conversation computer turn integration", function _Suite() {
       serviceAccountName: "computer",
       podUid: "pod-one",
     };
+    const process = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload } as const;
     const app = express()
       .use(express.json())
       .use(
         _CreateConversationComputerTurnRouter({
           logger: { warn: vi.fn() },
-          tokenReviewer: { __Review: vi.fn().mockResolvedValue(workload) },
+          authenticator: { authenticate: vi.fn().mockResolvedValue(process) },
           authority,
         }),
       );

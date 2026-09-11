@@ -88,8 +88,8 @@ current Use on the conversation. No personal persona, memory or tool assignment 
 company revision. An explicit no-personal-memory policy returns an empty preference list without
 opening the personal-memory repository.
 
-The production conversation computer repeats this authority check during bootstrap and before
-output, including retries that return an existing run snapshot. Current service state, revision,
+The conversation computer repeats this authority check during bootstrap and before output,
+including retries that return an existing run snapshot. Current service state, revision,
 identity, current human membership and required grants must still admit the operation. The frozen
 snapshot supplies evidence and input limits; it cannot restore removed access.
 Retries recover the memory policy from the saved snapshot. A valid `none` scope stays disabled;
@@ -109,7 +109,7 @@ evidence reduces credential validity, while refreshed evidence never extends the
 - `PersonalConversationExecutionSubjectAuthority` — joins the checked current AgentIdentity head,
   transaction-bound personal service and authorization evidence, and the current active
   ConversationComputer lease. It rechecks every request, service, revision, profile, computer,
-  lease, generation, and SandboxClaim coordinate before issuing an attempt-one subject. Its
+  lease, generation, and persisted realization coordinate before issuing an attempt-one subject. Its
   evidence-authority factory receives the admission transaction so Prisma evidence cannot escape
   onto a root client.
 - `__CreatePrismaSessionAssemblyAuthorities` — composes the production readers around that subject
@@ -156,7 +156,9 @@ non-canonical digest, or any single source refusal denies the run.
 The OpenCrane app composes one admission variant. The participant-owned conversation route derives
 requester provenance from the authenticated session and host; the injected subject authority then
 resolves the exact AgentIdentity, Principal, membership, capability, run, and computer lease inside
-the admission fence. Conversation history already contains the encrypted human entry before run
+the admission fence. This subject check is realization-neutral: it compares persisted lease
+coordinates and does not require Kubernetes identity or attest that a host process enforces
+production sandbox capabilities. Conversation history already contains the encrypted human entry before run
 admission. The injected history adapter re-reads that exact Kurrent revision and decrypts referenced
 private payloads for prompt compilation; this package never inserts a relational copy. The
 conversation ID comes from verified computer state, and identity, principal, silo, service, dataset,

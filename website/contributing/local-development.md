@@ -74,25 +74,99 @@ Nx and Angular caches make normal development faster. Clear them only for the op
 above, not whenever a branch changes and not as a substitute for reading the first server error.
 :::
 
-## Later tiers
+## Tier 2 — local application work
 
-Tier 2 and Tier 3 are being rebuilt as incremental successors to the closed historical proposals.
-Until their successor pull requests land, do not treat the old branches as supported setup paths.
+Tier 2 runs the current server and live-gateway browser application on the workstation. It uses
+Docker for a clean-baseline PostgreSQL database and TLS KurrentDB; Agent profiles can also run a
+loopback LiteLLM container. Install the repository dependencies and make sure `docker`, `openssl`,
+`curl` and `jq` are available before starting it.
 
-| Tier | Intended boundary | Status |
+The coordinator pins the same KurrentDB operand used by the current develop-smoke profile. Local
+LiteLLM resolves the deployment-owned repository and reviewed tag to an immutable multi-platform
+digest, so a later vendor tag update cannot change an existing Tier 2 branch silently. CI rejects
+drift between those deployment-owned coordinates and Tier 2.
+
+Start the core application profile:
+
+```bash
+npm run dev:tier2
+```
+
+The coordinator binds the browser to `http://local-development.localhost:4200`, proxies only
+`/api/v1` to the loopback server and seeds one fixed development identity. It prints a private URL
+with a new browser-session credential on every launch. Open that exact URL: the Tier 2 build removes
+the credential from the address bar, retains it in that browser tab, and sends it only to same-origin
+product API routes. An old tab cannot authenticate a later launch. The server does not mount the
+production Kubernetes workload listener or accept a non-loopback PostgreSQL server.
+
+Use an Agent profile when the change needs one current Conversation Computer:
+
+```bash
+# Uses local LiteLLM and the first recognized keys/.<provider>-key file in lexical order.
+npm run dev:tier2:agent
+
+# Makes the local model path explicit; --provider and --model are optional.
+npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
+
+# Uses an existing HTTPS LiteLLM gateway and an owner-only administrator-key file.
+npm run dev:tier2:agent:remote-llm -- \
+  --remote-litellm-endpoint https://litellm.example.com \
+  --remote-litellm-master-key-file /absolute/path/to/admin-key
+
+# Uses the deterministic model transport and reads no provider credential.
+npm run dev:tier2:agent:simulated-llm
+```
+
+Local provider keys are owner-only regular files named `keys/.openai-key`,
+`keys/.anthropic-key`, `keys/.gemini-key`, `keys/.mistral-key`, `keys/.deepseek-key` or
+`keys/.glm-key`. They must not be symbolic links. The local LiteLLM configuration contains an
+environment-variable reference, never the key value. Remote mode accepts only an HTTPS origin and
+an explicit owner-only administrator-key file; it refuses a local provider-key path.
+
+The workstation-hosted Conversation Computer is a development realization, not an Agent Sandbox.
+It binds only to loopback, is fenced to the current lease and does not advertise Kubernetes,
+gVisor, browser/CDP, review-command or durable workspace-checkpoint capabilities. Use Tier 3 to
+prove those deployment boundaries.
+
+### Stop or reset Tier 2
+
+Interrupting, terminating or suspending the command stops the processes and removes only the
+PostgreSQL, KurrentDB and optional LiteLLM containers, Docker network, KurrentDB TLS volume, browser
+credential and other session secrets owned by that repository worktree. The paired PostgreSQL and
+KurrentDB data volumes remain for the next launch. Their database credentials and conversation
+payload keyring remain owner-only on disk so the retained data stays readable. Failed startup uses
+the same cleanup path.
+
+The repository uses the 0.11 fresh-install baseline. If the launcher reports that the persistent
+database uses a different target baseline, recreate both persistent stores together:
+
+```bash
+npm run dev:tier2 -- --reset
+# Or retain the selected Agent profile:
+npm run dev:tier2:agent -- --reset
+```
+
+`--reset` permanently removes that worktree's local PostgreSQL and KurrentDB data plus the credentials
+and conversation keyring paired with those stores. It then creates new credentials, reapplies the
+reviewed target baseline and development seed, and starts the selected profile. It is not an upgrade
+or migration. The launcher refuses to reset similarly named resources owned by another repository
+or worktree.
+
+Do not restore the retired release-transition command, warm runtime, channel proxy or Obot paths
+from git history. Also do not clear Angular or Nx caches as part of a database reset. Use the cache
+recovery steps above only when the optimiser reports `504 (Outdated Optimize Dep)` or the matching
+dynamic-import failure.
+
+## Tier 3 — k3d and Codespaces
+
+Tier 3 is being rebuilt as the child of Tier 2. Until its successor pull request lands, do not treat
+the closed historical branch as a supported setup path.
+
+| Profile | Intended boundary | Status |
 | --- | --- | --- |
-| Tier 2 core | `npm run dev:tier2` — current server, browser application, PostgreSQL clean baseline and KurrentDB | 🔶 Rebuild planned |
-| Tier 2 agent | `npm run dev:tier2:agent` — core plus one current local Conversation Computer | 🔶 Rebuild planned |
-| Tier 2 agent alternatives | `npm run dev:tier2:agent:local-llm`, `:remote-llm` or `:simulated-llm` | 🔶 Rebuild planned |
 | Tier 3 infra | `npm run dev:tier3` or `npm run dev:tier3:infra` — current silo and prerequisites in disposable k3d, including Codespaces browser routing | 🔶 Rebuild planned |
 | Tier 3 agent | `npm run dev:tier3:agent` — infra plus one governed provider setup and one Agent Sandbox conversation turn | 🔶 Rebuild planned |
 
-The repository is on the 0.11 fresh-install baseline. A future Tier 2 `--reset` command will recreate
-its paired PostgreSQL and KurrentDB data; it will not migrate an older local database. Do not restore
-the retired release-transition command, warm runtime, channel proxy or Obot paths from git history.
-
-Tier 2 will clean only the processes, PostgreSQL/KurrentDB/LiteLLM containers, network and temporary
-secrets owned by that launch when it is aborted, stopped, suspended or fails. Tier 3 retains the
-historical minimum target of 4 cores, 16 GB memory and 32 GB storage, with 8 cores, 32 GB memory and
-64 GB storage recommended. A minimum-host run must report a storage shortfall instead of deleting
-unrelated dependency caches, clusters or other developer state.
+Tier 3 retains the historical minimum target of 4 cores, 16 GB memory and 32 GB storage, with 8
+cores, 32 GB memory and 64 GB storage recommended. A minimum-host run must report a storage
+shortfall instead of deleting unrelated dependency caches, clusters or other developer state.

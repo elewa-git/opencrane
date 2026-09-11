@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationComputerRealizationKinds } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __ConsumeRunToolResultInTransaction, __ReadRunToolResultInTransaction, RunToolResultReadOutcomes } from "@opencrane/backend/server/iam/authorization";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
@@ -129,7 +129,7 @@ export class PrismaConversationToolResultsUnitOfWork implements ConversationComp
 						|| stored.continuationReservation.compiledInputDigest !== stored.compile.digest
 						|| ___DigestCanonicalJson(expected.continuationReservation as unknown as JsonValue) !== ___DigestCanonicalJson(stored.continuationReservation as unknown as JsonValue)))
 						return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
-					await candidates.admit({ computerId: stored.computerId, lease: stored.lease, workload: reviewedWorkload });
+					await candidates.admit({ computerId: stored.computerId, lease: stored.lease, process: { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: reviewedWorkload } });
 					const repository = new PrismaConversationToolResultsRepository(transaction, dependencies);
 					return consume ? repository.consume(stored, reviewedWorkload) : repository.read(stored, reviewedWorkload);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, operation: "conversation tool result", attemptLimit: 3, timeout: 10_000 });

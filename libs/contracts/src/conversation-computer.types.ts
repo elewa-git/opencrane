@@ -1,7 +1,7 @@
 /**
  * States the persisted lifecycle of one logical conversation computer.
  *
- * A computer may cool to zero and later rehydrate, but it is not an always-running Pod. Lifecycle
+ * A computer may cool to zero and later rehydrate, but it is not an always-running process. Lifecycle
  * listeners use these closed values to decide whether work may be admitted and whether a lease may
  * exist; an unknown value must not be treated as warm.
  *
@@ -9,11 +9,11 @@
  */
 export enum ConversationComputerStates
 {
-	/** The computer has no live sandbox and may be restored when work is admitted. */
+	/** The computer has no live realization and may activate when work is admitted. */
 	Cold = "cold",
-	/** The computer has requested one sandbox but has not received a live lease. */
+	/** The computer has reserved one realization but has not received a live lease. */
 	ClaimPending = "claim_pending",
-	/** The computer has one fenced live sandbox lease. */
+	/** The computer has one fenced live realization lease. */
 	Warm = "warm",
 	/** The computer has stopped admitting work while an active attempt reaches a safe boundary. */
 	Cooling = "cooling",
@@ -24,22 +24,75 @@ export enum ConversationComputerStates
 }
 
 /**
- * States the lifecycle of one fenced sandbox realization.
+ * States the lifecycle of one fenced process realization.
  *
- * Kubernetes realizes a lease but does not own the logical computer. An active lease has one
- * generation, and an old or lost realization must not continue to process work.
+ * The selected adapter realizes a lease but does not own the logical computer. An active lease has
+ * one generation, and an old or lost realization must not continue to process work.
  */
 export enum ComputerLeaseStates
 {
-	/** The upstream sandbox claim exists but a sandbox has not yet been assigned. */
+	/** The realization is reserved but its process has not yet been assigned or started. */
 	Claimed = "claimed",
-	/** The sandbox realization may process work for its exact lease generation. */
+	/** The realized process may accept work for its lease generation. */
 	Active = "active",
 	/** The computer released this realization after work reached a safe boundary. */
 	Released = "released",
-	/** The lease expired or its claim disappeared before an orderly release, so no checkpoint was captured. */
+	/** The lease expired or its process disappeared before an orderly release. */
 	Lost = "lost",
 }
+
+/**
+ * Selects how one conversation-computer lease is physically realised.
+ *
+ * These string values are stored in KurrentDB with the lease snapshot. They let product history
+ * describe a production Agent Sandbox or a workstation process without inventing Kubernetes
+ * identity for local development. Unknown values fail history parsing.
+ */
+export enum ConversationComputerRealizationKinds
+{
+	/** An Agent Sandbox claim and its assigned Kubernetes sandbox realise the lease. */
+	AgentSandbox = "agent_sandbox",
+	/** A child process bound to loopback realises the lease for local development. */
+	HostDevelopmentProcess = "host_development_process",
+}
+
+/** Records the controller coordinates for one production Agent Sandbox realisation. */
+export interface AgentSandboxConversationComputerRealization
+{
+	/** Selects the production Agent Sandbox adapter. */
+	readonly kind: ConversationComputerRealizationKinds.AgentSandbox;
+	/** Identifies the upstream Agent Sandbox claim. */
+	readonly claimId: string;
+	/** Identifies the assigned sandbox, or null while the claim is pending. */
+	readonly sandboxId: string | null;
+	/** Carries the controller-reported in-cluster Service address after assignment. */
+	readonly serviceFQDN: string | null;
+}
+
+/**
+ * Records the non-secret coordinates for one workstation child-process realisation.
+ *
+ * These coordinates make no confinement or capacity claim. Host development does not apply the
+ * Kubernetes RuntimeClass, network policy, resource ceiling or checkpoint transport from a
+ * production computer profile.
+ */
+export interface HostDevelopmentConversationComputerRealization
+{
+	/** Selects the workstation process adapter. */
+	readonly kind: ConversationComputerRealizationKinds.HostDevelopmentProcess;
+	/** Identifies the child owned by the local supervisor without granting access to it. */
+	readonly processId: string;
+	/** Carries the loopback-only private endpoint used by this child. */
+	readonly endpoint: string;
+}
+
+/**
+ * Describes the physical process behind a lease without storing its authentication secret.
+ *
+ * The active lease generation remains the product authority. A realisation records where that
+ * generation runs; it does not grant permission by itself.
+ */
+export type ConversationComputerRealization = AgentSandboxConversationComputerRealization | HostDevelopmentConversationComputerRealization;
 
 /**
  * Fixes the requested and maximum resources that one immutable profile permits.
@@ -157,9 +210,9 @@ export interface ConversationComputer
 }
 
 /**
- * Represents one fenced live sandbox realization of a conversation computer.
+ * Represents one fenced live realization of a conversation computer.
  *
- * Its generation prevents a replaced or stale Pod from acting as the current computer. A logical
+ * Its generation prevents a replaced or stale process from acting as the current computer. A logical
  * computer can have at most one active lease, although it retains prior lease history.
  */
 export interface ComputerLease
@@ -172,12 +225,8 @@ export interface ComputerLease
 	readonly computerId: string;
 	/** Fences this realization from every earlier lease. */
 	readonly generation: number;
-	/** Identifies the upstream Agent Sandbox claim. */
-	readonly sandboxClaimId: string;
-	/** Identifies the upstream sandbox after assignment. */
-	readonly sandboxId: string | null;
-	/** Carries the controller-reported in-cluster Service DNS name after assignment. */
-	readonly serviceFQDN: string | null;
+	/** Describes the physical process behind this lease without storing its bearer credential. */
+	readonly realization: ConversationComputerRealization;
 	/** States whether this realization may process work. */
 	readonly state: ComputerLeaseStates;
 	/** Records when this lease was claimed. */

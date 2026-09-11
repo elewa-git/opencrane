@@ -13,7 +13,7 @@ root version in the same slice. Documentation-only changes do not advance an app
 | App | Responsibility |
 | --- | --- |
 | [`apps/opencrane`](../../apps/opencrane/README.md) | Authenticated REST API, durable product authority, process composition, Prisma, and the server Helm unit. |
-| [`apps/conversation-computer`](../../apps/conversation-computer/README.md) | Generation-fenced process image for an Agent Sandbox conversation computer. |
+| [`apps/conversation-computer`](../../apps/conversation-computer/README.md) | Shared generation-fenced process entrypoint for production Agent Sandbox and Tier 2 host-development realizations. |
 | [`apps/opencrane-ui`](../../apps/opencrane-ui/README.md) | Angular web client for organisation and employee surfaces. |
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
 | [`apps/agent-controller`](../../apps/agent-controller/README.md) | Sole Kubernetes mutator for governed one-shot Jobs. |
@@ -48,6 +48,7 @@ app's source.
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/server/infra/history-store`](../../libs/backend/server/infra/history-store/README.md) | KurrentDB stream reads, checked appends, and subscriptions for event-history owners. |
 | [`libs/backend/server/infra/agent-sandbox`](../../libs/backend/server/infra/agent-sandbox/README.md) | Kubernetes SandboxClaim realization and lease-bound Pod verification. |
+| [`libs/backend/server/infra/conversation-computer-host`](../../libs/backend/server/infra/conversation-computer-host/README.md) | Workstation child-process ownership and private bearer cleanup for Tier 2 conversation computers. |
 | [`apps/_infra/kurrentdb`](../../apps/_infra/kurrentdb/README.md) | Private KurrentDB HistoryStore deployment with persistent TLS-only storage. |
 | [`apps/_infra/agent-sandbox`](../../apps/_infra/agent-sandbox/README.md) | Release-scoped Agent Sandbox templates, zero-replica warm pools, and claim admission boundaries. |
 | [`libs/backend/server/infra/workflows`](../../libs/backend/server/infra/workflows/README.md) | Workflow-engine task contract, guardrails, finite respawn chains, the Absurd adapter, and deterministic test support. |
@@ -57,7 +58,8 @@ app's source.
 | [`libs/backend/conversation-computer/review-surface`](../../libs/backend/conversation-computer/review-surface/README.md) | Sandbox-local, lease-authenticated file, command, preview, and Chromium review adapters. |
 
 The durable product authority is `Conversation -> immutable KurrentDB entry stream`. An
-`agent_session` may activate one generation-fenced conversation computer through Agent Sandbox.
+`agent_session` may activate one generation-fenced conversation computer through Agent Sandbox in
+production or through the host-development realization in Tier 2; neither process becomes product authority.
 Direct and ordinary group messages create no computer activation. The computer receives a bounded
 bootstrap and proposes output; it never becomes a second conversation, approval, or artifact authority.
 

@@ -51,8 +51,8 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 	});
 	router.post("/model-step", async function _ModelStep(request: Request, response: Response): Promise<void>
 	{
-		const workload = await _Workload(request, options);
-		if (workload === null)
+		const process = await _Process(request, options);
+		if (process === null)
 		{
 			response.sendStatus(401);
 			return;
@@ -66,7 +66,7 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 		}
 		try
 		{
-			response.status(200).json(await options.authority.modelStep({ bootstrapId, workload }));
+			response.status(200).json(await options.authority.modelStep({ bootstrapId, process }));
 		}
 		catch (error)
 		{
@@ -81,11 +81,11 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 /** TokenReview the caller and read its lease coordinates, answering 401 or 400 when either is missing. */
 async function _LeaseCommand(request: Request, response: Response, options: ConversationComputerTurnRouterOptions)
 {
-	const workload = await _Workload(request, options);
+	const process = await _Process(request, options);
 	const computerId = _String(request.query["computerId"]);
 	const leaseId = _String(request.query["leaseId"]);
 	const generation = Number(request.query["generation"]);
-	if (workload === null)
+	if (process === null)
 	{
 		response.sendStatus(401);
 		return null;
@@ -95,16 +95,16 @@ async function _LeaseCommand(request: Request, response: Response, options: Conv
 		response.sendStatus(400);
 		return null;
 	}
-	return { computerId, lease: { leaseId, leaseGeneration: generation }, workload };
+	return { computerId, lease: { leaseId, leaseGeneration: generation }, process };
 }
 
-/** TokenReview one bearer credential without exposing denial details. */
-async function _Workload(request: Request, options: ConversationComputerTurnRouterOptions)
+/** Authenticate one process bearer without exposing denial details. */
+async function _Process(request: Request, options: ConversationComputerTurnRouterOptions)
 {
 	const header = request.header("authorization") ?? "";
 	if (!header.startsWith("Bearer "))
 		return null;
-	return options.tokenReviewer.__Review(header.slice("Bearer ".length));
+	return options.authenticator.authenticate(header.slice("Bearer ".length));
 }
 
 /** Accept one non-empty scalar string without normalization. */

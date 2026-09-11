@@ -1,10 +1,10 @@
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HttpConversationComputerCheckpointSandbox } from "../conversation-computer-lifecycle-runtime";
 
 const _COMPUTER: ConversationComputer = { schemaVersion: 1, id: "computer-1", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", state: ConversationComputerStates.Warm, leaseGeneration: 3, workspaceCheckpoint: null, createdAt: "2026-09-06T10:00:00.000Z", updatedAt: "2026-09-06T10:00:00.000Z" } as ConversationComputer;
-const _LEASE: ComputerLease = { schemaVersion: 1, id: "lease-abc", computerId: "computer-1", generation: 3, sandboxClaimId: "computer-1-g3", sandboxId: "sandbox-1", serviceFQDN: "computer-1.sandboxes.svc.cluster.local", state: ComputerLeaseStates.Active, claimedAt: "2026-09-06T10:00:00.000Z", expiresAt: "2026-09-06T11:00:00.000Z", releasedAt: null } as ComputerLease;
+const _LEASE: ComputerLease = { schemaVersion: 1, id: "lease-abc", computerId: "computer-1", generation: 3, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g3", sandboxId: "sandbox-1", serviceFQDN: "computer-1.sandboxes.svc.cluster.local" }, state: ComputerLeaseStates.Active, claimedAt: "2026-09-06T10:00:00.000Z", expiresAt: "2026-09-06T11:00:00.000Z", releasedAt: null };
 
 /** Records the coordinates it was asked for and returns one fixed secret. */
 function _Deriver()
@@ -32,7 +32,7 @@ describe("HttpConversationComputerCheckpointSandbox", function _Suite()
 		for await (const chunk of await new HttpConversationComputerCheckpointSandbox(deriver).capture(_COMPUTER, _LEASE))
 			bytes.push(...chunk);
 		expect(bytes).toEqual([1, 2, 3]);
-		expect(deriver.bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-abc", leaseGeneration: 3 } });
+		expect(deriver.bearer).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-abc", leaseGeneration: 3, realization: _LEASE.realization } });
 		const request = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
 		expect(request[0]).toBe("http://computer-1.sandboxes.svc.cluster.local:8090/v1/checkpoints/capture");
 		expect((request[1].headers as Record<string, string>).authorization).toBe("Bearer derived-review-secret,older-review-secret");

@@ -1,4 +1,3 @@
-import type * as k8s from "@kubernetes/client-node";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
@@ -11,7 +10,7 @@ import { __HumanMembershipRevision, _CreateHumanMembershipEvidenceConfig, type H
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { __CreatePrismaMcpToolInvocationParticipantFactory } from "@opencrane/backend/server/iam/authorization";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import { _CreateAgentControllerTokenReviewer, _CreateMcpExecutorTokenReviewer, _ValidateIsolatedWorkloadNamespace } from "@opencrane/backend/server/infra/workload-identity";
+import { _CreateAgentControllerTokenReviewer, _CreateMcpExecutorTokenReviewer, _ValidateIsolatedWorkloadNamespace, type ProjectedTokenReviewApi } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
@@ -22,7 +21,7 @@ import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 const _MCP_TASK_STATUS_POLL_MILLISECONDS = 250;
 
 /** Compose the sole database and HTTP authority for OCI-backed MCP execution. */
-export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflows: McpWorkflowComposition, history: HistoryStore): McpRuntimeComposition
+export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: ProjectedTokenReviewApi, config: Pick<InternalRuntimeConfig, "mcpCompanionClaimLeaseMilliseconds" | "mcpControllerClaimLeaseMilliseconds" | "mcpExecutorNamespace" | "serverNamespace" | "siloId">, workflows: McpWorkflowComposition, history: HistoryStore): McpRuntimeComposition
 {
 	const executorNamespace = _ValidateIsolatedWorkloadNamespace(config.mcpExecutorNamespace, config.serverNamespace);
 	const dispatchDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());

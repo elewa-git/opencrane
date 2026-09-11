@@ -3,6 +3,7 @@ import { _ModelReservationFixture } from "./conversation-output-intent.fixture";
 import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { describe, expect, it, vi } from "vitest";
+import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
 
 import { KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
@@ -12,7 +13,7 @@ const _TURN = {
   bootstrapId: _ID,
   siloId: "testv5",
   computerId: "computer-1",
-  lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
+  lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } },
   latestPendingEntryId: "entry-1",
   modelAlias: "testv5-default",
   maximumBudgetUsd: 0.05,
@@ -41,7 +42,7 @@ const _TURN = {
   },
 } satisfies FrozenConversationComputerTurn;
 
-/** The frozen event data as KurrentDB stores it: flat lease fields and a string stream revision. */
+/** The frozen event data as KurrentDB stores it: a discriminated realization and a string stream revision. */
 const _STORED_TURN = {
   bootstrapId: _TURN.bootstrapId,
   siloId: _TURN.siloId,
@@ -53,7 +54,7 @@ const _STORED_TURN = {
   modelAlias: _TURN.modelAlias,
   maximumBudgetUsd: _TURN.maximumBudgetUsd,
   credentialLifetimeSeconds: _TURN.credentialLifetimeSeconds,
-  sandboxClaimId: "computer-1-g1",
+  realization: _TURN.lease.realization,
   compile: _TURN.compile,
 };
 

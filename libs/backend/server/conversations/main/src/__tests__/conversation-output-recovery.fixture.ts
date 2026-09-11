@@ -3,7 +3,7 @@ import { _ReserveConversationOutputFixture } from "./conversation-output-intent.
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { vi } from "vitest";
 
-import { ConversationModelResponseKinds, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { ConversationModelResponseKinds, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { BoundConversationWriter } from "../bound-conversation-writer";
@@ -51,16 +51,20 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 	const stream = "conversation-conversation-1";
 	history.streams.set(stream, [0n, 1n].map(revision => ({ id: `prior-${revision}`, type: "prior-entry", data: {}, metadata: {}, streamName: stream, revision, recordedAt: new Date() })));
 	const binding = { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 };
-	const lease = { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" };
+	const realization = { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } as const;
+	const lease = { leaseId: "lease-1", leaseGeneration: 1, realization };
 	const candidate: ConversationComputerTurnCandidate = { binding, lease, latestPendingEntryId: "prior-1", modelAlias: "test-model", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60, credentialExpiresAt: "2099-01-01T00:00:00.000Z", compiledInput: { promptCompilerVersion: "test-v1", runId: "run-1", attempt: 1, instructions: "Help", messages: [], tools: [], model: { modelAlias: "test-model", maxOutputTokens: 100, generatedOutputCapabilities: [] }, budget: { maxCompletionTokens: 100, maxModelTurns: 1, maxToolInvocations: 0, maxCostUsdMicros: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${"a".repeat(64)}` } };
-	const current = { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { id: lease.leaseId, generation: 1, state: ComputerLeaseStates.Active, sandboxId: "sandbox-1", expiresAt: "2099-01-01T00:00:00.000Z" } };
+	const current = { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { id: lease.leaseId, generation: 1, realization, state: ComputerLeaseStates.Active, expiresAt: "2099-01-01T00:00:00.000Z" } };
 	const flags = { mayAppend: true, mayUseVisibility: true, stamp: 0, payloadWrites: 0, runState: "running" };
 	const compiler = { compile: vi.fn(async function _CompileOriginalHistory()
 	{
 		return flags.mayAppend && history.streams.get(stream)!.at(-1)!.revision === binding.expectedRevision ? candidate : null;
 	}) };
-	const pods = { verify: vi.fn(async function _Verify(command: { workload: { podUid: string; namespace: string; serviceAccountName: string } }) { return command.workload.podUid === "pod-1" && command.workload.namespace === "computers" && command.workload.serviceAccountName === "computer"; }) };
-	const candidates = new ActiveConversationComputerTurnCandidateResolver("silo-1", { resolve: async function _Projection() { return { conversationId: binding.conversationId, agentIdentityId: binding.agentIdentityId, profileRevisionId: "profile-1" }; } }, { load: async function _Computer() { return current; } } as never, pods, compiler);
+	const realizer = { bind: vi.fn(async function _Bind(command: { process: { kind: ConversationComputerRealizationKinds; workload?: { podUid: string; namespace: string; serviceAccountName: string } } })
+	{
+		return command.process.kind === ConversationComputerRealizationKinds.AgentSandbox && command.process.workload?.podUid === "pod-1" && command.process.workload.namespace === "computers" && command.process.workload.serviceAccountName === "computer";
+	}) };
+	const candidates = new ActiveConversationComputerTurnCandidateResolver("silo-1", { resolve: async function _Projection() { return { conversationId: binding.conversationId, agentIdentityId: binding.agentIdentityId, profileRevisionId: "profile-1" }; } }, { load: async function _Computer() { return current; } } as never, realizer, compiler);
 	const payloads = new Map<string, { text: string; blockId: string; payloadRef: string; ciphertextDigest: string }>();
 	const outputPayloads = { store: vi.fn(async function _Payload(_turn: FrozenConversationComputerTurn, source: string, text: string)
 	{
@@ -96,11 +100,12 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 		} } };
 		return new ConversationComputerTurnAuthority({ ...dependencies, ...overrides });
 	}
-	const command = { computerId: "computer-1", lease, workload: { subject: "system:serviceaccount:computers:computer", namespace: "computers", serviceAccountName: "computer", podUid: "pod-1" } };
+	const process = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: { subject: "system:serviceaccount:computers:computer", namespace: "computers", serviceAccountName: "computer", podUid: "pod-1" } } as const;
+	const command = { computerId: "computer-1", lease, process };
 	const authority = _Restart();
 	const bootstrap = await authority.bootstrap(command);
-	const output = { bootstrapId: bootstrap!.bootstrapId, sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"), text: "A private chosen answer", workload: command.workload };
+	const output = { bootstrapId: bootstrap!.bootstrapId, sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"), text: "A private chosen answer", process: command.process };
 	if (reserveOutput)
 		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(history), bootstrap!.bootstrapId, output.sourceCommandId);
-	return { candidate, model, history, stream, current, flags, compiler, pods, candidates, payloads, outputPayloads, credentials, runLifecycle, command, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
+	return { candidate, model, history, stream, current, flags, compiler, realizer, candidates, payloads, outputPayloads, credentials, runLifecycle, command, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
 }

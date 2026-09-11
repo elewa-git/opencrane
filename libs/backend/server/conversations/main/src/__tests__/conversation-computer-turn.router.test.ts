@@ -1,19 +1,20 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
+import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
 
 import { _CreateConversationComputerTurnRouter } from "../conversation-computer-turn.router";
 
 /** Mount the private router with controlled identity and product authority. */
 function _App()
 {
-	const workload = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" };
+	const process = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" } } as const;
 	const authority = { reviewCredential: vi.fn().mockResolvedValue({ reviewCredential: "keyed-review-secret" }), bootstrap: vi.fn().mockResolvedValue({ outcome: "ready", bootstrapId: "bootstrap-1",  }), modelStep: vi.fn().mockResolvedValue({ outcome: "completed" }) };
 	const logger = { warn: vi.fn() };
 	const app = express();
 	app.use(express.json({ limit: 70_000 }));
-	app.use(_CreateConversationComputerTurnRouter({ logger, tokenReviewer: { __Review: vi.fn().mockResolvedValue(workload) }, authority }));
-	return { app, authority, logger, workload };
+	app.use(_CreateConversationComputerTurnRouter({ logger, authenticator: { authenticate: vi.fn().mockResolvedValue(process) }, authority }));
+	return { app, authority, logger, process };
 }
 
 describe("conversation computer private turn router", function _Suite()
@@ -23,7 +24,7 @@ describe("conversation computer private turn router", function _Suite()
 		const fixture = _App();
 		const response = await request(fixture.app).get("/bootstrap?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token");
 		expect(response.status).toBe(200);
-		expect(fixture.authority.bootstrap).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, workload: fixture.workload });
+		expect(fixture.authority.bootstrap).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, process: fixture.process });
 	});
 
 	it("hands the review credential only to a TokenReviewed Pod with exact lease coordinates", async function _ReviewCredential()
@@ -32,7 +33,7 @@ describe("conversation computer private turn router", function _Suite()
 		const response = await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token");
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ reviewCredential: "keyed-review-secret" });
-		expect(fixture.authority.reviewCredential).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, workload: fixture.workload });
+		expect(fixture.authority.reviewCredential).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, process: fixture.process });
 		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&leaseId=lease-one").set("authorization", "Bearer projected-token")).status).toBe(400);
 		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one")).status).toBe(401);
 		fixture.authority.reviewCredential.mockRejectedValue(new Error("not the bound Pod"));
@@ -46,7 +47,7 @@ describe("conversation computer private turn router", function _Suite()
 		const response = await request(fixture.app).post("/model-step").set("authorization", "Bearer projected-token").send(body);
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ outcome: "completed" });
-		expect(fixture.authority.modelStep).toHaveBeenCalledWith({ ...body, workload: fixture.workload });
+		expect(fixture.authority.modelStep).toHaveBeenCalledWith({ ...body, process: fixture.process });
 		for (const invalid of [{ ...body, text: "forged" }, { ...body, key: "forged" }, { ...body, ordinal: 2 }, { ...body, ordinal: 1 }, { ...body, bootstrapId: "invalid" }])
 			expect((await request(fixture.app).post("/model-step").set("authorization", "Bearer projected-token").send(invalid)).status).toBe(400);
 		expect((await request(fixture.app).post("/model-step").send(body)).status).toBe(401);

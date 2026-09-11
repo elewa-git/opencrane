@@ -1,4 +1,3 @@
-import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,9 +10,10 @@ const _log = vi.hoisted(function _HoistedLog() { return { info: vi.fn(), warn: v
 
 vi.mock("../log", function _Log() { return { _log }; });
 
-import { _StartConversationComputerActivationWorker } from "../conversation-computer-activation-composition";
+import { _StartConversationComputerActivationConsumer } from "../conversation-computer-activation-composition";
 
 const _PROFILE: AgentSandboxReleaseProfileConfig = { profileRevisionId: `sha256:${"a".repeat(64)}`, profileName: "developer", warmPoolName: "developer-pool", namespace: "testv5-computers", serviceAccountName: "computer", leaseTtlMilliseconds: 3_600_000, maximumTurnCostUsdMicros: 1 };
+const _REALIZER = { prepare: vi.fn(), claim: vi.fn(), inspect: vi.fn(), renew: vi.fn(), release: vi.fn(), bind: vi.fn() };
 
 /** A subscription that never delivers, so the composition's lifecycle is the only thing under test. */
 function _IdleSubscription(): HistoryPersistentSubscription
@@ -38,7 +38,7 @@ describe("conversation computer activation worker composition", function _Suite(
 		const subscription = _IdleSubscription();
 		const subscribePersistent = vi.fn().mockResolvedValue(subscription);
 
-		const worker = await _StartConversationComputerActivationWorker({} as PrismaClient, {} as k8s.CustomObjectsApi, _HistoryStore(subscribePersistent), "silo-1", _PROFILE);
+		const worker = await _StartConversationComputerActivationConsumer({} as PrismaClient, _HistoryStore(subscribePersistent), "silo-1", _PROFILE, _REALIZER as never);
 		await vi.waitFor(function _Subscribed() { expect(worker.health().state).toBe(ConversationComputerActivationConsumerStates.Subscribed); });
 		await worker.stop();
 
@@ -53,7 +53,7 @@ describe("conversation computer activation worker composition", function _Suite(
 		const subscribePersistent = vi.fn().mockRejectedValueOnce(new Error("kurrentdb restarting")).mockResolvedValue(_IdleSubscription());
 		const onExhausted = vi.fn();
 
-		const worker = await _StartConversationComputerActivationWorker({} as PrismaClient, {} as k8s.CustomObjectsApi, _HistoryStore(subscribePersistent), "silo-1", _PROFILE, { onExhausted, wait: _instantWait });
+		const worker = await _StartConversationComputerActivationConsumer({} as PrismaClient, _HistoryStore(subscribePersistent), "silo-1", _PROFILE, _REALIZER as never, { onExhausted, wait: _instantWait });
 		await vi.waitFor(function _Reopened() { expect(subscribePersistent).toHaveBeenCalledTimes(2); });
 		await worker.stop();
 
@@ -67,7 +67,7 @@ describe("conversation computer activation worker composition", function _Suite(
 		const subscribePersistent = vi.fn().mockRejectedValue(new Error("kurrentdb unreachable"));
 		const onExhausted = vi.fn();
 
-		const worker = await _StartConversationComputerActivationWorker({} as PrismaClient, {} as k8s.CustomObjectsApi, _HistoryStore(subscribePersistent), "silo-1", _PROFILE, { onExhausted, wait: _instantWait, resubscribe: { maxConsecutiveFailures: 2 } });
+		const worker = await _StartConversationComputerActivationConsumer({} as PrismaClient, _HistoryStore(subscribePersistent), "silo-1", _PROFILE, _REALIZER as never, { onExhausted, wait: _instantWait, resubscribe: { maxConsecutiveFailures: 2 } });
 		await vi.waitFor(function _Exhausted() { expect(onExhausted).toHaveBeenCalledOnce(); });
 
 		expect(subscribePersistent).toHaveBeenCalledTimes(2);

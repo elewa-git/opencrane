@@ -12,6 +12,7 @@ import { _ReadBoundConversationWriterIntent } from "./bound-conversation-writer"
 import { _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";
 import type { ConversationComputerOutputDecision, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
+import { _ValidatedConversationComputerRealization } from "./conversation-computers";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
 const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v2";
@@ -324,7 +325,7 @@ function _Serializable(turn: FrozenConversationComputerTurn): Record<string, unk
 		modelAlias: turn.modelAlias,
 		maximumBudgetUsd: turn.maximumBudgetUsd,
 		credentialLifetimeSeconds: turn.credentialLifetimeSeconds,
-		sandboxClaimId: turn.lease.sandboxClaimId,
+		realization: turn.lease.realization,
 		compile: { runId: turn.compile.runId, attempt: turn.compile.attempt, promptCompilerVersion: turn.compile.promptCompilerVersion, digest: turn.compile.digest },
 	};
 }
@@ -334,8 +335,8 @@ function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown
 	return { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.lease.leaseId, generation: turn.lease.leaseGeneration, bootstrapId: turn.bootstrapId };
 }
 
-/** Shape of the frozen event data as it is stored: the lease flattened to `generation`, `leaseId` and `sandboxClaimId`, and the stream revision as a string. */
-type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolSelection" | "continuationReservation" | "modelReservation"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
+/** Shape of the frozen event data with its realization discriminant and string stream revision. */
+type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolSelection" | "continuationReservation" | "modelReservation"> & { readonly generation: number; readonly leaseId: string; readonly realization: FrozenConversationComputerTurn["lease"]["realization"]; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
 
 /** Rebuild the in-memory record from the stored event, gathering the flat lease fields into the `lease` bundle. */
 function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConversationComputerTurn
@@ -349,7 +350,7 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 		bootstrapId: value.bootstrapId,
 		siloId: value.siloId,
 		computerId: value.computerId,
-		lease: { leaseId: value.leaseId, leaseGeneration: value.generation, sandboxClaimId: value.sandboxClaimId },
+		lease: { leaseId: value.leaseId, leaseGeneration: value.generation, realization: _ValidatedConversationComputerRealization(value.realization) },
 		binding: { ...value.binding, expectedRevision: BigInt(value.binding.expectedRevision) },
 		latestPendingEntryId: value.latestPendingEntryId,
 		modelAlias: value.modelAlias,

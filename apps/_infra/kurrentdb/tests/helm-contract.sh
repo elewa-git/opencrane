@@ -142,11 +142,14 @@ printf '%s\n' "$rendered" | node -e '
   const bootstrap = resources.find(function _IsKurrentBootstrapScript(resource) {
     return resource?.kind === "ConfigMap" && resource.metadata?.name === "opencrane-testv5-kurrentdb-bootstrap";
   }).data["bootstrap.sh"];
+  assert.equal(bootstrap, fs.readFileSync(process.argv[2], "utf8"),
+    "Helm and local development must execute the same app-owned bootstrap policy");
   assert.ok(bootstrap.includes("$endpoint/streams/%24settings/head"), "Bootstrap must read the current ACL event");
   assert.ok(bootstrap.includes("Accept: application/json"), "Bootstrap must request the event data as JSON");
   const quote = String.fromCharCode(39);
-  assert.ok(bootstrap.includes(`--user "$history_username:$history_password" --header ${quote}Accept: application/json${quote}`),
-    "The service probe must request a supported stream representation");
+  assert.ok(bootstrap.includes(`--header "@$service_authorization_header" --header ${quote}Accept: application/json${quote}`),
+    "The service probe must use file-backed authorization and a supported stream representation");
+  assert.equal(bootstrap.includes("--user"), false, "Bootstrap credentials must not enter curl process arguments");
   assert.ok(bootstrap.includes(`"$subscription_url/info"`), "Bootstrap must inspect a subscription without consuming messages");
   assert.equal(/^\s*subscription_status=.*"\$subscription_url"/m.test(bootstrap), false);
   const queryStart = bootstrap.indexOf(`! jq -e ${quote}`) + `! jq -e ${quote}`.length;
@@ -173,7 +176,7 @@ printf '%s\n' "$rendered" | node -e '
   assert.equal(_AcceptsCurrentAcl({ entries: [{ data: JSON.stringify(expected) }] }), false,
     "An HTTP feed is not the current settings event");
   assert.equal(_AcceptsCurrentAcl({}), false);
-' "$ROOT_DIR/node_modules/js-yaml"
+' "$ROOT_DIR/node_modules/js-yaml" "$ROOT_DIR/apps/_infra/kurrentdb/helm/files/bootstrap.sh"
 grep -Fq 'kind: StatefulSet' <<<"$rendered"
 grep -Fq 'name: opencrane-testv5-kurrentdb' <<<"$rendered"
 grep -Fq 'kind: Job' <<<"$rendered"
@@ -200,14 +203,14 @@ grep -Fq 'eventType": "opencrane-history-default-acl"' <<<"$rendered"
 grep -Fq '"$userStreamAcl"' <<<"$rendered"
 grep -Fq '"$d": "$admins"' <<<"$rendered"
 grep -Fq 'jq -e' <<<"$rendered"
-grep -Fq 'activation_stream="computer-activations-opencrane-testv5"' <<<"$rendered"
+grep -Fq 'activation_stream="computer-activations-$KURRENTDB_BOOTSTRAP_SILO_ID"' <<<"$rendered"
 grep -Fq 'activation_group="conversation-computer-activation"' <<<"$rendered"
 grep -Fq 'subscription_url="$endpoint/subscriptions/$activation_stream/$activation_group"' <<<"$rendered"
-grep -Fq -- '--user "admin:$admin_password" --request PUT' <<<"$rendered"
-grep -Fq 'maxSubscriberCount: 4' <<<"$rendered"
+grep -Fq -- '--header "@$admin_authorization_header" --request PUT' <<<"$rendered"
+grep -Fq 'maxSubscriberCount: $maxSubscribers' <<<"$rendered"
 grep -Fq 'messageTimeoutMilliseconds: 60000' <<<"$rendered"
 grep -Fq 'maxRetryCount: 60' <<<"$rendered"
-if grep -F -- '--user "$history_username:$history_password" --request PUT' <<<"$rendered"; then
+if grep -F -- '--header "@$service_authorization_header" --request PUT' <<<"$rendered"; then
   echo "HistoryStore service credentials gained persistent-subscription administration" >&2
   exit 1
 fi

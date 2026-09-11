@@ -55,7 +55,7 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 			|| activeComputer.computer.conversationId !== command.conversationId || activeComputer.computer.agentIdentityId !== computer.agentIdentityId
 			|| activeComputer.computer.profileRevisionId !== agent.profileRevisionId || activeComputer.lease.id !== lease.leaseId
 			|| activeComputer.lease.computerId !== computer.computerId || activeComputer.lease.generation !== lease.leaseGeneration
-			|| activeComputer.lease.sandboxClaimId !== lease.sandboxClaimId)
+			|| JSON.stringify(activeComputer.lease.realization) !== JSON.stringify(lease.realization))
 			return { outcome: "denied", reason: "identity_unavailable" };
 
 		// The stored execution subject keeps `computerScope` flat with `leaseId` and `leaseGeneration`: PostgreSQL triggers read that shape.

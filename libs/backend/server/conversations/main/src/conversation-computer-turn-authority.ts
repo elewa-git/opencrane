@@ -7,7 +7,7 @@ import type { CompiledRunInput } from "@opencrane/contracts";
 
 import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
-/** Coordinates one durable, lease-fenced conversation turn for a bound sandbox Pod. */
+/** Coordinates one durable, lease-fenced conversation turn for a bound realized process. */
 export class ConversationComputerTurnAuthority implements ConversationComputerTurnAuthorityPort
 {
 	public constructor(private readonly dependencies: ConversationComputerTurnAuthorityDependencies) {}
@@ -30,7 +30,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	 *
 	 * Saved output is recovered before recompilation because its own history append may already have
 	 * changed the conversation head. An unreserved turn must still reproduce the frozen input digest.
-	 * A reserved request reports status without creating another allowance or handing a key to the Pod.
+	 * A reserved request reports status without creating another allowance or handing a key to the process.
 	 * Saved tool content may report ready so the server can continue admission and result handling;
 	 * that status never permits the first model request to dispatch again.
 	 */
@@ -39,12 +39,12 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const active = await this.dependencies.store.loadActive({ siloId: this.dependencies.siloId, computerId: command.computerId, lease: command.lease });
 		if (active !== null && active.outputReceipt !== null)
 		{
-			await this._FinishOutput(active, command.workload);
+			await this._FinishOutput(active, command.process);
 			return null;
 		}
 		if (active?.modelReservation !== null && active !== null)
 		{
-			await this._AdmitOutputPod(active, command.workload);
+			await this._AdmitOutputProcess(active, command.process);
 			if (active.continuationReservation === null && (active.toolSelection !== null || await this.dependencies.modelCustody.loadDeclaration(active) !== null))
 				return { bootstrapId: active.bootstrapId, outcome: "ready" };
 			return { bootstrapId: active.bootstrapId, outcome: _ConversationModelReservationStatus(active.continuationReservation ?? active.modelReservation).outcome as "pending" | "response_unavailable" };
@@ -57,28 +57,28 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const turn = active ?? await this.dependencies.store.createOrRead(proposed);
 		_AssertSameTurn(proposed, turn);
 		_AssertRecompiledInput(turn, candidate.compiledInput);
-		await this.dependencies.candidates.assertCurrent(turn, command.workload);
+		await this.dependencies.candidates.assertCurrent(turn, command.process);
 		if (turn.outputSourceCommandId !== null)
 			return null;
 		await this.dependencies.runLifecycle.start(_RunLifecycleCommand(turn));
 		return { bootstrapId: turn.bootstrapId, outcome: "ready" };
 	}
 
-	/** Advance the saved model/tool protocol after proving the current Pod; failures never retry paid work. */
+	/** Advance the saved model/tool protocol after proving the current process; failures never retry paid work. */
 	public async modelStep(command: ConversationComputerModelStepCommand): Promise<ConversationComputerModelStepResult>
 	{
 		const turn = await this.dependencies.store.load(command.bootstrapId);
 		if (turn === null)
 			return { outcome: ConversationComputerModelStepOutcomes.AuthorityEnded };
-		await this._AdmitOutputPod(turn, command.workload);
+		await this._AdmitOutputProcess(turn, command.process);
 		if (turn.outputReceipt !== null)
 		{
-			await this._FinishOutput(turn, command.workload);
+			await this._FinishOutput(turn, command.process);
 			return { outcome: ConversationComputerModelStepOutcomes.Completed };
 		}
 		try
 		{
-			return await _AdvanceConversationComputerModel(turn, command.workload, this.dependencies, this.appendOutput.bind(this));
+			return await _AdvanceConversationComputerModel(turn, command.process, this.dependencies, this.appendOutput.bind(this));
 		}
 		catch (error)
 		{
@@ -92,13 +92,13 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		}
 	}
 
-	/** Save only the winning server model response; the Pod has no output-submission route. */
+	/** Save the winning server model response; the realized process has no output-submission route. */
 	public async appendOutput(command: ConversationComputerOutputCommand): Promise<"accepted" | "idempotent">
 	{
 		const turn = await this.dependencies.store.load(command.bootstrapId);
 		if (turn === null)
 			throw new Error("Conversation computer output requires an admitted bootstrap");
-		await this._AdmitOutputPod(turn, command.workload);
+		await this._AdmitOutputProcess(turn, command.process);
 		const reservation = turn.continuationReservation ?? turn.modelReservation;
 		if (turn.toolSelection !== null && turn.continuationReservation === null || reservation === null || reservation.invocationFence !== command.modelInvocationFence || command.sourceCommandId !== command.modelInvocationFence || !Number.isSafeInteger(command.modelNotAfterEpochMs) || command.modelNotAfterEpochMs > reservation.dispatchDeadlineEpochMs)
 			throw new Error("Conversation computer output cannot finish unresolved tool work");
@@ -111,35 +111,35 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			if (entry.kind !== "message" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
 				|| entry.blocks[0].id !== payload.blockId || entry.blocks[0].payloadRef !== payload.payloadRef || entry.blocks[0].ciphertextDigest !== payload.ciphertextDigest)
 				throw new Error("Conversation computer output retry has a different saved payload");
-			await this._FinishOutput(turn, command.workload);
+			await this._FinishOutput(turn, command.process);
 			return "idempotent";
 		}
-		const notAfter = Math.min(command.modelNotAfterEpochMs, await __AssertConversationComputerAnswerAuthority(turn, command.workload, this.dependencies));
+		const notAfter = Math.min(command.modelNotAfterEpochMs, await __AssertConversationComputerAnswerAuthority(turn, command.process, this.dependencies));
 		const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
-		const writer = this.dependencies.writers.create(turn, command.workload);
+		const writer = this.dependencies.writers.create(turn, command.process);
 		const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: payload.blockId, kind: "text", payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
 		if (Date.now() >= Math.min(reservation.dispatchDeadlineEpochMs, notAfter))
 			throw new Error("Conversation computer model response missed its fixed dispatch deadline");
 		const decision = await this.dependencies.store.markOutput(turn.bootstrapId, receipt);
-		await this._FinishOutput({ ...turn, outputSourceCommandId: decision.receipt.event.id, outputReceipt: decision.receipt }, command.workload);
+		await this._FinishOutput({ ...turn, outputSourceCommandId: decision.receipt.event.id, outputReceipt: decision.receipt }, command.process);
 		return decision.outcome;
 	}
 
-	/** Verify the current Pod without recompiling history that may already contain its accepted answer. */
-	private async _AdmitOutputPod(turn: FrozenConversationComputerTurn, workload: ConversationComputerBootstrapCommand["workload"]): Promise<void>
+	/** Verify the current process without recompiling history that may already contain its accepted answer. */
+	private async _AdmitOutputProcess(turn: FrozenConversationComputerTurn, process: ConversationComputerBootstrapCommand["process"]): Promise<void>
 	{
 		if (turn.siloId !== this.dependencies.siloId)
 			throw new Error("Conversation computer output crossed its admitted silo");
-		await this.dependencies.candidates.admit({ computerId: turn.computerId, lease: turn.lease, workload });
+		await this.dependencies.candidates.admit({ computerId: turn.computerId, lease: turn.lease, process });
 	}
 
 	/** Confirm the saved event before completing idempotent run, credential and active-pointer work. */
-	private async _FinishOutput(turn: FrozenConversationComputerTurn, workload: ConversationComputerBootstrapCommand["workload"]): Promise<void>
+	private async _FinishOutput(turn: FrozenConversationComputerTurn, process: ConversationComputerBootstrapCommand["process"]): Promise<void>
 	{
 		if (turn.outputReceipt === null)
 			throw new Error("Conversation computer output receipt is missing");
-		await this._AdmitOutputPod(turn, workload);
-		const writer = this.dependencies.writers.create(turn, workload);
+		await this._AdmitOutputProcess(turn, process);
+		const writer = this.dependencies.writers.create(turn, process);
 		await writer.append(turn.outputReceipt);
 		await this.dependencies.runLifecycle.complete(_RunLifecycleCommand(turn));
 		await this.dependencies.credentials.revoke(turn.bootstrapId);
@@ -158,7 +158,7 @@ function _RunLifecycleCommand(turn: FrozenConversationComputerTurn): Conversatio
  * Build the durable record field by field so compiled content can never ride along into the Kurrent event.
  *
  * The lease is copied from the candidate: the compiler received it from this same bootstrap command
- * and added the SandboxClaim the Pod-binding check proved.
+ * and added the persisted realization that process binding proved.
  */
 function _Freeze(candidate: ConversationComputerTurnCandidate, command: ConversationComputerBootstrapCommand, bootstrapId: string): FrozenConversationComputerTurn
 {
@@ -167,7 +167,7 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		bootstrapId,
 		siloId: candidate.binding.siloId,
 		computerId: command.computerId,
-		lease: { leaseId: candidate.lease.leaseId, leaseGeneration: candidate.lease.leaseGeneration, sandboxClaimId: candidate.lease.sandboxClaimId },
+		lease: { leaseId: candidate.lease.leaseId, leaseGeneration: candidate.lease.leaseGeneration, realization: candidate.lease.realization },
 		binding: candidate.binding,
 		latestPendingEntryId: candidate.latestPendingEntryId,
 		modelAlias: candidate.modelAlias,

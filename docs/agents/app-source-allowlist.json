@@ -11,6 +11,7 @@
   ],
   "allowedFiles": [
 	{ "path": "apps/opencrane/src/app/company-assistant-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+    { "path": "apps/opencrane/src/app/conversation-computer-agent-sandbox-realizer.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/prisma.config.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/scripts/emit-openapi.mts", "owner": "apps/opencrane", "classification": "build-entrypoint" },
     { "path": "apps/opencrane/src/app/background-workers.ts", "owner": "apps/opencrane", "classification": "process-composition" },
@@ -66,6 +67,23 @@
     { "path": "apps/opencrane/src/infra/health/public-health.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/infra/health/public-health-probe.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/infra/health/public-health.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/authentication.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+	{ "path": "apps/opencrane/src/development/cleanup.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/config.ts", "owner": "apps/opencrane", "classification": "app-config" },
+    { "path": "apps/opencrane/src/development/config.types.ts", "owner": "apps/opencrane", "classification": "app-config" },
+    { "path": "apps/opencrane/src/development/conversation-computer-host-realizer.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/conversation-computer-host-realizer.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/conversation-computer-host-supervisor.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/conversation-computer-lifecycle.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/conversation-computer-private-app.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+    { "path": "apps/opencrane/src/development/conversation-computer-runtime.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/index.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/lifecycle.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/public-app.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+    { "path": "apps/opencrane/src/development/public-app.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+    { "path": "apps/opencrane/src/development/simulated-conversation-model.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
     { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
@@ -75,6 +93,8 @@
     { "path": "apps/opencrane-ui/src/app/conversation-workspace.providers.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
     { "path": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
     { "path": "apps/opencrane-ui/src/app/gateway-profile.providers.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
+    { "path": "apps/opencrane-ui/src/app/http-profile.provider.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
+    { "path": "apps/opencrane-ui/src/app/http-profile.provider.tier2.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
     { "path": "apps/opencrane-ui/src/app/login/login-page.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-view" },
 	{ "path": "apps/opencrane-ui/src/app/login/login-return-to.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
     { "path": "apps/opencrane-ui/src/app/local-development-profile.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
@@ -129,7 +149,9 @@
     { "path": "apps/mcp-executor/vitest.config.ts", "owner": "apps/mcp-executor", "classification": "test-config" },
 
     { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
-    { "path": "apps/conversation-computer/src/main.py", "owner": "apps/conversation-computer", "classification": "process-entrypoint" }
+    { "path": "apps/conversation-computer/src/main.py", "owner": "apps/conversation-computer", "classification": "process-entrypoint" },
+    { "path": "apps/_infra/litellm/local-development/config-generation.mjs", "owner": "apps/_infra/litellm", "classification": "app-config" },
+    { "path": "apps/_infra/litellm/local-development/provider-selection.mjs", "owner": "apps/_infra/litellm", "classification": "app-config" }
   ],
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",
