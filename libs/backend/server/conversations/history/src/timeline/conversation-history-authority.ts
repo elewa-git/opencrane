@@ -1,5 +1,5 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { ___ConversationEntrySchema } from "@opencrane/contracts";
+import { ___ConversationEntrySchema, ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageActivations } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult, type ConversationHistoryAttestedAppendCommand } from "./conversation-history-authority.types";
@@ -50,22 +50,25 @@ export class ConversationHistoryAuthority
 	 */
 	public async append(command: ConversationHistoryAppendCommand): Promise<ConversationHistoryAppendResult>
 	{
-		// 1. Validate coordinates before malformed data can enter the immutable history stream.
-		const entry = _ValidatedEntry(command);
-		// 2. Derive the stream from the command so an entry cannot redirect its own append.
-		const streamName = `conversation-${command.conversationId}`;
+		const checked = this.entryAppend(command);
 		// 3. Return the stream's conflict for re-authorization and preserve every other store error.
 		try
 		{
-			const receipt = await this.historyStore.append({ streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] });
+			const receipt = await this.historyStore.append(checked);
 			return { outcome: ConversationHistoryAppendOutcomes.Appended, receipt };
 		}
 		catch (error)
 		{
-			if (error instanceof WrongExpectedVersionError && error.streamName === streamName)
+			if (error instanceof WrongExpectedVersionError && error.streamName === checked.streamName)
 				return { outcome: ConversationHistoryAppendOutcomes.ExpectedHeadConflict };
 			throw error;
 		}
+	}
+
+	/** Builds one validated conversation-entry append for a larger atomic history transaction. */
+	public entryAppend(command: ConversationHistoryAppendCommand): HistoryAppend
+	{
+		return _ConversationHistoryEntryAppend(command);
 	}
 
 	/** Atomically appends one message and its silo activation request after both stream heads are checked. */
@@ -76,11 +79,13 @@ export class ConversationHistoryAuthority
 		const entry = _ValidatedEntry(command);
 		const streamName = `conversation-${command.conversationId}`;
 		const queueStreamName = `computer-activations-${command.siloId}`;
+		if (entry.kind !== ConversationEntryKinds.Message || entry.author.kind !== ConversationAuthorKinds.Human || entry.activation !== ConversationMessageActivations.Start && entry.activation !== ConversationMessageActivations.Stop)
+			throw new Error("Conversation activation append requires a human start or stop message");
 		if (!_Identifier(command.activation.computerId) || !Number.isSafeInteger(command.activation.generation) || command.activation.generation < 1 || !_UUID_PATTERN.test(command.activation.eventId) || !_ExpectedRevision(command.activation.queueExpectedRevision))
 			throw new Error("Conversation activation append requires checked computer and queue coordinates");
 		try
 		{
-			const receipts = await this.historyStore.appendAtomic({ expectedHeads: [{ streamName, revision: command.expectedRevision }, { streamName: queueStreamName, revision: command.activation.queueExpectedRevision }], appends: [{ streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] }, { streamName: queueStreamName, expectedRevision: command.activation.queueExpectedRevision, events: [{ id: command.activation.eventId, type: "opencrane.computer.activation-requested.v1", data: { siloId: command.siloId, computerId: command.activation.computerId, conversationId: command.conversationId, generation: command.activation.generation, causationPosition: entry.position }, metadata: { causationId: entry.id, correlationId: entry.correlationId, idempotencyKey: command.activation.eventId } }] }] });
+			const receipts = await this.historyStore.appendAtomic({ expectedHeads: [{ streamName, revision: command.expectedRevision }, { streamName: queueStreamName, revision: command.activation.queueExpectedRevision }], appends: [{ streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] }, { streamName: queueStreamName, expectedRevision: command.activation.queueExpectedRevision, events: [{ id: command.activation.eventId, type: "opencrane.computer.activation-requested.v1", data: { action: entry.activation, siloId: command.siloId, computerId: command.activation.computerId, conversationId: command.conversationId, generation: command.activation.generation, causationPosition: entry.position }, metadata: { causationId: entry.id, correlationId: entry.correlationId, idempotencyKey: command.activation.eventId } }] }] });
 			const receipt = receipts.find(item => item.streamName === streamName);
 			if (receipt === undefined)
 				throw new Error("Conversation activation append omitted its conversation receipt");
@@ -121,6 +126,13 @@ export class ConversationHistoryAuthority
 			throw error;
 		}
 	}
+}
+
+/** Builds one validated conversation-entry append for an authority-owned atomic history transaction. */
+export function _ConversationHistoryEntryAppend(command: ConversationHistoryAppendCommand): HistoryAppend
+{
+	const entry = _ValidatedEntry(command);
+	return { streamName: `conversation-${command.conversationId}`, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] };
 }
 
 /** Builds the versioned KurrentDB event envelope for one validated entry. */

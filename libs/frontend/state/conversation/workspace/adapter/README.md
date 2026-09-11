@@ -40,7 +40,9 @@ network coordinates or lease credentials to the browser.
 It also implements `ConversationPersonalRunsGateway` through `GET /me/runs`. The model-adjacent
 validator rejects unknown states, malformed timestamps, duplicate rows and oversized lists before
 the selected-chat store adopts them. The existing cookie supplies identity and an AbortSignal
-cancels obsolete reads; response bodies never become error copy.
+cancels obsolete reads; response bodies never become error copy. Its Stop command uses the existing
+conversation-message endpoint with the store's stable UUID, fixed `Stop` control text, and `stop`
+activation. It does not append browser history or infer terminal cancellation from the HTTP response.
 The same adapter implements the group-child port. Child reads and creation responses must match the
 requested parent and source; shares forward the reviewed text and UUID unchanged and accept only a
 validated accepted/idempotent acknowledgement. Every request carries the existing session cookie

@@ -31,6 +31,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `children/` | Admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
+| `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
 | `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits and terminal tool-result wakeups. |
 | `computers/turns/approval-notifications/` | Recheck the assigned participant and publish one receipt-backed requested-approval history fact before the durable wait. |
 | `computers/turns/tool-result-notifications/` | Publish a terminal tool status and its private recovery receipt before the remaining model call is reserved. |
@@ -45,12 +46,42 @@ signed-in participant ──► main ◄── HERE ──► history
 - `PrismaSelfConversationHistoryUnitOfWork` and `_CreateSelfConversationHistoryRouter` bind current access to messages, history and event streams.
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child requests and recovery.
 - Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
+- Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
+- A fresh Stop selection checks current requester access before Kurrent records its target or no-target
+  outcome. Target admission then rechecks current SQL authority and binds one Absurd cancellation task. That task
+  records the Kurrent winner, cancels the original turn task, revokes model credentials and waits
+  for provider claims before finalizing. Missing relational lease coordinates fail closed; a
+  no-target receipt is written only when an existing exact lease names the checked pointer stream.
 - Lifecycle, checkpoint, turn and review authorities, routers and adapter ports support server composition. The activation worker receives a process logger and an explicit exhaustion callback.
 - `ConversationComputerTurnAuthority` owns the final output-authority recheck, the turn store owns the atomic receipt-and-answer commit, and `ConversationComputerTurnWriterFactory` prepares and exactly confirms that answer. The activation and lifecycle units of work own their transaction isolation.
 - `PrismaCompanyAssistantDirectory`, `PrismaGroupChildAgentResolver`, `_ResolveConversationCaller` and `_RegisterGroupChildWorkflow` bind current identity and recovery to participant operation owners.
 - `_SelfConversationHistoryOpenapiPaths` contributes the conversation API description.
 
 History and computer snapshot classes are imported directly from their sibling packages.
+
+### Stop selection and recovery
+
+Each Stop command has a private Kurrent stream. Its first event fixes the selected turn or records
+that there was no eligible turn. The append also checks the observed active-turn pointer, so two
+deliveries cannot commit different selections. Recording a target does not yet cancel work or admit
+a task: the following SQL transaction must recheck the requester, lease, generation, run attempt
+and original task before saving `Cancelling` and the Absurd task together.
+
+| Saved command state | Next event or observation | Result |
+| --- | --- | --- |
+| No command event | Authorized reader finds a target and the observed pointer still matches | Append target selection at revision 0. |
+| No command event | Authorized reader finds no eligible target and the observed pointer still matches | Append the terminal no-target receipt at revision 0; admit no task. |
+| No command event | Another delivery or turn changes a checked stream | Reload the saved selection, or resolve again if no delivery selected yet. |
+| Target selected at revision 0; no SQL admission | First delivery or restart | Recheck authority and admit only that saved target. Never select a newer turn. |
+| Target selected; SQL admission is denied | Run already ended or current authority no longer permits Stop | Return a permanent refusal to the activation consumer. No cancellation state or task commits. |
+| Target selected; SQL admission exists | Delivery or task retry | Recover the saved cancellation task and arbitrate against output for the same turn. |
+| Target selected; final output wins | Absurd observes the committed answer | Append an output-won receipt at revision 1; complete the SQL run successfully without cancellation cleanup. |
+| Target selected; cancellation wins | Absurd commits cancellation against the turn revision | Append the cancellation receipt at revision 1 together with the interrupted log and active-turn settlement, then perform cleanup. |
+| Terminal receipt exists | Redelivery or restart | Reuse the recorded outcome; resume any admitted cleanup without another model request or allowance. |
+
+Kurrent owns the selection and final-output race. SQL owns current authorization and atomic task/run
+admission. Absurd owns retries and cleanup after admission. A selected target whose SQL admission
+was denied remains bound to that command; it cannot be reused to stop a later turn.
 
 ## Boundary
 

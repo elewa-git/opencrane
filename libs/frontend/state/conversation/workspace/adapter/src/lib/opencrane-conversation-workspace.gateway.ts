@@ -3,7 +3,7 @@ import { Injectable, inject } from "@angular/core";
 import type { GroupChildCreateCommand, GroupChildShareCommand, GroupChildView } from "@opencrane/models/conversations";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { _ParseConversationPersonalRuns, type ConversationPersonalRun, type ConversationPersonalRunsGateway, _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
+import { _ParseConversationPersonalRuns, type ConversationPersonalRun, type ConversationPersonalRunsGateway, type ConversationWorkStopCommand, _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationComputerBrowserPage, _ConversationComputerBrowserTargets, _ConversationComputerCommandResult, _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
@@ -42,6 +42,14 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 			throw _Failure(result.response?.status);
 		try { return _ParseConversationPersonalRuns(result.data); }
 		catch { throw _InvalidResponse(); }
+	}
+
+	/** Append an explicit Stop control message without starting a replacement turn. */
+	public async requestStop(command: ConversationWorkStopCommand): Promise<void>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: "Stop", activation: "stop" } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
 	}
 
 	/** Reads currently visible children and rejects a response for another parent. */

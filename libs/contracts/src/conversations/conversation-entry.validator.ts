@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 
-import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, type ConversationEntry } from "./conversation-entry.types";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageActivations, ConversationMessageContentBlockKinds, type ConversationEntry } from "./conversation-entry.types";
 
 const _IdentifierSchema = z.string().trim().min(1);
 const _InstantSchema = z.string().datetime({ offset: true });
@@ -54,7 +54,7 @@ const _MessageEntrySchema = z.object({
 	blocks: z.array(_MessageContentBlockSchema).min(1).refine(function _HasUniqueBlockIds(blocks): boolean { return new Set(blocks.map(function _BlockId(block): string { return block.id; })).size === blocks.length; }),
 	replyToEntryId: _IdentifierSchema.nullable(),
 	addressedAgentIdentityId: _IdentifierSchema.nullable(),
-	activation: z.enum(["none", "start", "interrupt"]),
+	activation: z.nativeEnum(ConversationMessageActivations),
 }).strict();
 const _LogEntryBase = { ..._EntryBase, kind: z.literal(ConversationEntryKinds.Log), summary: _IdentifierSchema, detailsRef: _IdentifierSchema.nullable() };
 const _LogEntrySchema = z.discriminatedUnion("logKind", [

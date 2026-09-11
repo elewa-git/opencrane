@@ -77,6 +77,7 @@
             [groupError]="vm.groupStore.error()" [groupRefreshing]="vm.groupStore.loading()"
             [groupRefreshAvailable]="selected.mode === vm.modes.Group && (vm.groupStore.children().length > 0 || vm.groupStore.error() !== null)"
             [computerStatus]="vm.computerStatus()" [connectionStatus]="vm.connectionStatus()" [reconnectPending]="vm.store.manualReconnectPending()"
+            [runActions]="vm.runActions()" (stopRequested)="vm.stopCurrentWork()"
             (draftChanged)="vm.updateDraft($event)" (submitted)="vm.send()" (groupRefreshRequested)="vm.groupStore.refresh()" (reconnectRequested)="vm.reconnect()" />
         } @else {
           <section

@@ -1,4 +1,4 @@
-import type { ConversationComputer, ConversationEntry } from "@opencrane/contracts";
+import { ConversationMessageActivations, type ConversationComputer, type ConversationEntry } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/backend/observability";
 
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
@@ -35,18 +35,11 @@ export enum ConversationMessageAdmissionOutcomes
  * Selects the agent-work transition committed with one participant text message.
  *
  * The server validates these closed wire values before admission. `Start` requests work after the
- * message commits, while `Interrupt` first requests that current work stop; neither value grants
- * permission without the participant and computer checks in the authority.
+ * message commits, while `Interrupt` first requests that current work stop. `Stop` only ends the
+ * requester's current turn. Every operation requires current participant and computer authority;
+ * a message receipt proves command admission, not that cancellation has finished.
  */
-export enum ConversationMessageActivations
-{
-	/** Records a message without requesting agent work. */
-	None = "none",
-	/** Requests fresh agent work after the message is committed. */
-	Start = "start",
-	/** Requests interruption of current work before fresh agent work. */
-	Interrupt = "interrupt",
-}
+export { ConversationMessageActivations } from "@opencrane/contracts";
 
 /** Validated participant text-message command. */
 export interface ConversationMessageCommand

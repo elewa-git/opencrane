@@ -67,18 +67,17 @@ describe("conversation elements", function _ConversationElements()
 		expect(fixture.nativeElement.querySelector(".conversation-rich-text")?.getAttribute("data-message-id")).toBe("message-1");
 	});
 
-	it("emits run action intents only from visible controls", async function _RunActions()
+	it("emits Stop only from an enabled current-work control", async function _RunActions()
 	{
 		const fixture = await _Fixture(ConversationRunActionsComponent);
-		_SetInput(fixture.componentInstance.presentation, { statusLabel: "Run failed", canCancel: false, canRetry: true, canSteer: false, busy: false });
-		_SetInput(fixture.componentInstance.steeringDraft, "");
-		const retry = vi.fn();
-		fixture.componentInstance.retryRequested.subscribe(retry);
+		_SetInput(fixture.componentInstance.presentation, { statusLabel: "Assistant working", detail: "You can stop further work.", canStop: true, busy: false, error: null });
+		const stop = vi.fn();
+		fixture.componentInstance.stopRequested.subscribe(stop);
 		fixture.detectChanges();
 		const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
 		button.click();
-		expect(retry).toHaveBeenCalledOnce();
-		expect(fixture.nativeElement.textContent).not.toContain("Cancel run");
+		expect(stop).toHaveBeenCalledOnce();
+		expect(button.textContent).toContain("Stop");
 	});
 	it("retains exact message and assertive status presentations", function _RetainsPresentations()
 	{

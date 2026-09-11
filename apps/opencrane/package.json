@@ -119,6 +119,7 @@
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-proposal.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-approval.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-result.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-stop*.sql.test.ts",
             "vitest run src/bootstrap/onboarding/__tests__/personal-agent-profile-repair.sql.test.ts"
           ],
           "parallel": false
@@ -129,6 +130,15 @@
         "outputs": [
           "{workspaceRoot}/dist/apps/opencrane/openapi.json"
         ]
+      },
+      "test:stop-sql": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/conversation-stop*.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
       }
     }
   }

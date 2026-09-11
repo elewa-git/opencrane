@@ -86,6 +86,8 @@ class PrismaToolInvocationRunRecoveryRepository implements ToolInvocationRunReco
 			return ToolInvocationRunRecoveryEnterResults.Entered;
 		}
 		const state = await this._state(command);
+		if (state === AgentRunState.Cancelling)
+			return ToolInvocationRunRecoveryEnterResults.Cancelling;
 		if (state === AgentRunState.RecoveryRequired)
 		{
 			return ToolInvocationRunRecoveryEnterResults.AlreadyRecoveryRequired;

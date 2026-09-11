@@ -188,4 +188,18 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const result = await new PrismaToolInvocationRepository(transaction).recoverExpiredClaim("invocation-row-1", new Date("2026-08-11T10:00:01.000Z"));
 		expect(result).toEqual({ changed: true, invocation: expect.objectContaining({ state: ToolInvocationStates.Reconciling, claimKind: null }) });
 	});
+
+	it("preserves an expired provider-idempotent dispatch after cancellation wins", async function _cancelledExpiredDispatch()
+	{
+		const active = _row({ recoveryMode: ExternalActionRecoveryMode.ProviderIdempotency, state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, claimExpiresAt: new Date("2026-08-11T10:00:00.000Z"), revision: 5, run: { state: AgentRunState.Cancelling } });
+		const recovered = _row({ recoveryMode: ExternalActionRecoveryMode.ProviderIdempotency, state: ToolInvocationState.RecoveryRequired, claimKind: null, claimFence: 3, claimExpiresAt: null, recoveryRequiredAt: new Date("2026-08-11T10:00:01.000Z"), revision: 6, run: { state: AgentRunState.Cancelling } });
+		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(active).mockResolvedValueOnce(recovered), updateMany } } as unknown as Prisma.TransactionClient;
+		const result = await new PrismaToolInvocationRepository(transaction).recoverExpiredClaim("invocation-row-1", new Date("2026-08-11T10:00:01.000Z"));
+		expect(result).toEqual({ changed: true, invocation: expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired, claimKind: null }) });
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+			data: expect.objectContaining({ state: ToolInvocationState.RecoveryRequired, recoveryRequiredAt: new Date("2026-08-11T10:00:01.000Z") }),
+			where: expect.objectContaining({ run: { is: { attempt: 2, state: { in: ["Running", "Cancelling"] } } } }),
+		}));
+	});
 });

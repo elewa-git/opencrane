@@ -212,10 +212,13 @@ CREATE TYPE "ThirdPartySourceItemKind" AS ENUM ('mcp-server');
 CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive');
 
 -- CreateEnum
-CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_input', 'recovery_required', 'completed', 'failed');
+CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_input', 'recovery_required', 'cancelling', 'completed', 'cancelled', 'failed');
 
 -- CreateEnum
-CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
+CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input', 'user_cancelled');
+
+-- CreateEnum
+CREATE TYPE "AgentRunCancellationDecision" AS ENUM ('cancellation_won', 'output_won');
 
 -- CreateEnum
 CREATE TYPE "WorkloadKind" AS ENUM ('pod', 'job', 'deployment');
@@ -1638,6 +1641,17 @@ CREATE TABLE "agent_runs" (
     "workflow_task_id" TEXT,
     "workflow_task_name" TEXT,
     "workflow_task_key" TEXT,
+    "cancellation_command_id" TEXT,
+    "cancellation_command_digest" TEXT,
+    "cancellation_bootstrap_id" TEXT,
+    "cancellation_requested_by_principal_id" TEXT,
+    "cancellation_requested_at" TIMESTAMP(3),
+    "cancellation_authorization_decision_digest" TEXT,
+    "cancellation_workflow_task_id" TEXT,
+    "cancellation_workflow_task_name" TEXT,
+    "cancellation_workflow_task_key" TEXT,
+    "cancellation_decision" "AgentRunCancellationDecision",
+    "cancellation_decided_at" TIMESTAMP(3),
     "accepted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "started_at" TIMESTAMP(3),
     "finished_at" TIMESTAMP(3),
@@ -2622,6 +2636,12 @@ CREATE UNIQUE INDEX "third_party_source_items_source_id_kind_upstream_id_key" ON
 CREATE UNIQUE INDEX "agent_runs_workflow_task_id_key" ON "agent_runs"("workflow_task_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_cancellation_command_id_key" ON "agent_runs"("cancellation_command_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_cancellation_workflow_task_id_key" ON "agent_runs"("cancellation_workflow_task_id");
+
+-- CreateIndex
 CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
 
 -- CreateIndex
@@ -2653,6 +2673,9 @@ CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("convers
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_workflow_task_key" ON "agent_runs"("workflow_task_name", "workflow_task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_cancellation_workflow_task_key" ON "agent_runs"("cancellation_workflow_task_name", "cancellation_workflow_task_key");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
@@ -3898,16 +3921,17 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'AgentRun workflow task binding is immutable';
     END IF;
-    IF OLD."state" IN ('completed', 'failed') THEN
+    IF OLD."state" IN ('completed', 'cancelled', 'failed') THEN
         RAISE EXCEPTION 'terminal AgentRun attempt coordinates are immutable';
     END IF;
     IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
-        (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'running', 'failed')) OR
+        (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'running', 'cancelling', 'failed')) OR
         (OLD."state" = 'queued' AND NEW."state" IN ('assigned', 'failed')) OR
         (OLD."state" = 'assigned' AND NEW."state" IN ('running', 'failed')) OR
-        (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_input', 'recovery_required', 'completed', 'failed')) OR
-        (OLD."state" = 'waiting_for_input' AND NEW."state" IN ('running', 'completed', 'failed')) OR
-        (OLD."state" = 'recovery_required' AND NEW."state" IN ('running', 'failed'))
+        (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_input', 'recovery_required', 'cancelling', 'completed', 'failed')) OR
+        (OLD."state" = 'waiting_for_input' AND NEW."state" IN ('running', 'cancelling', 'completed', 'failed')) OR
+        (OLD."state" = 'recovery_required' AND NEW."state" IN ('running', 'cancelling', 'failed')) OR
+        (OLD."state" = 'cancelling' AND NEW."state" IN ('cancelled', 'completed'))
     ) THEN
         RAISE EXCEPTION 'invalid AgentRun state transition';
     END IF;
@@ -3923,6 +3947,85 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE VIEW "agent_run_authority_clock" AS
+    SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
+
+-- A Stop task keeps one immutable target and audit decision across recovery.
+CREATE FUNCTION "enforce_agent_run_cancellation"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    admission_fields INTEGER;
+BEGIN
+    admission_fields := num_nonnulls(NEW."cancellation_command_id", NEW."cancellation_command_digest", NEW."cancellation_bootstrap_id", NEW."cancellation_requested_by_principal_id", NEW."cancellation_requested_at", NEW."cancellation_authorization_decision_digest", NEW."cancellation_workflow_task_id", NEW."cancellation_workflow_task_name", NEW."cancellation_workflow_task_key");
+    IF admission_fields NOT IN (0, 9) THEN
+        RAISE EXCEPTION 'AgentRun cancellation admission must be complete';
+    END IF;
+    IF TG_OP = 'INSERT' AND admission_fields <> 0 THEN
+        RAISE EXCEPTION 'a new AgentRun cannot carry a cancellation admission';
+    END IF;
+    IF admission_fields = 0 THEN
+        IF NEW."state" IN ('cancelling', 'cancelled') OR NEW."cancellation_decision" IS NOT NULL OR NEW."cancellation_decided_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'AgentRun cancellation requires its saved admission';
+        END IF;
+        IF TG_OP = 'UPDATE' AND OLD."cancellation_command_id" IS NOT NULL THEN
+            RAISE EXCEPTION 'AgentRun cancellation admission is immutable';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."state" NOT IN ('cancelling', 'cancelled', 'completed') THEN
+        RAISE EXCEPTION 'an admitted Stop cannot reopen AgentRun work';
+    END IF;
+    IF OLD."cancellation_command_id" IS NULL THEN
+        IF NEW."state" <> 'cancelling' OR NEW."cancellation_decision" IS NOT NULL OR NEW."cancellation_decided_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'Stop admission must enter cancelling before terminal arbitration';
+        END IF;
+        IF NEW."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."cancellation_requested_by_principal_id" THEN
+            RAISE EXCEPTION 'Stop requires the original run requester';
+        END IF;
+        PERFORM 1 FROM "audit_decisions"
+        WHERE "decision_digest" = NEW."cancellation_authorization_decision_digest"
+          AND "silo_id" = NEW."silo_id" AND "actor_kind" = 'user'
+          AND "actor_id" = NEW."cancellation_requested_by_principal_id"
+          AND "resource_kind" = 'conversation' AND "resource_id" = NEW."conversation_id"
+          AND "action" = 'use' AND "outcome" = 'allow'
+          AND "arguments_digest" = NEW."cancellation_command_digest";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Stop requires its exact recorded requester authorization';
+        END IF;
+        NEW."cancellation_requested_at" := clock_timestamp();
+    ELSIF NEW."cancellation_command_id" IS DISTINCT FROM OLD."cancellation_command_id"
+        OR NEW."cancellation_command_digest" IS DISTINCT FROM OLD."cancellation_command_digest"
+        OR NEW."cancellation_bootstrap_id" IS DISTINCT FROM OLD."cancellation_bootstrap_id"
+        OR NEW."cancellation_requested_by_principal_id" IS DISTINCT FROM OLD."cancellation_requested_by_principal_id"
+        OR NEW."cancellation_requested_at" IS DISTINCT FROM OLD."cancellation_requested_at"
+        OR NEW."cancellation_authorization_decision_digest" IS DISTINCT FROM OLD."cancellation_authorization_decision_digest"
+        OR NEW."cancellation_workflow_task_id" IS DISTINCT FROM OLD."cancellation_workflow_task_id"
+        OR NEW."cancellation_workflow_task_name" IS DISTINCT FROM OLD."cancellation_workflow_task_name"
+        OR NEW."cancellation_workflow_task_key" IS DISTINCT FROM OLD."cancellation_workflow_task_key" THEN
+        RAISE EXCEPTION 'AgentRun cancellation admission is immutable';
+    END IF;
+    IF OLD."cancellation_decision" IS NOT NULL AND (
+        NEW."cancellation_decision" IS DISTINCT FROM OLD."cancellation_decision"
+        OR NEW."cancellation_decided_at" IS DISTINCT FROM OLD."cancellation_decided_at"
+    ) THEN
+        RAISE EXCEPTION 'AgentRun cancellation terminal winner is immutable';
+    END IF;
+    IF NEW."cancellation_decision" IS NULL AND NEW."cancellation_decided_at" IS NOT NULL THEN
+        RAISE EXCEPTION 'AgentRun cancellation decision time requires its terminal winner';
+    END IF;
+    IF OLD."cancellation_decision" IS NULL AND NEW."cancellation_decision" IS NOT NULL THEN
+        NEW."cancellation_decided_at" := clock_timestamp();
+    END IF;
+    IF NEW."state" = 'cancelled' AND NEW."cancellation_decision" IS DISTINCT FROM 'cancellation_won'::"AgentRunCancellationDecision" THEN
+        RAISE EXCEPTION 'a cancelled AgentRun requires the cancellation terminal winner';
+    END IF;
+    IF NEW."state" = 'completed' AND NEW."cancellation_decision" IS DISTINCT FROM 'output_won'::"AgentRunCancellationDecision" THEN
+        RAISE EXCEPTION 'an admitted Stop may complete only when final output won';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_runs_cancellation_authority" BEFORE INSERT OR UPDATE ON "agent_runs"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_cancellation"();
 CREATE FUNCTION "reject_capability_catalog_revision_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'CapabilityCatalogRevision rows are immutable';
@@ -3960,6 +4063,7 @@ DECLARE
     current_run "agent_runs"%ROWTYPE;
     current_invocation "tool_invocations"%ROWTYPE;
     bound_request "approval_requests"%ROWTYPE;
+    admitted_stop_cleanup BOOLEAN := FALSE;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
     IF TG_OP = 'UPDATE' THEN
@@ -3999,8 +4103,13 @@ BEGIN
     bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
     SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
+    -- Only the saved cancellation winner may close approvals after lease or membership expiry.
+    admitted_stop_cleanup := TG_OP = 'UPDATE' AND NEW."state" = 'cancelled'
+        AND current_run."state" = 'cancelling'
+        AND current_run."cancellation_decision" = 'cancellation_won'
+        AND current_run."cancellation_command_id" IS NOT NULL;
     IF current_run."attempt" IS DISTINCT FROM bound_request."attempt"
-        OR current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+        OR (current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState" AND NOT COALESCE(admitted_stop_cleanup, FALSE))
         OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
         OR current_invocation."run_id" IS DISTINCT FROM bound_request."run_id"
         OR current_invocation."attempt" IS DISTINCT FROM bound_request."attempt"
@@ -4017,17 +4126,19 @@ BEGIN
         OR COALESCE(current_run."execution_subject"->'computerScope'->>'leaseGeneration', '') !~ '^[1-9][0-9]*$' THEN
         RAISE EXCEPTION 'ApprovalRequest requires the current waiting run and its exact computer-lease invocation';
     END IF;
-    PERFORM 1 FROM "conversation_computer_active_leases"
-    WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
-      AND "silo_id" = current_run."silo_id"
-      AND "conversation_id" = current_run."conversation_id"
-      AND "agent_identity_id" = current_run."agent_identity_id"
-      AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
-      AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
-      AND "expires_at" > decision_time
-    FOR UPDATE;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+    IF NOT COALESCE(admitted_stop_cleanup, FALSE) THEN
+        PERFORM 1 FROM "conversation_computer_active_leases"
+        WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
+          AND "silo_id" = current_run."silo_id"
+          AND "conversation_id" = current_run."conversation_id"
+          AND "agent_identity_id" = current_run."agent_identity_id"
+          AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
+          AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
+          AND "expires_at" > decision_time
+        FOR UPDATE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+        END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN
         IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
@@ -4039,6 +4150,9 @@ BEGIN
         RETURN NEW;
     END IF;
     IF NEW."state" = 'cancelled' THEN
+        IF NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+            RAISE EXCEPTION 'ApprovalRequest cancellation cannot approve final arguments';
+        END IF;
         IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
             RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
         END IF;
@@ -4263,7 +4377,7 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM "agent_runs"
         WHERE "conversation_id" = OLD."id"
-          AND "state" NOT IN ('completed', 'failed')
+          AND "state" NOT IN ('completed', 'cancelled', 'failed')
     ) THEN
         RAISE EXCEPTION 'Conversation cannot close while a foreground run is active';
     END IF;
@@ -4327,7 +4441,7 @@ BEGIN
         OR conversation_agent_service_id IS DISTINCT FROM NEW."agent_service_id" THEN
         RAISE EXCEPTION 'AgentRun requires the exact agent-session Conversation authority';
     END IF;
-    IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'failed') THEN
+    IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'cancelled', 'failed') THEN
         RAISE EXCEPTION 'non-terminal AgentRun requires an open Conversation';
     END IF;
     RETURN NEW;
@@ -5865,14 +5979,31 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_workflow_task_check" CHECK (
          "workflow_task_name" = 'conversation-computer-turn' AND
          "workflow_task_key" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
     );
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cancellation_material_check" CHECK (
+    "cancellation_command_id" IS NULL OR (
+        "cancellation_command_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND "cancellation_command_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "cancellation_authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "cancellation_bootstrap_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND btrim("cancellation_requested_by_principal_id") <> ''
+        AND "workflow_task_id" IS NOT NULL
+        AND "cancellation_workflow_task_id" <> "workflow_task_id"
+        AND "cancellation_workflow_task_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND "cancellation_workflow_task_name" = 'conversation-computer-stop'
+        AND "cancellation_workflow_task_key" = "cancellation_command_id"
+    )
+);
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cancellation_audit_fkey"
+    FOREIGN KEY ("cancellation_authorization_decision_digest") REFERENCES "audit_decisions"("decision_digest") ON DELETE RESTRICT;
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_check" CHECK (
-        ("state" IN ('completed', 'failed') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR
-        ("state" NOT IN ('completed', 'failed') AND "finished_at" IS NULL AND "terminal_reason" IS NULL)
+        ("state" IN ('completed', 'cancelled', 'failed') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR
+        ("state" NOT IN ('completed', 'cancelled', 'failed') AND "finished_at" IS NULL AND "terminal_reason" IS NULL)
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_reason_check" CHECK (
         ("state" = 'completed' AND "terminal_reason" = 'success') OR
-        ("state" = 'failed' AND "terminal_reason" <> 'success') OR
-        "state" NOT IN ('completed', 'failed')
+        ("state" = 'failed' AND "terminal_reason" NOT IN ('success', 'user_cancelled')) OR
+        ("state" = 'cancelled' AND "terminal_reason" = 'user_cancelled') OR
+        "state" NOT IN ('completed', 'cancelled', 'failed')
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
         ("cost_amount" IS NULL AND "cost_currency" IS NULL) OR
@@ -6019,7 +6150,7 @@ ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participant
     );
 CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
     ON "agent_runs"("conversation_id")
-    WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed');
+    WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'cancelled', 'failed');
 ALTER TABLE "persona_question_sets" ADD CONSTRAINT "persona_question_sets_valid_check" CHECK (
         btrim("question_set_id") <> '' AND "version" > 0 AND
         (("state" = 'draft' AND "reviewed_by" IS NULL AND "reviewed_at" IS NULL) OR

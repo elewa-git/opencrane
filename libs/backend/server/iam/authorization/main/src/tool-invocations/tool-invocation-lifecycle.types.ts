@@ -133,6 +133,8 @@ export enum ToolInvocationLifecycleEvents
 	ReconcileProvenNotStarted = "reconcile_proven_not_started",
 	/** A non-mutating reconciliation claim expired before its result became durable. */
 	ReconcileClaimExpired = "reconcile_claim_expired",
+	/** A provider claim expired after cancellation won, so cleanup must preserve its uncertain outcome. */
+	CancellationClaimExpired = "cancellation_claim_expired",
 	/** Server-authoritative cancellation closed the invocation. */
 	Cancelled = "cancelled",
 }

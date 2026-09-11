@@ -8,6 +8,8 @@ const _Statuses: Record<ConversationActivityRunState, { readonly label: string; 
 	assigned: { label: "Preparing", tone: ScopeChipTones.Info },
 	running: { label: "Working", tone: ScopeChipTones.Info },
 	waiting_for_input: { label: "Waiting for input", tone: ScopeChipTones.Warning },
+	cancelling: { label: "Stopping", tone: ScopeChipTones.Warning },
+	cancelled: { label: "Stopped", tone: ScopeChipTones.Neutral },
 	recovery_required: { label: "Needs attention", tone: ScopeChipTones.Warning },
 	completed: { label: "Completed", tone: ScopeChipTones.Success },
 	failed: { label: "Failed", tone: ScopeChipTones.Danger },

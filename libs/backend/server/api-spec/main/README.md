@@ -38,6 +38,9 @@ edits. This package describes the API; it does not implement any endpoint.
 Personal run status documents `latestTool` as either null or one safe phase. The schema shares the
 contract enum and rejects extra progress properties. It distinguishes tool result receipt from the
 run's completion without exposing arguments, results or execution coordinates.
+The run states include `cancelling` while Stop cleanup is owed and `cancelled` after it finishes.
+The conversation message fragment describes Stop admission separately from that eventual result;
+clients cannot submit a run, attempt or lease as the cancellation target.
 
 ## Boundary
 

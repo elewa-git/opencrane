@@ -1,4 +1,5 @@
 import { ConversationMode, Prisma, type ConversationPrivatePayload } from "@prisma/client";
+import { ComputerLeaseStates } from "@opencrane/contracts";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,8 +59,9 @@ function _Fixture()
 	const read = vi.spyOn(ConversationHistoryReader.prototype, "read").mockResolvedValue({ entries: [], streamName: "conversation-conversation-1", genesis: {} as never });
 	const append = vi.spyOn(ConversationHistoryAuthority.prototype, "append").mockImplementation(async function _Append() { events.push("append"); return { outcome: ConversationHistoryAppendOutcomes.Appended } as never; });
 	const cipher = new AesGcmConversationPrivatePayloadCipher("key-1", { "key-1": Buffer.alloc(32, 7).toString("base64url") });
-	const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma as never, history, { cipher, computerReader: { load: vi.fn() } }, new ConversationHistoryAuthority(history));
-	return { authority, client, state, events, prisma, read, append };
+	const computerReader = { load: vi.fn() };
+	const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma as never, history, { cipher, computerReader }, new ConversationHistoryAuthority(history));
+	return { authority, client, state, events, prisma, read, append, computerReader, history };
 }
 
 afterEach(function _Restore() { vi.restoreAllMocks(); });
@@ -128,4 +130,38 @@ describe("participant message transaction with the central authorization authori
 		expect(f.state.audits).toEqual([]);
 		expect(f.client.conversationPrivatePayload.create).not.toHaveBeenCalled();
 	});
+
+	it.each([ComputerLeaseStates.Released, ComputerLeaseStates.Lost])("Stop keeps the observed generation for a %s lease", async function _StopGeneration(leaseState)
+	{
+		const f = _Fixture();
+		f.client.conversation.findFirst.mockResolvedValue({ mode: ConversationMode.AgentSession, computerId: "computer-1", computerAgentIdentityId: "agent-1", computerProfileRevisionId: "profile-1", participants: [{ visibleFromPosition: 0n }] } as never);
+		f.computerReader.load.mockResolvedValue({ computer: { id: "computer-1", leaseGeneration: 7 }, lease: { state: leaseState } });
+		f.history.readHead.mockResolvedValue({ streamName: "computer-activations-silo-1", revision: 4n });
+		const append = vi.spyOn(ConversationHistoryAuthority.prototype, "appendWithActivation").mockResolvedValue({ outcome: ConversationHistoryAppendOutcomes.Appended } as never);
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", { ..._COMMAND, activation: ConversationMessageActivations.Stop })).resolves.toMatchObject({ outcome: "accepted" });
+		expect(append).toHaveBeenCalledWith(expect.objectContaining({ entry: expect.objectContaining({ activation: "stop" }), activation: expect.objectContaining({ generation: 7 }) }));
+	});
+
+	it.each(["activation", "requester", "participant"])("rejects a recovered history entry with a different %s", async function _ConflictingHistory(field)
+	{
+		const f = _Fixture();
+		const author = { kind: "human", principalId: _CALLER.principalId, participantId: _CALLER.subjectId };
+		if (field === "requester")
+			author.principalId = "other-principal";
+		if (field === "participant")
+			author.participantId = "other-subject";
+		const activation = field === "activation" ? ConversationMessageActivations.Stop : ConversationMessageActivations.None;
+		f.read.mockResolvedValue({ entries: [{ id: _COMMAND.idempotencyKey, kind: "message", position: "4", author, activation }], streamName: "conversation-conversation-1", genesis: {} } as never);
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).rejects.toThrow("different command");
+		expect(f.append).not.toHaveBeenCalled();
+	});
+
+	it("returns the saved position for an exact history retry without another append", async function _RecoveredHistory()
+	{
+		const f = _Fixture();
+		f.read.mockResolvedValue({ entries: [{ id: _COMMAND.idempotencyKey, kind: "message", position: "4", author: { kind: "human", principalId: _CALLER.principalId, participantId: _CALLER.subjectId }, activation: _COMMAND.activation }], streamName: "conversation-conversation-1", genesis: {} } as never);
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).resolves.toEqual({ outcome: "idempotent", position: "4" });
+		expect(f.append).not.toHaveBeenCalled();
+	});
+
 });

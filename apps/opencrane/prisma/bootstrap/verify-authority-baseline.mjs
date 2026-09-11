@@ -5,6 +5,16 @@ const _MINIMUM_FUNCTIONS = 79;
 const _MINIMUM_TRIGGERS = 89;
 const _MINIMUM_CONSTRAINTS = 227;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'CREATE VIEW "agent_run_authority_clock" AS',
+    'CREATE FUNCTION "enforce_agent_run_cancellation"()',
+    'CREATE TRIGGER "agent_runs_cancellation_authority"',
+    'ADD CONSTRAINT "agent_runs_cancellation_material_check"',
+    'ADD CONSTRAINT "agent_runs_cancellation_audit_fkey"',
+    'Stop requires its exact recorded requester authorization',
+    'an admitted Stop cannot reopen AgentRun work',
+    'AgentRun cancellation terminal winner is immutable',
+    'ApprovalRequest cancellation cannot approve final arguments',
+
 	'CREATE TYPE "WorkloadKind" AS ENUM (\'pod\', \'job\', \'deployment\');',
 	'ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_check"',
 	'CREATE TABLE "oidc_sessions"',

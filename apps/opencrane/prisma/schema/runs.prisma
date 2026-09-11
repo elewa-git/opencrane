@@ -9,7 +9,11 @@ enum AgentRunState {
   Running          @map("running")
   WaitingForInput  @map("waiting_for_input")
   RecoveryRequired @map("recovery_required")
+  /// Further run work is fenced while its saved workflow and effect cleanup finish.
+  Cancelling       @map("cancelling")
   Completed        @map("completed")
+  /// The requester stopped this run; any uncertain external effect keeps its own recovery evidence.
+  Cancelled        @map("cancelled")
   Failed           @map("failed")
 }
 
@@ -19,6 +23,16 @@ enum AgentRunTerminalReason {
   BudgetExhausted @map("budget_exhausted")
   RuntimeFailure  @map("runtime_failure")
   InvalidInput    @map("invalid_input")
+  /// The original requester stopped the run without requesting another model turn.
+  UserCancelled  @map("user_cancelled")
+}
+
+/// The verified Kurrent terminal winner determines how the admitted Stop workflow finishes the run.
+enum AgentRunCancellationDecision {
+  /// Cancellation fenced final output; the saved workflow must finish cleanup before declaring Cancelled.
+  CancellationWon @map("cancellation_won")
+  /// Final output committed first; the saved workflow must preserve it and complete the original run.
+  OutputWon       @map("output_won")
 }
 
 enum WorkloadKind {
@@ -46,6 +60,28 @@ model AgentRun {
   workflowTaskId                    String?                               @unique @map("workflow_task_id")
   workflowTaskName                  String?                               @map("workflow_task_name")
   workflowTaskKey                   String?                               @map("workflow_task_key")
+  /// Identifies the one admitted Stop message; retries keep this target instead of selecting a later turn.
+  cancellationCommandId            String?                               @unique @map("cancellation_command_id")
+  /// Binds the immutable cancellation task input to its requester, message, run, attempt and lease.
+  cancellationCommandDigest        String?                               @map("cancellation_command_digest")
+  /// Names the original turn stream whose terminal revision arbitrates Stop against final output.
+  cancellationBootstrapId          String?                               @map("cancellation_bootstrap_id")
+  /// Records the original human requester whose current authority admitted Stop.
+  cancellationRequestedByPrincipalId String?                              @map("cancellation_requested_by_principal_id")
+  /// Records admission time alongside the command and its durable workflow receipt.
+  cancellationRequestedAt          DateTime?                             @map("cancellation_requested_at")
+  /// Binds the digest of the product authorization decision recorded by the admission transaction.
+  cancellationAuthorizationDecisionDigest String?                            @map("cancellation_authorization_decision_digest")
+  /// Identifies the cancellation task; the original turn task remains separately bound above.
+  cancellationWorkflowTaskId       String?                               @unique @map("cancellation_workflow_task_id")
+  /// Names the sole workflow definition permitted to finish the admitted cancellation.
+  cancellationWorkflowTaskName     String?                               @map("cancellation_workflow_task_name")
+  /// Deduplicates admission of the cancellation workflow across request and server retries.
+  cancellationWorkflowTaskKey      String?                               @map("cancellation_workflow_task_key")
+  /// Records the verified terminal Kurrent winner once; it cannot be replaced by the other outcome.
+  cancellationDecision             AgentRunCancellationDecision?         @map("cancellation_decision")
+  /// Records when the matching terminal receipt was adopted into this run.
+  cancellationDecidedAt             DateTime?                             @map("cancellation_decided_at")
   acceptedAt                        DateTime                              @default(now()) @map("accepted_at")
   startedAt                         DateTime?                             @map("started_at")
   finishedAt                        DateTime?                             @map("finished_at")
@@ -70,6 +106,7 @@ model AgentRun {
   @@unique([id, inputSnapshotDigest])
   @@unique([conversationId, id])
   @@unique([workflowTaskName, workflowTaskKey], map: "agent_runs_workflow_task_key")
+  @@unique([cancellationWorkflowTaskName, cancellationWorkflowTaskKey], map: "agent_runs_cancellation_workflow_task_key")
   @@unique([id, conversationId, siloId, agentServiceId], map: "agent_runs_thread_authority_key")
   @@unique([id, inputSnapshotDigest, conversationId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId], map: "agent_run_snapshot_identity_key")
   @@index([agentServiceId, state])
@@ -130,4 +167,12 @@ model RunModelCredentialMintAuthorization {
   @@unique([runId, attempt, generation])
   @@index([expiresAt])
   @@map("run_model_credential_mint_authorizations")
+}
+
+/// Reads the database clock used to admit and finish run work.
+view AgentRunAuthorityClock {
+  singleton Int      @unique
+  now       DateTime
+
+  @@map("agent_run_authority_clock")
 }

@@ -1,5 +1,6 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
+import { ConversationEntryKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationHistoryAuthority } from "../conversation-history-authority";
@@ -90,13 +91,32 @@ describe("ConversationHistoryAuthority", function ()
 	{
 		const appendAtomic = vi.fn().mockResolvedValue([{ streamName: "conversation-conversation-1", revision: 8n }, { streamName: "computer-activations-silo-1", revision: 3n }]);
 		const authority = new ConversationHistoryAuthority({ append: vi.fn(), appendAtomic });
-		const result = await authority.appendWithActivation({ ..._Command(), activation: { computerId: "computer-1", generation: 2, eventId: "9e60b5de-87a8-5c34-9cca-e6e4cb291369", queueExpectedRevision: 2n } });
+		const base = _Command();
+		if (base.entry.kind !== ConversationEntryKinds.A2UI)
+			throw new Error("test fixture requires an A2UI entry");
+		const { surfaceId: _surface, a2uiSchemaVersion: _schema, operation: _operation, payloadRef: _payload, payloadDigest: _digest, ...common } = base.entry;
+		const entry = { ...common, author: { kind: "human" as const, principalId: "principal-1", participantId: "subject-1", issuer: "https://issuer.test", authenticatedAt: "2026-09-01T00:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored" as const, runId: null, kind: "message" as const, state: "completed" as const, blocks: [{ id: "block-1", kind: "text" as const, payloadRef: "payload-1", ciphertextDigest: "sha256:payload" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "start" as const };
+		const result = await authority.appendWithActivation({ ...base, entry, activation: { computerId: "computer-1", generation: 2, eventId: "9e60b5de-87a8-5c34-9cca-e6e4cb291369", queueExpectedRevision: 2n } });
 
 		expect(result).toEqual({ outcome: ConversationHistoryAppendOutcomes.Appended, receipt: { streamName: "conversation-conversation-1", revision: 8n } });
 		expect(appendAtomic).toHaveBeenCalledWith(expect.objectContaining({
 			expectedHeads: [{ streamName: "conversation-conversation-1", revision: 7n }, { streamName: "computer-activations-silo-1", revision: 2n }],
-			appends: expect.arrayContaining([expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2, causationPosition: "8" } })] })]),
+			appends: expect.arrayContaining([expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ type: "opencrane.computer.activation-requested.v1", data: { action: "start", siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2, causationPosition: "8" } })] })]),
 		}));
+	});
+
+	it("derives stop from the validated human message and rejects non-message activation", async function _StopAction()
+	{
+		const appendAtomic = vi.fn().mockResolvedValue([{ streamName: "conversation-conversation-1", revision: 8n }, { streamName: "computer-activations-silo-1", revision: 0n }]);
+		const authority = new ConversationHistoryAuthority({ append: vi.fn(), appendAtomic });
+		const base = _Command();
+		if (base.entry.kind !== ConversationEntryKinds.A2UI)
+			throw new Error("test fixture requires an A2UI entry");
+		const { surfaceId: _surface, a2uiSchemaVersion: _schema, operation: _operation, payloadRef: _payload, payloadDigest: _digest, ...common } = base.entry;
+		const entry = { ...common, author: { kind: "human" as const, principalId: "principal-1", participantId: "subject-1", issuer: "https://issuer.test", authenticatedAt: "2026-09-01T00:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored" as const, runId: null, kind: "message" as const, state: "completed" as const, blocks: [{ id: "block-1", kind: "text" as const, payloadRef: "payload-1", ciphertextDigest: "sha256:payload" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "stop" as const };
+		await authority.appendWithActivation({ ...base, entry, activation: { computerId: "computer-1", generation: 2, eventId: "9e60b5de-87a8-5c34-9cca-e6e4cb291369", queueExpectedRevision: HistoryExpectedRevisions.NoStream } });
+		expect(appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ appends: expect.arrayContaining([expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ data: expect.objectContaining({ action: "stop" }) })] })]) }));
+		await expect(authority.appendWithActivation({ ...base, activation: { computerId: "computer-1", generation: 2, eventId: "9e60b5de-87a8-5c34-9cca-e6e4cb291369", queueExpectedRevision: HistoryExpectedRevisions.NoStream } })).rejects.toThrow("human start or stop message");
 	});
 
 	it("atomically appends a service receipt and its participant-visible transformation", async function _AppendsAttestation()

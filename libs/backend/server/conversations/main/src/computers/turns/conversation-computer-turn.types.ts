@@ -148,12 +148,25 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly outputSourceCommandId: string | null;
 	/** Receipt of the durable output, or null while the turn is still open. */
 	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
+	/** Records the Stop command that won this turn's terminal revision, or null while output may still win. */
+	readonly cancellationReceipt: ConversationComputerTurnCancellationReceipt | null;
 	/** Identifies the saved model-selected tool; unresolved work cannot produce final output. */
 	readonly toolSelection: ConversationComputerToolSelection | null;
 	/** Consumes the second and final model allowance after the exact tool result is saved. */
 	readonly continuationReservation: ConversationComputerContinuationReservation | null;
 	/** Consumes the first model allowance across retries and process restarts. */
 	readonly modelReservation: ConversationComputerModelReservation | null;
+}
+
+/** Minimal terminal decision retained in the turn stream when Stop wins against final output. */
+export interface ConversationComputerTurnCancellationReceipt
+{
+	/** Identifies the durable Stop control event. */
+	readonly commandId: string;
+	/** Binds the exact SQL-admitted command, target and original workflow receipt. */
+	readonly commandDigest: string;
+	/** Preserves the database-owned admission time across Kurrent retries. */
+	readonly occurredAt: string;
 }
 
 /** Keeps the complete server-stamped output intent in the existing durable turn decision. */

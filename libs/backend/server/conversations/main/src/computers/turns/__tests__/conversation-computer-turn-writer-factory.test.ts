@@ -14,7 +14,7 @@ const _TURN: FrozenConversationComputerTurn = {
 	latestPendingEntryId: "human-entry-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 300,
 	latestPendingEntryPosition: "1",
 	compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "v1", digest: "sha256:input" },
-	outputSourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", outputReceipt: null,
+	outputSourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", outputReceipt: null, cancellationReceipt: null,
 	toolSelection: null, continuationReservation: null, modelReservation: null,
 };
 const _WORKLOAD = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" };

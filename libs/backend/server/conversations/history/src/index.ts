@@ -1,6 +1,6 @@
 export { AesGcmConversationPrivatePayloadCipher } from "./payloads/conversation-private-payload-cipher";
 export type { EncryptedConversationPrivatePayload, ConversationPrivatePayloadKeyringDocument, ConversationPrivatePayloadCipher, ConversationPrivatePayloadCoordinates } from "./payloads/conversation-private-payload.types";
-export { ConversationHistoryAuthority } from "./timeline/conversation-history-authority";
+export { ConversationHistoryAuthority, _ConversationHistoryEntryAppend } from "./timeline/conversation-history-authority";
 export { ConversationHistoryAppendOutcomes } from "./timeline/conversation-history-authority.types";
 export type { ConversationHistoryAppendCommand, ConversationHistoryAppendResult, ConversationHistoryActivationAppendCommand, ConversationHistoryAttestedAppendCommand } from "./timeline/conversation-history-authority.types";
 export { ConversationHistoryReader } from "./timeline/conversation-history-reader";

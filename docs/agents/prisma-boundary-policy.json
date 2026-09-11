@@ -1292,6 +1292,60 @@
 						"importPath": "@opencrane/backend/agents/execution/elicitation"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-conversation-run-cancellation.ts",
+				"adapter": "PrismaConversationRunCancellationRepository",
+				"contract": "ConversationRunCancellationRepository",
+				"contractImportPath": "./conversation-run-cancellation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaRunWorkCancellationRepository",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/iam/authorization/main/src/approvals/prisma-run-work-cancellation.ts",
+				"adapter": "PrismaRunWorkCancellationRepository",
+				"contract": "RunWorkCancellationRepository",
+				"contractImportPath": "./run-work-cancellation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaToolInvocationRepository",
+						"importPath": "../tool-invocations/persistence/prisma-tool-invocation-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/interruptions/prisma-conversation-computer-stop-clock.ts",
+				"adapter": "PrismaConversationComputerStopClockRepository",
+				"contract": "ConversationComputerStopClockRepository",
+				"contractImportPath": "./conversation-computer-stop.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/interruptions/prisma-conversation-computer-stop-target-reader.ts",
+				"adapter": "PrismaConversationComputerStopTargetRepository",
+				"contract": "ConversationComputerStopTargetRepository",
+				"contractImportPath": "./conversation-computer-stop.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/interruptions/prisma-conversation-computer-stop-requester.ts",
+				"adapter": "PrismaConversationComputerStopRequesterRepository",
+				"contract": "ConversationComputerStopRequesterRepository",
+				"contractImportPath": "./conversation-computer-stop.types",
+				"constructs": [
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaConversationProductAuthorizationRepository",
+						"importPath": "../../authorization/db/conversation-product-authorization"
+					}
+				]
 			}
 		],
 		"unitsOfWork": [
@@ -2124,6 +2178,66 @@
 					{
 						"adapter": "PrismaConversationApprovalNotificationRepository",
 						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/interruptions/prisma-conversation-computer-stop-admission.ts",
+				"adapter": "PrismaConversationComputerStopAdmissionUnitOfWork",
+				"contract": "ConversationComputerStopAdmissionAuthority",
+				"contractImportPath": "./conversation-computer-stop.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerStopClockRepository",
+						"importPath": "./prisma-conversation-computer-stop-clock"
+					},
+					{
+						"adapter": "PrismaConversationRunCancellationRepository",
+						"importPath": "@opencrane/backend/agents/execution/runs"
+					},
+					{
+						"adapter": "PrismaConversationComputerStopRequesterRepository",
+						"importPath": "./prisma-conversation-computer-stop-requester"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/interruptions/prisma-conversation-computer-stop-lifecycle.ts",
+				"adapter": "PrismaConversationComputerStopLifecycleUnitOfWork",
+				"contract": "ConversationComputerStopLifecycle",
+				"contractImportPath": "./conversation-computer-stop.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerStopClockRepository",
+						"importPath": "./prisma-conversation-computer-stop-clock"
+					},
+					{
+						"adapter": "PrismaConversationRunCancellationRepository",
+						"importPath": "@opencrane/backend/agents/execution/runs"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/interruptions/prisma-conversation-computer-stop-target-reader.ts",
+				"adapter": "PrismaConversationComputerStopTargetUnitOfWork",
+				"contract": "ConversationComputerStopTargetReader",
+				"contractImportPath": "./conversation-computer-stop.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationComputerStopClockRepository",
+						"importPath": "./prisma-conversation-computer-stop-clock"
+					},
+					{
+						"adapter": "PrismaConversationComputerStopTargetRepository",
+						"importPath": "<same-file>"
+					},
+					{
+						"adapter": "PrismaConversationComputerStopRequesterRepository",
+						"importPath": "./prisma-conversation-computer-stop-requester"
+					},
+					{
+						"adapter": "PrismaConversationRunCancellationRepository",
+						"importPath": "@opencrane/backend/agents/execution/runs"
 					}
 				]
 			}

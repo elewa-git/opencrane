@@ -7,7 +7,7 @@ import { ConversationComputerActivationConsumerEventKinds, ConversationComputerA
 /** One valid activation delivery. */
 function _Delivery(id = "11111111-1111-4111-8111-111111111111"): HistoryPersistentRecordedEvent
 {
-	return { id, streamName: "computer-activations-silo-1", type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 1, causationPosition: "1" }, metadata: { causationId: "22222222-2222-4222-8222-222222222222" }, revision: 0n, recordedAt: new Date("2026-09-06T00:00:00.000Z"), retryCount: 0 };
+	return { id, streamName: "computer-activations-silo-1", type: "opencrane.computer.activation-requested.v1", data: { action: "start", siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 1, causationPosition: "1" }, metadata: { causationId: "22222222-2222-4222-8222-222222222222" }, revision: 0n, recordedAt: new Date("2026-09-06T00:00:00.000Z"), retryCount: 0 };
 }
 
 /** A hand-driven persistent subscription: the test pushes deliveries, ends it, or fails it. */

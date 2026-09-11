@@ -2263,7 +2263,7 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "completed" | "failed";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "cancelling" | "cancelled" | "completed" | "failed";
             latestTool: {
                 /** @enum {string} */
                 phase: "queued" | "running" | "result_received" | "needs_attention";
@@ -7803,8 +7803,11 @@ export interface operations {
                     /** Format: uuid */
                     idempotencyKey: string;
                     text: string;
-                    /** @enum {string} */
-                    activation: "none" | "start" | "interrupt";
+                    /**
+                     * @description Stop requests cancellation of the original requester's current turn without starting another turn. Admission is not cancellation completion.
+                     * @enum {string}
+                     */
+                    activation: "none" | "start" | "interrupt" | "stop";
                 };
             };
         };

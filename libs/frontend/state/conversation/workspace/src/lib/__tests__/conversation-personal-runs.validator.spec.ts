@@ -6,6 +6,11 @@ const _RUN = { runId: "run", attempt: 1, state: "completed", conversationId: "ch
 
 describe("personal run response validator", function _Suite()
 {
+	it.each(["cancelling", "cancelled"])("accepts the authoritative %s lifecycle", function _CancellationState(state)
+	{
+		expect(_ParseConversationPersonalRuns({ runs: [{ ..._RUN, state, finishedAt: state === "cancelled" ? "2026-09-08T12:00:02Z" : null }] })[0]?.state).toBe(state);
+	});
+
 	it.each([
 		{ latestTool: { phase: "running", result: "private result" } },
 		{ latestTool: { phase: "unknown" } },

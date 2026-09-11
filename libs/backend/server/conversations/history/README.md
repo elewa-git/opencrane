@@ -24,6 +24,8 @@ author and payload reference; immutable events contain references and digests, n
 ## Public surface
 
 - `ConversationHistoryAuthority` and `ConversationHistoryReader` validate immutable genesis and timeline entries.
+- `_ConversationHistoryEntryAppend` supplies the same validated entry envelope to domain transactions that must commit conversation history with another Kurrent stream.
+- `ConversationHistoryAuthority.appendWithActivation` derives `start` or `stop` from the validated human message and commits that action with the message on the existing silo control queue.
 - `ConversationHistoryAuthority.appendWithAttestation` atomically records a service receipt and its participant-visible transformation, so uncertain retries can prove the exact entry without a second append.
 - `BoundConversationWriter` prepares an exact output intent, then confirms or appends that saved intent against its admitted stream and lease binding.
 - `AesGcmConversationPrivatePayloadCipher` and `_ReadConversationPrivatePayloadKeyring` load mounted keys and protect private text.

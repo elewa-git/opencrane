@@ -1,4 +1,5 @@
 import type { Logger } from "@opencrane/backend/observability";
+import type { ConversationComputerStopAuthority } from "../interruptions/conversation-computer-stop.types";
 import type { ConversationComputerActivationConsumerHealth, ConversationComputerActivationResubscribePolicy } from "./conversation-computer-activation.types";
 
 /**
@@ -25,6 +26,8 @@ export interface ConversationComputerActivationWorkerHandle extends Conversation
 /** Seams the composition exposes so tests can shorten waits and observe the give-up reaction. */
 export interface ConversationComputerActivationWorkerOptions
 {
+	/** Resolves requester-bound Stop controls without starting replacement work. */
+	readonly stopAuthority: ConversationComputerStopAuthority;
 	/** Asks the app to react when the subscription has exhausted its reopen budget. */
 	readonly onExhausted: () => void;
 	/** Records subscription lifecycle observations through the process logger. */

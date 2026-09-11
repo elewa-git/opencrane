@@ -1,4 +1,4 @@
-import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
+import { AgentRunState, ExternalActionClaimKind, ExternalActionRecoveryMode, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
 import type { JsonValue } from "@opencrane/util";
 
@@ -347,15 +347,17 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	/** Apply the frozen strategy to one expired provider claim without repeating its effect. */
 	async recoverExpiredClaim(invocationId: string, now: Date): Promise<ToolInvocationTransitionResult>
 	{
-		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
+		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId }, include: { run: { select: { state: true } } } });
 		if (invocation === null || invocation.claimKind === null || invocation.claimExpiresAt === null || invocation.claimExpiresAt.getTime() > now.getTime())
 			return { changed: false, invocation: invocation === null ? null : _ToolInvocationRecord(invocation) };
-		const event = invocation.claimKind === ExternalActionClaimKind.Dispatch ? ToolInvocationLifecycleEvents.DispatchClaimExpired : ToolInvocationLifecycleEvents.ReconcileClaimExpired;
+		let event = invocation.claimKind === ExternalActionClaimKind.Dispatch ? ToolInvocationLifecycleEvents.DispatchClaimExpired : ToolInvocationLifecycleEvents.ReconcileClaimExpired;
+		if (invocation.run?.state === AgentRunState.Cancelling)
+			event = ToolInvocationLifecycleEvents.CancellationClaimExpired;
 		const target = _targetState(_ToolInvocationPlan(invocation, event, now));
 		if (target === null)
 			return { changed: false, invocation: _ToolInvocationRecord(invocation) };
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: invocationId, state: invocation.state, claimKind: invocation.claimKind, claimFence: invocation.claimFence, claimExpiresAt: { lte: now }, revision: invocation.revision, run: { is: { attempt: invocation.attempt ?? -1, state: "Running" } } },
+			where: { id: invocationId, state: invocation.state, claimKind: invocation.claimKind, claimFence: invocation.claimFence, claimExpiresAt: { lte: now }, revision: invocation.revision, run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } },
 			data: { state: target, recoveryRequiredAt: target === ToolInvocationState.RecoveryRequired ? now : null, claimKind: null, claimExpiresAt: null, revision: { increment: 1 } },
 		});
 		return { changed: updated.count === 1, invocation: await this._winner(invocationId) };

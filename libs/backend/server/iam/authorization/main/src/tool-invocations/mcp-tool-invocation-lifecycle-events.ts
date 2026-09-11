@@ -63,5 +63,7 @@ export async function _EnterMcpToolInvocationRecovery(authority: ToolInvocationR
 			throw new Error("tool recovery state requires its canonical recovery event");
 		return;
 	}
+	if (outcome === ToolInvocationRunRecoveryEnterResults.Cancelling)
+		return;
 	throw new Error("tool recovery state conflicts with its owning run attempt");
 }

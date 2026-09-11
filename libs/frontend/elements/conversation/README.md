@@ -31,7 +31,9 @@ contracts.
 - `ConversationComposerComponent` displays a host-owned draft and emits edit or submit intents.
 - `ConversationStatusLineComponent` announces one display-safe status.
 - `ConversationRichTextComponent` displays HTML already sanitized by the shared conversation renderer.
-- `ConversationRunActionsComponent` displays run status and emits controlled steer, cancel, and retry intents.
+- `ConversationRunActionsComponent` displays current personal work, pending or terminal Stop state,
+  and a single controlled Stop intent. It never receives run coordinates or treats emission as
+  cancellation success.
 - The exported enums and presentation types keep those components finite and testable.
 
 ## Boundary

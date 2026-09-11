@@ -193,8 +193,8 @@ export interface SubmitConversationMessageCommand
 	readonly idempotencyKey: string;
 	/** Plain participant text stored through the server's private payload boundary. */
 	readonly text: string;
-	/** Whether this message starts, interrupts, or does not activate computer work. */
-	readonly activation: "none" | "start" | "interrupt";
+	/** Whether this message starts, stops, interrupts, or does not activate computer work. */
+	readonly activation: "none" | "start" | "stop" | "interrupt";
 }
 
 /** App-owned route change requested after an authoritative workspace mutation. */

@@ -89,3 +89,13 @@ export type { ConversationApprovalNotificationClock, ConversationApprovalNotific
 export { KurrentConversationToolResultNotificationPublisher } from "./computers/turns/tool-result-notifications/kurrent-conversation-tool-result-notification";
 export { ConversationToolResultNotificationOutcomes } from "./computers/turns/tool-result-notifications/conversation-tool-result-notification.types";
 export type { ConversationToolResultNotificationCommand, ConversationToolResultNotificationEvidence, ConversationToolResultNotificationEvidenceReader, ConversationToolResultNotificationPort } from "./computers/turns/tool-result-notifications/conversation-tool-result-notification.types";
+
+export * from "./computers/interruptions/conversation-computer-stop.types";
+export { _ConversationComputerStopAuthority } from "./computers/interruptions/conversation-computer-stop-authority";
+export { CONVERSATION_COMPUTER_STOP_TASK } from "./computers/interruptions/conversation-computer-stop-task";
+export { _RegisterConversationComputerStopWorkflow } from "./computers/interruptions/conversation-computer-stop-workflow";
+export { PrismaConversationComputerStopAdmissionUnitOfWork } from "./computers/interruptions/prisma-conversation-computer-stop-admission";
+export { PrismaConversationComputerStopLifecycleUnitOfWork } from "./computers/interruptions/prisma-conversation-computer-stop-lifecycle";
+export { PrismaConversationComputerStopTargetUnitOfWork } from "./computers/interruptions/prisma-conversation-computer-stop-target-reader";
+export { KurrentConversationComputerStopPublisher } from "./computers/interruptions/kurrent-conversation-computer-stop-publisher";
+export { KurrentConversationComputerStopActiveTurnReader } from "./computers/interruptions/kurrent-conversation-computer-stop-active-turn-reader";

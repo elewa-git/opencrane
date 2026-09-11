@@ -1,4 +1,5 @@
           <section class="conversation-workspace__composer" aria-label="Conversation composer">
+            @if (runActions(); as actions) { <wo-conversation-run-actions [presentation]="actions" (stopRequested)="stopRequested.emit()" /> }
             @if (groupError(); as groupError) { <p-message severity="error" [text]="groupError" /> }
             @if (groupRefreshAvailable()) { <p-button label="Refresh assistant requests" severity="secondary" [text]="true" [loading]="groupRefreshing()" (onClick)="groupRefreshRequested.emit()" /> }
             @if (computerStatus(); as status) {

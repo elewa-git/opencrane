@@ -31,6 +31,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.Reject,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Fail,
 	},
 	[ToolInvocationStates.AwaitingApproval]: {
@@ -53,6 +54,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.Reject,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Fail,
 	},
 	[ToolInvocationStates.Ready]: {
@@ -75,6 +77,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.Reject,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Fail,
 	},
 	[ToolInvocationStates.Claimed]: {
@@ -97,6 +100,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.Reject,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.RequireManualRecovery,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Reject,
 	},
 	[ToolInvocationStates.Reconciling]: {
@@ -119,6 +123,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.RequireManualRecovery,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.RetryReconciliation,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.RetryReconciliation,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.RetryReconciliation,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Reject,
 	},
 	[ToolInvocationStates.Succeeded]: {
@@ -141,6 +146,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.Reject,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Reject,
 	},
 	[ToolInvocationStates.Failed]: {
@@ -163,6 +169,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.Reject,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Reject,
 	},
 	[ToolInvocationStates.RecoveryRequired]: {
@@ -185,6 +192,7 @@ const _EXPECTED_ACTIONS = {
 		[ToolInvocationLifecycleEvents.ReconcileInconclusive]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileProvenNotStarted]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.ReconcileClaimExpired]: ToolInvocationLifecycleActions.Reject,
+		[ToolInvocationLifecycleEvents.CancellationClaimExpired]: ToolInvocationLifecycleActions.Reject,
 		[ToolInvocationLifecycleEvents.Cancelled]: ToolInvocationLifecycleActions.Fail,
 	},
 } satisfies Readonly<Record<ToolInvocationStates, Readonly<Record<ToolInvocationLifecycleEvents, ToolInvocationLifecycleActions>>>>;
@@ -252,5 +260,8 @@ describe("ToolInvocation lifecycle", function _suite()
 		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Claimed, claimKind: ExternalActionClaimKinds.Dispatch, event: ToolInvocationLifecycleEvents.Cancelled }))).toBe(ToolInvocationLifecycleActions.Reject);
 		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Reconciling, claimKind: ExternalActionClaimKinds.Reconcile, event: ToolInvocationLifecycleEvents.Cancelled }))).toBe(ToolInvocationLifecycleActions.Reject);
 		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Reconciling, claimKind: null, event: ToolInvocationLifecycleEvents.Cancelled }))).toBe(ToolInvocationLifecycleActions.Fail);
+		for (const recoveryMode of Object.values(ExternalActionRecoveryModes))
+			expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Claimed, claimKind: ExternalActionClaimKinds.Dispatch, event: ToolInvocationLifecycleEvents.CancellationClaimExpired, recoveryMode }))).toBe(ToolInvocationLifecycleActions.RequireManualRecovery);
+		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Reconciling, claimKind: ExternalActionClaimKinds.Reconcile, event: ToolInvocationLifecycleEvents.CancellationClaimExpired }))).toBe(ToolInvocationLifecycleActions.RetryReconciliation);
 	});
 });

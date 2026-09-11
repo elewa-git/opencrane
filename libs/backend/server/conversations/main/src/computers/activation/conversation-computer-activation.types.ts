@@ -1,4 +1,15 @@
 import type { ActiveLeaseScope, ComputerScope } from "@opencrane/contracts";
+import type { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
+import type { ConversationComputerStopAuthority } from "../interruptions/conversation-computer-stop.types";
+
+/** Selects the durable control operation carried by the silo computer queue. */
+export enum ConversationComputerControlActions
+{
+	/** Start ordinary work for the causation message. */
+	Start = "start",
+	/** Stop the exact preceding turn without starting replacement work. */
+	Stop = "stop",
+}
 
 /**
  * Carries one stream-bound computer activation request after the listener validates its delivery.
@@ -86,6 +97,8 @@ export interface ConversationComputerActivationListenerOptions
 	readonly wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 	/** Shortens the retry wait so a held delivery is handed back as soon as shutdown starts. */
 	readonly signal?: AbortSignal;
+	/** Supplies requester-bound Stop handling; required before a Stop delivery can be acknowledged. */
+	readonly stop?: { readonly authority: ConversationComputerStopAuthority; readonly history: Pick<ConversationHistoryReader, "read">; readonly now?: () => number };
 }
 
 /**
