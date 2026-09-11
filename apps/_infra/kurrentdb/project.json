@@ -22,7 +22,7 @@
     },
     "test": {
       "executor": "nx:run-commands",
-      "options": { "command": "bash apps/_infra/kurrentdb/tests/helm-contract.sh" }
+      "options": { "command": "bash apps/_infra/kurrentdb/tests/bootstrap-policy-contract.sh && bash apps/_infra/kurrentdb/tests/helm-contract.sh" }
     }
   }
 }

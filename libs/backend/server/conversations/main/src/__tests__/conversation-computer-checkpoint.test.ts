@@ -1,10 +1,10 @@
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerCheckpointAuthority, _CheckpointArtifactId, _CheckpointRevisionId } from "../conversation-computer-checkpoint";
 
 const _COMPUTER: ConversationComputer = { schemaVersion: 1, id: "computer-1", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", state: ConversationComputerStates.Cooling, leaseGeneration: 2, workspaceCheckpoint: null, createdAt: "2026-09-05T12:00:00.000Z", updatedAt: "2026-09-05T12:00:00.000Z" };
-const _LEASE: ComputerLease = { schemaVersion: 1, id: "lease-2", computerId: "computer-1", generation: 2, sandboxClaimId: "computer-1-g2", sandboxId: "sandbox-2", serviceFQDN: "sandbox.svc.cluster.local", state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T12:00:00.000Z", expiresAt: "2026-09-05T13:00:00.000Z", releasedAt: null };
+const _LEASE: ComputerLease = { schemaVersion: 1, id: "lease-2", computerId: "computer-1", generation: 2, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g2", sandboxId: "sandbox-2", serviceFQDN: "sandbox.svc.cluster.local" }, state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T12:00:00.000Z", expiresAt: "2026-09-05T13:00:00.000Z", releasedAt: null };
 const _NOW = new Date("2026-09-05T12:20:00.000Z");
 
 function _Harness()

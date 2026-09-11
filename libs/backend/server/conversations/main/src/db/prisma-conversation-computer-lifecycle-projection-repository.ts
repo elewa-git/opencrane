@@ -20,11 +20,14 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 			throw new Error("Conversation computer checkpoint artifact conflicts with its deterministic owner");
 	}
 
-	/** Enumerate open agent-session projection coordinates for Kurrent-owned lifecycle filtering. */
-	public async enumerate(siloId: string, limit: number): Promise<readonly ConversationComputerCurrentCommand[]>
+	/** Enumerate one stable page of open agent-session coordinates for Kurrent-owned filtering. */
+	public async enumerate(siloId: string, afterConversationId: string | null, limit: number)
 	{
-		const rows = await this.prisma.conversation.findMany({ where: { siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, computerId: { not: null }, computerAgentIdentityId: { not: null }, computerProfileRevisionId: { not: null } }, select: { id: true, computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true }, orderBy: { id: "asc" }, take: limit });
-		return rows.map((row) => ({ computer: { siloId, computerId: row.computerId!, conversationId: row.id, agentIdentityId: row.computerAgentIdentityId! }, profileRevisionId: row.computerProfileRevisionId! }));
+		const rows = await this.prisma.conversation.findMany({ where: { siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, id: afterConversationId === null ? undefined : { gt: afterConversationId }, computerId: { not: null }, computerAgentIdentityId: { not: null }, computerProfileRevisionId: { not: null } }, select: { id: true, computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true }, orderBy: { id: "asc" }, take: limit });
+		return {
+			items: rows.map((row) => ({ computer: { siloId, computerId: row.computerId!, conversationId: row.id, agentIdentityId: row.computerAgentIdentityId! }, profileRevisionId: row.computerProfileRevisionId! })),
+			nextCursor: rows.length === limit ? rows.at(-1)?.id ?? null : null,
+		};
 	}
 
 	/** Resolve server-owned history coordinates without trusting them to a workload request. */

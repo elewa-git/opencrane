@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { ConversationToolProposal } from "@opencrane/contracts";
 import { __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/authorization";
-import { ___CloneCanonicalJson, ___DigestCanonicalJson } from "@opencrane/util";
+import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
@@ -30,7 +30,7 @@ export function _PrepareConversationToolProposal(turn: FrozenConversationCompute
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 	const hex = createHash("sha256").update(JSON.stringify(["conversation-tool-proposal", turn.compile.runId, turn.compile.attempt, 1])).digest("hex");
 	const proposalId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-	const assignmentDigest = ___DigestCanonicalJson({ siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId, lease: { ...turn.lease }, bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt });
+	const assignmentDigest = ___DigestCanonicalJson({ siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId, lease: { ...turn.lease }, bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt } as unknown as JsonValue);
 	const argumentsValue = ___CloneCanonicalJson(proposal.arguments) as ConversationToolProposal["arguments"];
 	const argumentsDigest = ___DigestCanonicalJson(argumentsValue);
 	const requestFingerprint = ___DigestCanonicalJson({ proposalId, assignmentDigest, compiledInputDigest: input.digest, toolRevisionId: tool.toolRevisionId, parametersSchemaDigest: tool.parametersSchemaDigest, argumentsDigest });

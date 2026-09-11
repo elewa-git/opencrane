@@ -4,7 +4,7 @@ import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissi
 import { PrismaPromptCompilerRepository, type ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
 import { ConversationComputerTurnAuthorityService, type ConversationComputerRunAdmissionCommand, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes, PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
-import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, ConversationComputerRealizationKinds, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AgentServiceKind, ModelRoutingScope } from "@prisma/client";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
@@ -44,7 +44,7 @@ function _savedRun(): { snapshot: RunInputSnapshot; compiled: CompiledRunInput }
 /** Supplies the same claimed computer and immutable message coordinates as the accepted request. */
 function _command(): ConversationComputerRunAdmissionCommand
 {
-	return { runId: "run-1", computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "child-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "claim-1" }, requesterPrincipalId: "human-principal", requesterSubjectId: "human-subject", requesterIssuer: "https://issuer.test", requesterAuthenticatedAt: "2026-09-07T00:00:00.000Z", requestIdempotencyKey: "message-1", messageInput: { mode: "pre_persisted_history", messageId: "message-1", historyRevision: "1", orderedMessageIds: ["message-1"] } };
+	return { runId: "run-1", computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "child-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "claim-1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } }, requesterPrincipalId: "human-principal", requesterSubjectId: "human-subject", requesterIssuer: "https://issuer.test", requesterAuthenticatedAt: "2026-09-07T00:00:00.000Z", requestIdempotencyKey: "message-1", messageInput: { mode: "pre_persisted_history", messageId: "message-1", historyRevision: "1", orderedMessageIds: ["message-1"] } };
 }
 
 describe("conversation run admission composition", function _ConversationRunAdmissionCompositionSuite()
@@ -217,7 +217,7 @@ function _StandaloneComputerFixture()
 			resolve: resolveCandidate
 		},
 	});
-	const bootstrap = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 }, workload: { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" } };
+	const bootstrap = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 }, process: { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" } } } as const;
 	return { database, row, principal, issueOnce, computer, bootstrap, compilers, advance: function _Advance() { now += 60_000; }, selectFleet: function _SelectFleet() { config = { mode: FleetMembershipDeploymentModes.Fleet, trustedIssuerId: "fleet", maximumStalenessMs: 300_000, verifier: { verify: vi.fn() } }; } };
 }
 
@@ -248,7 +248,7 @@ describe("standalone membership on actual computer bootstrap retry", function _S
 		if (change === "mode")
 			f.selectFleet();
 		await expect(f.computer.bootstrap(f.bootstrap)).rejects.toThrow("Conversation run admission was denied");
-		await expect(f.computer.modelStep({ bootstrapId: turn!.bootstrapId, workload: f.bootstrap.workload })).resolves.toEqual({ outcome: "authority_ended" });
+		await expect(f.computer.modelStep({ bootstrapId: turn!.bootstrapId, process: f.bootstrap.process })).resolves.toEqual({ outcome: "authority_ended" });
 		expect(f.issueOnce).not.toHaveBeenCalled();
 	});
 });

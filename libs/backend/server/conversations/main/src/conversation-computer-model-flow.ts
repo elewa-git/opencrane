@@ -1,41 +1,42 @@
 import { createHash, randomUUID } from "node:crypto";
-import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelContinuationSchema, ___ConversationToolProposalSchema, type ConversationModelToolCall } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationComputerRealizationKinds, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelContinuationSchema, ___ConversationToolProposalSchema, type ConversationModelToolCall } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
-import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import { _ConversationModelRequestDigest } from "./conversation-computer-model-reservation";
 import { ConversationComputerModelStepOutcomes, type ConversationComputerModelReservation, type ConversationComputerModelStepResult } from "./conversation-computer-model.types";
 import { ConversationComputerToolResultOutcomes, type ConversationComputerContinuationReservation, type ConversationComputerPrivateModelReference, type ConversationComputerToolDeclaration } from "./conversation-computer-continuation.types";
 import type { ConversationComputerCredentialReceipt, ConversationComputerOutputCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import { _PrepareConversationToolProposal } from "./conversation-tool-proposal";
+import type { ConversationComputerProcessIdentity } from "./conversation-computer-realization.types";
 
 /**
  * Advances one text answer or one tool followed by a final answer within the original attempt.
  * Only fresh reservation winners send model requests. Saved declarations may finish tool admission
  * after a restart, but never grant permission to repeat a paid model request.
- * Called by: ConversationComputerTurnAuthority.modelStep after current Pod admission.
+ * Called by: ConversationComputerTurnAuthority.modelStep after the current process is bound to its
+ * persisted realization.
  */
-export async function _AdvanceConversationComputerModel(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelStepResult>
+export async function _AdvanceConversationComputerModel(turn: FrozenConversationComputerTurn, process: ConversationComputerProcessIdentity, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelStepResult>
 {
 	if (turn.continuationReservation !== null)
 		return _ConversationModelReservationStatus(turn.continuationReservation);
 	if (turn.modelReservation !== null)
 	{
 		const saved = await dependencies.modelCustody.loadDeclaration(turn);
-		return saved === null ? _ConversationModelReservationStatus(turn.modelReservation) : _ContinueTool(turn, saved.declaration, saved.reference, workload, dependencies, appendOutput);
+		return saved === null ? _ConversationModelReservationStatus(turn.modelReservation) : _ContinueTool(turn, saved.declaration, saved.reference, process, dependencies, appendOutput);
 	}
-	const candidate = await _Current(turn, workload, dependencies);
+	const candidate = await _Current(turn, process, dependencies);
 	const reservation = _FirstReservation(turn, candidate);
 	if (!await dependencies.store.reserveModel(turn.bootstrapId, reservation))
 		return { outcome: ConversationComputerModelStepOutcomes.Pending };
 	const reserved = { ...turn, modelReservation: reservation };
 	const credential = await dependencies.credentials.issueOnce(_CredentialCommand(reserved, candidate));
-	const current = await _Current(reserved, workload, dependencies);
+	const current = await _Current(reserved, process, dependencies);
 	const notAfter = _RequestDeadline(reservation, current, credential);
 	const response = await dependencies.model.request({ compiledInput: current.compiledInput, endpoint: dependencies.endpoint, key: credential.key, modelAlias: turn.modelAlias, maxCompletionTokens: reservation.maxCompletionTokens, notAfterEpochMs: notAfter, tools: reservation.tools, continuation: null });
 	if (response.kind === ConversationModelResponseKinds.Text)
 	{
-		await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, workload });
+		await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, process });
 		return { outcome: ConversationComputerModelStepOutcomes.Completed };
 	}
 	if (reservation.tools !== ConversationModelToolModes.Select || response.kind !== ConversationModelResponseKinds.Tool)
@@ -43,17 +44,20 @@ export async function _AdvanceConversationComputerModel(turn: FrozenConversation
 	const acceptedAtEpochMs = Date.now();
 	if (acceptedAtEpochMs >= notAfter)
 		throw new Error("Conversation model declaration missed its dispatch deadline");
-	const acceptedCandidate = await _Current(reserved, workload, dependencies);
+	const acceptedCandidate = await _Current(reserved, process, dependencies);
 	_Proposal(reserved, acceptedCandidate, response.call);
 	const declaration = { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, modelInvocationFence: reservation.invocationFence, acceptedAtEpochMs, requestNotAfterEpochMs: notAfter, credentialDigest: credential.credentialDigest, credentialExpiresAt: credential.expiresAt, call: response.call };
 	const reference = await dependencies.modelCustody.storeDeclaration(reserved, declaration);
-	return _ContinueTool(reserved, declaration, reference, workload, dependencies, appendOutput);
+	return _ContinueTool(reserved, declaration, reference, process, dependencies, appendOutput);
 }
 
 /** Recover the saved tool declaration, its existing executor and one exact terminal result. */
-async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: ConversationComputerToolDeclaration, reference: ConversationComputerPrivateModelReference, workload: RuntimeWorkloadIdentity, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelStepResult>
+async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: ConversationComputerToolDeclaration, reference: ConversationComputerPrivateModelReference, process: ConversationComputerProcessIdentity, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelStepResult>
 {
-	const candidate = await _Current(turn, workload, dependencies);
+	if (process.kind !== ConversationComputerRealizationKinds.AgentSandbox)
+		throw new Error("Host development conversation computers cannot invoke production tools");
+	const workload = process.workload;
+	const candidate = await _Current(turn, process, dependencies);
 	const proposal = _Proposal(turn, candidate, declaration.call);
 	const selection = { ...reference, proposalId: proposal.prepared.proposalId, requestFingerprint: proposal.prepared.requestFingerprint };
 	await dependencies.store.selectTool(turn.bootstrapId, selection);
@@ -69,7 +73,7 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 		throw new Error("Conversation tool result differs from its immutable digest");
 	const continuation = { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, declaration: reference, proposalId: selection.proposalId, resultDigest: result.payloadDigest, ...pair };
 	const continuationReference = await dependencies.modelCustody.storeContinuation(selected, continuation);
-	const current = await _Current(selected, workload, dependencies);
+	const current = await _Current(selected, process, dependencies);
 	const reservation = _SecondReservation(selected, current, declaration, continuationReference, result.payloadDigest, result.notAfterEpochMs);
 	if (!await dependencies.store.reserveContinuation(turn.bootstrapId, reservation))
 		return { outcome: ConversationComputerModelStepOutcomes.Pending };
@@ -81,14 +85,14 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	if (saved.resultContent !== ___CanonicalizeJson(consumed.payload) || ___CanonicalizeJson(saved.call as unknown as JsonValue) !== ___CanonicalizeJson(declaration.call as unknown as JsonValue))
 		throw new Error("Conversation continuation differs from its accepted call and exact result");
 	const credential = await dependencies.credentials.reuseExact({ ..._CredentialCommand(reserved, current), expectedCredentialDigest: declaration.credentialDigest, expectedExpiresAt: declaration.credentialExpiresAt });
-	const dispatchCandidate = await _Current(reserved, workload, dependencies);
+	const dispatchCandidate = await _Current(reserved, process, dependencies);
 	const notAfter = Math.min(_RequestDeadline(reservation, dispatchCandidate, credential), consumed.notAfterEpochMs);
 	if (Date.now() >= notAfter)
 		throw new Error("Conversation continuation authority expired before dispatch");
 	const response = await dependencies.model.request({ compiledInput: dispatchCandidate.compiledInput, endpoint: dependencies.endpoint, key: credential.key, modelAlias: turn.modelAlias, maxCompletionTokens: reservation.maxCompletionTokens, notAfterEpochMs: notAfter, tools: ConversationModelToolModes.None, continuation: { call: saved.call, resultContent: saved.resultContent } });
 	if (response.kind !== ConversationModelResponseKinds.Text)
 		throw new Error("Conversation continuation cannot request another tool");
-	await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, workload });
+	await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, process });
 	return { outcome: ConversationComputerModelStepOutcomes.Completed };
 }
 
@@ -103,9 +107,9 @@ function _Proposal(turn: FrozenConversationComputerTurn, candidate: Conversation
 }
 
 /** Recompile without changing the original history revision, run attempt or digest. */
-async function _Current(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity, dependencies: ConversationComputerTurnAuthorityDependencies)
+async function _Current(turn: FrozenConversationComputerTurn, process: ConversationComputerProcessIdentity, dependencies: ConversationComputerTurnAuthorityDependencies)
 {
-	const candidate = await dependencies.candidates.assertCurrent(turn, workload);
+	const candidate = await dependencies.candidates.assertCurrent(turn, process);
 	const input = candidate.compiledInput;
 	if (input.digest !== turn.compile.digest || input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt || input.promptCompilerVersion !== turn.compile.promptCompilerVersion)
 		throw new Error("Conversation model input differs from its frozen attempt");

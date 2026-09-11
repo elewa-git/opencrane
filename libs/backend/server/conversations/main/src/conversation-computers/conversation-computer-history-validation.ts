@@ -1,4 +1,4 @@
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, type ComputerLease, type ConversationComputer, type ConversationComputerRealization } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
 import type { ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot } from "./conversation-computer-history.types";
@@ -88,10 +88,11 @@ export function _ValidatedConversationComputer(value: unknown): ConversationComp
 /** Parses the exact closed ComputerLease contract at a history boundary. */
 export function _ValidatedComputerLease(value: unknown): ComputerLease
 {
-	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "computerId", "generation", "sandboxClaimId", "sandboxId", "serviceFQDN", "state", "claimedAt", "expiresAt", "releasedAt"]))
+	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "computerId", "generation", "realization", "state", "claimedAt", "expiresAt", "releasedAt"]))
 		throw new Error("Conversation computer history requires a valid lease snapshot");
-	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.computerId) || !_PositiveInteger(value.generation) || !_Identifier(value.sandboxClaimId) || (value.sandboxId !== null && !_Identifier(value.sandboxId)) || (value.serviceFQDN !== null && !_ServiceFqdn(value.serviceFQDN)) || !_LeaseState(value.state) || !_IsoTimestamp(value.claimedAt) || !_IsoTimestamp(value.expiresAt) || (value.releasedAt !== null && !_IsoTimestamp(value.releasedAt)))
+	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.computerId) || !_PositiveInteger(value.generation) || !_LeaseState(value.state) || !_IsoTimestamp(value.claimedAt) || !_IsoTimestamp(value.expiresAt) || (value.releasedAt !== null && !_IsoTimestamp(value.releasedAt)))
 		throw new Error("Conversation computer history requires valid lease coordinates");
+	_ValidatedConversationComputerRealization(value.realization);
 	if (Date.parse(value.expiresAt) <= Date.parse(value.claimedAt))
 		throw new Error("Conversation computer history requires a lease expiry after its claim");
 	if (value.releasedAt !== null && Date.parse(value.releasedAt) < Date.parse(value.claimedAt))
@@ -112,13 +113,15 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 		throw new Error("Conversation computer history requires the lease to match its computer generation");
 	if (lease.state === ComputerLeaseStates.Claimed)
 	{
-		if (computer.state !== ConversationComputerStates.ClaimPending || lease.sandboxId !== null || lease.serviceFQDN !== null || lease.releasedAt !== null)
+		const pendingSandbox = lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox || lease.realization.sandboxId === null && lease.realization.serviceFQDN === null;
+		if (computer.state !== ConversationComputerStates.ClaimPending || !pendingSandbox || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires a pending claim without a sandbox");
 		return;
 	}
 	if (lease.state === ComputerLeaseStates.Active)
 	{
-		if ((computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling) || lease.sandboxId === null || lease.serviceFQDN === null || lease.releasedAt !== null)
+		const assignedSandbox = lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox || lease.realization.sandboxId !== null && lease.realization.serviceFQDN !== null;
+		if ((computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling) || !assignedSandbox || lease.releasedAt !== null)
 			throw new Error("Conversation computer history requires an active lease for a warm or cooling computer");
 		return;
 	}
@@ -157,16 +160,60 @@ function _SameComputerCoordinates(first: ConversationComputer, current: Conversa
 /** Allows lifecycle changes for one lease without letting a terminal or foreign lease return. */
 function _ValidateSameLeaseTransition(previous: ComputerLease, current: ComputerLease): void
 {
-	if (previous.schemaVersion !== current.schemaVersion || previous.computerId !== current.computerId || previous.generation !== current.generation || previous.sandboxClaimId !== current.sandboxClaimId || previous.claimedAt !== current.claimedAt)
+	if (previous.schemaVersion !== current.schemaVersion || previous.computerId !== current.computerId || previous.generation !== current.generation || previous.claimedAt !== current.claimedAt || previous.realization.kind !== current.realization.kind)
 		throw new Error("Conversation computer history changed stable lease coordinates");
-	if (previous.sandboxId !== null && previous.sandboxId !== current.sandboxId)
-		throw new Error("Conversation computer history changed an assigned sandbox");
-	if (previous.serviceFQDN !== null && previous.serviceFQDN !== current.serviceFQDN)
-		throw new Error("Conversation computer history changed an assigned sandbox Service");
+	if (!_SameRealization(previous.realization, current.realization))
+		throw new Error("Conversation computer history changed its realization coordinates");
 	if ((previous.state === ComputerLeaseStates.Released || previous.state === ComputerLeaseStates.Lost) && previous.state !== current.state)
 		throw new Error("Conversation computer history reactivated a terminal lease");
 	if (previous.state === ComputerLeaseStates.Active && current.state === ComputerLeaseStates.Claimed)
 		throw new Error("Conversation computer history moved an active lease back to claimed");
+}
+
+/** Parses one closed realization variant without accepting credentials or unknown fields. */
+export function _ValidatedConversationComputerRealization(value: unknown): ConversationComputerRealization
+{
+	if (!_Record(value))
+		throw new Error("Conversation computer history requires a valid realization");
+	if (value.kind === ConversationComputerRealizationKinds.AgentSandbox)
+	{
+		if (!_ExactKeys(value, ["kind", "claimId", "sandboxId", "serviceFQDN"]) || !_Identifier(value.claimId) || (value.sandboxId !== null && !_Identifier(value.sandboxId)) || (value.serviceFQDN !== null && !_ServiceFqdn(value.serviceFQDN)))
+			throw new Error("Conversation computer history requires valid Agent Sandbox coordinates");
+		return value as unknown as ConversationComputerRealization;
+	}
+	if (value.kind === ConversationComputerRealizationKinds.HostDevelopmentProcess)
+	{
+		if (!_ExactKeys(value, ["kind", "processId", "endpoint"]) || !_Identifier(value.processId) || !_LoopbackEndpoint(value.endpoint))
+			throw new Error("Conversation computer history requires a loopback host process");
+		return value as unknown as ConversationComputerRealization;
+	}
+	throw new Error("Conversation computer history requires a supported realization kind");
+}
+
+/** Keeps realization coordinates immutable once a lease has been recorded. */
+function _SameRealization(previous: ConversationComputerRealization, current: ConversationComputerRealization): boolean
+{
+	if (previous.kind === ConversationComputerRealizationKinds.AgentSandbox && current.kind === ConversationComputerRealizationKinds.AgentSandbox)
+		return previous.claimId === current.claimId && (previous.sandboxId === null || previous.sandboxId === current.sandboxId) && (previous.serviceFQDN === null || previous.serviceFQDN === current.serviceFQDN);
+	if (previous.kind === ConversationComputerRealizationKinds.HostDevelopmentProcess && current.kind === ConversationComputerRealizationKinds.HostDevelopmentProcess)
+		return previous.processId === current.processId && previous.endpoint === current.endpoint;
+	return false;
+}
+
+/** Accepts only an HTTP listener on IPv4 or IPv6 loopback. */
+function _LoopbackEndpoint(value: unknown): value is string
+{
+	if (typeof value !== "string")
+		return false;
+	try
+	{
+		const url = new URL(value);
+		return url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "[::1]") && url.username === "" && url.password === "" && url.pathname === "/" && url.search === "" && url.hash === "";
+	}
+	catch
+	{
+		return false;
+	}
 }
 
 function _ServiceFqdn(value: unknown): value is string

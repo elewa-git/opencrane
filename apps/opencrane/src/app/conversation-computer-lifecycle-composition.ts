@@ -1,7 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import { ConversationComputerCheckpointAuthority, ConversationComputerCheckpointFenceAdapter, ConversationComputerHistory, ConversationComputerLifecycleAuthority, ConversationComputerLifecycleDueEnumerator, ConversationComputerLifecycleScheduler, ConversationComputerLifecycleWorker, HttpConversationComputerCheckpointSandbox, KeyedConversationComputerReviewCredentialDeriver, KurrentConversationComputerActivityReader, PrismaConversationComputerLifecycleProjectionRepository, _CreateConversationComputerCheckpointRouter } from "@opencrane/backend/server/conversations";
-import { AgentSandboxClaimAdapter, AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
+import { AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _CreateConversationComputerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
@@ -11,6 +11,7 @@ import type { ConversationComputerActivationWorker } from "./conversation-comput
 import { _ReadConversationPrivatePayloadKeyring } from "./conversation-history-composition";
 import { _log } from "./log";
 import { _CreateArtifactUploadGateway, _CreatePublishedArtifactReader } from "../infra/artifacts/artifact-upload.factory";
+import { AgentSandboxConversationComputerRealizer } from "./conversation-computer-agent-sandbox-realizer";
 
 /** Fixed idle timings admitted by release 0.11; the lease lifetime joins them from the release profile. */
 const _IDLE_POLICY = { staleAfterMilliseconds: 300_000, retireAfterMilliseconds: 1_200_000 };
@@ -30,10 +31,10 @@ export function _CreateConversationComputerLifecycleComposition(prisma: PrismaCl
 		extendActiveLease: function _ExtendActiveLease(command: Parameters<typeof projections.extendActiveLease>[0]) { return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction) { const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction); return repository.extendActiveLease(command); }, { isolationLevel: "Serializable", operation: "conversation computer active lease renewal" }); },
 	};
 	const policy = { ..._IDLE_POLICY, leaseTtlMilliseconds: profile.leaseTtlMilliseconds };
-	const claims = new AgentSandboxClaimAdapter(customApi);
+	const realizer = new AgentSandboxConversationComputerRealizer(customApi, coreApi, profile);
 	const activity = new KurrentConversationComputerActivityReader(historyStore);
-	const authority = new ConversationComputerLifecycleAuthority(history, checkpoints, attempts, claims, activity, profile.namespace, policy);
-	const enumerator = new ConversationComputerLifecycleDueEnumerator(projections, history, activity, claims, siloId, profile.namespace, policy);
+	const authority = new ConversationComputerLifecycleAuthority(history, checkpoints, attempts, realizer, activity, policy);
+	const enumerator = new ConversationComputerLifecycleDueEnumerator(projections, history, activity, realizer, siloId, policy);
 	const scheduler = new ConversationComputerLifecycleScheduler(enumerator, authority, 50);
 	return { router: _CreateConversationComputerCheckpointRouter({ authority: checkpoints, siloId, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName) }), worker: new ConversationComputerLifecycleWorker(scheduler, _log) };
 }

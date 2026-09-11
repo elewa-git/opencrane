@@ -14,8 +14,17 @@ export interface ConversationComputerLifecycleCandidate extends Omit<Conversatio
 /** Enumerates bounded nonterminal projected computers due for reconciliation. */
 export interface ConversationComputerLifecycleEnumerator
 {
-	/** Returns at most `limit` due computers in stable projection order. */
-	enumerateDue(now: Date, limit: number): Promise<readonly ConversationComputerLifecycleCandidate[]>;
+	/** Returns due computers from one stable projection page and the cursor for the next page. */
+	enumerateDue(now: Date, limit: number, afterConversationId: string | null): Promise<ConversationComputerLifecycleCandidatePage>;
+}
+
+/** Carries due candidates separately from the cursor over every inspected projection row. */
+export interface ConversationComputerLifecycleCandidatePage
+{
+	/** Contains due computers found in this projection page. */
+	readonly items: readonly ConversationComputerLifecycleCandidate[];
+	/** Advances past inspected non-due rows as well as due rows. */
+	readonly nextCursor: string | null;
 }
 
 /** Reconciles one lifecycle command against authoritative Kurrent history. */

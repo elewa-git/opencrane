@@ -39,7 +39,7 @@ export class ManagedConversationExecutionSubjectAuthority implements ExecutionSu
 			|| identity.identity.id !== computer.agentIdentityId || identity.identity.siloId !== command.siloId || identity.identity.agentServiceId !== agent.agentServiceId
 			|| active.computer.siloId !== command.siloId || active.computer.id !== computer.computerId || active.computer.conversationId !== command.conversationId
 			|| active.computer.agentIdentityId !== computer.agentIdentityId || active.computer.profileRevisionId !== agent.profileRevisionId
-			|| active.lease.id !== lease.leaseId || active.lease.computerId !== computer.computerId || active.lease.generation !== lease.leaseGeneration || active.lease.sandboxClaimId !== lease.sandboxClaimId)
+			|| active.lease.id !== lease.leaseId || active.lease.computerId !== computer.computerId || active.lease.generation !== lease.leaseGeneration || JSON.stringify(active.lease.realization) !== JSON.stringify(lease.realization))
 			return { outcome: "denied", reason: "identity_unavailable" };
 		if (transaction.authorization === undefined)
 			return { outcome: "denied", reason: "product_authorization_unavailable" };

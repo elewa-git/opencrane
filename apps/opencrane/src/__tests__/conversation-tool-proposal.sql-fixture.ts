@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import { Client } from "pg";
 
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, ___ExecutionSubjectSchema, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, ExecutionSubjectMembershipKinds, ___ExecutionSubjectSchema, type RunInputSnapshot } from "@opencrane/contracts";
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
@@ -34,7 +34,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 	const now = new Date();
 	const trustedUntil = new Date(now.getTime() + (options.trustLifetimeMs ?? 300_000)).toISOString();
 	const leaseExpiresAt = new Date(now.getTime() + (options.currentLeaseLifetimeMs ?? 300_000)).toISOString();
-	const lease = { leaseId: id("lease"), leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` };
+	const lease = { leaseId: id("lease"), leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: `${computerId}-g1`, sandboxId: id("sandbox"), serviceFQDN: `${id("sandbox")}.computers.svc.cluster.local` } } as const;
 	const membership = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId, siloId, issuer: "https://identity.example.test", subjectId: principalId, membershipId: id("membership"), membershipUpdatedAt: now.toISOString(), observedAt: now.toISOString(), trustedUntil };
 	const subject = ___ExecutionSubjectSchema.parse({ schemaVersion: 1, siloId, agentIdentityId, principalId,
 		identity: { agentIdentityId, principalId, siloId, headRevision: "0", headDigest: ___DigestCanonicalJson(id("identity-head")), decisionEvidenceId: id("identity-evidence"), verifiedAt: now.toISOString() },
@@ -93,7 +93,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 	const identity = { schemaVersion: 1, id: agentIdentityId, siloId, agentServiceId, name: "SQL assistant", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: principalId, createdAt: now.toISOString(), kind: "proxied", proxiedPrincipalId: principalId, delegationPolicyId: "personal-agent-session-v1" } as const;
 	const dependencies = { ..._CreateConversationToolDispatchDependencies({} as never, { mode: FleetMembershipDeploymentModes.Standalone, siloId, trustedOidcIssuer: membership.issuer, maximumStalenessMs: options.currentMembershipLifetimeMs ?? 300_000 }),
 		identities: { load: async function _Identity() { return { identity, revision: 0n, headDigest: subject.identity.headDigest, headEventId: id("identity-event"), streamName: id("identity-stream") }; } },
-		computers: { load: async function _Computer() { return { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { state: ComputerLeaseStates.Active, id: lease.leaseId, generation: 1, computerId, sandboxId: id("sandbox"), expiresAt: leaseExpiresAt } } as never; } } };
+		computers: { load: async function _Computer() { return { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { state: ComputerLeaseStates.Active, id: lease.leaseId, generation: 1, computerId, realization: lease.realization, expiresAt: leaseExpiresAt } } as never; } } };
 	const binding = { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId, agentServiceId, agentName: "SQL assistant", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 };
 	const compiledInput = { promptCompilerVersion: "tool-proof-v1", runId, attempt: 1, instructions: "Read the requested test record.", messages: [], tools: [tool], model: { modelAlias: modelId, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budget: { ...budgetPolicy, maxCostUsdMicros: null }, digest: ___DigestCanonicalJson(id("compiled-input")) };
 	const turn: FrozenConversationComputerTurn = { bootstrapId: randomUUID(), siloId, computerId, lease, binding, latestPendingEntryId: id("message"), modelAlias: modelId, maximumBudgetUsd: 1, credentialLifetimeSeconds: 120, compile: { runId, attempt: 1, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null };

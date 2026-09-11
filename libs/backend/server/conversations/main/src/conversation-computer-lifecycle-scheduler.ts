@@ -13,13 +13,23 @@ export class ConversationComputerLifecycleScheduler
 			throw new Error("Conversation computer lifecycle scheduler requires a positive limit");
 	}
 
-	/** Reconciles each due candidate with a stable event id safe across scheduler retries. */
+	/** Drains every stable projection page and reconciles due candidates with retry-stable event ids. */
 	public async reconcileDue(now: Date): Promise<readonly ConversationComputerLifecycleOutcome[]>
 	{
 		if (Number.isNaN(now.getTime()))
 			throw new Error("Conversation computer lifecycle scheduler requires a valid server time");
-		const due = await this.candidates.enumerateDue(now, this.limit);
-		return Promise.all(due.map((candidate) => this.reconciler.reconcile({ ...candidate, now, eventId: _LifecycleEventId(candidate) })));
+		const outcomes: ConversationComputerLifecycleOutcome[] = [];
+		let cursor: string | null = null;
+		do
+		{
+			const page = await this.candidates.enumerateDue(now, this.limit, cursor);
+			outcomes.push(...await Promise.all(page.items.map((candidate) => this.reconciler.reconcile({ ...candidate, now, eventId: _LifecycleEventId(candidate) }))));
+			if (page.nextCursor !== null && page.nextCursor === cursor)
+				throw new Error("Conversation computer lifecycle enumeration did not advance its cursor");
+			cursor = page.nextCursor;
+		}
+		while (cursor !== null);
+		return outcomes;
 	}
 }
 

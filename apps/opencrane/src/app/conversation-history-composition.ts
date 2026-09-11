@@ -9,7 +9,7 @@ import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import type { AgentSandboxReleaseProfileConfig } from "./config.types";
+import type { ConversationComputerReleaseProfileConfig } from "./config.types";
 import { _ProcessShutdownSignal } from "./process-shutdown";
 import { _log } from "./log";
 
@@ -18,7 +18,7 @@ export function _CreateConversationHistoryComposition(
   prisma: PrismaClient,
   historyStore: HistoryStore,
   keyringPath: string,
-  releaseProfile: AgentSandboxReleaseProfileConfig,
+  releaseProfile: ConversationComputerReleaseProfileConfig,
   workflows: IWorkflowEngine,
 ) {
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(

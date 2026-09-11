@@ -1,6 +1,6 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 import { __DigestCanonicalJson, PrismaAuthorizationAuthority, type ToolInvocationRecord, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -68,7 +68,7 @@ export class PrismaConversationToolDispatchAuthority implements ConversationTool
 		if (current === null || current.computer.state !== ConversationComputerStates.Warm || lease === null || lease === undefined
 			|| lease.state !== ComputerLeaseStates.Active || lease.id !== subject.computerScope.leaseId
 			|| lease.generation !== subject.computerScope.leaseGeneration || current.computer.leaseGeneration !== lease.generation
-			|| lease.computerId !== subject.computerScope.computerId || lease.sandboxId === null || Date.parse(lease.expiresAt) <= now.getTime())
+			|| lease.computerId !== subject.computerScope.computerId || lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox || lease.realization.sandboxId === null || Date.parse(lease.expiresAt) <= now.getTime())
 			return null;
 		const decisionTime = Math.max(now.getTime(), Date.now());
 		const authorization = new PrismaAuthorizationAuthority(this.transaction);

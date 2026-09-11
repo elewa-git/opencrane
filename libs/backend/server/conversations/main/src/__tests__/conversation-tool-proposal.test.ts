@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ConversationToolProposal } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, type ConversationToolProposal } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
@@ -13,7 +13,7 @@ function _Fixture()
 	vi.setSystemTime(1_800_000_000_000);
 	const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
 	const tool = { name: "records.read", toolRevisionId: "tool-1", description: "Read a record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
-	const turn = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", expectedRevision: 2n }, compile: { runId: "run-1", attempt: 1, digest: "sha256:compiled" }, outputSourceCommandId: null } as FrozenConversationComputerTurn;
+	const turn = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } }, binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", expectedRevision: 2n }, compile: { runId: "run-1", attempt: 1, digest: "sha256:compiled" }, outputSourceCommandId: null } as FrozenConversationComputerTurn;
 	const candidate: ConversationComputerTurnCandidate = { ...turn, credentialExpiresAt: "2099-01-01T00:00:00.000Z", compiledInput: { promptCompilerVersion: "proof-v1", instructions: "", messages: [], model: { modelAlias: "proof", maxOutputTokens: 512, generatedOutputCapabilities: [] }, runId: "run-1", attempt: 1, digest: "sha256:compiled", tools: [tool], budget: { maxModelTurns: 2, maxCompletionTokens: 1_024, maxCostUsdMicros: null, wallClockDeadlineEpochMs: Date.now() + 60_000, maxToolInvocations: 1 } } };
 	const proposal: ConversationToolProposal = { bootstrapId: turn.bootstrapId, toolRevisionId: "tool-1", arguments: { query: "record" } };
 	return { turn, candidate, proposal, tool };

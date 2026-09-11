@@ -1,4 +1,4 @@
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ManagedConversationExecutionSubjectAuthority } from "../managed-conversation-execution-subject-authority";
@@ -6,11 +6,12 @@ import type { PersonalConversationExecutionSubjectCoordinates } from "../persona
 
 const _NOW = "2026-09-06T01:00:00.000Z";
 const _IDENTITY = { schemaVersion: 1, id: "identity-1", siloId: "silo-1", agentServiceId: "service-1", name: "Company", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "principal-1", createdAt: _NOW, kind: "managed", principalId: "company-principal" } as const;
+const _REALIZATION = { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "claim-1", sandboxId: "sandbox-1", serviceFQDN: "sandbox.local" } as const;
 
 /** Supplies every immutable coordinate captured by app composition. */
 function _Coordinates(overrides: Partial<PersonalConversationExecutionSubjectCoordinates> = {}): PersonalConversationExecutionSubjectCoordinates
 {
-	return { runId: "run-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 3, sandboxClaimId: "claim-1" }, requesterPrincipalId: "principal-1", requesterIssuer: "issuer-1", requesterSubjectId: "subject-1", requesterAuthenticatedAt: _NOW, requestIdempotencyKey: "request-1", ...overrides };
+	return { runId: "run-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 3, realization: _REALIZATION }, requesterPrincipalId: "principal-1", requesterIssuer: "issuer-1", requesterSubjectId: "subject-1", requesterAuthenticatedAt: _NOW, requestIdempotencyKey: "request-1", ...overrides };
 }
 
 /** Builds the transaction-facing admission command without computer-owned fields. */
@@ -24,7 +25,7 @@ function _Dependencies(coordinates: PersonalConversationExecutionSubjectCoordina
 {
 	const identityHistory = { loadActive: vi.fn().mockResolvedValue({ streamName: "agent-identity-identity-1", revision: 4n, headEventId: "identity-event-4", headDigest: "sha256:identity-head", identity: _IDENTITY }) };
 	const executionEvidence = { load: vi.fn().mockResolvedValue({ outcome: "loaded", value: { membership: { kind: "managed", principalId: "company-principal", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", agentRevisionDigest: "sha256:revision", decisionEvidenceId: "sha256:model", trustedUntil: "2099-01-01T00:00:00.000Z" }, requesterMembership: { kind: "fleet", principalId: "principal-1", siloId: "silo-1", revision: 7, assertionId: "assertion-7", payloadDigest: "sha256:membership", decisionEvidenceId: "assertion-7", trustedUntil: "2099-01-01T00:00:00.000Z" }, capability: { effectiveContractDigest: "sha256:contract", effectiveBoundaryAttachments: [], effectiveBoundaryAttachmentDigest: "sha256:capability", authorizationDecisionDigests: ["sha256:admission"] }, admissionDecisionDigest: "sha256:admission" } }) };
-	const computerHistory = { loadActiveLease: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 5n, computer: { schemaVersion: 1, id: "computer-1", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", state: ConversationComputerStates.Warm, leaseGeneration: 4, workspaceCheckpoint: null, createdAt: _NOW, updatedAt: _NOW }, lease: { schemaVersion: 1, id: "lease-1", computerId: "computer-1", generation: 3, sandboxClaimId: "claim-1", sandboxId: "sandbox-1", serviceFQDN: "sandbox.local", state: ComputerLeaseStates.Active, claimedAt: _NOW, expiresAt: "2099-01-01T00:00:00.000Z", releasedAt: null } }) };
+	const computerHistory = { loadActiveLease: vi.fn().mockResolvedValue({ streamName: "conversation-computer-computer-1", revision: 5n, computer: { schemaVersion: 1, id: "computer-1", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", state: ConversationComputerStates.Warm, leaseGeneration: 4, workspaceCheckpoint: null, createdAt: _NOW, updatedAt: _NOW }, lease: { schemaVersion: 1, id: "lease-1", computerId: "computer-1", generation: 3, realization: _REALIZATION, state: ComputerLeaseStates.Active, claimedAt: _NOW, expiresAt: "2099-01-01T00:00:00.000Z", releasedAt: null } }) };
 	return { resolvePrincipalId: vi.fn().mockResolvedValue("company-principal"), coordinates, identityHistory, executionEvidence, executionEvidenceFactory: vi.fn().mockReturnValue(executionEvidence), computerHistory };
 }
 
@@ -49,7 +50,7 @@ describe("ManagedConversationExecutionSubjectAuthority", function _Suite()
 
 	it("fails closed when the active lease does not match the exact SandboxClaim", async function _RejectsLeaseDrift()
 	{
-		const dependencies = _Dependencies(_Coordinates({ lease: { leaseId: "lease-1", leaseGeneration: 3, sandboxClaimId: "claim-other" } }));
+		const dependencies = _Dependencies(_Coordinates({ lease: { leaseId: "lease-1", leaseGeneration: 3, realization: { ..._REALIZATION, claimId: "claim-other" } } }));
 		const authority = new ManagedConversationExecutionSubjectAuthority({ ...dependencies, executionEvidence: dependencies.executionEvidenceFactory } as never);
 		await expect(authority.load(_Command(), { agentServiceId: "service-1", agentRevisionId: "revision-1" } as never, { prisma: {}, authorization: {}, admittedAt: _NOW, admittedAtEpochMs: Date.parse(_NOW) } as never)).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
 	});

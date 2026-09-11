@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.main as computer_main
-from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _install_review_credential, _restore
+from src.main import _HealthHandler, _bootstrap, _configuration, _execute_turn, _install_review_credential, _publish_host_readiness, _restore
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -25,17 +25,50 @@ class ConfigurationTests(unittest.TestCase):
     def test_accepts_complete_coordinates(self) -> None:
         """Return the frozen coordinates when every release-owned value is present."""
         environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "agent_sandbox",
             "OPENCRANE_COMPUTER_ID": "computer-1",
             "OPENCRANE_COMPUTER_GENERATION": "3",
             "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
             "OPENCRANE_INTERNAL_ENDPOINT": "http://opencrane-internal:8081",
         }
         with patch.dict(os.environ, environment, clear=True):
-            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://opencrane-internal:8081", "leaseId": "lease-1", "reviewCredentialPath": "/var/run/opencrane/review/credential", "tokenPath": "/var/run/secrets/opencrane/token"})
+            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://opencrane-internal:8081", "leaseId": "lease-1", "realizationKind": "agent_sandbox", "reviewCredentialPath": "/var/run/opencrane/review/credential", "tokenPath": "/var/run/secrets/opencrane/token"})
+
+    def test_accepts_a_host_process_with_a_loopback_bearer_file(self) -> None:
+        """Keep workstation identity separate from projected Kubernetes credentials."""
+        environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "host_development_process",
+            "OPENCRANE_COMPUTER_PROCESS_ID": "local-computer-1",
+            "OPENCRANE_COMPUTER_ID": "computer-1",
+            "OPENCRANE_COMPUTER_GENERATION": "3",
+            "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
+            "OPENCRANE_HOST_BEARER_PATH": "/tmp/opencrane-computer/bearer",
+            "OPENCRANE_HOST_READY_PATH": "/tmp/opencrane-computer/ready",
+            "OPENCRANE_INTERNAL_ENDPOINT": "http://127.0.0.1:8081",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://127.0.0.1:8081", "leaseId": "lease-1", "processId": "local-computer-1", "readyPath": "/tmp/opencrane-computer/ready", "realizationKind": "host_development_process", "tokenPath": "/tmp/opencrane-computer/bearer"})
+
+    def test_rejects_a_non_loopback_host_process_endpoint(self) -> None:
+        """Do not let workstation process traffic leave the host through a configured endpoint."""
+        environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "host_development_process",
+            "OPENCRANE_COMPUTER_PROCESS_ID": "local-computer-1",
+            "OPENCRANE_COMPUTER_ID": "computer-1",
+            "OPENCRANE_COMPUTER_GENERATION": "3",
+            "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
+            "OPENCRANE_HOST_BEARER_PATH": "/tmp/opencrane-computer/bearer",
+            "OPENCRANE_HOST_READY_PATH": "/tmp/opencrane-computer/ready",
+            "OPENCRANE_INTERNAL_ENDPOINT": "https://server.example.test:8081",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "loopback private endpoint"):
+                _configuration()
 
     def test_rejects_missing_generation(self) -> None:
         """Fail readiness when the sandbox lacks a generation fence."""
         environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "agent_sandbox",
             "OPENCRANE_COMPUTER_ID": "computer-1",
             "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
             "OPENCRANE_INTERNAL_ENDPOINT": "http://opencrane-internal:8081",
@@ -43,6 +76,20 @@ class ConfigurationTests(unittest.TestCase):
         with patch.dict(os.environ, environment, clear=True):
             with self.assertRaisesRegex(RuntimeError, "OPENCRANE_COMPUTER_GENERATION is required"):
                 _configuration()
+
+    def test_requires_an_explicit_realization_kind(self) -> None:
+        """Refuse to guess whether the process owns Kubernetes or workstation identity."""
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "OPENCRANE_COMPUTER_REALIZATION_KIND is required"):
+                _configuration()
+
+    def test_writes_the_exact_host_readiness_marker_privately(self) -> None:
+        """Publish no lease or bearer data when the child reports successful host setup."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ready"
+            _publish_host_readiness({"processId": "local-computer-1", "readyPath": str(path)})
+            self.assertEqual(path.read_text(encoding="utf-8"), "local-computer-1")
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_reports_a_safe_degraded_readiness_after_turn_failure(self) -> None:
         """Keep liveness up while readiness exposes only the failure class."""
@@ -191,7 +238,7 @@ class TurnPollingTests(unittest.TestCase):
 
     def test_pending_bootstrap_polls_at_normal_cadence_without_model_work(self) -> None:
         """A pending reservation does not authorise another model request."""
-        with patch("src.main._configuration", return_value={}), patch("src.main._install_review_credential") as review, patch("src.main._restore") as restore, patch("src.main._bootstrap", return_value={"bootstrapId": "bootstrap-1", "outcome": "pending"}) as bootstrap, patch("src.main._execute_turn") as execute, patch("src.main.time.sleep", side_effect=[None, StopIteration]) as sleep:
+        with patch("src.main._configuration", return_value={"realizationKind": "agent_sandbox"}), patch("src.main._install_review_credential") as review, patch("src.main._restore") as restore, patch("src.main._bootstrap", return_value={"bootstrapId": "bootstrap-1", "outcome": "pending"}) as bootstrap, patch("src.main._execute_turn") as execute, patch("src.main.time.sleep", side_effect=[None, StopIteration]) as sleep:
             with self.assertRaises(StopIteration):
                 computer_main._turn_loop()
         self.assertEqual(bootstrap.call_count, 2)
@@ -214,7 +261,7 @@ class TurnPollingTests(unittest.TestCase):
                         raise StopIteration
 
                 polls = [{"bootstrapId": "bootstrap-1", "outcome": state} for state in ("ready", "pending", "ready")]
-                with patch("src.main._configuration", return_value={}), patch("src.main._install_review_credential"), patch("src.main._restore"), patch("src.main._bootstrap", side_effect=polls), patch("src.main._execute_turn", return_value=outcome) as execute, patch("src.main._LOGGER.warning") as warning, patch("src.main.time.sleep", side_effect=observe_sleep):
+                with patch("src.main._configuration", return_value={"realizationKind": "agent_sandbox"}), patch("src.main._install_review_credential"), patch("src.main._restore"), patch("src.main._bootstrap", side_effect=polls), patch("src.main._execute_turn", return_value=outcome) as execute, patch("src.main._LOGGER.warning") as warning, patch("src.main.time.sleep", side_effect=observe_sleep):
                     with self.assertRaises(StopIteration):
                         computer_main._turn_loop()
                 execute.assert_called_once()
@@ -223,11 +270,20 @@ class TurnPollingTests(unittest.TestCase):
 
     def test_restart_reads_unavailable_status_without_model_work(self) -> None:
         """A fresh process learns the durable refusal from bootstrap and leaves its call untouched."""
-        with patch("src.main._configuration", return_value={}), patch("src.main._install_review_credential"), patch("src.main._restore"), patch("src.main._bootstrap", return_value={"bootstrapId": "bootstrap-1", "outcome": "response_unavailable"}), patch("src.main._execute_turn") as execute, patch("src.main._LOGGER.warning"), patch("src.main.time.sleep", side_effect=StopIteration):
+        with patch("src.main._configuration", return_value={"realizationKind": "agent_sandbox"}), patch("src.main._install_review_credential"), patch("src.main._restore"), patch("src.main._bootstrap", return_value={"bootstrapId": "bootstrap-1", "outcome": "response_unavailable"}), patch("src.main._execute_turn") as execute, patch("src.main._LOGGER.warning"), patch("src.main.time.sleep", side_effect=StopIteration):
             with self.assertRaises(StopIteration):
                 computer_main._turn_loop()
         execute.assert_not_called()
         self.assertEqual(computer_main._LAST_FAILURE_TYPE, "response_unavailable")
+
+    def test_host_process_skips_review_and_checkpoint_setup(self) -> None:
+        """Start workstation polling without mounting production review or restore behaviour."""
+        config = {"realizationKind": "host_development_process"}
+        with patch("src.main._configuration", return_value=config), patch("src.main._install_review_credential") as review, patch("src.main._restore") as restore, patch("src.main._bootstrap", return_value={"outcome": "idle"}), patch("src.main.time.sleep", side_effect=StopIteration):
+            with self.assertRaises(StopIteration):
+                computer_main._turn_loop()
+        review.assert_not_called()
+        restore.assert_not_called()
 
 
 if __name__ == "__main__":

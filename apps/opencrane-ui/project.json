@@ -162,6 +162,17 @@
 					"optimization": false,
 					"extractLicenses": false,
 					"sourceMap": true
+				},
+				"development-tier2": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true,
+					"fileReplacements": [
+						{
+							"replace": "apps/opencrane-ui/src/app/http-profile.provider.ts",
+							"with": "apps/opencrane-ui/src/app/http-profile.provider.tier2.ts"
+						}
+					]
 				}
 			},
 			"defaultConfiguration": "production"
@@ -196,6 +207,13 @@
 				"development-live": {
 					"buildTarget": "opencrane-ui:build:development-live",
 					"proxyConfig": "apps/opencrane-ui/proxy.dev-live.conf.json"
+				},
+				"tier2": {
+					"buildTarget": "opencrane-ui:build:development-tier2",
+					"allowedHosts": [
+						"local-development.localhost"
+					],
+					"proxyConfig": "apps/opencrane-ui/proxy.tier2.conf.json"
 				}
 			},
 			"defaultConfiguration": "development"

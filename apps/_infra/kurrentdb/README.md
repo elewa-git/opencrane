@@ -36,9 +36,18 @@ a password, or widens an existing ACL.
 the silo umbrella renders: StatefulSet, Service, bootstrap Job, PodDisruptionBudget, and network
 policies.
 
+`helm/files/bootstrap.sh` — owns the one reviewed bootstrap policy used by both the Helm Job and
+Tier 2 local development. Callers provide the endpoint, CA, administrator password, service
+credential, silo, subscriber limit, and timeout through the named `KURRENTDB_BOOTSTRAP_*` and
+`KURRENTDB_HISTORY_*` environment variables. Local development may change only how those inputs are
+mounted; it does not keep a second ACL, identity, or subscription implementation.
+
 `helm/templates/_backup.tpl` — exports `opencrane.kurrentdb.backup`, the scheduled backup CronJob
 with its scripts, ServiceAccount, and (per mode) archive PVC or snapshot Role. `_resources.tpl`
 includes it when `historyStore.kurrentdb.backup.enabled` is true.
+
+`tests/bootstrap-policy-contract.sh` — proves that the shared host script keeps TLS, exact identity,
+ACL, subscription, and disposable-file cleanup requirements before Helm or Tier 2 consumes it.
 
 `tests/helm-contract.sh` — renders the target contract and rejects omitted KurrentDB credentials,
 either unpinned image, an unknown backup mode, or a snapshot backup without its class, image, or
@@ -69,6 +78,15 @@ The authenticated HTTP stream API is enabled so bootstrap can install and verify
 Verification reads the latest settings event as JSON and rejects different permissions; an older
 matching event in the stream cannot conceal a changed current ACL.
 Bootstrap inspects subscription metadata without consuming queued activation messages.
+
+Tier 2 starts its disposable TLS node on a loopback-only host port, then invokes that same
+`helm/files/bootstrap.sh` file with temporary credential paths owned by the local launch. An
+owner-only host directory feeds a short-lived root provisioner that copies the server key into a
+private Docker volume for the non-root database process; the key never becomes group-readable or a
+curl argument. Stopping the launch removes the session credential files, TLS volume, containers and
+network. The verified PostgreSQL/KurrentDB data volumes and their owner-only credentials survive a
+normal stop; `--reset` recreates the pair from the current fresh-install baseline instead of
+attempting an upgrade.
 
 Parked activation replay is an operator maintenance action: KurrentDB 26.1.1 requires operations
 or administrator authority for it, independently of stream ACLs. Run the usual silo deploy command

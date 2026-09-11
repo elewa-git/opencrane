@@ -7,7 +7,7 @@ import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { AgentSandboxReleaseProfileConfig } from "./config.types";
+import type { ConversationComputerReleaseProfileConfig } from "./config.types";
 import { _log } from "./log";
 
 /**
@@ -18,7 +18,7 @@ import { _log } from "./log";
  * personal memory, skills and tool assignments until those paths have their own product proof.
  * @see PrismaCompanyAssistantProvisioningUnitOfWork for current permission checks and recoverable creation.
  */
-export function _CreateCompanyAssistantComposition(prisma: PrismaClient, history: HistoryStore, profile: AgentSandboxReleaseProfileConfig): Router
+export function _CreateCompanyAssistantComposition(prisma: PrismaClient, history: HistoryStore, profile: ConversationComputerReleaseProfileConfig): Router
 {
 	const authority = new PrismaCompanyAssistantProvisioningUnitOfWork(prisma, {
 		workloadProfile: profile.profileName,

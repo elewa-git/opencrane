@@ -77,6 +77,11 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   recognisable capability names and categorical availability, never internal topology or errors.
 - `ConversationHistoryResponse`, `ConversationEntry`, and the conversation-computer contracts — the
   immutable history and generation-fenced computer vocabulary shared by server and browser.
+- `ConversationComputerRealizationKinds`, `ConversationComputerRealization`, and
+  `RealizedLeaseScope` — the persisted discriminant between a production Agent Sandbox and a Tier 2
+  host-development process. Both carry non-secret process coordinates; authentication and product
+  authority remain server-owned. Host coordinates do not claim that the workstation enforces the
+  production profile's Kubernetes confinement, resources or checkpoint support.
 - `ConversationToolProposal`, `___ConversationToolProposalSchema` and
   `ConversationToolProposalReceipt` — the private workload request for one frozen tool revision
   and bounded JSON arguments. It accepts no caller-selected identity or approval. A receipt

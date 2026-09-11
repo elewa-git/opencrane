@@ -4,27 +4,37 @@
 
 ## What it owns
 
-This app is the image boundary for one 0.11 conversation computer. Kubernetes Agent Sandbox starts
-the image from a release-owned profile after OpenCrane admits a generation-bound computer lease.
+This app is the process entrypoint for one 0.11 conversation computer. In production, Kubernetes
+Agent Sandbox starts its image from a release-owned profile after OpenCrane admits a
+generation-bound computer lease. Tier 2 starts the Python module directly from the local checkout.
 
 ```text
- KurrentDB lease event ──► SandboxClaim ──► conversation-computer ◄── HERE
-                                                  │
-                                                  ├── Pod-bound bootstrap
-                                                  ├── server model-step request
-                                                  ├── turn outcome polling
-                                                  └── lease-local review gateway
+ KurrentDB lease event
+          │
+          ├── production ──► SandboxClaim/Pod ──► conversation-computer ◄── HERE
+          │                                              ├── Pod-bound bootstrap
+          │                                              ├── server model-step request
+          │                                              ├── turn outcome polling
+          │                                              └── lease-local review gateway
+          │
+          └── Tier 2 ──────► host child/private bearer ──► conversation-computer
+                                                         ├── host-bound bootstrap
+                                                         ├── server model-step request
+                                                         └── turn outcome polling
 ```
 
 **In this flow:** [opencrane](../opencrane/README.md) admits the lease, while
-[agent-sandbox](../_infra/agent-sandbox/README.md) fixes the image and confinement profile.
+[agent-sandbox](../_infra/agent-sandbox/README.md) fixes the production image and confinement profile.
+Tier 2 instead uses the local host-process owner composed by the OpenCrane development entrypoint.
 
-The process refuses readiness unless it receives the computer id, lease id, computer generation and
-private server endpoint. It re-reads a short-lived, audience-bound projected token for every exchange.
-After binding the Pod to the current lease, the server returns a bootstrap id and its outcome. The
+The process refuses startup unless it receives an explicit realization kind, computer id, lease id,
+computer generation and private server endpoint. Production `agent_sandbox` mode re-reads a
+short-lived, audience-bound projected token for every exchange. Host development reads the private
+bearer file owned by its parent server process.
+After binding the process to the current lease, the server returns a bootstrap id and its outcome. The
 process sends exactly `{bootstrapId}` to the private model-step route when that outcome is `ready`.
 The server chooses the next step from saved progress. It owns the compiled input, model credential,
-original call and token budgets, tool selection, result continuation and conversation output. The Pod
+original call and token budgets, tool selection, result continuation and conversation output. The process
 receives none of those inputs or credentials and has no direct tool-proposal or output route.
 
 Pending work polls bootstrap at the normal two-second cadence. A `response_unavailable` or
@@ -38,8 +48,8 @@ approvals and recovery controls remain separate product work.
 
 ## Public surface
 
-Entrypoint: `python3 -m src.main` serves `/healthz` and `/readyz` on port 8080. A second listener on
-private port 8090 accepts one bearer: a review credential the server derives with a server-only key
+Entrypoint: `python3 -m src.main`. In production it serves `/healthz` and `/readyz` on port 8080. A
+second listener on private port 8090 accepts one bearer: a review credential the server derives with a server-only key
 from the silo, computer, generation and lease id. The process fetches that secret once at start over
 the TokenReviewed private API and writes it to a tmpfs file; the listener refuses every request until
 the file exists. The lease id itself is a public Pod label and never grants access. The listener
@@ -52,6 +62,16 @@ until the next lease.
 The same authenticated gateway exposes Chromium 142 CDP discovery, creates targets only for those
 localhost previews, and renders bounded preview screenshots. Raw CDP remains on Pod loopback port
 9222 and is neither a container port nor a public server route.
+
+Tier 2 runs the same Python module from the checkout in `host_development_process` mode without
+pretending that the workstation is an Agent Sandbox. The parent server writes a private bearer file,
+starts one process fenced to the persisted lease and waits for its process marker. The marker proves
+that configuration was accepted; it is not a health or model-readiness claim. That process runs the
+bootstrap/model-step loop against a loopback listener. It starts no health listener, review command
+gateway, checkpoint restore, browser/CDP surface, Kubernetes claim or projected-token flow. Stopping
+the Tier 2 launch revokes the bearer before terminating the child. Host mode also makes no claim
+that the workstation enforces the production profile's RuntimeClass, network policy or resource
+ceiling.
 
 ## Boundary
 
@@ -68,12 +88,16 @@ holds no product authorization or lifecycle authority.
 
 ## Runtime & config
 
-The image runs as uid/gid 65532 with no writable application files. Readiness requires
-`OPENCRANE_COMPUTER_ID`, `OPENCRANE_COMPUTER_GENERATION`, `OPENCRANE_COMPUTER_LEASE_ID`, and
-`OPENCRANE_INTERNAL_ENDPOINT`. The projected token defaults to `/var/run/secrets/opencrane/token`;
+The image runs as uid/gid 65532 with no writable application files. Both modes require
+`OPENCRANE_COMPUTER_REALIZATION_KIND`, `OPENCRANE_COMPUTER_ID`,
+`OPENCRANE_COMPUTER_GENERATION`, `OPENCRANE_COMPUTER_LEASE_ID`, and
+`OPENCRANE_INTERNAL_ENDPOINT`. Production uses `agent_sandbox`; its projected token defaults to
+`/var/run/secrets/opencrane/token`;
 the review credential file (`OPENCRANE_REVIEW_CREDENTIAL_PATH`) defaults to
 `/var/run/opencrane/review/credential` on a memory-backed volume; `OPENCRANE_COMPUTER_HEALTH_PORT`
-defaults to `8080`.
+defaults to `8080`. Tier 2 uses `host_development_process` plus parent-owned
+`OPENCRANE_COMPUTER_PROCESS_ID`, `OPENCRANE_HOST_BEARER_PATH`, and
+`OPENCRANE_HOST_READY_PATH`; its endpoint must be loopback HTTP.
 
 The writable `/workspace` volume is capped at 2 GiB and dies with the sandbox. The command gateway
 admits only `git`, `node`, `npm`, `npx`, and `python3`, passes argv directly without a shell, uses a

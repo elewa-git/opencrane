@@ -1,25 +1,25 @@
 import { createHash } from "node:crypto";
 
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
-import type { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
+import { ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActiveLeaseProjectionCommand, type ConversationComputerActivationOutcome, type ConversationComputerActivationProfile, type ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
 import { ConversationComputerHistory, _ComputerScopeOf, _LeaseScopeOf } from "./conversation-computers";
+import type { ConversationComputerRealizer } from "./conversation-computer-realization.types";
 
-/** Realizes activation requests through one release-owned Agent Sandbox profile. */
+/** Realizes activation requests through the process adapter selected by the release composition. */
 export class ConversationComputerActivationAuthorityAdapter implements ConversationComputerActivationAuthority
 {
 	/** Reads and appends the durable computer aggregate. */
 	private readonly computers: ConversationComputerHistory;
 
-	/** Connects relational coordinate lookup, Kurrent history, and the sole SandboxClaim mutator. */
-	public constructor(private readonly projections: ConversationComputerActivationProjectionRepository, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">, private readonly claims: Pick<AgentSandboxClaimAdapter, "claim">, private readonly profile: ConversationComputerActivationProfile)
+	/** Connects relational coordinate lookup, Kurrent history, and the selected process realizer. */
+	public constructor(private readonly projections: ConversationComputerActivationProjectionRepository, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">, private readonly realizer: ConversationComputerRealizer, private readonly profile: ConversationComputerActivationProfile)
 	{
 		this.computers = new ConversationComputerHistory(historyStore);
 	}
 
-	/** Reserve or observe the exact generation, and report pending until a sandbox is assigned. */
+	/** Reserves or observes one generation and reports retry while its external process remains pending. */
 	public async activate(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationOutcome>
 	{
 		// 1. Resolve immutable identity and profile coordinates from the server-owned projection.
@@ -48,13 +48,14 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 			return "activated";
 		}
 
-		// 2. Persist the generation reservation before creating an external claim, so a retry has one owner.
+		// 2. Persist the generation reservation before starting an external process, so a retry has one owner.
 		const expiresAt = new Date(now.getTime() + this.profile.leaseTtlMilliseconds).toISOString();
 		const initialClaim = current.computer.state === ConversationComputerStates.Cold && current.lease === null && current.computer.leaseGeneration === command.generation;
 		const recoveryClaim = (current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.Cooling) && _IsTerminalLease(current.lease) && current.computer.leaseGeneration + 1 === command.generation;
 		if (initialClaim || recoveryClaim)
 		{
-			const lease = _ClaimedLease(command.computerId, command.generation, now.toISOString(), expiresAt);
+			const request = { siloId: command.siloId, computerId: command.computerId, leaseId: _LeaseId(command.computerId, command.generation), generation: command.generation, expiresAt, reason: current.computer.workspaceCheckpoint === null ? "activation_requested" as const : "recovery_requested" as const };
+			const lease = _ClaimedLease(command.computerId, command.generation, now.toISOString(), expiresAt, this.realizer.prepare(request));
 			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-claim-pending", lease.id), computer: { ...current.computer, state: ConversationComputerStates.ClaimPending, leaseGeneration: command.generation, updatedAt: now.toISOString() }, lease });
 			current = await this.computers.load(coordinates);
 		}
@@ -70,13 +71,13 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		if (current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)
 			return "denied";
 
-		// 3. Converge the deterministic claim and keep the delivery live until its controller assigns a sandbox.
-		const claim = await this.claims.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: current.lease.id, generation: command.generation, namespace: this.profile.namespace, profileName: this.profile.profileName, warmPoolName: this.profile.warmPoolName, expiresAt: current.lease.expiresAt, reason: current.computer.workspaceCheckpoint === null ? "activation_requested" : "recovery_requested" });
-		if (claim.sandboxId === null || claim.serviceFQDN === null)
+		// 3. Converge the reserved realization and keep the delivery live while its adapter reports pending.
+		const realization = await this.realizer.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: current.lease.id, generation: command.generation, expiresAt: current.lease.expiresAt, reason: current.computer.workspaceCheckpoint === null ? "activation_requested" : "recovery_requested", realization: current.lease.realization });
+		if (realization.kind === ConversationComputerRealizationKinds.AgentSandbox && (realization.sandboxId === null || realization.serviceFQDN === null))
 			return { action: ConversationComputerActivationQueueActions.Retry, reason: "Agent Sandbox has not assigned the conversation computer yet" };
 
-		// 4. Fence the assigned sandbox into history before the queue acknowledges activation.
-		const activeLease: ComputerLease = { ...current.lease, sandboxClaimId: claim.claimId, sandboxId: claim.sandboxId, serviceFQDN: claim.serviceFQDN, state: ComputerLeaseStates.Active };
+		// 4. Fence the ready process into history before the queue acknowledges activation.
+		const activeLease: ComputerLease = { ...current.lease, realization, state: ComputerLeaseStates.Active };
 		await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-lease-active", activeLease.id), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: new Date().toISOString() }, lease: activeLease });
 		await this.projections.publishActiveLease(_ActiveProjection(current.computer, activeLease));
 		return "activated";
@@ -102,11 +103,16 @@ function _ActiveProjection(computer: ConversationComputer, lease: ComputerLease)
 }
 
 /** Build a deterministic DNS-label lease so redelivery cannot reserve a second realization. */
-function _ClaimedLease(computerId: string, generation: number, claimedAt: string, expiresAt: string): ComputerLease
+function _ClaimedLease(computerId: string, generation: number, claimedAt: string, expiresAt: string, realization: ComputerLease["realization"]): ComputerLease
+{
+	return { schemaVersion: 1, id: _LeaseId(computerId, generation), computerId, generation, realization, state: ComputerLeaseStates.Claimed, claimedAt, expiresAt, releasedAt: null };
+}
+
+/** Derives the id that fences one reserved generation before external realization starts. */
+function _LeaseId(computerId: string, generation: number): string
 {
 	const digest = createHash("sha256").update(`${computerId}:${generation}`, "utf8").digest("hex").slice(0, 24);
-	const claimId = `${computerId}-g${generation}`;
-	return { schemaVersion: 1, id: `lease-${digest}`, computerId, generation, sandboxClaimId: claimId, sandboxId: null, serviceFQDN: null, state: ComputerLeaseStates.Claimed, claimedAt, expiresAt, releasedAt: null };
+	return `lease-${digest}`;
 }
 
 /** Derive one stable RFC 4122 version-five-shaped event identifier. */

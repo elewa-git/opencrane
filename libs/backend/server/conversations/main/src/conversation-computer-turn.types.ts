@@ -1,24 +1,24 @@
 import type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolResults, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
 import type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";
 import type { ConversationToolProposalAdmission } from "./conversation-tool-proposal.types";
-import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
+import type { AgentScope, CompiledRunInput, ComputerScope, LeaseScope, RealizedLeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
-import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { BoundConversationWriter } from "./bound-conversation-writer";
 import type { BoundConversationWriterBinding, BoundConversationWriterIntent } from "./bound-conversation-writer.types";
 import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
 import type { ConversationComputerReviewCredentialDeriver } from "./review/conversation-computer-review.types";
+import type { ConversationComputerProcessAuthenticator, ConversationComputerProcessIdentity } from "./conversation-computer-realization.types";
 
-/** Coordinates a sandbox Pod must prove before receiving one pending turn. */
+/** Coordinates a realized process must prove before receiving one pending turn. */
 export interface ConversationComputerBootstrapCommand
 {
-	/** Identifies the logical computer fixed on the Pod label. */
+	/** Identifies the logical computer whose current history the server checks. */
 	readonly computerId: string;
-	/** Names the lease and generation the Pod claims from its labels; the server checks both against current history. */
+	/** Names the lease and generation the process claims; the server checks both against current history. */
 	readonly lease: LeaseScope;
-	/** Carries only the TokenReviewed Pod identity. */
-	readonly workload: RuntimeWorkloadIdentity;
+	/** Carries the identity returned by the selected realization's authenticator. */
+	readonly process: ConversationComputerProcessIdentity;
 }
 
 /**
@@ -33,7 +33,7 @@ export interface ConversationComputerBootstrap
 }
 
 /**
- * Review gateway secret handed to the bound Pod once per lease.
+ * Review gateway secret handed to the bound Agent Sandbox Pod once per lease.
  *
  * The Pod writes this value to its private credential file and the review surface accepts only this
  * bearer. The server derives the same value for the review proxy and for checkpoint transport, so
@@ -52,20 +52,20 @@ export interface ConversationComputerOutputCommand
 	readonly bootstrapId: string;
 	/** UUID idempotency key derived from the winning model reservation. */
 	readonly sourceCommandId: string;
-	/** Carries the reservation fence retained by the live server handler; it is not a Pod credential. */
+	/** Carries the reservation fence retained by the live server handler; it is not a process credential. */
 	readonly modelInvocationFence: string;
 	/** Retains any shorter authority deadline observed immediately before gateway dispatch. */
 	readonly modelNotAfterEpochMs: number;
 	/** Plain assistant text accepted only into encrypted private payload storage. */
 	readonly text: string;
-	/** Carries only the TokenReviewed Pod identity. */
-	readonly workload: RuntimeWorkloadIdentity;
+	/** Carries the identity returned by the selected realization's authenticator. */
+	readonly process: ConversationComputerProcessIdentity;
 }
 
 /** Product authority behind the private transport. */
 export interface ConversationComputerTurnAuthority
 {
-	/** Return the review gateway secret after the same lease and Pod checks as bootstrap, without admitting a run. */
+	/** Return the Agent Sandbox review secret after the same lease and process checks as bootstrap, without admitting a run. */
 	reviewCredential(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerReviewCredentialGrant>;
 	/** Return turn status, or null after saved-output recovery or while no work is admitted. */
 	bootstrap(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerBootstrap | null>;
@@ -86,8 +86,8 @@ export interface ConversationComputerTurnCoordinates
 	readonly maximumBudgetUsd: number;
 	/** Caps each credential issuance; fresh authority and lease expiry can shorten it further. */
 	readonly credentialLifetimeSeconds: number;
-	/** Names the lease, generation and SandboxClaim the turn was compiled for. */
-	readonly lease: ClaimedLeaseScope;
+	/** Names the lease, generation and persisted realization the turn was compiled for. */
+	readonly lease: RealizedLeaseScope;
 }
 
 /** Server-resolved material used to freeze one pending computer turn; only the authority holds the compiled input. */
@@ -120,8 +120,8 @@ export interface ConversationComputerTurnCompileAnchor
 /**
  * Durable turn record; it carries only coordinates and a digest, never compiled content or a raw LiteLLM credential.
  *
- * The Kurrent event stores the lease flat (`generation`, `leaseId`, `sandboxClaimId`); the turn store
- * maps between that persisted shape and the `lease` bundle here. The record is assignable to
+ * The Kurrent event stores the lease id, generation, and discriminated realization; the turn store
+ * maps that persisted shape to the `lease` bundle here. The record is assignable to
  * `ConversationComputerLeaseCoordinates`, so the active-turn stream can be derived from it directly.
  */
 export interface FrozenConversationComputerTurn extends ConversationComputerTurnCoordinates
@@ -130,7 +130,7 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly bootstrapId: string;
 	/** Identifies the silo fixed by server configuration when the turn was frozen. */
 	readonly siloId: string;
-	/** Identifies the logical computer the Pod named on its label. */
+	/** Identifies the logical computer whose active process owns this turn. */
 	readonly computerId: string;
 	/** Requires the server's recompiled input to match before model dispatch. */
 	readonly compile: ConversationComputerTurnCompileAnchor;
@@ -158,17 +158,17 @@ export interface ConversationComputerOutputDecision
 	readonly receipt: ConversationComputerTurnOutputReceipt;
 }
 
-/** Resolves only a currently active, Pod-bound computer and its next pending input. */
+/** Resolves a currently active, process-bound computer and its next pending input. */
 export interface ConversationComputerTurnCandidateResolver
 {
-	/** Throw unless the command names the current active lease and the TokenReviewed Pod bound to it; admit nothing. */
+	/** Throw unless the command names the current active lease and the process bound to its realization; admit nothing. */
 	admit(command: ConversationComputerBootstrapCommand): Promise<void>;
 	resolve(command: ConversationComputerBootstrapCommand): Promise<ConversationComputerTurnCandidate | null>;
 	/** Return the current recompiled candidate only when it still matches the frozen turn. */
-	assertCurrent(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<ConversationComputerTurnCandidate>;
+	assertCurrent(turn: FrozenConversationComputerTurn, process: ConversationComputerProcessIdentity): Promise<ConversationComputerTurnCandidate>;
 }
 
-/** Locates immutable computer coordinates from the workload's reviewed silo. */
+/** Locates immutable computer coordinates from the server's configured silo. */
 export interface ConversationComputerTurnProjectionRepository
 {
 	resolve(siloId: string, computerId: string): Promise<{ readonly conversationId: string; readonly agentIdentityId: string; readonly profileRevisionId: string } | null>;
@@ -181,8 +181,8 @@ export interface ConversationComputerTurnCompileCommand
 	readonly computer: ComputerScope;
 	/** Identifies the immutable profile revision bound to the computer. */
 	readonly profileRevisionId: string;
-	/** Names the active lease, generation and SandboxClaim the Pod proved. */
-	readonly lease: ClaimedLeaseScope;
+	/** Names the active lease, generation and persisted realization the process proved. */
+	readonly lease: RealizedLeaseScope;
 }
 
 /** Compiles pending history and the service's current published revision for a new frozen turn. */
@@ -305,7 +305,7 @@ export interface ConversationComputerOutputPayloadStore
 /** Creates the single-use writer whose binding was frozen with the bootstrap. */
 export interface ConversationComputerBoundWriterFactory
 {
-	create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Pick<BoundConversationWriter, "prepare" | "append">;
+	create(turn: FrozenConversationComputerTurn, process: ConversationComputerProcessIdentity): Pick<BoundConversationWriter, "prepare" | "append">;
 }
 
 /** Dependencies of the durable computer-turn product authority. */
@@ -370,8 +370,8 @@ export interface ConversationComputerTurnRouterOptions
 {
 	/** Records the fixed operation and sanitized diagnostic when authority rejects a request; never receives request or credential data. */
 	readonly logger: Pick<Logger, "warn">;
-	/** TokenReviews the exact audience, namespace, ServiceAccount and bound Pod UID. */
-	readonly tokenReviewer: RuntimeTokenReviewer;
+	/** Authenticates a production Pod through TokenReview or a host child through its supervisor-owned bearer. */
+	readonly authenticator: ConversationComputerProcessAuthenticator;
 	/** Owns durable lease, input, model credential and output authority. */
 	readonly authority: ConversationComputerTurnAuthority;
 }
