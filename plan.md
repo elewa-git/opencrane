@@ -67,6 +67,11 @@ It must prove dataset isolation and useful recall, exact document/source identit
 committed response is lost, restart/index convergence and deletion boundaries. Selected CI cannot
 skip missing Docker or missing proof. The existing image-smoke selection owns the job condition and
 normal publication waits for its result. Implementation and provider qualification are in progress.
+Draft [#863](https://github.com/elewa-git/opencrane/pull/863) records the reviewed source at
+`5fdbd56e7b8260054da296372915111720275182`. Its first image run `34597141363` built successfully
+but stopped before semantic tests: the container label says `1.2.1`, while the loaded package reports
+`1.2.1-local`. Attestation now retains all inspected module hashes and source snapshots before
+rejecting mismatches. Expected hashes remain unchanged until that exact source is reviewed.
 Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
 subsequent product slices are complete. Local container VMs are not started for this work.
 
