@@ -1756,6 +1756,8 @@
               "running",
               "waiting_for_input",
               "recovery_required",
+              "cancelling",
+              "cancelled",
               "completed",
               "failed"
             ]
@@ -12521,8 +12523,10 @@
                     "enum": [
                       "none",
                       "start",
-                      "interrupt"
-                    ]
+                      "interrupt",
+                      "stop"
+                    ],
+                    "description": "Stop requests cancellation of the original requester's current turn without starting another turn. Admission is not cancellation completion."
                   }
                 }
               }

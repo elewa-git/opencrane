@@ -157,8 +157,9 @@ describe.skipIf(_URL === undefined)("conversation Stop arbitration against a liv
 		const publisher = new KurrentConversationComputerStopPublisher(history);
 		expect(await publisher.select(command, { kind: ConversationComputerStopAdmissionKinds.NoTarget, commandDigest, authorizationDecisionDigest: _DIGEST, activeTurnStreamName, activeTurnExpectedRevision: "1" })).toEqual(admission);
 		expect(await new KurrentConversationComputerStopPublisher(_Connect()).publish(admission)).toEqual({ decision: ConversationComputerStopDecisions.NoTarget, published: false, outputReceiptDigest: null });
-		const stale = { ...admission, command: { ...command, commandId: randomUUID() }, activeTurnExpectedRevision: "0" };
-		expect(await publisher.select(stale.command, { kind: ConversationComputerStopAdmissionKinds.NoTarget, commandDigest: stale.commandDigest, authorizationDecisionDigest: stale.authorizationDecisionDigest, activeTurnStreamName, activeTurnExpectedRevision: "0" })).toBeNull();
+		const staleCommand = { ...command, commandId: randomUUID() };
+		const staleDigest = ___DigestCanonicalJson({ command: staleCommand, activeTurnStreamName, activeTurnExpectedRevision: "0" } as unknown as JsonValue);
+		expect(await publisher.select(staleCommand, { kind: ConversationComputerStopAdmissionKinds.NoTarget, commandDigest: staleDigest, authorizationDecisionDigest: admission.authorizationDecisionDigest, activeTurnStreamName, activeTurnExpectedRevision: "0" })).toBeNull();
 	});
 
 	it.each(["target-first", "settlement-first"] as const)("keeps one command selection when Target races active-pointer settlement: %s", async function _OverlappingSelections(order)

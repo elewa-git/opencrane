@@ -7,8 +7,9 @@ CI run `34578065587` includes the real KurrentDB lost-response recovery case, da
 build/test/lint, API generation, all 169 Storybook behavior tests, Linux visual checks, and server/UI
 image publication. The complete PR stack check passes. No testv5 deployment is implied.
 
-The requester-only Stop slice starts from that exact commit on
-`feat/0.12-conversation-work-cancellation`. Source implementation now covers the participant Stop
+Draft [#862](https://github.com/elewa-git/opencrane/pull/862) starts directly from that exact commit
+on `feat/0.12-conversation-work-cancellation`. Its first published commit is
+`e6765da605a9235d1be7f285ac332809e7845af9`. Source implementation covers the participant Stop
 message, server-selected saved target, Absurd cleanup, private Kurrent receipt and personal Stop
 control. Authorized Kurrent selection binds every delivery to the same target or no-target outcome
 before SQL rechecks authority and admits cancellation. Final output and cancellation compete on the
@@ -23,7 +24,13 @@ and all three macOS visual checks. Server and production UI builds, API generati
 style, module-growth and release-baseline checks pass. The new SQL case proves an active participant
 with Conversation Use still cannot select another requester's turn. The Kurrent integration target
 collects successfully with three local tests passed and twelve service-dependent cases skipped;
-the real service and Linux screenshot references require CI on the pushed commit.
+CI run `34591425003` passes affected build/test/lint, all database authority suites and both image
+smokes. Both new Target/NoTarget selection races pass against real KurrentDB. One older stale-pointer
+fixture reused the wrong command digest; the reviewed correction recomputes it for that request.
+The generated website API reference is now synced. All 12 unique Linux renders from that exact
+commit (artifact `10195948833`) passed independent visual review and were copied byte-for-byte into
+the references. A fresh CI run must confirm these test and reference corrections; production code
+is unchanged.
 
 Architecture and independent reviews cover the final source; all raised findings are resolved.
 Database tests use an isolated local PostgreSQL instance, not testv5. Personal controls are the first UI journey; controls
@@ -90,7 +97,7 @@ remain separate gates.
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented and result-history CI passes. Standard remote connection activation awaits its recorded approval, then one real integration and the required hosted MCP slice follow. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
-| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass source review and local validation; publish the draft, complete CI and qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
+| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass source review and local validation; complete draft #862 CI and qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Complete the existing server-issued interaction and presentation contracts. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | Connect existing upload/scan, model input and artifact finalisation owners. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
