@@ -7,9 +7,9 @@ export type GeneratedElicitationSubmission = paths["/me/conversations/{conversat
 export interface ConversationElicitationGateway
 {
 	/** List at most fifty current requests assigned to the caller in one readable conversation. */
-	listOpen(conversationId: string): Promise<readonly ConversationElicitation[]>;
+	listOpen(conversationId: string, signal?: AbortSignal): Promise<readonly ConversationElicitation[]>;
 	/** Read one exact active-participant request. */
-	read(conversationId: string, requestId: string): Promise<ConversationElicitation>;
+	read(conversationId: string, requestId: string, signal?: AbortSignal): Promise<ConversationElicitation>;
 	/** Submit one typed idempotent response. */
 	respond(conversationId: string, requestId: string, submission: SubmitElicitationResponse): Promise<ElicitationResponseProjection>;
 	/** Read bounded canonical request references for Activity. */

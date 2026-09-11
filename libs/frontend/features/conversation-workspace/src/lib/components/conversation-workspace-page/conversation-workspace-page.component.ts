@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, inject, input, output, signal, untracked } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, inject, input, output, signal, untracked } from "@angular/core";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
-import type { ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
+import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
+import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 import { ConversationGroupChildStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { ConversationSessionRailItemKinds, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
@@ -25,7 +26,7 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationWorkspacePresenter, ConversationWorkspaceSelectionCoordinator, ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationWorkspacePresenter, ConversationWorkspaceSelectionCoordinator, ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent
 {
 	/** Composes read-only presentation and typed store intents without class inheritance. */
@@ -50,6 +51,8 @@ export class ConversationWorkspacePageComponent
 	public readonly stepUpRequested = output<string>();
 	/** Keeps a route selection and the component-scoped store aligned. */
 	private readonly _routeSelectionEffect = effect(this._OpenRouteSelection.bind(this));
+	/** Restores the approval control after the app reports that verified sign-in completed. */
+	private readonly _elicitationFocusEffect = afterRenderEffect(this._RestoreElicitationFocus.bind(this));
 	/** Polite result of following an Activity deep link. */
 	protected readonly activityAnnouncement = signal("");
 	/** Whether the selected ordinary conversation's Activity and Files context is visible. */
@@ -57,6 +60,9 @@ export class ConversationWorkspacePageComponent
 	/** Header trigger that receives focus after the context panel closes. */
 	@ViewChild(ConversationWorkspaceHeaderComponent)
 	private _header: ConversationWorkspaceHeaderComponent | undefined;
+	/** Current approval card, when the selected conversation is waiting for a decision. */
+	@ViewChild(ConversationElicitationCardComponent)
+	private _elicitationCard: ConversationElicitationCardComponent | undefined;
 
 	/** Move focus when Angular creates the access-change explanation. */
 	@ViewChild("accessChangedHeading")
@@ -169,9 +175,16 @@ export class ConversationWorkspacePageComponent
 	/** Reconcile the request after the app's verified sign-in window closes. */
 	public async recoverAfterStepUp(): Promise<void>
 	{
-		const selected = this.vm.store.selected();
-		if (selected !== null)
-			await this.vm.store.open(selected.id);
+		await this.vm.recoverElicitationAfterStepUp();
+	}
+
+	/** Return focus to the retained decision after its exact request has been reconciled. */
+	private _RestoreElicitationFocus(): void
+	{
+		if (this.vm.elicitationStore.stepUpPath() !== null || this.vm.elicitationStore.restoreFocusRequestId() === null || this._elicitationCard === undefined)
+			return;
+		this._elicitationCard.restoreFocus();
+		this.vm.elicitationStore.acknowledgeFocusRestored();
 	}
 
 	/**

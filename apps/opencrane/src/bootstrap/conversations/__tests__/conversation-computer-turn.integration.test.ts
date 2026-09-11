@@ -52,7 +52,7 @@ describe("conversation computer turn integration", function _Suite()
 
 		let definition!: IWorkflowTaskDefinition<any, unknown>;
 		const workflows = { register: vi.fn(value => { definition = value; }) };
-		_RegisterConversationComputerTurnWorkflow(workflows as never, { authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "testv5" });
+		_RegisterConversationComputerTurnWorkflow(workflows as never, { approvalNotifications: { publishRequested: vi.fn().mockResolvedValue("published") }, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "testv5" });
 		const activationEventId = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 		const context = { task: { taskId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: activationEventId }, attempt: 1, checkpoint: vi.fn(), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn(), waitForEvent: vi.fn() } as unknown as IWorkflowTaskContext;
 		await expect(definition.run(context, { siloId: "testv5", computerId: "computer-one", leaseId: "lease-one", leaseGeneration: 1, activationEventId, causationId: "entry-one", causationPosition: "1" })).resolves.toMatchObject({ outcome: "completed" });

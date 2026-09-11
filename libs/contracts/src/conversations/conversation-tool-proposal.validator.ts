@@ -34,9 +34,15 @@ function _BoundedArguments(value: unknown): boolean
 	}
 }
 
-/** Validate only the Pod's bounded selection; all authority coordinates come from the server. */
+/**
+ * Bounds JSON arguments shared by tool proposals and their participant-facing approval bodies.
+ * This checks size and shape; the IAM owner separately decides whether arguments may be disclosed.
+ */
+export const ___ConversationToolArgumentsSchema: z.ZodType<ConversationToolProposal["arguments"]> = z.custom<ConversationToolProposal["arguments"]>(_BoundedArguments);
+
+/** Validates a tool selection; the server supplies and checks its authority coordinates. */
 export const ___ConversationToolProposalSchema: z.ZodType<ConversationToolProposal> = z.object({
 	bootstrapId: z.string().uuid(),
 	toolRevisionId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/u),
-	arguments: z.custom<ConversationToolProposal["arguments"]>(_BoundedArguments),
+	arguments: ___ConversationToolArgumentsSchema,
 }).strict();

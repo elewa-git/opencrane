@@ -4,6 +4,7 @@ import { ConversationComputerStates } from "@opencrane/contracts";
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import { ConversationActivityReadStates } from "@opencrane/features/conversation-activity";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
+import { ConversationElicitationStore, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, ConversationComputerReviewStore, ConversationCreationStates, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { _GroupRequestSource, _GroupShareSource } from "./conversation-group.mapper";
@@ -30,6 +31,8 @@ export class ConversationWorkspacePresenter
 	public readonly reviewStore = inject(ConversationComputerReviewStore);
 	/** Reads recent personal work independently from the selected transcript. */
 	public readonly personalRuns = inject(ConversationPersonalRunsStore);
+	/** Existing typed question and approval state for the selected conversation. */
+	public readonly elicitationStore = inject(ConversationElicitationStore);
 	/** Whether immutable-mode creation is visible. */
 	public readonly creating = signal(false);
 	/** Stable route state vocabulary used by the template switch. */
@@ -112,6 +115,12 @@ export class ConversationWorkspacePresenter
 	public async send(): Promise<void> { await this.store.send(); }
 	/** Ask the selected workspace store to replace a paused or failed socket. */
 	public reconnect(): void { this.store.reconnect(); }
+	/** Keep the selected approval response in its component-scoped state owner. */
+	public selectElicitation(value: ElicitationResponseValue): void { this.elicitationStore.select(value); }
+	/** Submit the selected response through the existing authority-backed store. */
+	public async submitElicitation(): Promise<void> { await this.elicitationStore.submit(); }
+	/** Reconcile the exact request after verified sign-in completes. */
+	public async recoverElicitationAfterStepUp(): Promise<void> { await this.elicitationStore.recoverAfterStepUp(); }
 	/** Route existing asset intents back to their owning store. */
 	public async assetAction(intent: ConversationAssetActionIntent): Promise<void>
 	{

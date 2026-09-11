@@ -122,6 +122,11 @@ have separate command owners. They receive the caller's transaction and preserve
 approval/invocation/run changes. The split introduces no independent commit, policy authority,
 retry loop, or network call.
 
+Tool approval saves the display-safe argument projection with the participant request. The body
+also freezes the admitted tool name, its provider-authored description, and the operator-authored
+server name before the participant decides. If the schema marks any proposed value as sensitive,
+the body contains no arguments and IAM accepts denial only.
+
 The authority decides product permission; it does not authenticate a browser or Pod, own another
 domain's lifecycle, execute a provider call, or grant Kubernetes access. The caller derives the silo
 and Principal from verified identity, loads the target from trusted domain data, and treats the

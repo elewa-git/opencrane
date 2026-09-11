@@ -54,7 +54,11 @@ covers the choice, empty, pending, retry, ready-child, and accepted-share states
 request dialog. None of these presentation hints replace server source or permission checks.
 
 The page injects its presenter through composition. A separate selection coordinator starts initial
-reads, clears file state before changing conversations, and selects the current computer generation.
+reads, clears file and elicitation state before changing conversations, and selects the current computer generation.
+An approval log position invalidates the selected conversation's elicitation read; its approval id
+is never treated as a request id. The coordinator re-lists current requests through the signed-in
+API without polling, while the existing card keeps disclosure, decision, and terminal states out of
+the routed page markup.
 Pure status mappers derive composer and connection states. Each service is provided on the page,
 so navigating away destroys its effects and all selected-conversation state with it.
 
@@ -67,7 +71,8 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
 - `ConversationWorkspacePageComponent` is the composition shell. It emits exact navigation intents
   to the feature-local route coordinator.
 - Internal header, transcript and composer components own separate typed presentation contracts.
-  The header restores context-trigger focus, the transcript owns message anchors and scrolling,
+  The header restores context-trigger focus, the transcript owns message anchors, the page-owned
+  conversation body scrolls messages and participant requests together,
   and the composer emits draft/send/reconnect intents. They reuse the established conversation elements.
 - `ConversationOnboardingHistoryComponent` renders the completed bootstrap transcript without message,
   asset, run, archive, or close controls.

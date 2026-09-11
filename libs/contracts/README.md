@@ -88,6 +88,11 @@ a tool's identity, arguments or result.
   and bounded JSON arguments. It accepts no caller-selected identity; its approval requirement is
   copied from the frozen tool definition and remains a proposal until server-owned IAM decides it.
   A receipt confirms storage only; it contains no provider result or execution claim.
+- `ElicitationApprovalBody.proposedArguments` — the saved arguments which the participant may
+  review. An object contains the proposal; null makes the request denial-only because secret fields
+  prevented disclosure. Other approval purposes omit it. `___ConversationToolArgumentsSchema`
+  shares the proposal's JSON size and nesting limits with browser validation; IAM still decides
+  what may be disclosed. The browser submits a decision and cannot change the saved arguments.
 - `___ConversationComputerSchema` validates the existing public computer shape, lease generation,
   and checkpoint metadata without admitting private extensions. Readers still bind its conversation
   coordinate to the authenticated request.

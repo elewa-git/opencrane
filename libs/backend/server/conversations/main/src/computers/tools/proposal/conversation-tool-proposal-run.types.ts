@@ -11,6 +11,19 @@ export interface ConversationToolProposalRun
 	readonly agentRevisionId: string;
 	/** Retains the execution identity that also appears in the saved input. */
 	readonly subject: ExecutionSubject;
+	/** Human-readable tool and system metadata frozen into an approval request, when approval is required. */
+	readonly approvalDisclosure: ConversationToolApprovalDisclosure | null;
+}
+
+/** Stored tool metadata safe to disclose for one exact approval-gated revision. */
+export interface ConversationToolApprovalDisclosure
+{
+	/** Tool name frozen in the admitted run snapshot. */
+	readonly toolName: string;
+	/** Provider-authored description frozen in the admitted run snapshot. */
+	readonly toolDescription: string | null;
+	/** Operator-authored name of the server that owns the selected tool revision. */
+	readonly serverName: string;
 }
 
 /** Reads proposal prerequisites without recording permission or starting invocation preparation. */

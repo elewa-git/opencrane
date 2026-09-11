@@ -4224,6 +4224,9 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                proposedArguments?: {
+                                    [key: string]: unknown;
+                                } | null;
                             } | {
                                 /** @constant */
                                 kind: "single_choice";
@@ -4333,6 +4336,9 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                proposedArguments?: {
+                                    [key: string]: unknown;
+                                } | null;
                             } | {
                                 /** @constant */
                                 kind: "single_choice";
@@ -4444,6 +4450,9 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                proposedArguments?: {
+                                    [key: string]: unknown;
+                                } | null;
                             } | {
                                 /** @constant */
                                 kind: "single_choice";

@@ -8,7 +8,7 @@ import { _RegisterConversationComputerTurnWorkflow } from "../conversation-compu
 
 const _TASK = { taskId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651" };
 const _INPUT: ConversationComputerTurnTaskInput = { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 2, activationEventId: _TASK.idempotencyKey, causationId: "message-1", causationPosition: "2" };
-const _TURN = { bootstrapId: "turn-1", latestPendingEntryId: _INPUT.causationId, latestPendingEntryPosition: _INPUT.causationPosition, compile: { runId: "run-1", attempt: 1 } };
+const _TURN = { bootstrapId: "turn-1", siloId: "silo-1", binding: { conversationId: "conversation-1" }, latestPendingEntryId: _INPUT.causationId, latestPendingEntryPosition: _INPUT.causationPosition, compile: { runId: "run-1", attempt: 1 } };
 
 /** Capture the registered definition and expose deterministic durable-wait seams. */
 function _Fixture(progress: readonly Record<string, unknown>[])
@@ -19,9 +19,10 @@ function _Fixture(progress: readonly Record<string, unknown>[])
 	for (const result of progress)
 		authority.advance.mockResolvedValueOnce(result);
 	const receipts = { bind: vi.fn().mockResolvedValue(true) };
-	_RegisterConversationComputerTurnWorkflow(execution as never, { authority: authority as never, receipts, siloId: "silo-1" });
-	const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn().mockResolvedValue(undefined), waitForEvent: vi.fn().mockResolvedValue({ eventName: "tool-result:tool-1", payload: {} }) } as unknown as IWorkflowTaskContext;
-	return { authority, context, definition, receipts };
+	const approvalNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
+	_RegisterConversationComputerTurnWorkflow(execution as never, { approvalNotifications, authority: authority as never, receipts, siloId: "silo-1" });
+	const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(_step, operation) { return operation(); }), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn().mockResolvedValue(undefined), waitForEvent: vi.fn().mockResolvedValue({ eventName: "tool-result:tool-1", payload: {} }) } as unknown as IWorkflowTaskContext;
+	return { approvalNotifications, authority, context, definition, receipts };
 }
 
 describe("conversation computer turn workflow", function _Suite()
@@ -49,6 +50,8 @@ describe("conversation computer turn workflow", function _Suite()
 		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" }, { outcome: "completed" }]);
 		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
 		expect(fixture.context.waitForEvent).toHaveBeenCalledExactlyOnceWith("tool-approval:tool-1");
+		expect(fixture.approvalNotifications.publishRequested).toHaveBeenCalledExactlyOnceWith({ bootstrapId: "turn-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, approvalId: "tool-1" });
+		expect(fixture.approvalNotifications.publishRequested.mock.invocationCallOrder[0]).toBeLessThan((fixture.context.waitForEvent as unknown as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!);
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
 	});
 
@@ -67,7 +70,8 @@ describe("conversation computer turn workflow", function _Suite()
 				return { outcome: "completed" as const };
 			}),
 		};
-		_RegisterConversationComputerTurnWorkflow(execution, { authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "silo-1" });
+		const approvalNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
+		_RegisterConversationComputerTurnWorkflow(execution, { approvalNotifications, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "silo-1" });
 		const task = await execution.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: _TASK.idempotencyKey, input: _INPUT });
 		const running = execution._DrainPendingTasks();
 		await Promise.resolve();
@@ -77,6 +81,7 @@ describe("conversation computer turn workflow", function _Suite()
 		await execution.emitEvent(task, { eventName: "tool-approval:tool-approval", payload: { owner: "user-1" } });
 		await running;
 		expect(state.executions).toBe(1);
+		expect(approvalNotifications.publishRequested).toHaveBeenCalledTimes(1);
 		await execution._DrainPendingTasks();
 		expect(state.executions).toBe(1);
 	});

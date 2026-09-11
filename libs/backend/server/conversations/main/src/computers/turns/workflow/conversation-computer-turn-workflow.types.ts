@@ -1,5 +1,6 @@
 import type { ConversationComputerTurnAuthority } from "../conversation-computer-turn.types";
 import type { ConversationComputerTurnWorkflowReceiptBinder } from "./conversation-computer-turn-workflow-receipt.types";
+import type { ConversationApprovalNotificationPort } from "../approval-notifications/conversation-approval-notification.types";
 
 /** Carries only durable routing and lease fences into one server-owned conversation turn. */
 export interface ConversationComputerTurnTaskInput
@@ -27,6 +28,8 @@ export type ConversationComputerTurnWorkflowResult =
 /** Dependencies that keep orchestration separate from turn effects and receipt persistence. */
 export interface ConversationComputerTurnWorkflowDependencies
 {
+	/** Publishes one safe requested fact before the workflow begins its approval wait. */
+	readonly approvalNotifications: ConversationApprovalNotificationPort;
 	readonly authority: Pick<ConversationComputerTurnAuthority, "start" | "advance">;
 	readonly receipts: ConversationComputerTurnWorkflowReceiptBinder;
 	readonly siloId: string;

@@ -3,7 +3,7 @@ import { ConversationMessageComponent, ConversationRichTextComponent } from "@op
 import type { ConversationWorkspaceTranscriptEntry } from "../../presentation/conversation-workspace-presentation.types";
 import { ConversationGroupMessageActionsComponent } from "../conversation-group-message-actions/conversation-group-message-actions.component";
 
-/** Owns transcript scrolling, accessible message anchors and per-message group actions. */
+/** Presents accessible message anchors and per-message group actions inside the page-owned scroll area. */
 @Component({ selector: "wo-conversation-workspace-transcript", standalone: true, imports: [ConversationMessageComponent, ConversationRichTextComponent, ConversationGroupMessageActionsComponent], templateUrl: "./conversation-workspace-transcript.component.html", styleUrl: "./conversation-workspace-transcript.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ConversationWorkspaceTranscriptComponent
 {

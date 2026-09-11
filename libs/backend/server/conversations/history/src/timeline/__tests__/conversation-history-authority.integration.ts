@@ -5,7 +5,7 @@ import { HistoryExpectedRevisions, _KurrentHistoryStore } from "@opencrane/backe
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ConversationHistoryAuthority } from "../conversation-history-authority";
-import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand } from "../conversation-history-authority.types";
+import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAttestedAppendCommand } from "../conversation-history-authority.types";
 
 /**
  * Live proofs that `ConversationHistoryAuthority` turns real KurrentDB conflicts into retryable outcomes.
@@ -65,6 +65,15 @@ function _command(siloId: string, conversationId: string, expectedRevision: bigi
 function _activationCommand(siloId: string, conversationId: string, expectedRevision: bigint, queueExpectedRevision: HistoryExpectedRevisions.NoStream | bigint): ConversationHistoryActivationAppendCommand
 {
 	return { ..._command(siloId, conversationId, expectedRevision), activation: { computerId: "computer-1", generation: 1, eventId: randomUUID(), queueExpectedRevision } };
+}
+
+/** Builds one system log whose attestation points to the receipt committed beside it. */
+function _attestedCommand(siloId: string, conversationId: string, expectedRevision: bigint, approvalId: string): ConversationHistoryAttestedAppendCommand
+{
+	const receiptId = randomUUID();
+	const streamName = `conversation-approval-notification-${approvalId}`;
+	const base = _command(siloId, conversationId, expectedRevision);
+	return { ...base, entry: { schemaVersion: 1, id: approvalId, conversationId, position: (expectedRevision + 1n).toString(), author: { kind: "system", systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "participant_subset", participantIds: ["participant-1"] }, runId: "run-1", causationId: approvalId, correlationId: "run-1", idempotencyKey: approvalId, occurredAt: "2026-09-01T00:00:00.000Z", attestation: { serviceId: "opencrane", receiptId, domainStream: streamName, domainRevision: "0", decisionEvidenceId: null }, kind: "log", logKind: "approval", approvalId, action: "Invoke tool", phase: "requested", summary: "Approval requested", detailsRef: null }, attestation: { streamName, event: { id: receiptId, type: "opencrane.conversation-approval-notification.v1", data: { approvalId }, metadata: { siloId, conversationId } } } };
 }
 
 it.skipIf(_URL !== undefined)(`skips the live ConversationHistoryAuthority proofs because ${_URL_VARIABLE} is unset`, function ()
@@ -127,5 +136,21 @@ describe.skipIf(_URL === undefined)("ConversationHistoryAuthority against a live
 		expect(staleConversation).toEqual({ outcome: ConversationHistoryAppendOutcomes.ExpectedHeadConflict });
 		expect(await store.readHead(`conversation-${conversationId}`)).toEqual({ streamName: `conversation-${conversationId}`, revision: 1n });
 		expect(await store.readHead(queueStreamName)).toEqual({ streamName: queueStreamName, revision: 0n });
+	});
+
+	it("atomically commits an attestation receipt with one conversation entry", async function _AttestedAppend()
+	{
+		const siloId = _identifier("silo");
+		const conversationId = await _createConversation(siloId);
+		const approvalId = randomUUID();
+		const command = _attestedCommand(siloId, conversationId, 0n, approvalId);
+
+		const appended = await authority.appendWithAttestation(command);
+		const replay = await authority.appendWithAttestation(command);
+
+		expect(appended).toEqual({ outcome: ConversationHistoryAppendOutcomes.Appended, receipt: { streamName: `conversation-${conversationId}`, revision: 1n } });
+		expect(replay).toEqual({ outcome: ConversationHistoryAppendOutcomes.Appended, receipt: { streamName: `conversation-${conversationId}`, revision: 1n } });
+		expect(await store.readHead(command.attestation.streamName)).toEqual({ streamName: command.attestation.streamName, revision: 0n });
+		expect(await store.readHead(`conversation-${conversationId}`)).toEqual({ streamName: `conversation-${conversationId}`, revision: 1n });
 	});
 });

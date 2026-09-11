@@ -9,17 +9,18 @@ administration and action recovery retain their places below.
 
 An active execution goal now covers these ten tracks. Continue through reviewed, coherent slices
 with cheaper parallel agents, keeping source/CI evidence separate from live qualification. The
-current wave starts from #851 at `e4901da0a4cd23cb71a0b0dd303408b39563d823` on
-`feat/0.12-mcp-protocol-conformance`. Its first change fixes the shared standard MCP exchange used
-by remote probing and hosted execution: request metadata/headers, response envelopes and bounded
-JSON/SSE response handling. This prerequisite changes neither credential custody nor workflow
-authority. Approval integration and hosted credential/network policy are prepared in independent
-lanes while the common protocol work proceeds.
+current wave starts from #856 at `b9b362f0ed7ceeef6212f1c4ef1c799e69243913` on
+`feat/0.12-visible-personal-tool-approval`. The standard MCP contract, personal approval wait,
+memory provider coordinates and selected-conversation request discovery have reviewable source
+changes. Three parallel lanes now complete frozen action disclosure, durable approval notification
+and reuse of the conversation approval card. Remote connection activation and credential use still
+await the recorded approval decisions; neither source tests nor a healthy MCP process prove a real
+connected journey. The testv5 repair is prepared separately and preserves current data.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; standard remote connection activation, participant result evidence and one real integration come first, followed by the required hosted MCP slice. |
-| 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry and durable resume are locally proven. Bind the company approver and disclose the exact connection owner and external target before qualifying a real action. |
+| 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry and durable resume are locally proven. Complete the selected-conversation approval card, frozen disclosure and event-driven discovery; company approver/connection binding and real action qualification follow. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | Reuse conversation events, stores and approved components; preserve current access on reconnect. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Complete the existing server-issued interaction and presentation contracts. |
@@ -469,6 +470,50 @@ review and architecture post-review pass with no findings.
 
 CI caught a missing website OpenAPI snapshot after the typed client was generated. The website
 snapshot is now synchronized with the same emitted schema, and the documentation build passes.
+
+### Visible personal tool approval — source implementation complete
+
+This slice starts above draft #856 at immutable base
+`b9b362f0ed7ceeef6212f1c4ef1c799e69243913` on
+`feat/0.12-visible-personal-tool-approval`. The integration branch is `develop`, observed at
+`d4bd0213c38e4fa70cbc3d93535857da9e381a32`; live ancestry is refreshed before publication.
+
+Three parallel lanes reuse the existing owners: IAM freezes reviewable arguments and human tool
+labels in the saved elicitation body; Absurd publishes an approval-requested history fact before
+waiting; the workspace mounts the existing card and store and refreshes from that fact without
+polling. The shared contract distinguishes reviewable arguments from a denial-only request whose
+secret fields cannot be shown. Other approval purposes retain their existing bodies.
+
+Architecture and component preflights and independent backend/frontend post-reviews pass. The
+history owner atomically saves the receipt and entry, rechecks current recipient access, and verifies
+the original receipt after an uncertain response. Only the assigned participant receives the generic
+history fact; action details come from the authorized elicitation read. The browser's decision never
+supplies replacement arguments or dispatch authority. A later message does not replace a saved
+proposal or its input; current run, approval, permission and lease checks still govern execution.
+
+Review found and corrected a narrow-screen clipping defect and stale private disclosure after an
+authoritative denied read. Messages and approval details now share a scrolling body with the
+composer retained in view. Current denied discovery, exact reads and post-submission reconciliation
+clear the private request and draft immediately.
+
+Validation includes 477 conversation tests, 245 authorization tests, 52 elicitation tests, 31
+observability tests, 122 contract tests and 28 history tests. The full fresh PostgreSQL target passes,
+including 17 proposal, 3 approval, 4 result and 5 profile-repair tests. The real turn and history-owner
+fixture proves notification and final-answer recovery without repeating the original model request,
+tool execution or allowance. Server and production UI builds and the generated client/website
+checks pass. Frontend checks pass: 72 focused unit tests and 163 Storybook interaction/accessibility tests.
+Seven approval states have reviewed desktop/narrow references. The complete local visual comparison
+also found ten missing macOS references for unchanged stories; these have been visually reviewed
+and added beside their existing Linux references. The full macOS visual target passes all three
+checks, covering 120 tagged states and desktop layout contracts. Style reports zero errors and
+warnings; Prisma, dependency, workload and domain guards and their relevant negative tests pass.
+Module-growth review confirms that the elicitation store owns one request lifecycle. Real KurrentDB
+integration and exact-head Linux visual comparison remain CI evidence. This source slice is ready
+for its incremental draft PR; company/connection and live acceptance below remain open.
+
+Company approver resolution, remote connection-owner disclosure, live provider effects and testv5
+qualification remain separate gates. The pending testv5 deployment approval does not block this
+source work or authorize changing the test environment.
 
 ### Testv5 access repair — preserve existing data
 

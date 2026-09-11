@@ -1,3 +1,4 @@
+import type { ConversationToolProposal } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /** Exact prepared tool invocation to pause behind a new pending deferred-tool approval. */
@@ -13,6 +14,12 @@ export interface DeferToolRequestCommand
 	readonly toolInvocationRowId: string;
 	/** Immutable tool revision being invoked, recorded as the approval's resource id. */
 	readonly toolRevisionId: string;
+	/** Tool name frozen in the admitted run snapshot. */
+	readonly toolName: string;
+	/** Provider-authored description frozen in the admitted run snapshot. */
+	readonly toolDescription: string | null;
+	/** Operator-authored server name resolved through the silo-bound tool revision. */
+	readonly externalSystemName: string;
 	/** Exact normalized arguments proposed by the reviewed runtime candidate. */
 	readonly reviewedArguments: JsonValue;
 	/** Digest of the normalized proposed arguments. */
@@ -22,7 +29,7 @@ export interface DeferToolRequestCommand
 	/** Digest of the frozen reviewed parameters schema. */
 	readonly reviewedParametersSchemaDigest: string;
 	/** Redacted proposed-argument projection safe for the owning actor. */
-	readonly safeProposedArguments: JsonValue;
+	readonly safeProposedArguments: ConversationToolProposal["arguments"] | null;
 	/** Decision response schema derived from the reviewed parameters schema. */
 	readonly responseSchema: JsonValue;
 	/** Deterministic per-invocation digest; the unique run/attempt key makes deferral idempotent. */
@@ -88,6 +95,12 @@ export interface OpenDeferredToolApprovalCommand
 	readonly toolInvocationId: string;
 	/** Immutable tool revision being invoked. */
 	readonly toolRevisionId: string;
+	/** Tool name frozen in the admitted run snapshot. */
+	readonly toolName: string;
+	/** Provider-authored description frozen in the admitted run snapshot. */
+	readonly toolDescription: string | null;
+	/** Operator-authored server name resolved through the silo-bound tool revision. */
+	readonly externalSystemName: string;
 	/** Exact normalized arguments from the reviewed runtime candidate. */
 	readonly arguments: JsonValue;
 	/** Digest of the normalized action arguments. */

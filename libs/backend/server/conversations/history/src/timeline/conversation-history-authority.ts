@@ -2,7 +2,7 @@ import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { ___ConversationEntrySchema } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult } from "./conversation-history-authority.types";
+import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult, type ConversationHistoryAttestedAppendCommand } from "./conversation-history-authority.types";
 import { ConversationHistoryModes, type ConversationHistoryGenesis } from "./conversation-history-reader.types";
 import { _ParseGroupChildOrigin } from "./conversation-genesis.validator";
 
@@ -89,6 +89,34 @@ export class ConversationHistoryAuthority
 		catch (error)
 		{
 			if (error instanceof WrongExpectedVersionError && (error.streamName === streamName || error.streamName === queueStreamName))
+				return { outcome: ConversationHistoryAppendOutcomes.ExpectedHeadConflict };
+			throw error;
+		}
+	}
+
+	/** Atomically records one service receipt and its validated participant-visible transformation. */
+	public async appendWithAttestation(command: ConversationHistoryAttestedAppendCommand): Promise<ConversationHistoryAppendResult>
+	{
+		if (this.historyStore.appendAtomic === undefined)
+			throw new Error("Conversation attestation append requires atomic KurrentDB history support");
+		const entry = _ValidatedEntry(command);
+		const streamName = `conversation-${command.conversationId}`;
+		const attestation = entry.attestation;
+		if (entry.provenance !== "service-attested" || attestation === null || attestation.receiptId !== command.attestation.event.id
+			|| attestation.domainStream !== command.attestation.streamName || attestation.domainRevision !== "0"
+			|| !_Identifier(command.attestation.streamName) || !_UUID_PATTERN.test(command.attestation.event.id))
+			throw new Error("Conversation attestation entry does not match its immutable receipt");
+		try
+		{
+			const receipts = await this.historyStore.appendAtomic({ expectedHeads: [{ streamName, revision: command.expectedRevision }, { streamName: command.attestation.streamName, revision: HistoryExpectedRevisions.NoStream }], appends: [{ streamName: command.attestation.streamName, expectedRevision: HistoryExpectedRevisions.NoStream, events: [command.attestation.event] }, { streamName, expectedRevision: command.expectedRevision, events: [_EntryEvent(command, entry)] }] });
+			const receipt = receipts.find(item => item.streamName === streamName);
+			if (receipt === undefined)
+				throw new Error("Conversation attestation append omitted its conversation receipt");
+			return { outcome: ConversationHistoryAppendOutcomes.Appended, receipt };
+		}
+		catch (error)
+		{
+			if (error instanceof WrongExpectedVersionError && (error.streamName === streamName || error.streamName === command.attestation.streamName))
 				return { outcome: ConversationHistoryAppendOutcomes.ExpectedHeadConflict };
 			throw error;
 		}

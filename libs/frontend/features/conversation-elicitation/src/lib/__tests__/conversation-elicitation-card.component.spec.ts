@@ -27,4 +27,14 @@ describe("conversation elicitation submit boundary", function _SubmitBoundarySui
 		expect(_CanSubmitElicitation(request, draft, true)).toBe(false);
 		expect(_CanSubmitElicitation({ ...request, state: ElicitationRequestStates.Answered }, draft, false)).toBe(false);
 	});
+
+	it("allows denial but refuses approval when complete proposal arguments are hidden", function _HiddenArgumentsFence()
+	{
+		const request = _Request({ kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: null, consequence: "The event may be visible to invitees." });
+		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(false);
+		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: false }, false)).toBe(true);
+		const omittedToolProposal = { ...request, purpose: ElicitationPurposes.ToolApproval, body: { ...request.body, proposedArguments: undefined } };
+		expect(_CanSubmitElicitation(omittedToolProposal, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(false);
+		expect(_CanSubmitElicitation(omittedToolProposal, { kind: ElicitationBodyKinds.Approval, approved: false }, false)).toBe(true);
+	});
 });

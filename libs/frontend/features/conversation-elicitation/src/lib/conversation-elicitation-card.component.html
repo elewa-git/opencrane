@@ -1,15 +1,15 @@
-<article class="elicitation-card" [attr.data-request-id]="elicitation().requestId">
+<article class="elicitation-card" tabindex="-1">
 	@if (elicitation().state === states.Requested) {
-		@if (approvalBody(); as body) { <wo-elicitation-approval [body]="body" [value]="approvalValue()" [disabled]="busy()" (valueChange)="selectApproval($event)" /> }
-		@if (singleChoiceBody(); as body) { <wo-elicitation-single-choice [body]="body" [value]="singleChoiceValue()" [disabled]="busy()" (valueChange)="selectSingleChoice($event)" /> }
-		@if (multipleChoiceBody(); as body) { <wo-elicitation-multiple-choice [body]="body" [value]="multipleChoiceValue()" [disabled]="busy()" (valueChange)="selectMultipleChoice($event)" /> }
-		@if (freeTextBody(); as body) { <wo-elicitation-free-text [body]="body" [value]="freeTextValue()" [disabled]="busy()" (valueChange)="selectFreeText($event)" /> }
+		@if (approvalBody(); as body) { <wo-elicitation-approval [body]="body" [value]="approvalValue()" [disabled]="busy() || disabled() || stepUpPath() !== null" [approvalDisabled]="approvalUnavailable()" (valueChange)="selectApproval($event)" /> }
+		@if (singleChoiceBody(); as body) { <wo-elicitation-single-choice [body]="body" [value]="singleChoiceValue()" [disabled]="busy() || disabled() || stepUpPath() !== null" (valueChange)="selectSingleChoice($event)" /> }
+		@if (multipleChoiceBody(); as body) { <wo-elicitation-multiple-choice [body]="body" [value]="multipleChoiceValue()" [disabled]="busy() || disabled() || stepUpPath() !== null" (valueChange)="selectMultipleChoice($event)" /> }
+		@if (freeTextBody(); as body) { <wo-elicitation-free-text [body]="body" [value]="freeTextValue()" [disabled]="busy() || disabled() || stepUpPath() !== null" (valueChange)="selectFreeText($event)" /> }
 		@if (error(); as message) { <p-message severity="error" [text]="message" /> }
 		<div class="elicitation-card__actions">
-			@if (stepUpPath()) { <p-button label="Sign in again" severity="secondary" icon="pi pi-lock" (onClick)="recover()" /> }
-			<p-button label="Submit response" icon="pi pi-send" [loading]="busy()" [disabled]="!canSubmit()" (onClick)="submitRequested.emit()" />
+			@if (stepUpPath()) { <p-button label="Sign in again" severity="secondary" icon="pi pi-lock" [disabled]="disabled()" (onClick)="recover()" /> }
+			<p-button [label]="submitLabel()" icon="pi pi-send" [loading]="busy()" [disabled]="!canSubmit()" (onClick)="submitRequested.emit()" />
 		</div>
 	} @else {
-		<p class="elicitation-card__outcome" role="status"><strong>Request {{ elicitation().state }}</strong>@if (elicitation().safeReason) { <span>{{ elicitation().safeReason }}</span> }</p>
+		<p class="elicitation-card__outcome" role="status"><strong>{{ terminalOutcome().heading }}</strong><span>{{ terminalOutcome().detail }}</span></p>
 	}
 </article>

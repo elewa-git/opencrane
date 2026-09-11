@@ -22,7 +22,8 @@ In this flow: the feature owns submission, while the server remains the decision
 
 ## Public surface
 
-- `ElicitationApprovalComponent` discloses the exact action and emits approve or deny.
+- `ElicitationApprovalComponent` discloses the exact action and display-safe proposed arguments. An
+  explicitly hidden proposal disables approval while keeping denial available.
 - `ElicitationSingleChoiceComponent` and `ElicitationMultipleChoiceComponent` emit bounded selections.
 - `ElicitationFreeTextComponent` emits text within the server-owned browser limit.
 
@@ -30,7 +31,8 @@ In this flow: the feature owns submission, while the server remains the decision
 
 The components depend only on Angular and local presentational types. They never import state, features, an
 application, or a backend package. Prompts and disclosed consequences are rendered as text, never
-as trusted markup.
+as trusted markup. Tool proposal arguments render as escaped, bounded JSON and never as editable
+fields or provider-specific change summaries.
 
 ## Dependency direction
 

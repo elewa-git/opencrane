@@ -32,6 +32,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits and terminal tool-result wakeups. |
+| `computers/turns/approval-notifications/` | Recheck the assigned participant and publish one receipt-backed requested-approval history fact before the durable wait. |
 | `computers/turns/credentials/` | Credential issuance, exact recovery and cleanup use repositories supplied by the credential unit of work. |
 | `authorization/` | Transaction-bound product permission and membership checks. |
 | `http/` | Public OpenAPI descriptions. |
@@ -85,6 +86,13 @@ Only the exact current run owner may answer its elicitation. Approval marks the 
 wakes the saved Absurd turn task; denial, expiry or stale authority produces no MCP dispatch and
 wakes the same continuation to record the terminal outcome. Managed company approval tools remain
 unavailable at model selection and proposal preparation until an entitled human resolver is bound.
+
+Before waiting, the Absurd turn checkpoints a participant-subset approval log. Its fixed summary and
+action reveal no tool target, arguments, schema, purpose payload or credential. A revision-zero
+Kurrent receipt commits atomically with the conversation entry, so restart recovery confirms the
+same event rather than publishing a duplicate. Current owned-elicitation and Conversation Read
+checks suppress a new append after expiry or revocation; ordinary history authorization still
+controls later replay and live delivery.
 
 The turn store atomically commits the exact answer receipt and participant-visible history event. Absurd
 owns durable deadlines, waits, restart recovery and selection of the next saved step. A new

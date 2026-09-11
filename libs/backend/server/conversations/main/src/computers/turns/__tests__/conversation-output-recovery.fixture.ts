@@ -13,12 +13,17 @@ import { KurrentConversationComputerTurnStore } from "../conversation-computer-t
 import type { ConversationComputerTurnCandidate, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnHistoryAnchor, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 
 /** Model checked revisions, same-ID acknowledgements and bounded reads over shared durable records. */
-class _History implements Pick<HistoryStore, "append" | "appendAtomic" | "readStream">
+class _History implements Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">
 {
 	readonly streams = new Map<string, HistoryRecordedEvent[]>();
 	beforeAppend: (command: HistoryAppend) => Promise<void> = async function _Before() {};
 	afterAppend: (command: HistoryAppend) => Promise<void> = async function _After() {};
 	beforeRead: (request: HistoryReadRequest) => Promise<void> = async function _Read() {};
+	async readHead(streamName: string)
+	{
+		const events = this.streams.get(streamName) ?? [];
+		return { streamName, revision: events.at(-1)?.revision ?? null };
+	}
 	async append(command: HistoryAppend)
 	{
 		await this.beforeAppend(command);

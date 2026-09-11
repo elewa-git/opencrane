@@ -20,6 +20,8 @@ export interface ElicitationApprovalPresentation
 	readonly target: string;
 	/** Plain-language data use. */
 	readonly dataUse: string;
+	/** Exact display-safe proposal arguments, or null when approval must remain unavailable. */
+	readonly proposedArguments?: Readonly<Record<string, unknown>> | null;
 	/** Optional external system label. */
 	readonly externalSystem?: string;
 	/** Plain-language consequence. */

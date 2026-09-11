@@ -66,7 +66,7 @@ test("intermediate conversation workspace keeps its rail and context inside the 
 		const rail = page.locator("wo-conversation-list");
 		const contextPanel = page.locator("wo-conversation-workspace-context-panel");
 		const header = page.locator(".conversation-workspace__header");
-		const transcript = page.locator(".conversation-workspace__transcript");
+		const conversationBody = page.locator(".conversation-workspace__body");
 		const composer = page.locator(".conversation-workspace__composer");
 		const railFooter = page.locator(".conversation-list__identity");
 		await expect(routeHost).toHaveCount(1);
@@ -75,7 +75,7 @@ test("intermediate conversation workspace keeps its rail and context inside the 
 		await expect(rail).toHaveCount(1);
 		await expect(contextPanel).toHaveCount(1);
 		await expect(header).toHaveCount(1);
-		await expect(transcript).toHaveCount(1);
+		await expect(conversationBody).toHaveCount(1);
 		await expect(composer).toHaveCount(1);
 		await expect(railFooter).toHaveCount(1);
 
@@ -98,7 +98,7 @@ test("intermediate conversation workspace keeps its rail and context inside the 
 		expect(Math.round(headerBox.y)).toBe(0);
 		expect(Math.round(composerBox.y + composerBox.height)).toBe(viewport.height);
 		expect(Math.round(railFooterBox.y + railFooterBox.height)).toBe(viewport.height);
-		expect(await transcript.evaluate(function _OwnsScroll(element) { return element.scrollHeight > element.clientHeight; })).toBe(true);
+		expect(await conversationBody.evaluate(function _OwnsScroll(element) { return element.scrollHeight > element.clientHeight; })).toBe(true);
 		expect(await page.locator("html").evaluate(function _DoesNotScroll(element) { return element.scrollHeight <= element.clientHeight; })).toBe(true);
 	}
 });
@@ -230,9 +230,38 @@ async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 	// 2. Suppress residual transitions because the design system includes intentional paper motion.
 	await page.addStyleTag({ content: STABLE_SCREENSHOT_CSS });
 
-	// 3. Wait for local fonts and Angular to settle. Workspace stories also wait for their route to leave loading,
-	// because CI captured their loading screen before the selected conversation rendered.
-	await page.evaluate(async () => document.fonts.ready);
+	// 3. Wait for Angular to render before awaiting fonts that its components may request. Workspace stories also
+	// wait for their route to leave loading because CI once captured before the selected conversation rendered.
 	await expect(page.locator("#storybook-root")).not.toBeEmpty({ timeout: 15_000 });
+	await page.evaluate(async () => document.fonts.ready);
 	if (storyId.startsWith("conversations-workspace-shell--")) await expect(page.locator(".conversation-workspace:not([data-route-state=\"loading\"])")).toHaveCount(1, { timeout: 15_000 });
+	if (storyId === "conversations-workspace-shell--personal-tool-approval" || storyId === "conversations-workspace-shell--personal-tool-approval-narrow")
+	{
+		const scrollOwner = page.locator(".conversation-workspace__body");
+		const approval = page.locator("wo-conversation-elicitation-card");
+		const narrowApproval = storyId.endsWith("--personal-tool-approval-narrow");
+		await expect.poll(async function _ApprovalStoryIsReady()
+		{
+			const [bounds, bodyBounds, scrollPosition] = await Promise.all([
+				approval.boundingBox(),
+				scrollOwner.boundingBox(),
+				scrollOwner.evaluate(function _ScrollPosition(element) { return { top: element.scrollTop, height: element.clientHeight }; })
+			]);
+			if (bounds === null || bodyBounds === null || scrollPosition.top <= 0 || scrollPosition.height <= 0)
+				return false;
+			const approvalBottom = bounds.y + bounds.height;
+			const bodyBottom = bodyBounds.y + bodyBounds.height;
+			return narrowApproval ? approvalBottom <= bodyBottom && approvalBottom > bodyBounds.y : bounds.y >= bodyBounds.y && bounds.y < bodyBottom;
+		}).toBe(true);
+		if (narrowApproval)
+		{
+			const confirmation = page.getByRole("button", { name: "Confirm approval" });
+			await expect(page.getByRole("radio", { name: /Approve/u })).toBeChecked();
+			await expect.poll(async function _ConfirmationIsReady()
+			{
+				const [bounds, viewportHeight] = await Promise.all([confirmation.boundingBox(), page.evaluate(function _ViewportHeight() { return globalThis.innerHeight; })]);
+				return bounds !== null && bounds.y >= 0 && bounds.y + bounds.height <= viewportHeight;
+			}).toBe(true);
+		}
+	}
 }

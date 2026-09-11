@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { ___ConversationToolArgumentsSchema } from "@opencrane/contracts";
 import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { __DigestCanonicalJson } from "../../authority/canonical-json-digest";
@@ -69,7 +70,7 @@ export async function __OpenDeferredToolApprovalInTransaction(transaction: Prism
 {
 	const argumentsDigest = __DigestCanonicalJson(command.arguments);
 	const parametersSchemaDigest = __DigestCanonicalJson(command.parametersSchema);
-	if (argumentsDigest !== command.argumentsDigest || parametersSchemaDigest !== command.parametersSchemaDigest || !__ValidateDeferredToolArguments(command.parametersSchema, command.arguments))
+	if (!___ConversationToolArgumentsSchema.safeParse(command.arguments).success || argumentsDigest !== command.argumentsDigest || parametersSchemaDigest !== command.parametersSchemaDigest || !__ValidateDeferredToolArguments(command.parametersSchema, command.arguments))
 	{
 		await __MarkToolInvocationApprovalRejectedInTransaction(transaction, command.invocationId, command.now, "approval_arguments_invalid");
 		return false;
@@ -81,6 +82,9 @@ export async function __OpenDeferredToolApprovalInTransaction(transaction: Prism
 		attempt: command.attempt,
 		toolInvocationRowId: command.invocationId,
 		toolRevisionId: command.toolRevisionId,
+		toolName: command.toolName,
+		toolDescription: command.toolDescription,
+		externalSystemName: command.externalSystemName,
 		reviewedArguments: command.arguments,
 		argumentsDigest: command.argumentsDigest,
 		reviewedParametersSchema: command.parametersSchema,
@@ -147,7 +151,7 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 {
 	const argumentsDigest = __DigestCanonicalJson(command.arguments);
 	const parametersSchemaDigest = __DigestCanonicalJson(command.parametersSchema);
-	if (argumentsDigest !== command.argumentsDigest || parametersSchemaDigest !== command.parametersSchemaDigest || !__ValidateDeferredToolArguments(command.parametersSchema, command.arguments))
+	if (!___ConversationToolArgumentsSchema.safeParse(command.arguments).success || argumentsDigest !== command.argumentsDigest || parametersSchemaDigest !== command.parametersSchemaDigest || !__ValidateDeferredToolArguments(command.parametersSchema, command.arguments))
 	{
 		await transaction(async function _invalid(repository)
 		{
@@ -165,8 +169,11 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 				interruptId: command.interruptId,
 				runId: command.runId,
 				attempt: command.attempt,
-					toolInvocationRowId: command.invocationId,
+				toolInvocationRowId: command.invocationId,
 				toolRevisionId: command.toolRevisionId,
+				toolName: command.toolName,
+				toolDescription: command.toolDescription,
+				externalSystemName: command.externalSystemName,
 				reviewedArguments: command.arguments,
 				argumentsDigest: command.argumentsDigest,
 				reviewedParametersSchema: command.parametersSchema,

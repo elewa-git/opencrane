@@ -98,4 +98,18 @@ describe("ConversationHistoryAuthority", function ()
 			appends: expect.arrayContaining([expect.objectContaining({ streamName: "computer-activations-silo-1", events: [expect.objectContaining({ type: "opencrane.computer.activation-requested.v1", data: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", generation: 2, causationPosition: "8" } })] })]),
 		}));
 	});
+
+	it("atomically appends a service receipt and its participant-visible transformation", async function _AppendsAttestation()
+	{
+		const receiptId = "9e60b5de-87a8-5c34-9cca-e6e4cb291369";
+		const receiptStream = "conversation-approval-notification-approval-1";
+		const appendAtomic = vi.fn().mockResolvedValue([{ streamName: receiptStream, revision: 0n }, { streamName: "conversation-conversation-1", revision: 8n }]);
+		const authority = new ConversationHistoryAuthority({ append: vi.fn(), appendAtomic });
+		const entry = { ..._Command().entry, author: { kind: "system" as const, systemId: "opencrane" as const, name: "OpenCrane" as const }, provenance: "service-attested" as const, attestation: { serviceId: "opencrane", receiptId, domainStream: receiptStream, domainRevision: "0", decisionEvidenceId: null } };
+		const event = { id: receiptId, type: "opencrane.conversation-approval-notification.v1", data: { approvalId: "approval-1" }, metadata: {} };
+		const result = await authority.appendWithAttestation({ ..._Command(), entry, attestation: { streamName: receiptStream, event } });
+
+		expect(result).toEqual({ outcome: ConversationHistoryAppendOutcomes.Appended, receipt: { streamName: "conversation-conversation-1", revision: 8n } });
+		expect(appendAtomic).toHaveBeenCalledWith(expect.objectContaining({ expectedHeads: [{ streamName: "conversation-conversation-1", revision: 7n }, { streamName: receiptStream, revision: HistoryExpectedRevisions.NoStream }], appends: expect.arrayContaining([expect.objectContaining({ streamName: receiptStream, expectedRevision: HistoryExpectedRevisions.NoStream, events: [event] })]) }));
+	});
 });

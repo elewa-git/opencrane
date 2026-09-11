@@ -121,16 +121,23 @@ this hosted slice or imply that arbitrary uploaded executables have authenticate
 
 ## Next wave: approved external actions
 
-The current model selector and tool proposal reject approval-required tools, and the proposal intent
-always records `approvalRequired: false`. Connect those paths to the existing IAM deferred-approval
-owner. It already saves reviewed arguments, schema, action identity, expiry and the decision; use that
-saved request at execution instead of accepting a new payload from the browser.
+The personal model and proposal path now uses the existing IAM deferred-approval owner and waits
+through Absurd with the original run allowance. It saves reviewed arguments, schema, action identity,
+expiry and the decision; execution uses that saved request instead of accepting a new payload from
+the browser. Company approval tools remain unavailable until an entitled human is bound explicitly.
 
 Extend the existing approval body and presenter to show the exact target, changed fields/arguments,
 consequences and selected connection owner. The current generic label and revision identifier do not
 suffice for a real external action. Resolve the entitled human participant explicitly for a company
 assistant: the executing service Principal is not automatically the approver. This minimal presenter
 belongs in T2 even though general rich interaction is fifth.
+
+The visible personal approval slice reuses the existing elicitation card and store in the selected
+conversation. Absurd publishes a participant-scoped requested fact through the history owner before
+waiting. The fact triggers an authorized read and carries no proposal details. A receipt and history
+entry must commit atomically so restart cannot duplicate the notification. Initial selection uses
+the same pending-request read; there is no approval polling or additional scheduler. If IAM cannot
+disclose a proposal because of secret fields, the participant may deny but cannot approve it.
 
 Use a dedicated fake-provider fixture for deterministic decision, tampering, revocation and ambiguity
 tests, then one authorized real write for acceptance. A submitted request or approval click is not

@@ -2,6 +2,7 @@
 .conversation-workspace { position: relative; overflow: hidden; display: grid; grid-template-columns: var(--oc-conversation-session-rail-width) minmax(0, 1fr) minmax(16rem, 21rem); block-size: 100%; min-block-size: 0; background: var(--p-surface-0); color: var(--p-text-color); }
 .conversation-workspace--context-hidden { grid-template-columns: var(--oc-conversation-session-rail-width) minmax(0, 1fr); }
 .conversation-workspace__main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-block-size: 0; }
+.conversation-workspace__body { overflow: auto; min-block-size: 0; }
 .conversation-workspace__empty, .conversation-workspace__route-state { margin: auto; max-width: 30rem; padding: 3rem 1.5rem; text-align: center; color: var(--p-text-muted-color); }
 .conversation-workspace__empty--page { grid-row: 1 / -1; }
 .conversation-workspace__route-state { grid-column: 1 / -1; align-self: center; }

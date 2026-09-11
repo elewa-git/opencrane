@@ -1,5 +1,5 @@
 import type { ConversationEntry } from "@opencrane/contracts";
-import { type HistoryAppendReceipt, type HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
+import { type HistoryAppendReceipt, type HistoryEvent, type HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
 /**
  * Describes what happened when KurrentDB checked a participant-visible entry against a conversation stream head.
@@ -53,4 +53,11 @@ export interface ConversationHistoryActivationAppendCommand extends Conversation
 {
 	/** Identifies the checked logical computer generation requested by this message. */
 	readonly activation: { readonly computerId: string; readonly generation: number; readonly eventId: string; readonly queueExpectedRevision: HistoryExpectedRevisions.NoStream | bigint };
+}
+
+/** Checked cross-stream append that records a service receipt and its participant-visible transformation together. */
+export interface ConversationHistoryAttestedAppendCommand extends ConversationHistoryAppendCommand
+{
+	/** Supplies the new immutable receipt stream and its sole revision-zero event. */
+	readonly attestation: { readonly streamName: string; readonly event: HistoryEvent };
 }
