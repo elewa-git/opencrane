@@ -10,6 +10,10 @@ from provider_identity_contract import prepare_identity, recover_identity
 from provider_isolation_contract import prepare_isolation
 
 
+SYNTHETIC_USER_EMAIL = "opencrane-memory-contract@example.com"
+SYNTHETIC_USER_PASSWORD = "test-only-memory-contract-password"
+
+
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=("initial", "recovery"), required=True)
@@ -28,6 +32,12 @@ def main() -> None:
     output_path = Path(args.output)
     state_path = Path(args.state)
     try:
+        if args.mode == "acl-enabled":
+            api.authenticate(
+                SYNTHETIC_USER_EMAIL,
+                SYNTHETIC_USER_PASSWORD,
+                register=args.phase == "initial",
+            )
         if args.phase == "initial":
             evidence = prepare_isolation(api, args.namespace, args.mode)
             if args.mode == "acl-enabled":

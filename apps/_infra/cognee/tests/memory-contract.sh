@@ -128,6 +128,7 @@ _start_cognee()
   local container="$1"
   local volume="$2"
   local access_control="$3"
+  local require_authentication="$4"
   docker run -d \
     --name "$container" \
     --network "$network" \
@@ -138,7 +139,7 @@ _start_cognee()
     --env HOST=0.0.0.0 \
     --env PORT=8000 \
     --env "ENABLE_BACKEND_ACCESS_CONTROL=$access_control" \
-    --env REQUIRE_AUTHENTICATION=false \
+    --env "REQUIRE_AUTHENTICATION=$require_authentication" \
     --env DATA_ROOT_DIRECTORY=/cognee-data/data_storage \
     --env SYSTEM_ROOT_DIRECTORY=/cognee-data/cognee_system \
     --env LLM_PROVIDER=openai \
@@ -155,7 +156,7 @@ _start_cognee()
 }
 
 current_case="acl_disabled_negative_control"
-_start_cognee "$negative" "$negative_volume" false
+_start_cognee "$negative" "$negative_volume" false false
 docker exec "$negative" python /contract/provider_contract.py \
   --phase initial \
   --mode acl-disabled \
@@ -168,7 +169,7 @@ docker logs "$negative" >"$output_dir/acl-disabled-provider.log" 2>&1
 docker rm -f "$negative" >/dev/null
 
 current_case="acl_enabled_initial_contract"
-_start_cognee "$positive" "$positive_volume" true
+_start_cognee "$positive" "$positive_volume" true true
 docker run -d \
   --name "$proxy" \
   --network "$network" \
@@ -196,7 +197,7 @@ docker exec "$positive" python /contract/provider_contract.py \
 docker logs "$positive" >"$output_dir/acl-enabled-before-restart.log" 2>&1
 docker rm -f "$positive" >/dev/null
 current_case="acl_enabled_restart_recovery_and_deletion"
-_start_cognee "$positive" "$positive_volume" true
+_start_cognee "$positive" "$positive_volume" true true
 docker exec "$positive" python /contract/provider_contract.py \
   --phase recovery \
   --mode acl-enabled \

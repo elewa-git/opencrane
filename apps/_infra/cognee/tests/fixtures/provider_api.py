@@ -7,6 +7,7 @@ import mimetypes
 import uuid
 from typing import Any
 from urllib import error, request
+from urllib.parse import urlencode
 
 
 class ProviderResponseError(RuntimeError):
@@ -21,8 +22,9 @@ class ProviderResponseError(RuntimeError):
 class ProviderApi:
     """Call the exact Cognee dataset, ingestion, search, and deletion routes under test."""
 
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, access_token: str | None = None):
         self.base_url = base_url.rstrip("/")
+        self._access_token = access_token
 
     def _request(
         self,
@@ -34,6 +36,8 @@ class ProviderApi:
         accepted: tuple[int, ...] = (200,),
     ) -> bytes:
         headers = {"accept": "application/json"}
+        if self._access_token is not None:
+            headers["authorization"] = f"Bearer {self._access_token}"
         if content_type is not None:
             headers["content-type"] = content_type
         command = request.Request(
@@ -49,6 +53,28 @@ class ProviderApi:
         if status not in accepted:
             raise ProviderResponseError(status, path, body)
         return body
+
+    def authenticate(self, email: str, password: str, register: bool) -> None:
+        """Create the synthetic user when requested, then retain its bearer only in memory."""
+        if register:
+            self.json(
+                "POST",
+                "/api/v1/auth/register",
+                {"email": email, "password": password},
+                accepted=(201,),
+            )
+        payload = urlencode({"username": email, "password": password}).encode("utf-8")
+        body = self._request(
+            "POST",
+            "/api/v1/auth/login",
+            payload,
+            "application/x-www-form-urlencoded",
+        )
+        response = json.loads(body)
+        access_token = response.get("access_token") if isinstance(response, dict) else None
+        if not isinstance(access_token, str) or not access_token:
+            raise AssertionError("Provider login did not return an access token")
+        self._access_token = access_token
 
     def json(
         self,
@@ -112,7 +138,7 @@ class ProviderApi:
             f"--{boundary}--\r\n".encode(),
         ]
         payload = b"".join(pieces)
-        endpoint = self if base_url is None else ProviderApi(base_url)
+        endpoint = self if base_url is None else ProviderApi(base_url, self._access_token)
         body = endpoint._request(
             "POST",
             "/api/v1/add",
@@ -142,16 +168,19 @@ class ProviderApi:
             ]
         )
         connection = http.client.HTTPConnection(proxy_host, proxy_port, timeout=310)
+        headers = {
+            "accept": "application/json",
+            "content-type": f"multipart/form-data; boundary={boundary}",
+            "content-length": str(len(payload)),
+        }
+        if self._access_token is not None:
+            headers["authorization"] = f"Bearer {self._access_token}"
         try:
             connection.request(
                 "POST",
                 "/api/v1/add",
                 body=payload,
-                headers={
-                    "accept": "application/json",
-                    "content-type": f"multipart/form-data; boundary={boundary}",
-                    "content-length": str(len(payload)),
-                },
+                headers=headers,
             )
             response = connection.getresponse()
             response.read()

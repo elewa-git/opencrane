@@ -43,6 +43,9 @@ class _Handler(BaseHTTPRequestHandler):
             "content-type": self.headers.get("content-type", "application/octet-stream"),
             "content-length": str(len(payload)),
         }
+        authorization = self.headers.get("authorization")
+        if authorization is not None:
+            forwarded_headers["authorization"] = authorization
         connection.request("POST", self.path, body=payload, headers=forwarded_headers)
         response = connection.getresponse()
         response.read()

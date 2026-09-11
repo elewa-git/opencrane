@@ -77,6 +77,12 @@ hash matches the reviewed 1.2.1 source. The only mismatch is the version suffix.
 reader appends `-local` when reading its source checkout, so the fixture now requires the observed
 exact value `1.2.1-local`. No source hash or semantic requirement is relaxed; the next run can reach
 the provider behavior tests.
+Run `34598301881` passed source attestation and the ACL-disabled negative control, reproducing
+cross-dataset retrieval. The positive case stopped at HTTP 401: Cognee requires authentication when
+backend access control is enabled. The harness now qualifies that candidate with an explicit
+synthetic test-account login, repeated after restart, without retaining tokens in evidence. This
+does not change chart defaults, gateway authentication or production credentials. Positive
+isolation, recovery and deletion remain unproved until that authenticated case runs.
 Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
 subsequent product slices are complete. Local container VMs are not started for this work.
 

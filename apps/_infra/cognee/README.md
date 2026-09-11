@@ -100,9 +100,12 @@ port. The harness removes only its own containers, network and temporary storage
 The pinned image reports `1.2.1-local`: Cognee appends this suffix when it reads the version from its
 source checkout. Qualification requires that exact value and the reviewed module hashes.
 
-The test compares dataset partitioning enabled and disabled while Cognee HTTP login remains disabled.
-These are disposable test configurations. A passing provider proof is required before changing the
-deployment default or enabling personal memory writes. An empty result cannot stand in for an
+The negative control tests the current configuration, with dataset partitioning and HTTP login
+disabled. The positive candidate enables both: Cognee requires authentication when partitioning is
+enabled. It registers a synthetic account in disposable storage and signs in again after restart;
+the test token stays in process memory and never enters evidence files.
+A passing provider proof is required before changing the deployment default or enabling personal
+memory writes. An empty result cannot stand in for an
 unavailable provider, a lost response cannot authorize another write, and a chunk identifier cannot
 stand in for the owning document during deletion.
 
