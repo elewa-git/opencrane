@@ -159,7 +159,7 @@ describe("saved conversation tool results", function _results()
 	it("reads exact result content with the current authority in the same Serializable transaction", async function _read()
 	{
 		const f = await _fixture(false);
-		await expect(f.unit.read(f.turn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Available, payload: f.row.resultDelivery.payload, payloadDigest: f.row.resultDelivery.payloadDigest, notAfterEpochMs: _NOW.getTime() + 60_000 });
+		await expect(f.unit.read(f.turn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Available, payload: f.row.resultDelivery.payload, payloadDigest: f.row.resultDelivery.payloadDigest, toolRevisionId: "tool-revision-1", occurredAt: _NOW.toISOString(), notAfterEpochMs: _NOW.getTime() + 60_000 });
 		expect(f.run).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 		expect(f.guard).toHaveBeenCalledOnce();
 		expect(f.updateMany).not.toHaveBeenCalled();

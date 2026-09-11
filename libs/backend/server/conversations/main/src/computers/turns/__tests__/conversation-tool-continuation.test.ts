@@ -135,7 +135,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 			if (decision === "awaiting")
 				return { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor: "approval", waitUntilEpochMs: Date.now() + 60_000 } as const;
 			const payload = { toolInvocationId: turn.toolSelection!.proposalId, outcome: "succeeded" as const, result: { record: "private-result" } };
-			return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), notAfterEpochMs: Date.now() + 60_000 } as const;
+			return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), toolRevisionId: "tool-1", occurredAt: "2026-09-11T10:00:00.000Z", notAfterEpochMs: Date.now() + 60_000 } as const;
 		});
 
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "tool_pending", waitFor: "approval" });

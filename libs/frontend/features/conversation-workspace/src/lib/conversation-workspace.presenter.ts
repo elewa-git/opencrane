@@ -12,7 +12,7 @@ import { _PersonalRunActivity } from "./conversation-personal-run-activity.mappe
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
 import { _ComposerState, _ComputerStatus, _ConnectionStatus } from "./presentation/conversation-workspace-status.mapper";
-import type { ConversationWorkspaceTranscriptEntry } from "./presentation/conversation-workspace-presentation.types";
+import { ConversationWorkspaceTranscriptEntryKinds, type ConversationWorkspaceTranscriptEntry } from "./presentation/conversation-workspace-presentation.types";
 import type { ConversationOnboardingContinuationPresentation, ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
 
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
@@ -71,7 +71,7 @@ export class ConversationWorkspacePresenter
 	/** Canonical and live transcript rows mapped through the shared sanitizer. */
 	public readonly messages = computed(this._Messages.bind(this));
 	/** Links recent work only to answers currently rendered in this selection. */
-	public readonly activityRows = computed(() => _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, new Set(this.messages().map(entry => entry.message.id))));
+	public readonly activityRows = computed(() => _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, new Set(this.messages().flatMap(entry => entry.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? [entry.message.id] : []))));
 	/** Presents read progress separately from the server's run lifecycle. */
 	public readonly activityReadState = computed(this._ActivityReadState.bind(this));
 	/** Existing asset presentations for transcript and Files views. */
@@ -98,14 +98,16 @@ export class ConversationWorkspacePresenter
 	/** Opens the explicit company assistant picker for an eligible own message. */
 	public askAssistant(messageId: string): void
 	{
-		const source = this.messages().find(entry => entry.message.id === messageId)?.requestSource;
+		const entry = this.messages().find(candidate => candidate.id === messageId);
+		const source = entry?.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? entry.requestSource : null;
 		if (source != null)
 			this.groupStore.ask(source);
 	}
 	/** Opens editable text review for a completed assistant response in the selected child. */
 	public reviewGroupShare(messageId: string): void
 	{
-		const source = this.messages().find(entry => entry.message.id === messageId)?.shareSource;
+		const entry = this.messages().find(candidate => candidate.id === messageId);
+		const source = entry?.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? entry.shareSource : null;
 		if (source != null)
 			this.groupStore.reviewShare(source);
 	}
@@ -225,7 +227,9 @@ export class ConversationWorkspacePresenter
 		const children = this.groupStore.children();
 		return _ConversationEntryViews(history.entries, history.payloads).map(function _GroupActions(view)
 		{
-			const entry = entries.get(view.message.id)!;
+			if (view.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity)
+				return view;
+			const entry = entries.get(view.id)!;
 			return { ...view, requestSource: _GroupRequestSource(entry, history.payloads, selected, subject), shareSource: _GroupShareSource(entry, history.payloads, selected), children: children.filter(child => child.parentMessageId === entry.id) };
 		});
 	}

@@ -1,6 +1,7 @@
 import { DestroyRef, Injector } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
 
+import { ConversationEntryKinds, type ToolCallLogEntry } from "@opencrane/contracts";
 import { ConversationLifecycles, ConversationModes, MessageRoles } from "@opencrane/models/conversations";
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 
@@ -40,8 +41,32 @@ function _Live(command: StreamConversationEventsCommand): void
 	command.onUpdate?.({ status: ConversationEventStreamStatuses.Live, state: { ...__CreateConversationHistoryProjection(), payloads: { "payload-private": "Private message" }, nextPosition: "2" }, reconnectAttempt: 0, lastHeartbeatAt: Date.now() });
 }
 
+/** Builds the content-free tool result fact retained in authorized history. */
+function _ToolResult(): ToolCallLogEntry
+{
+	return { schemaVersion: 1, id: "tool-result-entry", conversationId: "conversation-1", position: "1", author: { kind: "system", systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "conversation" }, runId: "run-1", causationId: "tool-call-1", correlationId: "conversation-1", idempotencyKey: "tool-result-entry", occurredAt: "2026-09-11T08:00:00.000Z", attestation: null, kind: ConversationEntryKinds.Log, summary: "Tool result received", detailsRef: null, logKind: "tool_call", toolCallId: "tool-call-1", toolKind: "mcp", toolName: "customer_records", phase: "completed", resultArtifactRevisionId: null };
+}
+
 describe("conversation stream access changes", function _DescribeAccess()
 {
+	it("retains a canonical tool result across reconnect and purges it on access loss", async function _ToolResultLifetime()
+	{
+		const { store, commands } = _Workspace();
+		await store.load();
+		const projection = { ...__CreateConversationHistoryProjection(), entries: [_ToolResult()], nextPosition: "2" };
+		commands[0]!.onUpdate?.({ status: ConversationEventStreamStatuses.Live, state: projection, reconnectAttempt: 0, lastHeartbeatAt: Date.now() });
+		expect(store.live().entries).toEqual(projection.entries);
+		commands[0]!.onUpdate?.({ status: ConversationEventStreamStatuses.Failed, state: projection, reconnectAttempt: 1, lastHeartbeatAt: null });
+		store.reconnect();
+		await vi.waitFor(function _Reconnected() { expect(commands).toHaveLength(2); });
+		expect(store.live().entries).toEqual(projection.entries);
+		commands[1]!.onUpdate?.({ status: ConversationEventStreamStatuses.Live, state: projection, reconnectAttempt: 0, lastHeartbeatAt: Date.now() });
+		expect(store.live().entries).toEqual(projection.entries);
+		_Revoke(commands[1]!);
+		expect(store.live()).toEqual(__CreateConversationHistoryProjection());
+		expect(store.selected()).toBeNull();
+	});
+
 	it("opens a new child absent from the list using its authoritative origin and visibility", async function _ChildDeepLink()
 	{
 		const { store, gateway } = _Workspace();

@@ -13,14 +13,46 @@ visible approval slice is published in draft #857 above #856 at
 `b9b362f0ed7ceeef6212f1c4ef1c799e69243913`. The standard MCP contract, personal approval wait,
 memory provider coordinates, selected-conversation request discovery, frozen action disclosure,
 durable approval notification and conversation approval card have reviewed source changes.
-The next available T1 slice publishes durable tool-result facts in personal and company-child
+The next T1 slice now publishes durable tool-result facts in personal and company-child
 conversation history and renders them through the existing transcript. Remote connection activation and credential use still
 await the recorded approval decisions; neither source tests nor a healthy MCP process prove a real
 connected journey. The testv5 repair is prepared separately and preserves current data.
 
+The tool-result source is published in draft [#858](https://github.com/elewa-git/opencrane/pull/858)
+on `feat/0.12-conversation-tool-results`, based directly on
+#857 at `5a4e3bcf5d1ee2e2b1069984854866681ffd9d2c`. Architecture preflight/post-review,
+component review and mandatory independent source review pass.
+Independent backend and frontend lanes reuse the current IAM result reader, atomic history receipt
+and transcript status-line component. The server publishes only a terminal tool fact after encrypted
+result custody and before reserving its final model call; history failure must leave that call
+unspent. No new API, schema, scheduler or credential path is required. The transcript coalesces
+each invocation's latest phase, preserves message actions and clears retained results on access loss.
+This producer emits terminal facts; requested/running production events and complete controls remain U1.
+
+Local validation passes: 494 conversation, 245 IAM and 28 history tests; six combined approval/result
+and final-answer recovery cases; 13 app composition tests; 34 frontend feature and 65 state tests.
+Backend and frontend lint/type checks, server and production UI builds, Storybook build, style,
+Prisma, dependency and workload composition checks pass. Style reports 15 production files with
+zero errors or warnings. Module growth passes; independent review confirms that the three-line
+turn-dependency addition does not introduce another responsibility. All 32 Storybook suites and 169
+interaction/accessibility tests and all three local visual checks pass. Six new macOS references
+have independent visual acceptance; existing references and comparison tolerances are unchanged.
+Workflow, authorization, release and agent-domain guards and the workload/domain negative tests
+also pass. Initial Linux CI run `34576967664` on `c07aeeeb9148ea44167b1efa7fd0b721b8d4e29d`
+passes database authority, generated API, all 169 Storybook behavior tests and both viewport checks.
+Its visual comparison required only the six new Linux references. The renders from artifact
+`10190184981` passed independent visual review and are now copied byte-for-byte into the Linux
+references, with no changes to existing images or comparison tolerances.
+The new Kurrent suite initially failed during import because the IAM barrel loaded an ungenerated
+Prisma enum. A reviewed test-only mock supplies the two delivery outcome constants; the publisher,
+real Kurrent client, atomic append and recovery remain unmocked. Local import/collection passes,
+with six live cases skipped because no local Kurrent endpoint was configured. Exact-head CI still
+owes the real-Kurrent proof and full completion. Testv5, real provider and hosted MCP qualification
+remain separate gates.
+
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
-| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection is implemented and locally verified; standard remote connection activation, participant result evidence and one real integration come first, followed by the required hosted MCP slice. |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Finish result-history CI, then standard remote connection activation and one real integration, followed by the required hosted MCP slice. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | Reuse conversation events, stores and approved components; preserve current access on reconnect. |
@@ -195,6 +227,14 @@ result is transport evidence rather than durable or indexed completion, and unav
 prove that no request was sent. The source evidence is pinned to the version-matched Cognee `v1.2.1`
 tag commit `15e48600cac49c6962fd688aaf783f5deda18660`; it has not been independently attested as the source
 of the pinned OCI image digest, so it does not qualify or enable mutation.
+
+The next recall journey also needs a dataset provisioning/availability owner and encrypted transient
+result delivery. Personal run snapshots still select no memory scope, and ordinary tool-result JSON
+is not suitable custody for recalled private facts. Reuse the existing conversation ciphertext store,
+one-use memory permission and Absurd owners; only an opaque reference may enter invocation results.
+A dormant recall task would be preparatory code, not a usable capability. Keep activation closed
+until the admitted dataset, current permission, pinned gateway image and isolated live query are
+proven. The #854 provider-coordinate contracts already exist and must not be duplicated.
 
 
 ## Absurd-owned conversation turn progression - 2026-09-09
@@ -514,7 +554,9 @@ Module-growth review confirms that the elicitation store owns one request lifecy
 database, generated API and all 163 Storybook interaction/accessibility tests. Seven Linux visual
 references differed from their initial macOS-seeded images. The exact Linux renders from artifact
 `10188675908` passed independent visual review and now replace those seven references; production
-source and comparison tolerances are unchanged. Full CI completion remains unproven. The incremental draft PR
+source and comparison tolerances are unchanged. Run `34574153065` passes on exact source
+`5a4e3bcf5d1ee2e2b1069984854866681ffd9d2c`, including Linux visual comparisons and all eight
+affected image publications. The incremental draft PR
 records validation and the review order; company/connection and live acceptance below remain open.
 
 Company approver resolution, remote connection-owner disclosure, live provider effects and testv5

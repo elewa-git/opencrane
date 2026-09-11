@@ -69,7 +69,7 @@ export class PrismaRunToolResultDeliveryRepository implements RunToolResultDeliv
 		const payload = _ReadExactRunToolResultPayload(invocation, delivery.payload, delivery.payloadDigest);
 		if (payload === null)
 			return { outcome: RunToolResultReadOutcomes.Unavailable };
-		return { outcome: RunToolResultReadOutcomes.Available, invocation, payload, payloadDigest: delivery.payloadDigest, consumed: delivery.state === ToolResultDeliveryState.Consumed };
+		return { outcome: RunToolResultReadOutcomes.Available, invocation, payload, payloadDigest: delivery.payloadDigest, occurredAt: row.completedAt.toISOString(), consumed: delivery.state === ToolResultDeliveryState.Consumed };
 	}
 
 	/** Acknowledges the exact stored result in the caller's already-authorized continuation transaction. */

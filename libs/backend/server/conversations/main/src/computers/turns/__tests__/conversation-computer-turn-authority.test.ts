@@ -92,7 +92,7 @@ function _Harness() {
       revoke: vi.fn().mockResolvedValue(undefined),
     },
     modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() },
-    toolResults: { read: vi.fn(), consume: vi.fn() },
+    toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") },
     endpoint: "http://litellm.testv5.svc.cluster.local:4000",
     outputPayloads: {
       store: vi

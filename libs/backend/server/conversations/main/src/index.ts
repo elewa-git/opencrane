@@ -68,6 +68,7 @@ export type * from "./admission/run-admission-composition.types";
 export { __AssertConversationComputerAnswerAuthority } from "./computers/turns/conversation-computer-answer-authority";
 export { PrismaConversationModelCustodyUnitOfWork } from "./computers/turns/db/prisma-conversation-model-custody";
 export { PrismaConversationToolResultsUnitOfWork } from "./computers/tools/results/prisma-conversation-tool-results";
+export { CurrentConversationToolResultNotificationEvidenceReader } from "./computers/tools/results/current-conversation-tool-result-notification-evidence";
 export { ConversationComputerToolResultOutcomes } from "./computers/turns/conversation-computer-continuation.types";
 export type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolSelection, ConversationComputerToolResults } from "./computers/turns/conversation-computer-continuation.types";
 export { PrismaConversationToolDispatchAuthority } from "./computers/tools/dispatch/prisma-conversation-tool-dispatch-authority";
@@ -85,3 +86,6 @@ export { KurrentConversationApprovalNotificationPublisher } from "./computers/tu
 export { PrismaConversationApprovalNotificationUnitOfWork } from "./computers/turns/approval-notifications/prisma-conversation-approval-notification-unit-of-work";
 export { ConversationApprovalNotificationOutcomes } from "./computers/turns/approval-notifications/conversation-approval-notification.types";
 export type { ConversationApprovalNotificationClock, ConversationApprovalNotificationCommand, ConversationApprovalNotificationPort, ConversationApprovalNotificationRequestReader } from "./computers/turns/approval-notifications/conversation-approval-notification.types";
+export { KurrentConversationToolResultNotificationPublisher } from "./computers/turns/tool-result-notifications/kurrent-conversation-tool-result-notification";
+export { ConversationToolResultNotificationOutcomes } from "./computers/turns/tool-result-notifications/conversation-tool-result-notification.types";
+export type { ConversationToolResultNotificationCommand, ConversationToolResultNotificationEvidence, ConversationToolResultNotificationEvidenceReader, ConversationToolResultNotificationPort } from "./computers/turns/tool-result-notifications/conversation-tool-result-notification.types";

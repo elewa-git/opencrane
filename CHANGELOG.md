@@ -29,12 +29,20 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   without a fresh model allowance. Company approver binding and live remote-provider/hosted-MCP
   qualification remain unfinished.
 
+- **Conversation participants can retain a safe record of terminal tool-result status beside the
+  transcript.** Personal and company-child conversations show that a tool result was received while
+  keeping this status separate from the assistant's final answer. The durable history fact contains
+  no tool arguments, result content or credentials, and binds the exact saved result receipt. After
+  a restart, recovery publishes that fact before spending the original turn's remaining allowance
+  on the final continuation. Full work controls and live connection/provider qualification remain
+  unfinished.
+
 - **People can distinguish tool progress from an assistant's final answer in recent personal activity.**
   The activity view shows queued, running, result-received and needs-attention tool phases while
   preserving the separate run status. Reads check the current personal owner and run permission;
   tool arguments, results and credentials are not returned. Refresh only reads status, and an answer
-  link still requires an authorized, loaded final message. Company participant receipts and complete
-  work controls remain later slices.
+  link still requires an authorized, loaded final message. Complete work controls remain a later
+  slice.
 
 - **Standalone administrators can remove a colleague's company access from Settings.** The member
   remains recorded as suspended; Owner and self-removal are protected. Proven access loss clears

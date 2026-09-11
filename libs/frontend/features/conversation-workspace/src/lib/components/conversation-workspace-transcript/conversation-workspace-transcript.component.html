@@ -13,18 +13,25 @@
                 </p>
               </div>
             }
-            @for (entry of entries(); track entry.message.id) {
-              <div
-                class="conversation-workspace__message"
-                [id]="entry.message.id"
-                tabindex="-1"
-              >
-                <wo-conversation-message [message]="entry.message"
-                  ><wo-conversation-rich-text
-                    conversation-message-rich-card
-                    [presentation]="entry.richText"
-                /></wo-conversation-message>
-                @if (entry.requestSource !== null || entry.shareSource !== null || entry.children.length > 0) { <wo-conversation-group-message-actions [canAsk]="entry.requestSource !== null" [canShare]="entry.shareSource !== null" [children]="entry.children" (askRequested)="askRequested.emit(entry.message.id)" (shareRequested)="shareRequested.emit(entry.message.id)" (childRequested)="childRequested.emit($event)" /> }
-              </div>
+            @for (entry of entries(); track entry.id) {
+              @switch (entry.kind) {
+                @case (kinds.Message) {
+                  <div
+                    class="conversation-workspace__message"
+                    [id]="entry.message.id"
+                    tabindex="-1"
+                  >
+                    <wo-conversation-message [message]="entry.message"
+                      ><wo-conversation-rich-text
+                        conversation-message-rich-card
+                        [presentation]="entry.richText"
+                    /></wo-conversation-message>
+                    @if (entry.requestSource !== null || entry.shareSource !== null || entry.children.length > 0) { <wo-conversation-group-message-actions [canAsk]="entry.requestSource !== null" [canShare]="entry.shareSource !== null" [children]="entry.children" (askRequested)="askRequested.emit(entry.message.id)" (shareRequested)="shareRequested.emit(entry.message.id)" (childRequested)="childRequested.emit($event)" /> }
+                  </div>
+                }
+                @case (kinds.ToolActivity) {
+                  <wo-conversation-status-line [status]="entry.status" />
+                }
+              }
             }
           </section>

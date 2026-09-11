@@ -39,6 +39,14 @@ KurrentDB history remains canonical while the shared SSE adapter adds immutable 
 logical computer state. Resolved private payload text comes only from the authorized history response. The
 workspace does not reconstruct AG-UI frames or expose run, tool, or sandbox commands.
 
+The selected transcript also renders the latest canonical lifecycle fact for each visible tool call.
+Requested, running, completed, failed, cancelled, and recovery-required facts use the shared conversation
+status line. A completed result remains separate from the assistant's later answer and grants no download,
+retry, or execution control. Repeated facts for one call coalesce at the newest history position, and neither
+tool-call coordinates, result coordinates, arguments, nor result payloads enter the presentation. This same
+history contract applies to personal Agent sessions and shared company-child chats; personal Recent activity
+remains a separate private run index.
+
 A person can select their own posted group message and choose **Ask company assistant**. The picker
 uses the server's permitted company-assistant directory; an empty directory explains that an
 administrator must provision an assistant and grant access. It never substitutes the personal agent.
@@ -71,7 +79,7 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
 - `ConversationWorkspacePageComponent` is the composition shell. It emits exact navigation intents
   to the feature-local route coordinator.
 - Internal header, transcript and composer components own separate typed presentation contracts.
-  The header restores context-trigger focus, the transcript owns message anchors, the page-owned
+  The header restores context-trigger focus, the transcript owns message anchors and canonical tool-status rows, the page-owned
   conversation body scrolls messages and participant requests together,
   and the composer emits draft/send/reconnect intents. They reuse the established conversation elements.
 - `ConversationOnboardingHistoryComponent` renders the completed bootstrap transcript without message,
