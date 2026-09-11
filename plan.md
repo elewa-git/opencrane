@@ -18,7 +18,8 @@ conversation history and renders them through the existing transcript. Remote co
 await the recorded approval decisions; neither source tests nor a healthy MCP process prove a real
 connected journey. The testv5 repair is prepared separately and preserves current data.
 
-The tool-result source is implemented on `feat/0.12-conversation-tool-results`, based directly on
+The tool-result source is published in draft [#858](https://github.com/elewa-git/opencrane/pull/858)
+on `feat/0.12-conversation-tool-results`, based directly on
 #857 at `5a4e3bcf5d1ee2e2b1069984854866681ffd9d2c`. Architecture preflight/post-review,
 component review and mandatory independent source review pass.
 Independent backend and frontend lanes reuse the current IAM result reader, atomic history receipt
@@ -37,8 +38,17 @@ turn-dependency addition does not introduce another responsibility. All 32 Story
 interaction/accessibility tests and all three local visual checks pass. Six new macOS references
 have independent visual acceptance; existing references and comparison tolerances are unchanged.
 Workflow, authorization, release and agent-domain guards and the workload/domain negative tests
-also pass. Linux references must come from actual child CI renders. The new real-Kurrent lost-response test is selected by the existing CI target
-but has not run locally. Testv5, real provider and hosted MCP qualification remain separate gates.
+also pass. Initial Linux CI run `34576967664` on `c07aeeeb9148ea44167b1efa7fd0b721b8d4e29d`
+passes database authority, generated API, all 169 Storybook behavior tests and both viewport checks.
+Its visual comparison required only the six new Linux references. The renders from artifact
+`10190184981` passed independent visual review and are now copied byte-for-byte into the Linux
+references, with no changes to existing images or comparison tolerances.
+The new Kurrent suite initially failed during import because the IAM barrel loaded an ungenerated
+Prisma enum. A reviewed test-only mock supplies the two delivery outcome constants; the publisher,
+real Kurrent client, atomic append and recovery remain unmocked. Local import/collection passes,
+with six live cases skipped because no local Kurrent endpoint was configured. Exact-head CI still
+owes the real-Kurrent proof and full completion. Testv5, real provider and hosted MCP qualification
+remain separate gates.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |

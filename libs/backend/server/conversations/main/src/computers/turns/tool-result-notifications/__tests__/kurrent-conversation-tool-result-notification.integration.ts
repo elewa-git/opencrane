@@ -8,6 +8,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ConversationToolResultNotificationOutcomes, type ConversationToolResultNotificationCommand, type ConversationToolResultNotificationEvidence } from "../conversation-tool-result-notification.types";
 import { KurrentConversationToolResultNotificationPublisher } from "../kurrent-conversation-tool-result-notification";
 
+// The Kurrent job does not generate Prisma; this publisher needs only the two delivery outcome values.
+vi.mock("@opencrane/backend/server/iam/authorization", function _ToolResultOutcomes()
+{
+	return { ToolResultDeliveryOutcomes: { Succeeded: "succeeded", Failed: "failed" } };
+});
+
 /** Holds the explicit KurrentDB endpoint used only by the integration target. */
 const _URL = process.env["KURRENTDB_INTEGRATION_URL"];
 
