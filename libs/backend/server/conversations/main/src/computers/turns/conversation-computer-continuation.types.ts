@@ -105,7 +105,7 @@ export enum ConversationComputerToolResultOutcomes
 /** Supplies only validated result content after the same transaction checks current authority. */
 export type ConversationComputerToolResult =
 	| { readonly outcome: ConversationComputerToolResultOutcomes.Pending | ConversationComputerToolResultOutcomes.Unavailable; readonly waitFor?: "approval" | "result"; readonly waitUntilEpochMs?: number }
-	| { readonly outcome: ConversationComputerToolResultOutcomes.Available; readonly payload: ToolResultDeliveryPayload; readonly payloadDigest: string; readonly notAfterEpochMs: number };
+	| { readonly outcome: ConversationComputerToolResultOutcomes.Available; readonly payload: ToolResultDeliveryPayload; readonly payloadDigest: string; readonly toolRevisionId: string; readonly occurredAt: string; readonly notAfterEpochMs: number };
 
 /**
  * Reads the original invocation under current authority without consuming its delivery.

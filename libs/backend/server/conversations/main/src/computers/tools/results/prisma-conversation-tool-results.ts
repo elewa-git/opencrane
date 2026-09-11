@@ -85,7 +85,7 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 		}
 		if (notAfterEpochMs <= Date.now())
 			throw new _ResultAuthorityEnded();
-		return { outcome: ConversationComputerToolResultOutcomes.Available, payload: result.payload, payloadDigest: result.payloadDigest, notAfterEpochMs };
+		return { outcome: ConversationComputerToolResultOutcomes.Available, payload: result.payload, payloadDigest: result.payloadDigest, toolRevisionId: result.invocation.toolRevisionId, occurredAt: result.occurredAt, notAfterEpochMs };
 	}
 }
 

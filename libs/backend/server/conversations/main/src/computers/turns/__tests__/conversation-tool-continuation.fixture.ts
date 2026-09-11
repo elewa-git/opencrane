@@ -45,6 +45,8 @@ export async function _ToolContinuationHarness()
 			throw new Error("another proposal already owns this attempt");
 		return { proposalId: admitted, outcome: ConversationToolProposalOutcomes.Existing };
 	}) };
+	const occurredAt = new Date().toISOString();
+	const notifications = { publishTerminal: vi.fn().mockResolvedValue("published") };
 	const results = {
 		read: vi.fn(async function _Read(turn: FrozenConversationComputerTurn)
 		{
@@ -53,7 +55,7 @@ export async function _ToolContinuationHarness()
 			if (flags.pending)
 				return { outcome: ConversationComputerToolResultOutcomes.Pending } as const;
 			const payload = { toolInvocationId: turn.toolSelection!.proposalId, outcome: "succeeded" as const, result: { record: "private-result" } };
-			return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), notAfterEpochMs: Date.now() + 60_000 } as const;
+			return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), toolRevisionId: "tool-1", occurredAt, notAfterEpochMs: Date.now() + 60_000 } as const;
 		}),
 		consume: vi.fn(async function _Consume(turn: FrozenConversationComputerTurn)
 		{
@@ -69,6 +71,6 @@ export async function _ToolContinuationHarness()
 			return result;
 		}),
 	};
-	Object.assign(overrides, { modelCustody: custody, toolResults: results, toolProposals: proposals });
-	return { ...f, authority: f.restart(), call, rows, custody, results, proposals, toolFlags: flags, step: f.output.bootstrapId };
+	Object.assign(overrides, { modelCustody: custody, toolResults: results, toolProposals: proposals, toolResultNotifications: notifications });
+	return { ...f, authority: f.restart(), call, rows, custody, results, notifications, proposals, toolFlags: flags, step: f.output.bootstrapId };
 }

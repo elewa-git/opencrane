@@ -2,7 +2,7 @@ import { Router } from "@angular/router";
 import { type Decorator, type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
-import { CONVERSATION_ELICITATION_VERSION, ConversationEntryKinds, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ApprovalLogEntry, type ConversationElicitation, type MessageEntry } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ConversationEntryKinds, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ApprovalLogEntry, type ConversationElicitation, type MessageEntry, type ToolCallLogEntry } from "@opencrane/contracts";
 import { ConversationModes, ConversationLifecycles } from "@opencrane/models/conversations";
 import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
@@ -27,6 +27,12 @@ const _DETAIL: ConversationWorkspaceDetail = { id: "conversation-1", mode: Conve
 /** Immutable assistant entry whose private payload supplies the long transcript. */
 const _ENTRY: MessageEntry = { schemaVersion: 1, id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", conversationId: _DETAIL.id, position: "1", author: { kind: "agent", agentIdentityId: "agent-identity-1", agentServiceId: "agent-1", name: "The Commander", avatarArtifactRevisionId: null }, provenance: "agent-authored", visibility: { audience: "conversation" }, runId: "run-1", causationId: "run-1", correlationId: "conversation-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", occurredAt: "2026-09-05T19:30:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:story" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
 
+/** Canonical completed tool fact carrying no result, argument or execution payload. */
+const _TOOL_RESULT: ToolCallLogEntry = { schemaVersion: 1, id: "tool-result-log", conversationId: _DETAIL.id, position: "1", author: { kind: "system", systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "conversation" }, runId: "run-1", causationId: "tool-call-1", correlationId: "conversation-1", idempotencyKey: "tool-result-log", occurredAt: "2026-09-05T19:29:59.000Z", attestation: null, kind: ConversationEntryKinds.Log, summary: "Tool result received", detailsRef: null, logKind: "tool_call", toolCallId: "tool-call-1", toolKind: "mcp", toolName: "Customer records", phase: "completed", resultArtifactRevisionId: null };
+
+/** Canonical recovery fact that grants no browser-side retry. */
+const _TOOL_RECOVERY: ToolCallLogEntry = { ..._TOOL_RESULT, id: "tool-recovery-log", idempotencyKey: "tool-recovery-log", phase: "recovery_required", resultArtifactRevisionId: null };
+
 /** Approval history changes only invalidate the current authority read. */
 const _APPROVAL_LOG: ApprovalLogEntry = { schemaVersion: 1, id: "approval-log-1", conversationId: _DETAIL.id, position: "2", author: { kind: "service", serviceId: "approval-authority", name: "Approval authority" }, provenance: "service-attested", visibility: { audience: "conversation" }, runId: "run-1", causationId: "tool-call-1", correlationId: "conversation-1", idempotencyKey: "approval-log-1", occurredAt: "2026-09-05T19:30:02.000Z", attestation: null, kind: ConversationEntryKinds.Log, summary: "Approval requested", detailsRef: null, logKind: "approval", approvalId: "approval-history-1", action: "Create calendar event", phase: "requested" };
 
@@ -35,6 +41,12 @@ const _ELICITATION: ConversationElicitation = { version: CONVERSATION_ELICITATIO
 
 /** Current immutable-history projection rendered by every responsive shell contract. */
 const _HISTORY: ConversationHistoryProjection = { ...__CreateConversationHistoryProjection(), entries: [_ENTRY], payloads: { "payload-1": _LONG_CONTENT }, nextPosition: "2" };
+
+/** Tool result followed by a durable assistant answer in canonical conversation order. */
+const _TOOL_RESULT_HISTORY: ConversationHistoryProjection = { ...__CreateConversationHistoryProjection(), entries: [_TOOL_RESULT, { ..._ENTRY, position: "2" }], payloads: { "payload-1": "The customer account is active and the renewal date is confirmed." }, nextPosition: "3" };
+
+/** Company-child form of the same result and answer chronology. */
+const _COMPANY_TOOL_RESULT_HISTORY: ConversationHistoryProjection = { ..._TOOL_RESULT_HISTORY, entries: [_TOOL_RESULT, { ..._ENTRY, position: "2", author: { kind: "agent", agentIdentityId: "company-identity", agentServiceId: "company-agent", name: "Company assistant", avatarArtifactRevisionId: null } }] };
 
 /** Projection long enough to require transcript scrolling at every asserted desktop width. */
 const _OVERFLOW_HISTORY: ConversationHistoryProjection = { ..._HISTORY, payloads: { "payload-1": _OVERFLOW_CONTENT } };
@@ -50,6 +62,17 @@ const _WORKSPACE_GATEWAY: ConversationWorkspaceGateway =
 	send: async function _Send() { return; },
 	archive: async function _Archive() { return _DETAIL; },
 	close: async function _Close() { return { ..._DETAIL, lifecycle: ConversationLifecycles.Closed }; }
+};
+
+/** Shared company-child selection using the same participant-authorized history projection. */
+const _COMPANY_DETAIL: ConversationWorkspaceDetail = { ..._DETAIL, agentServiceId: "company-agent", participantRefs: ["self", "colleague-1", "colleague-2"], parent: { requestId: "group-request", parentConversationId: "group-conversation", parentMessageId: "group-message", parentMessagePosition: "4" } };
+
+/** Test-only company directory and selection without any personal-run projection. */
+const _COMPANY_WORKSPACE_GATEWAY: ConversationWorkspaceGateway = {
+	..._WORKSPACE_GATEWAY,
+	directory: async function _Directory() { return { companyAssistants: [{ agentServiceId: "company-agent", displayName: "Company assistant" }], participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "colleague-1", isSelf: false, label: "Amina" }, { participantRef: "colleague-2", isSelf: false, label: "Kamau" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "The Commander" } }; },
+	list: async function _List() { return [_COMPANY_DETAIL]; },
+	open: async function _Open() { return _COMPANY_DETAIL; }
 };
 
 /** Test-only history stream that stays live until the routed component is destroyed. */
@@ -104,6 +127,39 @@ export const IntermediateLongContent: Story = { tags: ["visual-test"], decorator
 
 /** Wide desktop width keeps rail, transcript, composer, and context panel in one viewport. */
 export const WideLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(_HISTORY)] };
+
+/** Shows durable tool evidence before the personal assistant's final saved answer. */
+export const PersonalToolResult: Story = { tags: ["visual-test"], decorators: [_Providers(_TOOL_RESULT_HISTORY)], play: async function _PersonalEvidence({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(await canvas.findByText("Tool result received", { exact: true })).toBeVisible();
+	expect(canvas.getByText(/Customer records: result received/u)).toBeVisible();
+	expect(canvas.getByText(/may still be preparing its answer/u)).toBeVisible();
+	expect(canvas.getByText("The customer account is active and the renewal date is confirmed.", { exact: true })).toBeVisible();
+	expect(canvas.queryByText(_TOOL_RESULT.toolCallId)).not.toBeInTheDocument();
+} };
+
+/** Shows the same canonical tool evidence to participants in a company-child chat. */
+export const CompanyToolResult: Story = { tags: ["visual-test"], decorators: [_Providers(_COMPANY_TOOL_RESULT_HISTORY, _COMPANY_WORKSPACE_GATEWAY)], play: async function _CompanyEvidence({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(await canvas.findByText("Shared assistant chat · 3 participants", { exact: true })).toBeVisible();
+	expect(canvas.getByText("Tool result received", { exact: true })).toBeVisible();
+	expect(canvas.getByText(/Customer records: result received/u)).toBeVisible();
+	expect(canvas.getByText("The customer account is active and the renewal date is confirmed.", { exact: true })).toBeVisible();
+	expect(canvas.queryByText(_TOOL_RESULT.toolCallId)).not.toBeInTheDocument();
+} };
+
+/** Keeps an uncertain company tool outcome readable without exposing a retry action. */
+export const CompanyToolRecoveryNarrow: Story = { tags: ["visual-test", "visual-test-narrow"], decorators: [_Providers({ ...__CreateConversationHistoryProjection(), entries: [_TOOL_RECOVERY], nextPosition: "2" }, _COMPANY_WORKSPACE_GATEWAY)], play: async function _RecoveryEvidence({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	await userEvent.click(await canvas.findByRole("button", { name: "Close context pane" }));
+	expect(await canvas.findByText("Tool needs attention", { exact: true })).toBeVisible();
+	expect(canvas.getByText(/will not repeat it automatically/u)).toBeVisible();
+	expect(canvas.queryByRole("button", { name: /retry/u })).not.toBeInTheDocument();
+	expect(canvas.queryByText(_TOOL_RECOVERY.toolCallId)).not.toBeInTheDocument();
+} };
 
 /** Shows the complete informed approval inside the selected conversation without exposing coordinates. */
 export const PersonalToolApproval: Story = { tags: ["visual-test"], decorators: [_Providers({ ..._HISTORY, entries: [_ENTRY, _APPROVAL_LOG], nextPosition: "3" }, _WORKSPACE_GATEWAY, _ELICITATIONS)], play: async function _ApprovalVisible({ canvasElement })

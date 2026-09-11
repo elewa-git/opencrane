@@ -45,7 +45,7 @@ describe("__ReadRunToolResultInTransaction", function _resultReader()
 		const row = _row();
 		const fixture = _reader(row);
 		const result = await __ReadRunToolResultInTransaction(fixture.transaction, _COMMAND);
-		expect(result).toMatchObject({ outcome: RunToolResultReadOutcomes.Available, invocation: { id: row.id, toolInvocationId: _COMMAND.toolInvocationId }, payload: row.resultDelivery.payload, payloadDigest: row.resultDelivery.payloadDigest, consumed: false });
+		expect(result).toMatchObject({ outcome: RunToolResultReadOutcomes.Available, invocation: { id: row.id, toolInvocationId: _COMMAND.toolInvocationId }, payload: row.resultDelivery.payload, payloadDigest: row.resultDelivery.payloadDigest, occurredAt: _NOW.toISOString(), consumed: false });
 		expect(fixture.findFirst).toHaveBeenCalledExactlyOnceWith({ where: { ..._COMMAND, mcpTaskId: null, run: { is: { id: _COMMAND.runId, siloId: _COMMAND.siloId, attempt: _COMMAND.attempt, state: { in: [AgentRunState.Running, AgentRunState.WaitingForInput] } } } }, include: { run: { select: { id: true, siloId: true, attempt: true, state: true } }, resultDelivery: true } });
 		expect(row.resultDelivery.state).toBe(ToolResultDeliveryState.Pending);
 		expect(row.resultDelivery.consumedAt).toBeNull();

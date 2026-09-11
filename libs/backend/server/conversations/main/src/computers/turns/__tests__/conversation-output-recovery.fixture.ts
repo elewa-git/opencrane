@@ -119,7 +119,7 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 	function _Restart()
 	{
 		const store = new KurrentConversationComputerTurnStore(history);
-		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { create: function _Writer(turn, workload)
+		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { create: function _Writer(turn, workload)
 		{
 			return new BoundConversationWriter(history, turn.binding, { now: function _Now() { return new Date(Date.parse("2026-09-08T23:00:00.000Z") + flags.stamp++ * 1_000); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility()
 			{

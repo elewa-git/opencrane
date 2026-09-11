@@ -97,7 +97,7 @@ the ordinary exact boundary-matching rules.
 Run-owned tool result reads use `__ReadRunToolResultInTransaction`. The caller supplies all saved
 run, attempt, computer, command, public invocation and fingerprint coordinates. IAM checks the
 current run and the full immutable terminal payload and digest, then returns the existing invocation
-record for a current-authority check in the same transaction. Pending or inconsistent work exposes
+record and its original completion time for a current-authority check in the same transaction. Pending or inconsistent work exposes
 no result content. `__ConsumeRunToolResultInTransaction` acknowledges only that exact payload;
 the conversation owner must first prove the saved second-model-request reservation and current
 permission. An exact replay preserves its first acknowledgement time, and consumed results remain

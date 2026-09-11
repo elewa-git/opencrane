@@ -7,6 +7,7 @@ import type { ConversationComputerModelProgress, ConversationComputerModelReserv
 import { ConversationComputerToolResultOutcomes, type ConversationComputerContinuationReservation, type ConversationComputerPrivateModelReference, type ConversationComputerToolDeclaration } from "./conversation-computer-continuation.types";
 import type { ConversationComputerCredentialReceipt, ConversationComputerOutputCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import { _PrepareConversationToolProposal } from "../tools/proposal/conversation-tool-proposal";
+import { ConversationToolResultNotificationOutcomes } from "./tool-result-notifications/conversation-tool-result-notification.types";
 
 /**
  * Advances one text answer or one tool followed by a final answer within the original attempt.
@@ -69,6 +70,9 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 		throw new Error("Conversation tool result differs from its immutable digest");
 	const continuation = { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, declaration: reference, proposalId: selection.proposalId, resultDigest: result.payloadDigest, ...pair };
 	const continuationReference = await dependencies.modelCustody.storeContinuation(selected, continuation);
+	const notification = await dependencies.toolResultNotifications.publishTerminal({ bootstrapId: selected.bootstrapId, siloId: selected.siloId, conversationId: selected.binding.conversationId, runId: selected.compile.runId, attempt: selected.compile.attempt, toolInvocationId: selection.proposalId, expectedResultDigest: result.payloadDigest });
+	if (notification !== ConversationToolResultNotificationOutcomes.Published)
+		return { outcome: "authority_ended" };
 	const current = await _Current(selected, dependencies);
 	const reservation = _SecondReservation(selected, current.candidate, declaration, continuationReference, result.payloadDigest, result.notAfterEpochMs);
 	if (!await dependencies.store.reserveContinuation(turn.bootstrapId, reservation))

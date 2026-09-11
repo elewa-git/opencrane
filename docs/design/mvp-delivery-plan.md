@@ -61,8 +61,13 @@ Recheck live ancestry before publishing each PR; do not duplicate an open predec
    content-free waiting state.
 3. **Keep the retrieved evidence with the conversation.** Use the existing invocation result and
    history boundary to expose a minimal durable tool result/activity reference to authorized
-   participants. The current lifecycle hook wakes Absurd but does not append participant history.
-   This is the evidence needed to trust the first retrieval; comprehensive controls remain U1.
+   participants. The terminal-result slice is implemented above #857: after saving the encrypted
+   result, the turn atomically records a private receipt and a participant history fact before
+   spending the remaining model allowance. Recovery confirms the same fact and cannot repeat
+   tool execution or the original paid request. The transcript shows the frozen tool name and
+   terminal status separately from the answer, without arguments, result content or credentials.
+   Source review and focused tests pass; CI and the real provider journey remain separate proof.
+   Requested/running production events and comprehensive controls remain U1.
 4. **Prove the real journey.** Retrieve the chosen record in personal and company-child chats, then
    reload and replace a server without duplicating dispatch, refreshing allowance or losing the
    answer/result. Exercise wrong-silo access, revoked company versus retained human grants, stale

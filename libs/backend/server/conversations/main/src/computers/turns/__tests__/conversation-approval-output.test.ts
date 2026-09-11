@@ -7,6 +7,8 @@ import { ConversationApprovalNotificationOutcomes } from "../approval-notificati
 import { KurrentConversationApprovalNotificationPublisher } from "../approval-notifications/kurrent-conversation-approval-notification";
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
+import { CurrentConversationToolResultNotificationEvidenceReader } from "../../tools/results/current-conversation-tool-result-notification-evidence";
+import { KurrentConversationToolResultNotificationPublisher } from "../tool-result-notifications/kurrent-conversation-tool-result-notification";
 
 afterEach(function _Restore() { vi.restoreAllMocks(); });
 
@@ -17,6 +19,9 @@ describe("approval history and the saved model continuation", function _Suite()
 		const f = await _ToolContinuationHarness();
 		const historyAuthority = new ConversationHistoryAuthority(f.history);
 		const historyReader = new ConversationHistoryReader(f.history);
+		const resultEvidence = new CurrentConversationToolResultNotificationEvidenceReader(f.store, f.candidates, f.results);
+		const resultNotifications = new KurrentConversationToolResultNotificationPublisher(resultEvidence, historyAuthority, historyReader, f.history);
+		f.notifications.publishTerminal.mockImplementation(resultNotifications.publishTerminal.bind(resultNotifications));
 		const genesis = historyAuthority.genesisAppend({ schemaVersion: 1, siloId: "silo-1", conversationId: "conversation-1", mode: ConversationHistoryModes.AgentSession, agentServiceId: "service-1", createdByPrincipalId: "owner-1", createdAt: new Date().toISOString() }, "71c1f1dc-0010-4f13-9c2f-d3841ffd6651");
 		f.history.streams.get(f.stream)![0] = { ...f.history.streams.get(f.stream)![0], ...genesis.events[0], metadata: Object.fromEntries(Object.entries(genesis.events[0].metadata).map(([key, value]) => [key, String(value)])) };
 		Object.assign(f.candidate.compiledInput.tools[0], { requiresApproval: true });
@@ -48,7 +53,8 @@ describe("approval history and the saved model continuation", function _Suite()
 		f.history.afterAppend = async function _LoseOneReply(append)
 		{
 			const isNotification = append.streamName.startsWith("conversation-approval-notification-");
-			const isAnswer = append.streamName === f.stream && append.events[0].id !== approvalId;
+			const entry = append.events[0].data["entry"];
+			const isAnswer = append.streamName === f.stream && typeof entry === "object" && entry !== null && "kind" in entry && entry.kind === "message";
 			if (!lost && (lostReply === "notification" ? isNotification : isAnswer))
 			{
 				lost = true;
@@ -79,9 +85,11 @@ describe("approval history and the saved model continuation", function _Suite()
 		const completed = (await f.store.load(f.step))!;
 		expect(completed.modelReservation).toEqual(waiting.modelReservation);
 		expect(completed.continuationReservation?.ordinal).toBe(2);
-		expect(completed.outputReceipt?.expectedRevision).toBe("2");
-		expect(f.history.streams.get(f.stream)).toHaveLength(4);
-		expect(f.history.streams.get(f.stream)![3].data).toEqual(completed.outputReceipt!.event.data);
+		expect(completed.outputReceipt?.expectedRevision).toBe("3");
+		expect(f.history.streams.get(f.stream)).toHaveLength(5);
+		expect(f.history.streams.get(f.stream)![3].data["entry"]).toMatchObject({ logKind: "tool_call", toolCallId: approvalId, phase: "completed" });
+		expect(f.history.streams.get(f.stream)![3].id).not.toBe(approvalId);
+		expect(f.history.streams.get(f.stream)![4].data).toEqual(completed.outputReceipt!.event.data);
 		expect(f.history.streams.get(`conversation-approval-notification-${approvalId}`)).toHaveLength(1);
 		expect(JSON.stringify(f.history.streams.get(`conversation-approval-notification-${approvalId}`)![0].data)).not.toContain("private-query");
 		expect(f.model.request).toHaveBeenCalledTimes(2);

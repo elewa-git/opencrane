@@ -33,6 +33,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits and terminal tool-result wakeups. |
 | `computers/turns/approval-notifications/` | Recheck the assigned participant and publish one receipt-backed requested-approval history fact before the durable wait. |
+| `computers/turns/tool-result-notifications/` | Publish a terminal tool status and its private recovery receipt before the remaining model call is reserved. |
 | `computers/turns/credentials/` | Credential issuance, exact recovery and cleanup use repositories supplied by the credential unit of work. |
 | `authorization/` | Transaction-bound product permission and membership checks. |
 | `http/` | Public OpenAPI descriptions. |
@@ -80,6 +81,14 @@ The dispatch coordinator delegates saved run and budget evidence, current comput
 conversation access to their owners. It does not decide the invocation lifecycle; central IAM owns
 those state transitions. A terminal result remains readable only while its original authority holds.
 
+After encrypted continuation custody accepts the exact result, the turn publishes one content-free
+tool log before it reserves the second model call. A private revision-zero receipt binds the saved
+invocation, terminal outcome and result digest to that conversation entry. The participant log keeps
+the frozen tool name, public invocation identity and completed or failed phase, along with the author,
+time, visibility and identifiers required by conversation history. It never carries arguments, result
+content, result digests, credentials or provider metadata. Receipt recovery is idempotent; a new
+physical append repeats current result, run, conversation and lease checks.
+
 Approval-gated personal proposals preserve the frozen arguments, schema and run allowance in the
 existing invocation slot, then pause the run in `WaitingForInput` through deferred IAM approval.
 Only the exact current run owner may answer its elicitation. Approval marks the invocation ready and
@@ -114,7 +123,8 @@ evidence; KurrentDB owns conversation and computer history. Ciphertext is stored
 reference is appended. Serializable writes retain their existing retry and conflict semantics.
 
 Run `nx run backend-server-conversations:test:integration` with `KURRENTDB_INTEGRATION_URL` to
-exercise answer recovery against a real history server. Ordinary package tests use controlled ports.
+exercise approval, tool-result and answer recovery against a real history server. Ordinary package
+tests use controlled ports.
 
 ## See also
 

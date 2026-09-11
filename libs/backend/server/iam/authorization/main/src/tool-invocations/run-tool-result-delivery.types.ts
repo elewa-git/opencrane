@@ -62,6 +62,8 @@ export type ReadRunToolResultResult =
 		readonly payload: ToolResultDeliveryPayload;
 		/** Binds the entire canonical payload for a later durable continuation. */
 		readonly payloadDigest: string;
+		/** Preserves the terminal invocation time used by deterministic participant evidence. */
+		readonly occurredAt: string;
 		/** Reports existing acknowledgement state without changing it or hiding consumed results. */
 		readonly consumed: boolean;
 	};
