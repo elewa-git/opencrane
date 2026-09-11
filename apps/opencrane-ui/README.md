@@ -50,7 +50,8 @@ the SPA and the API share one origin without this container ever proxying. Insid
 surface is pinned to `"org"`: sign-in admits a person to the application, while administration
 controls use the server's current product-capability projection. The server checks every operation.
 Change detection is zoneless (no zone.js is bundled), and production data gateways use the live API.
-If the backend is unreachable the app refuses authenticated actions.
+If the backend is unreachable the app refuses authenticated actions. Build-time provider and route
+replacement keeps the disposable Tier 1 fixtures out of production and development-live bundles.
 
 ## Public surface
 
@@ -61,6 +62,28 @@ workspace), `settings/members` (organisation directory and invitations), `invite
 acceptance), and `admin` (MCP tool administration). The root route redirects to
 `/onboarding`; protected routes use `OperatorAccessGuard`. Conversation history and computer state
 remain on the ordinary chat route; the retired relational Agent-thread projection has no child URL.
+
+For frontend-only work, the default local command replaces live gateways with one disposable
+in-memory profile and starts at onboarding:
+
+```bash
+npm run serve:opencrane-ui
+```
+
+The four reviewed archetypes can open their deterministic personal-Agent conversation directly:
+
+```bash
+npm run serve:opencrane-ui:commander
+npm run serve:opencrane-ui:catalyst
+npm run serve:opencrane-ui:anchor
+npm run serve:opencrane-ui:analyst
+```
+
+A named command selects its exact archetype for that run. A plain run begins at onboarding with
+Commander as the deterministic initial fixture, then uses the reviewed survey result. The local
+route table mounts only onboarding and chats, does not use the live
+authentication guard, and redirects unsupported live-only routes to the selected entry. Tier 1 makes
+no API, PostgreSQL, KurrentDB, Docker, Cognee, LiteLLM, Agent Sandbox, or Kubernetes connection.
 
 ## Boundary
 
@@ -80,7 +103,7 @@ Build-time and container config (there is no server-side env here — it is a st
 
 | Concern | Where | Notes |
 |---|---|---|
-| API/environment selection | `src/environments/environment*.ts` | `environment.ts` (mock) · `.prod.ts` (live) · `.dev-live.ts` (dev against live backend); chosen by build `fileReplacements` |
+| Gateway/route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | local fixtures for default/named development · live adapters for production and development-live; chosen by build `fileReplacements` |
 | Static serving | `deploy/nginx.conf` | `nginxinc/nginx-unprivileged`, listens `:8080`, `/healthz` probe, immutable caching for hashed assets, SPA fallback to `index.html` |
 | Image | `deploy/Dockerfile` | `ghcr.io/elewa-git/opencrane-ui` |
 | Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart. The composer supplies the reviewed image's exact OCI digest; deployment fails rather than reporting success if this workload does not roll out with that digest. |
