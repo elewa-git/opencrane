@@ -72,6 +72,11 @@ Draft [#863](https://github.com/elewa-git/opencrane/pull/863) records the review
 but stopped before semantic tests: the container label says `1.2.1`, while the loaded package reports
 `1.2.1-local`. Attestation now retains all inspected module hashes and source snapshots before
 rejecting mismatches. Expected hashes remain unchanged until that exact source is reviewed.
+The second image run `34597761277` captured all 14 named modules: every source byte and expected
+hash matches the reviewed 1.2.1 source. The only mismatch is the version suffix. Upstream's version
+reader appends `-local` when reading its source checkout, so the fixture now requires the observed
+exact value `1.2.1-local`. No source hash or semantic requirement is relaxed; the next run can reach
+the provider behavior tests.
 Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
 subsequent product slices are complete. Local container VMs are not started for this work.
 

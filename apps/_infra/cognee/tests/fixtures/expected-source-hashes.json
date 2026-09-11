@@ -1,5 +1,5 @@
 {
-  "version": "1.2.1",
+  "version": "1.2.1-local",
   "modules": {
     "cognee.api.v1.datasets.datasets": "75ff6b78baedd292ec0d3b941295c6e064ce138bc0f2b3e6d00291bb4a6ebfe4",
     "cognee.api.v1.datasets.routers.get_datasets_router": "5b2fc117c3a051d797032b283b28f00e2e031b044e53eb0f9daab2ed711eac57",

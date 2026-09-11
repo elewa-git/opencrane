@@ -97,6 +97,8 @@ a deterministic model/embedding stub on a private Docker network. It records the
 version and source hashes before checking dataset isolation, document identity, recovery after a lost
 response, restart, indexing and deletion. The driver uses container DNS without publishing a host
 port. The harness removes only its own containers, network and temporary storage.
+The pinned image reports `1.2.1-local`: Cognee appends this suffix when it reads the version from its
+source checkout. Qualification requires that exact value and the reviewed module hashes.
 
 The test compares dataset partitioning enabled and disabled while Cognee HTTP login remains disabled.
 These are disposable test configurations. A passing provider proof is required before changing the
