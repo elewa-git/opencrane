@@ -473,7 +473,8 @@ snapshot is now synchronized with the same emitted schema, and the documentation
 
 ### Visible personal tool approval — source implementation complete
 
-This slice starts above draft #856 at immutable base
+This slice is published in draft [#857](https://github.com/elewa-git/opencrane/pull/857),
+directly above draft #856 at immutable base
 `b9b362f0ed7ceeef6212f1c4ef1c799e69243913` on
 `feat/0.12-visible-personal-tool-approval`. The integration branch is `develop`, observed at
 `d4bd0213c38e4fa70cbc3d93535857da9e381a32`; live ancestry is refreshed before publication.
@@ -508,8 +509,8 @@ and added beside their existing Linux references. The full macOS visual target p
 checks, covering 120 tagged states and desktop layout contracts. Style reports zero errors and
 warnings; Prisma, dependency, workload and domain guards and their relevant negative tests pass.
 Module-growth review confirms that the elicitation store owns one request lifecycle. Real KurrentDB
-integration and exact-head Linux visual comparison remain CI evidence. This source slice is ready
-for its incremental draft PR; company/connection and live acceptance below remain open.
+integration and exact-head Linux visual comparison remain CI evidence. The incremental draft PR
+records validation and the review order; company/connection and live acceptance below remain open.
 
 Company approver resolution, remote connection-owner disclosure, live provider effects and testv5
 qualification remain separate gates. The pending testv5 deployment approval does not block this
