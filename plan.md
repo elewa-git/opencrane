@@ -99,6 +99,34 @@ recovery after an interrupted deletion before memory mutation can be enabled.
 Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
 subsequent product slices are complete. Local container VMs are not started for this work.
 
+### Candidate follow-up: fresh Cognee 1.5.4 qualification
+
+The next source slice starts directly above #863 at
+`b8f7d7ac902583b6a0a4e348c3189188ecf28149` on
+`feat/0.12-memory-candidate-qualification`. Architecture preflight permits a disposable image and
+contract under the existing Cognee test tree. The production Dockerfile, chart, release manifest
+and failing 1.2.1 publication gate stay unchanged.
+
+The official 1.5.4 source fixes ordinary original-upload deletion, but changes document identity to
+dataset-scoped rows, uses a newer native database extension and still has a gap when file cleanup
+fails after the relational deletion commits. Qualification must check the whole provider on fresh
+storage: exact source/image/native-extension pins, non-root offline startup, dataset and document
+identity, useful recall, lost-response and restart recovery, shared files, local path ownership,
+and interrupted deletion. Every failed proof stays visible; a candidate pass never publishes an
+image or enables personal memory by itself.
+
+The bounded source slice is implemented and independently reviewed. Local Cognee test/lint passes
+with 17 Python tests, image contracts and a regression rejecting a smoke run with no execution
+receipt. All 24 affected-deployable tests and the relevant ownership, style, Prisma, module-growth
+and release checks pass. Exact-image CI remains pending.
+
+The candidate keeps a separate disposable lifecycle because its non-root storage, evidence volume
+and additional restart differ from 1.2.1; API, stub, proxy, attestation and summary helpers remain
+shared. Remove the obsolete lifecycle when a qualified production replacement is selected.
+Before activation, complete the wider provider matrix: concurrent delete/add, interruptions before
+relational commit and between graph and relational cleanup, exact schema/native-store recovery,
+duplicate-chunk checks and explicit removal of both stored file locations.
+
 ## Delivery priorities — 2026-09-10
 
 The user selected this order. Each track delivers a useful journey through the existing owners;

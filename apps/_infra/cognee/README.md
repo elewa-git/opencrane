@@ -123,6 +123,17 @@ selected run fails if Docker or a required provider proof is unavailable. Logs a
 result are retained under `.nx/test-results/cognee-memory-contract` and uploaded by the workflow.
 The ordinary `cognee:test` target stays fast and does not require Docker.
 
+To evaluate the proposed 1.5.4 replacement, run `npm exec -- nx run cognee:memory-contract-1-5-4`
+on the CI Docker runner. Its Dockerfile and immutable image profile live under
+`tests/candidates/1.5.4/`; it creates fresh disposable storage and keeps its own evidence under
+`.nx/test-results/cognee-memory-contract-1-5-4`. The separate CI job retains failures as well as
+successful checks. It does not register a release image or satisfy the production publication gate.
+
+The candidate changes dataset and native-database behavior, so its qualification must include the
+full provider journey and deletion recovery. A successful ordinary delete alone does not establish
+safe local file ownership or recovery after an interrupted cleanup. Selecting a production image,
+changing chart defaults and enabling personal memory are later reviewed changes.
+
 ## See also
 
 - Parent index: [_infra](../README.md)

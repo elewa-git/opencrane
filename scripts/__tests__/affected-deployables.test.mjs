@@ -285,6 +285,35 @@ test("requires an uncached Docker memory proof before normal publication", funct
 	assert.doesNotMatch(project.targets.test.options.command, /memory-contract|docker/u);
 });
 
+test("qualifies a disposable Cognee candidate without replacing the production gate", function _IsolatesCandidateQualification()
+{
+	const workflow = parse(_Workflow());
+	const candidate = workflow.jobs.cognee_candidate_contract;
+	assert.equal(candidate.needs, "prepare");
+	assert.equal(candidate.if, "needs.prepare.outputs.cognee_memory_contract_required == 'true'");
+	assert.equal(candidate["continue-on-error"], undefined);
+	const execution = candidate.steps.find(function _Execution(step) { return step.run?.includes("cognee:memory-contract-1-5-4"); });
+	assert.equal(execution.run, "npm exec -- nx run cognee:memory-contract-1-5-4");
+	assert.equal(execution["continue-on-error"], undefined);
+	const evidence = candidate.steps.find(function _Evidence(step) { return step.uses === "actions/upload-artifact@v4"; });
+	assert.equal(evidence.if, "always()");
+	assert.equal(evidence.with.path, ".nx/test-results/cognee-memory-contract-1-5-4");
+	assert.equal(evidence.with["if-no-files-found"], "error");
+	for (const name of ["build-and-push", "publish-develop-smoke-images"])
+	{
+		const publication = workflow.jobs[name];
+		assert.ok(publication.needs.includes("cognee_memory_contract"));
+		assert.ok(!publication.needs.includes("cognee_candidate_contract"));
+		assert.doesNotMatch(publication.if, /cognee_candidate_contract/u);
+	}
+	const projectPath = fileURLToPath(new URL("../../apps/_infra/cognee/project.json", import.meta.url));
+	const project = JSON.parse(readFileSync(projectPath, "utf8"));
+	assert.equal(project.targets["memory-contract-1-5-4"].cache, false);
+	assert.equal(project.targets["memory-contract-1-5-4"].options.command, "bash apps/_infra/cognee/tests/memory-contract-1.5.4.sh");
+	assert.equal(project.targets["memory-contract-1-5-4"].metadata?.release, undefined);
+	assert.equal(project.targets.container.metadata.release.dockerfile, "apps/_infra/cognee/deploy/Dockerfile");
+});
+
 test("uses all affected projects for contract verification and changed files for guard fixtures", function _SelectsPipelineInputs()
 {
 	const fixture = _Fixture();
