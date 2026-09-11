@@ -10,6 +10,7 @@ import { parse } from "yaml";
 import {
 	selectAffectedDeployables,
 	selectApiContractChanged,
+	selectCogneeMemoryContractRequired,
 	selectDevelopSmokeImages,
 	selectDevelopSmokeInputsChanged,
 	selectDevelopSmokeProjects,
@@ -242,6 +243,48 @@ test("selects affected image smokes unless manual qualification expands to every
 	);
 });
 
+test("selects Cognee provider qualification through the existing image-smoke decision", function _SelectsMemoryContract()
+{
+	const all = ["cognee", "mcp-executor"];
+	for (const [affected, manual, required] of [
+		[["cognee"], "", true],
+		[["mcp-executor"], "", false],
+		[[], "image-smoke", true],
+		[[], "all", true],
+		[[], "k3d", false],
+		[[], "none", false],
+	])
+	{
+		assert.equal(selectCogneeMemoryContractRequired(selectImageSmokeProjects(affected, all, manual)), required);
+	}
+});
+
+test("requires an uncached Docker memory proof before normal publication", function _ProtectsMemoryContract()
+{
+	const workflow = parse(_Workflow());
+	const provider = workflow.jobs.cognee_memory_contract;
+	assert.equal(provider.needs, "prepare");
+	assert.equal(provider.if, "needs.prepare.outputs.cognee_memory_contract_required == 'true'");
+	assert.equal(provider["continue-on-error"], undefined);
+	const execution = provider.steps.find(function _Execution(step) { return step.run?.includes("cognee:memory-contract"); });
+	assert.equal(execution.run, "npm exec -- nx run cognee:memory-contract");
+	assert.equal(execution["continue-on-error"], undefined);
+	const evidence = provider.steps.find(function _Evidence(step) { return step.uses === "actions/upload-artifact@v4"; });
+	assert.equal(evidence.if, "always()");
+	assert.equal(evidence.with.path, ".nx/test-results/cognee-memory-contract");
+	assert.equal(evidence.with["if-no-files-found"], "error");
+	for (const name of ["build-and-push", "publish-develop-smoke-images"])
+	{
+		const job = workflow.jobs[name];
+		assert.ok(job.needs.includes("cognee_memory_contract"));
+		assert.match(job.if, /needs\.cognee_memory_contract\.result == 'success' \|\| needs\.cognee_memory_contract\.result == 'skipped'/u);
+	}
+	const projectPath = fileURLToPath(new URL("../../apps/_infra/cognee/project.json", import.meta.url));
+	const project = JSON.parse(readFileSync(projectPath, "utf8"));
+	assert.equal(project.targets["memory-contract"].cache, false);
+	assert.doesNotMatch(project.targets.test.options.command, /memory-contract|docker/u);
+});
+
 test("uses all affected projects for contract verification and changed files for guard fixtures", function _SelectsPipelineInputs()
 {
 	const fixture = _Fixture();
@@ -344,7 +387,7 @@ test("keeps heavyweight remote qualification ahead of image publication", functi
 	assert.match(workflow, /run: \.\/apps\/_infra\/deploy-k8s\/platform\/tests\/develop-smoke\.sh/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'k3d'/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'all'/u);
-	assert.match(workflow, /needs: \[prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke\]/u);
+	assert.match(workflow, /needs: \[prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke, cognee_memory_contract\]/u);
 	assert.match(workflow, /needs\.history_store\.result == 'success'/u);
 	assert.match(developSmokeJob[0], /needs: prepare/u);
 	assert.match(developSmokeJob[0], /needs\.prepare\.outputs\.develop_smoke_can_skip != 'true'/u);

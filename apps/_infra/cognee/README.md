@@ -37,7 +37,8 @@ offline image smoke. No runtime network exception hides either failure.
 - `deploy/Dockerfile` builds the OpenCrane-owned Cognee image.
 - `helm/` provides `opencrane.cognee.resources`, the named-template library composed by the silo
   chart.
-- `project.json` registers the container, contract-test, offline image-smoke, and Helm-lint targets.
+- `project.json` registers the container, fast contract tests, offline image smoke, memory-provider
+  qualification, and Helm-lint targets.
 
 There is no importable application code.
 
@@ -87,6 +88,26 @@ fallback.
 - `sharedPlatform.litellm.mode` must remain `instance`.
 - Cognee's own login middleware stays disabled because the authenticated gateway and NetworkPolicy
   own access to this private Service.
+
+## Provider qualification
+
+Run `npm exec -- nx run cognee:memory-contract` on the CI Docker runner to test the pinned image's
+memory behavior with synthetic facts. The target builds the app-owned image, then runs Cognee and
+a deterministic model/embedding stub on a private Docker network. It records the installed provider
+version and source hashes before checking dataset isolation, document identity, recovery after a lost
+response, restart, indexing and deletion. The driver uses container DNS without publishing a host
+port. The harness removes only its own containers, network and temporary storage.
+
+The test compares dataset partitioning enabled and disabled while Cognee HTTP login remains disabled.
+These are disposable test configurations. A passing provider proof is required before changing the
+deployment default or enabling personal memory writes. An empty result cannot stand in for an
+unavailable provider, a lost response cannot authorize another write, and a chunk identifier cannot
+stand in for the owning document during deletion.
+
+CI selects this uncached target whenever the existing image-smoke selection includes Cognee. A
+selected run fails if Docker or a required provider proof is unavailable. Logs and a machine-readable
+result are retained under `.nx/test-results/cognee-memory-contract` and uploaded by the workflow.
+The ordinary `cognee:test` target stays fast and does not require Docker.
 
 ## See also
 

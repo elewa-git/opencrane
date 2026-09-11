@@ -5,7 +5,8 @@
 Draft #858 is fully green at `3cb899d68c851bfb0073c42933fc77fba3fe0e17`:
 CI run `34578065587` includes the real KurrentDB lost-response recovery case, database authority,
 build/test/lint, API generation, all 169 Storybook behavior tests, Linux visual checks, and server/UI
-image publication. The complete PR stack check passes. No testv5 deployment is implied.
+image builds. The complete PR stack check passes. This pull-request workflow does not publish images
+or deploy testv5.
 
 Draft [#862](https://github.com/elewa-git/opencrane/pull/862) starts directly from that exact commit
 on `feat/0.12-conversation-work-cancellation`. Its first published commit is
@@ -29,8 +30,11 @@ smokes. Both new Target/NoTarget selection races pass against real KurrentDB. On
 fixture reused the wrong command digest; the reviewed correction recomputes it for that request.
 The generated website API reference is now synced. All 12 unique Linux renders from that exact
 commit (artifact `10195948833`) passed independent visual review and were copied byte-for-byte into
-the references. A fresh CI run must confirm these test and reference corrections; production code
-is unchanged.
+the references. Final CI run `34592580306` is fully green on
+`6536ac318d375685a2771c4156b9954a7971e2ce`: affected build/test/lint for 79 projects, all database
+authority suites, real Kurrent proofs, generated API, all 174 Storybook tests, three Linux visual
+checks and seven image builds pass. This pull-request run does not publish images. Production code
+is unchanged by the CI corrections; the live PR stack also passes.
 
 Architecture and independent reviews cover the final source; all raised findings are resolved.
 Database tests use an isolated local PostgreSQL instance, not testv5. Personal controls are the first UI journey; controls
@@ -41,6 +45,30 @@ Company-tool approval implementation and remote MCP activation retain their reco
 blocks. The testv5 repair still preserves all current data and awaits deployment approval. Its
 strengthened wrapper passed independent review and a fresh read-only inspection of image, baseline
 and volume coordinates. No install, database reset or test-data deletion occurred.
+
+### Next slice: qualify the pinned memory provider
+
+The memory slice starts directly above #862 at `6536ac318d375685a2771c4156b9954a7971e2ce` on
+`feat/0.12-memory-provider-contract`. Architecture preflight passes for test-only qualification under
+the existing Cognee app and CI workflow. No application adapter, memory write path or deployment
+configuration is changed in this slice.
+
+The source audit found that Cognee 1.2.1 CHUNKS retrieval does not apply the requested dataset when
+backend access control is disabled. The current chart disables that switch. The inspected source
+also separates chunk and document identity and provides no operation-idempotent HTTP Add contract.
+These findings require proof against the exact image; a matching version label alone is insufficient.
+The inspected last-reference deletion removes the processed source but can retain the original
+upload. Official Cognee 1.5.4 contains a fix for that ordinary case; its different ingestion/schema
+and path handling require separate qualification before selecting it as a replacement.
+
+The dedicated uncached `cognee:memory-contract` target runs two disposable provider configurations,
+synthetic datasets and a deterministic local model/embedding stub on an internal Docker network.
+It must prove dataset isolation and useful recall, exact document/source identity, recovery after a
+committed response is lost, restart/index convergence and deletion boundaries. Selected CI cannot
+skip missing Docker or missing proof. The existing image-smoke selection owns the job condition and
+normal publication waits for its result. Implementation and provider qualification are in progress.
+Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
+subsequent product slices are complete. Local container VMs are not started for this work.
 
 ## Delivery priorities — 2026-09-10
 
@@ -96,8 +124,8 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented and result-history CI passes. Standard remote connection activation awaits its recorded approval, then one real integration and the required hosted MCP slice follow. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | Verify the pinned gateway's recall/deletion identity and recoverable correction before enabling writes. |
-| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass source review and local validation; complete draft #862 CI and qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: qualify the pinned provider's isolation, identity, restart and deletion contracts on disposable CI data before implementing personal dataset provisioning and explicit Remember. |
+| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Complete the existing server-issued interaction and presentation contracts. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | Connect existing upload/scan, model input and artifact finalisation owners. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |

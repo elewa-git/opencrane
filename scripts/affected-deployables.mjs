@@ -6,6 +6,7 @@ import { appendFileSync } from "node:fs";
 import {
   selectAffectedDeployables,
   selectApiContractChanged,
+  selectCogneeMemoryContractRequired,
   selectDevelopSmokeImages,
   selectDevelopSmokeInputsChanged,
   selectDevelopSmokeProjects,
@@ -99,6 +100,7 @@ _output("deployables", JSON.stringify({ include: deployables }));
 _output("has_deployables", String(deployables.length > 0));
 _output("image_smokes", JSON.stringify({ include: imageSmokes }));
 _output("has_image_smokes", String(imageSmokes.length > 0));
+_output("cognee_memory_contract_required", String(selectCogneeMemoryContractRequired(imageSmokes)));
 _output("develop_smoke_images", JSON.stringify({ include: developSmokeImages }));
 _output("develop_smoke_projects", developSmokeProjects.join(","));
 _output("affected_container_projects", affectedContainerProjects.join(","));
