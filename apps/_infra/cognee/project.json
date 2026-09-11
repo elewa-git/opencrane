@@ -10,7 +10,7 @@
     },
     "test": {
       "executor": "nx:run-commands",
-      "options": { "command": "bash apps/_infra/cognee/tests/image-contract.sh && bash apps/_infra/cognee/tests/image-policy-contract.sh && PYTHONPYCACHEPREFIX=.nx/python python3 -m unittest discover -s apps/_infra/cognee/tests/fixtures -p test_provider_auth.py" }
+      "options": { "command": "bash apps/_infra/cognee/tests/image-contract.sh && bash apps/_infra/cognee/tests/image-policy-contract.sh && PYTHONPYCACHEPREFIX=.nx/python python3 -m unittest discover -s apps/_infra/cognee/tests/fixtures -p 'test_provider_*.py'" }
     },
     "container": {
       "executor": "nx:run-commands",

@@ -10,6 +10,26 @@ from urllib import error, request
 from urllib.parse import urlencode
 
 
+def _parse_chunks_response(
+    value: Any, dataset_id: str, dataset_enveloped: bool
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise AssertionError("CHUNKS response is not a list of objects")
+    if not dataset_enveloped:
+        if any("dataset_id" in item or "search_result" in item for item in value):
+            raise AssertionError("ACL-disabled CHUNKS response unexpectedly contains a dataset envelope")
+        return value
+    if len(value) != 1:
+        raise AssertionError("ACL-enabled CHUNKS response must contain exactly one dataset envelope")
+    envelope = value[0]
+    if envelope.get("dataset_id") != dataset_id:
+        raise AssertionError("ACL-enabled CHUNKS response identifies a different dataset")
+    chunks = envelope.get("search_result")
+    if not isinstance(chunks, list) or not all(isinstance(item, dict) for item in chunks):
+        raise AssertionError("ACL-enabled CHUNKS dataset result is not a list of objects")
+    return chunks
+
+
 class ProviderResponseError(RuntimeError):
     """Report a provider response that does not satisfy the requested status."""
 
@@ -25,6 +45,7 @@ class ProviderApi:
     def __init__(self, base_url: str, access_token: str | None = None):
         self.base_url = base_url.rstrip("/")
         self._access_token = access_token
+        self._dataset_enveloped_search = False
 
     def _request(
         self,
@@ -75,6 +96,7 @@ class ProviderApi:
         if not isinstance(access_token, str) or not access_token:
             raise AssertionError("Provider login did not return an access token")
         self._access_token = access_token
+        self._dataset_enveloped_search = True
 
     def json(
         self,
@@ -210,9 +232,7 @@ class ProviderApi:
             },
             timeout=300,
         )
-        if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
-            raise AssertionError("CHUNKS response is not a list of objects")
-        return value
+        return _parse_chunks_response(value, dataset_id, self._dataset_enveloped_search)
 
     def delete(self, dataset_id: str, document_id: str) -> None:
         self._request(

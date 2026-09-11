@@ -83,6 +83,12 @@ backend access control is enabled. The harness now qualifies that candidate with
 synthetic test-account login, repeated after restart, without retaining tokens in evidence. This
 does not change chart defaults, gateway authentication or production credentials. Positive
 isolation, recovery and deletion remain unproved until that authenticated case runs.
+Run `34599650427` passed attestation, synthetic login, dataset creation and ingestion, then exposed
+a harness parsing error: authenticated CHUNKS search returns a dataset envelope. The fixture now
+requires exactly the requested dataset envelope in that mode and keeps the ACL-disabled flat
+response separate. Eight fast provider tests cover authentication, proxy forwarding and malformed
+or foreign-dataset search responses. Positive isolation, recovery and deletion still require the
+next exact-image run; successful HTTP calls alone do not prove them.
 Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
 subsequent product slices are complete. Local container VMs are not started for this work.
 

@@ -104,6 +104,9 @@ The negative control tests the current configuration, with dataset partitioning 
 disabled. The positive candidate enables both: Cognee requires authentication when partitioning is
 enabled. It registers a synthetic account in disposable storage and signs in again after restart;
 the test token stays in process memory and never enters evidence files.
+Authenticated search must identify the exact requested dataset in its response envelope. The
+negative control uses the provider's separate flat response shape; neither parser accepts the
+other mode or silently selects from several datasets.
 A passing provider proof is required before changing the deployment default or enabling personal
 memory writes. An empty result cannot stand in for an
 unavailable provider, a lost response cannot authorize another write, and a chunk identifier cannot
